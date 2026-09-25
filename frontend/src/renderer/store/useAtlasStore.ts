@@ -1,0 +1,152 @@
+import { create } from 'zustand';
+import { BackendAdapter } from '@atlas/backend-adapter';
+import type { ConversationSummary, ModelListResponse, RuntimeEventEnvelope, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
+import type { Artifact } from '../../types/artifact';
+import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
+
+const backend = new BackendAdapter({ baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8765' });
+
+interface AtlasState {
+  mode: 'mock' | 'backend';
+  connected: boolean;
+  busy: boolean;
+  paused: boolean;
+  error: string | null;
+  model: string;
+  models: ModelListResponse['models'];
+  tools: ToolListResponse['tools'];
+  conversations: ConversationSummary[];
+  activeConversationId: string;
+  runs: AgentRun[];
+  activeRunId: string | null;
+  artifacts: Artifact[];
+  initialize: () => Promise<void>;
+  openConversation: (conversation: ConversationSummary) => Promise<void>;
+  selectModel: (model: string) => Promise<void>;
+  sendMessage: (content: string) => Promise<void>;
+  createRun: (conversationId: string, title: string) => AgentRun;
+  appendEvent: (event: AgentEvent) => void;
+  getRun: (runId: string) => AgentRun | undefined;
+  setActiveRun: (runId: string | null) => void;
+  removeRun: (runId: string) => void;
+  approve: (eventId: string) => void;
+  reject: (eventId: string) => void;
+  togglePaused: () => void;
+  stopTask: () => void;
+  dismissError: () => void;
+}
+
+const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
+
+export const useAtlasStore = create<AtlasState>((set, get) => ({
+  mode: 'mock', connected: false, busy: false, paused: false, error: null,
+  model: 'gpt-5.6-luna', models: [], tools: [], conversations: [], activeConversationId: 'demo-planning',
+  runs: [], activeRunId: null, artifacts: [],
+
+  initialize: async () => {
+    const mode = await backend.initialize();
+    set({ mode, connected: mode === 'backend' });
+    try {
+      const [models, conversations, toolList] = await Promise.all([backend.getModels(), backend.getConversations(), backend.getTools()]);
+      set({ models: models.models, model: models.current, conversations, tools: toolList.tools });
+      if (mode === 'backend' && conversations.length) await get().openConversation(conversations[0]);
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '无法读取后端数据' });
+    }
+  },
+
+  openConversation: async (conversation) => {
+    const run = [...get().runs].reverse().find((item) => item.conversationId === conversation.id);
+    set({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, error: null, paused: run?.status === 'paused' });
+  },
+
+  selectModel: async (model) => {
+    try { await backend.selectModel(model); set({ model }); }
+    catch (error) { set({ error: error instanceof Error ? error.message : '切换模型失败' }); }
+  },
+
+  createRun: (conversationId, title) => {
+    const timestamp = new Date().toISOString();
+    const run: AgentRun = { id: crypto.randomUUID(), conversationId, title, status: 'planning', phase: 'planning', startedAt: timestamp, updatedAt: timestamp, lastEventSequence: 0, events: [] };
+    set((state) => ({ runs: [...state.runs, run], activeRunId: run.id, busy: true, paused: false, error: null }));
+    return run;
+  },
+
+  appendEvent: (event) => {
+    set((state) => {
+      const current = state.runs.find((run) => run.id === event.runId);
+      if (!current) return state;
+      const updated = applyRuntimeEvent(current, event);
+      if (updated === current) return state;
+      let artifacts = state.artifacts;
+      if (event.type === 'artifact.updated') {
+        const data = event.data;
+        const artifact: Artifact = {
+          id: String(data.artifact_id ?? event.id), runId: event.runId,
+          type: (['file', 'report', 'patch', 'image'].includes(String(data.artifact_type)) ? data.artifact_type : 'file') as Artifact['type'],
+          name: String(data.name ?? data.path ?? 'Artifact'), path: typeof data.path === 'string' ? data.path : undefined,
+          summary: String(data.summary ?? data.change ?? ''), createdAt: event.timestamp,
+        };
+        artifacts = [...state.artifacts.filter((item) => item.id !== artifact.id), artifact];
+      }
+      const runs = state.runs.map((run) => run.id === event.runId ? updated : run);
+      const active = runs.find((run) => run.id === state.activeRunId);
+      return { runs, artifacts, busy: runs.some((run) => !terminal.has(run.status)), paused: active?.status === 'paused' };
+    });
+  },
+
+  getRun: (runId) => get().runs.find((run) => run.id === runId),
+  setActiveRun: (runId) => {
+    const run = get().runs.find((item) => item.id === runId);
+    set({ activeRunId: runId, activeConversationId: run?.conversationId ?? get().activeConversationId, paused: run?.status === 'paused' });
+  },
+  removeRun: (runId) => set((state) => {
+    const runs = state.runs.filter((run) => run.id !== runId);
+    const activeRunId = state.activeRunId === runId ? null : state.activeRunId;
+    const active = runs.find((run) => run.id === activeRunId);
+    return { runs, artifacts: state.artifacts.filter((artifact) => artifact.runId !== runId), activeRunId, busy: runs.some((run) => !terminal.has(run.status)), paused: active?.status === 'paused' };
+  }),
+
+  sendMessage: async (content) => {
+    const message = content.trim();
+    if (!message) return;
+    const conversationId = get().activeConversationId;
+    const conversation = get().conversations.find((item) => item.id === conversationId);
+    const run = get().createRun(conversationId, conversation?.title ?? message.slice(0, 80));
+    const handleEvent = (envelope: RuntimeEventEnvelope) => {
+      if (!isRuntimeEvent(envelope)) return;
+      const event = normalizeRuntimeEvent(envelope);
+      if (event) get().appendEvent(event);
+    };
+    void backend.startRun({ type: 'run.start', run_id: run.id, content: message, conversation_id: run.conversationId, model: get().model }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
+      .catch((error) => {
+        set({ error: error instanceof Error ? error.message : '运行启动失败' });
+        const current = get().getRun(run.id);
+        if (current && !terminal.has(current.status)) get().appendEvent({ id: `${run.id}:transport-failure`, runId: run.id, sequence: current.lastEventSequence + 1, type: 'run.failed', timestamp: new Date().toISOString(), data: { detail: error instanceof Error ? error.message : '运行启动失败' } });
+      });
+  },
+
+  approve: (eventId) => {
+    const run = get().runs.find((item) => item.events.some((event) => event.id === eventId && event.type === 'approval.required'));
+    if (!run) return;
+    try { backend.respondToApproval(run.id, { type: 'approval.response', event_id: eventId, choice: 'allow' }); }
+    catch (error) { set({ error: error instanceof Error ? error.message : '批准请求失败' }); }
+  },
+  reject: (eventId) => {
+    const run = get().runs.find((item) => item.events.some((event) => event.id === eventId && event.type === 'approval.required'));
+    if (!run) return;
+    try { backend.respondToApproval(run.id, { type: 'approval.response', event_id: eventId, choice: 'deny' }); }
+    catch (error) { set({ error: error instanceof Error ? error.message : '拒绝请求失败' }); }
+  },
+
+  togglePaused: () => {
+    const runId = get().activeRunId;
+    const run = runId ? get().getRun(runId) : undefined;
+    if (!run || terminal.has(run.status)) return;
+    try { backend.controlRun(run.id, run.status === 'paused' ? 'run.resume' : 'run.pause'); }
+    catch (error) { set({ error: error instanceof Error ? error.message : '运行控制请求失败' }); }
+  },
+  stopTask: () => { if (get().activeRunId) backend.cancelRun(get().activeRunId!); },
+  dismissError: () => set({ error: null }),
+}));

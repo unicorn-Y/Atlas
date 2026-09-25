@@ -7,13 +7,17 @@
     "frontend"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "npm run dev:frontend",
     "dev:backend": "cd core && python -m uvicorn atlas.server:app --reload --port 8765",
     "dev:frontend": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build",
+    "build": "npm --prefix frontend run build",
+    "dev:desktop": "npm --prefix frontend run dev",
     "start": "pm2 start ecosystem.config.js",
     "stop": "pm2 stop atlas"
   },
   "author": "",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
 }
