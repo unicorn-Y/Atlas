@@ -121,6 +121,25 @@ class TestHealth:
         assert "version" in data
 
 
+class TestAgentCapabilities:
+    async def test_discover_and_activate_skill_capability(self, client: AsyncClient) -> None:
+        discovered = await client.get("/api/agent/capabilities")
+
+        assert discovered.status_code == 200
+        capabilities = discovered.json()["capabilities"]
+        skill = next(item for item in capabilities if item["name"] == "skill.coding-discipline")
+        assert skill["source"] == "skill"
+
+        invoked = await client.post(
+            "/api/agent/capabilities/skill.coding-discipline/invoke",
+            json={},
+        )
+
+        assert invoked.status_code == 200
+        assert invoked.json()["name"] == "skill.coding-discipline"
+        assert "## Instructions" in invoked.json()["result"]
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------

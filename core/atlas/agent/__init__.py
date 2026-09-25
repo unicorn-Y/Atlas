@@ -21,6 +21,7 @@ from langgraph.graph.message import add_messages
 from litellm import acompletion
 from typing_extensions import TypedDict
 
+from atlas.agent.capabilities import AgentCapabilityRegistry
 from atlas.config import get_config
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
@@ -114,11 +115,23 @@ class AgentOrchestrator:
         model_mgr: ModelManager,
         memory: MemoryStore,
         mcp_client: MCPClient | None = None,
+        capability_registry: AgentCapabilityRegistry | None = None,
     ) -> None:
         self._model_mgr = model_mgr
         self._memory = memory
         self._mcp = mcp_client
+        self._capabilities = capability_registry or AgentCapabilityRegistry()
         self._graph = self._build_graph()
+
+    def discover_capabilities(self) -> list[dict[str, str]]:
+        """Return registered capabilities without involving model execution."""
+        return self._capabilities.discover()
+
+    async def invoke_capability(
+        self, name: str, inputs: dict[str, Any] | None = None,
+    ) -> Any:
+        """Invoke a registered capability independently of the model provider."""
+        return await self._capabilities.invoke(name, inputs)
 
     # -- graph construction --------------------------------------------------
 

@@ -12,10 +12,11 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from atlas.agent.capabilities import AgentCapabilityRegistry, register_skill_capabilities
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.config import get_config
 from atlas.memory.store import MemoryStore
@@ -55,9 +56,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     skill_mgr = SkillManager()
     await skill_mgr.scan_skills()
+    capabilities = AgentCapabilityRegistry()
+    register_skill_capabilities(capabilities, skill_mgr)
 
     orchestrator = AgentOrchestrator(
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
+        capability_registry=capabilities,
     )
 
     cfg = get_config()
@@ -438,6 +442,27 @@ async def delete_knowledge(entry_id: str) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # Skills
 # ---------------------------------------------------------------------------
+
+@app.get("/api/agent/capabilities")
+async def list_agent_capabilities() -> dict[str, Any]:
+    """Return the capabilities registered for the agent."""
+    assert orchestrator is not None
+    capabilities = orchestrator.discover_capabilities()
+    return {"count": len(capabilities), "capabilities": capabilities}
+
+
+@app.post("/api/agent/capabilities/{name}/invoke")
+async def invoke_agent_capability(
+    name: str,
+    inputs: dict[str, Any] | None = Body(default=None),
+) -> dict[str, Any]:
+    """Invoke a registered capability through the agent capability registry."""
+    assert orchestrator is not None
+    try:
+        result = await orchestrator.invoke_capability(name, inputs or {})
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Capability not found: {name}") from None
+    return {"name": name, "result": result}
 
 @app.get("/api/skills")
 async def list_skills(
