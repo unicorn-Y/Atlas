@@ -1,0 +1,44 @@
+# Atlas
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+
+# Data
+data/*.db
+data/*.db-journal
+
+# Config with secrets
+config/atlas.toml
+
+# Electron
+frontend/dist/
+frontend/out/
+frontend/node_modules/
+
+# Environment
+.env
+.env.*
+
+# Survey / scratch assets (not source)
+survey_images/
+atlas-frontend-preview*.html
+atlas-frontend-v3.html
+
+# Cowork skills (not Atlas source)
+skills/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

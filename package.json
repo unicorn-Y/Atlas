@@ -1,0 +1,19 @@
+{
+  "name": "atlas",
+  "version": "0.1.0",
+  "description": "Atlas - All-in-one AI Personal Assistant",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd core && python -m uvicorn atlas.server:app --reload --port 8765",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "pm2 start ecosystem.config.js",
+    "stop": "pm2 stop atlas"
+  },
+  "author": "",
+  "license": "UNLICENSED"
+}
