@@ -67,8 +67,8 @@ env = { BRAVE_API_KEY = "" }
 
 [tools.servers.git]
 transport = "stdio"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-git"]
+command = "mcp-server-git"
+args = ["--repository", "D:/Atlas"]
 
 # Example SSE server:
 # [tools.servers.custom-remote]
