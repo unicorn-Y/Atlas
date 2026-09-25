@@ -2,19 +2,19 @@
 
 STATUS: READY
 
-TASK_ID: CODEX-ATLAS-P7C-ELECTRON-BACKEND-LIFECYCLE
+TASK_ID: CODEX-ATLAS-P7D-CONVERSATION-HISTORY
 
-TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P7C-ELECTRON-BACKEND-LIFECYCLE.md
+TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P7D-CONVERSATION-HISTORY.md
 
 WORKER: Luna
 
-CODE_BASE_HEAD: bfd833a5f26a5cc7b92d960f164b794acc4990ad
+CODE_BASE_HEAD: 5b304516ac71741c31ab6854e1d7e5d9b62d14ba
 
 BASE_HEAD_RULE:
 After pulling origin/main, record the actual starting HEAD as BASE_HEAD. Review/task-dispatch commits after CODE_BASE_HEAD are expected.
 
 PREVIOUS_REVIEW:
-P7B accepted for scope. True early streaming, streamed tool-call reconstruction, and run()-level context isolation are present. The one full-suite failure is a pre-existing Windows path expectation in test_config.py and is not a P7B blocker.
+P7C accepted. Electron backend lifecycle is implemented: healthy backend reuse, managed backend startup, readiness gate, shutdown ownership separation, and startup failure handling passed.
 
 RULE:
 Read LUNA_WORKER.md first, then execute TASKBOOK exactly. Do not start another task after completion.
