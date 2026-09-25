@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { ApprovalResponse, ConversationMessage, ConversationSummary, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ResumeRequest, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, ToolListResponse } from './types';
+import type { ApprovalResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ResumeRequest, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, ToolListResponse } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -21,6 +21,7 @@ export class BackendAdapter {
   }
 
   get mode(): 'mock' | 'backend' { return this.live ? 'backend' : 'mock'; }
+  get apiBaseUrl(): string { return this.baseUrl; }
 
   async initialize(timeoutMs = 1200): Promise<'mock' | 'backend'> {
     const controller = new AbortController();
@@ -83,6 +84,13 @@ export class BackendAdapter {
     else mockModels.current = model;
   }
   async getConversations(): Promise<ConversationSummary[]> { return this.live ? this.request('/api/conversations') : mockConversations; }
+  async createConversation(title = 'New conversation'): Promise<ConversationSummary> {
+    const request: ConversationCreateRequest = { title };
+    if (this.live) return this.request('/api/conversations', { method: 'POST', body: JSON.stringify(request) });
+    const conversation = { id: crypto.randomUUID(), title };
+    mockConversations.unshift(conversation);
+    return conversation;
+  }
   async getMessages(id: string): Promise<ConversationMessage[]> { return this.live ? this.request(`/api/conversations/${encodeURIComponent(id)}/messages`) : []; }
   async renameConversation(id: string, title: string): Promise<void> {
     if (this.live) await this.request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ title }) });

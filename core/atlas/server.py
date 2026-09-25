@@ -113,6 +113,10 @@ class ConversationUpdateRequest(BaseModel):
     title: str
 
 
+class ConversationCreateRequest(BaseModel):
+    title: str = "New Conversation"
+
+
 class FactCreateRequest(BaseModel):
     key: str
     value: str
@@ -182,6 +186,16 @@ async def list_conversations() -> list[dict[str, Any]]:
     """Return all conversation summaries."""
     assert memory is not None
     return await memory.list_conversations()
+
+
+@app.post("/api/conversations")
+async def create_conversation(req: ConversationCreateRequest) -> dict[str, Any]:
+    """Create and return a conversation summary."""
+    assert memory is not None
+    conversation_id = await memory.create_conversation(req.title.strip() or "New Conversation")
+    conversation = await memory.get_conversation(conversation_id)
+    assert conversation is not None
+    return conversation
 
 
 @app.get("/api/conversations/{conversation_id}/messages")

@@ -8,6 +8,7 @@ import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../ser
 const backend = new BackendAdapter({ baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8765' });
 
 interface AtlasState {
+  apiBaseUrl: string;
   mode: 'mock' | 'backend';
   connected: boolean;
   busy: boolean;
@@ -24,6 +25,7 @@ interface AtlasState {
   artifacts: Artifact[];
   initialize: () => Promise<void>;
   openConversation: (conversation: ConversationSummary) => Promise<void>;
+  createConversation: (title?: string) => Promise<void>;
   selectModel: (model: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   createRun: (conversationId: string, title: string) => AgentRun;
@@ -41,8 +43,8 @@ interface AtlasState {
 const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
 
 export const useAtlasStore = create<AtlasState>((set, get) => ({
-  mode: 'mock', connected: false, busy: false, paused: false, error: null,
-  model: 'gpt-5.6-luna', models: [], tools: [], conversations: [], conversationMessages: {}, activeConversationId: 'demo-planning',
+  apiBaseUrl: backend.apiBaseUrl, mode: 'mock', connected: false, busy: false, paused: false, error: null,
+  model: '', models: [], tools: [], conversations: [], conversationMessages: {}, activeConversationId: '',
   runs: [], activeRunId: null, artifacts: [],
 
   initialize: async () => {
@@ -51,7 +53,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
     try {
       const [models, conversations, toolList] = await Promise.all([backend.getModels(), backend.getConversations(), backend.getTools()]);
       set({ models: models.models, model: models.current, conversations, tools: toolList.tools });
-      if (mode === 'backend' && conversations.length) await get().openConversation(conversations[0]);
+      if (conversations.length) await get().openConversation(conversations[0]);
     } catch (error) {
       set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取后端数据' });
     }
@@ -69,6 +71,22 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
       if (get().activeConversationId === conversation.id) {
         set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取对话历史' });
       }
+    }
+  },
+
+  createConversation: async (title = 'New conversation') => {
+    try {
+      const conversation = await backend.createConversation(title);
+      set((state) => ({
+        conversations: [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)],
+        conversationMessages: { ...state.conversationMessages, [conversation.id]: [] },
+        activeConversationId: conversation.id,
+        activeRunId: null,
+        paused: false,
+        error: null,
+      }));
+    } catch (error) {
+      set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法创建新对话' });
     }
   },
 
@@ -132,8 +150,20 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
   sendMessage: async (content) => {
     const message = content.trim();
     if (!message) return;
-    const conversationId = get().activeConversationId;
-    const conversation = get().conversations.find((item) => item.id === conversationId);
+    if (!get().activeConversationId) await get().createConversation(message.slice(0, 40) || 'New conversation');
+    let conversationId = get().activeConversationId;
+    if (!conversationId) return;
+    let conversation = get().conversations.find((item) => item.id === conversationId);
+    if (conversation?.title === 'New conversation') {
+      const title = message.slice(0, 40) || 'New conversation';
+      try {
+        await backend.renameConversation(conversation.id, title);
+        set((state) => ({ conversations: state.conversations.map((item) => item.id === conversationId ? { ...item, title } : item) }));
+        conversation = { ...conversation, title };
+      } catch (error) {
+        set({ error: error instanceof Error ? error.message : '无法更新对话标题' });
+      }
+    }
     const run = get().createRun(conversationId, conversation?.title ?? message.slice(0, 80));
     const handleEvent = (envelope: RuntimeEventEnvelope) => {
       if (!isRuntimeEvent(envelope)) return;

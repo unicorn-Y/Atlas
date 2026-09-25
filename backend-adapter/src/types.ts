@@ -22,6 +22,10 @@ export interface ConversationSummary {
   [key: string]: unknown;
 }
 
+export interface ConversationCreateRequest {
+  title?: string;
+}
+
 export interface ConversationMessage {
   id: string;
   conversation_id: string;

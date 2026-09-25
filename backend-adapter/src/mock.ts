@@ -1,22 +1,15 @@
 import type { ConversationSummary, ModelListResponse, RunStartRequest, RuntimeEventEnvelope, ToolListResponse } from './types';
 
 export const mockModels: ModelListResponse = {
-  models: [
-    { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', provider: 'OpenAI' },
-    { id: 'claude-sonnet', name: 'Claude Sonnet', provider: 'Anthropic' },
-  ],
-  current: 'gpt-5.6-luna',
+  models: [],
+  current: '',
 };
 
-export const mockConversations: ConversationSummary[] = [
-  { id: 'demo-planning', title: 'MemoryOS Protected State' },
-  { id: 'demo-research', title: 'Atlas 工作区梳理' },
-  { id: 'demo-writing', title: '起草产品更新说明' },
-];
+export const mockConversations: ConversationSummary[] = [];
 
 export const mockTools: ToolListResponse = {
-  servers: ['Files', 'Terminal', 'Git', 'Browser'],
-  tool_count: 12,
+  servers: [],
+  tool_count: 0,
   tools: [],
 };
 
@@ -38,10 +31,10 @@ export async function streamMockRun(request: RunStartRequest, onEvent: (event: R
   emit('run.status', { status: 'running' });
   emit('tool.started', { tool_call_id: `${request.run_id}:tool`, name: 'workspace.inspect', arguments: { query: request.content } });
   if (!await delay()) { emit('run.cancelled'); return; }
-  emit('tool.completed', { tool_call_id: `${request.run_id}:tool`, name: 'workspace.inspect', result: { summary: 'Mock runtime 已完成工作区检查。' } });
-  emit('artifact.updated', { artifact_id: `${request.run_id}:report`, artifact_type: 'report', name: 'runtime-report.md', summary: 'Mock Agent Runtime 事件流验收报告。', path: 'artifacts/runtime-report.md' });
+  emit('tool.completed', { tool_call_id: `${request.run_id}:tool`, name: 'runtime.preview', result: { summary: 'Mock runtime preview.' } });
+  emit('artifact.updated', { artifact_id: `${request.run_id}:report`, artifact_type: 'report', name: 'runtime-preview.md', summary: 'Mock runtime preview artifact.', path: 'runtime-preview.md' });
   if (!await delay()) { emit('run.cancelled'); return; }
-  const approval = { approval_id: `${request.run_id}:approval`, description: 'Mock Runtime 请求批准继续执行。', input: { action: 'continue', scope: '当前任务' }, tool: 'execute_command' };
+  const approval = { approval_id: `${request.run_id}:approval`, description: 'Mock runtime approval preview.', input: { action: 'continue' }, tool: 'runtime.preview' };
   const approvalEventId = `${request.run_id}:${sequence + 1}`;
   emit('approval.required', approval);
   const choice = await waitForApproval(approvalEventId);

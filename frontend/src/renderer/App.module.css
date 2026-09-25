@@ -75,4 +75,34 @@
 .approvalCopy code { color: #5f5d56; font: 9px "SFMono-Regular",Consolas,monospace; }
 .approvalDetail { margin: 8px 0 0; color: #969188; font-size: 8px; line-height: 1.55; }
 .artifactList button.artifactSelected { border-color: #e4d4bd; background: #faf7f1; }
+.historyEmpty { padding: 9px 12px; color: #aaa79e; font-size: 10px; }
+.connectionProfile { display: flex; align-items: center; gap: 7px; margin: 12px 3px 0; padding: 12px 5px 2px; border-top: 1px solid rgba(42,42,37,.065); color: #8b8980; font-size: 10px; }
+.connectionProfile i,.settingsStatus i { width: 7px; height: 7px; border-radius: 50%; background: #c1a37c; }
+.connectionProfile i.connectedDot,.settingsStatus i.connectedDot { background: #8fa28d; }
+.emptyConversation { margin: 38px 36px; color: #a19e94; font-size: 11px; }
+.markdownContent { color: #56554e; line-height: 1.7; white-space: normal; font-size: 11px; overflow-wrap: anywhere; }
+.markdownContent > :first-child { margin-top: 0; }
+.markdownContent > :last-child { margin-bottom: 0; }
+.markdownContent p { margin: 0 0 10px; }
+.markdownContent h1,.markdownContent h2,.markdownContent h3,.markdownContent h4,.markdownContent h5,.markdownContent h6 { margin: 15px 0 7px; color: #45443e; line-height: 1.35; }
+.markdownContent h1 { font-size: 17px; }.markdownContent h2 { font-size: 15px; }.markdownContent h3 { font-size: 13px; }
+.markdownContent ul,.markdownContent ol { margin: 7px 0 11px; padding-left: 23px; }.markdownContent li { padding-left: 2px; }
+.markdownContent code { padding: 1px 4px; border-radius: 4px; color: #6e5945; background: #f1eee8; font: 10px/1.5 "SFMono-Regular",Consolas,monospace; }
+.markdownContent pre { overflow: auto; margin: 9px 0 12px; padding: 11px 12px; border: 1px solid #ebe8e0; border-radius: 8px; color: #e8e4da; background: #302f2b; white-space: pre; }
+.markdownContent pre code { padding: 0; color: inherit; background: transparent; font-size: 10px; }
+.markdownContent a { color: #98734f; text-decoration: underline; text-underline-offset: 2px; }
+.settingsPage { height: 100%; overflow: auto; padding: 30px clamp(22px, 6vw, 84px); background: #faf9f6; }
+.settingsHeader { display: flex; align-items: flex-start; gap: 18px; margin-bottom: 22px; }
+.settingsHeader h1 { margin: 0; color: #45443e; font-size: 20px; font-weight: 600; }
+.settingsHeader p { margin: 6px 0 0; color: #8c8980; font-size: 11px; }
+.settingsCard { max-width: 720px; margin: 0 0 14px 93px; padding: 17px 19px; border: 1px solid rgba(42,42,37,.08); border-radius: 12px; background: #fffefa; }
+.settingsCard h2 { margin: 0 0 13px; color: #55534c; font-size: 12px; font-weight: 600; }
+.settingsCard p { color: #89867e; font-size: 10px; line-height: 1.6; }
+.settingsCard label { display: grid; gap: 6px; color: #8c8980; font-size: 10px; }
+.settingsCard input { width: 100%; height: 34px; padding: 0 10px; border: 1px solid #ebe8e0; border-radius: 7px; color: #626058; background: #faf9f6; font: 11px "SFMono-Regular",Consolas,monospace; }
+.settingsStatus { display: flex; align-items: center; gap: 7px; margin-bottom: 0; }
+.settingsModels { display: grid; gap: 6px; }
+.settingsModels button { display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 7px 10px; border: 1px solid #eeece5; border-radius: 7px; background: #fffefa; text-align: left; }
+.settingsModels button:hover,.settingsModels button.settingsModelSelected { border-color: #e4d4bd; background: #faf7f1; }
+.settingsModels button span { display: grid; gap: 4px; }.settingsModels strong { color: #5f5d56; font-size: 10px; font-weight: 550; }.settingsModels small { color: #99968d; font-size: 9px; }.settingsModels svg { color: #8d9b83; }
 @media (min-width: 1700px) { .activityInner { width: min(100%, 1120px); } }

@@ -179,6 +179,22 @@ class TestConversations:
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
+    async def test_create_conversation(self, client: AsyncClient) -> None:
+        created = await client.post("/api/conversations", json={"title": "Frontend session"})
+
+        assert created.status_code == 200
+        conversation = created.json()
+        assert conversation["title"] == "Frontend session"
+        assert conversation["id"]
+        listed = await client.get("/api/conversations")
+        assert any(item["id"] == conversation["id"] for item in listed.json())
+
+    async def test_create_conversation_uses_default_title(self, client: AsyncClient) -> None:
+        created = await client.post("/api/conversations", json={})
+
+        assert created.status_code == 200
+        assert created.json()["title"] == "New Conversation"
+
     async def test_get_messages_404(self, client: AsyncClient) -> None:
         resp = await client.get("/api/conversations/nonexistent/messages")
         assert resp.status_code == 404

@@ -32,6 +32,20 @@ afterEach(() => {
 });
 
 describe('BackendAdapter availability and recovery', () => {
+  it('creates a conversation through the backend API', async () => {
+    const created = { id: 'conversation-1', title: 'New conversation' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => created } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+
+    await expect(adapter.createConversation()).resolves.toEqual(created);
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8765/api/conversations');
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ title: 'New conversation' }) });
+  });
+
   it('can recover from an unavailable backend when initialized again', async () => {
     const fetchMock = vi.fn()
       .mockRejectedValueOnce(new Error('offline'))
