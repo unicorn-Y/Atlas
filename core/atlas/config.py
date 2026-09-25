@@ -110,6 +110,9 @@ class AtlasConfig:
 
     @property
     def scheduler_enabled(self) -> bool:
+        env = os.environ.get("ATLAS_SCHEDULER_ENABLED")
+        if env is not None:
+            return env.lower() in ("1", "true", "yes")
         return bool(self.get("scheduler.enabled", True))
 
     @property

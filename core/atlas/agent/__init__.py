@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
-from typing import Annotated, Any, AsyncIterator, Literal
+from typing import Annotated, Any, AsyncIterator, Callable, Literal
 
 import structlog
 from langchain_core.messages import (
@@ -58,6 +59,8 @@ class AgentState(TypedDict):
     pending_events: list[dict[str, Any]]
     # Tracks tool-call rounds to prevent infinite loops
     tool_rounds: int
+    # Set when run is cancelled externally
+    cancelled: bool
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +79,12 @@ class AgentOrchestrator:
     invokes it with the conversation's messages.
     """
 
+    # Tools that require explicit user approval before execution
+    APPROVAL_REQUIRED_TOOLS: set[str] = {
+        "write_file", "delete_file", "move_file",
+        "execute_command", "run_script",
+    }
+
     def __init__(
         self,
         model_mgr: ModelManager,
@@ -86,6 +95,10 @@ class AgentOrchestrator:
         self._memory = memory
         self._mcp = mcp_client
         self._graph = self._build_graph()
+        # Per-run control hooks (set by run())
+        self._cancel_event: asyncio.Event | None = None
+        self._pause_event: asyncio.Event | None = None
+        self._approval_callback: Callable[[str, str, dict], Any] | None = None
 
     # -- graph construction --------------------------------------------------
 
@@ -202,7 +215,11 @@ class AgentOrchestrator:
         }
 
     async def _execute_tools_node(self, state: AgentState) -> dict[str, Any]:
-        """Execute tool calls from the last AI message."""
+        """Execute tool calls from the last AI message.
+
+        For tools in APPROVAL_REQUIRED_TOOLS, emits an approval.required
+        event and waits for the approval callback before executing.
+        """
         messages = state["messages"]
         last = messages[-1]
         assert isinstance(last, AIMessage) and last.tool_calls
@@ -214,6 +231,47 @@ class AgentOrchestrator:
             fn_name = tc["name"]
             fn_args = tc["args"]
             tc_id = tc["id"]
+
+            # Check cancellation between tool calls
+            if self._cancel_event and self._cancel_event.is_set():
+                break
+
+            # Wait if paused
+            if self._pause_event:
+                await self._pause_event.wait()
+
+            # Approval gate for sensitive tools
+            if fn_name in self.APPROVAL_REQUIRED_TOOLS and self._approval_callback:
+                approval_event_id = f"approval:{tc_id}"
+                events.append({
+                    "type": "approval_required",
+                    "event_id": approval_event_id,
+                    "tool_call_id": tc_id,
+                    "name": fn_name,
+                    "arguments": fn_args,
+                })
+
+                # Ask server layer for approval
+                choice = await self._approval_callback(
+                    approval_event_id, fn_name, fn_args
+                )
+
+                if choice != "allow":
+                    # Denied — skip this tool, return a synthetic error
+                    events.append({
+                        "type": "tool_result",
+                        "id": tc_id,
+                        "name": fn_name,
+                        "content": [{"type": "text", "text": f"Tool '{fn_name}' denied by user."}],
+                        "is_error": True,
+                    })
+                    tool_messages.append(
+                        ToolMessage(
+                            content=f"Tool '{fn_name}' denied by user.",
+                            tool_call_id=tc_id,
+                        )
+                    )
+                    continue
 
             # Call the MCP tool
             assert self._mcp is not None
@@ -248,16 +306,33 @@ class AgentOrchestrator:
         message: str,
         conversation_id: str,
         model: str | None = None,
+        cancel_event: asyncio.Event | None = None,
+        pause_event: asyncio.Event | None = None,
+        approval_callback: Callable[[str, str, dict], Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
+
+        Args:
+            message: The user's input text.
+            conversation_id: Conversation to append to.
+            model: Optional model override for this run.
+            cancel_event: asyncio.Event — set to cancel the run.
+            pause_event: asyncio.Event — clear to pause, set to resume.
+            approval_callback: async (event_id, tool_name, args) -> 'allow'|'deny'
 
         Events yielded:
             {"type": "chunk", "content": "..."}
             {"type": "tool_call", "id": "...", "name": "...", "arguments": {...}}
             {"type": "tool_result", "id": "...", "name": "...", "content": [...], "is_error": bool}
+            {"type": "approval_required", "event_id": "...", "tool_call_id": "...", ...}
             {"type": "done", "message_id": "...", "model": "..."}
             {"type": "error", "detail": "..."}
         """
+        # Store control hooks for this run
+        self._cancel_event = cancel_event
+        self._pause_event = pause_event
+        self._approval_callback = approval_callback
+
         # Resolve model
         if model:
             self._model_mgr.select(model)

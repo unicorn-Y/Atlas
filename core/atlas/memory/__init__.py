@@ -280,6 +280,162 @@ class MemoryStore:
         await self._db.commit()
         return cursor.rowcount > 0
 
+    # ----- Knowledge Base (vector search placeholder) -----
+
+    async def _ensure_knowledge_table(self) -> None:
+        """Create knowledge table for embeddings if it doesn't exist."""
+        assert self._db is not None
+        await self._db.executescript("""
+            CREATE TABLE IF NOT EXISTS knowledge (
+                id TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                embedding BLOB,
+                source TEXT DEFAULT '',
+                category TEXT DEFAULT 'general',
+                metadata TEXT DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_knowledge_category
+                ON knowledge(category);
+
+            -- FTS for keyword fallback
+            CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+                content,
+                source,
+                content=knowledge,
+                content_rowid=rowid
+            );
+
+            CREATE TRIGGER IF NOT EXISTS knowledge_ai AFTER INSERT ON knowledge BEGIN
+                INSERT INTO knowledge_fts(rowid, content, source)
+                    VALUES (new.rowid, new.content, new.source);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS knowledge_ad AFTER DELETE ON knowledge BEGIN
+                INSERT INTO knowledge_fts(knowledge_fts, rowid, content, source)
+                    VALUES ('delete', old.rowid, old.content, old.source);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS knowledge_au AFTER UPDATE ON knowledge BEGIN
+                INSERT INTO knowledge_fts(knowledge_fts, rowid, content, source)
+                    VALUES ('delete', old.rowid, old.content, old.source);
+                INSERT INTO knowledge_fts(rowid, content, source)
+                    VALUES (new.rowid, new.content, new.source);
+            END;
+        """)
+        await self._db.commit()
+
+    async def add_knowledge(
+        self,
+        content: str,
+        source: str = "",
+        category: str = "general",
+        metadata: dict[str, Any] | None = None,
+        embedding: bytes | None = None,
+    ) -> str:
+        """Add a knowledge entry.
+
+        Args:
+            content: The text content.
+            source: Where this came from (URL, file path, etc.).
+            category: Grouping label.
+            metadata: Extra metadata dict.
+            embedding: Pre-computed embedding as bytes (optional).
+
+        Returns:
+            The new entry's ID.
+        """
+        assert self._db is not None
+        await self._ensure_knowledge_table()
+
+        entry_id = str(uuid.uuid4())
+        await self._db.execute(
+            "INSERT INTO knowledge (id, content, embedding, source, category, metadata) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (entry_id, content, embedding, source, category,
+             json.dumps(metadata or {})),
+        )
+        await self._db.commit()
+        return entry_id
+
+    async def search_knowledge(
+        self,
+        query: str,
+        category: str | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Search knowledge base using FTS5 (keyword search).
+
+        Vector similarity search will be added when embeddings are
+        integrated; for now this provides keyword-based retrieval.
+        """
+        assert self._db is not None
+        await self._ensure_knowledge_table()
+
+        if category:
+            cursor = await self._db.execute(
+                "SELECT k.id, k.content, k.source, k.category, k.metadata, "
+                "       k.created_at, "
+                "       highlight(knowledge_fts, 0, '<b>', '</b>') AS snippet "
+                "FROM knowledge_fts "
+                "JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
+                "WHERE knowledge_fts MATCH ? AND k.category = ? "
+                "ORDER BY rank LIMIT ?",
+                (query, category, limit),
+            )
+        else:
+            cursor = await self._db.execute(
+                "SELECT k.id, k.content, k.source, k.category, k.metadata, "
+                "       k.created_at, "
+                "       highlight(knowledge_fts, 0, '<b>', '</b>') AS snippet "
+                "FROM knowledge_fts "
+                "JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
+                "WHERE knowledge_fts MATCH ? "
+                "ORDER BY rank LIMIT ?",
+                (query, limit),
+            )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    async def list_knowledge(
+        self,
+        category: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List knowledge entries, optionally filtered by category."""
+        assert self._db is not None
+        await self._ensure_knowledge_table()
+
+        if category:
+            cursor = await self._db.execute(
+                "SELECT id, content, source, category, metadata, created_at "
+                "FROM knowledge WHERE category = ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (category, limit),
+            )
+        else:
+            cursor = await self._db.execute(
+                "SELECT id, content, source, category, metadata, created_at "
+                "FROM knowledge ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    async def delete_knowledge(self, entry_id: str) -> bool:
+        """Delete a knowledge entry by ID. Returns True if found."""
+        assert self._db is not None
+        await self._ensure_knowledge_table()
+
+        cursor = await self._db.execute(
+            "DELETE FROM knowledge WHERE id = ?",
+            (entry_id,),
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
+
     # ----- Cleanup -----
 
     async def close(self) -> None:

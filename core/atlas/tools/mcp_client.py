@@ -145,6 +145,7 @@ class MCPClient:
     def __init__(self) -> None:
         self._servers: dict[str, MCPServerHandle] = {}
         self._tool_index: dict[str, ToolInfo] = {}  # qualified_name → ToolInfo
+        self._server_configs: dict[str, MCPServerConfig] = {}  # name → config
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -214,6 +215,7 @@ class MCPClient:
             self._tool_index[info.qualified_name] = info
 
         self._servers[cfg.name] = handle
+        self._server_configs[cfg.name] = cfg
         log.info("mcp.server_ready", server=cfg.name,
                  tools=[t.name for t in handle.tools])
 
@@ -344,6 +346,35 @@ class MCPClient:
         """Return tools for a specific server."""
         handle = self._servers.get(server_name)
         return handle.tools if handle else []
+
+    def get_server_config(self, server_name: str) -> MCPServerConfig | None:
+        """Return the stored config for a connected server, if any."""
+        return self._server_configs.get(server_name)
+
+    async def disconnect_server(self, server_name: str) -> None:
+        """Disconnect and remove a single MCP server."""
+        handle = self._servers.pop(server_name, None)
+        if handle is None:
+            return
+        # Remove tools from index
+        for tool in handle.tools:
+            self._tool_index.pop(tool.qualified_name, None)
+        # Clean up transport
+        try:
+            if handle._cleanup:
+                await handle._cleanup.__aexit__(None, None, None)
+            log.info("mcp.server_stopped", server=server_name)
+        except Exception as e:
+            log.warning("mcp.stop_error", server=server_name, error=str(e))
+        self._server_configs.pop(server_name, None)
+
+    async def restart_server(self, server_name: str) -> None:
+        """Disconnect then reconnect a server using its stored config."""
+        cfg = self._server_configs.get(server_name)
+        if cfg is None:
+            raise ValueError(f"No stored config for server: {server_name}")
+        await self.disconnect_server(server_name)
+        await self._connect_server(cfg)
 
     @property
     def connected(self) -> bool:

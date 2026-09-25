@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -279,6 +281,156 @@ async def list_tools() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# MCP Server Management
+# ---------------------------------------------------------------------------
+
+class MCPServerAddRequest(BaseModel):
+    name: str
+    transport: str = "stdio"  # "stdio" | "sse"
+    command: str = ""
+    args: list[str] = []
+    env: dict[str, str] = {}
+    cwd: str | None = None
+    url: str = ""  # for SSE transport
+
+
+@app.get("/api/mcp/servers")
+async def list_mcp_servers() -> dict[str, Any]:
+    """Return all connected MCP servers and their tools."""
+    assert mcp_client is not None
+    servers = []
+    for name in mcp_client.get_server_names():
+        tools = mcp_client.get_server_tools(name)
+        servers.append({
+            "name": name,
+            "tool_count": len(tools),
+            "tools": [t.qualified_name for t in tools],
+        })
+    return {"servers": servers}
+
+
+@app.post("/api/mcp/servers")
+async def add_mcp_server(req: MCPServerAddRequest) -> dict[str, Any]:
+    """Dynamically add and connect a new MCP server."""
+    assert mcp_client is not None
+    from atlas.tools.mcp_client import MCPServerConfig
+
+    if req.name in mcp_client.get_server_names():
+        raise HTTPException(status_code=409, detail=f"Server already exists: {req.name}")
+
+    cfg = MCPServerConfig(
+        name=req.name,
+        transport=req.transport,
+        command=req.command,
+        args=req.args,
+        env=req.env,
+        cwd=req.cwd,
+        url=req.url,
+        enabled=True,
+    )
+
+    try:
+        await mcp_client._connect_server(cfg)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to connect: {e}")
+
+    tools = mcp_client.get_server_tools(req.name)
+    return {
+        "name": req.name,
+        "tool_count": len(tools),
+        "tools": [t.qualified_name for t in tools],
+    }
+
+
+@app.delete("/api/mcp/servers/{server_name}")
+async def remove_mcp_server(server_name: str) -> dict[str, str]:
+    """Disconnect and remove an MCP server."""
+    assert mcp_client is not None
+
+    if server_name not in mcp_client.get_server_names():
+        raise HTTPException(status_code=404, detail=f"Server not found: {server_name}")
+
+    await mcp_client.disconnect_server(server_name)
+    return {"status": "ok", "server": server_name}
+
+
+@app.post("/api/mcp/servers/{server_name}/restart")
+async def restart_mcp_server(server_name: str) -> dict[str, Any]:
+    """Restart an MCP server (disconnect + reconnect)."""
+    assert mcp_client is not None
+
+    if server_name not in mcp_client.get_server_names():
+        raise HTTPException(status_code=404, detail=f"Server not found: {server_name}")
+
+    try:
+        await mcp_client.restart_server(server_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Restart failed: {e}")
+
+    tools = mcp_client.get_server_tools(server_name)
+    return {
+        "name": server_name,
+        "tool_count": len(tools),
+        "tools": [t.qualified_name for t in tools],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Knowledge Base
+# ---------------------------------------------------------------------------
+
+class KnowledgeAddRequest(BaseModel):
+    content: str
+    source: str = ""
+    category: str = "general"
+    metadata: dict[str, Any] = {}
+
+
+@app.get("/api/knowledge")
+async def list_knowledge(
+    category: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+) -> list[dict[str, Any]]:
+    """List knowledge base entries."""
+    assert memory is not None
+    return await memory.list_knowledge(category=category, limit=limit)
+
+
+@app.post("/api/knowledge")
+async def add_knowledge(req: KnowledgeAddRequest) -> dict[str, Any]:
+    """Add a knowledge entry."""
+    assert memory is not None
+    entry_id = await memory.add_knowledge(
+        content=req.content,
+        source=req.source,
+        category=req.category,
+        metadata=req.metadata,
+    )
+    return {"id": entry_id, "content": req.content, "source": req.source}
+
+
+@app.get("/api/knowledge/search")
+async def search_knowledge(
+    q: str = Query(..., min_length=1),
+    category: str | None = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+) -> list[dict[str, Any]]:
+    """Search the knowledge base."""
+    assert memory is not None
+    return await memory.search_knowledge(query=q, category=category, limit=limit)
+
+
+@app.delete("/api/knowledge/{entry_id}")
+async def delete_knowledge(entry_id: str) -> dict[str, str]:
+    """Delete a knowledge entry."""
+    assert memory is not None
+    ok = await memory.delete_knowledge(entry_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Knowledge entry not found: {entry_id}")
+    return {"status": "ok", "id": entry_id}
+
+
+# ---------------------------------------------------------------------------
 # Skills
 # ---------------------------------------------------------------------------
 
@@ -434,87 +586,331 @@ async def run_schedule_now(task_id: str) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# WebSocket chat
+# Runtime Protocol
 # ---------------------------------------------------------------------------
 
-class ConnectionManager:
-    """Manages active WebSocket connections."""
+@app.get("/api/runtime/protocol")
+async def runtime_protocol() -> dict[str, str]:
+    """Advertise Runtime Event Protocol version."""
+    return {"version": "1.2"}
+
+
+# ---------------------------------------------------------------------------
+# WebSocket chat — Runtime Event Protocol 1.2
+# ---------------------------------------------------------------------------
+
+class RunState:
+    """Tracks a single agent run's state for the runtime protocol."""
+
+    __slots__ = (
+        "run_id", "conversation_id", "model", "sequence",
+        "status", "events", "cancel_event", "pause_event",
+        "approval_futures", "task",
+    )
+
+    def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
+        self.run_id = run_id
+        self.conversation_id = conversation_id
+        self.model = model
+        self.sequence = 0
+        self.status = "running"  # running | paused | waiting | completed | failed | cancelled
+        self.events: list[dict[str, Any]] = []  # full event log for replay
+        self.cancel_event = asyncio.Event()
+        self.pause_event = asyncio.Event()
+        self.pause_event.set()  # not paused initially
+        self.approval_futures: dict[str, asyncio.Future[str]] = {}
+        self.task: asyncio.Task[None] | None = None
+
+    def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Build a Runtime Event envelope and append to log."""
+        self.sequence += 1
+        envelope = {
+            "type": "agent_event",
+            "run_id": self.run_id,
+            "event_id": f"{self.run_id}:{self.sequence}",
+            "sequence": self.sequence,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event": event,
+            "data": data,
+        }
+        self.events.append(envelope)
+        return envelope
+
+
+class RuntimeManager:
+    """Manages active WebSocket connections and agent runs."""
 
     def __init__(self) -> None:
-        self.active: dict[str, WebSocket] = {}
+        self.connections: dict[str, WebSocket] = {}  # conn_id → ws
+        self.runs: dict[str, RunState] = {}  # run_id → RunState
+        self.conn_runs: dict[str, str] = {}  # conn_id → active run_id
 
     async def connect(self, ws: WebSocket, conn_id: str) -> None:
         await ws.accept()
-        self.active[conn_id] = ws
+        self.connections[conn_id] = ws
 
     def disconnect(self, conn_id: str) -> None:
-        self.active.pop(conn_id, None)
+        self.connections.pop(conn_id, None)
+        self.conn_runs.pop(conn_id, None)
 
-    async def send_json(self, conn_id: str, data: dict[str, Any]) -> None:
-        ws = self.active.get(conn_id)
+    async def send(self, conn_id: str, data: dict[str, Any]) -> None:
+        ws = self.connections.get(conn_id)
         if ws:
-            await ws.send_json(data)
+            try:
+                await ws.send_json(data)
+            except Exception:
+                pass  # connection may have closed
 
 
-ws_manager = ConnectionManager()
+runtime_mgr = RuntimeManager()
 
 
 @app.websocket("/ws/chat")
 async def ws_chat(ws: WebSocket) -> None:
-    """Main chat WebSocket endpoint.
+    """Runtime Event Protocol 1.2 WebSocket endpoint.
 
     Client sends:
-        {"type": "message", "content": "...", "conversation_id": "..."}
-        {"type": "cancel"}
+        {"type": "run.start", "run_id": "...", "content": "...", "conversation_id": "...", "model": "..."}
+        {"type": "resume", "run_id": "...", "after_sequence": N}
+        {"type": "run.cancel", "run_id": "..."}
+        {"type": "run.pause", "run_id": "..."}
+        {"type": "run.resume", "run_id": "..."}
+        {"type": "approval.response", "event_id": "...", "choice": "allow"|"deny"}
 
     Server sends:
-        {"type": "chunk", "content": "..."}          # streaming token
-        {"type": "tool_call", "name": "...", ...}    # tool invocation
-        {"type": "tool_result", "name": "...", ...}  # tool result
-        {"type": "done", "message_id": "..."}         # turn complete
-        {"type": "error", "detail": "..."}            # error
+        {"type": "agent_event", "run_id": "...", "event_id": "...", "sequence": N,
+         "timestamp": "...", "event": "<event_type>", "data": {...}}
+
+    Event types: run.started, run.status, run.phase, message.delta,
+    message.completed, tool.started, tool.completed, approval.required,
+    approval.responded, artifact.updated, run.paused, run.resumed,
+    run.completed, run.failed, run.cancelled
     """
     conn_id = str(uuid.uuid4())
-    await ws_manager.connect(ws, conn_id)
+    await runtime_mgr.connect(ws, conn_id)
 
     try:
         while True:
             raw = await ws.receive_text()
             data = json.loads(raw)
+            msg_type = data.get("type", "")
 
-            if data.get("type") == "message":
-                content = data.get("content", "")
-                conv_id = data.get("conversation_id") or str(uuid.uuid4())
-                model_override = data.get("model")  # optional per-message model
+            if msg_type == "run.start":
+                await _handle_run_start(conn_id, data)
 
-                # Save user message
-                assert memory is not None
-                await memory.save_message(
-                    conversation_id=conv_id,
-                    role="user",
-                    content=content,
-                )
+            elif msg_type == "resume":
+                await _handle_resume(conn_id, data)
 
-                # Run agent
-                assert orchestrator is not None
-                try:
-                    async for event in orchestrator.run(
-                        message=content,
-                        conversation_id=conv_id,
-                        model=model_override,
-                    ):
-                        await ws_manager.send_json(conn_id, event)
-                except Exception as e:
-                    await ws_manager.send_json(conn_id, {
-                        "type": "error",
-                        "detail": str(e),
-                    })
+            elif msg_type == "run.cancel":
+                run_id = data.get("run_id", "")
+                run = runtime_mgr.runs.get(run_id)
+                if run and run.status not in ("completed", "failed", "cancelled"):
+                    run.cancel_event.set()
 
-            elif data.get("type") == "cancel":
-                # TODO: implement cancellation
-                await ws_manager.send_json(conn_id, {
-                    "type": "cancelled",
-                })
+            elif msg_type == "run.pause":
+                run_id = data.get("run_id", "")
+                run = runtime_mgr.runs.get(run_id)
+                if run and run.status == "running":
+                    run.pause_event.clear()
+                    run.status = "paused"
+                    env = run.next_envelope("run.paused", {"status": "paused"})
+                    await runtime_mgr.send(conn_id, env)
+
+            elif msg_type == "run.resume":
+                run_id = data.get("run_id", "")
+                run = runtime_mgr.runs.get(run_id)
+                if run and run.status == "paused":
+                    run.pause_event.set()
+                    run.status = "running"
+                    env = run.next_envelope("run.resumed", {"status": "running"})
+                    await runtime_mgr.send(conn_id, env)
+
+            elif msg_type == "approval.response":
+                event_id = data.get("event_id", "")
+                choice = data.get("choice", "deny")
+                # Find the run that has this approval
+                for run in runtime_mgr.runs.values():
+                    fut = run.approval_futures.pop(event_id, None)
+                    if fut and not fut.done():
+                        fut.set_result(choice)
+                        env = run.next_envelope("approval.responded", {
+                            "event_id": event_id, "choice": choice,
+                        })
+                        await runtime_mgr.send(conn_id, env)
+                        break
 
     except WebSocketDisconnect:
-        ws_manager.disconnect(conn_id)
+        runtime_mgr.disconnect(conn_id)
+
+
+async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
+    """Start a new agent run."""
+    run_id = data.get("run_id") or str(uuid.uuid4())
+    content = data.get("content", "")
+    conv_id = data.get("conversation_id") or str(uuid.uuid4())
+    model_id = data.get("model")
+
+    assert model_mgr is not None
+    run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+    runtime_mgr.runs[run_id] = run
+    runtime_mgr.conn_runs[conn_id] = run_id
+
+    # Start the run in background so we can keep receiving messages
+    run.task = asyncio.create_task(
+        _execute_run(conn_id, run, content, model_id)
+    )
+
+
+async def _handle_resume(conn_id: str, data: dict[str, Any]) -> None:
+    """Replay events after a given sequence number."""
+    run_id = data.get("run_id", "")
+    after_seq = data.get("after_sequence", 0)
+    run = runtime_mgr.runs.get(run_id)
+    if not run:
+        return
+
+    runtime_mgr.conn_runs[conn_id] = run_id
+
+    # Replay missed events
+    for env in run.events:
+        if env["sequence"] > after_seq:
+            await runtime_mgr.send(conn_id, env)
+
+
+async def _execute_run(
+    conn_id: str,
+    run: RunState,
+    content: str,
+    model_id: str | None,
+) -> None:
+    """Execute agent run, emitting Runtime Event envelopes."""
+    assert orchestrator is not None
+    assert memory is not None
+
+    async def emit(event: str, data: dict[str, Any]) -> None:
+        """Emit an event envelope to the client."""
+        env = run.next_envelope(event, data)
+        await runtime_mgr.send(conn_id, env)
+
+    async def check_pause_cancel() -> bool:
+        """Wait while paused; return True if cancelled."""
+        if run.cancel_event.is_set():
+            return True
+        # Wait for unpause
+        while not run.pause_event.is_set():
+            if run.cancel_event.is_set():
+                return True
+            await asyncio.sleep(0.1)
+        return run.cancel_event.is_set()
+
+    try:
+        # Emit run.started
+        await emit("run.started", {
+            "status": "running",
+            "phase": "planning",
+            "content": content,
+        })
+
+        # Save user message
+        await memory.save_message(
+            conversation_id=run.conversation_id,
+            role="user",
+            content=content,
+        )
+
+        if await check_pause_cancel():
+            run.status = "cancelled"
+            await emit("run.cancelled", {})
+            return
+
+        await emit("run.status", {"status": "running"})
+        await emit("run.phase", {"phase": "execution"})
+
+        # Run the agent orchestrator
+        full_response = ""
+
+        # Build approval callback that emits approval.required and waits for response
+        async def approval_callback(
+            approval_event_id: str, tool_name: str, tool_args: dict[str, Any]
+        ) -> str:
+            """Emit approval.required and wait for client response."""
+            await emit("approval.required", {
+                "event_id": approval_event_id,
+                "tool": tool_name,
+                "arguments": tool_args,
+            })
+            run.status = "waiting"
+            # Create a future for this approval
+            loop = asyncio.get_running_loop()
+            fut: asyncio.Future[str] = loop.create_future()
+            run.approval_futures[approval_event_id] = fut
+            choice = await fut
+            run.status = "running"
+            return choice
+
+        async for event in orchestrator.run(
+            message=content,
+            conversation_id=run.conversation_id,
+            model=model_id,
+            cancel_event=run.cancel_event,
+            pause_event=run.pause_event,
+            approval_callback=approval_callback,
+        ):
+            if await check_pause_cancel():
+                run.status = "cancelled"
+                await emit("run.cancelled", {})
+                return
+
+            # Map orchestrator events to runtime protocol
+            etype = event.get("type", "")
+
+            if etype == "chunk":
+                chunk_content = event.get("content", "")
+                full_response += chunk_content
+                await emit("message.delta", {"content": chunk_content})
+
+            elif etype == "tool_call":
+                await emit("tool.started", {
+                    "tool_call_id": event.get("id", ""),
+                    "name": event.get("name", ""),
+                    "arguments": event.get("arguments", {}),
+                })
+
+            elif etype == "tool_result":
+                await emit("tool.completed", {
+                    "tool_call_id": event.get("id", ""),
+                    "name": event.get("name", ""),
+                    "result": event.get("content", []),
+                    "is_error": event.get("is_error", False),
+                })
+
+            elif etype == "approval_required":
+                # Already emitted by the approval_callback above;
+                # no need to re-emit here.
+                pass
+
+            elif etype == "done":
+                if full_response:
+                    await emit("message.completed", {"content": full_response})
+                await emit("run.phase", {"phase": "final"})
+
+            elif etype == "error":
+                run.status = "failed"
+                await emit("run.failed", {
+                    "detail": event.get("detail", "Unknown error"),
+                })
+                return
+
+        # Run completed successfully
+        run.status = "completed"
+        await emit("run.completed", {
+            "result": "completed",
+            "model": run.model,
+        })
+
+    except asyncio.CancelledError:
+        run.status = "cancelled"
+        await emit("run.cancelled", {})
+    except Exception as e:
+        run.status = "failed"
+        await emit("run.failed", {"detail": str(e)})
