@@ -65,6 +65,14 @@ class AgentRunContext:
 _EVENT_STREAM_DONE = object()
 
 
+class _RuntimeFailure(Exception):
+    """An agent failure with a user-facing runtime category."""
+
+    def __init__(self, category: str, detail: str) -> None:
+        super().__init__(detail)
+        self.category = category
+
+
 class AgentState(TypedDict):
     """LangGraph state for the agent."""
 
@@ -181,29 +189,32 @@ class AgentOrchestrator:
                 return value.get(key, default)
             return getattr(value, key, default)
 
-        response = await acompletion(**kwargs, stream=True)
-        async for chunk in response:
-            delta = chunk.choices[0].delta
-            content = get_value(delta, "content")
-            if content:
-                full_text += content
-                event = {"type": "chunk", "content": content}
-                events.append(event)
-                if event_queue is not None:
-                    await event_queue.put(event)
+        try:
+            response = await acompletion(**kwargs, stream=True)
+            async for chunk in response:
+                delta = chunk.choices[0].delta
+                content = get_value(delta, "content")
+                if content:
+                    full_text += content
+                    event = {"type": "chunk", "content": content}
+                    events.append(event)
+                    if event_queue is not None:
+                        await event_queue.put(event)
 
-            for position, fragment in enumerate(get_value(delta, "tool_calls", None) or []):
-                index = get_value(fragment, "index", position)
-                if index is None:
-                    index = position
-                aggregate = tool_fragments.setdefault(
-                    index, {"id": "", "name": "", "arguments": ""}
-                )
-                aggregate["id"] = aggregate["id"] or get_value(fragment, "id", "") or ""
-                function = get_value(fragment, "function", None)
-                if function is not None:
-                    aggregate["name"] += get_value(function, "name", "") or ""
-                    aggregate["arguments"] += get_value(function, "arguments", "") or ""
+                for position, fragment in enumerate(get_value(delta, "tool_calls", None) or []):
+                    index = get_value(fragment, "index", position)
+                    if index is None:
+                        index = position
+                    aggregate = tool_fragments.setdefault(
+                        index, {"id": "", "name": "", "arguments": ""}
+                    )
+                    aggregate["id"] = aggregate["id"] or get_value(fragment, "id", "") or ""
+                    function = get_value(fragment, "function", None)
+                    if function is not None:
+                        aggregate["name"] += get_value(function, "name", "") or ""
+                        aggregate["arguments"] += get_value(function, "arguments", "") or ""
+        except Exception as exc:
+            raise _RuntimeFailure("model", f"Model call failed: {exc}") from exc
 
         tc_list: list[dict[str, Any]] = []
         for index in sorted(tool_fragments):
@@ -307,7 +318,13 @@ class AgentOrchestrator:
 
             # Call the MCP tool
             assert self._mcp is not None
-            result = await self._mcp.call_tool(fn_name, fn_args)
+            try:
+                result = await self._mcp.call_tool(fn_name, fn_args)
+            except Exception as exc:
+                result = {
+                    "content": [{"type": "text", "text": f"Tool call failed: {exc}"}],
+                    "is_error": True,
+                }
 
             events.append({
                 "type": "tool_result",
@@ -316,6 +333,8 @@ class AgentOrchestrator:
                 "content": result["content"],
                 "is_error": result["is_error"],
             })
+            if result["is_error"]:
+                events[-1]["error_category"] = "tool"
             if getattr(ctx, "event_queue", None) is not None:
                 await ctx.event_queue.put(events[-1])
 
@@ -370,7 +389,11 @@ class AgentOrchestrator:
 
         # Resolve model
         if model:
-            self._model_mgr.select(model)
+            try:
+                self._model_mgr.select(model)
+            except Exception as exc:
+                yield {"type": "error", "category": "model", "detail": f"Model selection failed: {exc}"}
+                return
         litellm_model = self._model_mgr.current_litellm_model
 
         log.info(
@@ -382,9 +405,13 @@ class AgentOrchestrator:
 
         # Build initial messages from conversation history
         cfg = get_config()
-        history = await self._memory.get_conversation_messages(
-            conversation_id, limit=cfg.max_context_messages
-        )
+        try:
+            history = await self._memory.get_conversation_messages(
+                conversation_id, limit=cfg.max_context_messages
+            )
+        except Exception as exc:
+            yield {"type": "error", "category": "backend", "detail": f"Unable to load conversation history: {exc}"}
+            return
 
         initial_messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
         for msg in history:
@@ -421,12 +448,16 @@ class AgentOrchestrator:
                     full_response = msg.content
                     break
 
-            msg_id = await self._memory.save_message(
-                conversation_id=conversation_id,
-                role="assistant",
-                content=full_response,
-                metadata={"model": litellm_model},
-            )
+            try:
+                msg_id = await self._memory.save_message(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content=full_response,
+                    metadata={"model": litellm_model},
+                )
+            except Exception as e:
+                yield {"type": "error", "category": "backend", "detail": f"Unable to save assistant message: {e}"}
+                return
             yield {
                 "type": "done",
                 "message_id": msg_id,
@@ -437,7 +468,8 @@ class AgentOrchestrator:
             log.error("agent.run.error", error=str(e))
             yield {
                 "type": "error",
-                "detail": f"Model call failed: {e}",
+                "category": getattr(e, "category", "runtime"),
+                "detail": str(e),
             }
         finally:
             if not graph_task.done():

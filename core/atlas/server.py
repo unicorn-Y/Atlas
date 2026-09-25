@@ -789,12 +789,15 @@ def _map_tool_runtime_event(
             "arguments": event.get("arguments", {}),
         }
     if event_type == "tool_result":
-        return "tool.completed", {
+        data = {
             "tool_call_id": event.get("id", ""),
             "name": event.get("name", ""),
             "result": event.get("content", []),
             "is_error": event.get("is_error", False),
         }
+        if data["is_error"]:
+            data["error_category"] = event.get("error_category", "tool")
+        return "tool.completed", data
     return None
 
 
@@ -833,11 +836,19 @@ async def _execute_run(
         })
 
         # Save user message
-        await memory.save_message(
-            conversation_id=run.conversation_id,
-            role="user",
-            content=content,
-        )
+        try:
+            await memory.save_message(
+                conversation_id=run.conversation_id,
+                role="user",
+                content=content,
+            )
+        except Exception as e:
+            run.status = "failed"
+            await emit("run.failed", {
+                "category": "backend",
+                "detail": f"Unable to save user message: {e}",
+            })
+            return
 
         if await check_pause_cancel():
             run.status = "cancelled"
@@ -909,6 +920,7 @@ async def _execute_run(
             elif etype == "error":
                 run.status = "failed"
                 await emit("run.failed", {
+                    "category": event.get("category", "runtime"),
                     "detail": event.get("detail", "Unknown error"),
                 })
                 return
@@ -925,4 +937,4 @@ async def _execute_run(
         await emit("run.cancelled", {})
     except Exception as e:
         run.status = "failed"
-        await emit("run.failed", {"detail": str(e)})
+        await emit("run.failed", {"category": "runtime", "detail": str(e)})

@@ -269,6 +269,21 @@ class TestExecuteTools:
         tr = next(e for e in events if e["type"] == "tool_result")
         assert tr["is_error"] is True
 
+    async def test_execute_tool_exception_is_recoverable_error(self, orchestrator, mcp_client) -> None:
+        """A raised tool failure is returned to the model as a typed tool result."""
+        mcp_client.call_tool = AsyncMock(side_effect=TimeoutError("tool timed out"))
+        state = _agent_state(AIMessage(
+            content="",
+            tool_calls=[{"name": "fs__read", "args": {"path": "a"}, "id": "t2"}],
+        ))
+
+        result = await orchestrator._execute_tools_node(state)
+
+        assert result["messages"][0].content == "Tool call failed: tool timed out"
+        tool_result = next(e for e in result["pending_events"] if e["type"] == "tool_result")
+        assert tool_result["is_error"] is True
+        assert tool_result["error_category"] == "tool"
+
 
 # ---------------------------------------------------------------------------
 # Concurrent run control isolation
@@ -615,4 +630,5 @@ class TestRun:
 
         assert len(events) == 1
         assert events[0]["type"] == "error"
+        assert events[0]["category"] == "model"
         assert "API down" in events[0]["detail"]

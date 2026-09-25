@@ -328,15 +328,89 @@ class TestWebSocketProtocol:
         )
         assert _map_tool_runtime_event({"type": "chunk", "content": "text"}) is None
 
-    async def test_run_start_emits_agent_events(self, client: AsyncClient) -> None:
+    async def test_backend_failure_emits_terminal_protocol_event(self, monkeypatch) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from atlas import server
+
+        class Socket:
+            def __init__(self) -> None:
+                self.events: list[dict] = []
+
+            async def send_json(self, event: dict) -> None:
+                self.events.append(event)
+
+        socket = Socket()
+        conn_id = "backend-failure-test"
+        run = server.RunState("backend-failure-run", "conv-1", "test-model")
+        memory_mock = SimpleNamespace(save_message=AsyncMock(side_effect=OSError("database unavailable")))
+        monkeypatch.setattr(server, "memory", memory_mock)
+        monkeypatch.setattr(server, "orchestrator", SimpleNamespace())
+        monkeypatch.setitem(server.runtime_mgr.connections, conn_id, socket)
+
+        try:
+            await server._execute_run(conn_id, run, "hello", None)
+        finally:
+            server.runtime_mgr.connections.pop(conn_id, None)
+
+        failed = next(event for event in socket.events if event["event"] == "run.failed")
+        assert run.status == "failed"
+        assert failed["data"]["category"] == "backend"
+        assert failed["data"]["detail"] == "Unable to save user message: database unavailable"
+
+    async def test_tool_failure_reaches_runtime_event_and_run_completes(self, monkeypatch) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from atlas import server
+
+        class Socket:
+            def __init__(self) -> None:
+                self.events: list[dict] = []
+
+            async def send_json(self, event: dict) -> None:
+                self.events.append(event)
+
+        async def events(**kwargs):
+            yield {
+                "type": "tool_result", "id": "tc-1", "name": "fs__read",
+                "content": [{"type": "text", "text": "Tool call failed: tool timed out"}],
+                "is_error": True, "error_category": "tool",
+            }
+            yield {"type": "done"}
+
+        socket = Socket()
+        conn_id = "tool-failure-test"
+        run = server.RunState("tool-failure-run", "conv-2", "test-model")
+        monkeypatch.setattr(server, "memory", SimpleNamespace(save_message=AsyncMock()))
+        monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=events))
+        monkeypatch.setitem(server.runtime_mgr.connections, conn_id, socket)
+
+        try:
+            await server._execute_run(conn_id, run, "read", None)
+        finally:
+            server.runtime_mgr.connections.pop(conn_id, None)
+
+        tool_event = next(event for event in socket.events if event["event"] == "tool.completed")
+        assert tool_event["data"]["is_error"] is True
+        assert tool_event["data"]["error_category"] == "tool"
+        assert any(event["event"] == "run.completed" for event in socket.events)
+        assert run.status == "completed"
+
+    async def test_run_start_emits_agent_events(self, monkeypatch) -> None:
         """A run.start message should produce agent_event envelopes."""
-        import asyncio
         import json as _json
+        from types import SimpleNamespace
         from starlette.testclient import TestClient
-        from atlas.server import app as _app, lifespan
+        from atlas import server
+        from atlas.server import app as _app
+
+        async def fake_run(**kwargs):
+            yield {"type": "chunk", "content": "Hello"}
+            yield {"type": "done"}
 
         # Use sync TestClient for WebSocket (starlette limitation)
         with TestClient(_app) as tc:
+            monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=fake_run))
             with tc.websocket_connect("/ws/chat") as ws:
                 ws.send_text(_json.dumps({
                     "type": "run.start",
