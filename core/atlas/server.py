@@ -606,6 +606,7 @@ class RunState:
         "run_id", "conversation_id", "model", "sequence",
         "status", "events", "cancel_event", "pause_event",
         "approval_futures", "task",
+        "event_lock",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -620,6 +621,7 @@ class RunState:
         self.pause_event.set()  # not paused initially
         self.approval_futures: dict[str, asyncio.Future[str]] = {}
         self.task: asyncio.Task[None] | None = None
+        self.event_lock = asyncio.Lock()
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""
@@ -660,6 +662,18 @@ class RuntimeManager:
                 await ws.send_json(data)
             except Exception:
                 pass  # connection may have closed
+
+    async def send_run(self, run: RunState, data: dict[str, Any], fallback_conn_id: str) -> None:
+        """Send to the most recently attached connection for this run."""
+        conn_id = next(
+            (
+                conn for conn, active_run_id in reversed(self.conn_runs.items())
+                if active_run_id == run.run_id
+            ),
+            fallback_conn_id,
+        )
+        async with run.event_lock:
+            await self.send(conn_id, data)
 
 
 runtime_mgr = RuntimeManager()
@@ -746,6 +760,14 @@ async def ws_chat(ws: WebSocket) -> None:
 async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     """Start a new agent run."""
     run_id = data.get("run_id") or str(uuid.uuid4())
+    existing = runtime_mgr.runs.get(run_id)
+    if existing:
+        runtime_mgr.conn_runs[conn_id] = run_id
+        async with existing.event_lock:
+            for env in list(existing.events):
+                await runtime_mgr.send(conn_id, env)
+        return
+
     content = data.get("content", "")
     conv_id = data.get("conversation_id") or str(uuid.uuid4())
     model_id = data.get("model")
@@ -764,17 +786,28 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
 async def _handle_resume(conn_id: str, data: dict[str, Any]) -> None:
     """Replay events after a given sequence number."""
     run_id = data.get("run_id", "")
-    after_seq = data.get("after_sequence", 0)
+    try:
+        after_seq = max(0, int(data.get("after_sequence", 0)))
+    except (TypeError, ValueError):
+        after_seq = 0
     run = runtime_mgr.runs.get(run_id)
     if not run:
+        missing = RunState(run_id, "", "")
+        missing.sequence = after_seq
+        env = missing.next_envelope("run.failed", {
+            "category": "interrupted",
+            "detail": "Run state is no longer available; start a new run to continue.",
+        })
+        await runtime_mgr.send(conn_id, env)
         return
 
     runtime_mgr.conn_runs[conn_id] = run_id
 
-    # Replay missed events
-    for env in run.events:
-        if env["sequence"] > after_seq:
-            await runtime_mgr.send(conn_id, env)
+    # Keep live events behind the replay so sequence order is preserved.
+    async with run.event_lock:
+        for env in list(run.events):
+            if env["sequence"] > after_seq:
+                await runtime_mgr.send(conn_id, env)
 
 
 def _map_tool_runtime_event(
@@ -814,7 +847,7 @@ async def _execute_run(
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
         env = run.next_envelope(event, data)
-        await runtime_mgr.send(conn_id, env)
+        await runtime_mgr.send_run(run, env, fallback_conn_id=conn_id)
 
     async def check_pause_cancel() -> bool:
         """Wait while paused; return True if cancelled."""

@@ -448,3 +448,93 @@ class TestWebSocketProtocol:
 
                 # Last event should be run.completed or run.failed
                 assert events[-1]["event"] in ("run.completed", "run.failed")
+
+    async def test_resume_routes_new_events_to_reconnected_socket(self, monkeypatch) -> None:
+        from atlas import server
+
+        class Socket:
+            def __init__(self) -> None:
+                self.events: list[dict] = []
+
+            async def send_json(self, event: dict) -> None:
+                self.events.append(event)
+
+        old_socket = Socket()
+        new_socket = Socket()
+        run = server.RunState("reconnect-run", "conv-reconnect", "test-model")
+        run.next_envelope("run.started", {"status": "running"})
+        monkeypatch.setitem(server.runtime_mgr.runs, run.run_id, run)
+        monkeypatch.setitem(server.runtime_mgr.connections, "old-connection", old_socket)
+        monkeypatch.setitem(server.runtime_mgr.connections, "new-connection", new_socket)
+        monkeypatch.setitem(server.runtime_mgr.conn_runs, "old-connection", run.run_id)
+
+        await server._handle_resume("new-connection", {"run_id": run.run_id, "after_sequence": 1})
+        next_event = run.next_envelope("message.delta", {"content": "continued"})
+        await server.runtime_mgr.send_run(run, next_event, fallback_conn_id="old-connection")
+
+        assert old_socket.events == []
+        assert new_socket.events == [next_event]
+
+    async def test_duplicate_run_start_reuses_existing_run_and_task(self, monkeypatch) -> None:
+        import asyncio
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from atlas import server
+
+        run_id = "duplicate-start-run"
+        gate = asyncio.Event()
+        async def blocked_run(*args, **kwargs):
+            await gate.wait()
+
+        execute = AsyncMock(side_effect=blocked_run)
+        monkeypatch.setattr(server, "model_mgr", SimpleNamespace(current_model="test-model"))
+        monkeypatch.setattr(server, "_execute_run", execute)
+
+        try:
+            await server._handle_run_start("first-connection", {
+                "run_id": run_id, "content": "hello", "conversation_id": "conv-duplicate",
+            })
+            original = server.runtime_mgr.runs[run_id]
+            original_task = original.task
+
+            await server._handle_run_start("second-connection", {
+                "run_id": run_id, "content": "hello", "conversation_id": "conv-duplicate",
+            })
+            await asyncio.sleep(0)
+
+            assert server.runtime_mgr.runs[run_id] is original
+            assert server.runtime_mgr.runs[run_id].task is original_task
+            assert execute.await_count == 1
+            assert server.runtime_mgr.conn_runs["second-connection"] == run_id
+        finally:
+            gate.set()
+            task = server.runtime_mgr.runs.pop(run_id, None)
+            if task and task.task:
+                task.task.cancel()
+                await asyncio.gather(task.task, return_exceptions=True)
+            server.runtime_mgr.conn_runs.pop("first-connection", None)
+            server.runtime_mgr.conn_runs.pop("second-connection", None)
+
+    async def test_resume_of_missing_run_emits_terminal_failure(self, monkeypatch) -> None:
+        from atlas import server
+
+        class Socket:
+            def __init__(self) -> None:
+                self.events: list[dict] = []
+
+            async def send_json(self, event: dict) -> None:
+                self.events.append(event)
+
+        socket = Socket()
+        monkeypatch.setitem(server.runtime_mgr.connections, "recovered-connection", socket)
+
+        await server._handle_resume("recovered-connection", {
+            "run_id": "lost-run", "after_sequence": 4,
+        })
+
+        assert len(socket.events) == 1
+        assert socket.events[0]["run_id"] == "lost-run"
+        assert socket.events[0]["sequence"] == 5
+        assert socket.events[0]["event"] == "run.failed"
+        assert socket.events[0]["data"]["category"] == "interrupted"
