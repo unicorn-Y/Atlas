@@ -485,8 +485,20 @@ class AgentOrchestrator:
                     metadata={"model": litellm_model},
                 )
             except Exception as e:
-                yield {"type": "error", "category": "backend", "detail": f"Unable to save assistant message: {e}"}
+                yield {
+                    "type": "error",
+                    "category": "backend",
+                    "detail": f"Unable to save assistant message: {e}",
+                }
                 return
+            try:
+                await self._memory.extract_conversation_candidates(conversation_id)
+            except Exception as exc:
+                log.warning(
+                    "memory.candidate_extraction_failed",
+                    conversation_id=conversation_id,
+                    error=str(exc),
+                )
             yield {
                 "type": "done",
                 "message_id": msg_id,

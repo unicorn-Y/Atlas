@@ -229,3 +229,82 @@ class TestExtractedMemories:
             }
         finally:
             await store.close()
+
+
+class TestAutomaticMemoryCandidates:
+    async def test_conversation_creates_pending_candidates_without_promoting(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation()
+        await store.save_message(
+            conversation_id, "user", "I prefer concise answers."
+        )
+        await store.save_message(
+            conversation_id, "assistant", "I will keep that in mind."
+        )
+
+        candidates = await store.extract_conversation_candidates(conversation_id)
+
+        assert len(candidates) == 1
+        assert candidates[0]["key"] == "user_preference"
+        assert candidates[0]["value"] == "concise answers"
+        assert candidates[0]["status"] == "pending"
+        assert await store.get_fact("user_preference") is None
+        assert await store.list_memory_candidates(status="pending") == candidates
+
+    async def test_explicit_project_decision_becomes_review_candidate(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation()
+        await store.save_message(
+            conversation_id, "user", "We decided to use PostgreSQL."
+        )
+
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+
+        assert candidate["key"] == "project_decision"
+        assert candidate["value"] == "PostgreSQL"
+        assert candidate["category"] == "decision"
+        assert candidate["status"] == "pending"
+        assert await store.get_fact("project_decision") is None
+
+    async def test_uncertain_and_secret_statements_are_rejected(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation()
+        await store.save_message(
+            conversation_id,
+            "user",
+            "I might prefer concise answers.\nMy API key is sk-secret-value.",
+        )
+
+        candidates = await store.extract_conversation_candidates(conversation_id)
+
+        assert candidates == []
+        assert await store.list_memory_candidates() == []
+        assert await store.list_facts() == []
+
+    async def test_candidate_promotion_requires_explicit_approval_and_persists(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation()
+        await store.save_message(conversation_id, "user", "My timezone is Asia/Hong_Kong.")
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+
+        promoted = await store.promote_memory_candidate(candidate["id"])
+
+        assert promoted is True
+        await store.close()
+        await store.init()
+        assert await store.get_fact(candidate["key"]) == "Asia/Hong_Kong"
+        assert (await store.list_memory_candidates())[0]["status"] == "approved"
+        assert await store.promote_memory_candidate(candidate["id"]) is False
+
+    async def test_rejected_candidate_never_becomes_fact(self, store: MemoryStore) -> None:
+        conversation_id = await store.create_conversation()
+        await store.save_message(conversation_id, "user", "Our project uses FastAPI.")
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+
+        assert await store.reject_memory_candidate(candidate["id"])
+        assert await store.get_fact(candidate["key"]) is None
+        assert (await store.list_memory_candidates())[0]["status"] == "rejected"

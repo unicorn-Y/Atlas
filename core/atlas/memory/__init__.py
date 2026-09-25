@@ -22,6 +22,48 @@ _MEMORY_LINE = re.compile(
     re.IGNORECASE,
 )
 _MEMORY_TOKEN = re.compile(r"[\w.-]+", re.UNICODE)
+_UNCERTAIN_MEMORY = re.compile(
+    r"\b(?:might|maybe|perhaps|possibly|probably|i think|not sure|guess|hypothetically)\b"
+    r"|(?:可能|也许|或许|大概|我猜|不确定|假设)",
+    re.IGNORECASE,
+)
+_SENSITIVE_MEMORY = re.compile(
+    r"\b(?:api\s*key|access\s*token|password|passwd|secret|credential|private\s*key)\b"
+    r"|(?:密钥|密码|令牌|凭据|私钥)",
+    re.IGNORECASE,
+)
+_AUTO_MEMORY_PATTERNS = (
+    (
+        re.compile(r"^(?:I prefer|I like|I usually use|I always use)\s+(.+)$", re.I),
+        "user_preference",
+        "preference",
+    ),
+    (re.compile(r"^My (timezone|time zone|language|name|role) is\s+(.+)$", re.I), None, "personal"),
+    (
+        re.compile(r"^(?:Our|This) project (?:uses|is built with|runs on)\s+(.+)$", re.I),
+        "project_stack",
+        "project",
+    ),
+    (
+        re.compile(r"^(?:We|Our team) decided to use\s+(.+)$", re.I),
+        "project_decision",
+        "decision",
+    ),
+    (
+        re.compile(r"^我(?:更)?(?:喜欢|偏好|习惯使用|通常使用|始终使用)\s*(.+)$"),
+        "user_preference",
+        "preference",
+    ),
+    (re.compile(r"^我的(时区|语言|姓名|名字|角色)是\s*(.+)$"), None, "personal"),
+    (re.compile(r"^(?:我们的|这个)项目(?:使用|采用|基于)\s*(.+)$"), "project_stack", "project"),
+    (re.compile(r"^(?:我们|团队)决定(?:使用|采用)\s*(.+)$"), "project_decision", "decision"),
+)
+_PERSONAL_KEYS = {
+    "timezone": "user_timezone", "time zone": "user_timezone",
+    "language": "user_language", "name": "user_name", "role": "user_role",
+    "时区": "user_timezone", "语言": "user_language", "姓名": "user_name",
+    "名字": "user_name", "角色": "user_role",
+}
 
 
 class MemoryStore:
@@ -105,6 +147,22 @@ class MemoryStore:
                 source_conversation_id TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Automatically extracted memories remain pending until approved.
+            CREATE TABLE IF NOT EXISTS memory_candidates (
+                id TEXT PRIMARY KEY,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                category TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending', 'approved', 'rejected')),
+                source_conversation_id TEXT NOT NULL,
+                source_message_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(source_message_id, key, value)
             );
         """)
         cursor = await self._db.execute("PRAGMA table_info(facts)")
@@ -280,6 +338,123 @@ class MemoryStore:
                 "source_conversation_id": conversation_id,
             })
         return extracted
+
+    async def extract_conversation_candidates(
+        self, conversation_id: str
+    ) -> list[dict[str, Any]]:
+        """Extract conservative user-stated memories into a review queue."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, role, content FROM messages WHERE conversation_id = ? "
+            "ORDER BY created_at ASC, rowid ASC",
+            (conversation_id,),
+        )
+        messages = await cursor.fetchall()
+        for message in messages:
+            if message["role"] != "user":
+                continue
+            text = message["content"].strip()
+            if not text or "?" in text or "？" in text or _UNCERTAIN_MEMORY.search(text):
+                continue
+            if _SENSITIVE_MEMORY.search(text):
+                continue
+            for line in text.splitlines():
+                line = line.strip()
+                for pattern, fixed_key, category in _AUTO_MEMORY_PATTERNS:
+                    match = pattern.fullmatch(line.rstrip(".!。"))
+                    if not match:
+                        continue
+                    groups = match.groups()
+                    if fixed_key is None:
+                        key = _PERSONAL_KEYS.get(groups[0].casefold())
+                        value = groups[1].strip()
+                    else:
+                        key = fixed_key
+                        value = groups[0].strip()
+                    value = value.rstrip(".!。 ")
+                    if not key or not 2 <= len(value) <= 160:
+                        continue
+                    if (
+                        _SENSITIVE_MEMORY.search(value)
+                        or _UNCERTAIN_MEMORY.search(value)
+                    ):
+                        continue
+                    await self._db.execute(
+                        "INSERT OR IGNORE INTO memory_candidates "
+                        "(id, key, value, category, confidence, "
+                        "source_conversation_id, source_message_id) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            str(uuid.uuid4()), key, value, category, 0.9,
+                            conversation_id, message["id"],
+                        ),
+                    )
+                    break
+        await self._db.commit()
+        return await self.list_memory_candidates(
+            status="pending", source_conversation_id=conversation_id
+        )
+
+    async def list_memory_candidates(
+        self, status: str | None = None,
+        source_conversation_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        assert self._db is not None
+        clauses: list[str] = []
+        params: list[str] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if source_conversation_id:
+            clauses.append("source_conversation_id = ?")
+            params.append(source_conversation_id)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        cursor = await self._db.execute(
+            "SELECT id, key, value, category, confidence, status, "
+            "source_conversation_id, source_message_id, created_at, updated_at "
+            "FROM memory_candidates" + where + " ORDER BY created_at, rowid",
+            params,
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def promote_memory_candidate(self, candidate_id: str) -> bool:
+        assert self._db is not None
+        await self._db.execute("BEGIN IMMEDIATE")
+        cursor = await self._db.execute(
+            "SELECT key, value, category, source_conversation_id "
+            "FROM memory_candidates WHERE id = ? AND status = 'pending'",
+            (candidate_id,),
+        )
+        candidate = await cursor.fetchone()
+        if not candidate:
+            await self._db.rollback()
+            return False
+        await self._db.execute(
+            "INSERT INTO facts (key, value, category, source_conversation_id) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+            "category=excluded.category, "
+            "source_conversation_id=COALESCE(excluded.source_conversation_id, "
+            "facts.source_conversation_id), updated_at=datetime('now')",
+            (candidate["key"], candidate["value"], candidate["category"],
+             candidate["source_conversation_id"]),
+        )
+        await self._db.execute(
+            "UPDATE memory_candidates SET status = 'approved', updated_at = datetime('now') "
+            "WHERE id = ? AND status = 'pending'", (candidate_id,),
+        )
+        await self._db.commit()
+        return True
+
+    async def reject_memory_candidate(self, candidate_id: str) -> bool:
+        assert self._db is not None
+        await self._db.execute("BEGIN IMMEDIATE")
+        cursor = await self._db.execute(
+            "UPDATE memory_candidates SET status = 'rejected', updated_at = datetime('now') "
+            "WHERE id = ? AND status = 'pending'", (candidate_id,),
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
 
     async def get_agent_context(
         self, query: str, limit: int = 10

@@ -356,6 +356,39 @@ async def delete_fact(key: str) -> dict[str, str]:
     return {"status": "ok", "key": key}
 
 
+@app.get("/api/memory/candidates")
+async def list_memory_candidates(
+    status: str | None = Query(None),
+) -> list[dict[str, Any]]:
+    """List extracted memory candidates for user review."""
+    assert memory is not None
+    if status not in (None, "pending", "approved", "rejected"):
+        raise HTTPException(status_code=400, detail="Invalid candidate status")
+    return await memory.list_memory_candidates(status=status)
+
+
+@app.post("/api/memory/candidates/{candidate_id}/approve")
+async def approve_memory_candidate(candidate_id: str) -> dict[str, str]:
+    """Promote a pending candidate after explicit user approval."""
+    assert memory is not None
+    if not await memory.promote_memory_candidate(candidate_id):
+        raise HTTPException(
+            status_code=404, detail="Pending memory candidate not found"
+        )
+    return {"status": "approved", "id": candidate_id}
+
+
+@app.post("/api/memory/candidates/{candidate_id}/reject")
+async def reject_memory_candidate(candidate_id: str) -> dict[str, str]:
+    """Reject a pending memory candidate."""
+    assert memory is not None
+    if not await memory.reject_memory_candidate(candidate_id):
+        raise HTTPException(
+            status_code=404, detail="Pending memory candidate not found"
+        )
+    return {"status": "rejected", "id": candidate_id}
+
+
 # ---------------------------------------------------------------------------
 # Tools (MCP)
 # ---------------------------------------------------------------------------

@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from atlas import server
+from atlas.memory import MemoryStore
 from atlas.server import app
 
 
@@ -336,6 +338,39 @@ class TestFacts:
         # Delete again should 404
         resp = await client.delete("/api/facts/to_delete")
         assert resp.status_code == 404
+
+    async def test_memory_candidate_requires_api_approval(
+        self, client: AsyncClient, tmp_path
+    ) -> None:
+        original_memory = server.memory
+        await original_memory.close()
+        isolated_memory = MemoryStore(db_path=tmp_path / "candidate-review.db")
+        await isolated_memory.init()
+        server.memory = isolated_memory
+        try:
+            conversation_id = await isolated_memory.create_conversation()
+            await isolated_memory.save_message(
+                conversation_id, "user", "I prefer concise answers."
+            )
+            [candidate] = await isolated_memory.extract_conversation_candidates(
+                conversation_id
+            )
+
+            listed = await client.get(
+                "/api/memory/candidates", params={"status": "pending"}
+            )
+            assert listed.status_code == 200
+            assert listed.json()[0]["id"] == candidate["id"]
+            assert await isolated_memory.get_fact("user_preference") is None
+
+            approved = await client.post(
+                f"/api/memory/candidates/{candidate['id']}/approve"
+            )
+            assert approved.status_code == 200
+            assert await isolated_memory.get_fact("user_preference") == "concise answers"
+        finally:
+            await isolated_memory.close()
+            server.memory = original_memory
 
 
 # ---------------------------------------------------------------------------
