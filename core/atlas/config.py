@@ -22,9 +22,10 @@ log = structlog.get_logger()
 # ---------------------------------------------------------------------------
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # D:\Atlas\core -> D:\Atlas
-CONFIG_PATH = PROJECT_ROOT / "config" / "atlas.toml"
+DATA_ROOT = Path(os.environ.get("ATLAS_DATA_DIR", PROJECT_ROOT)).resolve()
+CONFIG_PATH = (DATA_ROOT if os.environ.get("ATLAS_DATA_DIR") else PROJECT_ROOT) / "config" / "atlas.toml"
 EXAMPLE_CONFIG_PATH = PROJECT_ROOT / "config" / "atlas.example.toml"
-USER_SETTINGS_PATH = PROJECT_ROOT / "data" / "user-settings.json"
+USER_SETTINGS_PATH = DATA_ROOT / "data" / "user-settings.json"
 
 
 def load_user_settings(path: Path | None = None) -> dict[str, Any]:
@@ -123,7 +124,7 @@ class AtlasConfig:
         raw = self.get("memory.db_path", "./data/atlas.db")
         p = Path(str(raw))
         if not p.is_absolute():
-            p = PROJECT_ROOT / p
+            p = DATA_ROOT / p
         return p
 
     @property
@@ -180,6 +181,7 @@ def load_config(path: Path | None = None) -> AtlasConfig:
 
     if not cfg_path.exists():
         if EXAMPLE_CONFIG_PATH.exists():
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(EXAMPLE_CONFIG_PATH, cfg_path)
             log.info("config.created_from_example", path=str(cfg_path))
         else:

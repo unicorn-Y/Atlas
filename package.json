@@ -12,6 +12,7 @@
     "dev:frontend": "cd frontend && npm run dev",
     "build": "npm --prefix frontend run build",
     "dev:desktop": "npm --prefix frontend run dev",
+    "dist:win": "npm --prefix frontend run dist:win",
     "start": "pm2 start ecosystem.config.js",
     "stop": "pm2 stop atlas"
   },

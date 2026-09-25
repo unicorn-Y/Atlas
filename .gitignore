@@ -17,11 +17,22 @@ data/user-settings.json.tmp
 
 # Config with secrets
 config/atlas.toml
+config/atlas.toml.*
+config/*.bak-*
+config/*.bak
+config/*.local.toml
+*.bak-2026*
+
+# voice-demo local config (holds a real API key — use config.example.json)
+voice-demo/config.json
 
 # Electron
 frontend/dist/
 frontend/dist-electron/
 frontend/out/
+# electron-builder 产物与中间目录（避免 269M+ 二进制被提交）
+frontend/release/
+frontend/windows-release/
 frontend/node_modules/
 .playwright-mcp/
 /atlas-workspace-v1.png

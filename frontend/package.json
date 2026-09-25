@@ -1,6 +1,8 @@
 {
   "name": "@atlas/frontend",
   "version": "0.1.0",
+  "description": "Atlas AI Personal Assistant desktop application",
+  "author": "Atlas",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/electron.js",
@@ -11,6 +13,7 @@
     "test": "vitest run --root .",
     "test:adapter": "vitest run --root .. backend-adapter/tests/client.test.ts",
     "start": "electron .",
+    "dist:win": "npm run build && electron-builder --win nsis --x64",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -21,16 +24,31 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@types/node": "^22.10.2",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
-    "electron": "^33.2.1",
+    "electron": "33.4.11",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vitest": "^5.0.2",
     "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.atlas.desktop",
+    "productName": "Atlas",
+    "artifactName": "${productName}-${version}-Setup.${ext}",
+    "directories": { "output": "windows-release" },
+    "files": ["dist/**", "dist-electron/**", "package.json"],
+    "extraResources": [
+      { "from": "../core", "to": "atlas/core", "filter": ["**/*", "!tests/**", "!**/__pycache__/**", "!**/*.pyc"] },
+      { "from": "../skills", "to": "atlas/skills", "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"] },
+      { "from": "../config/atlas.example.toml", "to": "atlas/config/atlas.example.toml" }
+    ],
+    "win": { "target": ["nsis"] },
+    "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true }
   }
 }

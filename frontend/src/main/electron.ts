@@ -41,6 +41,10 @@ ipcMain.on('window:maximize', () => {
 ipcMain.on('window:close', () => windowRef?.close());
 
 app.whenReady().then(async () => {
+  if (app.isPackaged) {
+    process.env.ATLAS_ROOT ??= path.join(process.resourcesPath, 'atlas');
+    process.env.ATLAS_DATA_DIR ??= app.getPath('userData');
+  }
   try {
     await ensureBackendRunning();
   } catch (error) {

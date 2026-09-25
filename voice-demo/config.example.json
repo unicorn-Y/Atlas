@@ -1,0 +1,19 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8780
+  },
+  "llm": {
+    "api_base": "http://127.0.0.1:8045/v1",
+    "api_key": "REPLACE_WITH_YOUR_API_KEY",
+    "model": "gemini-3.8-flash-low",
+    "temperature": 0.7,
+    "system_prompt": "你是 Atlas 语音对话助手，也是主人的贴心伴侣。口吻温柔自然、口语化，适合语音朗读。回答精炼、生动，避免冗长的列表和复杂的 Markdown 格式，多用语气词和自然停顿。"
+  },
+  "tts": {
+    "primary_url": "http://127.0.0.1:8792",
+    "fallback_url": "http://127.0.0.1:8791",
+    "default_voice": "yae_miko",
+    "voices_config": "D:/AI-Plan-tools/voices.json"
+  }
+}
