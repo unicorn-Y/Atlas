@@ -150,6 +150,8 @@ class MemoryStore:
                 value TEXT NOT NULL,
                 category TEXT NOT NULL DEFAULT 'general',
                 source_conversation_id TEXT,
+                source_message_id TEXT,
+                confidence REAL NOT NULL DEFAULT 1.0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
@@ -162,12 +164,25 @@ class MemoryStore:
                 category TEXT NOT NULL,
                 confidence REAL NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending'
-                    CHECK(status IN ('pending', 'approved', 'rejected')),
+                    CHECK(status IN ('pending', 'approved', 'rejected', 'superseded')),
                 source_conversation_id TEXT NOT NULL,
                 source_message_id TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(source_message_id, key, value)
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_fact_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                category TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                source_conversation_id TEXT,
+                source_message_id TEXT,
+                event_type TEXT NOT NULL CHECK(event_type IN ('superseded', 'duplicate')),
+                candidate_id TEXT,
+                recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
         """)
         cursor = await self._db.execute("PRAGMA table_info(facts)")
@@ -176,6 +191,41 @@ class MemoryStore:
             await self._db.execute(
                 "ALTER TABLE facts ADD COLUMN source_conversation_id TEXT"
             )
+        if "source_message_id" not in fact_columns:
+            await self._db.execute("ALTER TABLE facts ADD COLUMN source_message_id TEXT")
+        if "confidence" not in fact_columns:
+            await self._db.execute(
+                "ALTER TABLE facts ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0"
+            )
+        cursor = await self._db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_candidates'"
+        )
+        candidate_sql = (await cursor.fetchone())["sql"] or ""
+        if "'superseded'" not in candidate_sql:
+            await self._db.executescript("""
+                ALTER TABLE memory_candidates RENAME TO memory_candidates_legacy;
+                CREATE TABLE memory_candidates (
+                    id TEXT PRIMARY KEY,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending'
+                        CHECK(status IN ('pending', 'approved', 'rejected', 'superseded')),
+                    source_conversation_id TEXT NOT NULL,
+                    source_message_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    UNIQUE(source_message_id, key, value)
+                );
+                INSERT INTO memory_candidates
+                    (id, key, value, category, confidence, status,
+                     source_conversation_id, source_message_id, created_at, updated_at)
+                SELECT id, key, value, category, confidence, status,
+                       source_conversation_id, source_message_id, created_at, updated_at
+                FROM memory_candidates_legacy;
+                DROP TABLE memory_candidates_legacy;
+            """)
         await self._db.commit()
 
     # ----- Conversations -----
@@ -279,17 +329,21 @@ class MemoryStore:
         value: str,
         category: str = "general",
         source_conversation_id: str | None = None,
+        source_message_id: str | None = None,
+        confidence: float = 1.0,
     ) -> None:
         assert self._db is not None
         await self._db.execute(
-            "INSERT INTO facts (key, value, category, source_conversation_id) "
-            "VALUES (?, ?, ?, ?) "
+            "INSERT INTO facts (key, value, category, source_conversation_id, "
+            "source_message_id, confidence) VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
             "category=excluded.category, "
             "source_conversation_id=COALESCE(excluded.source_conversation_id, "
             "facts.source_conversation_id), "
+            "source_message_id=excluded.source_message_id, "
+            "confidence=excluded.confidence, "
             "updated_at=datetime('now')",
-            (key, value, category, source_conversation_id),
+            (key, value, category, source_conversation_id, source_message_id, confidence),
         )
         await self._db.commit()
 
@@ -305,13 +359,15 @@ class MemoryStore:
         assert self._db is not None
         if category:
             cursor = await self._db.execute(
-                "SELECT key, value, category, source_conversation_id, updated_at FROM facts "
+                "SELECT key, value, category, source_conversation_id, source_message_id, "
+                "confidence, updated_at FROM facts "
                 "WHERE category = ? ORDER BY updated_at DESC",
                 (category,),
             )
         else:
             cursor = await self._db.execute(
-                "SELECT key, value, category, source_conversation_id, updated_at FROM facts "
+                "SELECT key, value, category, source_conversation_id, source_message_id, "
+                "confidence, updated_at FROM facts "
                 "ORDER BY updated_at DESC"
             )
         rows = await cursor.fetchall()
@@ -426,7 +482,7 @@ class MemoryStore:
         assert self._db is not None
         await self._db.execute("BEGIN IMMEDIATE")
         cursor = await self._db.execute(
-            "SELECT key, value, category, source_conversation_id "
+            "SELECT key, value, category, confidence, source_conversation_id, source_message_id "
             "FROM memory_candidates WHERE id = ? AND status = 'pending'",
             (candidate_id,),
         )
@@ -434,15 +490,74 @@ class MemoryStore:
         if not candidate:
             await self._db.rollback()
             return False
+        cursor = await self._db.execute(
+            "SELECT key, value, category, confidence, source_conversation_id, "
+            "source_message_id, updated_at FROM facts WHERE key = ?",
+            (candidate["key"],),
+        )
+        current = await cursor.fetchone()
+        if current and current["value"] == candidate["value"]:
+            await self._db.execute(
+                "INSERT INTO memory_fact_history "
+                "(key, value, category, confidence, source_conversation_id, "
+                "source_message_id, event_type, candidate_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'duplicate', ?)",
+                (current["key"], current["value"], current["category"],
+                 current["confidence"], current["source_conversation_id"],
+                 current["source_message_id"], candidate_id),
+            )
+            await self._db.execute(
+                "UPDATE memory_candidates SET status = 'approved', updated_at = datetime('now') "
+                "WHERE id = ?", (candidate_id,),
+            )
+            await self._db.commit()
+            return True
+        if current:
+            cursor = await self._db.execute(
+                "SELECT created_at FROM messages WHERE id = ?",
+                (candidate["source_message_id"],),
+            )
+            candidate_message = await cursor.fetchone()
+            cursor = await self._db.execute(
+                "SELECT created_at FROM messages WHERE id = ?",
+                (current["source_message_id"],),
+            )
+            current_message = await cursor.fetchone()
+            candidate_time = (
+                candidate_message["created_at"] if candidate_message else None
+            )
+            current_time = (
+                current_message["created_at"] if current_message else current["updated_at"]
+            )
+            if candidate_time and current_time and candidate_time < current_time:
+                await self._db.execute(
+                    "UPDATE memory_candidates SET status = 'superseded', "
+                    "updated_at = datetime('now') WHERE id = ?",
+                    (candidate_id,),
+                )
+                await self._db.commit()
+                return False
+            await self._db.execute(
+                "INSERT INTO memory_fact_history "
+                "(key, value, category, confidence, source_conversation_id, "
+                "source_message_id, event_type, candidate_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'superseded', ?)",
+                (current["key"], current["value"], current["category"],
+                 current["confidence"], current["source_conversation_id"],
+                 current["source_message_id"], candidate_id),
+            )
         await self._db.execute(
-            "INSERT INTO facts (key, value, category, source_conversation_id) "
-            "VALUES (?, ?, ?, ?) "
+            "INSERT INTO facts (key, value, category, source_conversation_id, "
+            "source_message_id, confidence) VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
             "category=excluded.category, "
             "source_conversation_id=COALESCE(excluded.source_conversation_id, "
-            "facts.source_conversation_id), updated_at=datetime('now')",
+            "facts.source_conversation_id), "
+            "source_message_id=excluded.source_message_id, confidence=excluded.confidence, "
+            "updated_at=datetime('now')",
             (candidate["key"], candidate["value"], candidate["category"],
-             candidate["source_conversation_id"]),
+             candidate["source_conversation_id"], candidate["source_message_id"],
+             candidate["confidence"]),
         )
         await self._db.execute(
             "UPDATE memory_candidates SET status = 'approved', updated_at = datetime('now') "
@@ -450,6 +565,32 @@ class MemoryStore:
         )
         await self._db.commit()
         return True
+
+    async def list_memory_conflicts(self) -> list[dict[str, Any]]:
+        """Return pending candidates whose values disagree with the current fact."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT c.id AS candidate_id, c.key, c.value AS candidate_value, "
+            "c.confidence AS candidate_confidence, c.source_conversation_id "
+            "AS candidate_source_conversation_id, c.source_message_id "
+            "AS candidate_source_message_id, f.value AS current_value, "
+            "f.confidence AS current_confidence, f.source_conversation_id "
+            "AS current_source_conversation_id, f.source_message_id "
+            "AS current_source_message_id FROM memory_candidates c "
+            "JOIN facts f ON f.key = c.key WHERE c.status = 'pending' "
+            "AND c.value <> f.value ORDER BY c.created_at, c.rowid"
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def list_memory_fact_history(self, key: str) -> list[dict[str, Any]]:
+        """Return superseded fact versions and duplicate consolidation records."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT key, value, category, confidence, source_conversation_id, "
+            "source_message_id, event_type, candidate_id, recorded_at "
+            "FROM memory_fact_history WHERE key = ? ORDER BY id", (key,)
+        )
+        return [dict(row) for row in await cursor.fetchall()]
 
     async def reject_memory_candidate(self, candidate_id: str) -> bool:
         assert self._db is not None

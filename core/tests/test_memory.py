@@ -266,6 +266,42 @@ class TestAgentContextRanking:
         finally:
             await store.close()
 
+    async def test_existing_candidate_table_is_migrated_for_superseded_status(
+        self, tmp_path: Path
+    ) -> None:
+        db_path = tmp_path / "legacy-candidates.db"
+        with sqlite3.connect(db_path) as db:
+            db.execute(
+                "CREATE TABLE memory_candidates ("
+                "id TEXT PRIMARY KEY, key TEXT NOT NULL, value TEXT NOT NULL, "
+                "category TEXT NOT NULL, confidence REAL NOT NULL, "
+                "status TEXT NOT NULL DEFAULT 'pending' "
+                "CHECK(status IN ('pending', 'approved', 'rejected')), "
+                "source_conversation_id TEXT NOT NULL, source_message_id TEXT NOT NULL, "
+                "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+                "updated_at TEXT NOT NULL DEFAULT (datetime('now')), "
+                "UNIQUE(source_message_id, key, value))"
+            )
+            db.execute(
+                "INSERT INTO memory_candidates (id, key, value, category, confidence, "
+                "source_conversation_id, source_message_id) "
+                "VALUES ('candidate-1', 'user_timezone', 'UTC', 'personal', 0.9, 'c1', 'm1')"
+            )
+        store = MemoryStore(db_path=db_path)
+        await store.init()
+        try:
+            [candidate] = await store.list_memory_candidates()
+            assert candidate["id"] == "candidate-1"
+            await store._db.execute(
+                "UPDATE memory_candidates SET status = 'superseded' WHERE id = ?",
+                (candidate["id"],),
+            )
+            await store._db.commit()
+            [migrated] = await store.list_memory_candidates()
+            assert migrated["status"] == "superseded"
+        finally:
+            await store.close()
+
 
 class TestAutomaticMemoryCandidates:
     async def test_conversation_creates_pending_candidates_without_promoting(
@@ -344,3 +380,98 @@ class TestAutomaticMemoryCandidates:
         assert await store.reject_memory_candidate(candidate["id"])
         assert await store.get_fact(candidate["key"]) is None
         assert (await store.list_memory_candidates())[0]["status"] == "rejected"
+
+    async def test_pending_candidate_conflict_is_reported_without_promotion(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("project_stack", "Django", confidence=0.95)
+        conversation_id = await store.create_conversation()
+        await store.save_message(conversation_id, "user", "Our project uses FastAPI.")
+
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+        conflicts = await store.list_memory_conflicts()
+
+        assert len(conflicts) == 1
+        assert conflicts[0]["candidate_id"] == candidate["id"]
+        assert conflicts[0]["current_value"] == "Django"
+        assert conflicts[0]["candidate_value"] == "FastAPI"
+        assert await store.get_fact("project_stack") == "Django"
+
+    async def test_older_approved_candidate_cannot_replace_newer_fact(
+        self, store: MemoryStore
+    ) -> None:
+        old_conversation = await store.create_conversation()
+        old_message = await store.save_message(
+            old_conversation, "user", "My timezone is Europe/Paris."
+        )
+        new_conversation = await store.create_conversation()
+        new_message = await store.save_message(
+            new_conversation, "user", "My timezone is Asia/Hong_Kong."
+        )
+        await store._db.execute(
+            "UPDATE messages SET created_at = '2026-01-01 00:00:00' WHERE id = ?",
+            (old_message,),
+        )
+        await store._db.execute(
+            "UPDATE messages SET created_at = '2026-02-01 00:00:00' WHERE id = ?",
+            (new_message,),
+        )
+        await store._db.commit()
+        [old_candidate] = await store.extract_conversation_candidates(old_conversation)
+        [new_candidate] = await store.extract_conversation_candidates(new_conversation)
+
+        assert await store.promote_memory_candidate(new_candidate["id"])
+        assert not await store.promote_memory_candidate(old_candidate["id"])
+        assert await store.get_fact("user_timezone") == "Asia/Hong_Kong"
+        assert (await store.list_memory_candidates())[0]["status"] == "superseded"
+        [fact] = await store.list_facts()
+        assert fact["source_message_id"] == new_message
+        assert fact["confidence"] == 0.9
+
+    async def test_newer_candidate_preserves_superseded_fact_and_provenance(
+        self, store: MemoryStore
+    ) -> None:
+        old_conversation = await store.create_conversation()
+        old_message = await store.save_message(
+            old_conversation, "user", "Our project uses Django."
+        )
+        new_conversation = await store.create_conversation()
+        new_message = await store.save_message(
+            new_conversation, "user", "Our project uses FastAPI."
+        )
+        await store._db.execute(
+            "UPDATE messages SET created_at = '2026-01-01 00:00:00' WHERE id = ?",
+            (old_message,),
+        )
+        await store._db.execute(
+            "UPDATE messages SET created_at = '2026-02-01 00:00:00' WHERE id = ?",
+            (new_message,),
+        )
+        await store._db.commit()
+        [old_candidate] = await store.extract_conversation_candidates(old_conversation)
+        [new_candidate] = await store.extract_conversation_candidates(new_conversation)
+
+        assert await store.promote_memory_candidate(old_candidate["id"])
+        assert await store.promote_memory_candidate(new_candidate["id"])
+        [old_version] = await store.list_memory_fact_history("project_stack")
+        assert old_version["event_type"] == "superseded"
+        assert old_version["value"] == "Django"
+        assert old_version["source_message_id"] == old_message
+        [current] = await store.list_facts()
+        assert current["value"] == "FastAPI"
+        assert current["source_message_id"] == new_message
+
+    async def test_duplicate_approved_value_is_consolidated(self, store: MemoryStore) -> None:
+        first_conversation = await store.create_conversation()
+        await store.save_message(first_conversation, "user", "My timezone is Asia/Hong_Kong.")
+        second_conversation = await store.create_conversation()
+        await store.save_message(second_conversation, "user", "My timezone is Asia/Hong_Kong.")
+        [first] = await store.extract_conversation_candidates(first_conversation)
+        [second] = await store.extract_conversation_candidates(second_conversation)
+
+        assert await store.promote_memory_candidate(first["id"])
+        assert await store.promote_memory_candidate(second["id"])
+        [history] = await store.list_memory_fact_history("user_timezone")
+        assert history["event_type"] == "duplicate"
+        assert history["candidate_id"] == second["id"]
+        assert await store.get_fact("user_timezone") == "Asia/Hong_Kong"
