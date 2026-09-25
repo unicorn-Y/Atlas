@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { ApprovalResponse, ConversationMessage, ConversationSummary, Fact, ModelListResponse, ResumeRequest, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, ToolListResponse } from './types';
+import type { ApprovalResponse, ConversationMessage, ConversationSummary, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ResumeRequest, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, ToolListResponse } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -82,6 +82,52 @@ export class BackendAdapter {
   }
   async search(query: string): Promise<unknown[]> {
     return this.live ? this.request(`/api/search?q=${encodeURIComponent(query)}`) : [];
+  }
+
+  // -- Knowledge Base -------------------------------------------------------
+
+  async getKnowledge(category?: string, limit = 50): Promise<KnowledgeEntry[]> {
+    if (!this.live) return [];
+    const params = new URLSearchParams();
+    if (category) params.set('category', category);
+    params.set('limit', String(limit));
+    return this.request(`/api/knowledge?${params}`);
+  }
+
+  async addKnowledge(entry: Pick<KnowledgeEntry, 'content' | 'source' | 'category'> & { metadata?: Record<string, unknown> }): Promise<KnowledgeEntry> {
+    if (!this.live) return { id: crypto.randomUUID(), content: entry.content, source: entry.source ?? '', category: entry.category ?? 'general' };
+    return this.request('/api/knowledge', { method: 'POST', body: JSON.stringify(entry) });
+  }
+
+  async searchKnowledge(query: string, category?: string, limit = 10): Promise<KnowledgeEntry[]> {
+    if (!this.live) return [];
+    const params = new URLSearchParams({ q: query });
+    if (category) params.set('category', category);
+    params.set('limit', String(limit));
+    return this.request(`/api/knowledge/search?${params}`);
+  }
+
+  async deleteKnowledge(id: string): Promise<void> {
+    if (this.live) await this.request(`/api/knowledge/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  // -- MCP Server Management ------------------------------------------------
+
+  async getMCPServers(): Promise<MCPServerListResponse> {
+    if (!this.live) return { servers: [] };
+    return this.request('/api/mcp/servers');
+  }
+
+  async addMCPServer(req: MCPServerAddRequest): Promise<MCPServerInfo> {
+    return this.request('/api/mcp/servers', { method: 'POST', body: JSON.stringify(req) });
+  }
+
+  async removeMCPServer(name: string): Promise<void> {
+    if (this.live) await this.request(`/api/mcp/servers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  }
+
+  async restartMCPServer(name: string): Promise<MCPServerInfo> {
+    return this.request(`/api/mcp/servers/${encodeURIComponent(name)}/restart`, { method: 'POST' });
   }
 
   async startRun(request: RunStartRequest, onEvent: (event: RuntimeStreamEvent) => void, shouldPause: () => boolean = () => false, maxReconnectAttempts = 5): Promise<void> {

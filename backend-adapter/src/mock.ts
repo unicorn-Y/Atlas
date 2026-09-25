@@ -41,7 +41,7 @@ export async function streamMockRun(request: RunStartRequest, onEvent: (event: R
   emit('tool.completed', { tool_call_id: `${request.run_id}:tool`, name: 'workspace.inspect', result: { summary: 'Mock runtime 已完成工作区检查。' } });
   emit('artifact.updated', { artifact_id: `${request.run_id}:report`, artifact_type: 'report', name: 'runtime-report.md', summary: 'Mock Agent Runtime 事件流验收报告。', path: 'artifacts/runtime-report.md' });
   if (!await delay()) { emit('run.cancelled'); return; }
-  const approval = { approval_id: `${request.run_id}:approval`, description: 'Mock Runtime 请求批准继续执行。', input: { action: 'continue', scope: '当前任务' } };
+  const approval = { approval_id: `${request.run_id}:approval`, description: 'Mock Runtime 请求批准继续执行。', input: { action: 'continue', scope: '当前任务' }, tool: 'execute_command' };
   const approvalEventId = `${request.run_id}:${sequence + 1}`;
   emit('approval.required', approval);
   const choice = await waitForApproval(approvalEventId);
@@ -49,5 +49,6 @@ export async function streamMockRun(request: RunStartRequest, onEvent: (event: R
   emit('approval.responded', { approval_id: approval.approval_id, event_id: approvalEventId, choice });
   emit('run.status', { status: choice === 'allow' ? 'running' : 'completed', approval_choice: choice });
   emit('message.delta', { content: choice === 'allow' ? '批准已收到，Mock 运行已完成。' : '请求已拒绝，Mock 运行已安全结束。' });
+  emit('message.completed', { content: choice === 'allow' ? '批准已收到，Mock 运行已完成。' : '请求已拒绝，Mock 运行已安全结束。' });
   emit('run.completed', { result: choice === 'allow' ? 'completed' : 'approval_rejected' });
 }

@@ -82,3 +82,33 @@ export interface Fact {
   category: string;
   [key: string]: unknown;
 }
+
+export interface KnowledgeEntry {
+  id: string;
+  content: string;
+  source: string;
+  category: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+export interface MCPServerInfo {
+  name: string;
+  tool_count: number;
+  tools: string[];
+}
+
+export interface MCPServerListResponse {
+  servers: MCPServerInfo[];
+}
+
+export interface MCPServerAddRequest {
+  name: string;
+  transport: 'stdio' | 'sse';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  url?: string;
+}

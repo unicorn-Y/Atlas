@@ -835,9 +835,10 @@ async def _execute_run(
         ) -> str:
             """Emit approval.required and wait for client response."""
             await emit("approval.required", {
-                "event_id": approval_event_id,
+                "approval_id": approval_event_id,
+                "description": f"Agent 请求执行工具 {tool_name}，需要你的确认。",
+                "input": tool_args,
                 "tool": tool_name,
-                "arguments": tool_args,
             })
             run.status = "waiting"
             # Create a future for this approval

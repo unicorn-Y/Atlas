@@ -102,7 +102,7 @@ export default function App() {
         <section className={styles.activityColumn} aria-label="任务活动">
           <div className={styles.activityScroll}><div className={styles.activityInner}>
             <div className={styles.conversationHeading}>任务对话</div>
-            {activeEvents.map((event) => renderRuntimeEvent(event, store, setTab, setApprovalDetails, approvalDetails))}
+            {renderEventList(activeEvents, store, setTab, setApprovalDetails, approvalDetails)}
             {store.error && <div className={styles.errorCard}><span>{store.error}</span><button onClick={store.dismissError}><X size={15} /></button></div>}
           </div></div>
           <div className={styles.composerZone}><form className={styles.composer} onSubmit={submit}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={onInputKey} placeholder="继续告诉 Atlas 要做什么…" rows={2} /><div className={styles.composerBottom}><div className={styles.composerTools}><button type="button" aria-label="添加附件" onClick={() => setToast('附件功能即将开放')}><Paperclip /></button><button type="button" aria-label="语音输入" onClick={() => setToast('语音输入即将开放')}><Mic /></button><span>{store.mode === 'mock' ? 'Mock 运行模式' : '已连接 Atlas 后端'}</span></div><button className={styles.sendButton} aria-label="发送消息" type="submit" disabled={!input.trim()}><Send size={15} />发送</button></div></form><div className={styles.composerHint}>Atlas 会在当前任务上下文中继续工作 <CircleHelp size={13} /></div></div>
@@ -123,6 +123,66 @@ export default function App() {
   </div>;
 }
 
+function renderEventList(
+  events: AgentEvent[],
+  store: ReturnType<typeof useAtlasStore.getState>,
+  setTab: (value: InspectorTab) => void,
+  setApprovalDetails: (value: (open: boolean) => boolean) => void,
+  approvalDetails: boolean,
+) {
+  const result: React.ReactNode[] = [];
+  let deltaBuffer: { content: string; ids: string[] } | null = null;
+
+  const flushDelta = () => {
+    if (!deltaBuffer) return;
+    const merged = deltaBuffer;
+    result.push(
+      <div className={styles.assistantMessage} key={merged.ids[0]}>
+        <div className={styles.assistantAvatar}>A</div>
+        <div className={styles.messageBody}>
+          <div className={styles.messageMeta}><strong>Atlas</strong><span>实时输出</span></div>
+          <div className={styles.messageText}>{merged.content}</div>
+        </div>
+      </div>
+    );
+    deltaBuffer = null;
+  };
+
+  for (const event of events) {
+    if (event.type === 'message.delta') {
+      const chunk = String(event.data.content ?? '');
+      if (deltaBuffer) {
+        deltaBuffer.content += chunk;
+        deltaBuffer.ids.push(event.id);
+      } else {
+        deltaBuffer = { content: chunk, ids: [event.id] };
+      }
+      continue;
+    }
+    // Non-delta event: flush any accumulated delta first
+    if (event.type !== 'message.completed') {
+      flushDelta();
+    } else {
+      // message.completed replaces accumulated deltas with final content
+      const finalContent = String(event.data.content ?? (deltaBuffer?.content ?? ''));
+      deltaBuffer = null;
+      result.push(
+        <div className={styles.assistantMessage} key={event.id}>
+          <div className={styles.assistantAvatar}>A</div>
+          <div className={styles.messageBody}>
+            <div className={styles.messageMeta}><strong>Atlas</strong><span>回复完成</span></div>
+            <div className={styles.messageText}>{finalContent}</div>
+          </div>
+        </div>
+      );
+      continue;
+    }
+    result.push(renderRuntimeEvent(event, store, setTab, setApprovalDetails, approvalDetails));
+  }
+  flushDelta(); // flush any trailing deltas
+  return result;
+}
+
 function renderRuntimeEvent(
   event: AgentEvent,
   store: ReturnType<typeof useAtlasStore.getState>,
@@ -132,13 +192,15 @@ function renderRuntimeEvent(
 ) {
   const data = event.data;
   if (event.type === 'run.started' && typeof data.content === 'string') return <div className={styles.userMessage} key={event.id}><div className={styles.userBubble}>{data.content}</div><div className={styles.userAvatar}>L</div></div>;
-  if (event.type === 'message.delta' || event.type === 'message.completed') return <div className={styles.assistantMessage} key={event.id}><div className={styles.assistantAvatar}>A</div><div className={styles.messageBody}><div className={styles.messageMeta}><strong>Atlas</strong><span>{event.type === 'message.delta' ? '实时输出' : '回复完成'}</span></div><div className={styles.messageText}>{String(data.content ?? '')}</div></div></div>;
+  // message.delta and message.completed are handled by renderEventList
+  if (event.type === 'message.delta' || event.type === 'message.completed') return null;
   if (event.type === 'tool.started' || event.type === 'tool.completed') return <details className={styles.activityCard} key={event.id} open={event.type === 'tool.started'}><summary><span className={styles.activityIcon}><Activity /></span><span>{String(data.name ?? 'Tool')} · {event.type === 'tool.started' ? '执行中' : '已完成'}</span><span className={styles.activityMeta}>{event.type === 'tool.started' ? '运行中' : 'Runtime'}</span></summary><div className={styles.activityDetail}><span>工具与结果</span><span>{JSON.stringify(data.result ?? data.arguments ?? {})}</span></div></details>;
   if (event.type === 'artifact.updated') return <div className={styles.fileChange} key={event.id}><div className={styles.fileHead}><FileText /><div><strong>{String(data.name ?? data.path ?? 'Artifact')}</strong><small>{String(data.artifact_type ?? 'file')} · Runtime 更新</small></div></div><p>{String(data.summary ?? data.change ?? '')}</p><button className={styles.quietButton} onClick={() => setTab('artifacts')}>在产物中查看</button></div>;
   if (event.type === 'approval.required') {
-    const response = store.getRun(event.runId)?.events.find((item) => item.type === 'approval.responded' && item.data.event_id === event.id);
+    const response = store.getRun(event.runId)?.events.find((item) => item.type === 'approval.responded' && (item.data.event_id === event.id || item.data.approval_id === data.approval_id));
     const choice = response?.data.choice;
-    return <div className={styles.approvalCard} key={event.id}><div className={styles.approvalTitle}><Shield size={16} />需要你的确认 <span>权限请求</span></div><div className={styles.approvalCopy}>{String(data.description ?? 'Agent Runtime 请求确认。')}<br />{data.input ? <code>{JSON.stringify(data.input)}</code> : null}</div>{choice ? <div className={styles.approvalResolved}>{choice === 'allow' ? '已允许' : '已拒绝'} · Runtime 已收到处理结果。</div> : <><div className={styles.approvalActions}><button onClick={() => store.approve(event.id)}>允许</button><button onClick={() => store.reject(event.id)}>拒绝</button><button onClick={() => setApprovalDetails((open) => !open)}>查看详情</button></div>{approvalDetails && <p className={styles.approvalDetail}>选择将以 approval.response 发送到对应的 Agent Run。</p>}</>}</div>;
+    const toolName = String(data.tool ?? data.name ?? '未知工具');
+    return <div className={styles.approvalCard} key={event.id}><div className={styles.approvalTitle}><Shield size={16} />需要你的确认 <span>{toolName}</span></div><div className={styles.approvalCopy}>{String(data.description ?? `Agent Runtime 请求执行 ${toolName}。`)}<br />{data.input ? <code>{JSON.stringify(data.input)}</code> : data.arguments ? <code>{JSON.stringify(data.arguments)}</code> : null}</div>{choice ? <div className={styles.approvalResolved}>{choice === 'allow' ? '已允许' : '已拒绝'} · Runtime 已收到处理结果。</div> : <><div className={styles.approvalActions}><button onClick={() => store.approve(event.id)}>允许</button><button onClick={() => store.reject(event.id)}>拒绝</button><button onClick={() => setApprovalDetails((open) => !open)}>查看详情</button></div>{approvalDetails && <p className={styles.approvalDetail}>选择将以 approval.response 发送到对应的 Agent Run。</p>}</>}</div>;
   }
   if (event.type === 'run.completed') return <div className={styles.resultCard} key={event.id}><div className={styles.resultTitle}><Check />任务完成</div><p>{String(data.result ?? 'Agent Run 已完成。')}</p><div className={styles.resultActions}><button onClick={() => setTab('artifacts')}>查看产物</button><button onClick={() => setTab('activity')}>查看事件</button></div></div>;
   if (event.type === 'run.failed') return <div className={styles.failureCard} key={event.id}>运行失败：{String(data.detail ?? data.code ?? '未知错误')}</div>;
