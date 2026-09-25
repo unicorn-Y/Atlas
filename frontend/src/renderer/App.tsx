@@ -102,7 +102,12 @@ export default function App() {
         <section className={styles.activityColumn} aria-label="任务活动">
           <div className={styles.activityScroll}><div className={styles.activityInner}>
             <div className={styles.conversationHeading}>任务对话</div>
-            {renderEventList(activeEvents, store, setTab, setApprovalDetails, approvalDetails)}
+            {(store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user' || message.role === 'assistant').map((message) => message.role === 'user'
+              ? <div className={styles.userMessage} key={message.id}><div className={styles.userBubble}>{message.content}</div><div className={styles.userAvatar}>L</div></div>
+              : <div className={styles.assistantMessage} key={message.id}><div className={styles.assistantAvatar}>A</div><div className={styles.messageBody}><div className={styles.messageMeta}><strong>Atlas</strong><span>历史消息</span></div><div className={styles.messageText}>{message.content}</div></div></div>)}
+            {renderEventList(activeRun && ['completed', 'failed', 'cancelled'].includes(activeRun.status)
+              ? activeEvents.filter((event) => !['run.started', 'message.delta', 'message.completed'].includes(event.type))
+              : activeEvents, store, setTab, setApprovalDetails, approvalDetails)}
             {store.error && <div className={styles.errorCard}><span>{store.error}</span><button onClick={store.dismissError}><X size={15} /></button></div>}
           </div></div>
           <div className={styles.composerZone}><form className={styles.composer} onSubmit={submit}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={onInputKey} placeholder="继续告诉 Atlas 要做什么…" rows={2} /><div className={styles.composerBottom}><div className={styles.composerTools}><button type="button" aria-label="添加附件" onClick={() => setToast('附件功能即将开放')}><Paperclip /></button><button type="button" aria-label="语音输入" onClick={() => setToast('语音输入即将开放')}><Mic /></button><span>{store.mode === 'mock' ? 'Mock 运行模式' : '已连接 Atlas 后端'}</span></div><button className={styles.sendButton} aria-label="发送消息" type="submit" disabled={!input.trim()}><Send size={15} />发送</button></div></form><div className={styles.composerHint}>Atlas 会在当前任务上下文中继续工作 <CircleHelp size={13} /></div></div>

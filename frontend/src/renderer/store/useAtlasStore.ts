@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { ConversationSummary, ModelListResponse, RuntimeEventEnvelope, ToolListResponse } from '@atlas/backend-adapter';
+import type { ConversationMessage, ConversationSummary, ModelListResponse, RuntimeEventEnvelope, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -17,6 +17,7 @@ interface AtlasState {
   models: ModelListResponse['models'];
   tools: ToolListResponse['tools'];
   conversations: ConversationSummary[];
+  conversationMessages: Record<string, ConversationMessage[]>;
   activeConversationId: string;
   runs: AgentRun[];
   activeRunId: string | null;
@@ -41,7 +42,7 @@ const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
 
 export const useAtlasStore = create<AtlasState>((set, get) => ({
   mode: 'mock', connected: false, busy: false, paused: false, error: null,
-  model: 'gpt-5.6-luna', models: [], tools: [], conversations: [], activeConversationId: 'demo-planning',
+  model: 'gpt-5.6-luna', models: [], tools: [], conversations: [], conversationMessages: {}, activeConversationId: 'demo-planning',
   runs: [], activeRunId: null, artifacts: [],
 
   initialize: async () => {
@@ -59,6 +60,16 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
   openConversation: async (conversation) => {
     const run = [...get().runs].reverse().find((item) => item.conversationId === conversation.id);
     set({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, error: null, paused: run?.status === 'paused' });
+    if (run && !terminal.has(run.status)) return;
+
+    try {
+      const messages = await backend.getMessages(conversation.id);
+      set((state) => ({ conversationMessages: { ...state.conversationMessages, [conversation.id]: messages } }));
+    } catch (error) {
+      if (get().activeConversationId === conversation.id) {
+        set({ error: error instanceof Error ? error.message : '无法读取对话历史' });
+      }
+    }
   },
 
   selectModel: async (model) => {
@@ -94,6 +105,16 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
       const active = runs.find((run) => run.id === state.activeRunId);
       return { runs, artifacts, busy: runs.some((run) => !terminal.has(run.status)), paused: active?.status === 'paused' };
     });
+    if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') {
+      const run = get().runs.find((item) => item.id === event.runId);
+      if (run) {
+        void backend.getMessages(run.conversationId).then((messages) => {
+          set((state) => ({ conversationMessages: { ...state.conversationMessages, [run.conversationId]: messages } }));
+        }).catch((error) => {
+          set({ error: error instanceof Error ? error.message : '无法读取对话历史' });
+        });
+      }
+    }
   },
 
   getRun: (runId) => get().runs.find((run) => run.id === runId),

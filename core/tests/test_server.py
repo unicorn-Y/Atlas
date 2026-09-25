@@ -98,6 +98,22 @@ class TestConversations:
         resp = await client.get("/api/conversations/nonexistent/messages")
         assert resp.status_code == 404
 
+    async def test_get_conversation_messages(self, client: AsyncClient) -> None:
+        from atlas.server import memory
+
+        assert memory is not None
+        conversation_id = await memory.create_conversation("History test")
+        await memory.save_message(conversation_id, "user", "hello")
+        await memory.save_message(conversation_id, "assistant", "hi")
+
+        resp = await client.get(f"/api/conversations/{conversation_id}/messages")
+
+        assert resp.status_code == 200
+        messages = resp.json()
+        assert [message["role"] for message in messages] == ["user", "assistant"]
+        assert [message["content"] for message in messages] == ["hello", "hi"]
+        assert all({"id", "role", "content", "created_at"} <= message.keys() for message in messages)
+
     async def test_update_conversation_404(self, client: AsyncClient) -> None:
         resp = await client.put(
             "/api/conversations/nonexistent",

@@ -127,8 +127,8 @@ class MemoryStore:
     ) -> list[dict[str, Any]]:
         assert self._db is not None
         cursor = await self._db.execute(
-            "SELECT id, role, content, metadata, created_at FROM messages "
-            "WHERE conversation_id = ? ORDER BY created_at ASC LIMIT ?",
+            "SELECT id, role, content, created_at FROM messages "
+            "WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC LIMIT ?",
             (conversation_id, limit),
         )
         rows = await cursor.fetchall()
