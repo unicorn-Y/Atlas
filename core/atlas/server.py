@@ -15,6 +15,7 @@ from atlas.config import get_config
 from atlas.models.manager import ModelManager
 from atlas.memory.store import MemoryStore
 from atlas.agent.orchestrator import AgentOrchestrator
+from atlas.tools.mcp_client import MCPClient
 
 # ---------------------------------------------------------------------------
 # Singletons (populated by lifespan)
@@ -23,6 +24,7 @@ from atlas.agent.orchestrator import AgentOrchestrator
 model_mgr: ModelManager | None = None
 memory: MemoryStore | None = None
 orchestrator: AgentOrchestrator | None = None
+mcp_client: MCPClient | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -32,16 +34,24 @@ orchestrator: AgentOrchestrator | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle."""
-    global model_mgr, memory, orchestrator
+    global model_mgr, memory, orchestrator, mcp_client
 
     model_mgr = ModelManager()
     memory = MemoryStore()
     await memory.init()
-    orchestrator = AgentOrchestrator(model_mgr=model_mgr, memory=memory)
+
+    mcp_client = MCPClient()
+    await mcp_client.start()
+
+    orchestrator = AgentOrchestrator(
+        model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
+    )
 
     yield  # app is running
 
     # Shutdown
+    if mcp_client:
+        await mcp_client.stop()
     if memory:
         await memory.close()
 
@@ -208,6 +218,30 @@ async def delete_fact(key: str) -> dict[str, str]:
     if not ok:
         raise HTTPException(status_code=404, detail="Fact not found")
     return {"status": "ok", "key": key}
+
+
+# ---------------------------------------------------------------------------
+# Tools (MCP)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/tools")
+async def list_tools() -> dict[str, Any]:
+    """Return all available MCP tools across connected servers."""
+    assert mcp_client is not None
+    tools = mcp_client.list_tools()
+    return {
+        "servers": mcp_client.get_server_names(),
+        "tool_count": mcp_client.tool_count,
+        "tools": [
+            {
+                "name": t.qualified_name,
+                "description": t.description,
+                "server": t.server_name,
+                "input_schema": t.input_schema,
+            }
+            for t in tools
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

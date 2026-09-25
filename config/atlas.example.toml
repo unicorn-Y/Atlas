@@ -45,12 +45,35 @@ toast_enabled = true
 # chat_id = "..."
 
 [tools]
-# MCP servers to auto-start
+# MCP servers to auto-start (names must match [tools.servers.*] keys)
 auto_start = [
     "filesystem",
-    "git",
-    "brave-search",
+    # "brave-search",
+    # "git",
 ]
+
+# -- MCP server definitions --
+
+[tools.servers.filesystem]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "D:/Atlas"]
+
+[tools.servers.brave-search]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-brave-search"]
+env = { BRAVE_API_KEY = "" }
+
+[tools.servers.git]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-git"]
+
+# Example SSE server:
+# [tools.servers.custom-remote]
+# transport = "sse"
+# url = "http://localhost:3001/sse"
 
 [logging]
 level = "INFO"
