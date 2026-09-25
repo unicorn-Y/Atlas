@@ -5,21 +5,24 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator
+from pathlib import Path
+from typing import Any
 
+import aiosqlite
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from atlas.config import get_config
-from atlas.models.manager import ModelManager
-from atlas.memory.store import MemoryStore
 from atlas.agent.orchestrator import AgentOrchestrator
-from atlas.tools.mcp_client import MCPClient
+from atlas.config import get_config
+from atlas.memory.store import MemoryStore
+from atlas.models.manager import ModelManager
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
 from atlas.skills import SkillManager
+from atlas.tools.mcp_client import MCPClient
 
 # ---------------------------------------------------------------------------
 # Singletons (populated by lifespan)
@@ -45,6 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     model_mgr = ModelManager()
     memory = MemoryStore()
     await memory.init()
+    await runtime_mgr.init(get_config().db_path)
 
     mcp_client = MCPClient()
     await mcp_client.start()
@@ -70,6 +74,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await mcp_client.stop()
     if memory:
         await memory.close()
+    await runtime_mgr.close()
 
 
 # ---------------------------------------------------------------------------
@@ -642,10 +647,80 @@ class RunState:
 class RuntimeManager:
     """Manages active WebSocket connections and agent runs."""
 
-    def __init__(self) -> None:
+    def __init__(self, db_path: Path | None = None) -> None:
         self.connections: dict[str, WebSocket] = {}  # conn_id → ws
         self.runs: dict[str, RunState] = {}  # run_id → RunState
         self.conn_runs: dict[str, str] = {}  # conn_id → active run_id
+        self.db_path = db_path
+        self._db: aiosqlite.Connection | None = None
+
+    async def init(self, db_path: Path | None = None) -> None:
+        """Load persisted lifecycle metadata and fail runs interrupted by restart."""
+        if db_path is not None:
+            self.db_path = db_path
+        if self.db_path is None:
+            self.db_path = get_config().db_path
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._db = await aiosqlite.connect(str(self.db_path))
+        self._db.row_factory = aiosqlite.Row
+        await self._db.execute("""
+            CREATE TABLE IF NOT EXISTS runtime_runs (
+                run_id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                model TEXT NOT NULL,
+                status TEXT NOT NULL,
+                sequence INTEGER NOT NULL DEFAULT 0,
+                recovery_event TEXT
+            )
+        """)
+        await self._db.commit()
+        async with self._db.execute("SELECT * FROM runtime_runs") as cursor:
+            rows = await cursor.fetchall()
+        for row in rows:
+            run = RunState(row["run_id"], row["conversation_id"], row["model"])
+            run.status = row["status"]
+            run.sequence = row["sequence"]
+            if run.status in ("running", "paused", "waiting"):
+                run.status = "failed"
+                recovery = run.next_envelope("run.failed", {
+                    "category": "interrupted",
+                    "detail": (
+                        "The service restarted while this run was active; "
+                        "execution was not resumed."
+                    ),
+                    "recoverable": True,
+                })
+                await self.persist_run(run, recovery_event=recovery)
+            elif row["recovery_event"]:
+                run.events.append(json.loads(row["recovery_event"]))
+            self.runs[run.run_id] = run
+
+    async def close(self) -> None:
+        if self._db is not None:
+            await self._db.close()
+            self._db = None
+
+    async def persist_run(
+        self, run: RunState, recovery_event: dict[str, Any] | None = None,
+    ) -> None:
+        if self._db is None:
+            return
+        await self._db.execute("""
+            INSERT INTO runtime_runs (
+                run_id, conversation_id, model, status, sequence, recovery_event
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET
+                conversation_id=excluded.conversation_id,
+                model=excluded.model,
+                status=excluded.status,
+                sequence=excluded.sequence,
+                recovery_event=COALESCE(excluded.recovery_event, runtime_runs.recovery_event)
+        """, (
+            run.run_id, run.conversation_id, run.model, run.status, run.sequence,
+            json.dumps(recovery_event) if recovery_event else None,
+        ))
+        await self._db.commit()
 
     async def connect(self, ws: WebSocket, conn_id: str) -> None:
         await ws.accept()
@@ -673,6 +748,7 @@ class RuntimeManager:
             fallback_conn_id,
         )
         async with run.event_lock:
+            await self.persist_run(run)
             await self.send(conn_id, data)
 
 
@@ -728,6 +804,7 @@ async def ws_chat(ws: WebSocket) -> None:
                     run.pause_event.clear()
                     run.status = "paused"
                     env = run.next_envelope("run.paused", {"status": "paused"})
+                    await runtime_mgr.persist_run(run)
                     await runtime_mgr.send(conn_id, env)
 
             elif msg_type == "run.resume":
@@ -737,6 +814,7 @@ async def ws_chat(ws: WebSocket) -> None:
                     run.pause_event.set()
                     run.status = "running"
                     env = run.next_envelope("run.resumed", {"status": "running"})
+                    await runtime_mgr.persist_run(run)
                     await runtime_mgr.send(conn_id, env)
 
             elif msg_type == "approval.response":
@@ -750,6 +828,7 @@ async def ws_chat(ws: WebSocket) -> None:
                         env = run.next_envelope("approval.responded", {
                             "event_id": event_id, "choice": choice,
                         })
+                        await runtime_mgr.persist_run(run)
                         await runtime_mgr.send(conn_id, env)
                         break
 
@@ -776,6 +855,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
     runtime_mgr.runs[run_id] = run
     runtime_mgr.conn_runs[conn_id] = run_id
+    await runtime_mgr.persist_run(run)
 
     # Start the run in background so we can keep receiving messages
     run.task = asyncio.create_task(

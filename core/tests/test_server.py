@@ -41,6 +41,72 @@ class TestRuntimeProtocol:
         data = resp.json()
         assert data["version"] == "1.2"
 
+    async def test_run_metadata_survives_manager_restart(self, tmp_path) -> None:
+        from atlas.server import RunState, RuntimeManager
+
+        db_path = tmp_path / "runtime.db"
+        first = RuntimeManager(db_path)
+        await first.init()
+        run = RunState("persisted-run", "persisted-conversation", "test-model")
+        run.next_envelope("run.started", {"status": "running"})
+        await first.persist_run(run)
+        await first.close()
+
+        restarted = RuntimeManager(db_path)
+        await restarted.init()
+        recovered = restarted.runs[run.run_id]
+        assert recovered.conversation_id == "persisted-conversation"
+        assert recovered.model == "test-model"
+        assert recovered.sequence == 2
+        assert recovered.status == "failed"
+        assert recovered.events[-1]["event"] == "run.failed"
+        await restarted.close()
+
+    async def test_recovery_is_idempotent_and_never_reexecutes_run(
+        self, tmp_path, monkeypatch,
+    ) -> None:
+        import asyncio
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from atlas import server
+
+        db_path = tmp_path / "runtime.db"
+        original = server.RuntimeManager(db_path)
+        await original.init()
+        run = server.RunState("recover-once", "conv-recover", "test-model")
+        run.next_envelope("run.started", {"status": "running"})
+        await original.persist_run(run)
+        await original.close()
+
+        recovered = server.RuntimeManager(db_path)
+        await recovered.init()
+        first_sequence = recovered.runs[run.run_id].sequence
+        await recovered.close()
+
+        restarted_again = server.RuntimeManager(db_path)
+        await restarted_again.init()
+        recovered_run = restarted_again.runs[run.run_id]
+        assert recovered_run.sequence == first_sequence
+        assert [event["event"] for event in recovered_run.events] == ["run.failed"]
+
+        execute = AsyncMock()
+        monkeypatch.setattr(server, "runtime_mgr", restarted_again)
+        monkeypatch.setattr(server, "model_mgr", SimpleNamespace(current_model="test-model"))
+        monkeypatch.setattr(server, "_execute_run", execute)
+        try:
+            await server._handle_run_start("recovery-connection", {
+                "run_id": run.run_id,
+                "content": "must not execute again",
+                "conversation_id": run.conversation_id,
+            })
+            await asyncio.sleep(0)
+            assert execute.await_count == 0
+            assert restarted_again.runs[run.run_id].status == "failed"
+        finally:
+            restarted_again.disconnect("recovery-connection")
+            await restarted_again.close()
+
 
 # ---------------------------------------------------------------------------
 # Health
