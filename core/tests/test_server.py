@@ -194,6 +194,39 @@ class TestMCPServerManagement:
         assert "servers" in data
         assert isinstance(data["servers"], list)
 
+    async def test_list_tools_exposes_connected_server_tools(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from atlas import server
+        from atlas.tools.mcp_client import MCPClient, MCPServerHandle, ToolInfo
+
+        mcp = MCPClient()
+        tool = ToolInfo(
+            name="read_file",
+            description="Read a file",
+            input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+            server_name="filesystem",
+        )
+        mcp._servers["filesystem"] = MCPServerHandle(
+            name="filesystem", transport="stdio", tools=[tool]
+        )
+        mcp._tool_index[tool.qualified_name] = tool
+        monkeypatch.setattr(server, "mcp_client", mcp)
+
+        resp = await client.get("/api/tools")
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "servers": ["filesystem"],
+            "tool_count": 1,
+            "tools": [{
+                "name": "filesystem__read_file",
+                "description": "Read a file",
+                "server": "filesystem",
+                "input_schema": tool.input_schema,
+            }],
+        }
+
     async def test_add_server_invalid_transport(self, client: AsyncClient) -> None:
         """Adding a server with bad config should return 500."""
         resp = await client.post("/api/mcp/servers", json={
@@ -266,6 +299,34 @@ class TestWebSocketProtocol:
 
     Uses starlette's built-in WebSocket test client (via pytest + anyio).
     """
+
+    def test_tool_events_map_to_runtime_events(self) -> None:
+        from atlas.server import _map_tool_runtime_event
+
+        assert _map_tool_runtime_event({
+            "type": "tool_call", "id": "tc-1", "name": "filesystem__read_file",
+            "arguments": {"path": "README.md"},
+        }) == (
+            "tool.started",
+            {
+                "tool_call_id": "tc-1",
+                "name": "filesystem__read_file",
+                "arguments": {"path": "README.md"},
+            },
+        )
+        assert _map_tool_runtime_event({
+            "type": "tool_result", "id": "tc-1", "name": "filesystem__read_file",
+            "content": [{"type": "text", "text": "# Atlas"}], "is_error": False,
+        }) == (
+            "tool.completed",
+            {
+                "tool_call_id": "tc-1",
+                "name": "filesystem__read_file",
+                "result": [{"type": "text", "text": "# Atlas"}],
+                "is_error": False,
+            },
+        )
+        assert _map_tool_runtime_event({"type": "chunk", "content": "text"}) is None
 
     async def test_run_start_emits_agent_events(self, client: AsyncClient) -> None:
         """A run.start message should produce agent_event envelopes."""

@@ -550,6 +550,8 @@ class TestRun:
         async def fake_acompletion(*, stream, messages, **kwargs):
             assert stream is True
             if messages[-1]["role"] == "tool":
+                assert messages[-1]["content"] == "hello"
+
                 async def final_stream():
                     chunk = MagicMock()
                     chunk.choices[0].delta.content = "The file says hello"
@@ -591,6 +593,14 @@ class TestRun:
         mcp_client.call_tool.assert_called_once_with(
             "fs__read", {"path": "/tmp/a.txt"}
         )
+        tool_call = next(event for event in events if event["type"] == "tool_call")
+        tool_result = next(event for event in events if event["type"] == "tool_result")
+        assert tool_call == {
+            "type": "tool_call", "id": "tc1", "name": "fs__read",
+            "arguments": {"path": "/tmp/a.txt"},
+        }
+        assert tool_result["content"] == [{"type": "text", "text": "hello"}]
+        assert tool_result["is_error"] is False
 
     async def test_run_error_handling(self, orchestrator, memory) -> None:
         """LLM call failure yields error event."""

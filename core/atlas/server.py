@@ -777,6 +777,27 @@ async def _handle_resume(conn_id: str, data: dict[str, Any]) -> None:
             await runtime_mgr.send(conn_id, env)
 
 
+def _map_tool_runtime_event(
+    event: dict[str, Any],
+) -> tuple[str, dict[str, Any]] | None:
+    """Map Agent tool events to the Runtime Event Protocol payloads."""
+    event_type = event.get("type")
+    if event_type == "tool_call":
+        return "tool.started", {
+            "tool_call_id": event.get("id", ""),
+            "name": event.get("name", ""),
+            "arguments": event.get("arguments", {}),
+        }
+    if event_type == "tool_result":
+        return "tool.completed", {
+            "tool_call_id": event.get("id", ""),
+            "name": event.get("name", ""),
+            "result": event.get("content", []),
+            "is_error": event.get("is_error", False),
+        }
+    return None
+
+
 async def _execute_run(
     conn_id: str,
     run: RunState,
@@ -870,20 +891,10 @@ async def _execute_run(
                 full_response += chunk_content
                 await emit("message.delta", {"content": chunk_content})
 
-            elif etype == "tool_call":
-                await emit("tool.started", {
-                    "tool_call_id": event.get("id", ""),
-                    "name": event.get("name", ""),
-                    "arguments": event.get("arguments", {}),
-                })
-
-            elif etype == "tool_result":
-                await emit("tool.completed", {
-                    "tool_call_id": event.get("id", ""),
-                    "name": event.get("name", ""),
-                    "result": event.get("content", []),
-                    "is_error": event.get("is_error", False),
-                })
+            elif etype in ("tool_call", "tool_result"):
+                mapped = _map_tool_runtime_event(event)
+                assert mapped is not None
+                await emit(*mapped)
 
             elif etype == "approval_required":
                 # Already emitted by the approval_callback above;

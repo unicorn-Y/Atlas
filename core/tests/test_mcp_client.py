@@ -198,3 +198,34 @@ class TestMCPClient:
         assert result["is_error"] is False
         assert result["content"][0]["text"] == "Hello from tool"
         mock_session.call_tool.assert_called_once_with("greet", {"name": "Atlas"})
+
+    async def test_connect_discovers_tools_for_agent(self) -> None:
+        """Tools returned by a connected server are indexed for the Agent."""
+        client = MCPClient()
+        mock_session = AsyncMock()
+        mock_session.initialize.return_value = MagicMock(
+            protocol_version="2025-03-26", server_info={"name": "filesystem"}
+        )
+        mock_tool = MagicMock()
+        mock_tool.name = "read_file"
+        mock_tool.description = "Read a file"
+        mock_tool.input_schema = {
+            "type": "object", "properties": {"path": {"type": "string"}}
+        }
+        mock_session.list_tools.return_value = MagicMock(tools=[mock_tool])
+
+        async def connect_stdio(config, handle):
+            handle.session = mock_session
+
+        with patch.object(client, "_connect_stdio", side_effect=connect_stdio):
+            await client._connect_server(MCPServerConfig(name="filesystem"))
+
+        assert client.get_server_names() == ["filesystem"]
+        assert client.get_tools_for_llm() == [{
+            "type": "function",
+            "function": {
+                "name": "filesystem__read_file",
+                "description": "Read a file",
+                "parameters": mock_tool.input_schema,
+            },
+        }]
