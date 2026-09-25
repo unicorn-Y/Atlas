@@ -2,19 +2,19 @@
 
 STATUS: READY
 
-TASK_ID: CODEX-ATLAS-P8D-R-ELECTRON-PACKAGING-RECOVERY
+TASK_ID: CODEX-ATLAS-P9A-MEMORYOS-INTEGRATION
 
-TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P8D-R-ELECTRON-PACKAGING-RECOVERY.md
+TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P9A-MEMORYOS-INTEGRATION.md
 
 WORKER: Luna
 
-CODE_BASE_HEAD: 7a0552912c145278e5bfeab9123ee1620a12966c
+CODE_BASE_HEAD: 4c3df6c7f73563e5ed1d85df18109388911b8174
 
 BASE_HEAD_RULE:
 After pulling origin/main, record the actual starting HEAD as BASE_HEAD. Review/task-dispatch commits after CODE_BASE_HEAD are expected.
 
 PREVIOUS_REVIEW:
-P8C accepted with known issues. Previous P8D packaging attempt was cancelled and replaced because it had no accepted delivery.
+P8D-R accepted with known limitations.
 
 BASELINE:
 Read docs/KNOWN-BASELINE-ISSUES-2026-09-26.md before execution.
