@@ -8,11 +8,13 @@ export interface BackendAdapterOptions {
 export class BackendAdapter {
   readonly baseUrl: string;
   private live = false;
+  private activeRuns = new Set<string>();
   private mockCancelled = new Set<string>();
   private mockControls = new Map<string, (event: string, data?: Record<string, unknown>) => void>();
   private runSockets = new Map<string, WebSocket>();
   private approvalResolvers = new Map<string, { runId: string; resolve: (choice: 'allow' | 'deny') => void }>();
   private runtimeProtocol: 'v1' | '1.1' | '1.2' | null = null;
+  availabilityError: string | null = null;
 
   constructor(options: BackendAdapterOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
@@ -26,8 +28,10 @@ export class BackendAdapter {
     try {
       const response = await fetch(`${this.baseUrl}/api/health`, { signal: controller.signal });
       this.live = response.ok;
-    } catch {
+      this.availabilityError = response.ok ? null : `Backend health check failed (${response.status})`;
+    } catch (error) {
       this.live = false;
+      this.availabilityError = error instanceof Error ? error.message : 'Backend is unavailable';
     } finally {
       clearTimeout(timeout);
     }
@@ -35,14 +39,28 @@ export class BackendAdapter {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, {
+        ...init,
+        headers: { 'Content-Type': 'application/json', ...init?.headers },
+      });
+    } catch (error) {
+      this.live = false;
+      this.availabilityError = error instanceof Error ? error.message : 'Backend request failed';
+      throw error;
+    }
     if (!response.ok) {
       const body = await response.json().catch(() => ({})) as { detail?: string };
-      throw new Error(body.detail ?? `Backend request failed (${response.status})`);
+      const message = body.detail ?? `Backend request failed (${response.status})`;
+      if (response.status >= 500) {
+        this.live = false;
+        this.availabilityError = message;
+      }
+      throw new Error(message);
     }
+    this.availabilityError = null;
+    if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   }
 
@@ -131,6 +149,16 @@ export class BackendAdapter {
   }
 
   async startRun(request: RunStartRequest, onEvent: (event: RuntimeStreamEvent) => void, shouldPause: () => boolean = () => false, maxReconnectAttempts = 5): Promise<void> {
+    if (this.activeRuns.has(request.run_id)) throw new Error(`Run ${request.run_id} is already active`);
+    this.activeRuns.add(request.run_id);
+    try {
+      await this.startRunInternal(request, onEvent, shouldPause, maxReconnectAttempts);
+    } finally {
+      this.activeRuns.delete(request.run_id);
+    }
+  }
+
+  private async startRunInternal(request: RunStartRequest, onEvent: (event: RuntimeStreamEvent) => void, shouldPause: () => boolean, maxReconnectAttempts: number): Promise<void> {
     if (!this.live) {
       this.mockCancelled.delete(request.run_id);
       try {
@@ -203,6 +231,12 @@ export class BackendAdapter {
       }, { once: true });
     });
     try { await connect(lastSequence > 0); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : 'Backend run connection failed';
+      this.availabilityError = message;
+      if (/WebSocket|Connection lost|Run disconnected/.test(message)) this.live = false;
+      throw error;
+    }
     finally {
       if (terminal) localStorage.removeItem(cursorKey);
       this.mockControls.delete(request.run_id);

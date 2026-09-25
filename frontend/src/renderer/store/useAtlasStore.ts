@@ -47,13 +47,13 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
 
   initialize: async () => {
     const mode = await backend.initialize();
-    set({ mode, connected: mode === 'backend' });
+    set({ mode, connected: mode === 'backend', error: mode === 'mock' ? backend.availabilityError : null });
     try {
       const [models, conversations, toolList] = await Promise.all([backend.getModels(), backend.getConversations(), backend.getTools()]);
       set({ models: models.models, model: models.current, conversations, tools: toolList.tools });
       if (mode === 'backend' && conversations.length) await get().openConversation(conversations[0]);
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : '无法读取后端数据' });
+      set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取后端数据' });
     }
   },
 
@@ -67,14 +67,14 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
       set((state) => ({ conversationMessages: { ...state.conversationMessages, [conversation.id]: messages } }));
     } catch (error) {
       if (get().activeConversationId === conversation.id) {
-        set({ error: error instanceof Error ? error.message : '无法读取对话历史' });
+        set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取对话历史' });
       }
     }
   },
 
   selectModel: async (model) => {
     try { await backend.selectModel(model); set({ model }); }
-    catch (error) { set({ error: error instanceof Error ? error.message : '切换模型失败' }); }
+    catch (error) { set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '切换模型失败' }); }
   },
 
   createRun: (conversationId, title) => {
@@ -111,7 +111,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
         void backend.getMessages(run.conversationId).then((messages) => {
           set((state) => ({ conversationMessages: { ...state.conversationMessages, [run.conversationId]: messages } }));
         }).catch((error) => {
-          set({ error: error instanceof Error ? error.message : '无法读取对话历史' });
+          set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取对话历史' });
         });
       }
     }
@@ -142,7 +142,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
     };
     void backend.startRun({ type: 'run.start', run_id: run.id, content: message, conversation_id: run.conversationId, model: get().model }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
       .catch((error) => {
-        set({ error: error instanceof Error ? error.message : '运行启动失败' });
+        set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '运行启动失败' });
         const current = get().getRun(run.id);
         if (current && !terminal.has(current.status)) get().appendEvent({ id: `${run.id}:transport-failure`, runId: run.id, sequence: current.lastEventSequence + 1, type: 'run.failed', timestamp: new Date().toISOString(), data: { detail: error instanceof Error ? error.message : '运行启动失败' } });
       });
