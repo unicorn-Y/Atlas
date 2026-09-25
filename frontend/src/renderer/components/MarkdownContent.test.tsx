@@ -10,7 +10,7 @@ describe('MarkdownContent', () => {
     expect(html).toContain('<strong>bold</strong>');
     expect(html).toContain('<code>inline</code>');
     expect(html).toContain('<ul><li>one</li><li>two</li></ul>');
-    expect(html).toContain('<pre><code>const answer = 42;</code></pre>');
+    expect(html).toContain('<pre data-language="ts"><code>const answer = 42;</code></pre>');
   });
 
   it('renders raw HTML as text and rejects unsafe link protocols', () => {

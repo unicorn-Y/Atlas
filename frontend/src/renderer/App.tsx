@@ -3,7 +3,7 @@ import { BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, FileText, Mic, 
 import { useAtlasStore } from './store/useAtlasStore';
 import styles from './App.module.css';
 import ConversationActivity from './components/ConversationActivity';
-import MarkdownContent from './components/MarkdownContent';
+import ConversationMessage from './components/ConversationMessage';
 import SettingsPage from './pages/SettingsPage';
 
 type InspectorTab = 'context' | 'artifacts' | 'activity';
@@ -48,12 +48,12 @@ export default function App() {
       <nav className={styles.navList} aria-label="主导航">
         <button className={`${styles.navItem} ${page === 'chat' ? styles.active : ''}`} onClick={() => setPage('chat')}><BookOpen /><span>对话</span></button>
       </nav>
-      <div className={styles.sectionLabel}>最近对话 <button aria-label="新建对话" onClick={() => { setPage('chat'); void store.createConversation(); }}><Plus size={15} /></button></div>
+      <div className={styles.sectionLabel}>最近对话 <button aria-label="新建对话" disabled={store.creatingConversation} onClick={() => { setPage('chat'); void store.createConversation(); }}><Plus size={15} /></button></div>
       <div className={styles.historyList}>
-        {store.conversations.map((conversation) => <button key={conversation.id} className={`${styles.historyItem} ${conversation.id === store.activeConversationId ? styles.historyCurrent : ''}`} onClick={() => void store.openConversation(conversation)}>
+        {store.conversations.map((conversation) => <button key={conversation.id} aria-current={conversation.id === store.activeConversationId ? 'page' : undefined} disabled={store.loadingMessagesConversationId === conversation.id} className={`${styles.historyItem} ${conversation.id === store.activeConversationId ? styles.historyCurrent : ''}`} onClick={() => void store.openConversation(conversation)}>
           {conversation.id === store.activeConversationId && <span className={styles.historyDot} />}{conversation.title}
         </button>)}
-        {!store.conversations.length && <div className={styles.historyEmpty}>暂无对话</div>}
+        {!store.conversations.length && <div className={styles.historyEmpty} role={store.conversationsLoading ? 'status' : undefined}>{store.conversationsLoading ? '正在加载对话…' : '暂无对话'}</div>}
       </div>
       <div className={styles.sidebarBottom}>
         <button className={`${styles.navItem} ${page === 'settings' ? styles.active : ''}`} onClick={() => setPage('settings')}><Settings /><span>设置</span></button>
@@ -85,12 +85,11 @@ export default function App() {
           <section className={styles.activityColumn} aria-label="任务活动">
             <div className={styles.activityScroll}><div className={styles.activityInner}>
               <div className={styles.conversationHeading}>任务对话</div>
-              {messages.map((message) => message.role === 'user'
-                ? <div className={styles.userMessage} key={message.id}><div className={styles.userBubble}>{message.content}</div><div className={styles.userAvatar}>你</div></div>
-                : <div className={styles.assistantMessage} key={message.id}><div className={styles.assistantAvatar}>A</div><div className={styles.messageBody}><div className={styles.messageMeta}><strong>Atlas</strong><span>历史消息</span></div><MarkdownContent content={message.content} /></div></div>)}
-              {!messages.length && !activeEvents.length && <div className={styles.emptyConversation}>{activeConversation ? '发送消息，开始这段对话。' : '新建对话，开始与 Atlas 协作。'}</div>}
+              {messages.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} status={message.role === 'assistant' ? '历史消息' : undefined} />)}
+              {store.loadingMessagesConversationId === store.activeConversationId && <div className={styles.loadingConversation} role="status">正在载入对话历史…</div>}
+              {!messages.length && !activeEvents.length && store.loadingMessagesConversationId !== store.activeConversationId && <div className={styles.emptyConversation}>{activeConversation ? '发送消息，开始这段对话。' : '新建对话，开始与 Atlas 协作。'}</div>}
               <ConversationActivity events={activeRun && ['completed', 'failed', 'cancelled'].includes(activeRun.status) ? activeEvents.filter((event) => !['run.started', 'message.delta', 'message.completed'].includes(event.type)) : activeEvents} store={store} setTab={setTab} />
-              {store.error && <div className={styles.errorCard}><span>{store.error}</span><button onClick={store.dismissError}><X size={15} /></button></div>}
+              {store.error && <div className={styles.errorCard} role="alert"><span>{store.error}</span><button aria-label="关闭错误提示" onClick={store.dismissError}><X size={15} /></button></div>}
             </div></div>
             <div className={styles.composerZone}><form className={styles.composer} onSubmit={submit}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={onInputKey} placeholder="继续告诉 Atlas 要做什么…" rows={2} /><div className={styles.composerBottom}><div className={styles.composerTools}><button type="button" aria-label="添加附件" onClick={() => setToast('附件功能尚未配置')}><Paperclip /></button><button type="button" aria-label="语音输入" onClick={() => setToast('语音输入尚未配置')}><Mic /></button><span>{store.mode === 'mock' ? 'Mock 运行模式' : '已连接 Atlas 后端'}</span></div><button className={styles.sendButton} aria-label="发送消息" type="submit" disabled={!input.trim()}><Send size={15} />发送</button></div></form><div className={styles.composerHint}>Atlas 会在当前任务上下文中继续工作 <CircleHelp size={13} /></div></div>
           </section>

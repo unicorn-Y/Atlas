@@ -31,6 +31,7 @@ export function renderMarkdown(source: string): ReactNode[] {
   let list: string[] = [];
   let ordered = false;
   let code: string[] | null = null;
+  let codeLanguage = '';
   const flushParagraph = () => {
     if (paragraph.length) blocks.push(<p key={`p-${blocks.length}`}>{inline(paragraph.join(' '))}</p>);
     paragraph = [];
@@ -43,12 +44,16 @@ export function renderMarkdown(source: string): ReactNode[] {
   };
 
   for (const line of lines) {
-    if (line.startsWith('```')) {
+    if (/^```/.test(line)) {
       flushParagraph(); flushList();
       if (code) {
-        blocks.push(<pre key={`c-${blocks.length}`}><code>{code.join('\n')}</code></pre>);
+        blocks.push(<pre key={`c-${blocks.length}`} data-language={codeLanguage || undefined}><code>{code.join('\n')}</code></pre>);
         code = null;
-      } else code = [];
+        codeLanguage = '';
+      } else {
+        code = [];
+        codeLanguage = line.slice(3).trim().split(/\s+/, 1)[0] ?? '';
+      }
       continue;
     }
     if (code) { code.push(line); continue; }
@@ -72,7 +77,7 @@ export function renderMarkdown(source: string): ReactNode[] {
     }
     flushList(); paragraph.push(line.trim());
   }
-  if (code) blocks.push(<pre key={`c-${blocks.length}`}><code>{code.join('\n')}</code></pre>);
+  if (code) blocks.push(<pre key={`c-${blocks.length}`} data-language={codeLanguage || undefined}><code>{code.join('\n')}</code></pre>);
   flushParagraph(); flushList();
   return blocks;
 }

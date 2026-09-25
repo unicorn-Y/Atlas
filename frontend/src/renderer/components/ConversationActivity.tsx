@@ -3,7 +3,7 @@ import { Activity, Check, FileText, Shield } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import styles from '../App.module.css';
-import MarkdownContent from './MarkdownContent';
+import ConversationMessage from './ConversationMessage';
 
 type InspectorTab = 'context' | 'artifacts' | 'activity';
 
@@ -27,23 +27,16 @@ export default function ConversationActivity({ events, store, setTab }: Conversa
       }
       const finalEvent = events[index]?.type === 'message.completed' ? events[index] : undefined;
       if (!finalEvent) index -= 1;
-      result.push(<AssistantMessage key={finalEvent?.id ?? firstId} content={String(finalEvent?.data.content ?? content)} status={finalEvent ? '回复完成' : '实时输出'} />);
+      result.push(<ConversationMessage key={finalEvent?.id ?? firstId} role="assistant" content={String(finalEvent?.data.content ?? content)} status={finalEvent ? '回复完成' : '实时输出'} />);
       continue;
     }
     if (event.type === 'message.completed') {
-      result.push(<AssistantMessage key={event.id} content={String(event.data.content ?? '')} status="回复完成" />);
+      result.push(<ConversationMessage key={event.id} role="assistant" content={String(event.data.content ?? '')} status="回复完成" />);
       continue;
     }
     result.push(renderRuntimeEvent(event, store, setTab, approvalDetails, setApprovalDetails));
   }
   return <>{result}</>;
-}
-
-function AssistantMessage({ content, status }: { content: string; status: string }) {
-  return <div className={styles.assistantMessage}>
-    <div className={styles.assistantAvatar}>A</div>
-    <div className={styles.messageBody}><div className={styles.messageMeta}><strong>Atlas</strong><span>{status}</span></div><MarkdownContent content={content} /></div>
-  </div>;
 }
 
 function renderRuntimeEvent(
@@ -54,8 +47,14 @@ function renderRuntimeEvent(
   setApprovalDetails: (update: (open: boolean) => boolean) => void,
 ) {
   const data = event.data;
-  if (event.type === 'run.started' && typeof data.content === 'string') return <div className={styles.userMessage} key={event.id}><div className={styles.userBubble}>{data.content}</div><div className={styles.userAvatar}>你</div></div>;
-  if (event.type === 'tool.started' || event.type === 'tool.completed') return <details className={styles.activityCard} key={event.id} open={event.type === 'tool.started'}><summary><span className={styles.activityIcon}><Activity /></span><span>{String(data.name ?? 'Tool')} · {event.type === 'tool.started' ? '执行中' : '已完成'}</span><span className={styles.activityMeta}>{event.type === 'tool.started' ? '运行中' : 'Runtime'}</span></summary><div className={styles.activityDetail}><span>工具与结果</span><span>{JSON.stringify(data.result ?? data.arguments ?? {})}</span></div></details>;
+  if (event.type === 'run.started' && typeof data.content === 'string') return <ConversationMessage key={event.id} role="user" content={data.content} />;
+  if (event.type === 'tool.started' || event.type === 'tool.completed') {
+    const result = data.result;
+    const input = data.arguments;
+    const value = result ?? input;
+    const detail = typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value, null, 2);
+    return <details className={styles.activityCard} key={event.id} open={event.type === 'tool.started'}><summary><span className={styles.activityIcon}><Activity /></span><span>{String(data.name ?? 'Tool')} · {event.type === 'tool.started' ? '执行中' : '已完成'}</span><span className={styles.activityMeta}>{event.type === 'tool.started' ? '运行中' : 'Runtime'}</span></summary>{detail && <div className={styles.activityDetail}><span>{result !== undefined ? '结果' : '输入'}</span><pre>{detail}</pre></div>}</details>;
+  }
   if (event.type === 'artifact.updated') return <div className={styles.fileChange} key={event.id}><div className={styles.fileHead}><FileText /><div><strong>{String(data.name ?? data.path ?? 'Artifact')}</strong><small>{String(data.artifact_type ?? 'file')} · Runtime 更新</small></div></div><p>{String(data.summary ?? data.change ?? '')}</p><button className={styles.quietButton} onClick={() => setTab('artifacts')}>在产物中查看</button></div>;
   if (event.type === 'approval.required') {
     const response = store.getRun(event.runId)?.events.find((item) => item.type === 'approval.responded' && (item.data.event_id === event.id || item.data.approval_id === data.approval_id));

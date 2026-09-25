@@ -18,6 +18,9 @@ interface AtlasState {
   models: ModelListResponse['models'];
   tools: ToolListResponse['tools'];
   conversations: ConversationSummary[];
+  conversationsLoading: boolean;
+  loadingMessagesConversationId: string | null;
+  creatingConversation: boolean;
   conversationMessages: Record<string, ConversationMessage[]>;
   activeConversationId: string;
   runs: AgentRun[];
@@ -44,26 +47,28 @@ const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
 
 export const useAtlasStore = create<AtlasState>((set, get) => ({
   apiBaseUrl: backend.apiBaseUrl, mode: 'mock', connected: false, busy: false, paused: false, error: null,
-  model: '', models: [], tools: [], conversations: [], conversationMessages: {}, activeConversationId: '',
+  model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
   runs: [], activeRunId: null, artifacts: [],
 
   initialize: async () => {
+    set({ conversationsLoading: true });
     const mode = await backend.initialize();
     set({ mode, connected: mode === 'backend', error: mode === 'mock' ? backend.availabilityError : null });
     try {
       const [models, conversations, toolList] = await Promise.all([backend.getModels(), backend.getConversations(), backend.getTools()]);
-      set({ models: models.models, model: models.current, conversations, tools: toolList.tools });
+      set({ models: models.models, model: models.current, conversations, tools: toolList.tools, conversationsLoading: false });
       if (conversations.length) await get().openConversation(conversations[0]);
     } catch (error) {
-      set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取后端数据' });
+      set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取后端数据', conversationsLoading: false });
     }
   },
 
   openConversation: async (conversation) => {
     const run = [...get().runs].reverse().find((item) => item.conversationId === conversation.id);
-    set({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, error: null, paused: run?.status === 'paused' });
+    set({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null, error: null, paused: run?.status === 'paused' });
     if (run && !terminal.has(run.status)) return;
 
+    set({ loadingMessagesConversationId: conversation.id });
     try {
       const messages = await backend.getMessages(conversation.id);
       set((state) => ({ conversationMessages: { ...state.conversationMessages, [conversation.id]: messages } }));
@@ -71,10 +76,14 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
       if (get().activeConversationId === conversation.id) {
         set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取对话历史' });
       }
+    } finally {
+      if (get().loadingMessagesConversationId === conversation.id) set({ loadingMessagesConversationId: null });
     }
   },
 
   createConversation: async (title = 'New conversation') => {
+    if (get().creatingConversation) return;
+    set({ creatingConversation: true });
     try {
       const conversation = await backend.createConversation(title);
       set((state) => ({
@@ -87,6 +96,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
       }));
     } catch (error) {
       set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法创建新对话' });
+    } finally {
+      set({ creatingConversation: false });
     }
   },
 

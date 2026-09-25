@@ -22,4 +22,30 @@ describe('conversation creation', () => {
     expect(state.conversations[0]).toMatchObject({ id: created.id, title: created.title });
     expect(fetchMock.mock.calls[4][1]).toMatchObject({ method: 'POST' });
   });
+
+  it('loads history and selects each opened conversation', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ models: [], current: '' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => [] } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ servers: [], tool_count: 0, tools: [] }) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    await useAtlasStore.getState().initialize();
+
+    let resolveMessages!: (response: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => { resolveMessages = resolve; }));
+    const opening = useAtlasStore.getState().openConversation({ id: 'conversation-open', title: 'Existing chat' });
+
+    expect(useAtlasStore.getState().loadingMessagesConversationId).toBe('conversation-open');
+    resolveMessages({ ok: true, json: async () => [{ id: 'message-open', role: 'assistant', content: 'Loaded history', created_at: '2026-09-26' }] } as Response);
+    await opening;
+    expect(useAtlasStore.getState().loadingMessagesConversationId).toBeNull();
+    expect(useAtlasStore.getState().activeConversationId).toBe('conversation-open');
+    expect(useAtlasStore.getState().conversationMessages['conversation-open'][0].content).toBe('Loaded history');
+
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'message-next', role: 'user', content: 'Switched history', created_at: '2026-09-26' }] } as Response);
+    await useAtlasStore.getState().openConversation({ id: 'conversation-next', title: 'Another chat' });
+    expect(useAtlasStore.getState().activeConversationId).toBe('conversation-next');
+    expect(useAtlasStore.getState().conversationMessages['conversation-next'][0].content).toBe('Switched history');
+  });
 });
