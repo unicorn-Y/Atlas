@@ -16,7 +16,7 @@ import structlog
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
+    import tomli as tomllib  # type: ignore[no-redef]  # noqa: F401
 
 import yaml
 
@@ -110,41 +110,114 @@ def _frontmatter_to_skill_info(
 
     Returns None if required fields are missing.
     """
+    def invalid(reason: str) -> None:
+        log.warning("skills.invalid_metadata", path=str(path), error=reason)
+
     name = fm.get("name")
-    description = fm.get("description")
-    if not name or not description:
-        log.warning("skill.missing_required_fields", path=str(path),
-                    has_name=bool(name), has_desc=bool(description))
+    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+        invalid("name must be a non-empty kebab-case string")
         return None
 
-    # Normalize triggers
-    raw_triggers = fm.get("triggers", []) or []
-    triggers: list[dict[str, str]] = []
-    for t in raw_triggers:
-        if isinstance(t, dict):
-            triggers.append(t)
-        elif isinstance(t, str):
-            triggers.append({"pattern": t})
+    description = fm.get("description")
+    if not isinstance(description, str) or not description.strip():
+        invalid("description must be a non-empty string")
+        return None
 
-    # Normalize dependencies
+    version = fm.get("version", "0.0.0")
+    if not isinstance(version, str) or not re.fullmatch(
+        r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?",
+        version,
+    ):
+        invalid("version must use MAJOR.MINOR.PATCH semantic version format")
+        return None
+
+    # Normalize triggers while rejecting malformed YAML shapes early.
+    raw_triggers = fm.get("triggers", []) or []
+    if not isinstance(raw_triggers, list):
+        invalid("triggers must be a list of strings or pattern/command mappings")
+        return None
+    triggers: list[dict[str, str]] = []
+    for trigger in raw_triggers:
+        if isinstance(trigger, str) and trigger.strip():
+            triggers.append({"pattern": trigger})
+        elif isinstance(trigger, dict) and any(
+            key in trigger and isinstance(trigger[key], str) and trigger[key].strip()
+            for key in ("pattern", "command")
+        ):
+            if any(
+                key in trigger and not isinstance(trigger[key], str)
+                for key in ("pattern", "command")
+            ):
+                invalid("trigger pattern and command values must be strings")
+                return None
+            triggers.append(trigger)
+        else:
+            invalid("each trigger must be a non-empty string or contain a pattern/command string")
+            return None
+
+    # Dependencies have a fixed set of string-list fields.
     deps = fm.get("dependencies", {}) or {}
     if not isinstance(deps, dict):
-        deps = {}
+        invalid("dependencies must be a mapping")
+        return None
+    for key in ("mcp_servers", "python_packages", "commands"):
+        values = deps.get(key, []) or []
+        if not isinstance(values, list) or any(
+            not isinstance(value, str) or not value for value in values
+        ):
+            invalid(f"dependencies.{key} must be a list of non-empty strings")
+            return None
 
-    # Handle Hermes-format metadata (backward compat)
+    # Accept Atlas fields and Hermes-compatible nested metadata.
     tags = fm.get("tags", []) or []
     related = fm.get("related_skills", []) or []
-    category = fm.get("category", "")
+    if not isinstance(tags, list) or any(not isinstance(tag, str) or not tag for tag in tags):
+        invalid("tags must be a list of non-empty strings")
+        return None
+    if not isinstance(related, list) or any(
+        not isinstance(item, str) or not item for item in related
+    ):
+        invalid("related_skills must be a list of non-empty strings")
+        return None
 
-    # Hermes stores these under metadata.hermes.*
-    hermes_meta = (fm.get("metadata", {}) or {}).get("hermes", {})
-    if hermes_meta:
-        if not tags and hermes_meta.get("tags"):
-            tags = hermes_meta["tags"]
-        if not related and hermes_meta.get("related_skills"):
-            related = hermes_meta["related_skills"]
-        if not category and hermes_meta.get("category"):
-            category = hermes_meta["category"]
+    category = fm.get("category", "") or ""
+    if not isinstance(category, str):
+        invalid("category must be a string")
+        return None
+    metadata = fm.get("metadata", {}) or {}
+    if not isinstance(metadata, dict):
+        invalid("metadata must be a mapping")
+        return None
+    hermes_meta = metadata.get("hermes", {}) or {}
+    if not isinstance(hermes_meta, dict):
+        invalid("metadata.hermes must be a mapping")
+        return None
+
+    for key, current in (("tags", tags), ("related_skills", related)):
+        if current:
+            continue
+        values = hermes_meta.get(key, []) or []
+        if not isinstance(values, list) or any(
+            not isinstance(value, str) or not value for value in values
+        ):
+            invalid(f"metadata.hermes.{key} must be a list of non-empty strings")
+            return None
+        if key == "tags":
+            tags = values
+        else:
+            related = values
+
+    if not category:
+        hermes_category = hermes_meta.get("category", "") or ""
+        if not isinstance(hermes_category, str):
+            invalid("metadata.hermes.category must be a string")
+            return None
+        category = hermes_category
+
+    author = fm.get("author", "") or ""
+    if not isinstance(author, str):
+        invalid("author must be a string")
+        return None
 
     # Infer category from directory structure if not in frontmatter
     if not category:
@@ -161,14 +234,14 @@ def _frontmatter_to_skill_info(
     return SkillInfo(
         name=name,
         description=description,
-        version=fm.get("version", "0.0.0"),
+        version=version,
         category=category,
         path=str(path),
         triggers=triggers,
         dependencies=deps,
-        tags=tags if isinstance(tags, list) else [tags],
-        related_skills=related if isinstance(related, list) else [related],
-        author=fm.get("author", ""),
+        tags=tags,
+        related_skills=related,
+        author=author,
     )
 
 
@@ -206,7 +279,14 @@ class SkillManager:
             return
 
         count = 0
-        for skill_md in self._skills_dir.rglob("SKILL.md"):
+        skill_files = [
+            path for path in self._skills_dir.rglob("SKILL.md")
+            if len(path.relative_to(self._skills_dir).parts) == 3
+        ]
+        skill_files.sort(
+            key=lambda path: path.relative_to(self._skills_dir).as_posix().casefold()
+        )
+        for skill_md in skill_files:
             parsed = _parse_skill_md(skill_md)
             if parsed is None:
                 continue

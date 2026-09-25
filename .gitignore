@@ -11,6 +11,7 @@ build/
 # Data
 data/*.db
 data/*.db-journal
+data/schedules.toml
 
 # Config with secrets
 config/atlas.toml

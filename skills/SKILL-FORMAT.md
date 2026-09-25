@@ -74,7 +74,23 @@ related_skills: [docx, xlsx]        # 可选 — 推荐相关技能
 | `tags` | array | — | 标签，用于搜索 |
 | `related_skills` | array | — | 相关技能的 name 列表 |
 
-### 2.3 正文结构 (Markdown)
+### 2.3 校验规则
+
+技能发现器按以下规则校验 frontmatter；无效技能会记录 `skills.invalid_metadata` 警告并跳过，扫描会继续处理其他技能：
+
+1. YAML frontmatter 必须可解析为 mapping。
+2. `name` 必须是非空的小写 kebab-case 字符串；同名按扫描优先级保留一个条目。
+3. `description` 必须是非空字符串。
+4. `version` 如提供，必须是 `MAJOR.MINOR.PATCH` 语义化版本字符串；旧技能缺省时使用 `0.0.0`。
+5. `category` 如提供必须是字符串；缺省时从目录结构推断，也兼容 `metadata.hermes.category`。
+6. `triggers` 如提供必须是列表，每项为非空字符串（兼容旧格式）或含非空 `pattern` / `command` 字符串的 mapping。
+7. `dependencies` 必须是 mapping；`mcp_servers`、`python_packages` 和 `commands` 如提供必须是非空字符串列表。
+8. `tags`、`related_skills` 如提供必须是非空字符串列表；Hermes 兼容字段从 `metadata.hermes` 读取。
+9. `author` 如提供必须是字符串。
+
+发现器只扫描规范目录 `skills/<category>/<skill-name>/SKILL.md`，忽略 Cowork 注入的其他目录布局。规范目录中的技能按相对路径忽略大小写排序；重复 name 保留路径排序最前的文件，并记录冲突路径。
+
+### 2.4 正文结构 (Markdown)
 
 Frontmatter 之后是 Markdown 正文，结构推荐但不强制：
 

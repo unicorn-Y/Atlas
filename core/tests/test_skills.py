@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 
 import pytest
 
-from atlas.skills import SkillManager, SkillInfo, _parse_skill_md, _frontmatter_to_skill_info
-
+from atlas import skills as skills_module
+from atlas.skills import SkillInfo, SkillManager, _frontmatter_to_skill_info, _parse_skill_md
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -30,6 +29,25 @@ def _write_skill(tmp_path: Path, category: str, name: str,
 # ---------------------------------------------------------------------------
 
 class TestParsing:
+    def test_repository_owned_skill_frontmatter_parses(self) -> None:
+        skills_dir = Path(__file__).resolve().parents[2] / "skills"
+        skill_files = [
+            path for path in skills_dir.rglob("SKILL.md")
+            if len(path.relative_to(skills_dir).parts) == 3
+        ]
+
+        assert skill_files
+        assert all(_parse_skill_md(path) is not None for path in skill_files)
+
+    def test_coding_discipline_content_is_utf8(self) -> None:
+        path = Path(__file__).resolve().parents[2] / "skills/dev/coding-discipline/SKILL.md"
+        parsed = _parse_skill_md(path)
+
+        assert parsed is not None
+        _frontmatter, body = parsed
+        assert "编码纪律" in body
+        assert "�" not in body
+
     def test_parse_valid_skill(self, tmp_path: Path) -> None:
         path = _write_skill(tmp_path, "research", "arxiv",
             'name: arxiv\n'
@@ -131,12 +149,56 @@ class TestFrontmatterConversion:
         assert info is not None
         assert info.category == "productivity"
 
+    def test_invalid_nested_metadata_has_clear_warning(self, tmp_path: Path, monkeypatch) -> None:
+        fm = {
+            "name": "invalid-meta",
+            "description": "Invalid metadata shape",
+            "metadata": "not-a-mapping",
+        }
+        path = tmp_path / "dev" / "invalid-meta" / "SKILL.md"
+        path.parent.mkdir(parents=True)
+        path.touch()
+        warnings: list[tuple[str, dict[str, object]]] = []
+        monkeypatch.setattr(
+            skills_module.log,
+            "warning",
+            lambda event, **fields: warnings.append((event, fields)),
+        )
+
+        assert _frontmatter_to_skill_info(fm, path, skills_dir=tmp_path) is None
+        assert warnings[0][0] == "skills.invalid_metadata"
+        assert warnings[0][1]["error"] == "metadata must be a mapping"
+
+    def test_invalid_trigger_metadata_is_rejected(self, tmp_path: Path) -> None:
+        fm = {
+            "name": "invalid-trigger",
+            "description": "Invalid trigger shape",
+            "triggers": {"pattern": "never-a-list"},
+        }
+        path = tmp_path / "dev" / "invalid-trigger" / "SKILL.md"
+        path.parent.mkdir(parents=True)
+        path.touch()
+
+        assert _frontmatter_to_skill_info(fm, path, skills_dir=tmp_path) is None
+
 
 # ---------------------------------------------------------------------------
 # SkillManager scanning
 # ---------------------------------------------------------------------------
 
 class TestScanning:
+    def test_scan_loads_every_repository_owned_skill(self) -> None:
+        skills_dir = Path(__file__).resolve().parents[2] / "skills"
+        skill_files = [
+            path for path in skills_dir.rglob("SKILL.md")
+            if len(path.relative_to(skills_dir).parts) == 3
+        ]
+        mgr = SkillManager(skills_dir=skills_dir)
+
+        mgr.scan_skills_sync()
+
+        assert mgr.skill_count == len(skill_files)
+
     def test_scan_empty_directory(self, tmp_path: Path) -> None:
         mgr = SkillManager(skills_dir=tmp_path)
         mgr.scan_skills_sync()
@@ -169,14 +231,45 @@ class TestScanning:
         mgr.scan_skills_sync()
         assert mgr.skill_count == 1
 
-    def test_duplicate_name_skipped(self, tmp_path: Path) -> None:
-        _write_skill(tmp_path, "dev", "dupe1",
-                     'name: same-name\ndescription: "First"\nversion: 1.0.0\n')
+    def test_duplicate_name_resolution_is_deterministic(self, tmp_path: Path) -> None:
         _write_skill(tmp_path, "research", "dupe2",
-                     'name: same-name\ndescription: "Second"\nversion: 1.0.0\n')
+                     'name: same-name\ndescription: "Research copy"\nversion: 1.0.0\n')
+        _write_skill(tmp_path, "dev", "dupe1",
+                     'name: same-name\ndescription: "Development copy"\nversion: 1.0.0\n')
         mgr = SkillManager(skills_dir=tmp_path)
         mgr.scan_skills_sync()
         assert mgr.skill_count == 1
+        assert mgr.get_skill("same-name").description == "Development copy"
+
+    def test_scan_skips_invalid_metadata_without_stopping(self, tmp_path: Path) -> None:
+        _write_skill(tmp_path, "dev", "good",
+                     'name: good\ndescription: "Good"\nversion: 1.0.0\n')
+        _write_skill(tmp_path, "dev", "bad",
+                     'name: bad\ndescription: "Bad"\nmetadata: invalid\n')
+        mgr = SkillManager(skills_dir=tmp_path)
+
+        mgr.scan_skills_sync()
+
+        assert mgr.skill_count == 1
+        assert mgr.get_skill("good") is not None
+        assert mgr.get_skill("bad") is None
+
+    def test_scan_ignores_skills_outside_category_directory_layout(self, tmp_path: Path) -> None:
+        _write_skill(tmp_path, "github", "owned",
+                     'name: owned\ndescription: "Atlas skill"\nversion: 1.0.0\n')
+        injected_path = tmp_path / "injected" / "SKILL.md"
+        injected_path.parent.mkdir(parents=True)
+        injected_path.write_text(
+            "---\nname: injected\ndescription: External skill\n---\n",
+            encoding="utf-8",
+        )
+        mgr = SkillManager(skills_dir=tmp_path)
+
+        mgr.scan_skills_sync()
+
+        assert mgr.skill_count == 1
+        assert mgr.get_skill("owned") is not None
+        assert mgr.get_skill("injected") is None
 
     async def test_async_scan(self, tmp_path: Path) -> None:
         _write_skill(tmp_path, "dev", "async-skill",
