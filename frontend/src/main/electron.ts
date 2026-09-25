@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let windowRef: BrowserWindow | null = null;
@@ -39,9 +40,30 @@ ipcMain.on('window:maximize', () => {
 });
 ipcMain.on('window:close', () => windowRef?.close());
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  try {
+    await ensureBackendRunning();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    dialog.showErrorBox('Atlas backend startup failed', `Atlas could not start its backend.\n\n${message}`);
+    app.quit();
+    return;
+  }
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+});
+
+let shutdownStarted = false;
+let shutdownComplete = false;
+app.on('before-quit', (event) => {
+  if (shutdownComplete) return;
+  event.preventDefault();
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  void stopManagedBackend().finally(() => {
+    shutdownComplete = true;
+    app.quit();
+  });
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
