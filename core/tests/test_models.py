@@ -10,8 +10,11 @@ from atlas.models import ModelManager
 
 
 @pytest.fixture
-def mgr() -> ModelManager:
+def mgr(tmp_path, monkeypatch) -> ModelManager:
     """Create a ModelManager with default settings."""
+    from atlas import config
+
+    monkeypatch.setattr(config, "USER_SETTINGS_PATH", tmp_path / "user-settings.json")
     # Ensure env vars don't interfere
     return ModelManager(default_model="claude-sonnet-4")
 

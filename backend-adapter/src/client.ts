@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { ApprovalResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ResumeRequest, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, ToolListResponse } from './types';
+import type { ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ResumeRequest, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, ToolListResponse } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -79,6 +79,22 @@ export class BackendAdapter {
   }
 
   async getModels(): Promise<ModelListResponse> { return this.live ? this.request('/api/models') : mockModels; }
+  async getConfiguration(): Promise<ConfigurationResponse> {
+    if (this.live) return this.request('/api/settings/configuration');
+    return { ...mockModels, gateway_base_url: this.baseUrl, api_key_configured: false };
+  }
+  async updateConfiguration(gatewayBaseUrl: string, apiKey: string): Promise<ConfigurationResponse> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能保存 API 配置');
+    return this.request('/api/settings/configuration', { method: 'PUT', body: JSON.stringify({ gateway_base_url: gatewayBaseUrl, api_key: apiKey || null }) });
+  }
+  async addCustomModel(model: CustomModelRequest): Promise<ConfigurationResponse> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能保存自定义模型');
+    return this.request('/api/models/custom', { method: 'POST', body: JSON.stringify(model) });
+  }
+  async testConnection(model?: string): Promise<ConnectionTestResponse> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能测试模型连接');
+    return this.request('/api/settings/test-connection', { method: 'POST', body: JSON.stringify({ model }) });
+  }
   async selectModel(model: string): Promise<void> {
     if (this.live) await this.request('/api/models/select', { method: 'POST', body: JSON.stringify({ model }) });
     else mockModels.current = model;

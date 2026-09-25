@@ -32,6 +32,22 @@ afterEach(() => {
 });
 
 describe('BackendAdapter availability and recovery', () => {
+  it('loads and saves provider configuration without a mock-only path', async () => {
+    const configuration = { gateway_base_url: 'https://api.example.test/v1', api_key_configured: true, models: [], current: '' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => configuration } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => configuration } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+
+    await expect(adapter.getConfiguration()).resolves.toEqual(configuration);
+    await adapter.updateConfiguration(configuration.gateway_base_url, 'secret');
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8765/api/settings/configuration');
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ gateway_base_url: configuration.gateway_base_url, api_key: 'secret' }) });
+  });
+
   it('creates a conversation through the backend API', async () => {
     const created = { id: 'conversation-1', title: 'New conversation' };
     const fetchMock = vi.fn()

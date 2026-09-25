@@ -49,3 +49,23 @@ describe('conversation creation', () => {
     expect(useAtlasStore.getState().conversationMessages['conversation-next'][0].content).toBe('Switched history');
   });
 });
+
+describe('settings configuration', () => {
+  it('saves provider settings through the backend and updates the rendered state', async () => {
+    const configuration = { gateway_base_url: 'https://api.example.test/v1', api_key_configured: true, models: [{ id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' }], current: 'gpt-4o' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...configuration, api_key_configured: false, gateway_base_url: 'https://old.example.test', models: [], current: '' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => [] } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ servers: [], tool_count: 0, tools: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => configuration } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await useAtlasStore.getState().initialize();
+    const saved = await useAtlasStore.getState().saveProviderSettings(configuration.gateway_base_url, 'secret');
+
+    expect(saved).toBe(true);
+    expect(useAtlasStore.getState()).toMatchObject({ providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: true, model: 'gpt-4o' });
+    expect(fetchMock.mock.calls[4][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ gateway_base_url: configuration.gateway_base_url, api_key: 'secret' }) });
+  });
+});

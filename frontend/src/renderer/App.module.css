@@ -105,6 +105,24 @@
 .settingsModels button { display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 7px 10px; border: 1px solid #eeece5; border-radius: 7px; background: #fffefa; text-align: left; }
 .settingsModels button:hover,.settingsModels button.settingsModelSelected { border-color: #e4d4bd; background: #faf7f1; }
 .settingsModels button span { display: grid; gap: 4px; }.settingsModels strong { color: #5f5d56; font-size: 10px; font-weight: 550; }.settingsModels small { color: #99968d; font-size: 9px; }.settingsModels svg { color: #8d9b83; }
+.settingsForm { display: grid; gap: 12px; }
+.settingsForm label { display: grid; gap: 6px; color: #77746c; font-size: 10px; }
+.settingsForm input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid #ebe8e0; border-radius: 7px; color: #55534c; background: #fffefa; font: 11px system-ui, sans-serif; }
+.settingsInputGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.settingsFormFooter,.settingsCardHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.settingsCardHeading h2 { margin-bottom: 0; }
+.settingsAction,.settingsActionSecondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 11px; border: 1px solid #e8ddcd; border-radius: 7px; color: #665b4e; background: #faf7f1; font-size: 10px; }
+.settingsAction:disabled,.settingsActionSecondary:disabled { opacity: .55; cursor: not-allowed; }
+.settingsActionSecondary { background: #fffefa; }
+.settingsModelRow { display: flex; align-items: stretch; gap: 5px; }
+.settingsModelRow > button:first-child { flex: 1; }
+.settingsModelRow > button:last-child { width: 38px; justify-content: center; color: #8c8980; }
+.settingsSuccess,.settingsError { padding: 9px 11px; border-radius: 7px; font-size: 10px; }
+.settingsSuccess { color: #54744d !important; background: #f1f7ee; }
+.settingsError { color: #9b514a !important; background: #fbf0ee; }
+.settingsSpinner { vertical-align: middle; margin-right: 6px; animation: settings-spin 1s linear infinite; }
+.settingsFooter { max-width: 720px; margin: 4px 0 0 93px; color: #a09d95; font-size: 9px; overflow-wrap: anywhere; }
+@keyframes settings-spin { to { transform: rotate(360deg); } }
 @media (min-width: 1700px) { .activityInner { width: min(100%, 1120px); } }
 .sectionLabel button:disabled { cursor: wait; opacity: .55; }
 .activityDetail { align-items: flex-start; gap: 12px; }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -23,6 +24,29 @@ log = structlog.get_logger()
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # D:\Atlas\core -> D:\Atlas
 CONFIG_PATH = PROJECT_ROOT / "config" / "atlas.toml"
 EXAMPLE_CONFIG_PATH = PROJECT_ROOT / "config" / "atlas.example.toml"
+USER_SETTINGS_PATH = PROJECT_ROOT / "data" / "user-settings.json"
+
+
+def load_user_settings(path: Path | None = None) -> dict[str, Any]:
+    """Load persistent settings written through the Atlas settings API."""
+    settings_path = path or USER_SETTINGS_PATH
+    try:
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError):
+        log.warning("settings.invalid_or_unreadable", path=str(settings_path))
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_user_settings(data: dict[str, Any], path: Path | None = None) -> None:
+    """Atomically persist non-secret preferences and provider credentials."""
+    settings_path = path or USER_SETTINGS_PATH
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = settings_path.with_suffix(settings_path.suffix + ".tmp")
+    temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    temporary.replace(settings_path)
 
 
 # ---------------------------------------------------------------------------

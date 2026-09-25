@@ -109,6 +109,22 @@ class ModelSelectRequest(BaseModel):
     model: str
 
 
+class ProviderSettingsRequest(BaseModel):
+    gateway_base_url: str
+    api_key: str | None = None
+
+
+class CustomModelRequest(BaseModel):
+    id: str
+    name: str
+    provider: str
+    litellm_model: str
+
+
+class ConnectionTestRequest(BaseModel):
+    model: str | None = None
+
+
 class ConversationUpdateRequest(BaseModel):
     title: str
 
@@ -175,6 +191,67 @@ async def select_model(req: ModelSelectRequest) -> dict[str, str]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"status": "ok", "model": model_mgr.current_model}
+
+
+@app.get("/api/settings/configuration")
+async def get_configuration() -> dict[str, Any]:
+    assert model_mgr is not None
+    return {
+        "gateway_base_url": model_mgr.gateway_base_url,
+        "api_key_configured": model_mgr.api_key_configured,
+        "models": model_mgr.list_models(),
+        "current": model_mgr.current_model,
+    }
+
+
+@app.put("/api/settings/configuration")
+async def update_configuration(req: ProviderSettingsRequest) -> dict[str, Any]:
+    assert model_mgr is not None
+    base_url = req.gateway_base_url.strip()
+    if not base_url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="服务地址必须以 http:// 或 https:// 开头")
+    model_mgr.update_provider(base_url, req.api_key.strip() if req.api_key and req.api_key.strip() else None)
+    return await get_configuration()
+
+
+@app.post("/api/models/custom")
+async def add_custom_model(req: CustomModelRequest) -> dict[str, Any]:
+    assert model_mgr is not None
+    model_id = req.id.strip()
+    if not model_id or not req.provider.strip() or not req.litellm_model.strip():
+        raise HTTPException(status_code=400, detail="模型 ID、提供商和 LiteLLM 模型名均为必填项")
+    try:
+        model_mgr.add_model({
+            "id": model_id,
+            "name": req.name.strip() or model_id,
+            "provider": req.provider.strip(),
+            "litellm_model": req.litellm_model.strip(),
+            "category": "custom",
+        })
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return await get_configuration()
+
+
+@app.post("/api/settings/test-connection")
+async def test_connection(req: ConnectionTestRequest) -> dict[str, Any]:
+    assert model_mgr is not None
+    selected = req.model or model_mgr.current_model
+    model = next((item for item in model_mgr.list_models() if item["id"] == selected), None)
+    if model is None:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {selected}")
+
+    from litellm import acompletion
+
+    try:
+        await acompletion(
+            model=str(model.get("litellm_model", selected)),
+            messages=[{"role": "user", "content": "Reply with OK."}],
+            max_tokens=2,
+        )
+    except Exception as exc:
+        return {"ok": False, "model": selected, "message": str(exc)}
+    return {"ok": True, "model": selected, "message": "模型连接测试成功。"}
 
 
 # ---------------------------------------------------------------------------

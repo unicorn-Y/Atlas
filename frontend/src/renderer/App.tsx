@@ -62,7 +62,7 @@ export default function App() {
     </aside>
 
     <main className={styles.main}>
-      {page === 'settings' ? <SettingsPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} models={store.models} selectedModel={store.model} onBack={() => setPage('chat')} onSelectModel={(model) => void store.selectModel(model)} /> : <>
+      {page === 'settings' ? <SettingsPage apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setPage('chat')} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} /> : <>
         <header className={styles.topbar}>
           <div className={styles.topbarTitle}>对话 <span>/</span> {activeConversation?.title ?? '新对话'}</div>
           <div className={styles.topbarActions}>

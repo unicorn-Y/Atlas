@@ -9,9 +9,14 @@ from atlas.server import app
 
 
 @pytest.fixture
-async def client():
+async def client(tmp_path, monkeypatch):
     """Async test client using httpx + ASGI transport with lifespan."""
     import os
+    from atlas import config
+
+    monkeypatch.setattr(config, "USER_SETTINGS_PATH", tmp_path / "user-settings.json")
+    for key in ("OPENAI_API_BASE", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
     old_val = os.environ.get("ATLAS_SCHEDULER_ENABLED")
     os.environ["ATLAS_SCHEDULER_ENABLED"] = "false"
 
@@ -167,6 +172,56 @@ class TestModels:
             json={"model": "nonexistent"},
         )
         assert resp.status_code == 400
+
+    async def test_configuration_persists_provider_and_hides_secret(self, client: AsyncClient) -> None:
+        saved = await client.put("/api/settings/configuration", json={
+            "gateway_base_url": "https://api.example.test/v1",
+            "api_key": "test-secret-value",
+        })
+        assert saved.status_code == 200
+        assert saved.json()["api_key_configured"] is True
+        assert saved.json()["gateway_base_url"] == "https://api.example.test/v1"
+        assert "api_key" not in saved.json()
+
+        loaded = await client.get("/api/settings/configuration")
+        assert loaded.json()["api_key_configured"] is True
+        assert "test-secret-value" not in loaded.text
+        from atlas.models import ModelManager
+
+        restarted = ModelManager()
+        assert restarted.gateway_base_url == "https://api.example.test/v1"
+        assert restarted.api_key_configured is True
+
+    async def test_configuration_rejects_invalid_url(self, client: AsyncClient) -> None:
+        response = await client.put("/api/settings/configuration", json={"gateway_base_url": "file:///tmp"})
+        assert response.status_code == 400
+
+    async def test_custom_model_persists_and_duplicate_is_rejected(self, client: AsyncClient) -> None:
+        model = {"id": "custom-test", "name": "Custom Test", "provider": "openai", "litellm_model": "openai/custom-test"}
+        response = await client.post("/api/models/custom", json=model)
+        assert response.status_code == 200
+        assert any(item["id"] == "custom-test" for item in response.json()["models"])
+        from atlas.models import ModelManager
+
+        assert any(item["id"] == "custom-test" for item in ModelManager().list_models())
+        duplicate = await client.post("/api/models/custom", json=model)
+        assert duplicate.status_code == 409
+
+    async def test_connection_test_uses_litellm_and_does_not_change_selection(self, client: AsyncClient, monkeypatch) -> None:
+        from atlas.server import model_mgr
+
+        call = {}
+
+        async def fake_completion(**kwargs):
+            call.update(kwargs)
+            return object()
+
+        monkeypatch.setattr("litellm.acompletion", fake_completion)
+        selected_before = model_mgr.current_model
+        response = await client.post("/api/settings/test-connection", json={"model": "gpt-4o"})
+        assert response.json()["ok"] is True
+        assert call["model"] == "openai/gpt-4o"
+        assert model_mgr.current_model == selected_before
 
 
 # ---------------------------------------------------------------------------

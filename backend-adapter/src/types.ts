@@ -15,6 +15,24 @@ export interface ModelListResponse {
   current: string;
 }
 
+export interface ConfigurationResponse extends ModelListResponse {
+  gateway_base_url: string;
+  api_key_configured: boolean;
+}
+
+export interface CustomModelRequest {
+  id: string;
+  name: string;
+  provider: string;
+  litellm_model: string;
+}
+
+export interface ConnectionTestResponse {
+  ok: boolean;
+  model: string;
+  message: string;
+}
+
 export interface ConversationSummary {
   id: string;
   title: string;

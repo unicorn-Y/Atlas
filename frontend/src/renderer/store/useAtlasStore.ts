@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { ConversationMessage, ConversationSummary, ModelListResponse, RuntimeEventEnvelope, ToolListResponse } from '@atlas/backend-adapter';
+import type { ConfigurationResponse, ConversationMessage, ConversationSummary, CustomModelRequest, ModelListResponse, RuntimeEventEnvelope, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -9,6 +9,10 @@ const backend = new BackendAdapter({ baseUrl: import.meta.env.VITE_API_BASE_URL 
 
 interface AtlasState {
   apiBaseUrl: string;
+  providerBaseUrl: string;
+  apiKeyConfigured: boolean;
+  settingsBusy: boolean;
+  connectionTest: { ok: boolean; message: string } | null;
   mode: 'mock' | 'backend';
   connected: boolean;
   busy: boolean;
@@ -30,6 +34,9 @@ interface AtlasState {
   openConversation: (conversation: ConversationSummary) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
   selectModel: (model: string) => Promise<void>;
+  saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
+  addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
+  testModelConnection: (model?: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   createRun: (conversationId: string, title: string) => AgentRun;
   appendEvent: (event: AgentEvent) => void;
@@ -44,9 +51,12 @@ interface AtlasState {
 }
 
 const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
+const getPreferredModel = () => typeof localStorage === 'undefined' ? null : localStorage.getItem('atlas.preference.model');
+const setPreferredModel = (model: string) => { if (typeof localStorage !== 'undefined') localStorage.setItem('atlas.preference.model', model); };
 
 export const useAtlasStore = create<AtlasState>((set, get) => ({
-  apiBaseUrl: backend.apiBaseUrl, mode: 'mock', connected: false, busy: false, paused: false, error: null,
+  apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, settingsBusy: false, connectionTest: null,
+  mode: 'mock', connected: false, busy: false, paused: false, error: null,
   model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
   runs: [], activeRunId: null, artifacts: [],
 
@@ -55,8 +65,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
     const mode = await backend.initialize();
     set({ mode, connected: mode === 'backend', error: mode === 'mock' ? backend.availabilityError : null });
     try {
-      const [models, conversations, toolList] = await Promise.all([backend.getModels(), backend.getConversations(), backend.getTools()]);
-      set({ models: models.models, model: models.current, conversations, tools: toolList.tools, conversationsLoading: false });
+      const [configuration, conversations, toolList] = await Promise.all([backend.getConfiguration(), backend.getConversations(), backend.getTools()]);
+      const preferredModel = getPreferredModel();
+      const model = mode === 'backend' ? configuration.current : preferredModel || configuration.current;
+      set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, conversations, tools: toolList.tools, conversationsLoading: false });
       if (conversations.length) await get().openConversation(conversations[0]);
     } catch (error) {
       set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取后端数据', conversationsLoading: false });
@@ -102,8 +114,42 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
   },
 
   selectModel: async (model) => {
-    try { await backend.selectModel(model); set({ model }); }
+    try { await backend.selectModel(model); setPreferredModel(model); set({ model }); }
     catch (error) { set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '切换模型失败' }); }
+  },
+
+  saveProviderSettings: async (baseUrl, apiKey) => {
+    set({ settingsBusy: true, connectionTest: null });
+    try {
+      const configuration: ConfigurationResponse = await backend.updateConfiguration(baseUrl, apiKey);
+      set({ providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, models: configuration.models, model: configuration.current, error: null });
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '保存 API 配置失败' });
+      return false;
+    } finally { set({ settingsBusy: false }); }
+  },
+
+  addCustomModel: async (model) => {
+    set({ settingsBusy: true, connectionTest: null });
+    try {
+      const configuration = await backend.addCustomModel(model);
+      set({ models: configuration.models, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, model: configuration.current, error: null });
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : '保存模型配置失败' });
+      return false;
+    } finally { set({ settingsBusy: false }); }
+  },
+
+  testModelConnection: async (model) => {
+    set({ settingsBusy: true, connectionTest: null });
+    try {
+      const result = await backend.testConnection(model);
+      set({ connectionTest: { ok: result.ok, message: result.message }, error: null });
+    } catch (error) {
+      set({ connectionTest: { ok: false, message: error instanceof Error ? error.message : '连接测试失败' } });
+    } finally { set({ settingsBusy: false }); }
   },
 
   createRun: (conversationId, title) => {

@@ -7,7 +7,7 @@ from typing import Any
 
 import structlog
 
-from atlas.config import get_config
+from atlas.config import get_config, load_user_settings, save_user_settings
 
 log = structlog.get_logger()
 
@@ -74,26 +74,60 @@ class ModelManager:
 
     def __init__(self, default_model: str | None = None) -> None:
         cfg = get_config()
+        settings = load_user_settings()
         self._models: list[dict[str, Any]] = list(DEFAULT_MODELS)
-        self._current: str = default_model or cfg.default_model
+        custom_models = settings.get("custom_models", [])
+        if not isinstance(custom_models, list):
+            custom_models = []
+        self._current: str = default_model or str(settings.get("selected_model") or cfg.default_model)
         self._favorites: set[str] = {"claude-opus-4", "claude-sonnet-4", "gpt-4o"}
+        self._api_base = str(settings.get("gateway_base_url") or cfg.gateway_base_url)
+        self._api_key = str(settings.get("api_key") or cfg.gateway_api_key)
 
-        # Register custom models from config
+        # Config-defined models are loaded but are not copied to user preferences.
         for custom in cfg.custom_models:
             if custom.get("id"):
-                self._models.append(custom)
+                self._models.append({**custom, "custom": False})
+        for custom in custom_models:
+            if custom.get("id") and not any(model["id"] == custom["id"] for model in self._models):
+                self.add_model(custom, persist=False)
 
         # Configure LiteLLM to use gateway
-        api_base = cfg.gateway_base_url
-        api_key = cfg.gateway_api_key
+        self._apply_provider_environment()
 
-        if api_base:
-            os.environ.setdefault("OPENAI_API_BASE", api_base)
+        log.info("model_manager.init", default=self._current, api_base=self._api_base)
+
+    def _apply_provider_environment(self) -> None:
+        if self._api_base:
+            os.environ["OPENAI_API_BASE"] = self._api_base
+        if self._api_key:
+            os.environ["OPENAI_API_KEY"] = self._api_key
+            os.environ["ANTHROPIC_API_KEY"] = self._api_key
+
+    @property
+    def gateway_base_url(self) -> str:
+        return self._api_base
+
+    @property
+    def api_key_configured(self) -> bool:
+        return bool(self._api_key)
+
+    def update_provider(self, base_url: str, api_key: str | None) -> None:
+        self._api_base = base_url.rstrip("/")
         if api_key:
-            os.environ.setdefault("OPENAI_API_KEY", api_key)
-            os.environ.setdefault("ANTHROPIC_API_KEY", api_key)
+            self._api_key = api_key
+        self._apply_provider_environment()
+        self._persist_settings()
 
-        log.info("model_manager.init", default=self._current, api_base=api_base)
+    def _persist_settings(self) -> None:
+        current = load_user_settings()
+        current.update({
+            "gateway_base_url": self._api_base,
+            "api_key": self._api_key,
+            "selected_model": self._current,
+            "custom_models": [model for model in self._models if model.get("custom")],
+        })
+        save_user_settings(current)
 
     @property
     def current_model(self) -> str:
@@ -113,6 +147,7 @@ class ModelManager:
         if model_id not in valid_ids:
             raise ValueError(f"Unknown model: {model_id}. Available: {valid_ids}")
         self._current = model_id
+        self._persist_settings()
         log.info("model_manager.select", model=model_id)
 
     def list_models(self) -> list[dict[str, Any]]:
@@ -134,7 +169,11 @@ class ModelManager:
     def remove_favorite(self, model_id: str) -> None:
         self._favorites.discard(model_id)
 
-    def add_model(self, model: dict[str, Any]) -> None:
+    def add_model(self, model: dict[str, Any], persist: bool = True) -> None:
         """Register a custom model."""
-        self._models.append(model)
+        if any(existing["id"] == model.get("id") for existing in self._models):
+            raise ValueError(f"Model already exists: {model.get('id')}")
+        self._models.append({**model, "custom": True})
+        if persist:
+            self._persist_settings()
         log.info("model_manager.add_model", model_id=model.get("id"))
