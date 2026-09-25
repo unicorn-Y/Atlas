@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -179,3 +180,52 @@ class TestFacts:
 
         ok = await store.delete_fact("nonexistent")
         assert ok is False
+
+
+class TestExtractedMemories:
+    async def test_explicit_memory_is_stored_and_retrievable(self, store: MemoryStore) -> None:
+        extracted = await store.extract_memories(
+            "conversation-1",
+            "Please keep this in mind.\nremember: timezone = Asia/Hong_Kong",
+        )
+
+        assert extracted == [{
+            "key": "timezone",
+            "value": "Asia/Hong_Kong",
+            "category": "extracted",
+            "source_conversation_id": "conversation-1",
+        }]
+        assert await store.get_fact("timezone") == "Asia/Hong_Kong"
+        context = await store.get_agent_context("What timezone do I use?")
+        assert len(context) == 1
+        assert context[0]["key"] == "timezone"
+        assert context[0]["value"] == "Asia/Hong_Kong"
+        assert context[0]["source_conversation_id"] == "conversation-1"
+
+    async def test_unmarked_text_is_not_extracted(self, store: MemoryStore) -> None:
+        extracted = await store.extract_memories(
+            "conversation-1", "My timezone is Asia/Hong_Kong."
+        )
+        assert extracted == []
+        assert await store.list_facts() == []
+
+    async def test_existing_fact_table_is_migrated(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "legacy.db"
+        with sqlite3.connect(db_path) as db:
+            db.execute(
+                "CREATE TABLE facts (key TEXT PRIMARY KEY, value TEXT NOT NULL, "
+                "category TEXT NOT NULL DEFAULT 'general', "
+                "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+                "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
+            )
+        store = MemoryStore(db_path=db_path)
+        await store.init()
+        try:
+            facts = await store.list_facts()
+            assert facts == []
+            columns = await store._db.execute("PRAGMA table_info(facts)")
+            assert "source_conversation_id" in {
+                row["name"] for row in await columns.fetchall()
+            }
+        finally:
+            await store.close()

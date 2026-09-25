@@ -43,6 +43,8 @@ def memory():
     mem = AsyncMock()
     mem.get_conversation_messages.return_value = []
     mem.save_message.return_value = "msg-123"
+    mem.extract_memories.return_value = []
+    mem.get_agent_context.return_value = []
     return mem
 
 
@@ -551,6 +553,36 @@ class TestRun:
         types = [e["type"] for e in events]
         assert "done" in types
         memory.save_message.assert_called_once()
+
+    async def test_run_includes_retrieved_memories_in_model_context(
+        self, orchestrator, memory
+    ) -> None:
+        memory.get_agent_context.return_value = [{
+            "key": "timezone", "value": "Asia/Hong_Kong", "category": "extracted",
+        }]
+        captured_messages = []
+
+        async def fake_stream():
+            yield SimpleNamespace(choices=[SimpleNamespace(
+                delta=SimpleNamespace(content="Hong Kong time.", tool_calls=None)
+            )])
+
+        async def fake_acompletion(**kwargs):
+            captured_messages.extend(kwargs["messages"])
+            return fake_stream()
+
+        with patch("atlas.agent.acompletion", side_effect=fake_acompletion):
+            events = [event async for event in orchestrator.run(
+                "What timezone do I use?", "memory-context-conv"
+            )]
+
+        memory.extract_memories.assert_awaited_once_with(
+            "memory-context-conv", "What timezone do I use?"
+        )
+        memory.get_agent_context.assert_awaited_once_with("What timezone do I use?")
+        assert captured_messages[1]["role"] == "system"
+        assert '"Asia/Hong_Kong"' in captured_messages[1]["content"]
+        assert any(event["type"] == "done" for event in events)
 
     async def test_run_with_tool_call(self, orchestrator, memory, mcp_client) -> None:
         """Response that includes tool calling."""

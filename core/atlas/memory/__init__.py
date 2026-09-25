@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +15,13 @@ import structlog
 from atlas.config import get_config
 
 log = structlog.get_logger()
+
+_MEMORY_LINE = re.compile(
+    r"^\s*(?:remember|记住)\s*[:：]\s*"
+    r"(?P<key>[\w.-]{1,64})\s*[=＝]\s*(?P<value>\S(?:.*\S)?)\s*$",
+    re.IGNORECASE,
+)
+_MEMORY_TOKEN = re.compile(r"[\w.-]+", re.UNICODE)
 
 
 class MemoryStore:
@@ -94,10 +102,17 @@ class MemoryStore:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
                 category TEXT NOT NULL DEFAULT 'general',
+                source_conversation_id TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
         """)
+        cursor = await self._db.execute("PRAGMA table_info(facts)")
+        fact_columns = {row["name"] for row in await cursor.fetchall()}
+        if "source_conversation_id" not in fact_columns:
+            await self._db.execute(
+                "ALTER TABLE facts ADD COLUMN source_conversation_id TEXT"
+            )
         await self._db.commit()
 
     # ----- Conversations -----
@@ -195,13 +210,23 @@ class MemoryStore:
 
     # ----- Facts -----
 
-    async def set_fact(self, key: str, value: str, category: str = "general") -> None:
+    async def set_fact(
+        self,
+        key: str,
+        value: str,
+        category: str = "general",
+        source_conversation_id: str | None = None,
+    ) -> None:
         assert self._db is not None
         await self._db.execute(
-            "INSERT INTO facts (key, value, category) VALUES (?, ?, ?) "
+            "INSERT INTO facts (key, value, category, source_conversation_id) "
+            "VALUES (?, ?, ?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+            "category=excluded.category, "
+            "source_conversation_id=COALESCE(excluded.source_conversation_id, "
+            "facts.source_conversation_id), "
             "updated_at=datetime('now')",
-            (key, value, category),
+            (key, value, category, source_conversation_id),
         )
         await self._db.commit()
 
@@ -217,17 +242,75 @@ class MemoryStore:
         assert self._db is not None
         if category:
             cursor = await self._db.execute(
-                "SELECT key, value, category, updated_at FROM facts "
+                "SELECT key, value, category, source_conversation_id, updated_at FROM facts "
                 "WHERE category = ? ORDER BY updated_at DESC",
                 (category,),
             )
         else:
             cursor = await self._db.execute(
-                "SELECT key, value, category, updated_at FROM facts "
+                "SELECT key, value, category, source_conversation_id, updated_at FROM facts "
                 "ORDER BY updated_at DESC"
             )
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
+
+    async def extract_memories(
+        self, conversation_id: str, content: str
+    ) -> list[dict[str, str]]:
+        """Persist explicitly marked ``remember: key = value`` lines as facts."""
+        extracted: list[dict[str, str]] = []
+        for line in content.splitlines():
+            match = _MEMORY_LINE.match(line)
+            if not match:
+                continue
+            key = match.group("key").strip().lower()
+            value = match.group("value").strip()
+            if len(value) > 500:
+                continue
+            await self.set_fact(
+                key,
+                value,
+                category="extracted",
+                source_conversation_id=conversation_id,
+            )
+            extracted.append({
+                "key": key,
+                "value": value,
+                "category": "extracted",
+                "source_conversation_id": conversation_id,
+            })
+        return extracted
+
+    async def get_agent_context(
+        self, query: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Return stored facts that lexically match the current agent request."""
+        facts = await self.list_facts()
+        terms = {
+            token.casefold()
+            for token in _MEMORY_TOKEN.findall(query)
+            if len(token) > 1
+        }
+        if not terms:
+            return []
+        ranked = [
+            (
+                sum(
+                    term in f"{fact['key']} {fact['value']}".casefold()
+                    for term in terms
+                ),
+                fact,
+            )
+            for fact in facts
+        ]
+        matches = [
+            fact
+            for score, fact in sorted(
+                ranked, key=lambda item: (-item[0], item[1]["updated_at"])
+            )
+            if score > 0
+        ]
+        return matches[: max(0, limit)]
 
     # ----- Conversation management -----
 
