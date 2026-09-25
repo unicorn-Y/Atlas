@@ -202,6 +202,42 @@ class TestExtractedMemories:
         assert context[0]["value"] == "Asia/Hong_Kong"
         assert context[0]["source_conversation_id"] == "conversation-1"
 
+
+class TestAgentContextRanking:
+    async def test_context_ranks_fact_keys_above_value_matches(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("language", "Spanish")
+        await store.set_fact("preferred_editor_language", "English")
+
+        context = await store.get_agent_context(
+            "What language should I use in the editor?"
+        )
+
+        assert [fact["key"] for fact in context] == [
+            "preferred_editor_language", "language"
+        ]
+
+    async def test_context_ignores_request_boilerplate_without_memory_terms(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("timezone", "Asia/Hong_Kong")
+        await store.set_fact("generic_note", "I should use it")
+
+        context = await store.get_agent_context("What should I do with it?")
+
+        assert context == []
+
+    async def test_context_ranks_request_terms_above_boilerplate_matches(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("meeting_notes", "I should use this")
+        await store.set_fact("favorite_language", "TypeScript")
+
+        context = await store.get_agent_context("What language should I use?")
+
+        assert [fact["key"] for fact in context] == ["favorite_language"]
+
     async def test_unmarked_text_is_not_extracted(self, store: MemoryStore) -> None:
         extracted = await store.extract_memories(
             "conversation-1", "My timezone is Asia/Hong_Kong."

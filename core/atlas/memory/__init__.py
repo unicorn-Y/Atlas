@@ -22,6 +22,11 @@ _MEMORY_LINE = re.compile(
     re.IGNORECASE,
 )
 _MEMORY_TOKEN = re.compile(r"[\w.-]+", re.UNICODE)
+_MEMORY_STOP_WORDS = {
+    "a", "an", "and", "are", "be", "do", "does", "for", "how", "i",
+    "in", "is", "it", "me", "my", "of", "on", "or", "should", "the",
+    "to", "use", "what", "when", "where", "which", "who", "why", "with",
+}
 _UNCERTAIN_MEMORY = re.compile(
     r"\b(?:might|maybe|perhaps|possibly|probably|i think|not sure|guess|hypothetically)\b"
     r"|(?:可能|也许|或许|大概|我猜|不确定|假设)",
@@ -459,33 +464,32 @@ class MemoryStore:
     async def get_agent_context(
         self, query: str, limit: int = 10
     ) -> list[dict[str, Any]]:
-        """Return stored facts that lexically match the current agent request."""
+        """Return the most relevant stored facts for the current agent request."""
         facts = await self.list_facts()
         terms = {
             token.casefold()
             for token in _MEMORY_TOKEN.findall(query)
-            if len(token) > 1
+            if len(token) > 1 and token.casefold() not in _MEMORY_STOP_WORDS
         }
         if not terms:
             return []
-        ranked = [
-            (
-                sum(
-                    term in f"{fact['key']} {fact['value']}".casefold()
-                    for term in terms
-                ),
-                fact,
+        ranked: list[tuple[int, dict[str, Any]]] = []
+        for fact in facts:
+            key = fact["key"].casefold()
+            key_terms = set(re.split(r"[\W_]+", key))
+            value = fact["value"].casefold()
+            score = sum(
+                4 if term in key_terms else 2 if term in key else 1 if term in value else 0
+                for term in terms
             )
-            for fact in facts
-        ]
-        matches = [
-            fact
-            for score, fact in sorted(
-                ranked, key=lambda item: (-item[0], item[1]["updated_at"])
-            )
-            if score > 0
-        ]
-        return matches[: max(0, limit)]
+            if score:
+                ranked.append((score, fact))
+
+        ranked.sort(
+            key=lambda item: (item[1]["updated_at"], item[1]["key"]), reverse=True
+        )
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return [fact for _, fact in ranked[: max(0, limit)]]
 
     # ----- Conversation management -----
 
