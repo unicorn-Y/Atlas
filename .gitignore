@@ -17,20 +17,27 @@ config/atlas.toml
 
 # Electron
 frontend/dist/
+frontend/dist-electron/
 frontend/out/
 frontend/node_modules/
+.playwright-mcp/
+/atlas-workspace-v1.png
 
 # Environment
 .env
 .env.*
+!.env.example
+!**/.env.example
 
 # Survey / scratch assets (not source)
 survey_images/
 atlas-frontend-preview*.html
 atlas-frontend-v3.html
 
-# Cowork skills (not Atlas source)
-skills/
+# Cowork skills (not Atlas source) — only root-level skills dir
+/skills/
+# But keep the core Python package
+!core/atlas/skills/
 
 # OS
 .DS_Store

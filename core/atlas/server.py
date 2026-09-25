@@ -16,6 +16,7 @@ from atlas.models.manager import ModelManager
 from atlas.memory.store import MemoryStore
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.tools.mcp_client import MCPClient
+from atlas.skills import SkillManager
 
 # ---------------------------------------------------------------------------
 # Singletons (populated by lifespan)
@@ -25,6 +26,7 @@ model_mgr: ModelManager | None = None
 memory: MemoryStore | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
+skill_mgr: SkillManager | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +36,7 @@ mcp_client: MCPClient | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle."""
-    global model_mgr, memory, orchestrator, mcp_client
+    global model_mgr, memory, orchestrator, mcp_client, skill_mgr
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -42,6 +44,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     mcp_client = MCPClient()
     await mcp_client.start()
+
+    skill_mgr = SkillManager()
+    await skill_mgr.scan_skills()
 
     orchestrator = AgentOrchestrator(
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
@@ -241,6 +246,65 @@ async def list_tools() -> dict[str, Any]:
             }
             for t in tools
         ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Skills
+# ---------------------------------------------------------------------------
+
+@app.get("/api/skills")
+async def list_skills(
+    category: str | None = Query(None),
+) -> dict[str, Any]:
+    """Return all available skills, optionally filtered by category."""
+    assert skill_mgr is not None
+    skills = skill_mgr.list_skills(category=category)
+    return {
+        "count": len(skills),
+        "categories": skill_mgr.categories,
+        "skills": [s.to_dict() for s in skills],
+    }
+
+
+@app.get("/api/skills/{name}")
+async def get_skill(name: str) -> dict[str, Any]:
+    """Return a single skill's metadata."""
+    assert skill_mgr is not None
+    skill = skill_mgr.get_skill(name)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
+    return skill.to_dict()
+
+
+@app.get("/api/skills/{name}/activate")
+async def activate_skill(name: str) -> dict[str, Any]:
+    """Activate a skill and return its full content."""
+    assert skill_mgr is not None
+    body = await skill_mgr.activate(name)
+    if body is None:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
+
+    skill = skill_mgr.get_skill(name)
+    deps = skill_mgr.check_dependencies(
+        name,
+        connected_servers=mcp_client.get_server_names() if mcp_client else [],
+    )
+    return {
+        "name": name,
+        "content": body,
+        "dependencies": deps,
+    }
+
+
+@app.get("/api/skills/search/{query}")
+async def search_skills(query: str) -> dict[str, Any]:
+    """Search skills by name, description, or tags."""
+    assert skill_mgr is not None
+    results = skill_mgr.search_skills(query)
+    return {
+        "count": len(results),
+        "skills": [s.to_dict() for s in results],
     }
 
 
