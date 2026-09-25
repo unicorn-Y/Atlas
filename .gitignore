@@ -34,9 +34,20 @@ survey_images/
 atlas-frontend-preview*.html
 atlas-frontend-v3.html
 
-# Cowork skills (not Atlas source) — only root-level skills dir
-/skills/
-# But keep the core Python package
+# Skills — track Atlas-owned content, ignore Cowork-injected skills
+# First un-ignore the directory itself so git enters it
+/skills/*
+# Keep Atlas skill content
+!/skills/SKILL-FORMAT.md
+!/skills/github/
+!/skills/research/
+!/skills/dev/
+!/skills/web/
+!/skills/messaging/
+!/skills/creative/
+!/skills/productivity/
+!/skills/automation/
+# Keep the core Python package
 !core/atlas/skills/
 
 # OS
