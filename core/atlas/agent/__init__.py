@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from dataclasses import dataclass
 from typing import Annotated, Any, AsyncIterator, Callable, Literal
 
 import structlog
@@ -51,6 +52,15 @@ MAX_TOOL_ROUNDS = 10
 # Agent State
 # ---------------------------------------------------------------------------
 
+@dataclass
+class AgentRunContext:
+    """Control hooks scoped to one agent run."""
+
+    cancel_event: asyncio.Event | None = None
+    pause_event: asyncio.Event | None = None
+    approval_callback: Callable[[str, str, dict], Any] | None = None
+
+
 class AgentState(TypedDict):
     """LangGraph state for the agent."""
 
@@ -61,6 +71,8 @@ class AgentState(TypedDict):
     tool_rounds: int
     # Set when run is cancelled externally
     cancelled: bool
+    # Per-run control hooks; never stored on the shared orchestrator.
+    runtime: AgentRunContext
 
 
 # ---------------------------------------------------------------------------
@@ -95,10 +107,6 @@ class AgentOrchestrator:
         self._memory = memory
         self._mcp = mcp_client
         self._graph = self._build_graph()
-        # Per-run control hooks (set by run())
-        self._cancel_event: asyncio.Event | None = None
-        self._pause_event: asyncio.Event | None = None
-        self._approval_callback: Callable[[str, str, dict], Any] | None = None
 
     # -- graph construction --------------------------------------------------
 
@@ -226,6 +234,7 @@ class AgentOrchestrator:
 
         events: list[dict[str, Any]] = []
         tool_messages: list[ToolMessage] = []
+        ctx = state["runtime"]
 
         for tc in last.tool_calls:
             fn_name = tc["name"]
@@ -233,15 +242,15 @@ class AgentOrchestrator:
             tc_id = tc["id"]
 
             # Check cancellation between tool calls
-            if self._cancel_event and self._cancel_event.is_set():
+            if ctx.cancel_event and ctx.cancel_event.is_set():
                 break
 
             # Wait if paused
-            if self._pause_event:
-                await self._pause_event.wait()
+            if ctx.pause_event:
+                await ctx.pause_event.wait()
 
             # Approval gate for sensitive tools
-            if fn_name in self.APPROVAL_REQUIRED_TOOLS and self._approval_callback:
+            if fn_name in self.APPROVAL_REQUIRED_TOOLS and ctx.approval_callback:
                 approval_event_id = f"approval:{tc_id}"
                 events.append({
                     "type": "approval_required",
@@ -252,7 +261,7 @@ class AgentOrchestrator:
                 })
 
                 # Ask server layer for approval
-                choice = await self._approval_callback(
+                choice = await ctx.approval_callback(
                     approval_event_id, fn_name, fn_args
                 )
 
@@ -328,10 +337,11 @@ class AgentOrchestrator:
             {"type": "done", "message_id": "...", "model": "..."}
             {"type": "error", "detail": "..."}
         """
-        # Store control hooks for this run
-        self._cancel_event = cancel_event
-        self._pause_event = pause_event
-        self._approval_callback = approval_callback
+        runtime = AgentRunContext(
+            cancel_event=cancel_event,
+            pause_event=pause_event,
+            approval_callback=approval_callback,
+        )
 
         # Resolve model
         if model:
@@ -364,6 +374,7 @@ class AgentOrchestrator:
                 "messages": initial_messages,
                 "pending_events": [],
                 "tool_rounds": 0,
+                "runtime": runtime,
             })
 
             # Yield all accumulated events

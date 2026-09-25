@@ -2,15 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 from typing import Any
+from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from atlas.agent import AgentOrchestrator, AgentState, SYSTEM_PROMPT, MAX_TOOL_ROUNDS
 from atlas.tools.mcp_client import MCPClient, ToolInfo
+
+
+def _agent_state(ai: AIMessage, *, runtime: Any | None = None) -> AgentState:
+    return {
+        "messages": [ai],
+        "pending_events": [],
+        "tool_rounds": 0,
+        "runtime": runtime or SimpleNamespace(
+            cancel_event=None, pause_event=None, approval_callback=None
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +192,9 @@ class TestExecuteTools:
             "messages": [HumanMessage(content="read a.txt"), ai],
             "pending_events": [],
             "tool_rounds": 0,
+            "runtime": SimpleNamespace(
+                cancel_event=None, pause_event=None, approval_callback=None
+            ),
         }
 
         result = await orchestrator._execute_tools_node(state)
@@ -219,6 +235,9 @@ class TestExecuteTools:
             "messages": [ai],
             "pending_events": [],
             "tool_rounds": 0,
+            "runtime": SimpleNamespace(
+                cancel_event=None, pause_event=None, approval_callback=None
+            ),
         }
 
         result = await orchestrator._execute_tools_node(state)
@@ -240,12 +259,124 @@ class TestExecuteTools:
             "messages": [ai],
             "pending_events": [],
             "tool_rounds": 0,
+            "runtime": SimpleNamespace(
+                cancel_event=None, pause_event=None, approval_callback=None
+            ),
         }
 
         result = await orchestrator._execute_tools_node(state)
         events = result["pending_events"]
         tr = next(e for e in events if e["type"] == "tool_result")
         assert tr["is_error"] is True
+
+
+# ---------------------------------------------------------------------------
+# Concurrent run control isolation
+# ---------------------------------------------------------------------------
+
+class TestConcurrentRunIsolation:
+    async def test_concurrent_run_cancel_isolation(self, orchestrator, mcp_client) -> None:
+        cancel_a = asyncio.Event()
+        cancel_a.set()
+        cancel_b = asyncio.Event()
+        state_a = _agent_state(
+            AIMessage(content="", tool_calls=[{
+                "name": "fs__read", "args": {"path": "/a"}, "id": "a"
+            }]),
+            runtime=SimpleNamespace(
+                cancel_event=cancel_a, pause_event=None, approval_callback=None
+            ),
+        )
+        state_b = _agent_state(
+            AIMessage(content="", tool_calls=[{
+                "name": "fs__read", "args": {"path": "/b"}, "id": "b"
+            }]),
+            runtime=SimpleNamespace(
+                cancel_event=cancel_b, pause_event=None, approval_callback=None
+            ),
+        )
+        mcp_client.call_tool = AsyncMock(return_value={
+            "content": [{"type": "text", "text": "ok"}], "is_error": False,
+        })
+
+        await asyncio.gather(
+            orchestrator._execute_tools_node(state_a),
+            orchestrator._execute_tools_node(state_b),
+        )
+
+        mcp_client.call_tool.assert_awaited_once_with("fs__read", {"path": "/b"})
+
+    async def test_concurrent_run_pause_isolation(self, orchestrator, mcp_client) -> None:
+        pause_a = asyncio.Event()
+        pause_b = asyncio.Event()
+        pause_b.set()
+        state_a = _agent_state(
+            AIMessage(content="", tool_calls=[{
+                "name": "fs__read", "args": {"path": "/a"}, "id": "a"
+            }]),
+            runtime=SimpleNamespace(
+                cancel_event=None, pause_event=pause_a, approval_callback=None
+            ),
+        )
+        state_b = _agent_state(
+            AIMessage(content="", tool_calls=[{
+                "name": "fs__read", "args": {"path": "/b"}, "id": "b"
+            }]),
+            runtime=SimpleNamespace(
+                cancel_event=None, pause_event=pause_b, approval_callback=None
+            ),
+        )
+        mcp_client.call_tool = AsyncMock(return_value={
+            "content": [{"type": "text", "text": "ok"}], "is_error": False,
+        })
+
+        task_a = asyncio.create_task(orchestrator._execute_tools_node(state_a))
+        task_b = asyncio.create_task(orchestrator._execute_tools_node(state_b))
+        await asyncio.sleep(0)
+        assert not task_a.done()
+        assert task_b.done()
+        pause_a.set()
+        await asyncio.gather(task_a, task_b)
+
+        assert {call.args[1]["path"] for call in mcp_client.call_tool.await_args_list} == {
+            "/a", "/b"
+        }
+
+    async def test_concurrent_run_approval_isolation(self, orchestrator) -> None:
+        calls_a: list[str] = []
+        calls_b: list[str] = []
+
+        async def approve_a(event_id: str, tool_name: str, args: dict) -> str:
+            calls_a.append(event_id)
+            return "deny"
+
+        async def approve_b(event_id: str, tool_name: str, args: dict) -> str:
+            calls_b.append(event_id)
+            return "deny"
+
+        state_a = _agent_state(
+            AIMessage(content="", tool_calls=[{
+                "name": "execute_command", "args": {"command": "a"}, "id": "a"
+            }]),
+            runtime=SimpleNamespace(
+                cancel_event=None, pause_event=None, approval_callback=approve_a
+            ),
+        )
+        state_b = _agent_state(
+            AIMessage(content="", tool_calls=[{
+                "name": "execute_command", "args": {"command": "b"}, "id": "b"
+            }]),
+            runtime=SimpleNamespace(
+                cancel_event=None, pause_event=None, approval_callback=approve_b
+            ),
+        )
+        await asyncio.gather(
+            orchestrator._execute_tools_node(state_a),
+            orchestrator._execute_tools_node(state_b),
+        )
+
+        assert calls_a == ["approval:a"]
+        assert calls_b == ["approval:b"]
 
 
 # ---------------------------------------------------------------------------
