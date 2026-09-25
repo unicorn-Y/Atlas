@@ -16,6 +16,7 @@ from atlas.models.manager import ModelManager
 from atlas.memory.store import MemoryStore
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.tools.mcp_client import MCPClient
+from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
 from atlas.skills import SkillManager
 
 # ---------------------------------------------------------------------------
@@ -27,6 +28,7 @@ memory: MemoryStore | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 skill_mgr: SkillManager | None = None
+scheduler: AtlasScheduler | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +38,7 @@ skill_mgr: SkillManager | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle."""
-    global model_mgr, memory, orchestrator, mcp_client, skill_mgr
+    global model_mgr, memory, orchestrator, mcp_client, skill_mgr, scheduler
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -52,9 +54,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
     )
 
+    cfg = get_config()
+    if cfg.scheduler_enabled:
+        scheduler = AtlasScheduler()
+        await scheduler.start()
+
     yield  # app is running
 
     # Shutdown
+    if scheduler:
+        await scheduler.stop()
     if mcp_client:
         await mcp_client.stop()
     if memory:
@@ -97,6 +106,26 @@ class FactCreateRequest(BaseModel):
     key: str
     value: str
     category: str = "general"
+
+
+class ScheduleCreateRequest(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    trigger_type: str = "cron"  # cron | interval | date
+    trigger_args: dict[str, Any] = {}
+    action: str  # "agent:<message>"
+    tags: list[str] = []
+
+
+class ScheduleUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    trigger_type: str | None = None
+    trigger_args: dict[str, Any] | None = None
+    action: str | None = None
+    status: str | None = None  # "active" | "paused"
+    tags: list[str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +335,102 @@ async def search_skills(query: str) -> dict[str, Any]:
         "count": len(results),
         "skills": [s.to_dict() for s in results],
     }
+
+
+# ---------------------------------------------------------------------------
+# Schedules
+# ---------------------------------------------------------------------------
+
+@app.get("/api/schedules")
+async def list_schedules(
+    status: str | None = Query(None),
+    tag: str | None = Query(None),
+) -> dict[str, Any]:
+    """Return all scheduled tasks."""
+    assert scheduler is not None
+    filter_status = TaskStatus(status) if status else None
+    tasks = scheduler.list_tasks(status=filter_status, tag=tag)
+    return {
+        "count": len(tasks),
+        "active_count": scheduler.active_count,
+        "tasks": [t.to_dict() for t in tasks],
+    }
+
+
+@app.get("/api/schedules/{task_id}")
+async def get_schedule(task_id: str) -> dict[str, Any]:
+    """Return a single scheduled task."""
+    assert scheduler is not None
+    task = scheduler.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
+    return task.to_dict()
+
+
+@app.post("/api/schedules")
+async def create_schedule(req: ScheduleCreateRequest) -> dict[str, Any]:
+    """Create a new scheduled task."""
+    assert scheduler is not None
+    task = ScheduledTask(
+        id=req.id,
+        name=req.name,
+        description=req.description,
+        trigger_type=TriggerType(req.trigger_type),
+        trigger_args=req.trigger_args,
+        action=req.action,
+        tags=req.tags,
+    )
+    try:
+        result = await scheduler.add_task(task)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return result.to_dict()
+
+
+@app.put("/api/schedules/{task_id}")
+async def update_schedule(task_id: str, req: ScheduleUpdateRequest) -> dict[str, Any]:
+    """Update an existing scheduled task."""
+    assert scheduler is not None
+    kwargs: dict[str, Any] = {}
+    if req.name is not None:
+        kwargs["name"] = req.name
+    if req.description is not None:
+        kwargs["description"] = req.description
+    if req.trigger_type is not None:
+        kwargs["trigger_type"] = TriggerType(req.trigger_type)
+    if req.trigger_args is not None:
+        kwargs["trigger_args"] = req.trigger_args
+    if req.action is not None:
+        kwargs["action"] = req.action
+    if req.status is not None:
+        kwargs["status"] = TaskStatus(req.status)
+    if req.tags is not None:
+        kwargs["tags"] = req.tags
+
+    result = await scheduler.update_task(task_id, **kwargs)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
+    return result.to_dict()
+
+
+@app.delete("/api/schedules/{task_id}")
+async def delete_schedule(task_id: str) -> dict[str, str]:
+    """Delete a scheduled task."""
+    assert scheduler is not None
+    ok = await scheduler.delete_task(task_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
+    return {"status": "ok", "task_id": task_id}
+
+
+@app.post("/api/schedules/{task_id}/run")
+async def run_schedule_now(task_id: str) -> dict[str, str]:
+    """Manually trigger a scheduled task immediately."""
+    assert scheduler is not None
+    ok = await scheduler.run_now(task_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
+    return {"status": "ok", "task_id": task_id}
 
 
 # ---------------------------------------------------------------------------
