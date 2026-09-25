@@ -13,7 +13,8 @@
     "test": "vitest run --root .",
     "test:adapter": "vitest run --root .. backend-adapter/tests/client.test.ts",
     "start": "electron .",
-    "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "clean:packaging": "node scripts/clean-packaging-output.mjs",
+    "dist:win": "npm run clean:packaging && npm run build && electron-builder --win nsis --x64 --publish never",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -42,13 +43,14 @@
     "productName": "Atlas",
     "artifactName": "${productName}-${version}-Setup.${ext}",
     "directories": { "output": "windows-release" },
+    "electronDist": "../node_modules/electron/dist",
     "files": ["dist/**", "dist-electron/**", "package.json"],
     "extraResources": [
-      { "from": "../core", "to": "atlas/core", "filter": ["**/*", "!tests/**", "!**/__pycache__/**", "!**/*.pyc"] },
+      { "from": "../core/atlas", "to": "atlas/core/atlas", "filter": ["**/*", "!**/__pycache__", "!**/__pycache__/**", "!**/*.pyc"] },
       { "from": "../skills", "to": "atlas/skills", "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"] },
       { "from": "../config/atlas.example.toml", "to": "atlas/config/atlas.example.toml" }
     ],
-    "win": { "target": ["nsis"] },
+    "win": { "target": ["nsis"], "signAndEditExecutable": false },
     "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true }
   }
 }
