@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Any, AsyncIterator, Callable, Literal
 
 import structlog
@@ -59,6 +59,10 @@ class AgentRunContext:
     cancel_event: asyncio.Event | None = None
     pause_event: asyncio.Event | None = None
     approval_callback: Callable[[str, str, dict], Any] | None = None
+    event_queue: asyncio.Queue[Any] = field(default_factory=asyncio.Queue)
+
+
+_EVENT_STREAM_DONE = object()
 
 
 class AgentState(TypedDict):
@@ -166,56 +170,71 @@ class AgentOrchestrator:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
+        runtime = state["runtime"]
+        event_queue = getattr(runtime, "event_queue", None)
         events: list[dict[str, Any]] = []
+        full_text = ""
+        tool_fragments: dict[int, dict[str, str]] = {}
 
-        if tools:
-            # Non-streaming when tools available (simplifies tool_call parsing)
-            response = await acompletion(**kwargs, stream=False)
-            choice = response.choices[0]
-            msg = choice.message
+        def get_value(value: Any, key: str, default: Any = None) -> Any:
+            if isinstance(value, dict):
+                return value.get(key, default)
+            return getattr(value, key, default)
 
-            content = msg.content or ""
-            tool_calls_raw = getattr(msg, "tool_calls", None) or []
-
-            # Emit text chunks
+        response = await acompletion(**kwargs, stream=True)
+        async for chunk in response:
+            delta = chunk.choices[0].delta
+            content = get_value(delta, "content")
             if content:
-                events.append({"type": "chunk", "content": content})
+                full_text += content
+                event = {"type": "chunk", "content": content}
+                events.append(event)
+                if event_queue is not None:
+                    await event_queue.put(event)
 
-            # Build AIMessage
-            if tool_calls_raw:
-                tc_list = [
-                    {
-                        "name": tc.function.name,
-                        "args": json.loads(tc.function.arguments)
-                        if isinstance(tc.function.arguments, str)
-                        else tc.function.arguments,
-                        "id": tc.id,
-                    }
-                    for tc in tool_calls_raw
-                ]
-                ai_msg = AIMessage(content=content, tool_calls=tc_list)
+            for position, fragment in enumerate(get_value(delta, "tool_calls", None) or []):
+                index = get_value(fragment, "index", position)
+                if index is None:
+                    index = position
+                aggregate = tool_fragments.setdefault(
+                    index, {"id": "", "name": "", "arguments": ""}
+                )
+                aggregate["id"] = aggregate["id"] or get_value(fragment, "id", "") or ""
+                function = get_value(fragment, "function", None)
+                if function is not None:
+                    aggregate["name"] += get_value(function, "name", "") or ""
+                    aggregate["arguments"] += get_value(function, "arguments", "") or ""
 
-                # Emit tool_call events
-                for tc in tc_list:
-                    events.append({
-                        "type": "tool_call",
-                        "id": tc["id"],
-                        "name": tc["name"],
-                        "arguments": tc["args"],
-                    })
-            else:
-                ai_msg = AIMessage(content=content)
+        tc_list: list[dict[str, Any]] = []
+        for index in sorted(tool_fragments):
+            fragment = tool_fragments[index]
+            try:
+                arguments = json.loads(fragment["arguments"] or "{}")
+            except (json.JSONDecodeError, TypeError) as exc:
+                raise ValueError(
+                    f"Malformed arguments for streamed tool call {fragment['id'] or index}: {exc}"
+                ) from exc
+            if not isinstance(arguments, dict):
+                raise ValueError(
+                    f"Streamed tool call {fragment['id'] or index} arguments must be a JSON object"
+                )
+            tc = {
+                "name": fragment["name"],
+                "args": arguments,
+                "id": fragment["id"] or str(uuid.uuid4()),
+            }
+            if not tc["name"]:
+                raise ValueError(f"Streamed tool call {tc['id']} has no function name")
+            tc_list.append(tc)
+            event = {
+                "type": "tool_call", "id": tc["id"], "name": tc["name"],
+                "arguments": tc["args"],
+            }
+            events.append(event)
+            if event_queue is not None:
+                await event_queue.put(event)
 
-        else:
-            # Streaming when no tools
-            response = await acompletion(**kwargs, stream=True)
-            full_text = ""
-            async for chunk in response:
-                delta = chunk.choices[0].delta
-                if delta.content:
-                    full_text += delta.content
-                    events.append({"type": "chunk", "content": delta.content})
-            ai_msg = AIMessage(content=full_text)
+        ai_msg = AIMessage(content=full_text, tool_calls=tc_list) if tc_list else AIMessage(content=full_text)
 
         return {
             "messages": [ai_msg],
@@ -259,6 +278,8 @@ class AgentOrchestrator:
                     "name": fn_name,
                     "arguments": fn_args,
                 })
+                if getattr(ctx, "event_queue", None) is not None:
+                    await ctx.event_queue.put(events[-1])
 
                 # Ask server layer for approval
                 choice = await ctx.approval_callback(
@@ -274,6 +295,8 @@ class AgentOrchestrator:
                         "content": [{"type": "text", "text": f"Tool '{fn_name}' denied by user."}],
                         "is_error": True,
                     })
+                    if getattr(ctx, "event_queue", None) is not None:
+                        await ctx.event_queue.put(events[-1])
                     tool_messages.append(
                         ToolMessage(
                             content=f"Tool '{fn_name}' denied by user.",
@@ -293,6 +316,8 @@ class AgentOrchestrator:
                 "content": result["content"],
                 "is_error": result["is_error"],
             })
+            if getattr(ctx, "event_queue", None) is not None:
+                await ctx.event_queue.put(events[-1])
 
             # Build ToolMessage for the LLM
             result_text = "\n".join(
@@ -368,34 +393,40 @@ class AgentOrchestrator:
             elif msg["role"] == "assistant":
                 initial_messages.append(AIMessage(content=msg["content"]))
 
-        # Run the graph
-        try:
-            result = await self._graph.ainvoke({
-                "messages": initial_messages,
-                "pending_events": [],
-                "tool_rounds": 0,
-                "runtime": runtime,
-            })
+        async def execute_graph() -> dict[str, Any]:
+            try:
+                return await self._graph.ainvoke({
+                    "messages": initial_messages,
+                    "pending_events": [],
+                    "tool_rounds": 0,
+                    "runtime": runtime,
+                })
+            finally:
+                runtime.event_queue.put_nowait(_EVENT_STREAM_DONE)
 
-            # Yield all accumulated events
-            for event in result["pending_events"]:
+        graph_task = asyncio.create_task(execute_graph())
+        try:
+            while True:
+                event = await runtime.event_queue.get()
+                if event is _EVENT_STREAM_DONE:
+                    break
                 yield event
 
-            # Extract the final assistant text from the last AIMessage
+            result = await graph_task
+
+            # Extract and persist the final assistant text exactly once.
             full_response = ""
             for msg in reversed(result["messages"]):
                 if isinstance(msg, AIMessage) and not msg.tool_calls:
                     full_response = msg.content
                     break
 
-            # Save assistant response
             msg_id = await self._memory.save_message(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=full_response,
                 metadata={"model": litellm_model},
             )
-
             yield {
                 "type": "done",
                 "message_id": msg_id,
@@ -408,6 +439,10 @@ class AgentOrchestrator:
                 "type": "error",
                 "detail": f"Model call failed: {e}",
             }
+        finally:
+            if not graph_task.done():
+                graph_task.cancel()
+            await asyncio.gather(graph_task, return_exceptions=True)
 
     # -- helpers -------------------------------------------------------------
 

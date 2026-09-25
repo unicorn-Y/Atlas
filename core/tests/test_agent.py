@@ -384,6 +384,131 @@ class TestConcurrentRunIsolation:
 # ---------------------------------------------------------------------------
 
 class TestRun:
+    async def test_run_yields_chunk_before_graph_completion(self, orchestrator, memory) -> None:
+        """Text is observable before a streamed model response completes, even with tools."""
+        orchestrator._mcp.get_tools_for_llm.return_value = [
+            {"type": "function", "function": {"name": "fs__read", "parameters": {}}}
+        ]
+        completed = asyncio.Event()
+
+        async def fake_stream():
+            for text in ("A", "B", "C"):
+                yield SimpleNamespace(choices=[SimpleNamespace(
+                    delta=SimpleNamespace(content=text, tool_calls=None)
+                )])
+                await asyncio.sleep(0.02)
+            completed.set()
+
+        async def fake_acompletion(**kwargs):
+            assert kwargs["stream"] is True
+            return fake_stream()
+
+        with patch("atlas.agent.acompletion", side_effect=fake_acompletion):
+            events = orchestrator.run("hi", "stream-conv")
+            first = await asyncio.wait_for(anext(events), timeout=0.1)
+            assert first == {"type": "chunk", "content": "A"}
+            assert not completed.is_set()
+            rest = [event async for event in events]
+
+        assert [event["content"] for event in rest if event["type"] == "chunk"] == ["B", "C"]
+        memory.save_message.assert_awaited_once_with(
+            conversation_id="stream-conv", role="assistant", content="ABC",
+            metadata={"model": "openai/test-model"},
+        )
+
+    async def test_run_reconstructs_streamed_tool_call_fragments(self, orchestrator, mcp_client):
+        orchestrator._mcp.get_tools_for_llm.return_value = [
+            {"type": "function", "function": {"name": "fs__read", "parameters": {}}}
+        ]
+        mcp_client.call_tool = AsyncMock(return_value={
+            "content": [{"type": "text", "text": "contents"}], "is_error": False,
+        })
+        tool_fragments = [
+            {"index": 0, "id": "call-1", "function": {"name": "fs__read", "arguments": '{"path":'}},
+            {"index": 0, "function": {"arguments": '"README.md"}'}},
+        ]
+
+        async def fake_acompletion(*, stream, **kwargs):
+            assert stream is True
+            if kwargs["messages"][-1]["role"] == "tool":
+                async def final_stream():
+                    yield SimpleNamespace(choices=[SimpleNamespace(
+                        delta=SimpleNamespace(content="done", tool_calls=None)
+                    )])
+                return final_stream()
+
+            async def tool_stream():
+                for fragment in tool_fragments:
+                    call = SimpleNamespace(
+                        index=fragment["index"],
+                        id=fragment.get("id"),
+                        function=SimpleNamespace(**fragment["function"]),
+                    )
+                    yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(
+                        content=None, tool_calls=[call]
+                    ))])
+            return tool_stream()
+
+        with patch("atlas.agent.acompletion", side_effect=fake_acompletion):
+            events = [event async for event in orchestrator.run("read", "tool-conv")]
+
+        mcp_client.call_tool.assert_awaited_once_with("fs__read", {"path": "README.md"})
+        tool_call = next(event for event in events if event["type"] == "tool_call")
+        assert tool_call["arguments"] == {"path": "README.md"}
+
+    async def test_concurrent_runs_keep_approval_contexts_isolated(
+        self, orchestrator, mcp_client
+    ):
+        orchestrator._mcp.get_tools_for_llm.return_value = [
+            {"type": "function", "function": {"name": "execute_command", "parameters": {}}}
+        ]
+        callbacks = {"a": [], "b": []}
+        run_commands = {}
+
+        async def approve_a(event_id, tool_name, args):
+            callbacks["a"].append(args["command"])
+            await asyncio.sleep(0.02)
+            return "deny"
+
+        async def approve_b(event_id, tool_name, args):
+            callbacks["b"].append(args["command"])
+            return "deny"
+
+        async def fake_acompletion(*, stream, messages, **kwargs):
+            assert stream is True
+            run_key = id(messages[0])
+            if run_key not in run_commands:
+                run_commands[run_key] = "a" if not run_commands else "b"
+            command = run_commands[run_key]
+
+            async def response_stream():
+                if not any(m["role"] == "tool" for m in messages):
+                    call = SimpleNamespace(index=0, id=f"call-{command}", function=SimpleNamespace(
+                        name="execute_command", arguments=json.dumps({"command": command})
+                    ))
+                    yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(
+                        content=None, tool_calls=[call]
+                    ))])
+                else:
+                    yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(
+                        content="finished", tool_calls=None
+                    ))])
+            return response_stream()
+
+        async def collect(message, callback):
+            return [event async for event in orchestrator.run(
+                message, f"conv-{message[-1]}", approval_callback=callback
+            )]
+
+        with patch("atlas.agent.acompletion", side_effect=fake_acompletion):
+            events_a, events_b = await asyncio.gather(
+                collect("run a", approve_a), collect("run b", approve_b)
+            )
+
+        assert callbacks == {"a": ["a"], "b": ["b"]}
+        assert any(event["type"] == "approval_required" for event in events_a)
+        assert any(event["type"] == "approval_required" for event in events_b)
+
     async def test_run_simple_response(self, orchestrator, memory) -> None:
         """Simple response with no tool calls."""
         # Mock acompletion to return a streaming response
@@ -422,22 +547,28 @@ class TestRun:
             }}
         ]
 
-        # First call: LLM returns tool call
-        mock_tc = MagicMock()
-        mock_tc.id = "tc1"
-        mock_tc.function.name = "fs__read"
-        mock_tc.function.arguments = '{"path": "/tmp/a.txt"}'
+        async def fake_acompletion(*, stream, messages, **kwargs):
+            assert stream is True
+            if messages[-1]["role"] == "tool":
+                async def final_stream():
+                    chunk = MagicMock()
+                    chunk.choices[0].delta.content = "The file says hello"
+                    chunk.choices[0].delta.tool_calls = None
+                    yield chunk
+                return final_stream()
 
-        mock_response_1 = MagicMock()
-        mock_response_1.choices = [MagicMock()]
-        mock_response_1.choices[0].message.content = ""
-        mock_response_1.choices[0].message.tool_calls = [mock_tc]
-
-        # Second call: LLM returns final text
-        mock_response_2 = MagicMock()
-        mock_response_2.choices = [MagicMock()]
-        mock_response_2.choices[0].message.content = "The file says hello"
-        mock_response_2.choices[0].message.tool_calls = None
+            async def tool_stream():
+                chunk = MagicMock()
+                chunk.choices[0].delta.content = None
+                call = SimpleNamespace(
+                    index=0, id="tc1",
+                    function=SimpleNamespace(
+                        name="fs__read", arguments='{"path": "/tmp/a.txt"}'
+                    ),
+                )
+                chunk.choices[0].delta.tool_calls = [call]
+                yield chunk
+            return tool_stream()
 
         # MCP tool returns result
         mcp_client.call_tool = AsyncMock(return_value={
@@ -445,9 +576,7 @@ class TestRun:
             "is_error": False,
         })
 
-        with patch("atlas.agent.acompletion") as mock_ac:
-            mock_ac.side_effect = [mock_response_1, mock_response_2]
-
+        with patch("atlas.agent.acompletion", side_effect=fake_acompletion):
             events = []
             async for event in orchestrator.run("read /tmp/a.txt", "conv-2"):
                 events.append(event)
