@@ -357,6 +357,12 @@ class MemoryStore:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS memory_knowledge_insight_applications (
+                id TEXT PRIMARY KEY,
+                application_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS agent_reflections (
                 id TEXT PRIMARY KEY,
                 category TEXT NOT NULL CHECK(category IN ('tool', 'model', 'runtime')),
@@ -2905,6 +2911,156 @@ class MemoryStore:
             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
         )
         return [json.loads(row["insight_json"]) for row in await cursor.fetchall()]
+
+    async def apply_knowledge_consolidated_insights(
+        self,
+        query: str,
+        *,
+        purpose: str,
+        conversation_id: str | None = None,
+        source_run_id: str | None = None,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Return relevant approved insights as advisory context and persist the decision."""
+        if purpose not in {"planning", "execution"}:
+            raise ValueError("Insight application purpose must be planning or execution")
+        if limit < 0:
+            raise ValueError("Insight application limit must be non-negative")
+        assert self._db is not None
+
+        query_terms = {
+            token.casefold() for token in _MEMORY_TOKEN.findall(query)
+            if len(token) > 1 and token.casefold() not in _MEMORY_STOP_WORDS
+        }
+        cursor = await self._db.execute(
+            "SELECT id, insight_json FROM memory_knowledge_consolidated_insights "
+            "ORDER BY id"
+        )
+        rows = await cursor.fetchall()
+        decisions: list[dict[str, Any]] = []
+        matches: list[tuple[int, str, dict[str, Any], list[str]]] = []
+        for row in rows:
+            insight = json.loads(row["insight_json"])
+            source_ids = sorted({
+                str(item) for item in insight.get("source_health_report_ids", ()) if item
+            })
+            evidence_refs = sorted({
+                str(item) for item in insight.get("evidence_refs", ()) if item
+            })
+            approved_ids: set[str] = set()
+            for source_id in source_ids:
+                approval = await self._db.execute(
+                    "SELECT decision FROM memory_knowledge_health_report_reviews "
+                    "WHERE report_id = ? ORDER BY id DESC LIMIT 1", (source_id,),
+                )
+                review = await approval.fetchone()
+                if review and review["decision"] == "approved":
+                    approved_ids.add(source_id)
+
+            valid_snapshot = (
+                insight.get("id") == row["id"]
+                and insight.get("advisory_only") is True
+                and bool(source_ids)
+                and approved_ids == set(source_ids)
+                and bool(evidence_refs)
+            )
+            if not valid_snapshot:
+                decisions.append({
+                    "insight_id": row["id"], "decision": "filtered",
+                    "reason": "source_snapshot_not_approved_or_invalid",
+                    "source_health_report_ids": source_ids,
+                    "evidence_refs": evidence_refs,
+                })
+                continue
+
+            searchable = " ".join(str(insight.get(field, "")) for field in (
+                "knowledge_id", "decision", "recommendation",
+            ))
+            matched_terms = sorted(query_terms & {
+                token.casefold() for token in _MEMORY_TOKEN.findall(searchable)
+                if len(token) > 1 and token.casefold() not in _MEMORY_STOP_WORDS
+            })
+            if not matched_terms:
+                decisions.append({
+                    "insight_id": row["id"], "decision": "filtered",
+                    "reason": "not_relevant_to_query",
+                    "source_health_report_ids": source_ids,
+                    "evidence_refs": evidence_refs,
+                })
+                continue
+            matches.append((len(matched_terms), row["id"], insight, matched_terms))
+
+        matches.sort(key=lambda item: (-item[0], item[1]))
+        selected = matches[:limit]
+        selected_ids = {item[1] for item in selected}
+        for _, insight_id, insight, matched_terms in matches:
+            decisions.append({
+                "insight_id": insight_id,
+                "decision": "applied" if insight_id in selected_ids else "filtered",
+                "reason": "relevant_approved_advisory_insight" if insight_id in selected_ids
+                else "application_limit",
+                "matched_terms": matched_terms,
+                "source_health_report_ids": sorted(insight["source_health_report_ids"]),
+                "evidence_refs": sorted(insight["evidence_refs"]),
+            })
+        decisions.sort(key=lambda item: item["insight_id"])
+
+        query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
+        source_report_ids = sorted({
+            source_id for _, _, insight, _ in selected
+            for source_id in insight["source_health_report_ids"]
+        })
+        applied_evidence_refs = sorted({
+            ref for _, _, insight, _ in selected for ref in insight["evidence_refs"]
+        })
+        application = {
+            "purpose": purpose,
+            "conversation_id": conversation_id,
+            "source_run_id": source_run_id,
+            "query_sha256": query_hash,
+            "applied_insight_ids": [item[1] for item in selected],
+            "source_health_report_ids": source_report_ids,
+            "evidence_refs": applied_evidence_refs,
+            "decisions": decisions,
+            "advisory_only": True,
+        }
+        identity = json.dumps(
+            application, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        application["id"] = "knowledge-insight-application:" + hashlib.sha256(
+            identity.encode("utf-8")
+        ).hexdigest()
+        created_at = datetime.now(UTC).isoformat()
+        await self._db.execute(
+            "INSERT OR IGNORE INTO memory_knowledge_insight_applications "
+            "(id, application_json, created_at) VALUES (?, ?, ?)",
+            (
+                application["id"],
+                json.dumps(application, ensure_ascii=False, sort_keys=True),
+                created_at,
+            ),
+        )
+        await self._db.commit()
+        return [
+            {**insight, "application_id": application["id"], "matched_terms": matched_terms}
+            for _, _, insight, matched_terms in selected
+        ]
+
+    async def list_knowledge_insight_applications(
+        self, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List immutable insight application decisions, newest first."""
+        if limit < 0:
+            raise ValueError("Insight application limit must be non-negative")
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT application_json, created_at FROM memory_knowledge_insight_applications "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
+        )
+        return [
+            {**json.loads(row["application_json"]), "created_at": row["created_at"]}
+            for row in await cursor.fetchall()
+        ]
 
     async def list_knowledge_self_steering_reports(
         self, *, limit: int = 100,

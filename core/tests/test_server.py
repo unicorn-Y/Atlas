@@ -1362,3 +1362,6 @@ async def test_knowledge_health_approval_and_consolidated_insights_api(
     listed_insights = await client.get("/api/memory/consolidated-insights")
     assert listed_insights.status_code == 200
     assert listed_insights.json() == []
+    applications = await client.get("/api/memory/insight-applications")
+    assert applications.status_code == 200
+    assert applications.json() == []

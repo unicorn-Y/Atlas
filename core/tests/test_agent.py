@@ -53,6 +53,7 @@ def memory():
     mem.retrieve_agent_reflections.return_value = []
     mem.retrieve_approved_goal_experiences.return_value = []
     mem.retrieve_approved_goal_knowledge.return_value = []
+    mem.apply_knowledge_consolidated_insights.return_value = []
     return mem
 
 

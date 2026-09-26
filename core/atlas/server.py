@@ -734,6 +734,14 @@ async def list_knowledge_consolidated_insights(
     return await memory.list_knowledge_consolidated_insights(limit=limit)
 
 
+@app.get("/api/memory/insight-applications")
+async def list_knowledge_insight_applications(
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    assert memory is not None
+    return await memory.list_knowledge_insight_applications(limit=limit)
+
+
 @app.post("/api/memory/self-steering-reports")
 async def create_memory_self_steering_report() -> dict[str, Any]:
     """Create auditable suggestions from maturity and approved outcome signals."""

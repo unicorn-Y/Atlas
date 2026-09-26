@@ -330,6 +330,77 @@ async def test_consolidated_insights_require_approved_health_snapshots_and_keep_
     assert await store.get_fact("project_stack") == original_fact
 
 
+async def test_insight_application_is_relevant_provenance_preserving_and_approval_gated(
+    store: MemoryStore,
+) -> None:
+    await store.set_fact("project_stack", "Python")
+    original_fact = await store.get_fact("project_stack")
+    report = {"advisory_only": True, "activations": [{
+        "activation_id": "activation-1", "knowledge_id": "filesystem",
+        "decision": "monitor_after_failure", "recommendation": "Review migration evidence.",
+        "evidence_refs": ["feedback:1", "usage:1"], "advisory_only": True,
+    }]}
+    for report_id in ("health-approved", "health-pending", "health-rejected"):
+        await store._db.execute(
+            "INSERT INTO memory_knowledge_health_reports (id, report_json, created_at) "
+            "VALUES (?, ?, ?)",
+            (report_id, json.dumps(report, sort_keys=True), "2026-09-27T00:00:00+00:00"),
+        )
+    await store._db.commit()
+    assert await store.review_knowledge_health_report("health-approved", approved=True)
+    assert await store.review_knowledge_health_report("health-rejected", approved=False)
+
+    [approved_insight] = await store.create_knowledge_consolidated_insights()
+    for report_id in ("health-pending", "health-rejected"):
+        [unapproved_insight] = evaluate_consolidated_knowledge_insights([{
+            "id": report_id, "status": "approved", "report": report,
+        }])
+        await store._db.execute(
+            "INSERT INTO memory_knowledge_consolidated_insights (id, insight_json, created_at) "
+            "VALUES (?, ?, ?)",
+            (unapproved_insight["id"], json.dumps(unapproved_insight, sort_keys=True),
+             "2026-09-27T00:00:00+00:00"),
+        )
+    await store._db.commit()
+
+    applied = await store.apply_knowledge_consolidated_insights(
+        "Review filesystem migration", purpose="planning",
+        conversation_id="conv-1", source_run_id="run-1",
+    )
+    repeated = await store.apply_knowledge_consolidated_insights(
+        "Review filesystem migration", purpose="planning",
+        conversation_id="conv-1", source_run_id="run-1",
+    )
+    unrelated = await store.apply_knowledge_consolidated_insights(
+        "Prepare quarterly budget", purpose="execution",
+        conversation_id="conv-1", source_run_id="run-1",
+    )
+    [application] = await store.list_knowledge_insight_applications(limit=1)
+
+    assert applied == repeated
+    assert [item["id"] for item in applied] == [approved_insight["id"]]
+    assert applied[0]["source_health_report_ids"] == ["health-approved"]
+    assert applied[0]["evidence_refs"] == ["feedback:1", "usage:1"]
+    assert applied[0]["advisory_only"] is True
+    assert unrelated == []
+    assert application["purpose"] == "execution"
+    assert application["applied_insight_ids"] == []
+    assert await store.get_fact("project_stack") == original_fact
+    records = await store.list_knowledge_insight_applications()
+    assert len(records) == 2
+    rejected_decisions = next(
+        item["decisions"] for item in records if item["purpose"] == "planning"
+    )
+    assert {item["source_health_report_ids"][0] for item in rejected_decisions} == {
+        "health-approved", "health-pending", "health-rejected",
+    }
+    assert all(
+        item["decision"] == "filtered"
+        for item in rejected_decisions
+        if item["source_health_report_ids"][0] != "health-approved"
+    )
+
+
 @pytest.mark.parametrize(
     ("facts", "passed"),
     [
