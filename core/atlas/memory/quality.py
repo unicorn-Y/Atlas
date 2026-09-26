@@ -661,3 +661,63 @@ def evaluate_knowledge_optimization_candidate(
         ),
         "evidence_refs": refs,
     }
+
+
+def evaluate_knowledge_consolidation_proposals(
+    approved_candidates: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Group explicitly approved optimization candidates into advisory proposals."""
+    groups: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
+    for candidate in approved_candidates:
+        if (
+            candidate.get("status") != "approved"
+            or candidate.get("advisory_only") is not True
+            or not candidate.get("id")
+            or not candidate.get("source_report_id")
+        ):
+            continue
+        refs = sorted({str(ref) for ref in candidate.get("evidence_refs", ()) if ref})
+        if not refs:
+            continue
+        key = (
+            str(candidate.get("area", "")),
+            str(candidate.get("source_type", "")),
+            str(candidate.get("action", "")),
+        )
+        groups.setdefault(key, []).append(candidate)
+
+    proposals = []
+    for (area, source_type, action), candidates in sorted(groups.items()):
+        source_candidates = sorted(candidates, key=lambda item: str(item["id"]))
+        proposal = {
+            "proposal_type": "approved_optimization_consolidation",
+            "area": area,
+            "source_type": source_type,
+            "action": action,
+            "priority": max(int(candidate.get("priority", 0)) for candidate in candidates),
+            "source_candidate_ids": [str(item["id"]) for item in source_candidates],
+            "source_report_ids": sorted({str(item["source_report_id"]) for item in candidates}),
+            "evidence_refs": sorted({
+                str(ref) for item in candidates for ref in item.get("evidence_refs", ()) if ref
+            }),
+            "candidate_snapshots": [
+                {
+                    "candidate_id": str(item["id"]),
+                    "source_report_id": str(item["source_report_id"]),
+                    "reason": str(item.get("reason", "")),
+                    "evidence_refs": sorted({
+                        str(ref) for ref in item.get("evidence_refs", ()) if ref
+                    }),
+                }
+                for item in source_candidates
+            ],
+            "advisory_only": True,
+        }
+        identity = json.dumps(
+            proposal, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        proposal["id"] = "knowledge-consolidation:" + hashlib.sha256(
+            identity.encode("utf-8")
+        ).hexdigest()
+        proposals.append(proposal)
+    return proposals

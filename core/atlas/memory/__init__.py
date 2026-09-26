@@ -15,6 +15,7 @@ import structlog
 
 from atlas.config import get_config
 from atlas.memory.quality import (
+    evaluate_knowledge_consolidation_proposals,
     evaluate_knowledge_maturity,
     evaluate_knowledge_optimization_candidate,
     evaluate_knowledge_optimization_candidates,
@@ -279,6 +280,23 @@ class MemoryStore:
                 decision TEXT NOT NULL CHECK(decision IN ('approved', 'rejected')),
                 reviewed_at TEXT NOT NULL,
                 FOREIGN KEY(candidate_id) REFERENCES memory_optimization_candidates(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_consolidation_proposals (
+                id TEXT PRIMARY KEY,
+                proposal_json TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending', 'approved', 'rejected')),
+                reviewed_at TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_consolidation_proposal_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                proposal_id TEXT NOT NULL,
+                decision TEXT NOT NULL CHECK(decision IN ('approved', 'rejected')),
+                reviewed_at TEXT NOT NULL,
+                FOREIGN KEY(proposal_id) REFERENCES memory_consolidation_proposals(id)
             );
 
             CREATE TABLE IF NOT EXISTS agent_reflections (
@@ -2372,6 +2390,100 @@ class MemoryStore:
             "INSERT INTO memory_optimization_candidate_reviews "
             "(candidate_id, decision, reviewed_at) VALUES (?, ?, ?)",
             (candidate_id, decision, reviewed_at),
+        )
+        await self._db.commit()
+        return True
+
+    async def create_knowledge_consolidation_proposals(self) -> list[dict[str, Any]]:
+        """Create deterministic advisory proposals from approved candidates only."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, candidate_json FROM memory_optimization_candidates "
+            "WHERE status = 'approved' ORDER BY id"
+        )
+        approved_candidates = []
+        for row in await cursor.fetchall():
+            candidate = json.loads(row["candidate_json"])
+            candidate["id"] = row["id"]
+            candidate["status"] = "approved"
+            approved_candidates.append(candidate)
+
+        proposals = evaluate_knowledge_consolidation_proposals(approved_candidates)
+        proposal_ids = {proposal["id"] for proposal in proposals}
+        created_at = datetime.now(UTC).isoformat()
+        for proposal in proposals:
+            await self._db.execute(
+                "INSERT OR IGNORE INTO memory_consolidation_proposals "
+                "(id, proposal_json, created_at) VALUES (?, ?, ?)",
+                (
+                    proposal["id"],
+                    json.dumps(proposal, ensure_ascii=False, sort_keys=True),
+                    created_at,
+                ),
+            )
+        await self._db.commit()
+        persisted = await self.list_knowledge_consolidation_proposals()
+        return [proposal for proposal in persisted if proposal["id"] in proposal_ids]
+
+    async def list_knowledge_consolidation_proposals(
+        self, *, status: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        if status not in (None, "pending", "approved", "rejected"):
+            raise ValueError("Unsupported knowledge consolidation proposal status")
+        if limit < 0:
+            raise ValueError("Proposal limit must be non-negative")
+        assert self._db is not None
+        query = (
+            "SELECT id, proposal_json, status, reviewed_at, created_at "
+            "FROM memory_consolidation_proposals"
+        )
+        params: list[Any] = []
+        if status is not None:
+            query += " WHERE status = ?"
+            params.append(status)
+        query += " ORDER BY id LIMIT ?"
+        params.append(limit)
+        cursor = await self._db.execute(query, params)
+        results = []
+        for row in await cursor.fetchall():
+            proposal = json.loads(row["proposal_json"])
+            proposal.update({
+                "status": row["status"], "reviewed_at": row["reviewed_at"],
+                "created_at": row["created_at"],
+            })
+            review_cursor = await self._db.execute(
+                "SELECT decision, reviewed_at FROM memory_consolidation_proposal_reviews "
+                "WHERE proposal_id = ? ORDER BY id", (row["id"],),
+            )
+            proposal["review_history"] = [dict(review) for review in await review_cursor.fetchall()]
+            results.append(proposal)
+        return results
+
+    async def review_knowledge_consolidation_proposal(
+        self, proposal_id: str, approved: bool,
+    ) -> bool:
+        """Record one explicit proposal decision without promoting or mutating facts."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT 1 FROM memory_consolidation_proposals "
+            "WHERE id = ? AND status = 'pending'", (proposal_id,),
+        )
+        if await cursor.fetchone() is None:
+            return False
+        decision = "approved" if approved else "rejected"
+        reviewed_at = datetime.now(UTC).isoformat()
+        cursor = await self._db.execute(
+            "UPDATE memory_consolidation_proposals SET status = ?, reviewed_at = ? "
+            "WHERE id = ? AND status = 'pending'",
+            (decision, reviewed_at, proposal_id),
+        )
+        if cursor.rowcount == 0:
+            await self._db.commit()
+            return False
+        await self._db.execute(
+            "INSERT INTO memory_consolidation_proposal_reviews "
+            "(proposal_id, decision, reviewed_at) VALUES (?, ?, ?)",
+            (proposal_id, decision, reviewed_at),
         )
         await self._db.commit()
         return True

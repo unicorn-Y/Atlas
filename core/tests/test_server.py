@@ -529,6 +529,73 @@ class TestFacts:
             await isolated_memory.close()
             server.memory = original_memory
 
+    async def test_memory_consolidation_proposals_require_approved_candidates(
+        self, client: AsyncClient, tmp_path,
+    ) -> None:
+        original_memory = server.memory
+        await original_memory.close()
+        isolated_memory = MemoryStore(db_path=tmp_path / "consolidation-proposals.db")
+        await isolated_memory.init()
+        server.memory = isolated_memory
+        try:
+            await isolated_memory.set_fact("user_preference", "concise answers")
+            original_fact = await isolated_memory.get_fact("user_preference")
+            report = await client.post("/api/memory/self-steering-reports")
+            assert report.status_code == 200
+            report_id = report.json()["id"]
+
+            no_approved_candidates = await client.post(
+                "/api/memory/consolidation-proposals"
+            )
+            assert no_approved_candidates.status_code == 200
+            assert no_approved_candidates.json() == []
+
+            approved_report = await client.post(
+                f"/api/memory/self-steering-reports/{report_id}/approve"
+            )
+            assert approved_report.status_code == 200
+            candidates = await client.post("/api/memory/optimization-candidates")
+            assert candidates.status_code == 200
+            for candidate in candidates.json():
+                reviewed = await client.post(
+                    f"/api/memory/optimization-candidates/{candidate['id']}/approve"
+                )
+                assert reviewed.status_code == 200
+
+            created = await client.post("/api/memory/consolidation-proposals")
+            repeated = await client.post("/api/memory/consolidation-proposals")
+            assert created.status_code == repeated.status_code == 200
+            assert created.json()
+            assert [item["id"] for item in created.json()] == [
+                item["id"] for item in repeated.json()
+            ]
+            for proposal in created.json():
+                assert proposal["advisory_only"] is True
+                assert proposal["source_report_ids"] == [report_id]
+                assert proposal["source_candidate_ids"]
+                assert proposal["evidence_refs"]
+                assert proposal["status"] == "pending"
+
+            proposal = created.json()[0]
+            reviewed = await client.post(
+                f"/api/memory/consolidation-proposals/{proposal['id']}/approve"
+            )
+            approved = await client.get(
+                "/api/memory/consolidation-proposals",
+                params={"status": "approved"},
+            )
+            duplicate_review = await client.post(
+                f"/api/memory/consolidation-proposals/{proposal['id']}/reject"
+            )
+            assert reviewed.status_code == 200
+            assert approved.status_code == 200
+            assert approved.json()[0]["review_history"][0]["decision"] == "approved"
+            assert duplicate_review.status_code == 404
+            assert await isolated_memory.get_fact("user_preference") == original_fact
+        finally:
+            await isolated_memory.close()
+            server.memory = original_memory
+
     async def test_goal_experience_requires_explicit_api_approval(
         self, client: AsyncClient, tmp_path,
     ) -> None:

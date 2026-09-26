@@ -9,6 +9,7 @@ import pytest
 
 from atlas.memory import MemoryStore
 from atlas.memory.quality import (
+    evaluate_knowledge_consolidation_proposals,
     evaluate_knowledge_maturity,
     evaluate_knowledge_optimization_candidate,
     evaluate_knowledge_optimization_candidates,
@@ -542,3 +543,41 @@ async def test_optimization_reports_preserve_recommendation_audit_history(
         assert (await reopened.list_memory_candidates(status="rejected"))[0]["id"] == candidate["id"]
     finally:
         await reopened.close()
+
+
+def test_consolidation_proposals_are_deterministic_and_keep_only_approved_provenance() -> None:
+    candidates = [
+        {
+            "id": "candidate-b", "status": "approved", "advisory_only": True,
+            "source_report_id": "report-b", "area": "fact_evidence",
+            "source_type": "fact", "action": "complete_fact_evidence",
+            "priority": 3, "reason": "collect a second source", "evidence_refs": ["evidence-2"],
+        },
+        {
+            "id": "candidate-a", "status": "approved", "advisory_only": True,
+            "source_report_id": "report-a", "area": "fact_evidence",
+            "source_type": "fact", "action": "complete_fact_evidence",
+            "priority": 2, "reason": "collect a first source", "evidence_refs": ["evidence-1"],
+        },
+        {
+            "id": "candidate-pending", "status": "pending", "advisory_only": True,
+            "source_report_id": "report-pending", "area": "fact_evidence",
+            "source_type": "fact", "action": "complete_fact_evidence",
+            "priority": 9, "evidence_refs": ["evidence-pending"],
+        },
+        {
+            "id": "candidate-rejected", "status": "rejected", "advisory_only": True,
+            "source_report_id": "report-rejected", "area": "fact_evidence",
+            "source_type": "fact", "action": "complete_fact_evidence",
+            "priority": 10, "evidence_refs": ["evidence-rejected"],
+        },
+    ]
+
+    proposals = evaluate_knowledge_consolidation_proposals(candidates)
+
+    assert proposals == evaluate_knowledge_consolidation_proposals(list(reversed(candidates)))
+    [proposal] = proposals
+    assert proposal["advisory_only"] is True
+    assert proposal["source_candidate_ids"] == ["candidate-a", "candidate-b"]
+    assert proposal["source_report_ids"] == ["report-a", "report-b"]
+    assert proposal["evidence_refs"] == ["evidence-1", "evidence-2"]
