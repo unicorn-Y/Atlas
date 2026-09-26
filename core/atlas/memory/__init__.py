@@ -112,6 +112,7 @@ class MemoryStore:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(str(self._db_path))
         self._db.row_factory = aiosqlite.Row
+        await self._db.execute("PRAGMA foreign_keys = ON")
         await self._create_tables()
         log.info("memory.init", db=str(self._db_path))
 
