@@ -276,6 +276,93 @@ class TestAgentContextRanking:
             "project framework about phone number today"
         ) == []
 
+    async def test_knowledge_retrieval_trace_explains_ranking_deterministically(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("project_language", "Python", category="project")
+        await store.set_fact("project_framework", "FastAPI", category="project")
+        await store.set_fact("user_language", "Python", category="personal")
+        await store.set_fact("user_timezone", "Asia/Hong_Kong", category="personal")
+        await store.set_fact("health_goal", "daily walk", category="health")
+        await store.set_fact("health_schedule", "after lunch", category="health")
+
+        first = await store.retrieve_user_knowledge_with_trace(
+            "project language Python", limit=1
+        )
+        second = await store.retrieve_user_knowledge_with_trace(
+            "project language Python", limit=1
+        )
+
+        assert first == second
+        assert [view["key"] for view in first["results"]] == [
+            "user_knowledge_project"
+        ]
+        by_key = {
+            decision["item_key"]: decision
+            for decision in first["decisions"]
+            if decision["item_type"] == "knowledge_view"
+        }
+        assert by_key["user_knowledge_project"]["decision"] == "selected"
+        assert by_key["user_knowledge_project"]["reason"] == "ranked_within_limit"
+        assert by_key["user_knowledge_project"]["matched_terms"] == [
+            "language", "project", "python"
+        ]
+        assert by_key["user_knowledge_personal"]["reason"] == "ranked_outside_limit"
+        assert by_key["user_knowledge_health"]["reason"] == "coverage_below_threshold"
+
+    async def test_knowledge_trace_explains_candidate_and_lifecycle_filters(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("project_language", "Python", category="project")
+        await store.set_fact("project_framework", "FastAPI", category="project")
+        await store.set_fact(
+            "unverified_identity", "user is a reviewer", category="project",
+            memory_type="identity",
+        )
+
+        pending_conversation = await store.create_conversation("Pending knowledge")
+        await store.save_message(
+            pending_conversation, "user", "Our project uses Rust"
+        )
+        [pending] = await store.extract_conversation_candidates(pending_conversation)
+
+        rejected_conversation = await store.create_conversation("Rejected knowledge")
+        await store.save_message(
+            rejected_conversation, "user", "We decided to use Django"
+        )
+        [rejected] = await store.extract_conversation_candidates(rejected_conversation)
+        assert await store.reject_memory_candidate(rejected["id"])
+
+        commitment_conversation = await store.create_conversation("Commitment status")
+        await store.save_message(
+            commitment_conversation, "user", "I promise to deliver the report"
+        )
+        [commitment] = await store.extract_conversation_candidates(
+            commitment_conversation
+        )
+        assert commitment["memory_type"] == "commitment"
+        assert await store.promote_memory_candidate(commitment["id"])
+        completion_message = await store.save_message(
+            commitment_conversation, "user", "I delivered the report"
+        )
+        assert await store.set_commitment_status(
+            commitment["key"], "fulfilled", completion_message
+        )
+
+        trace = await store.retrieve_user_knowledge_with_trace("project language Python")
+        decisions = {
+            (item["item_type"], item["item_key"], item.get("reason"))
+            for item in trace["decisions"]
+        }
+
+        assert [view["key"] for view in trace["results"]] == [
+            "user_knowledge_project"
+        ]
+        assert ("candidate", pending["key"], "candidate_pending") in decisions
+        assert ("candidate", rejected["key"], "candidate_rejected") in decisions
+        assert ("fact", "unverified_identity", "identity_evidence_missing") in decisions
+        assert ("fact", commitment["key"], "commitment_inactive") in decisions
+
     async def test_knowledge_excludes_pending_and_unverified_memories(
         self, store: MemoryStore
     ) -> None:

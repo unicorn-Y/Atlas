@@ -913,29 +913,48 @@ class MemoryStore:
         facts = await self.get_active_context(query, limit=limit - len(views))
         return facts + views
 
-    async def generate_user_knowledge(self) -> list[dict[str, Any]]:
-        """Aggregate related active memories into deterministic, evidence-linked views."""
+    async def generate_user_knowledge_with_trace(
+        self,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Build knowledge views and explain lifecycle decisions deterministically."""
         facts = await self.list_facts()
         grouped: dict[str, list[dict[str, Any]]] = {}
+        decisions: list[dict[str, Any]] = []
         for fact in facts:
+            reason = None
             if fact["memory_type"] in {"identity", "commitment"}:
                 if not await self._has_approved_user_evidence(
                     fact, fact["memory_type"]
                 ):
-                    continue
-            if fact["memory_type"] == "commitment":
+                    reason = f"{fact['memory_type']}_evidence_missing"
+            if reason is None and fact["memory_type"] == "commitment":
                 if fact["commitment_status"] != "active":
-                    continue
+                    reason = "commitment_inactive"
             category = fact["category"]
-            if category in {"general", "extracted"}:
+            if reason is None and category in {"general", "extracted"}:
+                reason = "category_excluded"
+            if reason:
+                decisions.append({
+                    "item_type": "fact", "item_key": fact["key"],
+                    "decision": "filtered", "reason": reason,
+                    "source_conversation_id": fact["source_conversation_id"],
+                    "source_message_id": fact["source_message_id"],
+                })
                 continue
             grouped.setdefault(category, []).append(fact)
 
         views: list[dict[str, Any]] = []
         for category, memories in sorted(grouped.items()):
-            if len(memories) < 2:
-                continue
             memories.sort(key=lambda fact: fact["key"])
+            if len(memories) < 2:
+                fact = memories[0]
+                decisions.append({
+                    "item_type": "fact", "item_key": fact["key"],
+                    "decision": "filtered", "reason": "category_has_fewer_than_two_items",
+                    "source_conversation_id": fact["source_conversation_id"],
+                    "source_message_id": fact["source_message_id"],
+                })
+                continue
             evidence = [
                 {
                     "key": fact["key"],
@@ -949,31 +968,68 @@ class MemoryStore:
             content = "\n".join(
                 f"{fact['key']}: {fact['value']}" for fact in memories
             )
-            views.append({
+            view = {
                 "id": f"user-knowledge:{category}",
                 "key": f"user_knowledge_{category}",
                 "category": category,
                 "memory_type": "knowledge_view",
                 "value": content,
                 "evidence": evidence,
+            }
+            views.append(view)
+            decisions.append({
+                "item_type": "knowledge_view", "item_key": view["key"],
+                "decision": "eligible", "reason": "active_evidence_aggregated",
+                "evidence_keys": [fact["key"] for fact in memories],
             })
+
+        for candidate in await self.list_memory_candidates():
+            if candidate["status"] == "approved":
+                continue
+            decisions.append({
+                "item_type": "candidate", "item_key": candidate["key"],
+                "candidate_id": candidate["id"],
+                "decision": "filtered",
+                "reason": f"candidate_{candidate['status']}",
+                "memory_type": candidate["memory_type"],
+                "source_conversation_id": candidate["source_conversation_id"],
+                "source_message_id": candidate["source_message_id"],
+            })
+        decisions.sort(key=lambda item: (
+            item["item_type"], item["item_key"], item.get("candidate_id", "")
+        ))
+        return views, decisions
+
+    async def generate_user_knowledge(self) -> list[dict[str, Any]]:
+        """Aggregate related active memories into deterministic, evidence-linked views."""
+        views, _ = await self.generate_user_knowledge_with_trace()
         return views
 
-    async def retrieve_user_knowledge(
+    async def retrieve_user_knowledge_with_trace(
         self, query: str, limit: int = 5
-    ) -> list[dict[str, Any]]:
-        """Return deterministic query-matched knowledge views with their evidence."""
-        if limit <= 0:
-            return []
-        terms = {
+    ) -> dict[str, Any]:
+        """Return knowledge results with deterministic retrieval and lifecycle reasons."""
+        terms = sorted({
             token.casefold()
             for token in _MEMORY_TOKEN.findall(query)
             if len(token) > 1 and token.casefold() not in _MEMORY_STOP_WORDS
-        }
+        })
+        if limit <= 0:
+            decisions = [{
+                "item_type": "query", "item_key": "query",
+                "decision": "filtered", "reason": "non_positive_limit",
+            }]
+            return {"query_terms": terms, "results": [], "decisions": decisions}
         if not terms:
-            return []
-        ranked: list[tuple[float, int, str, dict[str, Any]]] = []
-        for view in await self.generate_user_knowledge():
+            decisions = [{
+                "item_type": "query", "item_key": "query",
+                "decision": "filtered", "reason": "no_query_terms",
+            }]
+            return {"query_terms": terms, "results": [], "decisions": decisions}
+        views, decisions = await self.generate_user_knowledge_with_trace()
+
+        ranked: list[tuple[float, int, str, dict[str, Any], set[str]]] = []
+        for view in views:
             key_terms = {
                 token for token in re.split(r"[\W_]+", view["key"].casefold()) if token
             }
@@ -984,23 +1040,57 @@ class MemoryStore:
                 if token
             }
             value_terms = {
-                token.casefold()
-                for token in _MEMORY_TOKEN.findall(view["value"])
+                token.casefold() for token in _MEMORY_TOKEN.findall(view["value"])
             }
-            matched_terms = terms & (key_terms | evidence_key_terms | value_terms)
+            matched_terms = set(terms) & (key_terms | evidence_key_terms | value_terms)
             coverage = len(matched_terms) / len(terms)
-            if coverage < 0.5:
-                continue
             score = sum(
                 5 if term in evidence_key_terms else
                 4 if term in key_terms else
                 1 if term in value_terms else 0
                 for term in terms
             )
-            ranked.append((coverage, score, view["key"], view))
+            if coverage >= 0.5:
+                ranked.append((coverage, score, view["key"], view, matched_terms))
+            else:
+                decisions.append({
+                    "item_type": "knowledge_view", "item_key": view["key"],
+                    "decision": "filtered", "reason": "coverage_below_threshold",
+                    "coverage": coverage, "score": score,
+                    "matched_terms": sorted(matched_terms),
+                    "evidence_keys": [item["key"] for item in view["evidence"]],
+                })
         ranked.sort(key=lambda item: item[2])
         ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
-        return [view for _, _, _, view in ranked[:limit]]
+        results = [view for _, _, _, view, _ in ranked[:limit]]
+        for index, (coverage, score, key, view, matched_terms) in enumerate(ranked):
+            selected = index < limit
+            decisions.append({
+                "item_type": "knowledge_view", "item_key": key,
+                "decision": "selected" if selected else "filtered",
+                "reason": "ranked_within_limit" if selected else "ranked_outside_limit",
+                "coverage": coverage, "score": score,
+                "matched_terms": sorted(matched_terms),
+                "evidence_keys": [item["key"] for item in view["evidence"]],
+            })
+        decisions.sort(key=lambda item: (
+            item["item_type"], item["item_key"], item.get("candidate_id", "")
+        ))
+        return {"query_terms": terms, "results": results, "decisions": decisions}
+
+    async def retrieve_user_knowledge(
+        self, query: str, limit: int = 5
+    ) -> list[dict[str, Any]]:
+        """Return deterministic query-matched knowledge views with their evidence."""
+        trace = await self.retrieve_user_knowledge_with_trace(query, limit=limit)
+        log.info(
+            "memory.knowledge_retrieval",
+            query_terms=trace["query_terms"],
+            limit=limit,
+            selected_keys=[view["key"] for view in trace["results"]],
+            decisions=trace["decisions"],
+        )
+        return trace["results"]
 
     async def get_active_context(
         self, query: str, limit: int = 10
