@@ -310,15 +310,20 @@ class TestAgentContextRanking:
                 "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
                 "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
             )
+            db.execute(
+                "INSERT INTO facts (key, value, category) "
+                "VALUES ('user_timezone', 'Europe/Paris', 'personal')"
+            )
         store = MemoryStore(db_path=db_path)
         await store.init()
         try:
-            facts = await store.list_facts()
-            assert facts == []
             columns = await store._db.execute("PRAGMA table_info(facts)")
-            assert "source_conversation_id" in {
-                row["name"] for row in await columns.fetchall()
-            }
+            column_names = {row["name"] for row in await columns.fetchall()}
+            assert "source_conversation_id" in column_names
+            assert "memory_type" in column_names
+            [legacy_identity] = await store.list_facts()
+            assert legacy_identity["memory_type"] == "identity"
+            assert await store.get_agent_context("What timezone do I use?") == []
         finally:
             await store.close()
 
@@ -355,6 +360,7 @@ class TestAgentContextRanking:
             await store._db.commit()
             [migrated] = await store.list_memory_candidates()
             assert migrated["status"] == "superseded"
+            assert migrated["memory_type"] == "fact"
         finally:
             await store.close()
 
@@ -531,3 +537,71 @@ class TestAutomaticMemoryCandidates:
         assert history["event_type"] == "duplicate"
         assert history["candidate_id"] == second["id"]
         assert await store.get_fact("user_timezone") == "Asia/Hong_Kong"
+
+    async def test_identity_requires_approval_and_source_evidence_for_context(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation()
+        message_id = await store.save_message(
+            conversation_id, "user", "My language is Mandarin."
+        )
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+
+        assert candidate["memory_type"] == "identity"
+        assert await store.get_agent_context("What language do I use?") == []
+        assert await store.promote_memory_candidate(candidate["id"])
+        [fact] = await store.get_agent_context("What language do I use?")
+        assert fact["memory_type"] == "identity"
+        assert fact["source_message_id"] == message_id
+
+        await store.close()
+        await store.init()
+        [persisted] = await store.get_agent_context("What language do I use?")
+        assert persisted["source_message_id"] == message_id
+
+    async def test_identity_candidate_without_original_user_evidence_is_not_promoted(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation()
+        message_id = await store.save_message(
+            conversation_id, "user", "My timezone is UTC."
+        )
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+        await store._db.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+        await store._db.commit()
+
+        assert await store.promote_memory_candidate(candidate["id"]) is False
+        assert await store.get_fact("user_timezone") is None
+        assert (await store.list_memory_candidates())[0]["status"] == "pending"
+
+    async def test_commitment_lifecycle_requires_evidence_and_leaves_active_context(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation()
+        commitment_message = await store.save_message(
+            conversation_id, "user", "I commit to deliver the report."
+        )
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+
+        assert candidate["memory_type"] == "commitment"
+        assert candidate["category"] == "commitment"
+        assert await store.get_agent_context("When should I deliver the report?") == []
+        assert await store.promote_memory_candidate(candidate["id"])
+        [active] = await store.get_agent_context("When should I deliver the report?")
+        assert active["commitment_status"] == "active"
+        assert active["source_message_id"] == commitment_message
+
+        assert await store.set_commitment_status(
+            candidate["key"], "fulfilled", "missing-user-message"
+        ) is False
+        completion_message = await store.save_message(
+            conversation_id, "user", "I completed the report."
+        )
+        assert await store.set_commitment_status(
+            candidate["key"], "fulfilled", completion_message
+        )
+        assert await store.get_agent_context("When should I deliver the report?") == []
+        [event] = await store.list_commitment_history(candidate["key"])
+        assert event["previous_status"] == "active"
+        assert event["status"] == "fulfilled"
+        assert event["source_message_id"] == completion_message

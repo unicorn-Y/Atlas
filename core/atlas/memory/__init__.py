@@ -62,6 +62,8 @@ _AUTO_MEMORY_PATTERNS = (
     (re.compile(r"^我的(时区|语言|姓名|名字|角色)是\s*(.+)$"), None, "personal"),
     (re.compile(r"^(?:我们的|这个)项目(?:使用|采用|基于)\s*(.+)$"), "project_stack", "project"),
     (re.compile(r"^(?:我们|团队)决定(?:使用|采用)\s*(.+)$"), "project_decision", "decision"),
+    (re.compile(r"^(?:I commit to|I promise to)\s+(.+)$", re.I), "user_commitment", "commitment"),
+    (re.compile(r"^我(?:承诺|保证)\s*(.+)$"), "user_commitment", "commitment"),
 )
 _PERSONAL_KEYS = {
     "timezone": "user_timezone", "time zone": "user_timezone",
@@ -152,6 +154,10 @@ class MemoryStore:
                 source_conversation_id TEXT,
                 source_message_id TEXT,
                 confidence REAL NOT NULL DEFAULT 1.0,
+                memory_type TEXT NOT NULL DEFAULT 'fact'
+                    CHECK(memory_type IN ('fact', 'identity', 'commitment')),
+                commitment_status TEXT
+                    CHECK(commitment_status IS NULL OR commitment_status IN ('active', 'fulfilled', 'cancelled')),
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
@@ -165,6 +171,8 @@ class MemoryStore:
                 confidence REAL NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending'
                     CHECK(status IN ('pending', 'approved', 'rejected', 'superseded')),
+                memory_type TEXT NOT NULL DEFAULT 'fact'
+                    CHECK(memory_type IN ('fact', 'identity', 'commitment')),
                 source_conversation_id TEXT NOT NULL,
                 source_message_id TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -184,6 +192,15 @@ class MemoryStore:
                 candidate_id TEXT,
                 recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS memory_commitment_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT NOT NULL,
+                previous_status TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('active', 'fulfilled', 'cancelled')),
+                source_message_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
         """)
         cursor = await self._db.execute("PRAGMA table_info(facts)")
         fact_columns = {row["name"] for row in await cursor.fetchall()}
@@ -197,6 +214,16 @@ class MemoryStore:
             await self._db.execute(
                 "ALTER TABLE facts ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0"
             )
+        if "memory_type" not in fact_columns:
+            await self._db.execute(
+                "ALTER TABLE facts ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'fact'"
+            )
+        if "commitment_status" not in fact_columns:
+            await self._db.execute("ALTER TABLE facts ADD COLUMN commitment_status TEXT")
+        await self._db.execute(
+            "UPDATE facts SET memory_type = 'identity' "
+            "WHERE category = 'personal' AND memory_type = 'fact'"
+        )
         cursor = await self._db.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_candidates'"
         )
@@ -212,6 +239,8 @@ class MemoryStore:
                     confidence REAL NOT NULL,
                     status TEXT NOT NULL DEFAULT 'pending'
                         CHECK(status IN ('pending', 'approved', 'rejected', 'superseded')),
+                    memory_type TEXT NOT NULL DEFAULT 'fact'
+                        CHECK(memory_type IN ('fact', 'identity', 'commitment')),
                     source_conversation_id TEXT NOT NULL,
                     source_message_id TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -226,6 +255,12 @@ class MemoryStore:
                 FROM memory_candidates_legacy;
                 DROP TABLE memory_candidates_legacy;
             """)
+        cursor = await self._db.execute("PRAGMA table_info(memory_candidates)")
+        candidate_columns = {row["name"] for row in await cursor.fetchall()}
+        if "memory_type" not in candidate_columns:
+            await self._db.execute(
+                "ALTER TABLE memory_candidates ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'fact'"
+            )
         await self._db.commit()
 
     # ----- Conversations -----
@@ -331,19 +366,27 @@ class MemoryStore:
         source_conversation_id: str | None = None,
         source_message_id: str | None = None,
         confidence: float = 1.0,
+        memory_type: str = "fact",
     ) -> None:
+        if memory_type not in {"fact", "identity", "commitment"}:
+            raise ValueError("Unsupported memory type")
         assert self._db is not None
         await self._db.execute(
             "INSERT INTO facts (key, value, category, source_conversation_id, "
-            "source_message_id, confidence) VALUES (?, ?, ?, ?, ?, ?) "
+            "source_message_id, confidence, memory_type, commitment_status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
             "category=excluded.category, "
             "source_conversation_id=COALESCE(excluded.source_conversation_id, "
             "facts.source_conversation_id), "
             "source_message_id=excluded.source_message_id, "
             "confidence=excluded.confidence, "
+            "memory_type=excluded.memory_type, "
+            "commitment_status=CASE WHEN excluded.memory_type = 'commitment' "
+            "THEN COALESCE(facts.commitment_status, 'active') ELSE NULL END, "
             "updated_at=datetime('now')",
-            (key, value, category, source_conversation_id, source_message_id, confidence),
+            (key, value, category, source_conversation_id, source_message_id,
+             confidence, memory_type, "active" if memory_type == "commitment" else None),
         )
         await self._db.commit()
 
@@ -360,14 +403,14 @@ class MemoryStore:
         if category:
             cursor = await self._db.execute(
                 "SELECT key, value, category, source_conversation_id, source_message_id, "
-                "confidence, updated_at FROM facts "
+                "confidence, memory_type, commitment_status, updated_at FROM facts "
                 "WHERE category = ? ORDER BY updated_at DESC",
                 (category,),
             )
         else:
             cursor = await self._db.execute(
                 "SELECT key, value, category, source_conversation_id, source_message_id, "
-                "confidence, updated_at FROM facts "
+                "confidence, memory_type, commitment_status, updated_at FROM facts "
                 "ORDER BY updated_at DESC"
             )
         rows = await cursor.fetchall()
@@ -432,6 +475,13 @@ class MemoryStore:
                     else:
                         key = fixed_key
                         value = groups[0].strip()
+                    memory_type = (
+                        "identity" if category == "personal"
+                        else "commitment" if category == "commitment"
+                        else "fact"
+                    )
+                    if memory_type == "commitment":
+                        key = f"user_commitment_{message['id'].replace('-', '')[:16]}"
                     value = value.rstrip(".!。 ")
                     if not key or not 2 <= len(value) <= 160:
                         continue
@@ -442,11 +492,11 @@ class MemoryStore:
                         continue
                     await self._db.execute(
                         "INSERT OR IGNORE INTO memory_candidates "
-                        "(id, key, value, category, confidence, "
+                        "(id, key, value, category, confidence, memory_type, "
                         "source_conversation_id, source_message_id) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (
-                            str(uuid.uuid4()), key, value, category, 0.9,
+                            str(uuid.uuid4()), key, value, category, 0.9, memory_type,
                             conversation_id, message["id"],
                         ),
                     )
@@ -471,7 +521,7 @@ class MemoryStore:
             params.append(source_conversation_id)
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         cursor = await self._db.execute(
-            "SELECT id, key, value, category, confidence, status, "
+            "SELECT id, key, value, category, confidence, status, memory_type, "
             "source_conversation_id, source_message_id, created_at, updated_at "
             "FROM memory_candidates" + where + " ORDER BY created_at, rowid",
             params,
@@ -482,7 +532,7 @@ class MemoryStore:
         assert self._db is not None
         await self._db.execute("BEGIN IMMEDIATE")
         cursor = await self._db.execute(
-            "SELECT key, value, category, confidence, source_conversation_id, source_message_id "
+            "SELECT key, value, category, confidence, memory_type, source_conversation_id, source_message_id "
             "FROM memory_candidates WHERE id = ? AND status = 'pending'",
             (candidate_id,),
         )
@@ -491,8 +541,15 @@ class MemoryStore:
             await self._db.rollback()
             return False
         cursor = await self._db.execute(
-            "SELECT key, value, category, confidence, source_conversation_id, "
-            "source_message_id, updated_at FROM facts WHERE key = ?",
+            "SELECT 1 FROM messages WHERE id = ? AND conversation_id = ? AND role = 'user'",
+            (candidate["source_message_id"], candidate["source_conversation_id"]),
+        )
+        if not await cursor.fetchone():
+            await self._db.rollback()
+            return False
+        cursor = await self._db.execute(
+            "SELECT key, value, category, confidence, memory_type, commitment_status, "
+            "source_conversation_id, source_message_id, updated_at FROM facts WHERE key = ?",
             (candidate["key"],),
         )
         current = await cursor.fetchone()
@@ -548,16 +605,21 @@ class MemoryStore:
             )
         await self._db.execute(
             "INSERT INTO facts (key, value, category, source_conversation_id, "
-            "source_message_id, confidence) VALUES (?, ?, ?, ?, ?, ?) "
+            "source_message_id, confidence, memory_type, commitment_status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
             "category=excluded.category, "
             "source_conversation_id=COALESCE(excluded.source_conversation_id, "
             "facts.source_conversation_id), "
             "source_message_id=excluded.source_message_id, confidence=excluded.confidence, "
+            "memory_type=excluded.memory_type, "
+            "commitment_status=CASE WHEN excluded.memory_type = 'commitment' "
+            "THEN COALESCE(facts.commitment_status, 'active') ELSE NULL END, "
             "updated_at=datetime('now')",
             (candidate["key"], candidate["value"], candidate["category"],
              candidate["source_conversation_id"], candidate["source_message_id"],
-             candidate["confidence"]),
+             candidate["confidence"], candidate["memory_type"],
+             "active" if candidate["memory_type"] == "commitment" else None),
         )
         await self._db.execute(
             "UPDATE memory_candidates SET status = 'approved', updated_at = datetime('now') "
@@ -626,6 +688,14 @@ class MemoryStore:
             return []
         ranked: list[tuple[int, dict[str, Any]]] = []
         for fact in facts:
+            if fact["memory_type"] in {"identity", "commitment"}:
+                if not await self._has_approved_user_evidence(
+                    fact, fact["memory_type"]
+                ):
+                    continue
+            if fact["memory_type"] == "commitment":
+                if fact["commitment_status"] != "active":
+                    continue
             key = fact["key"].casefold()
             key_terms = {token for token in re.split(r"[\W_]+", key) if token}
             value_terms = {token.casefold() for token in _MEMORY_TOKEN.findall(fact["value"])}
@@ -640,6 +710,77 @@ class MemoryStore:
         ranked.sort(key=lambda item: item[1]["updated_at"], reverse=True)
         ranked.sort(key=lambda item: item[0], reverse=True)
         return [fact for _, fact in ranked[: max(0, limit)]]
+
+    async def _has_approved_user_evidence(
+        self, fact: dict[str, Any], memory_type: str
+    ) -> bool:
+        """Require an approved candidate and its original user message for durable recall."""
+        assert self._db is not None
+        source_message_id = fact.get("source_message_id")
+        source_conversation_id = fact.get("source_conversation_id")
+        if not source_message_id or not source_conversation_id:
+            return False
+        cursor = await self._db.execute(
+            "SELECT 1 FROM messages WHERE id = ? AND conversation_id = ? AND role = 'user'",
+            (source_message_id, source_conversation_id),
+        )
+        if not await cursor.fetchone():
+            return False
+        cursor = await self._db.execute(
+            "SELECT 1 FROM memory_candidates WHERE key = ? AND value = ? "
+            "AND memory_type = ? AND status = 'approved' "
+            "AND source_message_id = ? AND source_conversation_id = ?",
+            (fact["key"], fact["value"], memory_type,
+             source_message_id, source_conversation_id),
+        )
+        return await cursor.fetchone() is not None
+
+    async def set_commitment_status(
+        self, key: str, status: str, source_message_id: str
+    ) -> bool:
+        """Change an approved commitment lifecycle with a user message as evidence."""
+        if status not in {"active", "fulfilled", "cancelled"}:
+            raise ValueError("Unsupported commitment status")
+        assert self._db is not None
+        await self._db.execute("BEGIN IMMEDIATE")
+        cursor = await self._db.execute(
+            "SELECT commitment_status FROM facts WHERE key = ? AND memory_type = 'commitment'",
+            (key,),
+        )
+        fact = await cursor.fetchone()
+        if not fact:
+            await self._db.rollback()
+            return False
+        cursor = await self._db.execute(
+            "SELECT 1 FROM messages WHERE id = ? AND role = 'user'", (source_message_id,)
+        )
+        if not await cursor.fetchone():
+            await self._db.rollback()
+            return False
+        previous_status = fact["commitment_status"] or "active"
+        if previous_status == status:
+            await self._db.rollback()
+            return False
+        await self._db.execute(
+            "UPDATE facts SET commitment_status = ?, updated_at = datetime('now') "
+            "WHERE key = ? AND memory_type = 'commitment'",
+            (status, key),
+        )
+        await self._db.execute(
+            "INSERT INTO memory_commitment_history "
+            "(key, previous_status, status, source_message_id) VALUES (?, ?, ?, ?)",
+            (key, previous_status, status, source_message_id),
+        )
+        await self._db.commit()
+        return True
+
+    async def list_commitment_history(self, key: str) -> list[dict[str, Any]]:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT key, previous_status, status, source_message_id, recorded_at "
+            "FROM memory_commitment_history WHERE key = ? ORDER BY id", (key,)
+        )
+        return [dict(row) for row in await cursor.fetchall()]
 
     # ----- Conversation management -----
 
