@@ -478,3 +478,110 @@ def evaluate_knowledge_maturity(
         "memories": results,
         "recommendations": recommendations,
     }
+
+
+def evaluate_knowledge_self_steering(
+    maturity_report: Mapping[str, Any],
+    approved_knowledge_evaluations: Sequence[Mapping[str, Any]],
+    *,
+    maturity_report_id: str | None = None,
+) -> dict[str, Any]:
+    """Create deterministic, evidence-linked guidance without changing knowledge."""
+    suggestions: list[dict[str, Any]] = []
+    for item in maturity_report.get("memories", ()):
+        key = str(item["key"])
+        level = item.get("level")
+        evidence = item.get("evidence", {})
+        if level == "review_required":
+            action = "review_fact"
+            priority = 100 + int(evidence.get("review_signal_count", 0))
+            reason = "Review signals exist; a person should verify this active fact."
+        elif level == "nascent":
+            if not evidence.get("confidence_complete") or not evidence.get("provenance_complete"):
+                action = "complete_fact_evidence"
+                priority = 80
+                reason = (
+                    "Confidence or source attribution is incomplete; collect verified evidence."
+                )
+            else:
+                action = "reinforce_fact_evidence"
+                priority = 40
+                reason = "More stable usage and outcome feedback is needed to assess this fact."
+        elif level in {"developing", "established"}:
+            action = "continue_fact_observation"
+            priority = 20
+            reason = "Continue observing validated use and feedback before relying on this fact."
+        else:
+            continue
+        refs = list(evidence.get("references", ()))
+        if not refs:
+            refs = [f"fact:{key}"]
+        suggestions.append({
+            "area": key,
+            "source_type": "fact",
+            "action": action,
+            "priority": priority,
+            "reason": reason,
+            "evidence_refs": sorted(set(refs)),
+            "signals": {"maturity_level": level, **{
+                name: evidence.get(name) for name in (
+                    "confidence_complete", "provenance_complete", "usage_count",
+                    "positive_signal_count", "review_signal_count",
+                )
+            }},
+        })
+
+    for item in approved_knowledge_evaluations:
+        knowledge_id = str(item["knowledge_id"])
+        failed = int(item.get("failed_count", 0))
+        helpful = int(item.get("helpful_count", 0))
+        decision = item.get("decision")
+        if failed >= 2:
+            action, priority = "review_approved_knowledge", 100 + failed
+            reason = (
+                "Repeated unsuccessful applications warrant human review of this approved guidance."
+            )
+        elif failed == 1:
+            action, priority = "monitor_approved_knowledge", 70
+            reason = "One unsuccessful application is recorded; monitor another validated outcome."
+        elif helpful:
+            action, priority = "reinforce_approved_knowledge", 40
+            reason = "Helpful applications support continued use with outcome monitoring."
+        else:
+            action, priority = "collect_knowledge_outcomes", 20
+            reason = (
+                "No validated application feedback is available; collect outcomes before steering."
+            )
+        refs = {f"knowledge:{knowledge_id}"}
+        if item.get("source_outcome_id"):
+            refs.add(f"outcome:{item['source_outcome_id']}")
+        for evidence in item.get("evidence", ()):
+            refs.update((
+                f"usage:{evidence['usage_event_id']}",
+                f"feedback:{evidence['id']}",
+                f"outcome:{evidence['source_outcome_id']}",
+                f"outcome:{evidence['execution_outcome_id']}",
+            ))
+        suggestions.append({
+            "area": knowledge_id,
+            "source_type": "approved_goal_knowledge",
+            "action": action,
+            "priority": priority,
+            "reason": reason,
+            "evidence_refs": sorted(refs),
+            "signals": {
+                "decision": decision,
+                "helpful_count": helpful,
+                "failed_count": failed,
+            },
+        })
+
+    suggestions.sort(key=lambda item: (-item["priority"], item["area"], item["action"]))
+    return {
+        "evaluated_at": maturity_report.get("evaluated_at"),
+        "maturity_report_id": maturity_report_id,
+        "fact_count": len(maturity_report.get("memories", ())),
+        "approved_knowledge_count": len(approved_knowledge_evaluations),
+        "suggestion_count": len(suggestions),
+        "suggestions": suggestions,
+    }

@@ -690,6 +690,22 @@ async def list_memory_maturity_reports(
     return await memory.list_knowledge_maturity_reports(limit=limit)
 
 
+@app.post("/api/memory/self-steering-reports")
+async def create_memory_self_steering_report() -> dict[str, Any]:
+    """Create auditable suggestions from maturity and approved outcome signals."""
+    assert memory is not None
+    return await memory.create_knowledge_self_steering_report()
+
+
+@app.get("/api/memory/self-steering-reports")
+async def list_memory_self_steering_reports(
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """Return preserved self-steering snapshots, newest first."""
+    assert memory is not None
+    return await memory.list_knowledge_self_steering_reports(limit=limit)
+
+
 @app.get("/api/memory/goal-outcomes")
 async def list_goal_outcomes(
     status: str | None = Query(None),

@@ -10,6 +10,7 @@ import pytest
 from atlas.memory import MemoryStore
 from atlas.memory.quality import (
     evaluate_knowledge_maturity,
+    evaluate_knowledge_self_steering,
     evaluate_memory_quality,
     evaluate_memory_optimization,
     evaluate_knowledge_retrieval,
@@ -287,6 +288,92 @@ def test_knowledge_maturity_is_deterministic_and_explains_every_recommendation()
         "reason": "Review signals exist; a person should assess the active memory.",
         "evidence_refs": ["fact:review_fact", "feedback:2"],
     }]
+
+
+def test_knowledge_self_steering_is_deterministic_and_preserves_evidence_sources() -> None:
+    maturity = {
+        "evaluated_at": "2026-09-26T00:00:00+00:00",
+        "memories": [{
+            "key": "project_stack", "level": "review_required",
+            "evidence": {
+                "references": ["fact:project_stack", "feedback:7"],
+                "review_signal_count": 2, "usage_count": 3,
+                "positive_signal_count": 1,
+            },
+        }],
+    }
+    approved_evaluations = [{
+        "knowledge_id": "goal-knowledge:outcome-1",
+        "source_outcome_id": "outcome-1", "decision": "review_recommended_after_repeated_failures",
+        "helpful_count": 0, "failed_count": 2,
+        "evidence": [{
+            "id": 9, "usage_event_id": 4, "source_outcome_id": "outcome-1",
+            "execution_outcome_id": "outcome-2",
+        }],
+    }]
+
+    report = evaluate_knowledge_self_steering(
+        maturity, approved_evaluations, maturity_report_id="maturity-1",
+    )
+
+    assert report == evaluate_knowledge_self_steering(
+        maturity, approved_evaluations, maturity_report_id="maturity-1",
+    )
+    assert report["suggestion_count"] == 2
+    fact, knowledge = sorted(
+        report["suggestions"], key=lambda item: item["source_type"] != "fact",
+    )
+    assert fact["action"] == "review_fact"
+    assert fact["evidence_refs"] == ["fact:project_stack", "feedback:7"]
+    assert knowledge["action"] == "review_approved_knowledge"
+    assert knowledge["evidence_refs"] == [
+        "feedback:9", "knowledge:goal-knowledge:outcome-1",
+        "outcome:outcome-1", "outcome:outcome-2", "usage:4",
+    ]
+
+
+async def test_self_steering_uses_approved_knowledge_only_and_leaves_facts_unchanged(
+    store: MemoryStore,
+) -> None:
+    await store.set_fact("project_stack", "Python")
+    approved_outcome_id = await store.record_goal_outcome(
+        goal_id="review-stack", goal="Review project stack", status="completed",
+        evaluation={"satisfied": True, "evidence": "Stack recorded."}, steps=[],
+        source_conversation_id="approved-conversation", source_run_id="approved-run",
+    )
+    pending_outcome_id = await store.record_goal_outcome(
+        goal_id="pending-stack", goal="Review pending stack", status="completed",
+        evaluation={"satisfied": True, "evidence": "Pending stack recorded."}, steps=[],
+        source_conversation_id="pending-conversation", source_run_id="pending-run",
+    )
+    rejected_outcome_id = await store.record_goal_outcome(
+        goal_id="rejected-stack", goal="Review rejected stack", status="completed",
+        evaluation={"satisfied": True, "evidence": "Rejected stack recorded."}, steps=[],
+        source_conversation_id="rejected-conversation", source_run_id="rejected-run",
+    )
+    assert await store.review_goal_experience(approved_outcome_id, approved=True)
+    assert await store.review_goal_experience(rejected_outcome_id, approved=False)
+    original_fact = await store.get_fact("project_stack")
+
+    snapshot = await store.create_knowledge_self_steering_report()
+    suggestions = snapshot["report"]["suggestions"]
+    knowledge_suggestions = [
+        item for item in suggestions
+        if item["source_type"] == "approved_goal_knowledge"
+    ]
+
+    assert snapshot["report"]["approved_knowledge_count"] == 1
+    assert len(knowledge_suggestions) == 1
+    assert f"outcome:{approved_outcome_id}" in knowledge_suggestions[0]["evidence_refs"]
+    assert all(pending_outcome_id not in ref for ref in knowledge_suggestions[0]["evidence_refs"])
+    assert snapshot["report"]["maturity_report_id"]
+    assert await store.get_fact("project_stack") == original_fact
+    assert len(await store.list_knowledge_self_steering_reports()) == 1
+    assert len(await store.list_knowledge_maturity_reports()) == 1
+    pending_outcomes = await store.list_goal_outcomes(experience_status="pending")
+    assert pending_outcomes[0]["id"] == pending_outcome_id
+    rejected_outcomes = await store.list_goal_outcomes(experience_status="rejected")
+    assert rejected_outcomes[0]["id"] == rejected_outcome_id
 
 
 async def test_maturity_report_tracks_approved_fact_evidence_without_mutation(

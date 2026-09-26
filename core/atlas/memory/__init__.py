@@ -16,6 +16,7 @@ import structlog
 from atlas.config import get_config
 from atlas.memory.quality import (
     evaluate_knowledge_maturity,
+    evaluate_knowledge_self_steering,
     evaluate_memory_health,
     evaluate_memory_optimization,
 )
@@ -245,6 +246,12 @@ class MemoryStore:
             );
 
             CREATE TABLE IF NOT EXISTS memory_maturity_reports (
+                id TEXT PRIMARY KEY,
+                report_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_self_steering_reports (
                 id TEXT PRIMARY KEY,
                 report_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
@@ -1214,7 +1221,8 @@ class MemoryStore:
         """Analyze approved advisory knowledge usage without changing active knowledge."""
         assert self._db is not None
         query = (
-            "SELECT id FROM goal_knowledge WHERE source_approval_status = 'approved'"
+            "SELECT id, source_outcome_id FROM goal_knowledge "
+            "WHERE source_approval_status = 'approved'"
         )
         params: list[Any] = []
         if knowledge_id is not None:
@@ -1296,6 +1304,7 @@ class MemoryStore:
             evaluations.append({
                 "id": evaluation_id,
                 "knowledge_id": source_id,
+                "source_outcome_id": knowledge_row["source_outcome_id"],
                 "input_signature": input_signature,
                 "helpful_count": helpful_count,
                 "failed_count": failed_count,
@@ -2192,6 +2201,41 @@ class MemoryStore:
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT id, report_json, created_at FROM memory_maturity_reports "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
+        )
+        return [
+            {"id": row["id"], "created_at": row["created_at"],
+             "report": json.loads(row["report_json"])}
+            for row in await cursor.fetchall()
+        ]
+
+    async def create_knowledge_self_steering_report(self) -> dict[str, Any]:
+        """Persist evidence-linked suggestions derived from advisory knowledge signals."""
+        maturity = await self.create_knowledge_maturity_report()
+        evaluations = await self.evaluate_goal_knowledge_evolution()
+        report = evaluate_knowledge_self_steering(
+            maturity["report"], evaluations, maturity_report_id=maturity["id"],
+        )
+        report_id = str(uuid.uuid4())
+        created_at = datetime.now(UTC).isoformat()
+        assert self._db is not None
+        await self._db.execute(
+            "INSERT INTO memory_self_steering_reports (id, report_json, created_at) "
+            "VALUES (?, ?, ?)",
+            (report_id, json.dumps(report, ensure_ascii=False, sort_keys=True), created_at),
+        )
+        await self._db.commit()
+        return {"id": report_id, "created_at": created_at, "report": report}
+
+    async def list_knowledge_self_steering_reports(
+        self, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return immutable self-steering snapshots, newest first."""
+        if limit < 0:
+            raise ValueError("Report limit must be non-negative")
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, report_json, created_at FROM memory_self_steering_reports "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
         )
         return [
