@@ -9,11 +9,12 @@ import re
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
+import httpx
 from fastapi import Body, FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -21,6 +22,7 @@ from pydantic import BaseModel
 from atlas.agent.capabilities import (
     AgentCapabilityRegistry,
     register_skill_capabilities,
+    register_skill_catalog_capabilities,
     register_skill_discovery_capability,
 )
 from atlas.agent.orchestrator import AgentOrchestrator
@@ -29,7 +31,14 @@ from atlas.config import get_config
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
-from atlas.skills import SkillManager
+from atlas.skills import SKILLS_DIR, SkillManager
+from atlas.skills.acquisition import (
+    Acquisition,
+    CatalogUnavailableError,
+    SkillsShProvider,
+    inspect_github_source,
+    install_acquisition,
+)
 from atlas.skills.discovery import SkillDiscovery
 from atlas.skills.registry import SkillRegistry
 from atlas.tools.mcp_client import MCPClient
@@ -44,6 +53,8 @@ orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 skill_mgr: SkillManager | None = None
 skill_registry: SkillRegistry | None = None
+skill_catalog_provider = SkillsShProvider()
+skill_acquisitions: dict[str, Acquisition] = {}
 scheduler: AtlasScheduler | None = None
 
 
@@ -400,6 +411,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     capabilities = AgentCapabilityRegistry()
     register_skill_capabilities(capabilities, skill_mgr)
     register_skill_discovery_capability(capabilities, skill_registry)
+    register_skill_catalog_capabilities(capabilities, skill_catalog_provider)
 
     orchestrator = AgentOrchestrator(
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
@@ -1398,6 +1410,92 @@ async def discover_skills(
         raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
+@app.get("/api/skill-catalog/search")
+async def search_skill_catalog(
+    q: str = Query(..., min_length=2), page: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    """Search remote candidates; failures are isolated from local discovery and chat."""
+    try:
+        result = await skill_catalog_provider.search(q, page=page)
+        registry_items = skill_registry.list() if skill_registry else []
+        installed = {
+            (item.get("provenance") or {}).get("external_id") for item in registry_items
+        }
+        for item in result["results"]:
+            if item["external_id"] in installed:
+                item["installed"] = True
+                item["state"] = "installed"
+        return result
+    except CatalogUnavailableError as exc:
+        return {
+            "provider": "skills.sh", "results": [],
+            "pagination": {"page": page, "has_more": False},
+            "status": "external-catalog-unavailable", "message": str(exc),
+        }
+
+
+@app.post("/api/skill-catalog/inspect")
+async def inspect_skill_catalog(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Fetch and review a remote candidate without registry or activation side effects."""
+    try:
+        if payload.get("provider") == "github":
+            acquisition = await inspect_github_source(
+                str(payload.get("source_url", "")), str(payload.get("skill_path", "")),
+            )
+        else:
+            acquisition = await skill_catalog_provider.inspect(str(payload.get("external_id", "")))
+    except CatalogUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="GitHub source unavailable") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    acquisition_id = str(uuid.uuid4())
+    skill_acquisitions[acquisition_id] = acquisition
+    existing = (
+        skill_registry.get(acquisition.record["name"], acquisition.record["version"])
+        if skill_registry else None
+    )
+    return {
+        "acquisition_id": acquisition_id, "record": acquisition.record,
+        "files": acquisition.files, "validation": acquisition.validation,
+        "security": acquisition.security, "computed_sha256": acquisition.computed_hash,
+        "already_installed": existing is not None,
+        "existing_local": existing,
+        "install_target": f"skills/community/{acquisition.record['name']}",
+    }
+
+
+@app.post("/api/skill-catalog/install")
+async def install_catalog_skill(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    acquisition_id = payload.get("acquisition_id")
+    acquisition = (
+        skill_acquisitions.get(acquisition_id) if isinstance(acquisition_id, str) else None
+    )
+    if acquisition is None:
+        raise HTTPException(status_code=404, detail="Reviewed acquisition not found; inspect again")
+    if payload.get("approved") is not True or not isinstance(payload.get("approval_event_id"), str):
+        raise HTTPException(status_code=403, detail="Explicit user approval is required")
+    if acquisition.security["result"] == "WARN" and payload.get("warnings_confirmed") is not True:
+        raise HTTPException(status_code=403, detail="WARN risks require explicit confirmation")
+    assert skill_registry is not None
+    try:
+        result = await install_acquisition(
+            acquisition, skills_dir=skill_mgr._skills_dir if skill_mgr else SKILLS_DIR,
+            registry=skill_registry, approval_event_id=payload["approval_event_id"],
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    if skill_mgr:
+        skill_mgr.scan_skills_sync()
+    del skill_acquisitions[acquisition_id]
+    return result
+
+
 @app.get("/api/skills/discover/{name}")
 async def get_discovered_skill(name: str, version: str | None = Query(None)) -> dict[str, Any]:
     """Return one registered skill with stable explainability and provenance fields."""
@@ -1725,7 +1823,7 @@ class RunState:
             "run_id": self.run_id,
             "event_id": f"{self.run_id}:{self.sequence}",
             "sequence": self.sequence,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "event": event,
             "data": data,
         }

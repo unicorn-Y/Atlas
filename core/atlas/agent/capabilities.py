@@ -111,3 +111,56 @@ def register_skill_discovery_capability(
         handler=discover,
         source="skill-registry",
     )
+
+
+def register_skill_catalog_capabilities(
+    capabilities: AgentCapabilityRegistry,
+    provider: Any,
+) -> None:
+    """Expose remote search and inspection only; installation remains a UI/API approval action."""
+
+    async def search(inputs: dict[str, Any]) -> dict[str, Any]:
+        query = inputs.get("query", inputs.get("q", ""))
+        if not isinstance(query, str):
+            raise ValueError("query must be text")
+        return await provider.search(query, page=int(inputs.get("page", 0)))
+
+    async def inspect(inputs: dict[str, Any]) -> dict[str, Any]:
+        external_id = inputs.get("external_id")
+        if not isinstance(external_id, str):
+            raise ValueError("external_id is required")
+        acquisition = await provider.inspect(external_id)
+        return {
+            "record": acquisition.record,
+            "files": acquisition.files,
+            "validation": acquisition.validation,
+            "security": acquisition.security,
+            "computed_sha256": acquisition.computed_hash,
+        }
+
+    def install(_inputs: dict[str, Any]) -> None:
+        raise PermissionError(
+            "skill.catalog.install requires the explicit Skill Center approval flow"
+        )
+
+    capabilities.register(
+        "skill.catalog.search",
+        description="Search external skills without installing them.",
+        handler=search,
+        source="external-catalog",
+    )
+    capabilities.register(
+        "skill.catalog.inspect",
+        description=(
+            "Inspect external skill files and report validation and risk evidence "
+            "without installing them."
+        ),
+        handler=inspect,
+        source="external-catalog",
+    )
+    capabilities.register(
+        "skill.catalog.install",
+        description="Installation is denied here; use Skill Center review and explicit approval.",
+        handler=install,
+        source="external-catalog",
+    )

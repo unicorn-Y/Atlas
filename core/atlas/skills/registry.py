@@ -114,6 +114,15 @@ class SkillRegistry:
         if not isinstance(requirements, (list, dict)):
             raise ValueError("requirements must be a list or object")
         normalized["requirements"] = requirements
+        provenance = metadata.get("provenance")
+        if provenance is not None:
+            if not isinstance(provenance, dict):
+                raise ValueError("provenance must be an object")
+            try:
+                json.dumps(provenance, sort_keys=True)
+            except (TypeError, ValueError):
+                raise ValueError("provenance must contain JSON-compatible values") from None
+            normalized["provenance"] = provenance
         return normalized
 
     @staticmethod

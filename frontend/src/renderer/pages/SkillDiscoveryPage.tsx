@@ -2,12 +2,15 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Search, WandSparkles } from 'lucide-react';
 import styles from '../App.module.css';
 import { buildSkillDiscoveryUrl, canActivateLocalSkill } from './skillDiscoveryUrl';
+import { remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
 
 type SkillResult = {
   name: string; version: string; description: string; capabilities: string[]; tools: string[];
   requirements: unknown; source: string; status: string; category?: string; tags?: string[];
   relevance_score: number; match_reasons: string[]; matched_fields: string[];
 };
+type RemoteSkill = { provider: string; external_id: string; name: string; description: string; source: string; source_type: string; source_url: string; install_url: string; remote_hash?: string | null; audit?: unknown; installed: boolean; state: string };
+type Review = { acquisition_id: string; record: RemoteSkill & { version: string; description: string }; files: Record<string, string>; validation: { result: string; dependencies: string[] }; security: { result: 'PASS' | 'WARN' | 'BLOCK'; risks: string[]; note: string }; computed_sha256: string; already_installed: boolean; existing_local?: Record<string, unknown> | null; install_target: string };
 
 interface Props { apiBaseUrl: string }
 
@@ -21,18 +24,42 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activation, setActivation] = useState('');
+  const [mode, setMode] = useState<'local' | 'external' | 'all'>('local');
+  const [remoteResults, setRemoteResults] = useState<RemoteSkill[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState('');
+  const [review, setReview] = useState<Review | null>(null);
+  const [confirmWarnings, setConfirmWarnings] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [installState, setInstallState] = useState('');
+  const [githubSource, setGithubSource] = useState('');
+  const [githubPath, setGithubPath] = useState('');
 
-  const search = async (event?: FormEvent) => {
+  const search = async (event?: FormEvent, requestedMode = mode) => {
     event?.preventDefault();
     setLoading(true);
     setError('');
     setActivation('');
     try {
-      const response = await fetch(buildSkillDiscoveryUrl(apiBaseUrl, { query, capability, tool, source }));
-      if (!response.ok) throw new Error(`技能检索失败（HTTP ${response.status}）`);
-      const data = await response.json() as { results: SkillResult[] };
-      setResults(data.results);
-      setSelected(data.results[0] ?? null);
+      if (requestedMode !== 'external') {
+        try {
+          const response = await fetch(buildSkillDiscoveryUrl(apiBaseUrl, { query, capability, tool, source }));
+          if (!response.ok) throw new Error(`技能检索失败（HTTP ${response.status}）`);
+          const data = await response.json() as { results: SkillResult[] };
+          setResults(data.results); setSelected(data.results[0] ?? null);
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : '本地技能检索暂不可用');
+          setResults([]); setSelected(null);
+        }
+      } else { setResults([]); setSelected(null); }
+      if (requestedMode !== 'local') {
+        try {
+          const response = await fetch(`${apiBaseUrl}/api/skill-catalog/search?q=${encodeURIComponent(query.trim() || 'skills')}`);
+          const data = await response.json() as { results: RemoteSkill[]; status: string };
+          setRemoteResults(data.results ?? []); setCatalogStatus(data.status === 'available' ? '外部目录在线' : 'external-catalog-unavailable');
+        } catch {
+          setRemoteResults([]); setCatalogStatus('external-catalog-unavailable');
+        }
+      } else { setRemoteResults([]); setCatalogStatus(''); }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '技能检索暂不可用');
       setResults([]);
@@ -41,6 +68,41 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
   };
 
   useEffect(() => { void search(); }, [apiBaseUrl]);
+
+  const inspectRemote = async (skill: RemoteSkill) => {
+    setReview(null); setInstallState('正在获取不可信内容并执行预检…');
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/skill-catalog/inspect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: skill.provider, external_id: skill.external_id }) });
+      const data = await response.json() as Review;
+      if (!response.ok) throw new Error((data as unknown as { detail?: string }).detail ?? '预览获取失败');
+      setReview(data); setInstallState('');
+    } catch (cause) { setInstallState(cause instanceof Error ? cause.message : '预览获取失败'); }
+  };
+
+  const inspectGithub = async () => {
+    setReview(null); setInstallState('正在解析公开 GitHub 来源…');
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/skill-catalog/inspect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: 'github', source_url: githubSource, skill_path: githubPath }) });
+      const data = await response.json() as Review;
+      if (!response.ok) throw new Error((data as unknown as { detail?: string }).detail ?? 'GitHub Skill 获取失败');
+      setReview(data); setInstallState('');
+    } catch (cause) { setInstallState(cause instanceof Error ? cause.message : 'GitHub Skill 获取失败'); }
+  };
+
+  const installReviewed = async (warningsConfirmed = false) => {
+    if (!review) return;
+    const gate = reviewGateState(review.security.result, review.already_installed);
+    if (!gate.canInstall) return;
+    if (gate.requiresWarningConfirmation && !warningsConfirmed) { setConfirmWarnings(true); return; }
+    setInstalling(true); setInstallState('正在安全安装…');
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/skill-catalog/install`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acquisition_id: review.acquisition_id, approved: true, warnings_confirmed: warningsConfirmed, approval_event_id: crypto.randomUUID() }) });
+      const data = await response.json() as { detail?: string; name?: string };
+      if (!response.ok) throw new Error(data.detail ?? '安装失败');
+      setInstallState(`已安装 ${data.name}，本地索引已刷新。`); setReview(null); setConfirmWarnings(false); await search();
+    } catch (cause) { setInstallState(cause instanceof Error ? cause.message : '安装失败'); }
+    finally { setInstalling(false); }
+  };
 
   const activate = async (skill: SkillResult) => {
     setActivation('');
@@ -59,7 +121,9 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
   };
 
   return <section className={styles.skillCenter} aria-label="技能发现">
-    <header className={styles.skillCenterHeader}><div><span>本地技能库</span><h1>技能发现</h1><p>按任务描述检索已注册技能。搜索只返回候选，不会自动激活。</p></div></header>
+    <header className={styles.skillCenterHeader}><div><span>Skill Catalog</span><h1>技能发现</h1><p>本地搜索保持离线可用。远程技能需审查并明确批准后才会安装。</p></div></header>
+    <nav className={styles.skillCatalogTabs} aria-label="技能来源">{(['local', 'external', 'all'] as const).map((item) => <button type="button" key={item} aria-pressed={mode === item} onClick={() => { setMode(item); void search(undefined, item); }}>{item === 'local' ? 'Local' : item === 'external' ? 'External Catalog' : 'All'}</button>)}</nav>
+    {mode !== 'local' && <fieldset className={styles.skillGithubSource}><legend>直接检查公开 GitHub Skill</legend><label>Repository URL<input aria-label="公开 GitHub 仓库" value={githubSource} onChange={(event) => setGithubSource(event.target.value)} placeholder="https://github.com/owner/repo" /></label><label>Skill path<input aria-label="GitHub Skill 路径" value={githubPath} onChange={(event) => setGithubPath(event.target.value)} placeholder="skills/example-skill" /></label><button type="button" disabled={!githubSource} onClick={() => void inspectGithub()}>检查 GitHub 来源</button></fieldset>}
     <form className={styles.skillSearchForm} onSubmit={(event) => void search(event)}>
       <label className={styles.skillSearchBox}><Search size={17} /><input aria-label="任务或技能搜索" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="描述你要完成的任务…" /><button disabled={loading}>{loading ? '搜索中…' : '搜索技能'}</button></label>
       <div className={styles.skillFilters}>
@@ -69,6 +133,7 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
       </div>
     </form>
     {error && <div className={styles.skillStateError} role="alert">{error}。你仍可继续正常聊天。</div>}
+    {mode !== 'local' && <div role="status">External catalog: {catalogStatus || '等待搜索'}</div>}
     {!error && !loading && !results.length && <div className={styles.skillStateEmpty} role="status">没有匹配的本地技能。可调整关键词或筛选条件。</div>}
     <div className={styles.skillDiscoveryGrid}>
       <div className={styles.skillDiscoveryResults} aria-label="技能检索结果">
@@ -77,6 +142,7 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
           <p>{item.description}</p><small>匹配分 {item.relevance_score} · {item.matched_fields.join('、') || '筛选匹配'}</small>
         </button>)}
       </div>
+      {mode !== 'local' && <div className={styles.skillRemoteResults} aria-label="外部未安装技能">{remoteResults.map((item) => <article className={styles.skillRemoteCard} key={`${item.provider}:${item.external_id}`}><strong>{item.name}</strong><small>{item.provider} · {remoteSkillLabel(item.installed)}</small><p>{item.source}</p><a href={item.source_url} target="_blank" rel="noreferrer">来源仓库</a><button type="button" onClick={() => void inspectRemote(item)}>{item.installed ? '查看版本冲突' : '检查与预览'}</button></article>)}</div>}
       {selected && <article className={styles.skillDiscoveryDetail} aria-label="技能详情">
         <div className={styles.skillDetailTitle}><div><small>{selected.source} · {selected.status}</small><h2>{selected.name}</h2></div><span>v{selected.version}</span></div>
         <p>{selected.description}</p>
@@ -87,5 +153,8 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
         {activation && <pre className={styles.skillActivationContent} role="status">{activation}</pre>}
       </article>}
     </div>
+    {installState && <div role="status">{installState}</div>}
+    {review && <section role="dialog" aria-modal="true" aria-label="安装前安全审查"><h2>安装前审查：{review.record.name}</h2><p>版本 {review.record.version} · {review.record.provider} · {review.record.source_url}</p><p>{review.record.description}</p><p>安全检查：{review.security.result} · {review.security.risks.join(', ') || '未发现已知风险模式'}</p><p>{review.security.note}</p><p>审计：{JSON.stringify(review.record.audit ?? '无可用审计')}</p><p>远程哈希：{review.record.remote_hash ?? '未提供'}</p><p>本地 SHA-256：{review.computed_sha256}</p><p>验证：{review.validation.result} · 声明依赖：{review.validation.dependencies.join(', ') || '无'}</p><p>已安装：{review.already_installed ? '是' : '否'} · 目标：{review.install_target}</p>{review.already_installed && <section aria-label="已安装版本冲突"><h3>本地版本与来源</h3><pre>{JSON.stringify({ existing: review.existing_local, incoming: { source: review.record.source_url, hash: review.computed_sha256 } }, null, 2)}</pre></section>}<h3>文件树与内容预览</h3><ul>{Object.keys(review.files).map((file) => <li key={file}>{file}</li>)}</ul>{Object.entries(review.files).map(([file, content]) => <details key={file}><summary>{file}</summary><pre>{content}</pre></details>)}<button type="button" onClick={() => { setReview(null); setConfirmWarnings(false); }}>取消</button><button type="button" disabled={installing || review.security.result === 'BLOCK' || review.already_installed} onClick={() => void installReviewed()}>{review.security.result === 'BLOCK' ? '已阻止安装' : '我已审查并批准安装'}</button></section>}
+    {confirmWarnings && review && <section role="dialog" aria-modal="true" aria-label="确认风险后安装"><h2>此 Skill 包含风险提示</h2><p>{review.security.risks.join('、')}</p><p>风险扫描只提供证据，不能证明内容绝对安全。确认后将安装到 {review.install_target}。</p><button type="button" onClick={() => setConfirmWarnings(false)}>返回审查</button><button type="button" disabled={installing} onClick={() => void installReviewed(true)}>我理解风险，仍然安装</button></section>}
   </section>;
 }
