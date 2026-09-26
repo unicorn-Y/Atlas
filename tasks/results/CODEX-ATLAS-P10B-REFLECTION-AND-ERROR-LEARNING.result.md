@@ -37,4 +37,8 @@ The first isolated run of `test_run_start_emits_agent_events` used the default l
 
 ## Delivery
 
-Commit and push verification are recorded after publication.
+Implementation and the initial result artifact were committed as
+`e8dd92c4cd8cb8aff796e1bb6c316411ba4c7d6f` and pushed to `origin/main`.
+After that push, `LOCAL_HEAD` and `REMOTE_HEAD` both equaled this commit, and the
+worktree was clean. This delivery verification is included in the follow-up
+result-record commit.
