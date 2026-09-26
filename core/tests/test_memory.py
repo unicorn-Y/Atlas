@@ -490,6 +490,7 @@ class TestAutomaticMemoryCandidates:
         assert fact["source_message_id"] == new_message
         assert fact["confidence"] == 0.9
 
+
     async def test_newer_candidate_preserves_superseded_fact_and_provenance(
         self, store: MemoryStore
     ) -> None:
@@ -605,3 +606,74 @@ class TestAutomaticMemoryCandidates:
         assert event["previous_status"] == "active"
         assert event["status"] == "fulfilled"
         assert event["source_message_id"] == completion_message
+
+
+class TestMemoryFeedback:
+    async def test_usage_feedback_and_evaluation_persist_across_restart(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("user_timezone", "Asia/Hong_Kong")
+        conversation_id = await store.create_conversation("Memory feedback")
+        correction_message = await store.save_message(
+            conversation_id, "user", "My timezone is UTC."
+        )
+
+        await store.record_memory_usage("user_timezone", "used", conversation_id)
+        await store.record_memory_usage("user_timezone", "helpful", conversation_id)
+        await store.record_memory_usage("user_timezone", "unhelpful", conversation_id)
+        await store.record_memory_correction("user_timezone", correction_message)
+        await store.record_memory_evaluation("user_timezone", "useful")
+        await store.record_memory_evaluation("user_timezone", "not_useful")
+
+        assert await store.get_fact("user_timezone") == "Asia/Hong_Kong"
+        await store.close()
+        reopened = MemoryStore(db_path=store._db_path)
+        await reopened.init()
+        try:
+            assert await reopened.get_memory_quality("user_timezone") == {
+                "used_count": 1,
+                "not_used_count": 0,
+                "helpful_count": 1,
+                "unhelpful_count": 1,
+                "correction_count": 1,
+                "rejected_count": 0,
+                "useful_count": 1,
+                "not_useful_count": 1,
+                "uncertain_count": 0,
+            }
+            [feedback] = await reopened.list_memory_feedback("user_timezone")
+            assert feedback["signal"] == "correction"
+            assert feedback["source_message_id"] == correction_message
+        finally:
+            await reopened.close()
+
+    async def test_rejected_candidate_is_feedback_and_never_active(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation()
+        await store.save_message(conversation_id, "user", "Our project uses Django.")
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+
+        assert await store.reject_memory_candidate(candidate["id"])
+        assert not await store.promote_memory_candidate(candidate["id"])
+        assert await store.get_fact("project_stack") is None
+        assert (await store.get_memory_quality("project_stack"))["rejected_count"] == 1
+        [feedback] = await store.list_memory_feedback("project_stack")
+        assert feedback["signal"] == "rejected"
+        assert feedback["candidate_id"] == candidate["id"]
+
+    async def test_quality_events_require_active_memory_and_valid_feedback(
+        self, store: MemoryStore
+    ) -> None:
+        with pytest.raises(ValueError, match="unknown memory"):
+            await store.record_memory_usage("missing", "used")
+        with pytest.raises(ValueError, match="unknown memory"):
+            await store.record_memory_correction("missing")
+        with pytest.raises(ValueError, match="unknown memory"):
+            await store.record_memory_evaluation("missing", "useful")
+
+        await store.set_fact("user_timezone", "UTC")
+        with pytest.raises(ValueError, match="Unsupported memory usage outcome"):
+            await store.record_memory_usage("user_timezone", "maybe")
+        with pytest.raises(ValueError, match="Unsupported memory usefulness rating"):
+            await store.record_memory_evaluation("user_timezone", "great")

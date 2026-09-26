@@ -201,6 +201,30 @@ class MemoryStore:
                 source_message_id TEXT NOT NULL,
                 recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS memory_usage_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                memory_key TEXT NOT NULL,
+                outcome TEXT NOT NULL CHECK(outcome IN ('used', 'not_used', 'helpful', 'unhelpful')),
+                conversation_id TEXT,
+                recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                memory_key TEXT NOT NULL,
+                signal TEXT NOT NULL CHECK(signal IN ('correction', 'rejected')),
+                candidate_id TEXT,
+                source_message_id TEXT,
+                recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_evaluations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                memory_key TEXT NOT NULL,
+                rating TEXT NOT NULL CHECK(rating IN ('useful', 'not_useful', 'uncertain')),
+                recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
         """)
         cursor = await self._db.execute("PRAGMA table_info(facts)")
         fact_columns = {row["name"] for row in await cursor.fetchall()}
@@ -658,11 +682,135 @@ class MemoryStore:
         assert self._db is not None
         await self._db.execute("BEGIN IMMEDIATE")
         cursor = await self._db.execute(
+            "SELECT key FROM memory_candidates WHERE id = ? AND status = 'pending'",
+            (candidate_id,),
+        )
+        candidate = await cursor.fetchone()
+        if not candidate:
+            await self._db.rollback()
+            return False
+        await self._db.execute(
             "UPDATE memory_candidates SET status = 'rejected', updated_at = datetime('now') "
             "WHERE id = ? AND status = 'pending'", (candidate_id,),
         )
+        await self._db.execute(
+            "INSERT INTO memory_feedback (memory_key, signal, candidate_id) "
+            "VALUES (?, 'rejected', ?)", (candidate["key"], candidate_id),
+        )
         await self._db.commit()
-        return cursor.rowcount > 0
+        return True
+
+    async def record_memory_usage(
+        self, key: str, outcome: str, conversation_id: str | None = None,
+    ) -> int:
+        """Persist how an active memory affected a conversation."""
+        if _SENSITIVE_MEMORY.search(key):
+            raise ValueError("Sensitive memories cannot be recorded as feedback")
+        if outcome not in {"used", "not_used", "helpful", "unhelpful"}:
+            raise ValueError("Unsupported memory usage outcome")
+        assert self._db is not None
+        cursor = await self._db.execute("SELECT 1 FROM facts WHERE key = ?", (key,))
+        if not await cursor.fetchone():
+            raise ValueError("Cannot record usage for an unknown memory")
+        cursor = await self._db.execute(
+            "INSERT INTO memory_usage_events (memory_key, outcome, conversation_id) "
+            "VALUES (?, ?, ?)", (key, outcome, conversation_id),
+        )
+        await self._db.commit()
+        return int(cursor.lastrowid)
+
+    async def record_memory_correction(
+        self, key: str, source_message_id: str | None = None,
+    ) -> int:
+        """Record a user correction without changing or promoting a memory."""
+        if _SENSITIVE_MEMORY.search(key):
+            raise ValueError("Sensitive memories cannot be recorded as feedback")
+        assert self._db is not None
+        cursor = await self._db.execute("SELECT 1 FROM facts WHERE key = ?", (key,))
+        if not await cursor.fetchone():
+            raise ValueError("Cannot correct an unknown memory")
+        if source_message_id:
+            cursor = await self._db.execute(
+                "SELECT 1 FROM messages WHERE id = ? AND role = 'user'",
+                (source_message_id,),
+            )
+            if not await cursor.fetchone():
+                raise ValueError("Correction evidence must be a user message")
+        cursor = await self._db.execute(
+            "INSERT INTO memory_feedback (memory_key, signal, source_message_id) "
+            "VALUES (?, 'correction', ?)", (key, source_message_id),
+        )
+        await self._db.commit()
+        return int(cursor.lastrowid)
+
+    async def record_memory_evaluation(self, key: str, rating: str) -> int:
+        """Persist an explicit usefulness evaluation for an active memory."""
+        if _SENSITIVE_MEMORY.search(key):
+            raise ValueError("Sensitive memories cannot be recorded as feedback")
+        if rating not in {"useful", "not_useful", "uncertain"}:
+            raise ValueError("Unsupported memory usefulness rating")
+        assert self._db is not None
+        cursor = await self._db.execute("SELECT 1 FROM facts WHERE key = ?", (key,))
+        if not await cursor.fetchone():
+            raise ValueError("Cannot evaluate an unknown memory")
+        cursor = await self._db.execute(
+            "INSERT INTO memory_evaluations (memory_key, rating) VALUES (?, ?)",
+            (key, rating),
+        )
+        await self._db.commit()
+        return int(cursor.lastrowid)
+
+    async def get_memory_quality(self, key: str) -> dict[str, int]:
+        """Return durable outcome, feedback, and evaluation counts for a memory."""
+        assert self._db is not None
+        usage = await self._db.execute(
+            "SELECT outcome, COUNT(*) AS count FROM memory_usage_events "
+            "WHERE memory_key = ? GROUP BY outcome", (key,),
+        )
+        feedback = await self._db.execute(
+            "SELECT signal, COUNT(*) AS count FROM memory_feedback "
+            "WHERE memory_key = ? GROUP BY signal", (key,),
+        )
+        evaluations = await self._db.execute(
+            "SELECT rating, COUNT(*) AS count FROM memory_evaluations "
+            "WHERE memory_key = ? GROUP BY rating", (key,),
+        )
+        result = {
+            "used_count": 0, "not_used_count": 0, "helpful_count": 0,
+            "unhelpful_count": 0, "correction_count": 0, "rejected_count": 0,
+            "useful_count": 0, "not_useful_count": 0, "uncertain_count": 0,
+        }
+        for row in await usage.fetchall():
+            result[f"{row['outcome']}_count"] = row["count"]
+        for row in await feedback.fetchall():
+            result[f"{row['signal']}_count"] = row["count"]
+        for row in await evaluations.fetchall():
+            result[f"{row['rating']}_count"] = row["count"]
+        return result
+
+    async def list_memory_usage(self, key: str) -> list[dict[str, Any]]:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT memory_key, outcome, conversation_id, recorded_at "
+            "FROM memory_usage_events WHERE memory_key = ? ORDER BY id", (key,),
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def list_memory_feedback(self, key: str) -> list[dict[str, Any]]:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT memory_key, signal, candidate_id, source_message_id, recorded_at "
+            "FROM memory_feedback WHERE memory_key = ? ORDER BY id", (key,),
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def list_memory_evaluations(self, key: str) -> list[dict[str, Any]]:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT memory_key, rating, recorded_at FROM memory_evaluations "
+            "WHERE memory_key = ? ORDER BY id", (key,),
+        )
+        return [dict(row) for row in await cursor.fetchall()]
 
     async def get_agent_context(
         self, query: str, limit: int = 10
