@@ -1121,6 +1121,60 @@ class TestGoalOutcomes:
         assert await store.review_goal_experience(outcome_id, approved=False)
         assert await store.retrieve_approved_goal_knowledge("deployment credentials") == []
 
+    async def test_goal_knowledge_usage_events_keep_context_and_source_provenance(
+        self, store: MemoryStore,
+    ) -> None:
+        outcome_id = await store.record_goal_outcome(
+            goal_id="approved-goal",
+            goal="Review filesystem migration risks",
+            status="completed",
+            evaluation={"satisfied": True, "evidence": "Risks listed."},
+            steps=[{"id": "inspect", "title": "Inspect", "evidence": "Manifest reviewed."}],
+            source_conversation_id="source-conversation",
+            source_run_id="source-run",
+        )
+        assert await store.review_goal_experience(outcome_id, approved=True)
+        [knowledge] = await store.retrieve_approved_goal_knowledge("filesystem migration")
+
+        planning_event = await store.record_goal_knowledge_usage(
+            knowledge["id"], "planning", "current-conversation",
+        )
+        execution_event = await store.record_goal_knowledge_usage(
+            knowledge["id"], "execution", "current-conversation",
+        )
+        cursor = await store._db.execute(
+            "SELECT id, knowledge_id, source_outcome_id, context_type, conversation_id "
+            "FROM goal_knowledge_usage_events ORDER BY id"
+        )
+        events = [dict(row) for row in await cursor.fetchall()]
+
+        assert [event["id"] for event in events] == [planning_event, execution_event]
+        assert all(event["knowledge_id"] == knowledge["id"] for event in events)
+        assert all(event["source_outcome_id"] == outcome_id for event in events)
+        assert [event["context_type"] for event in events] == ["planning", "execution"]
+        assert all(event["conversation_id"] == "current-conversation" for event in events)
+        with pytest.raises(ValueError, match="unapproved goal knowledge"):
+            await store.record_goal_knowledge_usage("pending-or-rejected", "execution", "conv")
+
+    async def test_pending_goal_experience_cannot_record_knowledge_usage(
+        self, store: MemoryStore,
+    ) -> None:
+        outcome_id = await store.record_goal_outcome(
+            goal_id="pending-goal",
+            goal="Review filesystem migration risks",
+            status="completed",
+            evaluation={"satisfied": True, "evidence": "Risks listed."},
+            steps=[{"id": "inspect", "title": "Inspect", "evidence": "Manifest reviewed."}],
+            source_conversation_id="source-conversation",
+            source_run_id="source-run",
+        )
+
+        assert await store.retrieve_approved_goal_knowledge("filesystem migration") == []
+        with pytest.raises(ValueError, match="unapproved goal knowledge"):
+            await store.record_goal_knowledge_usage(
+                f"goal-knowledge:{outcome_id}", "planning", "current-conversation",
+            )
+
     async def test_outcomes_persist_with_evidence_and_require_approval(
         self, store: MemoryStore,
     ) -> None:

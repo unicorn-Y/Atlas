@@ -291,6 +291,20 @@ class MemoryStore:
             );
             CREATE INDEX IF NOT EXISTS idx_goal_knowledge_goal
                 ON goal_knowledge(source_goal_id);
+
+            CREATE TABLE IF NOT EXISTS goal_knowledge_usage_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                knowledge_id TEXT NOT NULL,
+                source_outcome_id TEXT NOT NULL,
+                context_type TEXT NOT NULL
+                    CHECK(context_type IN ('planning', 'execution')),
+                conversation_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY(knowledge_id) REFERENCES goal_knowledge(id),
+                FOREIGN KEY(source_outcome_id) REFERENCES goal_outcomes(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_goal_knowledge_usage_context
+                ON goal_knowledge_usage_events(conversation_id, context_type);
         """)
         cursor = await self._db.execute("PRAGMA table_info(goal_outcomes)")
         goal_outcome_columns = {row["name"] for row in await cursor.fetchall()}
@@ -1088,6 +1102,30 @@ class MemoryStore:
         ranked.sort(key=lambda entry: entry[1])
         ranked.sort(key=lambda entry: entry[0], reverse=True)
         return [item for _, _, item in ranked[:limit]]
+
+    async def record_goal_knowledge_usage(
+        self, knowledge_id: str, context_type: str, conversation_id: str,
+    ) -> int:
+        """Record approved goal knowledge when supplied to a planning or execution prompt."""
+        if context_type not in {"planning", "execution"}:
+            raise ValueError("Unsupported goal knowledge context type")
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT source_outcome_id FROM goal_knowledge "
+            "WHERE id = ? AND source_approval_status = 'approved'",
+            (knowledge_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            raise ValueError("Cannot record usage for unapproved goal knowledge")
+        cursor = await self._db.execute(
+            "INSERT INTO goal_knowledge_usage_events "
+            "(knowledge_id, source_outcome_id, context_type, conversation_id) "
+            "VALUES (?, ?, ?, ?)",
+            (knowledge_id, row["source_outcome_id"], context_type, conversation_id),
+        )
+        await self._db.commit()
+        return int(cursor.lastrowid)
 
     async def retrieve_approved_goal_experiences(
         self, query: str, limit: int = 3,
