@@ -36,4 +36,6 @@ Pytest was run with isolated `--basetemp` directories because the default pytest
 
 ## Delivery state
 
-Commit and remote `main` HEAD verification are recorded after push.
+- Implementation commit: `840be46ab37e1cba925e34c671e60b0ccd2f4b3c`
+- Push: `origin main` succeeded.
+- Post-push check: `git rev-parse HEAD` equals `git ls-remote origin refs/heads/main` (`840be46ab37e1cba925e34c671e60b0ccd2f4b3c`).
