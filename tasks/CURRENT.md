@@ -2,19 +2,19 @@
 
 STATUS: READY
 
-TASK_ID: CODEX-ATLAS-P9J-MEMORY-EXPERIENCE-OPTIMIZATION
+TASK_ID: CODEX-ATLAS-P9K-MEMORY-CONSOLIDATED-USER-KNOWLEDGE
 
-TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P9J-MEMORY-EXPERIENCE-OPTIMIZATION.md
+TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P9K-MEMORY-CONSOLIDATED-USER-KNOWLEDGE.md
 
 WORKER: Luna
 
-CODE_BASE_HEAD: 340cdad5aca09ee4ac3284fcdd72c2715abe4f49
+CODE_BASE_HEAD: ca0f536bed0d4415b2f052c2d89d12702f7e73a4
 
 BASE_HEAD_RULE:
 After pulling origin/main, record the actual starting HEAD as BASE_HEAD. Review/task-dispatch commits after CODE_BASE_HEAD are expected.
 
 PREVIOUS_REVIEW:
-P9I accepted with known limitations.
+P9J accepted with known limitations.
 
 BASELINE:
 Read docs/KNOWN-BASELINE-ISSUES-2026-09-26.md before execution.
