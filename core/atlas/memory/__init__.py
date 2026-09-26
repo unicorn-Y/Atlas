@@ -13,6 +13,7 @@ import aiosqlite
 import structlog
 
 from atlas.config import get_config
+from atlas.memory.quality import evaluate_memory_health
 
 log = structlog.get_logger()
 
@@ -811,6 +812,49 @@ class MemoryStore:
             "WHERE memory_key = ? ORDER BY id", (key,),
         )
         return [dict(row) for row in await cursor.fetchall()]
+
+    async def get_memory_health(
+        self,
+        *,
+        stale_after_days: int = 180,
+        window_days: int = 90,
+        as_of: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Aggregate durable feedback and return advisory review flags."""
+        if stale_after_days < 0 or window_days < 0:
+            raise ValueError("Memory health windows must be non-negative")
+        assert self._db is not None
+        now = as_of or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        now = now.astimezone(timezone.utc)
+        now_text = now.strftime("%Y-%m-%d %H:%M:%S")
+        cutoff_modifier = f"-{window_days} days"
+        cursor = await self._db.execute(
+            "SELECT f.key, f.memory_type, f.updated_at, "
+            "(SELECT COUNT(*) FROM memory_usage_events u WHERE u.memory_key=f.key AND u.outcome='used') AS used_count, "
+            "(SELECT COUNT(*) FROM memory_usage_events u WHERE u.memory_key=f.key AND u.outcome='not_used') AS not_used_count, "
+            "(SELECT COUNT(*) FROM memory_usage_events u WHERE u.memory_key=f.key AND u.outcome='helpful') AS helpful_count, "
+            "(SELECT COUNT(*) FROM memory_usage_events u WHERE u.memory_key=f.key AND u.outcome='unhelpful') AS unhelpful_count, "
+            "(SELECT COUNT(*) FROM memory_feedback b WHERE b.memory_key=f.key AND b.signal='correction') AS correction_count, "
+            "(SELECT COUNT(*) FROM memory_feedback b WHERE b.memory_key=f.key AND b.signal='rejected') AS rejected_count, "
+            "(SELECT COUNT(*) FROM memory_evaluations e WHERE e.memory_key=f.key AND e.rating='useful') AS useful_count, "
+            "(SELECT COUNT(*) FROM memory_evaluations e WHERE e.memory_key=f.key AND e.rating='not_useful') AS not_useful_count, "
+            "(SELECT COUNT(*) FROM memory_evaluations e WHERE e.memory_key=f.key AND e.rating='uncertain') AS uncertain_count, "
+            "((SELECT COUNT(*) FROM memory_usage_events u WHERE u.memory_key=f.key AND u.recorded_at >= datetime(?, ?)) + "
+            " (SELECT COUNT(*) FROM memory_feedback b WHERE b.memory_key=f.key AND b.recorded_at >= datetime(?, ?)) + "
+            " (SELECT COUNT(*) FROM memory_evaluations e WHERE e.memory_key=f.key AND e.recorded_at >= datetime(?, ?))) AS recent_signal_count "
+            "FROM facts f ORDER BY f.key",
+            (now_text, cutoff_modifier, now_text, cutoff_modifier,
+             now_text, cutoff_modifier),
+        )
+        memories = [dict(row) for row in await cursor.fetchall()]
+        return evaluate_memory_health(
+            memories,
+            stale_after_days=stale_after_days,
+            window_days=window_days,
+            as_of=now,
+        )
 
     async def get_agent_context(
         self, query: str, limit: int = 10
