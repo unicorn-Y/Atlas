@@ -1109,11 +1109,39 @@ async def _execute_run(
     """Execute agent run, emitting Runtime Event envelopes."""
     assert orchestrator is not None
     assert memory is not None
-
+    had_tool_failure = False
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
         env = run.next_envelope(event, data)
         await runtime_mgr.send_run(run, env, fallback_conn_id=conn_id)
+
+    async def record_reflection(
+        category: str, component: str, summary: str, resolution_hint: str,
+    ) -> None:
+        recorder = getattr(memory, "record_agent_reflection", None)
+        if not callable(recorder):
+            return
+        try:
+            await recorder(
+                category=category,
+                component=component,
+                summary=summary,
+                resolution_hint=resolution_hint,
+                source_conversation_id=run.conversation_id,
+                source_run_id=run.run_id,
+                model=run.model,
+            )
+        except Exception as exc:
+            log.warning("agent.reflection_record_failed", run_id=run.run_id, error=str(exc))
+
+    async def mark_reflections_recovered() -> None:
+        marker = getattr(memory, "mark_agent_reflections_recovered", None)
+        if not callable(marker):
+            return
+        try:
+            await marker(run.run_id)
+        except Exception as exc:
+            log.warning("agent.reflection_recovery_failed", run_id=run.run_id, error=str(exc))
 
     async def check_pause_cancel() -> bool:
         """Wait while paused; return True if cancelled."""
@@ -1215,6 +1243,19 @@ async def _execute_run(
                 mapped = _map_tool_runtime_event(event)
                 assert mapped is not None
                 await emit(*mapped)
+                if etype == "tool_result" and event.get("error_category") == "tool":
+                    had_tool_failure = True
+                    detail = "\n".join(
+                        str(block.get("text", block))
+                        if isinstance(block, dict) else str(block)
+                        for block in event.get("content", [])
+                    )
+                    await record_reflection(
+                        "tool",
+                        str(event.get("name", "unknown")),
+                        detail,
+                        "Review the tool error and validate a corrected request before retrying.",
+                    )
 
             elif etype == "approval_required":
                 # Already emitted by the approval_callback above;
@@ -1232,14 +1273,24 @@ async def _execute_run(
 
             elif etype == "error":
                 run.status = "failed"
+                category = event.get("category", "runtime")
+                if category in {"tool", "model", "runtime"}:
+                    await record_reflection(
+                        category,
+                        run.model if category == "model" else category,
+                        str(event.get("detail", "Unknown error")),
+                        "Review the failure evidence and validate any proposed resolution before reuse.",
+                    )
                 await emit("run.failed", {
-                    "category": event.get("category", "runtime"),
+                    "category": category,
                     "detail": event.get("detail", "Unknown error"),
                 })
                 return
 
         # Run completed successfully
         run.status = "completed"
+        if had_tool_failure:
+            await mark_reflections_recovered()
         await emit("run.completed", {
             "result": "completed",
             "model": run.model,
@@ -1250,4 +1301,8 @@ async def _execute_run(
         await emit("run.cancelled", {})
     except Exception as e:
         run.status = "failed"
+        await record_reflection(
+            "runtime", "runtime", str(e),
+            "Review the runtime failure evidence and validate a proposed resolution before reuse.",
+        )
         await emit("run.failed", {"category": "runtime", "detail": str(e)})

@@ -970,3 +970,94 @@ class TestMemoryFeedback:
             await store.record_memory_usage("user_timezone", "maybe")
         with pytest.raises(ValueError, match="Unsupported memory usefulness rating"):
             await store.record_memory_evaluation("user_timezone", "great")
+
+
+class TestAgentReflections:
+    async def test_reflections_are_provenanced_retrievable_and_persistent(
+        self, store: MemoryStore
+    ) -> None:
+        reflection_id = await store.record_agent_reflection(
+            category="tool",
+            component="filesystem__read_file",
+            summary="The requested path was not found.",
+            resolution_hint="Check the path against the workspace before retrying.",
+            source_conversation_id="conversation-1",
+            source_run_id="run-1",
+            model="test-model",
+        )
+
+        results = await store.retrieve_agent_reflections("filesystem path", limit=2)
+        assert len(results) == 1
+        assert results[0] == {
+            "id": reflection_id,
+            "category": "tool",
+            "component": "filesystem__read_file",
+            "summary": "The requested path was not found.",
+            "resolution_hint": "Check the path against the workspace before retrying.",
+            "source_conversation_id": "conversation-1",
+            "source_run_id": "run-1",
+            "model": "test-model",
+            "recovered": False,
+        }
+
+        await store.close()
+        reopened = MemoryStore(db_path=store._db_path)
+        await reopened.init()
+        try:
+            persisted = await reopened.retrieve_agent_reflections("filesystem path")
+            assert persisted[0]["id"] == reflection_id
+            assert persisted[0]["source_run_id"] == "run-1"
+        finally:
+            await reopened.close()
+
+    async def test_reflections_do_not_match_unrelated_queries(
+        self, store: MemoryStore
+    ) -> None:
+        await store.record_agent_reflection(
+            category="model",
+            component="openai/test-model",
+            summary="The provider returned a rate limit error.",
+            resolution_hint="Check provider limits before retrying.",
+            source_conversation_id="conversation-1",
+            source_run_id="run-1",
+            model="test-model",
+        )
+
+        assert await store.retrieve_agent_reflections("weather in Tokyo") == []
+
+    async def test_reflection_summaries_redact_credential_values(
+        self, store: MemoryStore
+    ) -> None:
+        await store.record_agent_reflection(
+            category="runtime",
+            component="runtime",
+            summary='Request failed with password="two words" and Bearer abc123.',
+            resolution_hint="Review the failure before retrying.",
+            source_conversation_id="conversation-1",
+            source_run_id="run-1",
+            model="test-model",
+        )
+
+        [reflection] = await store.retrieve_agent_reflections("password request")
+        assert "two words" not in reflection["summary"]
+        assert "abc123" not in reflection["summary"]
+        assert "[redacted]" in reflection["summary"]
+
+    async def test_recovered_reflection_records_resolution_outcome(
+        self, store: MemoryStore
+    ) -> None:
+        reflection_id = await store.record_agent_reflection(
+            category="tool",
+            component="filesystem__read_file",
+            summary="The requested path was not found.",
+            resolution_hint="Check the path against the workspace before retrying.",
+            source_conversation_id="conversation-1",
+            source_run_id="run-1",
+            model="test-model",
+        )
+
+        await store.mark_agent_reflections_recovered("run-1")
+
+        [reflection] = await store.retrieve_agent_reflections("filesystem path")
+        assert reflection["id"] == reflection_id
+        assert reflection["recovered"] is True

@@ -634,7 +634,12 @@ class TestWebSocketProtocol:
         socket = Socket()
         conn_id = "tool-failure-test"
         run = server.RunState("tool-failure-run", "conv-2", "test-model")
-        monkeypatch.setattr(server, "memory", SimpleNamespace(save_message=AsyncMock()))
+        memory_mock = SimpleNamespace(
+            save_message=AsyncMock(),
+            record_agent_reflection=AsyncMock(),
+            mark_agent_reflections_recovered=AsyncMock(),
+        )
+        monkeypatch.setattr(server, "memory", memory_mock)
         monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=events))
         monkeypatch.setitem(server.runtime_mgr.connections, conn_id, socket)
 
@@ -648,6 +653,89 @@ class TestWebSocketProtocol:
         assert tool_event["data"]["error_category"] == "tool"
         assert any(event["event"] == "run.completed" for event in socket.events)
         assert run.status == "completed"
+        memory_mock.record_agent_reflection.assert_awaited_once_with(
+            category="tool",
+            component="fs__read",
+            summary="Tool call failed: tool timed out",
+            resolution_hint="Review the tool error and validate a corrected request before retrying.",
+            source_conversation_id="conv-2",
+            source_run_id="tool-failure-run",
+            model="test-model",
+        )
+        memory_mock.mark_agent_reflections_recovered.assert_awaited_once_with(
+            "tool-failure-run"
+        )
+
+    async def test_success_without_tool_failures_does_not_write_recovery_state(
+        self, monkeypatch
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from atlas import server
+
+        async def events(**kwargs):
+            yield {"type": "done"}
+
+        memory_mock = SimpleNamespace(
+            save_message=AsyncMock(),
+            record_agent_reflection=AsyncMock(),
+            mark_agent_reflections_recovered=AsyncMock(),
+        )
+        run = server.RunState("clean-run", "conv-clean", "test-model")
+        monkeypatch.setattr(server, "memory", memory_mock)
+        monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=events))
+
+        await server._execute_run("clean-connection", run, "hello", None)
+
+        memory_mock.mark_agent_reflections_recovered.assert_not_awaited()
+
+    async def test_model_and_runtime_failures_are_reflected_with_provenance(
+        self, monkeypatch
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from atlas import server
+
+        class Socket:
+            def __init__(self) -> None:
+                self.events: list[dict] = []
+
+            async def send_json(self, event: dict) -> None:
+                self.events.append(event)
+
+        memory_mock = SimpleNamespace(
+            save_message=AsyncMock(),
+            record_agent_reflection=AsyncMock(),
+            mark_agent_reflections_recovered=AsyncMock(),
+        )
+        monkeypatch.setattr(server, "memory", memory_mock)
+
+        for category in ("model", "runtime"):
+            socket = Socket()
+            conn_id = f"{category}-failure-test"
+            run = server.RunState(f"{category}-failure-run", "conv-3", "test-model")
+
+            if category == "model":
+                async def events(**kwargs):
+                    yield {"type": "error", "category": "model", "detail": "provider unavailable"}
+            else:
+                async def events(**kwargs):
+                    raise RuntimeError("runtime crashed")
+                    yield  # Make this an async generator.
+
+            monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=events))
+            monkeypatch.setitem(server.runtime_mgr.connections, conn_id, socket)
+            try:
+                await server._execute_run(conn_id, run, "perform work", None)
+            finally:
+                server.runtime_mgr.connections.pop(conn_id, None)
+
+        calls = memory_mock.record_agent_reflection.await_args_list
+        assert [(call.kwargs["category"], call.kwargs["source_run_id"])
+                for call in calls] == [
+            ("model", "model-failure-run"),
+            ("runtime", "runtime-failure-run"),
+        ]
 
     async def test_run_start_emits_agent_events(self, monkeypatch) -> None:
         """A run.start message should produce agent_event envelopes."""

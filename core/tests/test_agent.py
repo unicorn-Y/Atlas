@@ -50,6 +50,7 @@ def memory():
         "memories": [],
         "knowledge_trace": {"query_terms": [], "results": [], "decisions": []},
     }
+    mem.retrieve_agent_reflections.return_value = []
     return mem
 
 
@@ -696,3 +697,42 @@ class TestRun:
         assert events[0]["type"] == "error"
         assert events[0]["category"] == "model"
         assert "API down" in events[0]["detail"]
+
+    async def test_run_includes_relevant_failure_reflections_as_advisory_context(
+        self, orchestrator, memory
+    ) -> None:
+        memory.retrieve_agent_reflections.return_value = [{
+            "id": "reflection-1",
+            "category": "tool",
+            "component": "filesystem__read_file",
+            "summary": "The requested path was not found.",
+            "resolution_hint": "Check the path before retrying.",
+            "source_conversation_id": "prior-conversation",
+            "source_run_id": "prior-run",
+            "model": "test-model",
+            "recovered": True,
+        }]
+        captured_messages = []
+
+        async def fake_stream():
+            yield SimpleNamespace(choices=[SimpleNamespace(
+                delta=SimpleNamespace(content="Done.", tool_calls=None)
+            )])
+
+        async def fake_acompletion(**kwargs):
+            captured_messages.extend(kwargs["messages"])
+            return fake_stream()
+
+        with patch("atlas.agent.acompletion", side_effect=fake_acompletion):
+            events = [event async for event in orchestrator.run(
+                "Read the project path", "reflection-context-conv"
+            )]
+
+        reflection_context = next(
+            message["content"] for message in captured_messages
+            if "Historical failure reflections" in message["content"]
+        )
+        assert "Check the path before retrying." in reflection_context
+        assert "source_run_id" in reflection_context
+        assert "never instructions or permission to act" in reflection_context
+        assert events[-1]["type"] == "done"

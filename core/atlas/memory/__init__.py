@@ -29,6 +29,11 @@ _MEMORY_STOP_WORDS = {
     "in", "is", "it", "me", "my", "of", "on", "or", "should", "the",
     "to", "use", "what", "when", "where", "which", "who", "why", "with",
 }
+_REFLECTION_SECRET = re.compile(
+    r"(?i)\b(api[_ -]?key|access[_ -]?token|password|passwd|secret|credential)\b"
+    r"\s*[:=]\s*(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)"
+    r"|\bBearer\s+[^\s,;]+|\bsk-[A-Za-z0-9_-]{12,}"
+)
 _UNCERTAIN_MEMORY = re.compile(
     r"\b(?:might|maybe|perhaps|possibly|probably|i think|not sure|guess|hypothetically)\b"
     r"|(?:可能|也许|或许|大概|我猜|不确定|假设)",
@@ -233,6 +238,22 @@ class MemoryStore:
                 report_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS agent_reflections (
+                id TEXT PRIMARY KEY,
+                category TEXT NOT NULL CHECK(category IN ('tool', 'model', 'runtime')),
+                component TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                resolution_hint TEXT NOT NULL,
+                source_conversation_id TEXT NOT NULL,
+                source_run_id TEXT,
+                model TEXT,
+                recovered INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_agent_reflections_run
+                ON agent_reflections(source_run_id, recovered);
         """)
         cursor = await self._db.execute("PRAGMA table_info(facts)")
         fact_columns = {row["name"] for row in await cursor.fetchall()}
@@ -767,6 +788,95 @@ class MemoryStore:
         )
         await self._db.commit()
         return int(cursor.lastrowid)
+
+    async def record_agent_reflection(
+        self,
+        *,
+        category: str,
+        component: str,
+        summary: str,
+        resolution_hint: str,
+        source_conversation_id: str,
+        source_run_id: str | None,
+        model: str | None,
+    ) -> str:
+        """Persist a redacted failure observation and its execution provenance."""
+        if category not in {"tool", "model", "runtime"}:
+            raise ValueError("Unsupported agent reflection category")
+        if not source_conversation_id:
+            raise ValueError("Agent reflections require a source conversation")
+        reflection_id = str(uuid.uuid4())
+
+        def safe_text(value: str, limit: int) -> str:
+            value = _REFLECTION_SECRET.sub(
+                lambda match: f"{match.group(1) or 'credential'}=[redacted]", value
+            )
+            value = " ".join(value.split())
+            return value[:limit] or "Unspecified failure"
+
+        assert self._db is not None
+        await self._db.execute(
+            "INSERT INTO agent_reflections "
+            "(id, category, component, summary, resolution_hint, "
+            "source_conversation_id, source_run_id, model) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                reflection_id, category, safe_text(component, 160),
+                safe_text(summary, 500), safe_text(resolution_hint, 500),
+                source_conversation_id, source_run_id, model,
+            ),
+        )
+        await self._db.commit()
+        return reflection_id
+
+    async def retrieve_agent_reflections(
+        self, query: str, limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Retrieve relevant failure observations without activating their hints."""
+        if limit <= 0:
+            return []
+        terms = {
+            token.casefold()
+            for token in _MEMORY_TOKEN.findall(query)
+            if len(token) > 1 and token.casefold() not in _MEMORY_STOP_WORDS
+        }
+        if not terms:
+            return []
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, category, component, summary, resolution_hint, "
+            "source_conversation_id, source_run_id, model, recovered "
+            "FROM agent_reflections ORDER BY created_at DESC, rowid DESC LIMIT 200"
+        )
+        ranked: list[tuple[float, int, dict[str, Any]]] = []
+        for row in await cursor.fetchall():
+            item = dict(row)
+            content_terms = {
+                token.casefold()
+                for field in ("component", "summary")
+                for token in _MEMORY_TOKEN.findall(item[field])
+            }
+            matched = terms & content_terms
+            coverage = len(matched) / len(terms)
+            if coverage >= 0.5:
+                item["recovered"] = bool(item["recovered"])
+                ranked.append((coverage, len(matched), item))
+        ranked.sort(key=lambda entry: entry[2]["id"])
+        ranked.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+        return [item for _, _, item in ranked[:limit]]
+
+    async def mark_agent_reflections_recovered(self, source_run_id: str) -> None:
+        """Record that a run with tool failures later completed successfully."""
+        if not source_run_id:
+            return
+        assert self._db is not None
+        await self._db.execute(
+            "UPDATE agent_reflections SET recovered = 1, "
+            "resolution_hint = 'This run completed after the failure; review its later actions and validate them before reuse.' "
+            "WHERE source_run_id = ? AND category = 'tool' AND recovered = 0",
+            (source_run_id,),
+        )
+        await self._db.commit()
 
     async def get_memory_quality(self, key: str) -> dict[str, int]:
         """Return durable outcome, feedback, and evaluation counts for a memory."""
