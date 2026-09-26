@@ -10,9 +10,10 @@ Provides a thin wrapper over APScheduler's AsyncScheduler with:
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Coroutine
@@ -66,6 +67,10 @@ class ScheduledTask:
     last_run_at: str = ""  # ISO 8601, empty if never
     next_run_at: str = ""  # computed from APScheduler
     run_count: int = 0
+    goal: str = ""
+    goal_status: str = "pending"
+    goal_progress: dict[str, Any] = field(default_factory=dict)
+    goal_events: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for API / TOML persistence."""
@@ -83,6 +88,10 @@ class ScheduledTask:
             "last_run_at": self.last_run_at,
             "next_run_at": self.next_run_at,
             "run_count": self.run_count,
+            "goal": self.goal,
+            "goal_status": self.goal_status,
+            "goal_progress": self.goal_progress,
+            "goal_events": self.goal_events,
         }
 
     @classmethod
@@ -102,6 +111,10 @@ class ScheduledTask:
             last_run_at=d.get("last_run_at", ""),
             next_run_at=d.get("next_run_at", ""),
             run_count=d.get("run_count", 0),
+            goal=d.get("goal", ""),
+            goal_status=d.get("goal_status", "pending"),
+            goal_progress=d.get("goal_progress", {}),
+            goal_events=d.get("goal_events", []),
         )
 
 
@@ -126,6 +139,14 @@ def _load_tasks_from_toml(path: Path) -> dict[str, ScheduledTask]:
     tasks: dict[str, ScheduledTask] = {}
     for task_id, task_data in data.get("tasks", {}).items():
         task_data["id"] = task_id
+        for field_name in ("goal_progress", "goal_events"):
+            serialized = task_data.pop(f"{field_name}_json", None)
+            if serialized:
+                try:
+                    task_data[field_name] = json.loads(serialized)
+                except (TypeError, ValueError):
+                    log.warning("scheduler.goal_state_load_error", task_id=task_id,
+                                field=field_name)
         try:
             tasks[task_id] = ScheduledTask.from_dict(task_data)
         except (KeyError, ValueError) as e:
@@ -155,6 +176,20 @@ def _save_tasks_to_toml(path: Path, tasks: dict[str, ScheduledTask]) -> None:
         lines.append(f'last_run_at = "{task.last_run_at}"')
         lines.append(f'next_run_at = "{task.next_run_at}"')
         lines.append(f"run_count = {task.run_count}")
+        lines.append(f'goal = "{_escape_toml(task.goal)}"')
+        lines.append(f'goal_status = "{task.goal_status}"')
+        progress_json = _escape_toml(
+            json.dumps(task.goal_progress, ensure_ascii=False)
+        )
+        events_json = _escape_toml(
+            json.dumps(task.goal_events, ensure_ascii=False)
+        )
+        lines.append(
+            f'goal_progress_json = "{progress_json}"'
+        )
+        lines.append(
+            f'goal_events_json = "{events_json}"'
+        )
 
         if task.tags:
             tag_list = ", ".join(f'"{t}"' for t in task.tags)
@@ -254,6 +289,13 @@ class AtlasScheduler:
             return
 
         self._tasks = _load_tasks_from_toml(self._path)
+        for task in self._tasks.values():
+            if task.goal and task.goal_status == "running":
+                task.goal_status = "interrupted"
+                self._append_goal_event(task, "goal.interrupted", {
+                    "detail": "The service restarted during goal execution.",
+                })
+        self._persist()
         log.info("scheduler.loaded", count=len(self._tasks), path=str(self._path))
 
         cfg = get_config()
@@ -300,6 +342,43 @@ class AtlasScheduler:
     def _persist(self) -> None:
         """Save current tasks to TOML."""
         _save_tasks_to_toml(self._path, self._tasks)
+
+    @staticmethod
+    def _append_goal_event(
+        task: ScheduledTask, event: str, data: dict[str, Any],
+    ) -> None:
+        task.goal_events.append({
+            "event": event,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "data": data,
+        })
+
+    async def update_goal_state(
+        self,
+        task_id: str,
+        *,
+        status: str | None = None,
+        progress: dict[str, Any] | None = None,
+    ) -> ScheduledTask | None:
+        task = self._tasks.get(task_id)
+        if task is None or not task.goal:
+            return None
+        if status is not None:
+            task.goal_status = status
+        if progress is not None:
+            task.goal_progress = progress
+        self._persist()
+        return task
+
+    async def record_goal_event(
+        self, task_id: str, event: str, data: dict[str, Any],
+    ) -> ScheduledTask | None:
+        task = self._tasks.get(task_id)
+        if task is None or not task.goal:
+            return None
+        self._append_goal_event(task, event, data)
+        self._persist()
+        return task
 
     # -- executor factory ------------------------------------------------------
 

@@ -35,6 +35,7 @@ def _orchestrator():
     memory.get_agent_context_with_trace.return_value = {
         "memories": [], "knowledge_trace": {"decisions": [], "query_terms": []},
     }
+    memory.retrieve_agent_reflections.return_value = []
     mcp = MagicMock()
     mcp.get_tools_for_llm.return_value = []
     return AgentOrchestrator(model, memory, mcp)

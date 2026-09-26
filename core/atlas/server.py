@@ -37,6 +37,69 @@ skill_mgr: SkillManager | None = None
 scheduler: AtlasScheduler | None = None
 
 
+async def _run_scheduled_goal(task_id: str, message: str) -> None:
+    """Run a scheduled goal through the normal planner and tool gates."""
+    if scheduler is None:
+        return
+    task = scheduler.get_task(task_id)
+    if task is None or not task.goal:
+        return
+    if orchestrator is None:
+        await scheduler.update_goal_state(task_id, status="failed")
+        await scheduler.record_goal_event(task_id, "goal.failed", {
+            "detail": "Agent orchestrator is unavailable.",
+        })
+        return
+
+    await scheduler.update_goal_state(task_id, status="running")
+    await scheduler.record_goal_event(task_id, "goal.triggered", {})
+    approval_required = False
+
+    async def approval_callback(
+        event_id: str, tool_name: str, tool_args: dict[str, Any],
+    ) -> str:
+        nonlocal approval_required
+        approval_required = True
+        await scheduler.update_goal_state(task_id, status="awaiting_approval")
+        await scheduler.record_goal_event(task_id, "approval.required", {
+            "approval_id": event_id,
+            "tool": tool_name,
+            "decision": "denied; explicit user approval is required",
+        })
+        return "deny"
+
+    async def persist_plan(value: dict[str, Any]) -> None:
+        await scheduler.update_goal_state(task_id, status="running", progress=value)
+        await scheduler.record_goal_event(task_id, "plan.updated", {"plan": value})
+
+    try:
+        async for event in orchestrator.run(
+            message=message,
+            conversation_id=f"scheduled-goal-{task_id}",
+            approval_callback=approval_callback,
+            plan_state=task.goal_progress or None,
+            plan_update_callback=persist_plan,
+        ):
+            event_type = event.get("type", "unknown")
+            if event_type not in {"plan_updated", "approval_required"}:
+                await scheduler.record_goal_event(
+                    task_id,
+                    f"execution.{event_type}",
+                    {key: event[key] for key in ("category",) if key in event},
+                )
+            if event_type == "error":
+                await scheduler.update_goal_state(task_id, status="failed")
+            elif event_type == "done" and not approval_required:
+                await scheduler.update_goal_state(task_id, status="completed")
+    except Exception as exc:
+        await scheduler.update_goal_state(
+            task_id, status="awaiting_approval" if approval_required else "failed",
+        )
+        await scheduler.record_goal_event(task_id, "execution.error", {
+            "detail": str(exc),
+        })
+
+
 # ---------------------------------------------------------------------------
 # Lifespan (replaces deprecated @app.on_event)
 # ---------------------------------------------------------------------------
@@ -66,7 +129,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     cfg = get_config()
     if cfg.scheduler_enabled:
-        scheduler = AtlasScheduler()
+        scheduler = AtlasScheduler(agent_callback=_run_scheduled_goal)
         await scheduler.start()
 
     yield  # app is running
@@ -157,6 +220,16 @@ class ScheduleUpdateRequest(BaseModel):
     action: str | None = None
     status: str | None = None  # "active" | "paused"
     tags: list[str] | None = None
+
+
+class GoalCreateRequest(BaseModel):
+    id: str
+    name: str
+    goal: str
+    description: str = ""
+    trigger_type: str = "cron"
+    trigger_args: dict[str, Any] = {}
+    tags: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -753,6 +826,56 @@ async def run_schedule_now(task_id: str) -> dict[str, str]:
     if not ok:
         raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
     return {"status": "ok", "task_id": task_id}
+
+
+@app.get("/api/goals")
+async def list_goals() -> dict[str, Any]:
+    assert scheduler is not None
+    goals = [task for task in scheduler.list_tasks() if task.goal]
+    return {"count": len(goals), "goals": [task.to_dict() for task in goals]}
+
+
+@app.post("/api/goals", status_code=201)
+async def create_goal(req: GoalCreateRequest) -> dict[str, Any]:
+    assert scheduler is not None
+    goal = req.goal.strip()
+    if not goal:
+        raise HTTPException(status_code=422, detail="Goal must not be empty")
+    task = ScheduledTask(
+        id=req.id,
+        name=req.name,
+        description=req.description,
+        trigger_type=TriggerType(req.trigger_type),
+        trigger_args=req.trigger_args,
+        action=f"agent:{goal}",
+        tags=req.tags,
+        goal=goal,
+    )
+    try:
+        result = await scheduler.add_task(task)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    await scheduler.record_goal_event(result.id, "goal.created", {})
+    return result.to_dict()
+
+
+@app.get("/api/goals/{goal_id}")
+async def get_goal(goal_id: str) -> dict[str, Any]:
+    assert scheduler is not None
+    task = scheduler.get_task(goal_id)
+    if not task or not task.goal:
+        raise HTTPException(status_code=404, detail=f"Scheduled goal not found: {goal_id}")
+    return task.to_dict()
+
+
+@app.post("/api/goals/{goal_id}/run")
+async def run_goal_now(goal_id: str) -> dict[str, str]:
+    assert scheduler is not None
+    task = scheduler.get_task(goal_id)
+    if not task or not task.goal:
+        raise HTTPException(status_code=404, detail=f"Scheduled goal not found: {goal_id}")
+    await scheduler.run_now(goal_id)
+    return {"status": "ok", "goal_id": goal_id}
 
 
 # ---------------------------------------------------------------------------
