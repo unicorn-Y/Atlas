@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ResumeRequest, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, ToolListResponse } from './types';
+import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ResumeRequest, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -115,6 +115,8 @@ export class BackendAdapter {
     if (this.live) await this.request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
   async getTools(): Promise<ToolListResponse> { return this.live ? this.request('/api/tools') : mockTools; }
+  async getSkills(): Promise<SkillInfo[]> { return this.live ? (await this.request<{ skills: SkillInfo[] }>('/api/skills')).skills : []; }
+  async getAgentCapabilities(): Promise<AgentCapabilityInfo[]> { return this.live ? (await this.request<{ capabilities: AgentCapabilityInfo[] }>('/api/agent/capabilities')).capabilities : []; }
   async getFacts(): Promise<Fact[]> { return this.live ? this.request('/api/facts') : []; }
   async saveFact(fact: Pick<Fact, 'key' | 'value' | 'category'>): Promise<void> {
     if (this.live) await this.request('/api/facts', { method: 'POST', body: JSON.stringify(fact) });

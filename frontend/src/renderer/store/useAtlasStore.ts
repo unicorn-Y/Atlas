@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { ConfigurationResponse, ConversationMessage, ConversationSummary, CustomModelRequest, ModelListResponse, RuntimeEventEnvelope, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentCapabilityInfo, ConfigurationResponse, ConversationMessage, ConversationSummary, CustomModelRequest, ModelListResponse, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -21,6 +21,8 @@ interface AtlasState {
   model: string;
   models: ModelListResponse['models'];
   tools: ToolListResponse['tools'];
+  skills: SkillInfo[];
+  capabilities: AgentCapabilityInfo[];
   conversations: ConversationSummary[];
   conversationsLoading: boolean;
   loadingMessagesConversationId: string | null;
@@ -37,7 +39,7 @@ interface AtlasState {
   saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
   addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
   testModelConnection: (model?: string) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: string[]) => Promise<void>;
   createRun: (conversationId: string, title: string) => AgentRun;
   appendEvent: (event: AgentEvent) => void;
   getRun: (runId: string) => AgentRun | undefined;
@@ -58,17 +60,17 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
   apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, settingsBusy: false, connectionTest: null,
   mode: 'mock', connected: false, busy: false, paused: false, error: null,
   model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
-  runs: [], activeRunId: null, artifacts: [],
+  runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [],
 
   initialize: async () => {
     set({ conversationsLoading: true });
     const mode = await backend.initialize();
     set({ mode, connected: mode === 'backend', error: mode === 'mock' ? backend.availabilityError : null });
     try {
-      const [configuration, conversations, toolList] = await Promise.all([backend.getConfiguration(), backend.getConversations(), backend.getTools()]);
+      const [configuration, conversations, toolList, skills, capabilities] = await Promise.all([backend.getConfiguration(), backend.getConversations(), backend.getTools(), backend.getSkills(), backend.getAgentCapabilities()]);
       const preferredModel = getPreferredModel();
       const model = mode === 'backend' ? configuration.current : preferredModel || configuration.current;
-      set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, conversations, tools: toolList.tools, conversationsLoading: false });
+      set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, conversations, tools: toolList.tools, skills, capabilities, conversationsLoading: false });
       if (conversations.length) await get().openConversation(conversations[0]);
     } catch (error) {
       set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '无法读取后端数据', conversationsLoading: false });
@@ -204,8 +206,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
     return { runs, artifacts: state.artifacts.filter((artifact) => artifact.runId !== runId), activeRunId, busy: runs.some((run) => !terminal.has(run.status)), paused: active?.status === 'paused' };
   }),
 
-  sendMessage: async (content) => {
-    const message = content.trim();
+  sendMessage: async (content, attachments = []) => {
+    const message = content.trim() || (attachments.length ? 'Please inspect the attached image(s).' : '');
     if (!message) return;
     if (!get().activeConversationId) await get().createConversation(message.slice(0, 40) || 'New conversation');
     let conversationId = get().activeConversationId;
@@ -227,7 +229,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
       const event = normalizeRuntimeEvent(envelope);
       if (event) get().appendEvent(event);
     };
-    void backend.startRun({ type: 'run.start', run_id: run.id, content: message, conversation_id: run.conversationId, model: get().model }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
+    void backend.startRun({ type: 'run.start', run_id: run.id, content: message, conversation_id: run.conversationId, model: get().model, attachments }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
       .catch((error) => {
         set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '运行启动失败' });
         const current = get().getRun(run.id);

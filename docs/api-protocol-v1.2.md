@@ -26,9 +26,12 @@ Start a run on `/ws/chat`. The client creates `run_id` before sending the comman
   "run_id": "run_01",
   "content": "Review the project and produce a report",
   "conversation_id": "conversation_01",
-  "model": "gpt-5.6-luna"
+  "model": "gpt-5.6-luna",
+  "attachments": ["data:image/png;base64,..."]
 }
 ```
+
+`attachments` is optional and accepts up to four inline PNG, JPEG, or WebP images. Each image is limited to 4 MiB and the combined decoded size to 8 MiB. Image bytes are used only for the current model run and are not stored in conversation history. The selected model provider must support image input.
 
 ## Event
 

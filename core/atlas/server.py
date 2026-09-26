@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+import re
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -1820,6 +1822,18 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         return
 
     content = data.get("content", "")
+    try:
+        image_attachments = _validated_image_attachments(data.get("attachments"))
+    except ValueError as exc:
+        invalid_run = RunState(
+            run_id,
+            str(data.get("conversation_id", "")),
+            str(data.get("model", "")),
+        )
+        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation", "detail": str(exc),
+        }))
+        return
     resume_from = data.get("resume_from")
     recovered_plan = None
     prior_run = runtime_mgr.runs.get(resume_from) if isinstance(resume_from, str) else None
@@ -1842,7 +1856,11 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
 
     # Start the run in background so we can keep receiving messages
     run.task = asyncio.create_task(
-        _execute_run(conn_id, run, content, model_id, plan_state=recovered_plan)
+        _execute_run(
+            conn_id, run, content, model_id,
+            plan_state=recovered_plan,
+            image_attachments=image_attachments,
+        )
     )
 
 
@@ -1897,12 +1915,39 @@ def _map_tool_runtime_event(
     return None
 
 
+def _validated_image_attachments(value: Any) -> list[str]:
+    """Accept a small set of inline raster images for a single model run."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > 4:
+        raise ValueError("attachments must contain at most four images")
+    result: list[str] = []
+    total_bytes = 0
+    pattern = re.compile(r"data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})\Z")
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError("image attachments must be data URLs")
+        match = pattern.fullmatch(item)
+        if not match:
+            raise ValueError("only PNG, JPEG, and WebP data URLs are accepted")
+        try:
+            decoded = base64.b64decode(match.group(2), validate=True)
+        except ValueError as exc:
+            raise ValueError("image attachment has invalid base64 data") from exc
+        total_bytes += len(decoded)
+        if len(decoded) > 4 * 1024 * 1024 or total_bytes > 8 * 1024 * 1024:
+            raise ValueError("image attachments exceed the 8 MiB run limit")
+        result.append(item)
+    return result
+
+
 async def _execute_run(
     conn_id: str,
     run: RunState,
     content: str,
     model_id: str | None,
     plan_state: dict[str, Any] | None = None,
+    image_attachments: list[str] | None = None,
 ) -> None:
     """Execute agent run, emitting Runtime Event envelopes."""
     assert orchestrator is not None
@@ -2024,6 +2069,7 @@ async def _execute_run(
             plan_state=plan_state,
             plan_update_callback=persist_plan,
             source_run_id=run.run_id,
+            image_attachments=image_attachments,
         ):
             if await check_pause_cancel():
                 run.status = "cancelled"

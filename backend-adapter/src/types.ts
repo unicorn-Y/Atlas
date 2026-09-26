@@ -72,6 +72,20 @@ export interface RunStartRequest {
   content: string;
   conversation_id: string;
   model?: string;
+  attachments?: string[];
+}
+
+export interface SkillInfo {
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+}
+
+export interface AgentCapabilityInfo {
+  name: string;
+  description: string;
+  source: string;
 }
 
 export interface RuntimeEventEnvelope {

@@ -384,6 +384,7 @@ class AgentOrchestrator:
         force_plan: bool = False,
         evaluate_goal: bool = False,
         source_run_id: str | None = None,
+        image_attachments: list[str] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -609,6 +610,17 @@ class AgentOrchestrator:
             elif msg["role"] == "assistant":
                 initial_messages.append(AIMessage(content=msg["content"]))
 
+        # Image bytes are transient run input. Keep the durable conversation
+        # text small while passing supported data URLs to vision-capable models.
+        if (
+            image_attachments
+            and initial_messages
+            and isinstance(initial_messages[-1], HumanMessage)
+        ):
+            initial_messages[-1] = HumanMessage(
+                content=self._multimodal_content(message, image_attachments)
+            )
+
         async def execute_graph() -> dict[str, Any]:
             try:
                 return await self._graph.ainvoke({
@@ -710,6 +722,17 @@ class AgentOrchestrator:
             await asyncio.gather(graph_task, return_exceptions=True)
 
     # -- helpers -------------------------------------------------------------
+
+    @staticmethod
+    def _multimodal_content(message: str, image_attachments: list[str]) -> list[dict[str, Any]]:
+        """Build the LiteLLM-compatible user content for a transient image turn."""
+        return [
+            {"type": "text", "text": message or "Please describe these images."},
+            *[
+                {"type": "image_url", "image_url": {"url": image}}
+                for image in image_attachments
+            ],
+        ]
 
     @staticmethod
     def _response_text(response: Any) -> str:
