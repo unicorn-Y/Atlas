@@ -84,6 +84,56 @@ def evaluate_recall(
     }
 
 
+def evaluate_knowledge_retrieval(
+    cases: Sequence[Mapping[str, Any]], *, limit: int = 1,
+) -> dict[str, int | float | bool]:
+    """Measure ranked knowledge-view retrieval, no-memory precision, and evidence."""
+    if limit < 0:
+        raise ValueError("limit must be non-negative")
+
+    relevant = 0
+    hits = 0
+    misses = 0
+    false_positives = 0
+    retrieved_count = 0
+    evidence_complete = 0
+    for case in cases:
+        expected = case.get("expected_key")
+        retrieved = list(case.get("retrieved", ()))[:limit]
+        retrieved_count += len(retrieved)
+        evidence_complete += sum(
+            isinstance(item.get("evidence"), Sequence)
+            and not isinstance(item.get("evidence"), (str, bytes))
+            and bool(item.get("evidence"))
+            for item in retrieved
+        )
+        if expected is None:
+            if retrieved:
+                false_positives += 1
+            continue
+
+        relevant += 1
+        if any(item.get("key") == expected for item in retrieved):
+            hits += 1
+        else:
+            misses += 1
+
+    evidence_coverage = evidence_complete / retrieved_count if retrieved_count else 1.0
+    passed = misses == 0 and false_positives == 0 and evidence_complete == retrieved_count
+    return {
+        "case_count": len(cases),
+        "relevant_case_count": relevant,
+        f"hits_at_{limit}": hits,
+        "misses": misses,
+        "false_positive_cases": false_positives,
+        "retrieved_item_count": retrieved_count,
+        "evidence_complete_items": evidence_complete,
+        f"recall_at_{limit}": hits / relevant if relevant else 1.0,
+        "evidence_coverage": evidence_coverage,
+        "passed": passed,
+    }
+
+
 def evaluate_memory_health(
     memories: Sequence[Mapping[str, Any]],
     *,

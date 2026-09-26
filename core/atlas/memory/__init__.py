@@ -972,25 +972,35 @@ class MemoryStore:
         }
         if not terms:
             return []
-        ranked: list[tuple[int, str, dict[str, Any]]] = []
+        ranked: list[tuple[float, int, str, dict[str, Any]]] = []
         for view in await self.generate_user_knowledge():
             key_terms = {
                 token for token in re.split(r"[\W_]+", view["key"].casefold()) if token
             }
-            value_terms = {
+            evidence_key_terms = {
                 token.casefold()
-                for token in re.split(r"[\W_]+", view["value"])
+                for item in view["evidence"]
+                for token in re.split(r"[\W_]+", item["key"])
                 if token
             }
+            value_terms = {
+                token.casefold()
+                for token in _MEMORY_TOKEN.findall(view["value"])
+            }
+            matched_terms = terms & (key_terms | evidence_key_terms | value_terms)
+            coverage = len(matched_terms) / len(terms)
+            if coverage < 0.5:
+                continue
             score = sum(
-                4 if term in key_terms else 1 if term in value_terms else 0
+                5 if term in evidence_key_terms else
+                4 if term in key_terms else
+                1 if term in value_terms else 0
                 for term in terms
             )
-            if score:
-                ranked.append((score, view["key"], view))
-        ranked.sort(key=lambda item: item[1])
-        ranked.sort(key=lambda item: item[0], reverse=True)
-        return [view for _, _, view in ranked[:limit]]
+            ranked.append((coverage, score, view["key"], view))
+        ranked.sort(key=lambda item: item[2])
+        ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return [view for _, _, _, view in ranked[:limit]]
 
     async def get_active_context(
         self, query: str, limit: int = 10

@@ -11,6 +11,7 @@ from atlas.memory import MemoryStore
 from atlas.memory.quality import (
     evaluate_memory_quality,
     evaluate_memory_optimization,
+    evaluate_knowledge_retrieval,
     evaluate_recall,
 )
 
@@ -99,6 +100,43 @@ async def test_golden_recall_cases_produce_numeric_metrics(store: MemoryStore) -
         "misses": 0,
         "false_positive_cases": 0,
         "recall_at_3": 1.0,
+    }
+
+
+async def test_knowledge_retrieval_golden_cases_measure_ranking_and_evidence(
+    store: MemoryStore,
+) -> None:
+    for key, value, category in [
+        ("project_language", "Python", "project"),
+        ("project_framework", "FastAPI", "project"),
+        ("user_language", "Python", "personal"),
+        ("user_timezone", "Asia/Hong_Kong", "personal"),
+    ]:
+        await store.set_fact(key, value, category)
+
+    cases = []
+    for query, expected_key in [
+        ("project language Python", "user_knowledge_project"),
+        ("personal language timezone", "user_knowledge_personal"),
+        ("What is my phone number?", None),
+    ]:
+        cases.append({
+            "expected_key": expected_key,
+            "retrieved": await store.retrieve_user_knowledge(query, limit=1),
+        })
+
+    report = evaluate_knowledge_retrieval(cases, limit=1)
+    assert report == {
+        "case_count": 3,
+        "relevant_case_count": 2,
+        "hits_at_1": 2,
+        "misses": 0,
+        "false_positive_cases": 0,
+        "retrieved_item_count": 2,
+        "evidence_complete_items": 2,
+        "recall_at_1": 1.0,
+        "evidence_coverage": 1.0,
+        "passed": True,
     }
 
 

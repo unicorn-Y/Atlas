@@ -258,6 +258,24 @@ class TestAgentContextRanking:
         assert context[-1] == first[0]
         assert await store.retrieve_user_knowledge("irrelevant question") == []
 
+    async def test_knowledge_ranking_prefers_matching_category_and_evidence_keys(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("project_language", "Python", category="project")
+        await store.set_fact("project_framework", "FastAPI", category="project")
+        await store.set_fact("user_language", "Python", category="personal")
+        await store.set_fact("user_timezone", "Asia/Hong_Kong", category="personal")
+
+        first = await store.retrieve_user_knowledge("project language Python")
+        second = await store.retrieve_user_knowledge("project language Python")
+
+        assert first == second
+        assert first[0]["key"] == "user_knowledge_project"
+        assert all(view["evidence"] for view in first)
+        assert await store.retrieve_user_knowledge(
+            "project framework about phone number today"
+        ) == []
+
     async def test_knowledge_excludes_pending_and_unverified_memories(
         self, store: MemoryStore
     ) -> None:
