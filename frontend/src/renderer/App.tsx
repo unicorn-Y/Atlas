@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, FileText, Mic, MoreHorizontal, PanelRight, Paperclip, Pause, Play, Plus, Send, Settings, Square, Volume2, X } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, FileText, Mic, MoreHorizontal, PanelRight, Paperclip, Pause, Play, Plus, Search, Send, Settings, Square, Volume2, X } from 'lucide-react';
 import { useAtlasStore } from './store/useAtlasStore';
 import styles from './App.module.css';
 import ConversationActivity from './components/ConversationActivity';
 import ConversationMessage from './components/ConversationMessage';
 import SettingsPage from './pages/SettingsPage';
+import SkillDiscoveryPage from './pages/SkillDiscoveryPage';
 
 type InspectorTab = 'context' | 'artifacts' | 'activity' | 'skills';
 type SpeechRecognitionLike = {
@@ -18,7 +19,7 @@ type SpeechRecognitionLike = {
 };
 
 export default function App() {
-  const [page, setPage] = useState<'chat' | 'settings'>('chat');
+  const [page, setPage] = useState<'chat' | 'settings' | 'skills'>('chat');
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [modelOpen, setModelOpen] = useState(false);
   const [tab, setTab] = useState<InspectorTab>('context');
@@ -147,6 +148,7 @@ export default function App() {
       <div className={styles.brand}><div className={styles.brandMark}>A</div><div><div className={styles.brandName}>Atlas</div><div className={styles.brandTag}>YOUR PERSONAL AGENT</div></div></div>
       <nav className={styles.navList} aria-label="主导航">
         <button className={`${styles.navItem} ${page === 'chat' ? styles.active : ''}`} onClick={() => setPage('chat')}><BookOpen /><span>对话</span></button>
+        <button className={`${styles.navItem} ${page === 'skills' ? styles.active : ''}`} onClick={() => setPage('skills')}><Search /><span>技能发现</span></button>
       </nav>
       <div className={styles.sectionLabel}>最近对话 <button aria-label="新建对话" disabled={store.creatingConversation} onClick={() => { setPage('chat'); void store.createConversation(); }}><Plus size={15} /></button></div>
       <div className={styles.historyList}>
@@ -162,7 +164,7 @@ export default function App() {
     </aside>
 
     <main className={styles.main}>
-      {page === 'settings' ? <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; localStorage.setItem('atlas.preference.username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setPage('chat')} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} /> : <>
+      {page === 'settings' ? <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; localStorage.setItem('atlas.preference.username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setPage('chat')} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} /> : page === 'skills' ? <SkillDiscoveryPage apiBaseUrl={store.apiBaseUrl} /> : <>
         <header className={styles.topbar}>
           <div className={styles.topbarTitle}>对话 <span>/</span> {activeConversation?.title ?? '新对话'}</div>
           <div className={styles.topbarActions}>

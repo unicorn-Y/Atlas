@@ -80,3 +80,34 @@ def register_skill_capabilities(registry: AgentCapabilityRegistry, skill_manager
             handler=activate,
             source="skill",
         )
+
+
+def register_skill_discovery_capability(
+    capabilities: AgentCapabilityRegistry, skill_registry: Any,
+) -> None:
+    """Expose an explicit, read-only discovery primitive to Planner and Agent callers."""
+    from atlas.skills.discovery import SkillDiscovery
+
+    discovery = SkillDiscovery(skill_registry)
+
+    def discover(inputs: dict[str, Any]) -> dict[str, Any]:
+        accepted = {
+            key: inputs[key]
+            for key in (
+                "query", "name", "capability", "tool", "status", "source", "limit", "offset",
+            )
+            if key in inputs
+        }
+        if "query" not in accepted and isinstance(inputs.get("task"), str):
+            accepted["query"] = inputs["task"]
+        return discovery.discover(**accepted)
+
+    capabilities.register(
+        "skill.discovery.search",
+        description=(
+            "Search registered skills for a task and return ranked candidates "
+            "without activating them."
+        ),
+        handler=discover,
+        source="skill-registry",
+    )

@@ -18,7 +18,11 @@ from fastapi import Body, FastAPI, HTTPException, Query, Response, WebSocket, We
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from atlas.agent.capabilities import AgentCapabilityRegistry, register_skill_capabilities
+from atlas.agent.capabilities import (
+    AgentCapabilityRegistry,
+    register_skill_capabilities,
+    register_skill_discovery_capability,
+)
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.agent.planning import TaskPlan
 from atlas.config import get_config
@@ -26,6 +30,7 @@ from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
 from atlas.skills import SkillManager
+from atlas.skills.discovery import SkillDiscovery
 from atlas.skills.registry import SkillRegistry
 from atlas.tools.mcp_client import MCPClient
 
@@ -386,9 +391,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 "tools": [],
                 "requirements": skill.dependencies,
                 "examples": [],
+                "aliases": [],
+                "tags": skill.tags,
+                "category": skill.category,
+                "keywords": skill.tags,
+                "use_cases": [],
             }, source="local")
     capabilities = AgentCapabilityRegistry()
     register_skill_capabilities(capabilities, skill_mgr)
+    register_skill_discovery_capability(capabilities, skill_registry)
 
     orchestrator = AgentOrchestrator(
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
@@ -1363,6 +1374,41 @@ async def list_skills(
         "categories": skill_mgr.categories,
         "skills": [s.to_dict() for s in skills],
     }
+
+
+@app.get("/api/skills/discover")
+async def discover_skills(
+    q: str = Query(""),
+    name: str | None = Query(None),
+    capability: str | None = Query(None),
+    tool: str | None = Query(None),
+    status: str = Query("active"),
+    source: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    """Return explainable, ranked candidates from the local Skill Registry."""
+    assert skill_registry is not None
+    try:
+        return SkillDiscovery(skill_registry).discover(
+            query=q, name=name, capability=capability, tool=tool, status=status,
+            source=source, limit=limit, offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+@app.get("/api/skills/discover/{name}")
+async def get_discovered_skill(name: str, version: str | None = Query(None)) -> dict[str, Any]:
+    """Return one registered skill with stable explainability and provenance fields."""
+    assert skill_registry is not None
+    result = SkillDiscovery(skill_registry).discover(name=name, status="all", limit=100)
+    matches = result["results"]
+    if version is not None:
+        matches = [item for item in matches if item["version"] == version]
+    if not matches:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return matches[0]
 
 
 @app.post("/api/skill-registry")

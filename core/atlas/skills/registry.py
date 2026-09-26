@@ -1,7 +1,8 @@
 """Persistent metadata registry for descriptive Atlas skills.
 
 The required metadata fields are ``name``, ``version``, and ``description``.
-Optional fields are ``capabilities``, ``tools``, ``requirements``, and ``examples``;
+Optional fields are ``capabilities``, ``tools``, ``requirements``, ``examples``,
+``aliases``, ``tags``, ``category``, ``keywords``, and ``use_cases``;
 the latter fields default to empty lists (``requirements`` also accepts an object).
 """
 
@@ -26,7 +27,10 @@ _SECRET_VALUE_RE = re.compile(
     r"\s*[:=]\s*\S+|\bBearer\s+\S+|\bsk-[A-Za-z0-9_-]{12,}"
 )
 REQUIRED_METADATA_FIELDS = ("name", "version", "description")
-OPTIONAL_METADATA_FIELDS = ("capabilities", "tools", "requirements", "examples")
+OPTIONAL_METADATA_FIELDS = (
+    "capabilities", "tools", "requirements", "examples", "aliases", "tags",
+    "category", "keywords", "use_cases",
+)
 
 
 class SkillRegistry:
@@ -92,13 +96,20 @@ class SkillRegistry:
             "version": version,
             "description": description.strip(),
         }
-        for field in ("capabilities", "tools", "examples"):
+        list_fields = (
+            "capabilities", "tools", "examples", "aliases", "tags", "keywords", "use_cases",
+        )
+        for field in list_fields:
             items = metadata.get(field, [])
             if not isinstance(items, list) or any(
                 not isinstance(item, str) or not item.strip() for item in items
             ):
                 raise ValueError(f"{field} must be a list of non-empty strings")
             normalized[field] = [item.strip() for item in items]
+        category = metadata.get("category", "")
+        if not isinstance(category, str):
+            raise ValueError("category must be a string")
+        normalized["category"] = category.strip()
         requirements = metadata.get("requirements", [])
         if not isinstance(requirements, (list, dict)):
             raise ValueError("requirements must be a list or object")
