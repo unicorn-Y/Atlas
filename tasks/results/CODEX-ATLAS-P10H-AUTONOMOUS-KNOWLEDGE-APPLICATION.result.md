@@ -29,4 +29,4 @@ The full memory run's single failure is the tracked pre-existing metadata retrie
 
 - Implementation commit pushed to `origin main`.
 - This result artifact is committed and pushed separately.
-- Remote `refs/heads/main` was checked after the implementation push and will be checked again after the result artifact push.
+- Remote `refs/heads/main` was checked against local `HEAD` after both the implementation and result artifact pushes; both checks matched.
