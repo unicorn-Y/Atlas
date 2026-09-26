@@ -296,9 +296,12 @@ class AtlasScheduler:
         for task in self._tasks.values():
             if task.goal and task.goal_status == "running":
                 task.goal_status = "interrupted"
+                trace = task.goal_progress.get("execution_trace", {})
+                if not isinstance(trace, dict):
+                    trace = {}
                 self._append_goal_event(task, "goal.interrupted", {
                     "detail": "The service restarted during goal execution.",
-                })
+                }, run_id=trace.get("run_id"), plan_id=trace.get("plan_id"))
         self._persist()
         log.info("scheduler.loaded", count=len(self._tasks), path=str(self._path))
 
@@ -360,13 +363,35 @@ class AtlasScheduler:
 
     @staticmethod
     def _append_goal_event(
-        task: ScheduledTask, event: str, data: dict[str, Any],
+        task: ScheduledTask,
+        event: str,
+        data: dict[str, Any],
+        *,
+        run_id: str | None = None,
+        plan_id: str | None = None,
+        step_id: str | None = None,
     ) -> None:
-        task.goal_events.append({
+        sequence = max(
+            (item.get("sequence", index)
+             for index, item in enumerate(task.goal_events)
+             if isinstance(item, dict)
+             and isinstance(item.get("sequence", index), int)),
+            default=-1,
+        ) + 1
+        record: dict[str, Any] = {
+            "event_id": f"{task.id}:{sequence}",
+            "sequence": sequence,
             "event": event,
             "timestamp": datetime.now(UTC).isoformat(),
             "data": data,
-        })
+        }
+        if run_id:
+            record["run_id"] = run_id
+        if plan_id:
+            record["plan_id"] = plan_id
+        if step_id:
+            record["step_id"] = step_id
+        task.goal_events.append(record)
 
     async def update_goal_state(
         self,
@@ -386,14 +411,47 @@ class AtlasScheduler:
         return task
 
     async def record_goal_event(
-        self, task_id: str, event: str, data: dict[str, Any],
+        self,
+        task_id: str,
+        event: str,
+        data: dict[str, Any],
+        *,
+        run_id: str | None = None,
+        plan_id: str | None = None,
+        step_id: str | None = None,
     ) -> ScheduledTask | None:
         task = self._tasks.get(task_id)
         if task is None or not task.goal:
             return None
-        self._append_goal_event(task, event, data)
+        self._append_goal_event(
+            task, event, data, run_id=run_id, plan_id=plan_id, step_id=step_id,
+        )
         self._persist()
         return task
+
+    def goal_trace(
+        self, task_id: str, *, run_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return persisted goal audit events in stable append order."""
+        task = self._tasks.get(task_id)
+        if task is None or not task.goal:
+            return None
+        events = []
+        for index, event in enumerate(task.goal_events):
+            if not isinstance(event, dict):
+                continue
+            sequence = event.get("sequence", index)
+            if not isinstance(sequence, int):
+                sequence = index
+            if run_id is not None and event.get("run_id") != run_id:
+                continue
+            events.append({**event, "sequence": sequence})
+        events.sort(key=lambda event: (event["sequence"], event.get("event_id", "")))
+        return {
+            "goal_id": task.id,
+            "status": task.goal_status,
+            "events": events,
+        }
 
     async def heartbeat_goals(self) -> int:
         """Continue durable goals whose last run left work pending."""

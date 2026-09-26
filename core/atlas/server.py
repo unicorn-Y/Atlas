@@ -51,21 +51,31 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
             task_id, run_id, message, "runtime", "Agent orchestrator is unavailable.",
         )
         progress = dict(task.goal_progress or {})
+        prior_trace = progress.get("execution_trace", {})
+        if not isinstance(prior_trace, dict):
+            prior_trace = {}
         progress.update({
             "blocked": True,
             "blocked_reason": "orchestrator_unavailable",
             "reflection_run_ids": [*progress.get("reflection_run_ids", []), run_id],
+            "execution_trace": {"run_id": run_id, "plan_id": prior_trace.get("plan_id")},
         })
         await scheduler.update_goal_state(task_id, status="blocked", progress=progress)
         await scheduler.record_goal_event(task_id, "goal.failed", {
             "detail": "Agent orchestrator is unavailable.",
-        })
+        }, run_id=run_id)
         return
 
-    await scheduler.update_goal_state(task_id, status="running")
-    await scheduler.record_goal_event(task_id, "goal.triggered", {})
-    approval_required = False
+    prior_trace = task.goal_progress.get("execution_trace", {})
+    if not isinstance(prior_trace, dict):
+        prior_trace = {}
+    active_plan_id = prior_trace.get("plan_id")
     progress = dict(task.goal_progress or {})
+    progress["execution_trace"] = {"run_id": run_id, "plan_id": active_plan_id}
+    await scheduler.update_goal_state(task_id, status="running", progress=progress)
+    await scheduler.record_goal_event(task_id, "goal.triggered", {}, run_id=run_id,
+                                      plan_id=active_plan_id)
+    approval_required = False
     prior_reflection_runs = list(progress.get("reflection_run_ids", []))
     goal_evaluation_passed = False
     goal_evaluation_processed = False
@@ -110,12 +120,18 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
             "approval_id": event_id,
             "tool": tool_name,
             "decision": "denied; explicit user approval is required",
-        })
+        }, run_id=run_id, plan_id=active_plan_id)
         return "deny"
 
     async def persist_plan(value: dict[str, Any]) -> None:
+        nonlocal active_plan_id
         plan = TaskPlan.from_dict(value)
         plan_value = plan.to_dict()
+        plan_id = str(uuid.uuid5(
+            uuid.UUID(run_id),
+            json.dumps(plan_value, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        ))
+        active_plan_id = plan_id
         completed = [item.id for item in plan.subtasks if item.status == "completed"]
         pending = [item.id for item in plan.subtasks if item.status != "completed"]
         state = {
@@ -125,9 +141,13 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
             "completed_steps": completed,
             "blocked": False,
             "reflection_run_ids": prior_reflection_runs,
+            "execution_trace": {"run_id": run_id, "plan_id": plan_id},
         }
         await scheduler.update_goal_state(task_id, status="running", progress=state)
-        await scheduler.record_goal_event(task_id, "plan.updated", {"plan": value})
+        await scheduler.record_goal_event(task_id, "plan.updated", {
+            "step_ids": [item.id for item in plan.subtasks],
+            "plan": value,
+        }, run_id=run_id, plan_id=plan_id)
 
     async def persist_goal_evaluation(value: Any) -> None:
         nonlocal goal_evaluation_passed, goal_evaluation_processed, goal_evaluation_steps
@@ -156,7 +176,10 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
             await scheduler.update_goal_state(
                 task_id, status="running", progress=current_progress,
             )
-            await scheduler.record_goal_event(task_id, "goal.evaluated", decision)
+            await scheduler.record_goal_event(
+                task_id, "goal.evaluated", decision,
+                run_id=run_id, plan_id=active_plan_id,
+            )
             return
 
         next_replan_count = int(current_progress.get("replan_count", 0)) + 1
@@ -169,15 +192,19 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
             "reflection_run_ids": prior_reflection_runs,
             "replan_count": next_replan_count,
             "last_evaluation": decision,
+            "execution_trace": {"run_id": run_id, "plan_id": active_plan_id},
         }
         await scheduler.update_goal_state(
             task_id, status="pending", progress=replan_progress,
         )
-        await scheduler.record_goal_event(task_id, "goal.evaluation_failed", decision)
+        await scheduler.record_goal_event(
+            task_id, "goal.evaluation_failed", decision,
+            run_id=run_id, plan_id=active_plan_id,
+        )
         await scheduler.record_goal_event(task_id, "goal.replanned", {
             "replan_count": next_replan_count,
             "reason": decision["reason"] or "Goal evidence was insufficient.",
-        })
+        }, run_id=run_id, plan_id=active_plan_id)
 
     saved_plan = task.goal_progress or None
     if saved_plan:
@@ -202,10 +229,15 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
                 await persist_goal_evaluation(event.get("evaluation"))
                 continue
             if event_type not in {"plan_updated", "approval_required"}:
+                event_step = event.get("step_id", event.get("subtask_id"))
+                if not isinstance(event_step, str) and isinstance(event.get("step"), dict):
+                    event_step = event["step"].get("id")
                 await scheduler.record_goal_event(
                     task_id,
                     f"execution.{event_type}",
                     {key: event[key] for key in ("category",) if key in event},
+                    run_id=run_id, plan_id=active_plan_id,
+                    step_id=event_step if isinstance(event_step, str) else None,
                 )
             if event_type == "error":
                 category = event.get("category")
@@ -255,7 +287,7 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
                     )
                     await scheduler.record_goal_event(task_id, "goal.verified", {
                         "completed_steps": final_progress["completed_steps"],
-                    })
+                    }, run_id=run_id, plan_id=active_plan_id)
                     if memory:
                         for failed_run_id in prior_reflection_runs:
                             try:
@@ -280,7 +312,8 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
                     )
                     await scheduler.record_goal_event(task_id, "goal.continuation_pending", {
                         "current_step": final_progress["current_step"],
-                    })
+                    }, run_id=run_id, plan_id=active_plan_id,
+                        step_id=final_progress["current_step"])
                 await persist_goal_outcome(final_progress)
     except Exception as exc:
         status = "awaiting_approval" if approval_required else "blocked"
@@ -294,7 +327,7 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
         await scheduler.update_goal_state(task_id, status=status, progress=progress)
         await scheduler.record_goal_event(task_id, "execution.error", {
             "detail": str(exc),
-        })
+        }, run_id=run_id, plan_id=active_plan_id)
         await persist_goal_outcome(progress)
 
 
@@ -1491,6 +1524,18 @@ async def get_goal(goal_id: str) -> dict[str, Any]:
     if not task or not task.goal:
         raise HTTPException(status_code=404, detail=f"Scheduled goal not found: {goal_id}")
     return task.to_dict()
+
+
+@app.get("/api/goals/{goal_id}/trace")
+async def get_goal_trace(
+    goal_id: str, run_id: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """Return a goal's append-ordered execution audit trace."""
+    assert scheduler is not None
+    trace = scheduler.goal_trace(goal_id, run_id=run_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail=f"Scheduled goal not found: {goal_id}")
+    return trace
 
 
 @app.post("/api/goals/{goal_id}/run")

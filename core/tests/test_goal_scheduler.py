@@ -32,7 +32,11 @@ async def test_goal_and_progress_survive_scheduler_restart(tmp_path: Path) -> No
     await first.update_goal_state(
         first_task.id,
         status="running",
-        progress={"goal": first_task.goal, "subtasks": []},
+        progress={
+            "goal": first_task.goal,
+            "subtasks": [],
+            "execution_trace": {"run_id": "interrupted-run", "plan_id": "saved-plan"},
+        },
     )
     await first.record_goal_event(first_task.id, "plan.updated", {"count": 0})
 
@@ -53,8 +57,16 @@ async def test_goal_and_progress_survive_scheduler_restart(tmp_path: Path) -> No
         assert task is not None
         assert task.goal == first_task.goal
         assert task.goal_status == "interrupted"
-        assert task.goal_progress == {"goal": first_task.goal, "subtasks": []}
-        assert any(event["event"] == "goal.interrupted" for event in task.goal_events)
+        assert task.goal_progress == {
+            "goal": first_task.goal,
+            "subtasks": [],
+            "execution_trace": {"run_id": "interrupted-run", "plan_id": "saved-plan"},
+        }
+        interrupted = next(
+            event for event in task.goal_events if event["event"] == "goal.interrupted"
+        )
+        assert interrupted["run_id"] == "interrupted-run"
+        assert interrupted["plan_id"] == "saved-plan"
 
         await asyncio.wait_for(resumed_event.wait(), timeout=2)
         assert resumed == [first_task.id]
@@ -246,6 +258,84 @@ async def test_goal_completes_only_after_each_step_has_verification_evidence(
         assert any(event["event"] == "goal.evaluated" for event in recovered_task.goal_events)
     finally:
         await recovered.stop()
+
+
+async def test_execution_trace_links_failure_restart_and_recovery(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    class FailingOrchestrator:
+        async def run(self, **kwargs):
+            await kwargs["plan_update_callback"]({
+                "goal": kwargs["message"],
+                "subtasks": [{
+                    "id": "inspect", "title": "Inspect", "verification": "Files inspected",
+                    "status": "pending",
+                }],
+            })
+            yield {"type": "error", "category": "runtime", "detail": "temporary failure"}
+
+    class RecoveringOrchestrator:
+        async def run(self, **kwargs):
+            assert kwargs["plan_state"]["execution_trace"]["run_id"]
+            await kwargs["plan_update_callback"]({
+                "goal": kwargs["message"],
+                "subtasks": [{
+                    "id": "inspect", "title": "Inspect", "verification": "Files inspected",
+                    "status": "completed", "evidence": "README reviewed",
+                }],
+            })
+            yield {"type": "goal_evaluated", "evaluation": {
+                "satisfied": True, "evidence": "Inspection complete", "reason": "Verified",
+            }}
+            yield {"type": "done"}
+
+    path = tmp_path / "schedules.toml"
+    scheduler = AtlasScheduler(schedules_path=path)
+    task = _goal_task()
+    await scheduler.add_task(task)
+    monkeypatch.setattr(server, "scheduler", scheduler)
+    monkeypatch.setattr(server, "orchestrator", FailingOrchestrator())
+
+    await server._run_scheduled_goal(task.id, task.goal)
+    failed_run = task.goal_progress["execution_trace"]["run_id"]
+    failed_trace = scheduler.goal_trace(task.id, run_id=failed_run)
+    assert failed_trace is not None
+    assert [event["event"] for event in failed_trace["events"]] == [
+        "goal.triggered", "plan.updated", "execution.error",
+    ]
+    failure = failed_trace["events"][-1]
+    plan = failed_trace["events"][1]
+    assert plan["run_id"] == failed_run
+    assert failure["plan_id"] == plan["plan_id"]
+    assert plan["data"]["step_ids"] == ["inspect"]
+    assert [event["sequence"] for event in failed_trace["events"]] == [0, 1, 2]
+
+    recovered = AtlasScheduler(schedules_path=path)
+    await recovered.start()
+    try:
+        persisted_failure = recovered.goal_trace(task.id, run_id=failed_run)
+        assert persisted_failure == failed_trace
+    finally:
+        await recovered.stop()
+
+    monkeypatch.setattr(server, "scheduler", recovered)
+    monkeypatch.setattr(server, "orchestrator", RecoveringOrchestrator())
+    await server._run_scheduled_goal(task.id, task.goal)
+    recovered_task = recovered.get_task(task.id)
+    assert recovered_task is not None
+    recovered_run = recovered_task.goal_progress["execution_trace"]["run_id"]
+    assert recovered_run != failed_run
+
+    first = recovered.goal_trace(task.id)
+    second = recovered.goal_trace(task.id)
+    assert first == second
+    assert first is not None
+    assert [event["sequence"] for event in first["events"]] == list(range(8))
+    recovered_events = recovered.goal_trace(task.id, run_id=recovered_run)["events"]
+    assert all(event["run_id"] == recovered_run for event in recovered_events)
+    assert recovered_events[1]["data"]["step_ids"] == ["inspect"]
+    assert recovered_events[-1]["event"] == "goal.verified"
+    assert recovered_events[-1]["plan_id"] == recovered_events[1]["plan_id"]
 
 
 async def test_completed_goal_outcome_links_evaluation_and_step_evidence(

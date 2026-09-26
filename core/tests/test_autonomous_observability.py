@@ -66,6 +66,33 @@ async def test_observability_snapshot_recovers_persisted_events(tmp_path: Path) 
         await recovered.stop()
 
 
+async def test_goal_trace_endpoint_filters_and_orders_persisted_audit_events(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    scheduler = AtlasScheduler(schedules_path=tmp_path / "schedules.toml")
+    await scheduler.add_task(_goal_task())
+    await scheduler.record_goal_event("review", "goal.triggered", {}, run_id="run-a")
+    await scheduler.record_goal_event(
+        "review", "plan.updated", {"step_ids": ["inspect"]},
+        run_id="run-a", plan_id="plan-a",
+    )
+    await scheduler.record_goal_event("review", "goal.triggered", {}, run_id="run-b")
+    monkeypatch.setattr(server, "scheduler", scheduler)
+
+    transport = httpx.ASGITransport(app=server.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://atlas") as client:
+        first = await client.get("/api/goals/review/trace", params={"run_id": "run-a"})
+        second = await client.get("/api/goals/review/trace", params={"run_id": "run-a"})
+
+    assert first.status_code == 200
+    assert first.json() == second.json()
+    trace = first.json()
+    assert trace["goal_id"] == "review"
+    assert [event["sequence"] for event in trace["events"]] == [0, 1]
+    assert [event["event_id"] for event in trace["events"]] == ["review:0", "review:1"]
+    assert trace["events"][1]["plan_id"] == "plan-a"
+
+
 async def test_runtime_observability_reports_degraded_components_and_goal_failure(
     tmp_path: Path, monkeypatch,
 ) -> None:
