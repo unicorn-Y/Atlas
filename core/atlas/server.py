@@ -788,6 +788,23 @@ async def reject_memory_consolidation_proposal(proposal_id: str) -> dict[str, st
     return {"status": "rejected", "id": proposal_id}
 
 
+@app.post("/api/memory/consolidation-proposals/{proposal_id}/activate")
+async def activate_memory_consolidation_proposal(proposal_id: str) -> dict[str, Any]:
+    assert memory is not None
+    activation = await memory.activate_knowledge_consolidation_proposal(proposal_id)
+    if activation is None:
+        raise HTTPException(status_code=404, detail="Approved consolidation proposal not found")
+    return activation
+
+
+@app.get("/api/memory/knowledge-activations")
+async def list_memory_knowledge_activations(
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    assert memory is not None
+    return await memory.list_knowledge_activations(limit=limit)
+
+
 @app.get("/api/memory/goal-outcomes")
 async def list_goal_outcomes(
     status: str | None = Query(None),

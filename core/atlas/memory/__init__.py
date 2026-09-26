@@ -299,6 +299,22 @@ class MemoryStore:
                 FOREIGN KEY(proposal_id) REFERENCES memory_consolidation_proposals(id)
             );
 
+            CREATE TABLE IF NOT EXISTS memory_knowledge_activations (
+                id TEXT PRIMARY KEY,
+                proposal_id TEXT NOT NULL UNIQUE,
+                activation_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(proposal_id) REFERENCES memory_consolidation_proposals(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_knowledge_activation_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                activation_id TEXT NOT NULL,
+                event TEXT NOT NULL CHECK(event IN ('activated')),
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(activation_id) REFERENCES memory_knowledge_activations(id)
+            );
+
             CREATE TABLE IF NOT EXISTS agent_reflections (
                 id TEXT PRIMARY KEY,
                 category TEXT NOT NULL CHECK(category IN ('tool', 'model', 'runtime')),
@@ -2487,6 +2503,96 @@ class MemoryStore:
         )
         await self._db.commit()
         return True
+
+    async def activate_knowledge_consolidation_proposal(
+        self, proposal_id: str,
+    ) -> dict[str, Any] | None:
+        """Create one advisory activation snapshot for an approved proposal."""
+        assert self._db is not None
+        activation_id = f"activation:{proposal_id}"
+        cursor = await self._db.execute(
+            "SELECT activation_json, created_at FROM memory_knowledge_activations "
+            "WHERE proposal_id = ?", (proposal_id,),
+        )
+        existing = await cursor.fetchone()
+        if existing is not None:
+            activation = json.loads(existing["activation_json"])
+            activation["created_at"] = existing["created_at"]
+            history_cursor = await self._db.execute(
+                "SELECT event, created_at FROM memory_knowledge_activation_history "
+                "WHERE activation_id = ? ORDER BY id", (activation_id,),
+            )
+            activation["history"] = [dict(row) for row in await history_cursor.fetchall()]
+            return activation
+
+        cursor = await self._db.execute(
+            "SELECT proposal_json, reviewed_at FROM memory_consolidation_proposals "
+            "WHERE id = ? AND status = 'approved'", (proposal_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+
+        proposal = json.loads(row["proposal_json"])
+        proposal["status"] = "approved"
+        proposal["reviewed_at"] = row["reviewed_at"]
+        review_cursor = await self._db.execute(
+            "SELECT decision, reviewed_at FROM memory_consolidation_proposal_reviews "
+            "WHERE proposal_id = ? ORDER BY id", (proposal_id,),
+        )
+        approval_history = [dict(review) for review in await review_cursor.fetchall()]
+        if not approval_history or approval_history[-1]["decision"] != "approved":
+            return None
+
+        created_at = datetime.now(UTC).isoformat()
+        activation = {
+            "id": activation_id,
+            "proposal_id": proposal_id,
+            "advisory_only": True,
+            "activation_status": "active",
+            "proposal": proposal,
+            "approval_history": approval_history,
+            "created_at": created_at,
+            "history": [{"event": "activated", "created_at": created_at}],
+        }
+        await self._db.execute(
+            "INSERT INTO memory_knowledge_activations "
+            "(id, proposal_id, activation_json, created_at) VALUES (?, ?, ?, ?)",
+            (
+                activation_id, proposal_id,
+                json.dumps(activation, ensure_ascii=False, sort_keys=True), created_at,
+            ),
+        )
+        await self._db.execute(
+            "INSERT INTO memory_knowledge_activation_history "
+            "(activation_id, event, created_at) VALUES (?, 'activated', ?)",
+            (activation_id, created_at),
+        )
+        await self._db.commit()
+        return activation
+
+    async def list_knowledge_activations(
+        self, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return advisory activation snapshots with their immutable audit history."""
+        if limit < 0:
+            raise ValueError("Activation limit must be non-negative")
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, activation_json, created_at FROM memory_knowledge_activations "
+            "ORDER BY id LIMIT ?", (limit,),
+        )
+        results = []
+        for row in await cursor.fetchall():
+            activation = json.loads(row["activation_json"])
+            activation["created_at"] = row["created_at"]
+            history_cursor = await self._db.execute(
+                "SELECT event, created_at FROM memory_knowledge_activation_history "
+                "WHERE activation_id = ? ORDER BY id", (row["id"],),
+            )
+            activation["history"] = [dict(item) for item in await history_cursor.fetchall()]
+            results.append(activation)
+        return results
 
     async def list_knowledge_self_steering_reports(
         self, *, limit: int = 100,

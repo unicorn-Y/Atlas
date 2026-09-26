@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -577,9 +579,37 @@ class TestFacts:
                 assert proposal["status"] == "pending"
 
             proposal = created.json()[0]
+            rejected_proposal = {**proposal, "id": "rejected-activation-proposal"}
+            await isolated_memory._db.execute(
+                "INSERT INTO memory_consolidation_proposals "
+                "(id, proposal_json, created_at) VALUES (?, ?, ?)",
+                (
+                    rejected_proposal["id"],
+                    json.dumps(rejected_proposal, sort_keys=True),
+                    proposal["created_at"],
+                ),
+            )
+            await isolated_memory._db.commit()
+
+            pending_activation = await client.post(
+                f"/api/memory/consolidation-proposals/{proposal['id']}/activate"
+            )
+            rejected = await client.post(
+                f"/api/memory/consolidation-proposals/{rejected_proposal['id']}/reject"
+            )
+            rejected_activation = await client.post(
+                f"/api/memory/consolidation-proposals/{rejected_proposal['id']}/activate"
+            )
             reviewed = await client.post(
                 f"/api/memory/consolidation-proposals/{proposal['id']}/approve"
             )
+            activated = await client.post(
+                f"/api/memory/consolidation-proposals/{proposal['id']}/activate"
+            )
+            repeated_activation = await client.post(
+                f"/api/memory/consolidation-proposals/{proposal['id']}/activate"
+            )
+            activation_list = await client.get("/api/memory/knowledge-activations")
             approved = await client.get(
                 "/api/memory/consolidation-proposals",
                 params={"status": "approved"},
@@ -587,7 +617,29 @@ class TestFacts:
             duplicate_review = await client.post(
                 f"/api/memory/consolidation-proposals/{proposal['id']}/reject"
             )
+            assert pending_activation.status_code == 404
+            assert rejected.status_code == 200
+            assert rejected_activation.status_code == 404
             assert reviewed.status_code == 200
+            assert activated.status_code == repeated_activation.status_code == 200
+            assert activated.json() == repeated_activation.json()
+            activation = activated.json()
+            assert activation["advisory_only"] is True
+            assert activation["activation_status"] == "active"
+            assert activation["proposal"]["id"] == proposal["id"]
+            assert activation["proposal"]["source_candidate_ids"] == proposal[
+                "source_candidate_ids"
+            ]
+            assert activation["proposal"]["source_report_ids"] == [report_id]
+            assert activation["proposal"]["evidence_refs"] == proposal["evidence_refs"]
+            assert activation["approval_history"] == [{
+                "decision": "approved", "reviewed_at": activation["proposal"]["reviewed_at"],
+            }]
+            assert activation["history"] == [{
+                "event": "activated", "created_at": activation["created_at"],
+            }]
+            assert activation_list.status_code == 200
+            assert activation_list.json() == [activation]
             assert approved.status_code == 200
             assert approved.json()[0]["review_history"][0]["decision"] == "approved"
             assert duplicate_review.status_code == 404
