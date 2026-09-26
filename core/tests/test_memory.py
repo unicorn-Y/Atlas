@@ -1065,6 +1065,62 @@ class TestAgentReflections:
 
 
 class TestGoalOutcomes:
+    async def test_approved_goal_experience_consolidates_to_persistent_advisory_knowledge(
+        self, store: MemoryStore,
+    ) -> None:
+        outcome_id = await store.record_goal_outcome(
+            goal_id="weekly-review",
+            goal="Review filesystem migration risks",
+            status="completed",
+            evaluation={"satisfied": True, "evidence": "Risks listed.", "reason": "Complete."},
+            steps=[{
+                "id": "inspect", "title": "Inspect filesystem",
+                "status": "completed", "evidence": "Manifest reviewed.",
+            }],
+            source_conversation_id="scheduled-goal-weekly-review",
+            source_run_id="run-knowledge-1",
+        )
+
+        assert await store.retrieve_approved_goal_knowledge("filesystem migration") == []
+        assert await store.review_goal_experience(outcome_id, approved=True)
+        first = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        second = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        assert first == second
+        [knowledge] = first
+        assert knowledge["source_outcome_id"] == outcome_id
+        assert knowledge["source_goal_id"] == "weekly-review"
+        assert knowledge["source_run_id"] == "run-knowledge-1"
+        assert knowledge["source_conversation_id"] == "scheduled-goal-weekly-review"
+        assert knowledge["approval_status"] == "approved"
+        assert knowledge["approved_at"]
+        assert knowledge["evaluation"]["evidence"] == "Risks listed."
+        assert knowledge["evidence"][0]["step_id"] == "inspect"
+
+        await store.close()
+        reopened = MemoryStore(db_path=store._db_path)
+        await reopened.init()
+        try:
+            assert await reopened.retrieve_approved_goal_knowledge(
+                "filesystem migration"
+            ) == first
+        finally:
+            await reopened.close()
+
+    async def test_rejected_goal_experience_never_enters_consolidated_knowledge(
+        self, store: MemoryStore,
+    ) -> None:
+        outcome_id = await store.record_goal_outcome(
+            goal_id="rejected-goal",
+            goal="Review deployment credentials",
+            status="completed",
+            evaluation={"satisfied": True, "evidence": "Review complete."},
+            steps=[{"id": "inspect", "title": "Inspect", "evidence": "No reuse."}],
+            source_conversation_id="conversation-rejected",
+            source_run_id="run-rejected",
+        )
+        assert await store.review_goal_experience(outcome_id, approved=False)
+        assert await store.retrieve_approved_goal_knowledge("deployment credentials") == []
+
     async def test_outcomes_persist_with_evidence_and_require_approval(
         self, store: MemoryStore,
     ) -> None:
@@ -1099,6 +1155,10 @@ class TestGoalOutcomes:
         await reopened.init()
         try:
             assert await reopened.review_goal_experience(outcome_id, approved=True)
+            [approved_outcome] = await reopened.list_goal_outcomes(
+                experience_status="approved",
+            )
+            assert approved_outcome["reviewed_at"]
             [experience] = await reopened.retrieve_approved_goal_experiences(
                 "filesystem migration", limit=3,
             )

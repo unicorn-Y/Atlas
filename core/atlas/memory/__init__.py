@@ -266,12 +266,36 @@ class MemoryStore:
                 source_run_id TEXT NOT NULL,
                 experience_status TEXT NOT NULL DEFAULT 'pending'
                     CHECK(experience_status IN ('pending', 'approved', 'rejected')),
+                reviewed_at TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
             CREATE INDEX IF NOT EXISTS idx_goal_outcomes_run
                 ON goal_outcomes(source_run_id);
+
+            CREATE TABLE IF NOT EXISTS goal_knowledge (
+                id TEXT PRIMARY KEY,
+                source_outcome_id TEXT NOT NULL UNIQUE,
+                source_goal_id TEXT NOT NULL,
+                goal TEXT NOT NULL,
+                outcome_status TEXT NOT NULL,
+                evaluation_json TEXT NOT NULL,
+                evidence_json TEXT NOT NULL,
+                source_conversation_id TEXT NOT NULL,
+                source_run_id TEXT NOT NULL,
+                source_approval_status TEXT NOT NULL
+                    CHECK(source_approval_status = 'approved'),
+                source_approved_at TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY(source_outcome_id) REFERENCES goal_outcomes(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_goal_knowledge_goal
+                ON goal_knowledge(source_goal_id);
         """)
+        cursor = await self._db.execute("PRAGMA table_info(goal_outcomes)")
+        goal_outcome_columns = {row["name"] for row in await cursor.fetchall()}
+        if "reviewed_at" not in goal_outcome_columns:
+            await self._db.execute("ALTER TABLE goal_outcomes ADD COLUMN reviewed_at TEXT")
         cursor = await self._db.execute("PRAGMA table_info(facts)")
         fact_columns = {row["name"] for row in await cursor.fetchall()}
         if "source_conversation_id" not in fact_columns:
@@ -956,7 +980,7 @@ class MemoryStore:
         assert self._db is not None
         query = (
             "SELECT id, goal_id, goal, status, evaluation_json, steps_json, "
-            "source_conversation_id, source_run_id, experience_status, created_at "
+            "source_conversation_id, source_run_id, experience_status, reviewed_at, created_at "
             "FROM goal_outcomes"
         )
         params: list[Any] = []
@@ -978,12 +1002,92 @@ class MemoryStore:
         """Explicitly approve or reject a pending goal experience."""
         assert self._db is not None
         cursor = await self._db.execute(
-            "UPDATE goal_outcomes SET experience_status = ? "
+            "UPDATE goal_outcomes SET experience_status = ?, reviewed_at = datetime('now') "
             "WHERE id = ? AND experience_status = 'pending'",
             ("approved" if approved else "rejected", outcome_id),
         )
+        if cursor.rowcount and approved:
+            await self._consolidate_goal_outcome(outcome_id)
         await self._db.commit()
         return cursor.rowcount > 0
+
+    async def _consolidate_goal_outcome(self, outcome_id: str) -> bool:
+        """Persist one approved goal outcome as traceable advisory knowledge."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, goal_id, goal, status, evaluation_json, steps_json, "
+            "source_conversation_id, source_run_id, experience_status, reviewed_at "
+            "FROM goal_outcomes WHERE id = ? AND experience_status = 'approved'",
+            (outcome_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None or row["reviewed_at"] is None:
+            return False
+        evaluation = json.loads(row["evaluation_json"])
+        steps = json.loads(row["steps_json"])
+        evidence = [
+            {
+                "step_id": step["id"], "title": step["title"],
+                "status": step["status"], "evidence": step["evidence"],
+            }
+            for step in steps
+        ]
+        content = " ".join([
+            row["goal"], row["status"], evaluation.get("reason", ""),
+            evaluation.get("evidence", ""),
+            *(f"{item['title']} {item['evidence']}" for item in evidence),
+        ])
+        await self._db.execute(
+            "INSERT OR IGNORE INTO goal_knowledge "
+            "(id, source_outcome_id, source_goal_id, goal, outcome_status, "
+            "evaluation_json, evidence_json, source_conversation_id, source_run_id, "
+            "source_approval_status, source_approved_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?)",
+            (
+                f"goal-knowledge:{row['id']}", row["id"], row["goal_id"], content,
+                row["status"], row["evaluation_json"],
+                json.dumps(evidence, ensure_ascii=False, sort_keys=True),
+                row["source_conversation_id"], row["source_run_id"], row["reviewed_at"],
+            ),
+        )
+        return True
+
+    async def retrieve_approved_goal_knowledge(
+        self, query: str, limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Return deterministic, provenance-linked knowledge from approved goals."""
+        terms = {
+            token.casefold() for token in _MEMORY_TOKEN.findall(query)
+            if len(token) > 1 and token.casefold() not in _MEMORY_STOP_WORDS
+        }
+        if not terms or limit <= 0:
+            return []
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, source_outcome_id, source_goal_id, goal, outcome_status, "
+            "evaluation_json, evidence_json, source_conversation_id, source_run_id, "
+            "source_approval_status, source_approved_at FROM goal_knowledge "
+            "WHERE source_approval_status = 'approved' "
+            "ORDER BY source_outcome_id"
+        )
+        ranked: list[tuple[int, str, dict[str, Any]]] = []
+        for row in await cursor.fetchall():
+            item = dict(row)
+            matched = terms & {
+                token.casefold() for token in _MEMORY_TOKEN.findall(item["goal"])
+            }
+            if not matched:
+                continue
+            item["evaluation"] = json.loads(item.pop("evaluation_json"))
+            item["evidence"] = json.loads(item.pop("evidence_json"))
+            item["approval_status"] = item.pop("source_approval_status")
+            item["approved_at"] = item.pop("source_approved_at")
+            item["advisory"] = True
+            item["matched_terms"] = sorted(matched)
+            ranked.append((len(matched), item["source_outcome_id"], item))
+        ranked.sort(key=lambda entry: entry[1])
+        ranked.sort(key=lambda entry: entry[0], reverse=True)
+        return [item for _, _, item in ranked[:limit]]
 
     async def retrieve_approved_goal_experiences(
         self, query: str, limit: int = 3,
@@ -998,7 +1102,7 @@ class MemoryStore:
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT id, goal, status, evaluation_json, steps_json, "
-            "source_conversation_id, source_run_id FROM goal_outcomes "
+            "source_conversation_id, source_run_id, reviewed_at FROM goal_outcomes "
             "WHERE experience_status = 'approved' "
             "ORDER BY created_at DESC, id LIMIT 200"
         )

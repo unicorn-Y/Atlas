@@ -464,6 +464,9 @@ class TestFacts:
             assert await isolated_memory.retrieve_approved_goal_experiences(
                 "filesystem migration",
             ) == []
+            assert await isolated_memory.retrieve_approved_goal_knowledge(
+                "filesystem migration",
+            ) == []
 
             approved = await client.post(
                 f"/api/memory/goal-outcomes/{outcome_id}/approve",
@@ -473,6 +476,11 @@ class TestFacts:
                 "filesystem migration",
             )
             assert experience["id"] == outcome_id
+            [knowledge] = await isolated_memory.retrieve_approved_goal_knowledge(
+                "filesystem migration",
+            )
+            assert knowledge["source_outcome_id"] == outcome_id
+            assert knowledge["approval_status"] == "approved"
         finally:
             await isolated_memory.close()
             server.memory = original_memory
