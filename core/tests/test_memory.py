@@ -204,6 +204,62 @@ class TestExtractedMemories:
 
 
 class TestAgentContextRanking:
+    async def test_active_context_is_bounded_and_deterministic(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("preferred_editor_language", "TypeScript")
+        await store.set_fact("preferred_spoken_language", "Spanish")
+        await store.set_fact("user_timezone", "Asia/Hong_Kong")
+
+        first = await store.get_active_context("Which language for the editor?", limit=1)
+        second = await store.get_active_context("Which language for the editor?", limit=1)
+
+        assert first == second
+        assert [fact["key"] for fact in first] == ["preferred_editor_language"]
+
+    async def test_active_context_carries_approved_fact_across_conversations(
+        self, store: MemoryStore
+    ) -> None:
+        source_conversation = await store.create_conversation("First session")
+        source_message = await store.save_message(
+            source_conversation, "user", "We decided to use Python."
+        )
+        [candidate] = await store.extract_conversation_candidates(source_conversation)
+        assert await store.get_active_context("Which language should the project use?") == []
+        assert await store.promote_memory_candidate(candidate["id"])
+
+        later_conversation = await store.create_conversation("Later session")
+        await store.save_message(
+            later_conversation, "user", "Continue work on the project."
+        )
+        await store.close()
+        reopened = MemoryStore(db_path=store._db_path)
+        await reopened.init()
+        try:
+            context = await reopened.get_active_context(
+                "Which language should the project use?"
+            )
+        finally:
+            await reopened.close()
+
+        assert [fact["key"] for fact in context] == ["project_decision"]
+        assert context[0]["value"] == "Python"
+        assert context[0]["source_conversation_id"] == source_conversation
+        assert context[0]["source_message_id"] == source_message
+
+    async def test_active_context_excludes_unrelated_and_pending_memories(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("user_timezone", "Asia/Hong_Kong")
+        conversation_id = await store.create_conversation()
+        await store.save_message(conversation_id, "user", "Our project uses Python")
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+
+        context = await store.get_active_context("What is my timezone?")
+
+        assert [fact["key"] for fact in context] == ["user_timezone"]
+        assert candidate["status"] == "pending"
+
     async def test_context_ranks_fact_keys_above_value_matches(
         self, store: MemoryStore
     ) -> None:

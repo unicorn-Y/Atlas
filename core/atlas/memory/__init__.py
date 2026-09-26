@@ -605,7 +605,17 @@ class MemoryStore:
     async def get_agent_context(
         self, query: str, limit: int = 10
     ) -> list[dict[str, Any]]:
-        """Return the most relevant stored facts for the current agent request."""
+        """Return query-relevant validated facts for the current agent request."""
+        return await self.get_active_context(query, limit=limit)
+
+    async def get_active_context(
+        self, query: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Assemble bounded, deterministic context from validated facts only.
+
+        Pending candidates are deliberately excluded: only facts written directly
+        by an explicit remember request or promoted through approval enter context.
+        """
         facts = await self.list_facts()
         terms = {
             token.casefold()
@@ -617,18 +627,17 @@ class MemoryStore:
         ranked: list[tuple[int, dict[str, Any]]] = []
         for fact in facts:
             key = fact["key"].casefold()
-            key_terms = set(re.split(r"[\W_]+", key))
-            value = fact["value"].casefold()
+            key_terms = {token for token in re.split(r"[\W_]+", key) if token}
+            value_terms = {token.casefold() for token in _MEMORY_TOKEN.findall(fact["value"])}
             score = sum(
-                4 if term in key_terms else 2 if term in key else 1 if term in value else 0
+                4 if term in key_terms else 1 if term in value_terms else 0
                 for term in terms
             )
             if score:
                 ranked.append((score, fact))
 
-        ranked.sort(
-            key=lambda item: (item[1]["updated_at"], item[1]["key"]), reverse=True
-        )
+        ranked.sort(key=lambda item: item[1]["key"])
+        ranked.sort(key=lambda item: item[1]["updated_at"], reverse=True)
         ranked.sort(key=lambda item: item[0], reverse=True)
         return [fact for _, fact in ranked[: max(0, limit)]]
 
