@@ -13,7 +13,7 @@ import aiosqlite
 import structlog
 
 from atlas.config import get_config
-from atlas.memory.quality import evaluate_memory_health
+from atlas.memory.quality import evaluate_memory_health, evaluate_memory_optimization
 
 log = structlog.get_logger()
 
@@ -225,6 +225,12 @@ class MemoryStore:
                 memory_key TEXT NOT NULL,
                 rating TEXT NOT NULL CHECK(rating IN ('useful', 'not_useful', 'uncertain')),
                 recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_optimization_reports (
+                id TEXT PRIMARY KEY,
+                report_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
             );
         """)
         cursor = await self._db.execute("PRAGMA table_info(facts)")
@@ -855,6 +861,47 @@ class MemoryStore:
             window_days=window_days,
             as_of=now,
         )
+
+    async def create_memory_optimization_report(
+        self,
+        *,
+        stale_after_days: int = 180,
+        window_days: int = 90,
+        as_of: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Create and durably audit an advisory optimization report snapshot."""
+        report = evaluate_memory_optimization(await self.get_memory_health(
+            stale_after_days=stale_after_days,
+            window_days=window_days,
+            as_of=as_of,
+        ))
+        report_id = str(uuid.uuid4())
+        created_at = datetime.now(timezone.utc).isoformat()
+        assert self._db is not None
+        await self._db.execute(
+            "INSERT INTO memory_optimization_reports (id, report_json, created_at) "
+            "VALUES (?, ?, ?)",
+            (report_id, json.dumps(report, ensure_ascii=False, sort_keys=True), created_at),
+        )
+        await self._db.commit()
+        return {"id": report_id, "created_at": created_at, "report": report}
+
+    async def list_memory_optimization_reports(
+        self, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return immutable optimization report snapshots, newest first."""
+        if limit < 0:
+            raise ValueError("Report limit must be non-negative")
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, report_json, created_at FROM memory_optimization_reports "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
+        )
+        return [
+            {"id": row["id"], "created_at": row["created_at"],
+             "report": json.loads(row["report_json"])}
+            for row in await cursor.fetchall()
+        ]
 
     async def get_agent_context(
         self, query: str, limit: int = 10

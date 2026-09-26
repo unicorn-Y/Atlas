@@ -159,3 +159,121 @@ def evaluate_memory_health(
         "review_count": sum(item["status"] == "review" for item in results),
         "memories": results,
     }
+
+
+def evaluate_memory_optimization(
+    health_report: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Turn measured retrieval and feedback signals into ranked advisory actions."""
+    memories = list(health_report.get("memories", ()))
+    retrieval_observations = sum(
+        int(memory["counts"].get("used", 0))
+        + int(memory["counts"].get("not_used", 0))
+        for memory in memories
+    )
+    positive = sum(int(memory.get("positive_signal_count", 0)) for memory in memories)
+    negative = sum(int(memory.get("negative_signal_count", 0)) for memory in memories)
+    quality_observations = positive + negative
+    metrics = {
+        "memory_count": len(memories),
+        "retrieval_observation_count": retrieval_observations,
+        "retrieval_effectiveness": round(
+            sum(int(memory["counts"].get("used", 0)) for memory in memories)
+            / retrieval_observations, 4,
+        ) if retrieval_observations else None,
+        "quality_observation_count": quality_observations,
+        "usefulness_rate": round(positive / quality_observations, 4)
+        if quality_observations else None,
+    }
+
+    recommendations: list[dict[str, Any]] = []
+    for memory in memories:
+        counts = memory["counts"]
+        corrections = int(counts.get("correction", 0))
+        rejected = int(counts.get("rejected", 0))
+        unhelpful = int(counts.get("unhelpful", 0))
+        not_useful = int(counts.get("not_useful", 0))
+        used = int(counts.get("used", 0))
+        not_used = int(counts.get("not_used", 0))
+        memory_quality_observations = (
+            int(memory.get("positive_signal_count", 0))
+            + int(memory.get("negative_signal_count", 0))
+        )
+        if corrections or rejected:
+            if corrections and rejected:
+                reason = (
+                    f"{corrections} correction and {rejected} rejection signal(s) were recorded; "
+                    "review the stored memory before changing it."
+                )
+            elif rejected:
+                reason = (
+                    f"{rejected} related candidate was rejected; review the stored memory "
+                    "before changing it."
+                )
+            else:
+                reason = (
+                    f"{corrections} correction signal(s) were recorded; review the stored "
+                    "memory before changing it."
+                )
+            recommendations.append({
+                "key": memory["key"],
+                "action": "human_review",
+                "priority": 100 + 10 * (corrections + rejected),
+                "reason": reason,
+                "evidence": {
+                    "rejected_count": rejected,
+                    "correction_count": corrections,
+                },
+            })
+        elif unhelpful or not_useful:
+            recommendations.append({
+                "key": memory["key"],
+                "action": "review_usefulness",
+                "priority": 70 + 5 * (unhelpful + not_useful),
+                "reason": (
+                    f"{unhelpful + not_useful} negative usefulness signal(s) were recorded; "
+                    "ask for human review before changing this memory."
+                ),
+                "evidence": {
+                    "unhelpful_count": unhelpful,
+                    "not_useful_count": not_useful,
+                },
+            })
+        elif not_used > used:
+            recommendations.append({
+                "key": memory["key"],
+                "action": "improve_retrieval",
+                "priority": 50 + not_used - used,
+                "reason": (
+                    f"The memory was not used in {not_used} of {used + not_used} "
+                    "recorded retrievals; review its retrieval cues."
+                ),
+                "evidence": {"used_count": used, "not_used_count": not_used},
+            })
+        elif "stale" in memory.get("review_reasons", ()):
+            recommendations.append({
+                "key": memory["key"],
+                "action": "verify_freshness",
+                "priority": 30,
+                "reason": (
+                    f"The memory is {memory['age_days']} days old; verify its freshness "
+                    "with the user before changing it."
+                ),
+                "evidence": {"age_days": memory["age_days"]},
+            })
+        elif not memory_quality_observations:
+            recommendations.append({
+                "key": memory["key"],
+                "action": "collect_feedback",
+                "priority": 10,
+                "reason": "No usefulness feedback is recorded; collect an outcome before optimizing.",
+                "evidence": {"quality_observation_count": memory_quality_observations},
+            })
+
+    recommendations.sort(key=lambda item: (-item["priority"], item["key"]))
+    return {
+        "evaluated_at": health_report.get("evaluated_at"),
+        "metrics": metrics,
+        "recommendation_count": len(recommendations),
+        "recommendations": recommendations,
+    }

@@ -367,6 +367,22 @@ async def list_memory_candidates(
     return await memory.list_memory_candidates(status=status)
 
 
+@app.post("/api/memory/optimization-reports")
+async def create_memory_optimization_report() -> dict[str, Any]:
+    """Generate and preserve a ranked, advisory memory optimization report."""
+    assert memory is not None
+    return await memory.create_memory_optimization_report()
+
+
+@app.get("/api/memory/optimization-reports")
+async def list_memory_optimization_reports(
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """Return preserved optimization report snapshots, newest first."""
+    assert memory is not None
+    return await memory.list_memory_optimization_reports(limit=limit)
+
+
 @app.post("/api/memory/candidates/{candidate_id}/approve")
 async def approve_memory_candidate(candidate_id: str) -> dict[str, str]:
     """Promote a pending candidate after explicit user approval."""

@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from atlas.memory import MemoryStore
-from atlas.memory.quality import evaluate_memory_quality, evaluate_recall
+from atlas.memory.quality import (
+    evaluate_memory_quality,
+    evaluate_memory_optimization,
+    evaluate_recall,
+)
 
 
 @pytest.fixture
@@ -173,3 +177,82 @@ def test_memory_health_rejects_negative_windows() -> None:
 
     with pytest.raises(ValueError, match="non-negative"):
         evaluate_memory_health([], stale_after_days=-1)
+
+
+def test_memory_optimization_ranks_explainable_recommendations_deterministically() -> None:
+    from atlas.memory.quality import evaluate_memory_health
+
+    health = evaluate_memory_health([
+        {
+            "key": "retrieval_gap", "memory_type": "fact",
+            "updated_at": "2026-09-25T00:00:00+00:00",
+            "used_count": 1, "not_used_count": 4, "helpful_count": 1,
+        },
+        {
+            "key": "rejected_memory", "memory_type": "fact",
+            "updated_at": "2026-09-25T00:00:00+00:00",
+            "rejected_count": 1,
+        },
+    ], as_of=datetime(2026, 9, 26, tzinfo=timezone.utc))
+
+    report = evaluate_memory_optimization(health)
+
+    assert report["metrics"] == {
+        "memory_count": 2,
+        "retrieval_observation_count": 5,
+        "retrieval_effectiveness": 0.2,
+        "quality_observation_count": 2,
+        "usefulness_rate": 0.5,
+    }
+    assert [item["key"] for item in report["recommendations"]] == [
+        "rejected_memory", "retrieval_gap",
+    ]
+    assert report["recommendations"][0] == {
+        "key": "rejected_memory",
+        "action": "human_review",
+        "priority": 110,
+        "reason": "1 related candidate was rejected; review the stored memory before changing it.",
+        "evidence": {"rejected_count": 1, "correction_count": 0},
+    }
+    assert evaluate_memory_optimization(health) == report
+
+
+async def test_optimization_reports_preserve_recommendation_audit_history(
+    store: MemoryStore,
+) -> None:
+    database_path = store._db_path
+    await store.set_fact("user_preference", "concise answers")
+    conversation_id = await store.create_conversation()
+    await store.save_message(
+        conversation_id, "user", "I prefer concise answers."
+    )
+    [candidate] = await store.extract_conversation_candidates(conversation_id)
+    assert await store.reject_memory_candidate(candidate["id"])
+
+    first = await store.create_memory_optimization_report(
+        as_of=datetime(2026, 9, 26, tzinfo=timezone.utc)
+    )
+    second = await store.create_memory_optimization_report(
+        as_of=datetime(2026, 9, 27, tzinfo=timezone.utc)
+    )
+    history = await store.list_memory_optimization_reports()
+
+    assert len(history) == 2
+    assert [entry["id"] for entry in history] == [second["id"], first["id"]]
+    assert history[1]["report"] == first["report"]
+    assert history[0]["report"]["recommendations"][0]["action"] == "human_review"
+    assert history[0]["report"]["recommendations"][0]["key"] == "user_preference"
+    assert await store.get_fact("user_preference") == "concise answers"
+    assert (await store.list_memory_candidates(status="rejected"))[0]["id"] == candidate["id"]
+
+    await store.close()
+    reopened = MemoryStore(db_path=database_path)
+    await reopened.init()
+    try:
+        persisted = await reopened.list_memory_optimization_reports()
+        assert [entry["id"] for entry in persisted] == [second["id"], first["id"]]
+        assert persisted[0]["report"] == second["report"]
+        assert await reopened.get_fact("user_preference") == "concise answers"
+        assert (await reopened.list_memory_candidates(status="rejected"))[0]["id"] == candidate["id"]
+    finally:
+        await reopened.close()
