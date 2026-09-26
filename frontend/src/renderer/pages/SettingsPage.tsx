@@ -4,6 +4,8 @@ import type { ModelInfo } from '@atlas/backend-adapter';
 import styles from '../App.module.css';
 
 interface SettingsPageProps {
+  username: string;
+  onSaveUsername: (username: string) => void;
   apiBaseUrl: string;
   providerBaseUrl: string;
   connected: boolean;
@@ -27,6 +29,7 @@ export default function SettingsPage(props: SettingsPageProps) {
   const [modelName, setModelName] = useState('');
   const [provider, setProvider] = useState('openai');
   const [litellmModel, setLitellmModel] = useState('');
+  const [username, setUsername] = useState(props.username);
   const saveProvider = async (event: FormEvent) => {
     event.preventDefault();
     if (await props.onSaveProvider(baseUrl, apiKey)) setApiKey('');
@@ -39,6 +42,13 @@ export default function SettingsPage(props: SettingsPageProps) {
 
   return <section className={styles.settingsPage} aria-label="设置">
     <header className={styles.settingsHeader}><button className={styles.quietButton} onClick={props.onBack}><ChevronLeft size={16} />返回对话</button><div><h1>设置</h1><p>配置模型服务并管理 Atlas 用户偏好。</p></div></header>
+    <section className={styles.settingsCard}>
+      <h2>用户</h2>
+      <form className={styles.settingsForm} onSubmit={(event) => { event.preventDefault(); props.onSaveUsername(username); }}>
+        <label>用户名<input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="User" /></label>
+        <div className={styles.settingsFormFooter}><span>用户名会保存在此设备的浏览器存储中。</span><button className={styles.settingsAction}>保存用户名</button></div>
+      </form>
+    </section>
     <section className={styles.settingsCard}>
       <h2>API 提供商</h2>
       <form className={styles.settingsForm} onSubmit={saveProvider}>

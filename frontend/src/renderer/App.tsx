@@ -16,12 +16,16 @@ export default function App() {
   const [selectedArtifact, setSelectedArtifact] = useState('');
   const [input, setInput] = useState('');
   const [toast, setToast] = useState('');
+  const [username, setUsername] = useState(() => localStorage.getItem('atlas.preference.username')?.trim() || 'User');
   const [maximized, setMaximized] = useState(false);
   const store = useAtlasStore();
   const activeConversation = store.conversations.find((item) => item.id === store.activeConversationId);
   const activeRun = store.runs.find((run) => run.id === store.activeRunId);
   const activeArtifacts = store.artifacts.filter((artifact) => artifact.runId === store.activeRunId);
   const activeEvents = activeRun?.events ?? [];
+  const currentPlan = [...activeEvents].reverse().find((event) => event.type === 'run.plan.updated')?.data.plan as { subtasks?: unknown[] } | undefined;
+  const planSteps = Array.isArray(currentPlan?.subtasks) ? currentPlan.subtasks.filter((step): step is { status?: string } => Boolean(step) && typeof step === 'object') : [];
+  const completedPlanSteps = planSteps.filter((step) => step.status === 'completed').length;
   const messages = (store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user' || message.role === 'assistant');
 
   useEffect(() => { void store.initialize(); }, []);
@@ -62,7 +66,7 @@ export default function App() {
     </aside>
 
     <main className={styles.main}>
-      {page === 'settings' ? <SettingsPage apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setPage('chat')} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} /> : <>
+      {page === 'settings' ? <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; localStorage.setItem('atlas.preference.username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setPage('chat')} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} /> : <>
         <header className={styles.topbar}>
           <div className={styles.topbarTitle}>对话 <span>/</span> {activeConversation?.title ?? '新对话'}</div>
           <div className={styles.topbarActions}>
@@ -77,21 +81,23 @@ export default function App() {
         <section className={styles.taskbar}>
           <div className={styles.taskIdentity}><div className={styles.eyebrow}>当前任务</div><div className={styles.taskTitle}>{activeRun?.title ?? activeConversation?.title ?? '新对话'}</div><div className={styles.taskSubtitle}>{activeRun ? `${activeRun.phase} · ${activeRun.status}` : activeConversation ? '在当前对话中继续与 Atlas 协作' : '新建对话以开始协作'}</div></div>
           <div className={styles.taskState}><i className={store.busy && !store.paused ? styles.stateWorking : ''} />{store.paused ? '已暂停' : store.busy ? '执行中' : activeRun?.status ?? '就绪'}</div>
-          <div className={styles.taskRuntime}>{store.mode === 'backend' ? '已连接' : 'Mock 模式'}</div><div className={styles.taskSpacer} />
+          <div className={styles.taskRuntime}>{store.connected ? '已连接' : '后端未连接'}</div><div className={styles.taskSpacer} />
           <div className={styles.taskActions}><button className={styles.quietButton} disabled={!activeRun || !store.busy} onClick={() => store.togglePaused()}>{store.paused ? <Play /> : <Pause />}{store.paused ? '继续' : '暂停'}</button><button className={styles.quietButton} disabled={!activeRun || !store.busy} onClick={() => store.stopTask()}><Square />停止</button><button className={styles.iconButton} aria-label="新建对话" onClick={() => void store.createConversation()}><Plus /></button><button className={styles.iconButton} aria-label="更多任务操作" onClick={() => setToast(activeRun ? `Run ${activeRun.id}` : '当前没有运行中的任务')}><MoreHorizontal /></button></div>
         </section>
+
+        {planSteps.length > 0 && <div className={styles.planStrip} aria-label="当前计划进度"><strong>{planSteps.length} 步 · {completedPlanSteps}/{planSteps.length} 完成</strong><div className={styles.planProgress}><i style={{ width: `${completedPlanSteps / planSteps.length * 100}%` }} /></div></div>}
 
         <div className={`${styles.workspace} ${inspectorOpen ? '' : styles.inspectorHidden}`}>
           <section className={styles.activityColumn} aria-label="任务活动">
             <div className={styles.activityScroll}><div className={styles.activityInner}>
               <div className={styles.conversationHeading}>任务对话</div>
-              {messages.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} status={message.role === 'assistant' ? '历史消息' : undefined} />)}
+              {messages.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username} status={message.role === 'assistant' ? '历史消息' : undefined} />)}
               {store.loadingMessagesConversationId === store.activeConversationId && <div className={styles.loadingConversation} role="status">正在载入对话历史…</div>}
               {!messages.length && !activeEvents.length && store.loadingMessagesConversationId !== store.activeConversationId && <div className={styles.emptyConversation}>{activeConversation ? '发送消息，开始这段对话。' : '新建对话，开始与 Atlas 协作。'}</div>}
-              <ConversationActivity events={activeRun && ['completed', 'failed', 'cancelled'].includes(activeRun.status) ? activeEvents.filter((event) => !['run.started', 'message.delta', 'message.completed'].includes(event.type)) : activeEvents} store={store} setTab={setTab} />
+              <ConversationActivity events={activeRun && ['completed', 'failed', 'cancelled'].includes(activeRun.status) ? activeEvents.filter((event) => !['run.started', 'message.delta', 'message.completed'].includes(event.type)) : activeEvents} store={store} username={username} setTab={setTab} />
               {store.error && <div className={styles.errorCard} role="alert"><span>{store.error}</span><button aria-label="关闭错误提示" onClick={store.dismissError}><X size={15} /></button></div>}
             </div></div>
-            <div className={styles.composerZone}><form className={styles.composer} onSubmit={submit}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={onInputKey} placeholder="继续告诉 Atlas 要做什么…" rows={2} /><div className={styles.composerBottom}><div className={styles.composerTools}><button type="button" aria-label="添加附件" onClick={() => setToast('附件功能尚未配置')}><Paperclip /></button><button type="button" aria-label="语音输入" onClick={() => setToast('语音输入尚未配置')}><Mic /></button><span>{store.mode === 'mock' ? 'Mock 运行模式' : '已连接 Atlas 后端'}</span></div><button className={styles.sendButton} aria-label="发送消息" type="submit" disabled={!input.trim()}><Send size={15} />发送</button></div></form><div className={styles.composerHint}>Atlas 会在当前任务上下文中继续工作 <CircleHelp size={13} /></div></div>
+            <div className={styles.composerZone}><form className={styles.composer} onSubmit={submit}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={onInputKey} placeholder="继续告诉 Atlas 要做什么…" rows={2} /><div className={styles.composerBottom}><div className={styles.composerTools}><button type="button" aria-label="添加附件" onClick={() => setToast('附件功能尚未配置')}><Paperclip /></button><button type="button" aria-label="语音输入" onClick={() => setToast('语音输入尚未配置')}><Mic /></button><span>{store.connected ? '已连接 Atlas 后端' : '后端未连接'}</span></div><button className={styles.sendButton} aria-label="发送消息" type="submit" disabled={!input.trim()}><Send size={15} />发送</button></div></form><div className={styles.composerHint}>Atlas 会在当前任务上下文中继续工作 <CircleHelp size={13} /></div></div>
           </section>
 
           {inspectorOpen && <aside className={styles.inspector}><div className={styles.inspectorHead}><div className={styles.tabs}>{(['context', 'artifacts', 'activity'] as InspectorTab[]).map((name) => <button className={tab === name ? styles.tabActive : ''} key={name} onClick={() => setTab(name)}>{name === 'context' ? '上下文' : name === 'artifacts' ? '产物' : '活动'}</button>)}</div><button className={styles.inspectorClose} aria-label="收起检查器" onClick={() => setInspectorOpen(false)}><ChevronRight /></button></div>

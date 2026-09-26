@@ -4,6 +4,21 @@ import { useAtlasStore } from './useAtlasStore';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('conversation creation', () => {
+  it('does not inject demo conversations when the backend history is empty', async () => {
+    useAtlasStore.setState({ conversations: [], activeConversationId: '', conversationMessages: {} });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ models: [], current: '' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => [] } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ servers: [], tool_count: 0, tools: [] }) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await useAtlasStore.getState().initialize();
+
+    expect(useAtlasStore.getState().conversations).toEqual([]);
+    expect(useAtlasStore.getState().activeConversationId).toBe('');
+  });
+
   it('creates a conversation in backend state and selects it', async () => {
     const created = { id: 'conversation-new', title: 'New conversation', created_at: '2026-09-26', updated_at: '2026-09-26' };
     const fetchMock = vi.fn()

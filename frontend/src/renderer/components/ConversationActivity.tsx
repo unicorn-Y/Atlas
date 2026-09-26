@@ -10,10 +10,11 @@ type InspectorTab = 'context' | 'artifacts' | 'activity';
 interface ConversationActivityProps {
   events: AgentEvent[];
   store: ReturnType<typeof useAtlasStore.getState>;
+  username: string;
   setTab: (tab: InspectorTab) => void;
 }
 
-export default function ConversationActivity({ events, store, setTab }: ConversationActivityProps) {
+export default function ConversationActivity({ events, store, username, setTab }: ConversationActivityProps) {
   const [approvalDetails, setApprovalDetails] = useState(false);
   const result: ReactNode[] = [];
   for (let index = 0; index < events.length; index += 1) {
@@ -27,14 +28,14 @@ export default function ConversationActivity({ events, store, setTab }: Conversa
       }
       const finalEvent = events[index]?.type === 'message.completed' ? events[index] : undefined;
       if (!finalEvent) index -= 1;
-      result.push(<ConversationMessage key={finalEvent?.id ?? firstId} role="assistant" content={String(finalEvent?.data.content ?? content)} status={finalEvent ? '回复完成' : '实时输出'} />);
+      result.push(<ConversationMessage key={finalEvent?.id ?? firstId} role="assistant" content={String(finalEvent?.data.content ?? content)} username={username} status={finalEvent ? '回复完成' : '实时输出'} />);
       continue;
     }
     if (event.type === 'message.completed') {
-      result.push(<ConversationMessage key={event.id} role="assistant" content={String(event.data.content ?? '')} status="回复完成" />);
+      result.push(<ConversationMessage key={event.id} role="assistant" content={String(event.data.content ?? '')} username={username} status="回复完成" />);
       continue;
     }
-    result.push(renderRuntimeEvent(event, store, setTab, approvalDetails, setApprovalDetails));
+    result.push(renderRuntimeEvent(event, store, username, setTab, approvalDetails, setApprovalDetails));
   }
   return <>{result}</>;
 }
@@ -42,12 +43,13 @@ export default function ConversationActivity({ events, store, setTab }: Conversa
 function renderRuntimeEvent(
   event: AgentEvent,
   store: ReturnType<typeof useAtlasStore.getState>,
+  username: string,
   setTab: (tab: InspectorTab) => void,
   approvalDetails: boolean,
   setApprovalDetails: (update: (open: boolean) => boolean) => void,
 ) {
   const data = event.data;
-  if (event.type === 'run.started' && typeof data.content === 'string') return <ConversationMessage key={event.id} role="user" content={data.content} />;
+  if (event.type === 'run.started' && typeof data.content === 'string') return <ConversationMessage key={event.id} role="user" content={data.content} username={username} />;
   if (event.type === 'tool.started' || event.type === 'tool.completed') {
     const result = data.result;
     const input = data.arguments;

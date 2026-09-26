@@ -6,6 +6,7 @@ export type AgentEventType =
   | 'message.delta' | 'message.completed'
   | 'tool.started' | 'tool.completed' | 'approval.required' | 'approval.responded'
   | 'artifact.updated' | 'run.paused' | 'run.resumed'
+  | 'run.plan.updated'
   | 'run.completed' | 'run.failed' | 'run.cancelled';
 
 export interface AgentEvent {
