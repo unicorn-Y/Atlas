@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import uuid
 from dataclasses import dataclass, field
@@ -22,6 +23,7 @@ from litellm import acompletion
 from typing_extensions import TypedDict
 
 from atlas.agent.capabilities import AgentCapabilityRegistry
+from atlas.agent.planning import TaskPlan, requires_plan
 from atlas.config import get_config
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
@@ -377,6 +379,8 @@ class AgentOrchestrator:
         cancel_event: asyncio.Event | None = None,
         pause_event: asyncio.Event | None = None,
         approval_callback: Callable[[str, str, dict], Any] | None = None,
+        plan_state: dict[str, Any] | None = None,
+        plan_update_callback: Callable[[dict[str, Any]], Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -387,6 +391,8 @@ class AgentOrchestrator:
             cancel_event: asyncio.Event — set to cancel the run.
             pause_event: asyncio.Event — clear to pause, set to resume.
             approval_callback: async (event_id, tool_name, args) -> 'allow'|'deny'
+            plan_state: Previously persisted plan to resume.
+            plan_update_callback: Persist generated or verified plan updates.
 
         Events yielded:
             {"type": "chunk", "content": "..."}
@@ -418,6 +424,56 @@ class AgentOrchestrator:
             msg_len=len(message),
         )
 
+        plan: TaskPlan | None = None
+        if plan_state:
+            try:
+                plan = TaskPlan.from_dict(plan_state)
+            except (TypeError, ValueError) as exc:
+                yield {
+                    "type": "error",
+                    "category": "backend",
+                    "detail": f"Unable to recover task plan: {exc}",
+                }
+                return
+            plan_value = plan.to_dict()
+            if plan_update_callback:
+                try:
+                    result = plan_update_callback(plan_value)
+                    if inspect.isawaitable(result):
+                        await result
+                except Exception as exc:
+                    yield {
+                        "type": "error",
+                        "category": "backend",
+                        "detail": f"Unable to persist recovered task plan: {exc}",
+                    }
+                    return
+            yield {"type": "plan_updated", "plan": plan_value, "resumed": True}
+        elif requires_plan(message):
+            try:
+                plan = await self._create_plan(message, litellm_model)
+            except Exception as exc:
+                yield {
+                    "type": "error",
+                    "category": "model",
+                    "detail": f"Unable to create task plan: {exc}",
+                }
+                return
+            plan_value = plan.to_dict()
+            if plan_update_callback:
+                try:
+                    result = plan_update_callback(plan_value)
+                    if inspect.isawaitable(result):
+                        await result
+                except Exception as exc:
+                    yield {
+                        "type": "error",
+                        "category": "backend",
+                        "detail": f"Unable to persist task plan: {exc}",
+                    }
+                    return
+            yield {"type": "plan_updated", "plan": plan_value, "resumed": False}
+
         # Build initial messages from conversation history
         cfg = get_config()
         try:
@@ -435,6 +491,12 @@ class AgentOrchestrator:
             return
 
         initial_messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
+        if plan:
+            initial_messages.append(SystemMessage(content=(
+                "Follow this structured task plan. Complete pending subtasks in order. "
+                "Do not repeat completed subtasks; their evidence is recorded. "
+                "Plan JSON:\n" + json.dumps(plan.to_dict(), ensure_ascii=False)
+            )))
         memories = context["memories"]
         if memories:
             initial_messages.append(SystemMessage(
@@ -489,6 +551,23 @@ class AgentOrchestrator:
                     full_response = msg.content
                     break
 
+            if plan:
+                try:
+                    plan.apply_verification(
+                        await self._verify_plan(plan, full_response, litellm_model)
+                    )
+                    plan_value = plan.to_dict()
+                    if plan_update_callback:
+                        update_result = plan_update_callback(plan_value)
+                        if inspect.isawaitable(update_result):
+                            await update_result
+                    yield {
+                        "type": "plan_updated", "plan": plan_value,
+                        "resumed": bool(plan_state),
+                    }
+                except Exception as exc:
+                    log.warning("agent.plan_verification_failed", error=str(exc))
+
             try:
                 msg_id = await self._memory.save_message(
                     conversation_id=conversation_id,
@@ -530,6 +609,89 @@ class AgentOrchestrator:
             await asyncio.gather(graph_task, return_exceptions=True)
 
     # -- helpers -------------------------------------------------------------
+
+    @staticmethod
+    def _response_text(response: Any) -> str:
+        choices = (
+            response.get("choices")
+            if isinstance(response, dict)
+            else getattr(response, "choices", None)
+        )
+        if not choices:
+            raise ValueError("Planner returned no choices")
+        choice = choices[0]
+        message = (
+            choice.get("message")
+            if isinstance(choice, dict)
+            else getattr(choice, "message", None)
+        )
+        content = (
+            message.get("content")
+            if isinstance(message, dict)
+            else getattr(message, "content", None)
+        )
+        if not isinstance(content, str):
+            raise ValueError("Planner response content must be text")
+        return content
+
+    @classmethod
+    def _json_object(cls, response: Any) -> dict[str, Any]:
+        raw = cls._response_text(response).strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            raw = raw.split("\n", 1)[-1].removesuffix("```").strip()
+        start, end = raw.find("{"), raw.rfind("}")
+        if start < 0 or end < start:
+            raise ValueError("Planner response did not contain a JSON object")
+        value = json.loads(raw[start:end + 1])
+        if not isinstance(value, dict):
+            raise ValueError("Planner response must be a JSON object")
+        return value
+
+    async def _create_plan(self, message: str, model: str) -> TaskPlan:
+        response = await acompletion(
+            model=model,
+            messages=[
+                {"role": "system", "content": (
+                    "Break the user's multi-step task into a concise ordered plan. "
+                    "Return only JSON with goal and subtasks. Each subtask needs a stable "
+                    "id, title, and a concrete verification condition."
+                )},
+                {"role": "user", "content": message},
+            ],
+            max_tokens=1200,
+            stream=False,
+        )
+        return TaskPlan.from_dict(self._json_object(response))
+
+    async def _verify_plan(
+        self, plan: TaskPlan, response_text: str, model: str,
+    ) -> list[dict[str, Any]]:
+        pending = [item for item in plan.subtasks if item.status != "completed"]
+        if not pending:
+            return []
+        response = await acompletion(
+            model=model,
+            messages=[
+                {"role": "system", "content": (
+                    "Verify each pending subtask against the assistant's final response. "
+                    "Mark completed only when the response provides concrete evidence for "
+                    "its verification condition. Return only JSON: {\"results\":["
+                    "{\"id\":\"...\",\"completed\":true,\"evidence\":\"...\"}]}. "
+                    "Omit unverified subtasks."
+                )},
+                {"role": "user", "content": json.dumps({
+                    "subtasks": [item.__dict__ for item in pending],
+                    "final_response": response_text,
+                }, ensure_ascii=False)},
+            ],
+            max_tokens=1200,
+            stream=False,
+        )
+        results = self._json_object(response).get("results")
+        if not isinstance(results, list):
+            raise ValueError("Verifier response requires a results list")
+        return results
 
     @staticmethod
     def _to_litellm_messages(messages: list[BaseMessage]) -> list[dict[str, Any]]:

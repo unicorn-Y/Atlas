@@ -73,15 +73,33 @@ class TestRuntimeProtocol:
         self, tmp_path, monkeypatch,
     ) -> None:
         import asyncio
+        import aiosqlite
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
 
         from atlas import server
 
         db_path = tmp_path / "runtime.db"
+        async with aiosqlite.connect(str(db_path)) as legacy_db:
+            await legacy_db.execute("""
+                CREATE TABLE runtime_runs (
+                    run_id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    sequence INTEGER NOT NULL DEFAULT 0,
+                    recovery_event TEXT
+                )
+            """)
+            await legacy_db.commit()
         original = server.RuntimeManager(db_path)
         await original.init()
         run = server.RunState("recover-once", "conv-recover", "test-model")
+        run.plan_state = {
+            "goal": "Recover plan", "subtasks": [{
+                "id": "step", "title": "Resume", "verification": "Evidence exists",
+            }],
+        }
         run.next_envelope("run.started", {"status": "running"})
         await original.persist_run(run)
         await original.close()
@@ -89,6 +107,7 @@ class TestRuntimeProtocol:
         recovered = server.RuntimeManager(db_path)
         await recovered.init()
         first_sequence = recovered.runs[run.run_id].sequence
+        assert recovered.runs[run.run_id].plan_state == run.plan_state
         await recovered.close()
 
         restarted_again = server.RuntimeManager(db_path)
@@ -113,6 +132,49 @@ class TestRuntimeProtocol:
         finally:
             restarted_again.disconnect("recovery-connection")
             await restarted_again.close()
+
+    async def test_interrupted_plan_is_persisted_and_resumes_as_new_run(
+        self, tmp_path, monkeypatch,
+    ) -> None:
+        import asyncio
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from atlas import server
+
+        db_path = tmp_path / "runtime.db"
+        original = server.RuntimeManager(db_path)
+        await original.init()
+        run = server.RunState("plan-interrupted", "plan-conversation", "test-model")
+        run.plan_state = {
+            "goal": "Inspect then summarize",
+            "subtasks": [{"id": "inspect", "title": "Inspect",
+                          "verification": "Files inspected"}],
+        }
+        await original.persist_run(run)
+        await original.close()
+
+        recovered = server.RuntimeManager(db_path)
+        await recovered.init()
+        prior = recovered.runs[run.run_id]
+        assert prior.status == "failed"
+        assert prior.plan_state == run.plan_state
+        execute = AsyncMock()
+        monkeypatch.setattr(server, "runtime_mgr", recovered)
+        monkeypatch.setattr(server, "model_mgr", SimpleNamespace(current_model="test-model"))
+        monkeypatch.setattr(server, "_execute_run", execute)
+        try:
+            await server._handle_run_start("resume-connection", {
+                "run_id": "plan-resumed",
+                "resume_from": run.run_id,
+            })
+            await asyncio.sleep(0)
+            assert execute.await_count == 1
+            assert execute.await_args.kwargs["plan_state"] == run.plan_state
+            assert execute.await_args.args[2] == "Inspect then summarize"
+        finally:
+            recovered.disconnect("resume-connection")
+            await recovered.close()
 
 
 # ---------------------------------------------------------------------------

@@ -113,6 +113,22 @@ On the active run socket the client may send `{ "type": "run.cancel", "run_id": 
 
 The adapter probes `GET /api/runtime/protocol` before the first live run. If it returns `{ "version": "1.1" }`, it uses the durable run command and replay contract above. If the endpoint is missing or reports another version, it sends the V1 `type: "message"` command and accepts `chunk`, `tool_call`, `tool_result`, `done`, `error`, and `cancelled` responses. Those responses are converted to local run events for display, but they do not provide durable IDs or replay, so an unexpected socket loss is reported instead of being resumed. Full crash recovery requires the V1.1 envelope and resume endpoint above. The current Python service may continue to expose only the V1 chat protocol until its Agent Runtime is implemented.
 
+## Structured planning recovery
+
+For an interrupted run with a persisted structured plan, a client may start a
+new run ID and set resume_from to the failed run ID. The server resumes the
+saved plan's pending subtasks in the same conversation. The original run remains
+terminal and replay-only. Plan changes are emitted as additive
+run.plan.updated events with the plan and subtask verification evidence.
+
+## Structured planning recovery
+
+For an interrupted run with a persisted structured plan, a client may start a
+new run ID and set resume_from to the failed run ID. The server resumes the
+saved plan's pending subtasks in the same conversation. The original run remains
+terminal and replay-only. Plan changes are emitted as additive
+run.plan.updated events with the plan and subtask verification evidence.
+
 ## Local development
 
 Copy `frontend/.env.example` to `frontend/.env.local`, then change only `VITE_API_BASE_URL` if the API uses another address. Run the API before starting the desktop app. If the health probe fails, the UI remains usable with Mock conversations and streamed sample replies. No backend endpoint details are embedded in renderer components.

@@ -775,7 +775,7 @@ class RunState:
     __slots__ = (
         "run_id", "conversation_id", "model", "sequence",
         "status", "events", "cancel_event", "pause_event",
-        "approval_futures", "task",
+        "approval_futures", "task", "plan_state",
         "event_lock",
     )
 
@@ -791,6 +791,7 @@ class RunState:
         self.pause_event.set()  # not paused initially
         self.approval_futures: dict[str, asyncio.Future[str]] = {}
         self.task: asyncio.Task[None] | None = None
+        self.plan_state: dict[str, Any] | None = None
         self.event_lock = asyncio.Lock()
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -835,9 +836,14 @@ class RuntimeManager:
                 model TEXT NOT NULL,
                 status TEXT NOT NULL,
                 sequence INTEGER NOT NULL DEFAULT 0,
-                recovery_event TEXT
+                recovery_event TEXT,
+                plan_state TEXT
             )
         """)
+        async with self._db.execute("PRAGMA table_info(runtime_runs)") as cursor:
+            columns = {row["name"] for row in await cursor.fetchall()}
+        if "plan_state" not in columns:
+            await self._db.execute("ALTER TABLE runtime_runs ADD COLUMN plan_state TEXT")
         await self._db.commit()
         async with self._db.execute("SELECT * FROM runtime_runs") as cursor:
             rows = await cursor.fetchall()
@@ -845,6 +851,7 @@ class RuntimeManager:
             run = RunState(row["run_id"], row["conversation_id"], row["model"])
             run.status = row["status"]
             run.sequence = row["sequence"]
+            run.plan_state = json.loads(row["plan_state"]) if row["plan_state"] else None
             if run.status in ("running", "paused", "waiting"):
                 run.status = "failed"
                 recovery = run.next_envelope("run.failed", {
@@ -872,18 +879,20 @@ class RuntimeManager:
             return
         await self._db.execute("""
             INSERT INTO runtime_runs (
-                run_id, conversation_id, model, status, sequence, recovery_event
+                run_id, conversation_id, model, status, sequence, recovery_event, plan_state
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(run_id) DO UPDATE SET
                 conversation_id=excluded.conversation_id,
                 model=excluded.model,
                 status=excluded.status,
                 sequence=excluded.sequence,
-                recovery_event=COALESCE(excluded.recovery_event, runtime_runs.recovery_event)
+                recovery_event=COALESCE(excluded.recovery_event, runtime_runs.recovery_event),
+                plan_state=COALESCE(excluded.plan_state, runtime_runs.plan_state)
         """, (
             run.run_id, run.conversation_id, run.model, run.status, run.sequence,
             json.dumps(recovery_event) if recovery_event else None,
+            json.dumps(run.plan_state, ensure_ascii=False) if run.plan_state else None,
         ))
         await self._db.commit()
 
@@ -1013,7 +1022,18 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         return
 
     content = data.get("content", "")
-    conv_id = data.get("conversation_id") or str(uuid.uuid4())
+    resume_from = data.get("resume_from")
+    recovered_plan = None
+    prior_run = runtime_mgr.runs.get(resume_from) if isinstance(resume_from, str) else None
+    if resume_from is not None:
+        if not prior_run or prior_run.status != "failed" or not prior_run.plan_state:
+            raise ValueError("resume_from must reference an interrupted run with a saved plan")
+        recovered_plan = prior_run.plan_state
+        if not content:
+            content = str(recovered_plan.get("goal", ""))
+    conv_id = data.get("conversation_id") or (
+        prior_run.conversation_id if prior_run else str(uuid.uuid4())
+    )
     model_id = data.get("model")
 
     assert model_mgr is not None
@@ -1024,7 +1044,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
 
     # Start the run in background so we can keep receiving messages
     run.task = asyncio.create_task(
-        _execute_run(conn_id, run, content, model_id)
+        _execute_run(conn_id, run, content, model_id, plan_state=recovered_plan)
     )
 
 
@@ -1084,6 +1104,7 @@ async def _execute_run(
     run: RunState,
     content: str,
     model_id: str | None,
+    plan_state: dict[str, Any] | None = None,
 ) -> None:
     """Execute agent run, emitting Runtime Event envelopes."""
     assert orchestrator is not None
@@ -1104,6 +1125,14 @@ async def _execute_run(
                 return True
             await asyncio.sleep(0.1)
         return run.cancel_event.is_set()
+
+    async def persist_plan(value: dict[str, Any]) -> None:
+        run.plan_state = value
+        await runtime_mgr.persist_run(run)
+        await emit("run.plan.updated", {
+            "plan": value,
+            "resumed": plan_state is not None,
+        })
 
     try:
         # Emit run.started
@@ -1166,6 +1195,8 @@ async def _execute_run(
             cancel_event=run.cancel_event,
             pause_event=run.pause_event,
             approval_callback=approval_callback,
+            plan_state=plan_state,
+            plan_update_callback=persist_plan,
         ):
             if await check_pause_cancel():
                 run.status = "cancelled"
@@ -1188,6 +1219,10 @@ async def _execute_run(
             elif etype == "approval_required":
                 # Already emitted by the approval_callback above;
                 # no need to re-emit here.
+                pass
+
+            elif etype == "plan_updated":
+                # The plan state is persisted and emitted by persist_plan.
                 pass
 
             elif etype == "done":
