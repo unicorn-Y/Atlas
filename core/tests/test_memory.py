@@ -182,6 +182,75 @@ class TestFacts:
         assert ok is False
 
 
+class TestKnowledgeGraph:
+    async def test_graph_is_deterministic_and_edges_keep_fact_evidence(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact(
+            "project_language", "Python", category="project",
+            source_conversation_id="conv-1", source_message_id="msg-1",
+        )
+        await store.set_fact(
+            "project_framework", "FastAPI", category="project",
+            source_conversation_id="conv-2", source_message_id="msg-2",
+        )
+        await store.set_fact("user_timezone", "Asia/Hong_Kong", category="personal")
+
+        first = await store.generate_knowledge_graph()
+        second = await store.generate_knowledge_graph()
+
+        assert first == second
+        assert len(first["nodes"]) == 3
+        [edge] = first["edges"]
+        assert edge["relation"] == "same_category"
+        assert [item["fact_key"] for item in edge["evidence"]] == [
+            "project_framework", "project_language",
+        ]
+        assert [item["source_message_id"] for item in edge["evidence"]] == [
+            "msg-2", "msg-1",
+        ]
+
+    async def test_graph_traversal_and_task_hook_are_bounded_and_safe(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("project_language", "Python", category="project")
+        await store.set_fact("project_framework", "FastAPI", category="project")
+        await store.set_fact("project_database", "SQLite", category="project")
+        await store.set_fact("api_key", "do-not-expose", category="project")
+        await store.set_fact(
+            "identity_name", "Unapproved", category="personal", memory_type="identity"
+        )
+
+        result = await store.get_relevant_knowledge_graph("Python", limit=1, hops=1)
+        assert len(result["seed_ids"]) == 1
+        assert {node["key"] for node in result["nodes"]} == {
+            "project_language", "project_framework", "project_database",
+        }
+        assert all("api_key" != node["key"] for node in result["nodes"])
+        assert all("identity_name" != node["key"] for node in result["nodes"])
+        assert len(result["edges"]) == 3
+
+        for purpose in ("planning", "autonomous"):
+            hook = await store.get_task_knowledge_graph("Python", purpose, limit=1)
+            assert hook["purpose"] == purpose
+            assert hook["nodes"] == result["nodes"]
+        with pytest.raises(ValueError):
+            await store.get_task_knowledge_graph("Python", "other")
+
+    async def test_pending_candidate_does_not_appear_in_graph(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation("Graph approval")
+        await store.save_message(conversation_id, "user", "Our project uses Python.")
+        [candidate] = await store.extract_conversation_candidates(conversation_id)
+
+        assert (await store.generate_knowledge_graph())["nodes"] == []
+        assert await store.promote_memory_candidate(candidate["id"])
+        graph = await store.generate_knowledge_graph()
+        assert [node["key"] for node in graph["nodes"]] == ["project_stack"]
+        assert graph["nodes"][0]["source_message_id"] == candidate["source_message_id"]
+
+
 class TestExtractedMemories:
     async def test_explicit_memory_is_stored_and_retrievable(self, store: MemoryStore) -> None:
         extracted = await store.extract_memories(

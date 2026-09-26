@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import uuid
@@ -1134,6 +1135,151 @@ class MemoryStore:
             decisions=trace["decisions"],
         )
         return trace["results"]
+
+    async def generate_knowledge_graph(self) -> dict[str, list[dict[str, Any]]]:
+        """Build a deterministic, evidence-linked graph from recallable facts.
+
+        Nodes and edges are derived from the existing facts table, so this does
+        not change the memory schema or candidate approval lifecycle.
+        """
+        facts = await self.list_facts()
+        eligible: list[dict[str, Any]] = []
+        for fact in facts:
+            sensitive_key = fact["key"].replace("_", " ")
+            if _SENSITIVE_MEMORY.search(f"{sensitive_key} {fact['value']}"):
+                continue
+            if fact["memory_type"] in {"identity", "commitment"}:
+                if not await self._has_approved_user_evidence(
+                    fact, fact["memory_type"]
+                ):
+                    continue
+            if (
+                fact["memory_type"] == "commitment"
+                and fact["commitment_status"] != "active"
+            ):
+                continue
+            eligible.append(fact)
+
+        nodes = []
+        by_category: dict[str, list[dict[str, Any]]] = {}
+        for fact in sorted(eligible, key=lambda item: item["key"]):
+            node_id = "kn_" + hashlib.sha256(
+                f"fact\0{fact['key']}".encode()
+            ).hexdigest()
+            nodes.append({
+                "id": node_id,
+                "kind": "fact",
+                "key": fact["key"],
+                "value": fact["value"],
+                "category": fact["category"],
+                "memory_type": fact["memory_type"],
+                "source_conversation_id": fact["source_conversation_id"],
+                "source_message_id": fact["source_message_id"],
+            })
+            by_category.setdefault(fact["category"], []).append({
+                "node_id": node_id,
+                "fact": fact,
+            })
+
+        edges = []
+        for category, members in sorted(by_category.items()):
+            for index, left in enumerate(members):
+                for right in members[index + 1:]:
+                    edge_key = (
+                        f"same_category\0{left['node_id']}\0{right['node_id']}"
+                    )
+                    edge_id = "ke_" + hashlib.sha256(
+                        edge_key.encode()
+                    ).hexdigest()
+                    evidence: list[dict[str, Any]] = []
+                    for member in (left, right):
+                        fact = member["fact"]
+                        evidence.append({
+                            "node_id": member["node_id"],
+                            "fact_key": fact["key"],
+                            "source_conversation_id": fact["source_conversation_id"],
+                            "source_message_id": fact["source_message_id"],
+                        })
+                    edges.append({
+                        "id": edge_id,
+                        "source": left["node_id"],
+                        "target": right["node_id"],
+                        "relation": "same_category",
+                        "category": category,
+                        "evidence": evidence,
+                    })
+        return {"nodes": nodes, "edges": edges}
+
+    async def get_relevant_knowledge_graph(
+        self, query: str, limit: int = 10, hops: int = 1
+    ) -> dict[str, list[dict[str, Any]] | list[str]]:
+        """Return query-matched facts and bounded neighboring facts deterministically."""
+        graph = await self.generate_knowledge_graph()
+        terms = {
+            token.casefold()
+            for token in _MEMORY_TOKEN.findall(query)
+            if len(token) > 1 and token.casefold() not in _MEMORY_STOP_WORDS
+        }
+        nodes_by_id = {node["id"]: node for node in graph["nodes"]}
+        ranked: list[tuple[int, str]] = []
+        for node in graph["nodes"]:
+            key_terms = {
+                token for token in re.split(r"[\W_]+", node["key"].casefold())
+                if token
+            }
+            value_terms = {
+                token.casefold() for token in _MEMORY_TOKEN.findall(node["value"])
+            }
+            category_terms = {
+                token.casefold()
+                for token in _MEMORY_TOKEN.findall(node["category"])
+            }
+            score = sum(
+                4 if term in key_terms else
+                2 if term in category_terms else
+                1 if term in value_terms else 0
+                for term in terms
+            )
+            if score:
+                ranked.append((score, node["id"]))
+        ranked.sort(key=lambda item: item[1])
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        cap = max(0, limit)
+        seed_ids = [node_id for _, node_id in ranked[:cap]]
+        selected = set(seed_ids)
+        frontier = set(seed_ids)
+        adjacency: dict[str, set[str]] = {}
+        for edge in graph["edges"]:
+            adjacency.setdefault(edge["source"], set()).add(edge["target"])
+            adjacency.setdefault(edge["target"], set()).add(edge["source"])
+        for _ in range(max(0, min(hops, 3))):
+            discovered = {
+                neighbor
+                for node_id in frontier
+                for neighbor in adjacency.get(node_id, set())
+                if neighbor not in selected
+            }
+            frontier = discovered
+            selected.update(discovered)
+        selected_nodes = [nodes_by_id[node_id] for node_id in sorted(selected)]
+        selected_edges = [
+            edge for edge in graph["edges"]
+            if edge["source"] in selected and edge["target"] in selected
+        ]
+        return {
+            "seed_ids": seed_ids,
+            "nodes": selected_nodes,
+            "edges": selected_edges,
+        }
+
+    async def get_task_knowledge_graph(
+        self, query: str, purpose: str, limit: int = 10, hops: int = 1
+    ) -> dict[str, Any]:
+        """Integration hook for planning and autonomous task context builders."""
+        if purpose not in {"planning", "autonomous"}:
+            raise ValueError("purpose must be 'planning' or 'autonomous'")
+        graph = await self.get_relevant_knowledge_graph(query, limit, hops)
+        return {"purpose": purpose, **graph}
 
     async def get_active_context(
         self, query: str, limit: int = 10
