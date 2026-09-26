@@ -34,6 +34,23 @@ async def test_autonomous_knowledge_loop_end_to_end(tmp_path):
     await store.set_fact("project_stack", "Python")
     original_fact = await store.get_fact("project_stack")
 
+    async def approval_state() -> dict[str, list[tuple]]:
+        tables = {
+            "goal_outcomes": "id, experience_status",
+            "goal_knowledge": "id, source_approval_status",
+            "goal_knowledge_proposals": "id, status",
+            "memory_consolidation_proposals": "id, status",
+            "memory_consolidation_proposal_reviews": "proposal_id, decision",
+            "memory_knowledge_health_report_reviews": "report_id, decision",
+        }
+        state = {}
+        for table, columns in tables.items():
+            cursor = await store._db.execute(
+                f"SELECT {columns} FROM {table} ORDER BY 1",
+            )
+            state[table] = [tuple(row) for row in await cursor.fetchall()]
+        return state
+
     model = MagicMock()
     model.current_model = "test"
     model.current_litellm_model = "openai/test"
@@ -192,6 +209,7 @@ async def test_autonomous_knowledge_loop_end_to_end(tmp_path):
         assert await store.review_knowledge_consolidation_proposal(
             proposal_id, approved=True,
         )
+        approvals_before_repeated_activation = await approval_state()
         activation = await store.activate_knowledge_consolidation_proposal(proposal_id)
         assert activation is not None and activation["advisory_only"] is True
         repeated_activation = await store.activate_knowledge_consolidation_proposal(proposal_id)
@@ -209,18 +227,22 @@ async def test_autonomous_knowledge_loop_end_to_end(tmp_path):
         assert repeated_verification["status"] == verification["status"]
         assert repeated_verification["checks"] == verification["checks"]
         assert repeated_verification["id"] != verification["id"]
+        assert await approval_state() == approvals_before_repeated_activation
 
         health = await store.create_knowledge_health_report(
             as_of=datetime(2026, 9, 27, tzinfo=UTC),
         )
         assert health["report"]["advisory_only"] is True
         assert health["report"]["activations"][0]["failed_count"] == 1
+        approvals_before_repeated_health = await approval_state()
         repeated_health = await store.create_knowledge_health_report(
             as_of=datetime(2026, 9, 27, tzinfo=UTC),
         )
         assert repeated_health["id"] == health["id"]
         assert repeated_health["report"] == health["report"]
+        assert await approval_state() == approvals_before_repeated_health
         assert await store.review_knowledge_health_report(health["id"], approved=True)
+        approvals_before_repeated_insights = await approval_state()
         [insight] = await store.create_knowledge_consolidated_insights()
         assert await store.create_knowledge_consolidated_insights() == [insight]
         applied = await store.apply_knowledge_consolidated_insights(
@@ -236,6 +258,7 @@ async def test_autonomous_knowledge_loop_end_to_end(tmp_path):
         assert applied[0]["id"] == insight["id"]
         assert applied[0]["evidence_refs"]
         assert applied[0]["advisory_only"] is True
+        assert await approval_state() == approvals_before_repeated_insights
 
         # The approved insight reaches a subsequent real planning/execution prompt.
         final_prompts: list[str] = []
