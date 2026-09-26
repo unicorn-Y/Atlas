@@ -258,6 +258,39 @@ class TestAgentContextRanking:
         assert context[-1] == first[0]
         assert await store.retrieve_user_knowledge("irrelevant question") == []
 
+    async def test_agent_context_trace_links_selected_knowledge_to_source_evidence(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation("Project stack")
+        message_id = await store.save_message(
+            conversation_id, "user", "Our project uses Python and FastAPI."
+        )
+        await store.set_fact(
+            "project_language", "Python", category="project",
+            source_conversation_id=conversation_id, source_message_id=message_id,
+        )
+        await store.set_fact(
+            "project_framework", "FastAPI", category="project",
+            source_conversation_id=conversation_id, source_message_id=message_id,
+        )
+
+        context = await store.get_agent_context_with_trace("project language Python")
+
+        view = next(
+            item for item in context["memories"]
+            if item["memory_type"] == "knowledge_view"
+        )
+        decision = next(
+            item for item in context["knowledge_trace"]["decisions"]
+            if item["item_key"] == view["key"] and item["decision"] == "selected"
+        )
+        assert context["knowledge_trace"]["results"] == [view]
+        assert decision["reason"] == "ranked_within_limit"
+        assert [item["key"] for item in decision["evidence"]] == [
+            "project_framework", "project_language"
+        ]
+        assert all(item["source_message_id"] == message_id for item in decision["evidence"])
+
     async def test_knowledge_ranking_prefers_matching_category_and_evidence_keys(
         self, store: MemoryStore
     ) -> None:

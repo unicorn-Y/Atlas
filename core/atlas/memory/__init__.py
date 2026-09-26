@@ -913,6 +913,19 @@ class MemoryStore:
         facts = await self.get_active_context(query, limit=limit - len(views))
         return facts + views
 
+    async def get_agent_context_with_trace(
+        self, query: str, limit: int = 10
+    ) -> dict[str, Any]:
+        """Return agent context with the knowledge retrieval decisions that produced it."""
+        trace = await self.retrieve_user_knowledge_with_trace(
+            query, limit=1 if limit > 0 else limit
+        )
+        if limit <= 0:
+            return {"memories": [], "knowledge_trace": trace}
+        views = trace["results"]
+        facts = await self.get_active_context(query, limit=limit - len(views))
+        return {"memories": facts + views, "knowledge_trace": trace}
+
     async def generate_user_knowledge_with_trace(
         self,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -981,6 +994,16 @@ class MemoryStore:
                 "item_type": "knowledge_view", "item_key": view["key"],
                 "decision": "eligible", "reason": "active_evidence_aggregated",
                 "evidence_keys": [fact["key"] for fact in memories],
+                "evidence": [
+                    {
+                        field: item[field]
+                        for field in (
+                            "key", "memory_type", "source_conversation_id",
+                            "source_message_id",
+                        )
+                    }
+                    for item in evidence
+                ],
             })
 
         for candidate in await self.list_memory_candidates():
@@ -1059,6 +1082,16 @@ class MemoryStore:
                     "coverage": coverage, "score": score,
                     "matched_terms": sorted(matched_terms),
                     "evidence_keys": [item["key"] for item in view["evidence"]],
+                    "evidence": [
+                        {
+                            field: item[field]
+                            for field in (
+                                "key", "memory_type", "source_conversation_id",
+                                "source_message_id",
+                            )
+                        }
+                        for item in view["evidence"]
+                    ],
                 })
         ranked.sort(key=lambda item: item[2])
         ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
@@ -1072,6 +1105,16 @@ class MemoryStore:
                 "coverage": coverage, "score": score,
                 "matched_terms": sorted(matched_terms),
                 "evidence_keys": [item["key"] for item in view["evidence"]],
+                "evidence": [
+                    {
+                        field: item[field]
+                        for field in (
+                            "key", "memory_type", "source_conversation_id",
+                            "source_message_id",
+                        )
+                    }
+                    for item in view["evidence"]
+                ],
             })
         decisions.sort(key=lambda item: (
             item["item_type"], item["item_key"], item.get("candidate_id", "")
