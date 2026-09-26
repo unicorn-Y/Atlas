@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from atlas.agent.capabilities import AgentCapabilityRegistry, register_skill_capabilities
 from atlas.agent.orchestrator import AgentOrchestrator
+from atlas.agent.planning import TaskPlan
 from atlas.config import get_config
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
@@ -38,14 +39,24 @@ scheduler: AtlasScheduler | None = None
 
 
 async def _run_scheduled_goal(task_id: str, message: str) -> None:
-    """Run a scheduled goal through the normal planner and tool gates."""
+    """Run one verified goal iteration through the normal planner and tool gates."""
     if scheduler is None:
         return
     task = scheduler.get_task(task_id)
     if task is None or not task.goal:
         return
+    run_id = str(uuid.uuid4())
     if orchestrator is None:
-        await scheduler.update_goal_state(task_id, status="failed")
+        await _record_goal_failure(
+            task_id, run_id, message, "runtime", "Agent orchestrator is unavailable.",
+        )
+        progress = dict(task.goal_progress or {})
+        progress.update({
+            "blocked": True,
+            "blocked_reason": "orchestrator_unavailable",
+            "reflection_run_ids": [*progress.get("reflection_run_ids", []), run_id],
+        })
+        await scheduler.update_goal_state(task_id, status="blocked", progress=progress)
         await scheduler.record_goal_event(task_id, "goal.failed", {
             "detail": "Agent orchestrator is unavailable.",
         })
@@ -54,13 +65,20 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
     await scheduler.update_goal_state(task_id, status="running")
     await scheduler.record_goal_event(task_id, "goal.triggered", {})
     approval_required = False
+    progress = dict(task.goal_progress or {})
+    prior_reflection_runs = list(progress.get("reflection_run_ids", []))
 
     async def approval_callback(
         event_id: str, tool_name: str, tool_args: dict[str, Any],
     ) -> str:
         nonlocal approval_required
         approval_required = True
-        await scheduler.update_goal_state(task_id, status="awaiting_approval")
+        blocked_progress = dict(task.goal_progress or {})
+        blocked_progress["blocked"] = True
+        blocked_progress["blocked_reason"] = "approval_required"
+        await scheduler.update_goal_state(
+            task_id, status="awaiting_approval", progress=blocked_progress,
+        )
         await scheduler.record_goal_event(task_id, "approval.required", {
             "approval_id": event_id,
             "tool": tool_name,
@@ -69,16 +87,35 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
         return "deny"
 
     async def persist_plan(value: dict[str, Any]) -> None:
-        await scheduler.update_goal_state(task_id, status="running", progress=value)
+        plan = TaskPlan.from_dict(value)
+        plan_value = plan.to_dict()
+        completed = [item.id for item in plan.subtasks if item.status == "completed"]
+        pending = [item.id for item in plan.subtasks if item.status != "completed"]
+        state = {
+            **plan_value,
+            "current_step": pending[0] if pending else None,
+            "completed_steps": completed,
+            "blocked": False,
+            "reflection_run_ids": prior_reflection_runs,
+        }
+        await scheduler.update_goal_state(task_id, status="running", progress=state)
         await scheduler.record_goal_event(task_id, "plan.updated", {"plan": value})
+
+    saved_plan = task.goal_progress or None
+    if saved_plan:
+        try:
+            TaskPlan.from_dict(saved_plan)
+        except (TypeError, ValueError):
+            saved_plan = None
 
     try:
         async for event in orchestrator.run(
             message=message,
             conversation_id=f"scheduled-goal-{task_id}",
             approval_callback=approval_callback,
-            plan_state=task.goal_progress or None,
+            plan_state=saved_plan,
             plan_update_callback=persist_plan,
+            force_plan=True,
         ):
             event_type = event.get("type", "unknown")
             if event_type not in {"plan_updated", "approval_required"}:
@@ -88,16 +125,97 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
                     {key: event[key] for key in ("category",) if key in event},
                 )
             if event_type == "error":
-                await scheduler.update_goal_state(task_id, status="failed")
+                category = event.get("category")
+                await _record_goal_failure(
+                    task_id, run_id, message,
+                    category if category in {"tool", "model", "runtime"} else "runtime",
+                    str(event.get("detail", "Goal execution failed.")),
+                )
+                progress = dict(task.goal_progress or progress)
+                progress.update({"blocked": True, "blocked_reason": "execution_error"})
+                progress["reflection_run_ids"] = [*prior_reflection_runs, run_id]
+                await scheduler.update_goal_state(
+                    task_id, status="blocked", progress=progress,
+                )
             elif event_type == "done" and not approval_required:
-                await scheduler.update_goal_state(task_id, status="completed")
+                final_progress = dict(task.goal_progress or progress)
+                subtasks = final_progress.get("subtasks", [])
+                verified = bool(subtasks) and all(
+                    isinstance(item, dict) and item.get("status") == "completed"
+                    and isinstance(item.get("evidence"), str)
+                    and bool(item["evidence"].strip())
+                    for item in subtasks
+                )
+                if verified:
+                    final_progress.update({
+                        "current_step": None,
+                        "completed_steps": [item["id"] for item in subtasks],
+                        "blocked": False,
+                    })
+                    await scheduler.update_goal_state(
+                        task_id, status="completed", progress=final_progress,
+                    )
+                    await scheduler.record_goal_event(task_id, "goal.verified", {
+                        "completed_steps": final_progress["completed_steps"],
+                    })
+                    if memory:
+                        for failed_run_id in prior_reflection_runs:
+                            try:
+                                await memory.mark_agent_reflections_recovered(failed_run_id)
+                            except Exception:
+                                pass
+                else:
+                    pending = [
+                        item.get("id") for item in subtasks
+                        if isinstance(item, dict) and item.get("status") != "completed"
+                    ]
+                    final_progress.update({
+                        "current_step": pending[0] if pending else None,
+                        "completed_steps": [
+                            item.get("id") for item in subtasks
+                            if isinstance(item, dict) and item.get("status") == "completed"
+                        ],
+                        "blocked": False,
+                    })
+                    await scheduler.update_goal_state(
+                        task_id, status="pending", progress=final_progress,
+                    )
+                    await scheduler.record_goal_event(task_id, "goal.continuation_pending", {
+                        "current_step": final_progress["current_step"],
+                    })
     except Exception as exc:
-        await scheduler.update_goal_state(
-            task_id, status="awaiting_approval" if approval_required else "failed",
-        )
+        status = "awaiting_approval" if approval_required else "blocked"
+        if not approval_required:
+            await _record_goal_failure(task_id, run_id, message, "runtime", str(exc))
+        progress = dict(task.goal_progress or {})
+        progress["blocked"] = True
+        progress["blocked_reason"] = "approval_required" if approval_required else "execution_error"
+        if not approval_required:
+            progress["reflection_run_ids"] = [*prior_reflection_runs, run_id]
+        await scheduler.update_goal_state(task_id, status=status, progress=progress)
         await scheduler.record_goal_event(task_id, "execution.error", {
             "detail": str(exc),
         })
+
+
+async def _record_goal_failure(
+    task_id: str, run_id: str, message: str, category: str, detail: str,
+) -> None:
+    """Store goal failures in the P10B advisory reflection store."""
+    if memory is None:
+        return
+    try:
+        await memory.record_agent_reflection(
+            category=category,
+            component="goal_scheduler",
+            summary=f"Goal {task_id} failed: {detail}",
+            resolution_hint="Review the failure and validate a retry before continuing.",
+            source_conversation_id=f"scheduled-goal-{task_id}",
+            source_run_id=run_id,
+            model=getattr(getattr(orchestrator, "_model_mgr", None), "current_model", None),
+        )
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -874,6 +992,11 @@ async def run_goal_now(goal_id: str) -> dict[str, str]:
     task = scheduler.get_task(goal_id)
     if not task or not task.goal:
         raise HTTPException(status_code=404, detail=f"Scheduled goal not found: {goal_id}")
+    if task.goal_status == "blocked":
+        progress = dict(task.goal_progress or {})
+        progress.update({"blocked": False, "blocked_reason": ""})
+        await scheduler.update_goal_state(goal_id, status="pending", progress=progress)
+        await scheduler.record_goal_event(goal_id, "goal.retry_requested", {})
     await scheduler.run_now(goal_id)
     return {"status": "ok", "goal_id": goal_id}
 

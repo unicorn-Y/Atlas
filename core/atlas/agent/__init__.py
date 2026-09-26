@@ -381,6 +381,7 @@ class AgentOrchestrator:
         approval_callback: Callable[[str, str, dict], Any] | None = None,
         plan_state: dict[str, Any] | None = None,
         plan_update_callback: Callable[[dict[str, Any]], Any] | None = None,
+        force_plan: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -393,6 +394,7 @@ class AgentOrchestrator:
             approval_callback: async (event_id, tool_name, args) -> 'allow'|'deny'
             plan_state: Previously persisted plan to resume.
             plan_update_callback: Persist generated or verified plan updates.
+            force_plan: Create a verifiable plan even for a single-step request.
 
         Events yielded:
             {"type": "chunk", "content": "..."}
@@ -449,7 +451,7 @@ class AgentOrchestrator:
                     }
                     return
             yield {"type": "plan_updated", "plan": plan_value, "resumed": True}
-        elif requires_plan(message):
+        elif force_plan or requires_plan(message):
             try:
                 plan = await self._create_plan(message, litellm_model)
             except Exception as exc:

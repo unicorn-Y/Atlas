@@ -274,6 +274,10 @@ class AtlasScheduler:
         self._ap_scheduler: AsyncScheduler | None = None
         self._agent_callback = agent_callback
         self._started = False
+        self._goal_heartbeat_task: asyncio.Task[None] | None = None
+        self._goal_locks: dict[str, asyncio.Lock] = {}
+
+    GOAL_HEARTBEAT_SECONDS = 30
 
     @property
     def _path(self) -> Path:
@@ -326,12 +330,23 @@ class AtlasScheduler:
 
         await self._ap_scheduler.start_in_background()
         self._started = True
+        self._goal_heartbeat_task = asyncio.create_task(
+            self._goal_heartbeat_loop(), name="atlas-goal-heartbeat"
+        )
         log.info("scheduler.started")
 
     async def stop(self) -> None:
         """Stop the scheduler and persist state."""
         if not self._started or self._ap_scheduler is None:
             return
+
+        if self._goal_heartbeat_task:
+            self._goal_heartbeat_task.cancel()
+            try:
+                await self._goal_heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._goal_heartbeat_task = None
 
         await self._ap_scheduler.stop()
         await self._ap_scheduler.__aexit__(None, None, None)
@@ -380,6 +395,46 @@ class AtlasScheduler:
         self._persist()
         return task
 
+    async def heartbeat_goals(self) -> int:
+        """Continue durable goals whose last run left work pending."""
+        if self._agent_callback is None:
+            return 0
+        candidates = [
+            task for task in self.list_tasks(status=TaskStatus.ACTIVE)
+            if task.goal and task.goal_status in {"pending", "interrupted"}
+        ]
+        started = 0
+        for task in candidates:
+            if await self._invoke_goal_callback(task.id, task.goal):
+                task.last_run_at = datetime.now(UTC).isoformat()
+                task.run_count += 1
+                self._persist()
+                started += 1
+        return started
+
+    async def _goal_heartbeat_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self.GOAL_HEARTBEAT_SECONDS)
+            try:
+                await self.heartbeat_goals()
+            except Exception as exc:
+                log.error("scheduler.goal_heartbeat_error", error=str(exc))
+
+    async def _invoke_goal_callback(self, task_id: str, message: str) -> bool:
+        callback = self._agent_callback
+        if callback is None:
+            return False
+        lock = self._goal_locks.setdefault(task_id, asyncio.Lock())
+        async with lock:
+            task = self._tasks.get(task_id)
+            if (
+                task is None or not task.goal
+                or task.goal_status in {"running", "completed", "blocked", "awaiting_approval"}
+            ):
+                return False
+            await callback(task_id, message)
+            return True
+
     # -- executor factory ------------------------------------------------------
 
     def _make_executor(self, task: ScheduledTask) -> Callable[[], Coroutine[Any, Any, None]]:
@@ -401,7 +456,11 @@ class AtlasScheduler:
                 message = action[len("agent:"):]
                 if self._agent_callback:
                     try:
-                        await self._agent_callback(task_id, message)
+                        t = self._tasks.get(task_id)
+                        if t and t.goal:
+                            await self._invoke_goal_callback(task_id, message)
+                        else:
+                            await self._agent_callback(task_id, message)
                     except Exception as e:
                         log.error("scheduler.agent_callback_error",
                                   task_id=task_id, error=str(e))
