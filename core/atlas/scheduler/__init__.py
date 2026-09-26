@@ -618,6 +618,54 @@ class AtlasScheduler:
         return sum(1 for t in self._tasks.values()
                    if t.status == TaskStatus.ACTIVE)
 
+    def observability_snapshot(self) -> dict[str, Any]:
+        """Return a deterministic, read-only summary of autonomous goal activity."""
+        goals = [task for task in self.list_tasks() if task.goal]
+        status_counts: dict[str, int] = {
+            status: 0 for status in (
+                "pending", "running", "interrupted", "completed", "blocked",
+                "awaiting_approval",
+            )
+        }
+        event_counts: dict[str, int] = {}
+        summaries: list[dict[str, Any]] = []
+
+        for task in goals:
+            status = task.goal_status if isinstance(task.goal_status, str) else "unknown"
+            status_counts[status] = status_counts.get(status, 0) + 1
+            events = [event for event in task.goal_events if isinstance(event, dict)]
+            for event in events:
+                name = event.get("event")
+                if isinstance(name, str) and name:
+                    event_counts[name] = event_counts.get(name, 0) + 1
+
+            latest_event = None
+            if events:
+                event = events[-1]
+                latest_event = {
+                    "event": event.get("event", ""),
+                    "timestamp": event.get("timestamp", ""),
+                    "sequence": len(task.goal_events) - 1,
+                }
+            summaries.append({
+                "goal_id": task.id,
+                "status": status,
+                "last_run_at": task.last_run_at,
+                "run_count": task.run_count,
+                "event_count": len(task.goal_events),
+                "latest_event": latest_event,
+            })
+
+        return {
+            "scheduler_running": self._started,
+            "task_count": self.task_count,
+            "active_task_count": self.active_count,
+            "goal_count": len(goals),
+            "goal_status_counts": dict(sorted(status_counts.items())),
+            "goal_event_counts": dict(sorted(event_counts.items())),
+            "goals": summaries,
+        }
+
     # -- manual trigger --------------------------------------------------------
 
     async def run_now(self, task_id: str) -> bool:

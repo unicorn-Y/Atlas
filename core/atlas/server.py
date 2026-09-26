@@ -459,6 +459,27 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "version": "0.1.0"}
 
 
+@app.get("/api/runtime/observability")
+async def runtime_observability() -> dict[str, Any]:
+    """Report runtime component availability and durable autonomous activity."""
+    scheduler_snapshot = scheduler.observability_snapshot() if scheduler else None
+    components = {
+        "scheduler": {
+            "available": scheduler is not None,
+            "running": bool(scheduler_snapshot and scheduler_snapshot["scheduler_running"]),
+        },
+        "orchestrator": {"available": orchestrator is not None},
+        "memory": {"available": memory is not None},
+    }
+    ready = all(component["available"] for component in components.values())
+    ready = ready and components["scheduler"]["running"]
+    return {
+        "status": "ok" if ready else "degraded",
+        "components": components,
+        "autonomous": scheduler_snapshot,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
