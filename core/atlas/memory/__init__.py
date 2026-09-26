@@ -254,6 +254,23 @@ class MemoryStore:
 
             CREATE INDEX IF NOT EXISTS idx_agent_reflections_run
                 ON agent_reflections(source_run_id, recovered);
+
+            CREATE TABLE IF NOT EXISTS goal_outcomes (
+                id TEXT PRIMARY KEY,
+                goal_id TEXT NOT NULL,
+                goal TEXT NOT NULL,
+                status TEXT NOT NULL,
+                evaluation_json TEXT NOT NULL,
+                steps_json TEXT NOT NULL,
+                source_conversation_id TEXT NOT NULL,
+                source_run_id TEXT NOT NULL,
+                experience_status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(experience_status IN ('pending', 'approved', 'rejected')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_goal_outcomes_run
+                ON goal_outcomes(source_run_id);
         """)
         cursor = await self._db.execute("PRAGMA table_info(facts)")
         fact_columns = {row["name"] for row in await cursor.fetchall()}
@@ -877,6 +894,132 @@ class MemoryStore:
             (source_run_id,),
         )
         await self._db.commit()
+
+    async def record_goal_outcome(
+        self,
+        *,
+        goal_id: str,
+        goal: str,
+        status: str,
+        evaluation: dict[str, Any],
+        steps: list[dict[str, Any]],
+        source_conversation_id: str,
+        source_run_id: str,
+    ) -> str:
+        """Persist a goal result as a pending experience with step provenance."""
+        if not goal_id or not source_conversation_id or not source_run_id:
+            raise ValueError("Goal outcomes require goal and run provenance")
+
+        def safe_text(value: Any, limit: int) -> str:
+            text = value if isinstance(value, str) else ""
+            text = _REFLECTION_SECRET.sub(
+                lambda match: f"{match.group(1) or 'credential'}=[redacted]", text
+            )
+            return " ".join(text.split())[:limit]
+
+        safe_evaluation = {
+            "satisfied": evaluation.get("satisfied") is True,
+            "evidence": safe_text(evaluation.get("evidence"), 2000),
+            "reason": safe_text(evaluation.get("reason"), 1000),
+        }
+        safe_steps = [
+            {
+                "id": safe_text(step.get("id"), 160),
+                "title": safe_text(step.get("title"), 300),
+                "status": safe_text(step.get("status"), 40),
+                "evidence": safe_text(step.get("evidence"), 2000),
+            }
+            for step in steps if isinstance(step, dict)
+        ]
+        outcome_id = str(uuid.uuid4())
+        assert self._db is not None
+        await self._db.execute(
+            "INSERT INTO goal_outcomes "
+            "(id, goal_id, goal, status, evaluation_json, steps_json, "
+            "source_conversation_id, source_run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                outcome_id, safe_text(goal_id, 160), safe_text(goal, 1000),
+                safe_text(status, 40), json.dumps(safe_evaluation, ensure_ascii=False),
+                json.dumps(safe_steps, ensure_ascii=False), source_conversation_id,
+                source_run_id,
+            ),
+        )
+        await self._db.commit()
+        return outcome_id
+
+    async def list_goal_outcomes(
+        self, experience_status: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List durable goal outcomes for review."""
+        if experience_status not in (None, "pending", "approved", "rejected"):
+            raise ValueError("Unsupported goal experience status")
+        assert self._db is not None
+        query = (
+            "SELECT id, goal_id, goal, status, evaluation_json, steps_json, "
+            "source_conversation_id, source_run_id, experience_status, created_at "
+            "FROM goal_outcomes"
+        )
+        params: list[Any] = []
+        if experience_status is not None:
+            query += " WHERE experience_status = ?"
+            params.append(experience_status)
+        query += " ORDER BY created_at DESC, id LIMIT ?"
+        params.append(max(0, limit))
+        cursor = await self._db.execute(query, params)
+        outcomes = []
+        for row in await cursor.fetchall():
+            outcome = dict(row)
+            outcome["evaluation"] = json.loads(outcome.pop("evaluation_json"))
+            outcome["steps"] = json.loads(outcome.pop("steps_json"))
+            outcomes.append(outcome)
+        return outcomes
+
+    async def review_goal_experience(self, outcome_id: str, approved: bool) -> bool:
+        """Explicitly approve or reject a pending goal experience."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "UPDATE goal_outcomes SET experience_status = ? "
+            "WHERE id = ? AND experience_status = 'pending'",
+            ("approved" if approved else "rejected", outcome_id),
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
+
+    async def retrieve_approved_goal_experiences(
+        self, query: str, limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Return relevant, explicitly approved goal experience as advisory data."""
+        terms = {
+            token.casefold() for token in _MEMORY_TOKEN.findall(query)
+            if len(token) > 1 and token.casefold() not in _MEMORY_STOP_WORDS
+        }
+        if not terms or limit <= 0:
+            return []
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, goal, status, evaluation_json, steps_json, "
+            "source_conversation_id, source_run_id FROM goal_outcomes "
+            "WHERE experience_status = 'approved' "
+            "ORDER BY created_at DESC, id LIMIT 200"
+        )
+        ranked: list[tuple[int, str, dict[str, Any]]] = []
+        for row in await cursor.fetchall():
+            item = dict(row)
+            content = item["goal"] + " " + " ".join(
+                step["title"] + " " + step["evidence"]
+                for step in json.loads(item["steps_json"])
+            )
+            matched = terms & {
+                token.casefold() for token in _MEMORY_TOKEN.findall(content)
+            }
+            if not matched:
+                continue
+            item["evaluation"] = json.loads(item.pop("evaluation_json"))
+            item["steps"] = json.loads(item.pop("steps_json"))
+            ranked.append((len(matched), item["id"], item))
+        ranked.sort(key=lambda entry: entry[1])
+        ranked.sort(key=lambda entry: entry[0], reverse=True)
+        return [item for _, _, item in ranked[:limit]]
 
     async def get_memory_quality(self, key: str) -> dict[str, int]:
         """Return durable outcome, feedback, and evaluation counts for a memory."""

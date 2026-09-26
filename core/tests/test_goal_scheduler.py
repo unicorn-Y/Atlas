@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 
 from atlas import server
+from atlas.memory import MemoryStore
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TriggerType
 
 
@@ -247,6 +248,87 @@ async def test_goal_completes_only_after_each_step_has_verification_evidence(
         await recovered.stop()
 
 
+async def test_completed_goal_outcome_links_evaluation_and_step_evidence(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    class VerifiedOrchestrator:
+        async def run(self, **kwargs):
+            await kwargs["plan_update_callback"]({
+                "goal": kwargs["message"],
+                "subtasks": [{
+                    "id": "inspect", "title": "Inspect", "verification": "Inspection done",
+                    "status": "completed", "evidence": "Reviewed source documents.",
+                }],
+            })
+            yield {"type": "goal_evaluated", "evaluation": {
+                "satisfied": True,
+                "evidence": "The requested review is complete.",
+                "reason": "The inspection evidence covers the goal.",
+            }}
+            yield {"type": "done"}
+
+    scheduler = AtlasScheduler(schedules_path=tmp_path / "schedules.toml")
+    task = _goal_task()
+    await scheduler.add_task(task)
+    memory = MemoryStore(db_path=tmp_path / "memory.db")
+    await memory.init()
+    monkeypatch.setattr(server, "scheduler", scheduler)
+    monkeypatch.setattr(server, "orchestrator", VerifiedOrchestrator())
+    monkeypatch.setattr(server, "memory", memory)
+
+    try:
+        await server._run_scheduled_goal(task.id, task.goal)
+        [outcome] = await memory.list_goal_outcomes(experience_status="pending")
+        assert outcome["goal_id"] == task.id
+        assert outcome["status"] == "completed"
+        assert outcome["evaluation"]["satisfied"] is True
+        assert outcome["steps"][0]["id"] == "inspect"
+        assert outcome["steps"][0]["evidence"] == "Reviewed source documents."
+        assert outcome["source_run_id"]
+        assert await memory.retrieve_approved_goal_experiences(task.goal) == []
+    finally:
+        await memory.close()
+
+
+async def test_failed_goal_evaluation_keeps_attempt_evidence_in_outcome(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    class InsufficientOrchestrator:
+        async def run(self, **kwargs):
+            await kwargs["plan_update_callback"]({
+                "goal": kwargs["message"],
+                "subtasks": [{
+                    "id": "inspect", "title": "Inspect", "verification": "Inspection done",
+                    "status": "completed", "evidence": "Reviewed source documents.",
+                }],
+            })
+            yield {"type": "goal_evaluated", "evaluation": {
+                "satisfied": False,
+                "evidence": "The requested summary is missing.",
+                "reason": "Inspection alone does not satisfy the goal.",
+            }}
+            yield {"type": "done"}
+
+    scheduler = AtlasScheduler(schedules_path=tmp_path / "schedules.toml")
+    task = _goal_task()
+    await scheduler.add_task(task)
+    memory = MemoryStore(db_path=tmp_path / "memory.db")
+    await memory.init()
+    monkeypatch.setattr(server, "scheduler", scheduler)
+    monkeypatch.setattr(server, "orchestrator", InsufficientOrchestrator())
+    monkeypatch.setattr(server, "memory", memory)
+
+    try:
+        await server._run_scheduled_goal(task.id, task.goal)
+        [outcome] = await memory.list_goal_outcomes()
+        assert outcome["status"] == "pending"
+        assert outcome["evaluation"]["satisfied"] is False
+        assert outcome["steps"][0]["id"] == "inspect"
+        assert outcome["steps"][0]["evidence"] == "Reviewed source documents."
+    finally:
+        await memory.close()
+
+
 async def test_failed_goal_evaluation_persists_decision_and_resets_plan_for_replanning(
     tmp_path: Path, monkeypatch,
 ) -> None:
@@ -325,9 +407,13 @@ async def test_goal_failure_is_reflected_and_blocks_until_requested_retry(
 
     class ReflectionMemory:
         calls: list[dict] = []
+        outcome_calls: list[dict] = []
 
         async def record_agent_reflection(self, **kwargs):
             self.calls.append(kwargs)
+
+        async def record_goal_outcome(self, **kwargs):
+            self.outcome_calls.append(kwargs)
 
     scheduler = AtlasScheduler(schedules_path=tmp_path / "schedules.toml")
     task = _goal_task()
@@ -345,6 +431,8 @@ async def test_goal_failure_is_reflected_and_blocks_until_requested_retry(
     assert reflection_memory.calls[0]["category"] == "model"
     assert reflection_memory.calls[0]["component"] == "goal_scheduler"
     assert task.goal_progress["reflection_run_ids"]
+    assert len(reflection_memory.outcome_calls) == 1
+    assert reflection_memory.outcome_calls[0]["status"] == "blocked"
 
 
 async def test_manual_goal_retry_unblocks_a_failed_goal(tmp_path: Path, monkeypatch) -> None:

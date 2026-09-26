@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -1061,3 +1062,68 @@ class TestAgentReflections:
         [reflection] = await store.retrieve_agent_reflections("filesystem path")
         assert reflection["id"] == reflection_id
         assert reflection["recovered"] is True
+
+
+class TestGoalOutcomes:
+    async def test_outcomes_persist_with_evidence_and_require_approval(
+        self, store: MemoryStore,
+    ) -> None:
+        outcome_id = await store.record_goal_outcome(
+            goal_id="weekly-review",
+            goal="Review filesystem migration risks",
+            status="completed",
+            evaluation={
+                "satisfied": True,
+                "evidence": "Migration risks were listed.",
+                "reason": "All requested risks were addressed.",
+            },
+            steps=[{
+                "id": "inspect-filesystem",
+                "title": "Inspect filesystem",
+                "status": "completed",
+                "evidence": "Reviewed the migration manifest.",
+            }],
+            source_conversation_id="scheduled-goal-weekly-review",
+            source_run_id="run-1",
+        )
+
+        assert await store.retrieve_approved_goal_experiences("filesystem migration") == []
+        [pending] = await store.list_goal_outcomes(experience_status="pending")
+        assert pending["id"] == outcome_id
+        assert pending["evaluation"]["satisfied"] is True
+        assert pending["steps"][0]["id"] == "inspect-filesystem"
+        assert pending["source_run_id"] == "run-1"
+
+        await store.close()
+        reopened = MemoryStore(db_path=store._db_path)
+        await reopened.init()
+        try:
+            assert await reopened.review_goal_experience(outcome_id, approved=True)
+            [experience] = await reopened.retrieve_approved_goal_experiences(
+                "filesystem migration", limit=3,
+            )
+            assert experience["id"] == outcome_id
+            assert experience["steps"][0]["evidence"] == "Reviewed the migration manifest."
+            assert experience["source_conversation_id"] == "scheduled-goal-weekly-review"
+            assert not await reopened.review_goal_experience(outcome_id, approved=False)
+        finally:
+            await reopened.close()
+
+    async def test_goal_outcome_redacts_credentials(self, store: MemoryStore) -> None:
+        await store.record_goal_outcome(
+            goal_id="secret-review",
+            goal="Review service password=secret-value",
+            status="completed",
+            evaluation={"satisfied": True, "evidence": "Bearer abc123", "reason": "done"},
+            steps=[{
+                "id": "inspect", "title": "Inspect", "status": "completed",
+                "evidence": "api_key=sk-abcdefghijklmnop",
+            }],
+            source_conversation_id="scheduled-goal-secret-review",
+            source_run_id="run-secret",
+        )
+        [outcome] = await store.list_goal_outcomes()
+        serialized = json.dumps(outcome)
+        assert "secret-value" not in serialized
+        assert "abc123" not in serialized
+        assert "sk-abcdefghijklmnop" not in serialized

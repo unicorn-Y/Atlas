@@ -434,6 +434,49 @@ class TestFacts:
             await isolated_memory.close()
             server.memory = original_memory
 
+    async def test_goal_experience_requires_explicit_api_approval(
+        self, client: AsyncClient, tmp_path,
+    ) -> None:
+        original_memory = server.memory
+        await original_memory.close()
+        isolated_memory = MemoryStore(db_path=tmp_path / "goal-outcomes.db")
+        await isolated_memory.init()
+        server.memory = isolated_memory
+        try:
+            outcome_id = await isolated_memory.record_goal_outcome(
+                goal_id="weekly-review",
+                goal="Review filesystem migration risks",
+                status="completed",
+                evaluation={"satisfied": True, "evidence": "Risks listed."},
+                steps=[{
+                    "id": "inspect", "title": "Inspect filesystem",
+                    "status": "completed", "evidence": "Manifest reviewed.",
+                }],
+                source_conversation_id="scheduled-goal-weekly-review",
+                source_run_id="run-1",
+            )
+
+            listed = await client.get(
+                "/api/memory/goal-outcomes", params={"status": "pending"},
+            )
+            assert listed.status_code == 200
+            assert listed.json()[0]["id"] == outcome_id
+            assert await isolated_memory.retrieve_approved_goal_experiences(
+                "filesystem migration",
+            ) == []
+
+            approved = await client.post(
+                f"/api/memory/goal-outcomes/{outcome_id}/approve",
+            )
+            assert approved.status_code == 200
+            [experience] = await isolated_memory.retrieve_approved_goal_experiences(
+                "filesystem migration",
+            )
+            assert experience["id"] == outcome_id
+        finally:
+            await isolated_memory.close()
+            server.memory = original_memory
+
 
 # ---------------------------------------------------------------------------
 # MCP Server Management

@@ -69,6 +69,31 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
     prior_reflection_runs = list(progress.get("reflection_run_ids", []))
     goal_evaluation_passed = False
     goal_evaluation_processed = False
+    goal_evaluation_steps: list[dict[str, Any]] = []
+    goal_outcome_recorded = False
+
+    async def persist_goal_outcome(fallback_progress: dict[str, Any]) -> None:
+        nonlocal goal_outcome_recorded
+        if goal_outcome_recorded or not memory or not hasattr(memory, "record_goal_outcome"):
+            return
+        outcome_progress = dict(task.goal_progress or fallback_progress)
+        try:
+            await memory.record_goal_outcome(
+                goal_id=task_id,
+                goal=task.goal,
+                status=task.goal_status,
+                evaluation=outcome_progress.get("last_evaluation", {}),
+                steps=(
+                    goal_evaluation_steps
+                    if goal_evaluation_processed
+                    else outcome_progress.get("subtasks", [])
+                ),
+                source_conversation_id=f"scheduled-goal-{task_id}",
+                source_run_id=run_id,
+            )
+            goal_outcome_recorded = True
+        except Exception:
+            log.warning("goal.outcome_persist_failed", task_id=task_id, run_id=run_id)
 
     async def approval_callback(
         event_id: str, tool_name: str, tool_args: dict[str, Any],
@@ -105,7 +130,7 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
         await scheduler.record_goal_event(task_id, "plan.updated", {"plan": value})
 
     async def persist_goal_evaluation(value: Any) -> None:
-        nonlocal goal_evaluation_passed, goal_evaluation_processed
+        nonlocal goal_evaluation_passed, goal_evaluation_processed, goal_evaluation_steps
         evaluation = value if isinstance(value, dict) else {}
         passed = (
             evaluation.get("satisfied") is True
@@ -122,6 +147,10 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
         goal_evaluation_passed = passed
         goal_evaluation_processed = True
         current_progress = dict(task.goal_progress or progress)
+        goal_evaluation_steps = [
+            step for step in current_progress.get("subtasks", [])
+            if isinstance(step, dict)
+        ]
         if passed:
             current_progress["last_evaluation"] = decision
             await scheduler.update_goal_state(
@@ -190,6 +219,7 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
                 await scheduler.update_goal_state(
                     task_id, status="blocked", progress=progress,
                 )
+                await persist_goal_outcome(progress)
             elif event_type == "done" and not approval_required:
                 final_progress = dict(task.goal_progress or progress)
                 subtasks = final_progress.get("subtasks", [])
@@ -250,6 +280,7 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
                     await scheduler.record_goal_event(task_id, "goal.continuation_pending", {
                         "current_step": final_progress["current_step"],
                     })
+                await persist_goal_outcome(final_progress)
     except Exception as exc:
         status = "awaiting_approval" if approval_required else "blocked"
         if not approval_required:
@@ -263,6 +294,7 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
         await scheduler.record_goal_event(task_id, "execution.error", {
             "detail": str(exc),
         })
+        await persist_goal_outcome(progress)
 
 
 async def _record_goal_failure(
@@ -639,6 +671,36 @@ async def list_memory_optimization_reports(
     """Return preserved optimization report snapshots, newest first."""
     assert memory is not None
     return await memory.list_memory_optimization_reports(limit=limit)
+
+
+@app.get("/api/memory/goal-outcomes")
+async def list_goal_outcomes(
+    status: str | None = Query(None),
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """List durable goal results and pending experience-review candidates."""
+    assert memory is not None
+    if status not in (None, "pending", "approved", "rejected"):
+        raise HTTPException(status_code=400, detail="Invalid goal experience status")
+    return await memory.list_goal_outcomes(experience_status=status, limit=limit)
+
+
+@app.post("/api/memory/goal-outcomes/{outcome_id}/approve")
+async def approve_goal_experience(outcome_id: str) -> dict[str, str]:
+    """Approve one pending goal outcome for future advisory context."""
+    assert memory is not None
+    if not await memory.review_goal_experience(outcome_id, approved=True):
+        raise HTTPException(status_code=404, detail="Pending goal outcome not found")
+    return {"status": "approved", "id": outcome_id}
+
+
+@app.post("/api/memory/goal-outcomes/{outcome_id}/reject")
+async def reject_goal_experience(outcome_id: str) -> dict[str, str]:
+    """Reject one pending goal outcome."""
+    assert memory is not None
+    if not await memory.review_goal_experience(outcome_id, approved=False):
+        raise HTTPException(status_code=404, detail="Pending goal outcome not found")
+    return {"status": "rejected", "id": outcome_id}
 
 
 @app.post("/api/memory/candidates/{candidate_id}/approve")
