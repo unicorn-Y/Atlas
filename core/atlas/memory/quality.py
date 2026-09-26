@@ -213,6 +213,152 @@ def evaluate_memory_health(
     }
 
 
+def evaluate_knowledge_health(
+    activations: Sequence[Mapping[str, Any]],
+    *,
+    as_of: datetime | None = None,
+) -> dict[str, Any]:
+    """Summarize verified use and outcome feedback for approved advisory activations."""
+    now = as_of or datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    now = now.astimezone(UTC)
+
+    results: list[dict[str, Any]] = []
+    for activation in activations:
+        proposal = activation.get("proposal", {})
+        approvals = activation.get("approval_history", ())
+        if not (
+            activation.get("activation_status") == "active"
+            and activation.get("advisory_only") is True
+            and proposal.get("status") == "approved"
+            and proposal.get("advisory_only") is True
+            and approvals
+            and approvals[-1].get("decision") == "approved"
+        ):
+            continue
+
+        knowledge_id = str(proposal.get("area", ""))
+        verifications = list(activation.get("verifications", ()))
+        verified_count = sum(item.get("status") == "verified" for item in verifications)
+        unverified_count = sum(item.get("status") == "unverified" for item in verifications)
+        usage_events = [
+            item for item in activation.get("usage_events", ())
+            if item.get("knowledge_id") == knowledge_id
+        ]
+        usage_by_id = {str(item.get("id")): item for item in usage_events}
+        feedback_events = [
+            item for item in activation.get("feedback_events", ())
+            if item.get("knowledge_id") == knowledge_id
+            and str(item.get("usage_event_id")) in usage_by_id
+            and item.get("source_outcome_id")
+                == usage_by_id[str(item.get("usage_event_id"))].get("source_outcome_id")
+        ]
+        helpful_count = sum(item.get("signal") == "helpful" for item in feedback_events)
+        failed_count = sum(item.get("signal") == "failed" for item in feedback_events)
+
+        if unverified_count:
+            decision = "review_unverified_usage"
+            recommendation = (
+                "Review unverified usage claims before relying on this advisory knowledge."
+            )
+        elif failed_count >= 2:
+            decision = "human_review_repeated_failures"
+            recommendation = (
+                "Repeated failed outcomes warrant human review before future reliance."
+            )
+        elif failed_count:
+            decision = "monitor_after_failure"
+            recommendation = "Monitor the next validated outcome after this failed use."
+        elif usage_events and not feedback_events:
+            decision = "collect_outcome_feedback"
+            recommendation = "Collect validated outcome feedback for recorded uses."
+        elif helpful_count:
+            decision = "continue_advisory_monitoring"
+            recommendation = "Continue advisory use with outcome monitoring."
+        else:
+            decision = "verify_before_reliance"
+            recommendation = "Verify a claimed use and collect its outcome before relying on it."
+
+        proposal_id = str(activation.get("proposal_id") or proposal.get("id", ""))
+        source_candidate_ids = sorted(set(map(str, proposal.get("source_candidate_ids", ()))))
+        source_report_ids = sorted(set(map(str, proposal.get("source_report_ids", ()))))
+        evidence_refs = set(map(str, proposal.get("evidence_refs", ())))
+        evidence_refs.update(
+            f"verification:{item['id']}" for item in verifications if item.get("id")
+        )
+        evidence_refs.update(
+            f"usage:{item['id']}" for item in usage_events if item.get("id") is not None
+        )
+        evidence_refs.update(
+            f"feedback:{item['id']}" for item in feedback_events if item.get("id") is not None
+        )
+        evidence_refs.update(f"candidate:{item}" for item in source_candidate_ids)
+        evidence_refs.update(f"report:{item}" for item in source_report_ids)
+        evidence_refs.add(f"knowledge:{knowledge_id}")
+        results.append({
+            "activation_id": str(activation["id"]),
+            "proposal_id": proposal_id,
+            "knowledge_id": knowledge_id,
+            "source_candidate_ids": source_candidate_ids,
+            "source_report_ids": source_report_ids,
+            "evidence_refs": sorted(evidence_refs),
+            "activation_history": sorted(
+                (dict(event) for event in activation.get("history", ())),
+                key=lambda event: (str(event.get("event", "")),
+                                   str(event.get("created_at", ""))),
+            ),
+            "approval_history": [dict(event) for event in approvals],
+            "verification_evidence": [
+                dict(item) for item in sorted(
+                    verifications, key=lambda item: str(item.get("id", "")),
+                )
+            ],
+            "verification_history": [
+                {
+                    "verification_id": str(item.get("id", "")),
+                    "status": item.get("status"),
+                    "history": sorted(
+                        (dict(event) for event in item.get("history", ())),
+                        key=lambda event: (str(event.get("event", "")),
+                                           str(event.get("created_at", ""))),
+                    ),
+                }
+                for item in sorted(verifications, key=lambda item: str(item.get("id", "")))
+            ],
+            "usage_evidence": sorted(
+                (dict(item) for item in usage_events), key=lambda item: str(item.get("id", "")),
+            ),
+            "feedback_evidence": sorted(
+                (dict(item) for item in feedback_events),
+                key=lambda item: str(item.get("id", "")),
+            ),
+            "verification_count": len(verifications),
+            "verified_count": verified_count,
+            "unverified_count": unverified_count,
+            "usage_count": len(usage_events),
+            "helpful_count": helpful_count,
+            "failed_count": failed_count,
+            "decision": decision,
+            "recommendation": recommendation,
+            "advisory_only": True,
+        })
+
+    results.sort(key=lambda item: (item["activation_id"], item["proposal_id"]))
+    return {
+        "evaluated_at": now.isoformat(),
+        "advisory_only": True,
+        "activation_count": len(results),
+        "review_count": sum(
+            item["decision"] in {
+                "review_unverified_usage", "human_review_repeated_failures",
+            }
+            for item in results
+        ),
+        "activations": results,
+    }
+
+
 def evaluate_memory_optimization(
     health_report: Mapping[str, Any],
 ) -> dict[str, Any]:

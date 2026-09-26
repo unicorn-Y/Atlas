@@ -11,13 +11,14 @@ import pytest
 from atlas.memory import MemoryStore
 from atlas.memory.quality import (
     evaluate_knowledge_consolidation_proposals,
+    evaluate_knowledge_health,
     evaluate_knowledge_maturity,
     evaluate_knowledge_optimization_candidate,
     evaluate_knowledge_optimization_candidates,
     evaluate_knowledge_retrieval,
     evaluate_knowledge_self_steering,
-    evaluate_memory_quality,
     evaluate_memory_optimization,
+    evaluate_memory_quality,
     evaluate_recall,
 )
 
@@ -56,6 +57,200 @@ def test_memory_quality_reports_confidence_and_provenance_counts() -> None:
         "unattributed_count": 1,
         "passed": False,
     }
+
+
+def test_knowledge_health_is_deterministic_and_keeps_advice_evidence_linked() -> None:
+    activation = {
+        "id": "activation:proposal-1",
+        "proposal_id": "proposal-1",
+        "advisory_only": True,
+        "activation_status": "active",
+        "approval_history": [{"decision": "approved"}],
+        "proposal": {
+            "id": "proposal-1",
+            "area": "knowledge-1",
+            "status": "approved",
+            "advisory_only": True,
+            "source_candidate_ids": ["candidate-1"],
+            "source_report_ids": ["report-1"],
+            "evidence_refs": ["knowledge:knowledge-1", "usage:4", "feedback:5"],
+            "candidate_snapshots": [{"candidate_id": "candidate-1"}],
+        },
+        "verifications": [
+            {"id": "verification-1", "status": "verified", "history": [
+                {"event": "verification_recorded"},
+            ]},
+            {"id": "verification-2", "status": "unverified", "history": [
+                {"event": "verification_recorded"},
+            ]},
+        ],
+        "usage_events": [{
+            "id": 4,
+            "knowledge_id": "knowledge-1",
+            "source_outcome_id": "source-1",
+            "conversation_id": "conversation-1",
+            "source_run_id": "run-1",
+        }],
+        "feedback_events": [{
+            "id": 5,
+            "usage_event_id": 4,
+            "knowledge_id": "knowledge-1",
+            "source_outcome_id": "source-1",
+            "execution_outcome_id": "execution-1",
+            "signal": "failed",
+        }],
+    }
+    pending = {**activation, "id": "activation:pending", "activation_status": "pending"}
+    expected = {
+        "evaluated_at": "2026-09-26T00:00:00+00:00",
+        "advisory_only": True,
+        "activation_count": 1,
+        "review_count": 1,
+        "activations": [{
+            "activation_id": "activation:proposal-1",
+            "proposal_id": "proposal-1",
+            "knowledge_id": "knowledge-1",
+            "source_candidate_ids": ["candidate-1"],
+            "source_report_ids": ["report-1"],
+            "evidence_refs": [
+                "candidate:candidate-1", "feedback:5", "knowledge:knowledge-1",
+                "report:report-1", "usage:4", "verification:verification-1",
+                "verification:verification-2",
+            ],
+            "activation_history": [],
+            "approval_history": [{"decision": "approved"}],
+            "verification_evidence": [
+                {"id": "verification-1", "status": "verified", "history": [
+                    {"event": "verification_recorded"},
+                ]},
+                {"id": "verification-2", "status": "unverified", "history": [
+                    {"event": "verification_recorded"},
+                ]},
+            ],
+            "verification_history": [
+                {"verification_id": "verification-1", "status": "verified", "history": [
+                    {"event": "verification_recorded"},
+                ]},
+                {"verification_id": "verification-2", "status": "unverified", "history": [
+                    {"event": "verification_recorded"},
+                ]},
+            ],
+            "usage_evidence": [{
+                "id": 4,
+                "knowledge_id": "knowledge-1",
+                "source_outcome_id": "source-1",
+                "conversation_id": "conversation-1",
+                "source_run_id": "run-1",
+            }],
+            "feedback_evidence": [{
+                "id": 5,
+                "usage_event_id": 4,
+                "knowledge_id": "knowledge-1",
+                "source_outcome_id": "source-1",
+                "execution_outcome_id": "execution-1",
+                "signal": "failed",
+            }],
+            "verification_count": 2,
+            "verified_count": 1,
+            "unverified_count": 1,
+            "usage_count": 1,
+            "helpful_count": 0,
+            "failed_count": 1,
+            "decision": "review_unverified_usage",
+            "recommendation": (
+                "Review unverified usage claims before relying on this advisory knowledge."
+            ),
+            "advisory_only": True,
+        }],
+    }
+    assert evaluate_knowledge_health(
+        [pending, activation], as_of=datetime(2026, 9, 26, tzinfo=UTC),
+    ) == expected
+    assert evaluate_knowledge_health(
+        [activation, pending], as_of=datetime(2026, 9, 26, tzinfo=UTC),
+    ) == expected
+
+
+@pytest.mark.asyncio
+async def test_knowledge_health_persists_verified_usage_and_feedback_snapshot(
+    store: MemoryStore,
+) -> None:
+    source_outcome_id = await store.record_goal_outcome(
+        goal_id="health-source",
+        goal="Review filesystem migration risks",
+        status="completed",
+        evaluation={"satisfied": True},
+        steps=[{"id": "inspect", "title": "Inspect", "evidence": "Manifest reviewed."}],
+        source_conversation_id="health-source-conversation",
+        source_run_id="health-source-run",
+    )
+    assert await store.review_goal_experience(source_outcome_id, approved=True)
+    [knowledge] = await store.retrieve_approved_goal_knowledge("filesystem migration")
+    usage_id = await store.record_goal_knowledge_usage(
+        knowledge["id"], "execution", "health-execution-conversation", "health-execution-run",
+    )
+    await store.record_goal_outcome(
+        goal_id="health-execution",
+        goal="Review filesystem migration risks",
+        status="completed",
+        evaluation={"satisfied": True},
+        steps=[],
+        source_conversation_id="health-execution-conversation",
+        source_run_id="health-execution-run",
+    )
+    [feedback] = await store.list_goal_knowledge_feedback(knowledge["id"])
+
+    proposal = {
+        "id": "proposal:knowledge-health",
+        "area": knowledge["id"],
+        "status": "approved",
+        "advisory_only": True,
+        "source_candidate_ids": ["candidate:health"],
+        "source_report_ids": ["report:health"],
+        "evidence_refs": [f"knowledge:{knowledge['id']}", f"usage:{usage_id}",
+                          f"feedback:{feedback['id']}"],
+        "candidate_snapshots": [{
+            "candidate_id": "candidate:health",
+            "evidence_refs": ["evidence:health"],
+        }],
+    }
+    reviewed_at = "2026-09-26T00:00:00+00:00"
+    await store._db.execute(
+        "INSERT INTO memory_consolidation_proposals "
+        "(id, proposal_json, status, reviewed_at, created_at) VALUES (?, ?, 'approved', ?, ?)",
+        (proposal["id"], json.dumps(proposal), reviewed_at, reviewed_at),
+    )
+    await store._db.execute(
+        "INSERT INTO memory_consolidation_proposal_reviews "
+        "(proposal_id, decision, reviewed_at) VALUES (?, 'approved', ?)",
+        (proposal["id"], reviewed_at),
+    )
+    await store._db.commit()
+    activation = await store.activate_knowledge_consolidation_proposal(proposal["id"])
+    assert activation is not None
+    verification = await store.verify_knowledge_activation_usage(
+        activation["id"], candidate_id="candidate:health",
+        evidence_refs=["evidence:health"], usage_id=str(usage_id),
+    )
+    assert verification is not None and verification["status"] == "verified"
+
+    as_of = datetime(2026, 9, 26, tzinfo=UTC)
+    report = await store.get_knowledge_health(as_of=as_of)
+    [item] = report["activations"]
+    assert report["advisory_only"] is True
+    assert item["decision"] == "continue_advisory_monitoring"
+    assert item["helpful_count"] == 1
+    assert item["failed_count"] == 0
+    assert item["verification_history"][0]["verification_id"] == verification["id"]
+    assert item["feedback_evidence"][0]["id"] == feedback["id"]
+    assert f"usage:{usage_id}" in item["evidence_refs"]
+
+    first = await store.create_knowledge_health_report(as_of=as_of)
+    second = await store.create_knowledge_health_report(as_of=as_of)
+    assert first == second
+    [stored] = await store.list_knowledge_health_reports()
+    assert stored == first
+    assert await store.retrieve_approved_goal_knowledge("filesystem migration") == [knowledge]
 
 
 @pytest.mark.parametrize(

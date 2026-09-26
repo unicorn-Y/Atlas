@@ -16,6 +16,7 @@ import structlog
 from atlas.config import get_config
 from atlas.memory.quality import (
     evaluate_knowledge_consolidation_proposals,
+    evaluate_knowledge_health,
     evaluate_knowledge_maturity,
     evaluate_knowledge_optimization_candidate,
     evaluate_knowledge_optimization_candidates,
@@ -333,6 +334,12 @@ class MemoryStore:
                 event TEXT NOT NULL CHECK(event IN ('verification_recorded')),
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(verification_id) REFERENCES memory_knowledge_verifications(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_knowledge_health_reports (
+                id TEXT PRIMARY KEY,
+                report_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS agent_reflections (
@@ -2714,6 +2721,99 @@ class MemoryStore:
             verification["history"] = [dict(item) for item in await history_cursor.fetchall()]
             results.append(verification)
         return results
+
+    async def get_knowledge_health(
+        self, *, as_of: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Evaluate active advisory knowledge from approval, verification, use, and feedback."""
+        activations = await self.list_knowledge_activations(limit=1_000_000)
+        assert self._db is not None
+        for activation in activations:
+            proposal = activation.get("proposal", {})
+            knowledge_id = str(proposal.get("area", ""))
+            activation_id = activation["id"]
+            activation["verifications"] = await self.list_knowledge_verifications(
+                activation_id=activation_id, limit=1_000_000,
+            )
+            if not knowledge_id:
+                activation["usage_events"] = []
+                activation["feedback_events"] = []
+                continue
+
+            cursor = await self._db.execute(
+                "SELECT usage.id, usage.knowledge_id, usage.source_outcome_id, "
+                "usage.context_type, usage.conversation_id, usage.source_run_id, "
+                "usage.recorded_at FROM goal_knowledge_usage_events AS usage "
+                "JOIN goal_knowledge AS knowledge ON knowledge.id = usage.knowledge_id "
+                "JOIN goal_outcomes AS source ON source.id = usage.source_outcome_id "
+                "WHERE usage.knowledge_id = ? AND knowledge.source_approval_status = 'approved' "
+                "AND source.experience_status = 'approved' ORDER BY usage.id",
+                (knowledge_id,),
+            )
+            activation["usage_events"] = [dict(row) for row in await cursor.fetchall()]
+            cursor = await self._db.execute(
+                "SELECT feedback.id, feedback.usage_event_id, feedback.knowledge_id, "
+                "feedback.source_outcome_id, feedback.execution_outcome_id, "
+                "feedback.conversation_id, feedback.source_run_id, feedback.signal, "
+                "feedback.recorded_at FROM goal_knowledge_feedback_events AS feedback "
+                "JOIN goal_knowledge_usage_events AS usage "
+                "ON usage.id = feedback.usage_event_id "
+                "JOIN goal_outcomes AS source ON source.id = feedback.source_outcome_id "
+                "JOIN goal_outcomes AS execution ON execution.id = feedback.execution_outcome_id "
+                "JOIN goal_knowledge AS knowledge ON knowledge.id = feedback.knowledge_id "
+                "WHERE feedback.knowledge_id = ? "
+                "AND usage.knowledge_id = feedback.knowledge_id "
+                "AND usage.source_outcome_id = feedback.source_outcome_id "
+                "AND usage.conversation_id = feedback.conversation_id "
+                "AND (usage.source_run_id = feedback.source_run_id OR usage.source_run_id IS NULL) "
+                "AND source.experience_status = 'approved' "
+                "AND knowledge.source_approval_status = 'approved' "
+                "AND execution.source_conversation_id = feedback.conversation_id "
+                "AND execution.source_run_id = feedback.source_run_id "
+                "ORDER BY feedback.id",
+                (knowledge_id,),
+            )
+            activation["feedback_events"] = [dict(row) for row in await cursor.fetchall()]
+        return evaluate_knowledge_health(activations, as_of=as_of)
+
+    async def create_knowledge_health_report(
+        self, *, as_of: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Persist a deterministic advisory health snapshot without changing activated knowledge."""
+        report = await self.get_knowledge_health(as_of=as_of)
+        identity = json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        report_id = "knowledge-health:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+        created_at = datetime.now(UTC).isoformat()
+        assert self._db is not None
+        await self._db.execute(
+            "INSERT OR IGNORE INTO memory_knowledge_health_reports "
+            "(id, report_json, created_at) VALUES (?, ?, ?)",
+            (report_id, json.dumps(report, ensure_ascii=False, sort_keys=True), created_at),
+        )
+        await self._db.commit()
+        cursor = await self._db.execute(
+            "SELECT created_at FROM memory_knowledge_health_reports WHERE id = ?",
+            (report_id,),
+        )
+        row = await cursor.fetchone()
+        return {"id": report_id, "created_at": row["created_at"], "report": report}
+
+    async def list_knowledge_health_reports(
+        self, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List immutable advisory knowledge health snapshots, newest first."""
+        if limit < 0:
+            raise ValueError("Knowledge health report limit must be non-negative")
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, report_json, created_at FROM memory_knowledge_health_reports "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
+        )
+        return [
+            {"id": row["id"], "created_at": row["created_at"],
+             "report": json.loads(row["report_json"])}
+            for row in await cursor.fetchall()
+        ]
 
     async def list_knowledge_self_steering_reports(
         self, *, limit: int = 100,
