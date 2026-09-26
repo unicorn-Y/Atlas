@@ -485,6 +485,64 @@ class TestFacts:
             await isolated_memory.close()
             server.memory = original_memory
 
+    async def test_goal_knowledge_proposal_api_requires_explicit_approval(
+        self, client: AsyncClient, tmp_path,
+    ) -> None:
+        original_memory = server.memory
+        await original_memory.close()
+        isolated_memory = MemoryStore(db_path=tmp_path / "goal-knowledge-proposals.db")
+        await isolated_memory.init()
+        server.memory = isolated_memory
+        try:
+            source_outcome_id = await isolated_memory.record_goal_outcome(
+                goal_id="migration-review",
+                goal="Review filesystem migration risks",
+                status="completed",
+                evaluation={"satisfied": True, "evidence": "Risks listed."},
+                steps=[{"id": "inspect", "title": "Inspect", "evidence": "Reviewed."}],
+                source_conversation_id="source-conversation",
+                source_run_id="source-run",
+            )
+            assert await isolated_memory.review_goal_experience(source_outcome_id, True)
+            [knowledge] = await isolated_memory.retrieve_approved_goal_knowledge(
+                "filesystem migration",
+            )
+            await isolated_memory.record_goal_knowledge_usage(
+                knowledge["id"], "execution", "execution-conversation", "execution-run",
+            )
+            await isolated_memory.record_goal_outcome(
+                goal_id="migration-review",
+                goal="Review filesystem migration risks",
+                status="blocked",
+                evaluation={"satisfied": False, "reason": "The manifest was unavailable."},
+                steps=[],
+                source_conversation_id="execution-conversation",
+                source_run_id="execution-run",
+            )
+
+            listed = await client.get(
+                "/api/memory/goal-knowledge/proposals", params={"status": "pending"},
+            )
+            assert listed.status_code == 200
+            [proposal] = listed.json()
+            assert proposal["status"] == "pending"
+            assert proposal["execution_outcome_id"]
+
+            approved = await client.post(
+                f"/api/memory/goal-knowledge/proposals/{proposal['id']}/approve",
+            )
+            assert approved.status_code == 200
+            assert approved.json()["status"] == "approved"
+            feedback = await client.get(
+                "/api/memory/goal-knowledge/feedback",
+                params={"knowledge_id": knowledge["id"]},
+            )
+            assert feedback.status_code == 200
+            assert feedback.json()[0]["signal"] == "failed"
+        finally:
+            await isolated_memory.close()
+            server.memory = original_memory
+
 
 # ---------------------------------------------------------------------------
 # MCP Server Management

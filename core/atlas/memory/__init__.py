@@ -299,17 +299,65 @@ class MemoryStore:
                 context_type TEXT NOT NULL
                     CHECK(context_type IN ('planning', 'execution')),
                 conversation_id TEXT NOT NULL,
+                source_run_id TEXT,
                 recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY(knowledge_id) REFERENCES goal_knowledge(id),
                 FOREIGN KEY(source_outcome_id) REFERENCES goal_outcomes(id)
             );
             CREATE INDEX IF NOT EXISTS idx_goal_knowledge_usage_context
                 ON goal_knowledge_usage_events(conversation_id, context_type);
+
+            CREATE TABLE IF NOT EXISTS goal_knowledge_feedback_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                usage_event_id INTEGER NOT NULL UNIQUE,
+                knowledge_id TEXT NOT NULL,
+                source_outcome_id TEXT NOT NULL,
+                execution_outcome_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                source_run_id TEXT NOT NULL,
+                signal TEXT NOT NULL CHECK(signal IN ('helpful', 'failed')),
+                recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY(usage_event_id) REFERENCES goal_knowledge_usage_events(id),
+                FOREIGN KEY(knowledge_id) REFERENCES goal_knowledge(id),
+                FOREIGN KEY(source_outcome_id) REFERENCES goal_outcomes(id),
+                FOREIGN KEY(execution_outcome_id) REFERENCES goal_outcomes(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_goal_knowledge_feedback_knowledge
+                ON goal_knowledge_feedback_events(knowledge_id, signal);
+
+            CREATE TABLE IF NOT EXISTS goal_knowledge_proposals (
+                id TEXT PRIMARY KEY,
+                usage_event_id INTEGER NOT NULL,
+                knowledge_id TEXT NOT NULL,
+                source_outcome_id TEXT NOT NULL,
+                execution_outcome_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                source_run_id TEXT NOT NULL,
+                signal TEXT NOT NULL CHECK(signal = 'failed'),
+                proposed_guidance TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending', 'approved', 'rejected')),
+                reviewed_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(usage_event_id, execution_outcome_id),
+                FOREIGN KEY(usage_event_id) REFERENCES goal_knowledge_usage_events(id),
+                FOREIGN KEY(knowledge_id) REFERENCES goal_knowledge(id),
+                FOREIGN KEY(source_outcome_id) REFERENCES goal_outcomes(id),
+                FOREIGN KEY(execution_outcome_id) REFERENCES goal_outcomes(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_goal_knowledge_proposals_status
+                ON goal_knowledge_proposals(status, created_at);
         """)
         cursor = await self._db.execute("PRAGMA table_info(goal_outcomes)")
         goal_outcome_columns = {row["name"] for row in await cursor.fetchall()}
         if "reviewed_at" not in goal_outcome_columns:
             await self._db.execute("ALTER TABLE goal_outcomes ADD COLUMN reviewed_at TEXT")
+        cursor = await self._db.execute("PRAGMA table_info(goal_knowledge_usage_events)")
+        goal_knowledge_usage_columns = {row["name"] for row in await cursor.fetchall()}
+        if "source_run_id" not in goal_knowledge_usage_columns:
+            await self._db.execute(
+                "ALTER TABLE goal_knowledge_usage_events ADD COLUMN source_run_id TEXT"
+            )
         cursor = await self._db.execute("PRAGMA table_info(facts)")
         fact_columns = {row["name"] for row in await cursor.fetchall()}
         if "source_conversation_id" not in fact_columns:
@@ -982,8 +1030,176 @@ class MemoryStore:
                 source_run_id,
             ),
         )
+        await self._record_goal_knowledge_feedback_for_outcome(outcome_id)
         await self._db.commit()
         return outcome_id
+
+    async def _record_goal_knowledge_feedback_for_outcome(
+        self, execution_outcome_id: str,
+    ) -> None:
+        """Attach execution results to knowledge actually supplied in that conversation."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, status, evaluation_json, steps_json, source_conversation_id, "
+            "source_run_id FROM goal_outcomes WHERE id = ?",
+            (execution_outcome_id,),
+        )
+        outcome = await cursor.fetchone()
+        if outcome is None:
+            return
+        evaluation = json.loads(outcome["evaluation_json"])
+        signal = (
+            "helpful"
+            if outcome["status"] == "completed" and evaluation.get("satisfied") is True
+            else "failed"
+        )
+        usage_cursor = await self._db.execute(
+            "SELECT usage.id, usage.knowledge_id, usage.source_outcome_id "
+            "FROM goal_knowledge_usage_events AS usage "
+            "JOIN goal_knowledge AS knowledge ON knowledge.id = usage.knowledge_id "
+            "WHERE usage.conversation_id = ? AND usage.context_type = 'execution' "
+            "AND (usage.source_run_id = ? OR usage.source_run_id IS NULL) "
+            "AND knowledge.source_approval_status = 'approved' "
+            "ORDER BY usage.id",
+            (outcome["source_conversation_id"], outcome["source_run_id"]),
+        )
+        usages = await usage_cursor.fetchall()
+        for usage in usages:
+            await self._db.execute(
+                "INSERT OR IGNORE INTO goal_knowledge_feedback_events "
+                "(usage_event_id, knowledge_id, source_outcome_id, execution_outcome_id, "
+                "conversation_id, source_run_id, signal) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    usage["id"], usage["knowledge_id"], usage["source_outcome_id"],
+                    execution_outcome_id, outcome["source_conversation_id"],
+                    outcome["source_run_id"], signal,
+                ),
+            )
+            if signal == "failed":
+                steps = json.loads(outcome["steps_json"])
+                failed_steps = [
+                    f"{step['title']}: {step['evidence']}"
+                    for step in steps
+                    if step.get("status", "").casefold() in {"failed", "blocked"}
+                ]
+                reasons = [
+                    value for value in (
+                        evaluation.get("reason", ""),
+                        evaluation.get("evidence", ""),
+                        *failed_steps,
+                    ) if value
+                ]
+                guidance = (
+                    "Review the applied knowledge against this unsuccessful execution "
+                    "before reusing or changing it."
+                )
+                if reasons:
+                    guidance += " Observed outcome: " + " ".join(reasons)
+                await self._db.execute(
+                    "INSERT OR IGNORE INTO goal_knowledge_proposals "
+                    "(id, usage_event_id, knowledge_id, source_outcome_id, "
+                    "execution_outcome_id, conversation_id, source_run_id, signal, "
+                    "proposed_guidance) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?)",
+                    (
+                        f"goal-knowledge-proposal:{usage['id']}:{execution_outcome_id}",
+                        usage["id"], usage["knowledge_id"], usage["source_outcome_id"],
+                        execution_outcome_id, outcome["source_conversation_id"],
+                        outcome["source_run_id"], guidance[:4000],
+                    ),
+                )
+
+    async def list_goal_knowledge_feedback(
+        self, knowledge_id: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List result feedback with links to both the applied knowledge and execution."""
+        assert self._db is not None
+        query = (
+            "SELECT id, usage_event_id, knowledge_id, source_outcome_id, "
+            "execution_outcome_id, conversation_id, source_run_id, signal, recorded_at "
+            "FROM goal_knowledge_feedback_events"
+        )
+        params: list[Any] = []
+        if knowledge_id is not None:
+            query += " WHERE knowledge_id = ?"
+            params.append(knowledge_id)
+        query += " ORDER BY id LIMIT ?"
+        params.append(max(0, limit))
+        cursor = await self._db.execute(query, params)
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def list_goal_knowledge_proposals(
+        self, status: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List pending or reviewed improvement candidates without applying them."""
+        if status not in (None, "pending", "approved", "rejected"):
+            raise ValueError("Unsupported goal knowledge proposal status")
+        assert self._db is not None
+        query = (
+            "SELECT id, usage_event_id, knowledge_id, source_outcome_id, "
+            "execution_outcome_id, conversation_id, source_run_id, signal, "
+            "proposed_guidance, status, reviewed_at, created_at "
+            "FROM goal_knowledge_proposals"
+        )
+        params: list[Any] = []
+        if status is not None:
+            query += " WHERE status = ?"
+            params.append(status)
+        query += " ORDER BY id LIMIT ?"
+        params.append(max(0, limit))
+        cursor = await self._db.execute(query, params)
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def review_goal_knowledge_proposal(
+        self, proposal_id: str, approved: bool,
+    ) -> bool:
+        """Reject a candidate or explicitly promote it as new advisory knowledge."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "UPDATE goal_knowledge_proposals SET status = ?, reviewed_at = datetime('now') "
+            "WHERE id = ? AND status = 'pending'",
+            ("approved" if approved else "rejected", proposal_id),
+        )
+        if cursor.rowcount == 0:
+            await self._db.commit()
+            return False
+        if approved:
+            proposal_cursor = await self._db.execute(
+                "SELECT execution_outcome_id, proposed_guidance "
+                "FROM goal_knowledge_proposals WHERE id = ?",
+                (proposal_id,),
+            )
+            proposal = await proposal_cursor.fetchone()
+            # Approval of the proposed improvement is an explicit review of this result.
+            await self._db.execute(
+                "UPDATE goal_outcomes SET experience_status = 'approved', "
+                "reviewed_at = COALESCE(reviewed_at, datetime('now')) "
+                "WHERE id = ? AND experience_status = 'pending'",
+                (proposal["execution_outcome_id"],),
+            )
+            await self._consolidate_goal_outcome(proposal["execution_outcome_id"])
+            knowledge_cursor = await self._db.execute(
+                "SELECT id, goal, evidence_json FROM goal_knowledge "
+                "WHERE source_outcome_id = ? AND source_approval_status = 'approved'",
+                (proposal["execution_outcome_id"],),
+            )
+            knowledge = await knowledge_cursor.fetchone()
+            if knowledge is not None:
+                evidence = json.loads(knowledge["evidence_json"])
+                evidence.append({
+                    "type": "approved_improvement_proposal",
+                    "proposal_id": proposal_id,
+                    "guidance": proposal["proposed_guidance"],
+                })
+                await self._db.execute(
+                    "UPDATE goal_knowledge SET goal = ?, evidence_json = ? WHERE id = ?",
+                    (
+                        knowledge["goal"] + " " + proposal["proposed_guidance"],
+                        json.dumps(evidence, ensure_ascii=False, sort_keys=True),
+                        knowledge["id"],
+                    ),
+                )
+        await self._db.commit()
+        return True
 
     async def list_goal_outcomes(
         self, experience_status: str | None = None, limit: int = 100,
@@ -1105,6 +1321,7 @@ class MemoryStore:
 
     async def record_goal_knowledge_usage(
         self, knowledge_id: str, context_type: str, conversation_id: str,
+        source_run_id: str | None = None,
     ) -> int:
         """Record approved goal knowledge when supplied to a planning or execution prompt."""
         if context_type not in {"planning", "execution"}:
@@ -1120,9 +1337,12 @@ class MemoryStore:
             raise ValueError("Cannot record usage for unapproved goal knowledge")
         cursor = await self._db.execute(
             "INSERT INTO goal_knowledge_usage_events "
-            "(knowledge_id, source_outcome_id, context_type, conversation_id) "
-            "VALUES (?, ?, ?, ?)",
-            (knowledge_id, row["source_outcome_id"], context_type, conversation_id),
+            "(knowledge_id, source_outcome_id, context_type, conversation_id, source_run_id) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                knowledge_id, row["source_outcome_id"], context_type, conversation_id,
+                source_run_id,
+            ),
         )
         await self._db.commit()
         return int(cursor.lastrowid)

@@ -383,6 +383,7 @@ class AgentOrchestrator:
         plan_update_callback: Callable[[dict[str, Any]], Any] | None = None,
         force_plan: bool = False,
         evaluate_goal: bool = False,
+        source_run_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -467,9 +468,13 @@ class AgentOrchestrator:
         elif force_plan or requires_plan(message):
             try:
                 for knowledge in consolidated_goal_knowledge:
-                    await self._memory.record_goal_knowledge_usage(
-                        knowledge["id"], "planning", conversation_id,
-                    )
+                    usage = self._memory.record_goal_knowledge_usage
+                    if source_run_id is None:
+                        await usage(knowledge["id"], "planning", conversation_id)
+                    else:
+                        await usage(
+                            knowledge["id"], "planning", conversation_id, source_run_id,
+                        )
                 plan = await self._create_plan(
                     message, litellm_model, consolidated_goal_knowledge,
                 )
@@ -508,9 +513,13 @@ class AgentOrchestrator:
                 message, limit=3,
             )
             for knowledge in consolidated_goal_knowledge:
-                await self._memory.record_goal_knowledge_usage(
-                    knowledge["id"], "execution", conversation_id,
-                )
+                usage = self._memory.record_goal_knowledge_usage
+                if source_run_id is None:
+                    await usage(knowledge["id"], "execution", conversation_id)
+                else:
+                    await usage(
+                        knowledge["id"], "execution", conversation_id, source_run_id,
+                    )
         except Exception as exc:
             yield {
                 "type": "error",

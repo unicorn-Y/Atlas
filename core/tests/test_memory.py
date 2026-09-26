@@ -1065,6 +1065,162 @@ class TestAgentReflections:
 
 
 class TestGoalOutcomes:
+    async def test_usage_event_run_id_migration_preserves_existing_events(
+        self, tmp_path: Path,
+    ) -> None:
+        db_path = tmp_path / "legacy-usage.db"
+        connection = sqlite3.connect(db_path)
+        connection.execute("""
+            CREATE TABLE goal_knowledge_usage_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                knowledge_id TEXT NOT NULL,
+                source_outcome_id TEXT NOT NULL,
+                context_type TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        connection.execute(
+            "INSERT INTO goal_knowledge_usage_events "
+            "(knowledge_id, source_outcome_id, context_type, conversation_id) "
+            "VALUES ('knowledge-1', 'outcome-1', 'execution', 'conversation-1')"
+        )
+        connection.commit()
+        connection.close()
+
+        migrated = MemoryStore(db_path=db_path)
+        await migrated.init()
+        try:
+            columns = await migrated._db.execute("PRAGMA table_info(goal_knowledge_usage_events)")
+            assert "source_run_id" in {row["name"] for row in await columns.fetchall()}
+            events = await migrated._db.execute(
+                "SELECT knowledge_id, conversation_id, source_run_id "
+                "FROM goal_knowledge_usage_events"
+            )
+            [event] = await events.fetchall()
+            assert dict(event) == {
+                "knowledge_id": "knowledge-1",
+                "conversation_id": "conversation-1",
+                "source_run_id": None,
+            }
+        finally:
+            await migrated.close()
+
+    async def _record_applied_goal_knowledge(
+        self, store: MemoryStore, *, signal: str = "failed",
+    ) -> tuple[str, int, str]:
+        source_outcome_id = await store.record_goal_outcome(
+            goal_id="migration-review",
+            goal="Review filesystem migration risks",
+            status="completed",
+            evaluation={"satisfied": True, "evidence": "Risks listed."},
+            steps=[{"id": "inspect", "title": "Inspect", "evidence": "Manifest reviewed."}],
+            source_conversation_id="source-conversation",
+            source_run_id="source-run",
+        )
+        assert await store.review_goal_experience(source_outcome_id, approved=True)
+        [knowledge] = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        usage_id = await store.record_goal_knowledge_usage(
+            knowledge["id"], "execution", "execution-conversation", "execution-run",
+        )
+        execution_outcome_id = await store.record_goal_outcome(
+            goal_id="migration-review",
+            goal="Review filesystem migration risks",
+            status="completed" if signal == "helpful" else "blocked",
+            evaluation={
+                "satisfied": signal == "helpful",
+                "evidence": "Migration manifest reviewed.",
+                "reason": "The evidence was incomplete.",
+            },
+            steps=[{
+                "id": "inspect", "title": "Inspect migration", "status": "blocked",
+                "evidence": "The source manifest was unavailable.",
+            }],
+            source_conversation_id="execution-conversation",
+            source_run_id="execution-run",
+        )
+        return knowledge["id"], usage_id, execution_outcome_id
+
+    async def test_execution_feedback_and_improvement_proposal_keep_provenance(
+        self, store: MemoryStore,
+    ) -> None:
+        knowledge_id, usage_id, execution_outcome_id = (
+            await self._record_applied_goal_knowledge(store)
+        )
+
+        [feedback] = await store.list_goal_knowledge_feedback(knowledge_id)
+        [proposal] = await store.list_goal_knowledge_proposals()
+        assert feedback["signal"] == "failed"
+        assert feedback["usage_event_id"] == usage_id
+        assert feedback["source_outcome_id"] == knowledge_id.removeprefix("goal-knowledge:")
+        assert feedback["execution_outcome_id"] == execution_outcome_id
+        assert feedback["conversation_id"] == "execution-conversation"
+        assert feedback["source_run_id"] == "execution-run"
+        assert proposal["status"] == "pending"
+        assert proposal["knowledge_id"] == knowledge_id
+        assert proposal["execution_outcome_id"] == execution_outcome_id
+        assert proposal["usage_event_id"] == usage_id
+        assert "source manifest was unavailable" in proposal["proposed_guidance"]
+        assert proposal == (await store.list_goal_knowledge_proposals())[0]
+        knowledge = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        assert all(item["source_outcome_id"] != execution_outcome_id for item in knowledge)
+
+    async def test_rejected_improvement_proposal_does_not_change_active_knowledge(
+        self, store: MemoryStore,
+    ) -> None:
+        knowledge_id, _, execution_outcome_id = await self._record_applied_goal_knowledge(store)
+        before = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        [proposal] = await store.list_goal_knowledge_proposals()
+
+        assert await store.review_goal_knowledge_proposal(proposal["id"], approved=False)
+        assert not await store.review_goal_knowledge_proposal(proposal["id"], approved=True)
+        assert await store.retrieve_approved_goal_knowledge("filesystem migration") == before
+        [rejected] = await store.list_goal_knowledge_proposals(status="rejected")
+        assert rejected["status"] == "rejected"
+        assert rejected["knowledge_id"] == knowledge_id
+        [outcome] = [
+            item for item in await store.list_goal_outcomes()
+            if item["id"] == execution_outcome_id
+        ]
+        assert outcome["experience_status"] == "pending"
+
+    async def test_approved_improvement_proposal_is_promoted_as_advisory_knowledge(
+        self, store: MemoryStore,
+    ) -> None:
+        _, _, execution_outcome_id = await self._record_applied_goal_knowledge(store)
+        [proposal] = await store.list_goal_knowledge_proposals()
+        assert await store.review_goal_knowledge_proposal(proposal["id"], approved=True)
+
+        promoted = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        [promoted_execution] = [
+            item for item in promoted if item["source_outcome_id"] == execution_outcome_id
+        ]
+        assert promoted_execution["approval_status"] == "approved"
+        assert promoted_execution["advisory"] is True
+        assert any(
+            item.get("type") == "approved_improvement_proposal"
+            and item.get("proposal_id") == proposal["id"]
+            for item in promoted_execution["evidence"]
+        )
+        [outcome] = [
+            item for item in await store.list_goal_outcomes()
+            if item["id"] == execution_outcome_id
+        ]
+        assert outcome["experience_status"] == "approved"
+
+    async def test_successful_execution_is_recorded_helpful_without_proposal(
+        self, store: MemoryStore,
+    ) -> None:
+        knowledge_id, usage_id, execution_outcome_id = await self._record_applied_goal_knowledge(
+            store, signal="helpful",
+        )
+
+        [feedback] = await store.list_goal_knowledge_feedback(knowledge_id)
+        assert feedback["signal"] == "helpful"
+        assert feedback["usage_event_id"] == usage_id
+        assert feedback["execution_outcome_id"] == execution_outcome_id
+        assert await store.list_goal_knowledge_proposals() == []
+
     async def test_approved_goal_experience_consolidates_to_persistent_advisory_knowledge(
         self, store: MemoryStore,
     ) -> None:

@@ -195,6 +195,7 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
             plan_update_callback=persist_plan,
             force_plan=True,
             evaluate_goal=True,
+            source_run_id=run_id,
         ):
             event_type = event.get("type", "unknown")
             if event_type == "goal_evaluated":
@@ -701,6 +702,46 @@ async def reject_goal_experience(outcome_id: str) -> dict[str, str]:
     if not await memory.review_goal_experience(outcome_id, approved=False):
         raise HTTPException(status_code=404, detail="Pending goal outcome not found")
     return {"status": "rejected", "id": outcome_id}
+
+
+@app.get("/api/memory/goal-knowledge/feedback")
+async def list_goal_knowledge_feedback(
+    knowledge_id: str | None = Query(None),
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """List helpful or failed usage outcomes with source provenance."""
+    assert memory is not None
+    return await memory.list_goal_knowledge_feedback(knowledge_id, limit)
+
+
+@app.get("/api/memory/goal-knowledge/proposals")
+async def list_goal_knowledge_proposals(
+    status: str | None = Query(None),
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """List improvement proposals separately from active advisory knowledge."""
+    assert memory is not None
+    if status not in (None, "pending", "approved", "rejected"):
+        raise HTTPException(status_code=400, detail="Invalid goal knowledge proposal status")
+    return await memory.list_goal_knowledge_proposals(status=status, limit=limit)
+
+
+@app.post("/api/memory/goal-knowledge/proposals/{proposal_id}/approve")
+async def approve_goal_knowledge_proposal(proposal_id: str) -> dict[str, str]:
+    """Promote a pending advisory improvement after explicit approval."""
+    assert memory is not None
+    if not await memory.review_goal_knowledge_proposal(proposal_id, approved=True):
+        raise HTTPException(status_code=404, detail="Pending goal knowledge proposal not found")
+    return {"status": "approved", "id": proposal_id}
+
+
+@app.post("/api/memory/goal-knowledge/proposals/{proposal_id}/reject")
+async def reject_goal_knowledge_proposal(proposal_id: str) -> dict[str, str]:
+    """Reject a pending advisory improvement without changing active knowledge."""
+    assert memory is not None
+    if not await memory.review_goal_knowledge_proposal(proposal_id, approved=False):
+        raise HTTPException(status_code=404, detail="Pending goal knowledge proposal not found")
+    return {"status": "rejected", "id": proposal_id}
 
 
 @app.post("/api/memory/candidates/{candidate_id}/approve")
@@ -1600,6 +1641,7 @@ async def _execute_run(
             approval_callback=approval_callback,
             plan_state=plan_state,
             plan_update_callback=persist_plan,
+            source_run_id=run.run_id,
         ):
             if await check_pause_cancel():
                 run.status = "cancelled"
