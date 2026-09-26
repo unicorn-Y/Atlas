@@ -1389,6 +1389,69 @@ class TestGoalOutcomes:
         assert feedback["execution_outcome_id"] == execution_outcome_id
         assert await store.list_goal_knowledge_proposals() == []
 
+    async def test_knowledge_evolution_is_deterministic_and_tracks_approved_evidence(
+        self, store: MemoryStore,
+    ) -> None:
+        knowledge_id, _, _ = await self._record_applied_goal_knowledge(store)
+        [first_evaluation] = await store.evaluate_goal_knowledge_evolution(knowledge_id)
+        assert first_evaluation["failed_count"] == 1
+        assert first_evaluation["decision"] == "monitor_after_single_failure"
+        assert first_evaluation["recommendation_id"] is None
+        assert await store.evaluate_goal_knowledge_evolution(knowledge_id) == [first_evaluation]
+
+        await store.record_goal_knowledge_usage(
+            knowledge_id, "execution", "evolution-conversation-2", "evolution-run-2",
+        )
+        execution_outcome_id = await store.record_goal_outcome(
+            goal_id="migration-review",
+            goal="Review filesystem migration risks",
+            status="blocked",
+            evaluation={"satisfied": False, "reason": "Target manifest was incomplete."},
+            steps=[],
+            source_conversation_id="evolution-conversation-2",
+            source_run_id="evolution-run-2",
+        )
+        before = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        [evaluation] = await store.evaluate_goal_knowledge_evolution(knowledge_id)
+
+        assert evaluation["failed_count"] == 2
+        assert evaluation["decision"] == "review_recommended_after_repeated_failures"
+        assert evaluation["recommendation_id"]
+        assert len(evaluation["evidence"]) == 2
+        assert any(
+            item["execution_outcome_id"] == execution_outcome_id
+            and item["conversation_id"] == "evolution-conversation-2"
+            and item["source_run_id"] == "evolution-run-2"
+            for item in evaluation["evidence"]
+        )
+        stored = await store.list_goal_knowledge_evolution_evaluations(knowledge_id)
+        stored_evaluation = next(
+            item for item in stored if item["id"] == evaluation["id"]
+        )
+        assert stored_evaluation["evidence"] == evaluation["evidence"]
+        [recommendation] = await store.list_goal_knowledge_evolution_recommendations(
+            knowledge_id,
+        )
+        assert recommendation["id"] == evaluation["recommendation_id"]
+        assert recommendation["evidence"] == evaluation["evidence"]
+        assert await store.retrieve_approved_goal_knowledge("filesystem migration") == before
+
+    async def test_knowledge_evolution_ignores_unapproved_knowledge(
+        self, store: MemoryStore,
+    ) -> None:
+        outcome_id = await store.record_goal_outcome(
+            goal_id="pending-review",
+            goal="Review pending filesystem migration",
+            status="completed",
+            evaluation={"satisfied": True},
+            steps=[],
+            source_conversation_id="pending-conversation",
+            source_run_id="pending-run",
+        )
+        assert await store.evaluate_goal_knowledge_evolution() == []
+        assert await store.evaluate_goal_knowledge_evolution(f"goal-knowledge:{outcome_id}") == []
+        assert await store.list_goal_knowledge_evolution_recommendations() == []
+
     async def test_approved_goal_experience_consolidates_to_persistent_advisory_knowledge(
         self, store: MemoryStore,
     ) -> None:

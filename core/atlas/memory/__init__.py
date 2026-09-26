@@ -394,6 +394,30 @@ class MemoryStore:
             );
             CREATE INDEX IF NOT EXISTS idx_goal_knowledge_governance_knowledge
                 ON goal_knowledge_governance_events(knowledge_id, created_at);
+
+            CREATE TABLE IF NOT EXISTS goal_knowledge_evolution_evaluations (
+                id TEXT PRIMARY KEY,
+                knowledge_id TEXT NOT NULL,
+                input_signature TEXT NOT NULL,
+                helpful_count INTEGER NOT NULL,
+                failed_count INTEGER NOT NULL,
+                decision TEXT NOT NULL,
+                evidence_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(knowledge_id, input_signature),
+                FOREIGN KEY(knowledge_id) REFERENCES goal_knowledge(id)
+            );
+            CREATE TABLE IF NOT EXISTS goal_knowledge_evolution_recommendations (
+                id TEXT PRIMARY KEY,
+                evaluation_id TEXT NOT NULL UNIQUE,
+                knowledge_id TEXT NOT NULL,
+                recommendation TEXT NOT NULL,
+                evidence_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY(evaluation_id)
+                    REFERENCES goal_knowledge_evolution_evaluations(id),
+                FOREIGN KEY(knowledge_id) REFERENCES goal_knowledge(id)
+            );
         """)
         cursor = await self._db.execute("PRAGMA table_info(goal_outcomes)")
         goal_outcome_columns = {row["name"] for row in await cursor.fetchall()}
@@ -1173,6 +1197,151 @@ class MemoryStore:
         params.append(max(0, limit))
         cursor = await self._db.execute(query, params)
         return [dict(row) for row in await cursor.fetchall()]
+
+    async def evaluate_goal_knowledge_evolution(
+        self, knowledge_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Analyze approved advisory knowledge usage without changing active knowledge."""
+        assert self._db is not None
+        query = (
+            "SELECT id FROM goal_knowledge WHERE source_approval_status = 'approved'"
+        )
+        params: list[Any] = []
+        if knowledge_id is not None:
+            query += " AND id = ?"
+            params.append(knowledge_id)
+        query += " ORDER BY id"
+        cursor = await self._db.execute(query, params)
+        knowledge_rows = await cursor.fetchall()
+
+        evaluations: list[dict[str, Any]] = []
+        for knowledge_row in knowledge_rows:
+            source_id = knowledge_row["id"]
+            feedback_cursor = await self._db.execute(
+                "SELECT feedback.id, feedback.usage_event_id, feedback.knowledge_id, "
+                "feedback.source_outcome_id, feedback.execution_outcome_id, "
+                "feedback.conversation_id, feedback.source_run_id, feedback.signal "
+                "FROM goal_knowledge_feedback_events AS feedback "
+                "JOIN goal_knowledge_usage_events AS usage "
+                "ON usage.id = feedback.usage_event_id "
+                "JOIN goal_outcomes AS source ON source.id = feedback.source_outcome_id "
+                "JOIN goal_outcomes AS execution ON execution.id = feedback.execution_outcome_id "
+                "JOIN goal_knowledge AS knowledge ON knowledge.id = feedback.knowledge_id "
+                "WHERE feedback.knowledge_id = ? "
+                "AND usage.knowledge_id = feedback.knowledge_id "
+                "AND usage.source_outcome_id = feedback.source_outcome_id "
+                "AND usage.conversation_id = feedback.conversation_id "
+                "AND (usage.source_run_id = feedback.source_run_id "
+                "OR usage.source_run_id IS NULL) "
+                "AND source.experience_status = 'approved' "
+                "AND knowledge.source_approval_status = 'approved' "
+                "AND execution.source_conversation_id = feedback.conversation_id "
+                "AND execution.source_run_id = feedback.source_run_id "
+                "ORDER BY feedback.id",
+                (source_id,),
+            )
+            evidence = [dict(row) for row in await feedback_cursor.fetchall()]
+            helpful_count = sum(item["signal"] == "helpful" for item in evidence)
+            failed_count = sum(item["signal"] == "failed" for item in evidence)
+            signature_payload = json.dumps(
+                evidence, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            )
+            input_signature = hashlib.sha256(signature_payload.encode("utf-8")).hexdigest()
+            evaluation_id = f"goal-knowledge-evolution-evaluation:{source_id}:{input_signature}"
+            decision = (
+                "review_recommended_after_repeated_failures"
+                if failed_count >= 2 else
+                "monitor_after_single_failure"
+                if failed_count == 1 else
+                "positive_evidence_only"
+                if helpful_count else "insufficient_usage_evidence"
+            )
+            evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+            await self._db.execute(
+                "INSERT OR IGNORE INTO goal_knowledge_evolution_evaluations "
+                "(id, knowledge_id, input_signature, helpful_count, failed_count, "
+                "decision, evidence_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    evaluation_id, source_id, input_signature, helpful_count,
+                    failed_count, decision, evidence_json,
+                ),
+            )
+            recommendation_id = None
+            recommendation_text = None
+            if failed_count >= 2:
+                recommendation_id = f"goal-knowledge-evolution-recommendation:{input_signature}"
+                recommendation_text = (
+                    "Review this approved advisory knowledge against its repeated failed "
+                    "applications before deciding whether to refine it."
+                )
+                await self._db.execute(
+                    "INSERT OR IGNORE INTO goal_knowledge_evolution_recommendations "
+                    "(id, evaluation_id, knowledge_id, recommendation, evidence_json) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        recommendation_id, evaluation_id, source_id,
+                        recommendation_text, evidence_json,
+                    ),
+                )
+            evaluations.append({
+                "id": evaluation_id,
+                "knowledge_id": source_id,
+                "input_signature": input_signature,
+                "helpful_count": helpful_count,
+                "failed_count": failed_count,
+                "decision": decision,
+                "evidence": evidence,
+                "recommendation_id": recommendation_id,
+                "recommendation": recommendation_text,
+            })
+        await self._db.commit()
+        return evaluations
+
+    async def list_goal_knowledge_evolution_evaluations(
+        self, knowledge_id: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return durable evolution decisions and their complete supporting evidence."""
+        assert self._db is not None
+        query = (
+            "SELECT id, knowledge_id, input_signature, helpful_count, failed_count, "
+            "decision, evidence_json, created_at FROM goal_knowledge_evolution_evaluations"
+        )
+        params: list[Any] = []
+        if knowledge_id is not None:
+            query += " WHERE knowledge_id = ?"
+            params.append(knowledge_id)
+        query += " ORDER BY id LIMIT ?"
+        params.append(max(0, limit))
+        cursor = await self._db.execute(query, params)
+        results = []
+        for row in await cursor.fetchall():
+            item = dict(row)
+            item["evidence"] = json.loads(item.pop("evidence_json"))
+            results.append(item)
+        return results
+
+    async def list_goal_knowledge_evolution_recommendations(
+        self, knowledge_id: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List review-only recommendations separately from active advisory knowledge."""
+        assert self._db is not None
+        query = (
+            "SELECT id, evaluation_id, knowledge_id, recommendation, evidence_json, created_at "
+            "FROM goal_knowledge_evolution_recommendations"
+        )
+        params: list[Any] = []
+        if knowledge_id is not None:
+            query += " WHERE knowledge_id = ?"
+            params.append(knowledge_id)
+        query += " ORDER BY id LIMIT ?"
+        params.append(max(0, limit))
+        cursor = await self._db.execute(query, params)
+        results = []
+        for row in await cursor.fetchall():
+            item = dict(row)
+            item["evidence"] = json.loads(item.pop("evidence_json"))
+            results.append(item)
+        return results
 
     async def list_goal_knowledge_proposals(
         self, status: str | None = None, limit: int = 100,

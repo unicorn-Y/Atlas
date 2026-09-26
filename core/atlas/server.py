@@ -714,6 +714,35 @@ async def list_goal_knowledge_feedback(
     return await memory.list_goal_knowledge_feedback(knowledge_id, limit)
 
 
+@app.post("/api/memory/goal-knowledge/evolution/evaluate")
+async def evaluate_goal_knowledge_evolution(
+    knowledge_id: str | None = Query(None),
+) -> list[dict[str, Any]]:
+    """Analyze approved advisory usage and persist review-only recommendations."""
+    assert memory is not None
+    return await memory.evaluate_goal_knowledge_evolution(knowledge_id)
+
+
+@app.get("/api/memory/goal-knowledge/evolution/evaluations")
+async def list_goal_knowledge_evolution_evaluations(
+    knowledge_id: str | None = Query(None),
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    assert memory is not None
+    return await memory.list_goal_knowledge_evolution_evaluations(knowledge_id, limit)
+
+
+@app.get("/api/memory/goal-knowledge/evolution/recommendations")
+async def list_goal_knowledge_evolution_recommendations(
+    knowledge_id: str | None = Query(None),
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    assert memory is not None
+    return await memory.list_goal_knowledge_evolution_recommendations(
+        knowledge_id, limit,
+    )
+
+
 @app.get("/api/memory/goal-knowledge/proposals")
 async def list_goal_knowledge_proposals(
     status: str | None = Query(None),

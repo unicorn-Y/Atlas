@@ -600,6 +600,30 @@ class TestFacts:
             assert feedback.status_code == 200
             assert len(feedback.json()) == 2
             assert all(item["signal"] == "failed" for item in feedback.json())
+            evolution = await client.post(
+                "/api/memory/goal-knowledge/evolution/evaluate",
+                params={"knowledge_id": knowledge["id"]},
+            )
+            assert evolution.status_code == 200
+            [evolution_decision] = evolution.json()
+            assert evolution_decision["decision"] == (
+                "review_recommended_after_repeated_failures"
+            )
+            assert len(evolution_decision["evidence"]) == 2
+            evolution_history = await client.get(
+                "/api/memory/goal-knowledge/evolution/evaluations",
+                params={"knowledge_id": knowledge["id"]},
+            )
+            assert evolution_history.status_code == 200
+            [stored_evolution] = evolution_history.json()
+            assert stored_evolution["evidence"] == evolution_decision["evidence"]
+            recommendations = await client.get(
+                "/api/memory/goal-knowledge/evolution/recommendations",
+                params={"knowledge_id": knowledge["id"]},
+            )
+            assert recommendations.status_code == 200
+            [recommendation] = recommendations.json()
+            assert recommendation["id"] == evolution_decision["recommendation_id"]
         finally:
             await isolated_memory.close()
             server.memory = original_memory
