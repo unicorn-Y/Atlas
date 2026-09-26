@@ -194,23 +194,44 @@ async def test_autonomous_knowledge_loop_end_to_end(tmp_path):
         )
         activation = await store.activate_knowledge_consolidation_proposal(proposal_id)
         assert activation is not None and activation["advisory_only"] is True
+        repeated_activation = await store.activate_knowledge_consolidation_proposal(proposal_id)
+        assert repeated_activation == activation
         verification = await store.verify_knowledge_activation_usage(
             activation["id"], candidate_id=candidate_id,
             evidence_refs=[f"feedback:{feedback['id']}"], usage_id=str(usage_id),
         )
         assert verification is not None and verification["status"] == "verified"
+        repeated_verification = await store.verify_knowledge_activation_usage(
+            activation["id"], candidate_id=candidate_id,
+            evidence_refs=[f"feedback:{feedback['id']}"], usage_id=str(usage_id),
+        )
+        assert repeated_verification is not None
+        assert repeated_verification["status"] == verification["status"]
+        assert repeated_verification["checks"] == verification["checks"]
+        assert repeated_verification["id"] != verification["id"]
 
         health = await store.create_knowledge_health_report(
             as_of=datetime(2026, 9, 27, tzinfo=UTC),
         )
         assert health["report"]["advisory_only"] is True
         assert health["report"]["activations"][0]["failed_count"] == 1
+        repeated_health = await store.create_knowledge_health_report(
+            as_of=datetime(2026, 9, 27, tzinfo=UTC),
+        )
+        assert repeated_health["id"] == health["id"]
+        assert repeated_health["report"] == health["report"]
         assert await store.review_knowledge_health_report(health["id"], approved=True)
         [insight] = await store.create_knowledge_consolidated_insights()
+        assert await store.create_knowledge_consolidated_insights() == [insight]
         applied = await store.apply_knowledge_consolidated_insights(
             "monitor the next validated outcome", purpose="planning",
             conversation_id="final-conversation", source_run_id="final-run",
         )
+        repeated_application = await store.apply_knowledge_consolidated_insights(
+            "monitor the next validated outcome", purpose="planning",
+            conversation_id="final-conversation", source_run_id="final-run",
+        )
+        assert repeated_application == applied
         assert insight["source_health_report_ids"] == [health["id"]]
         assert applied[0]["id"] == insight["id"]
         assert applied[0]["evidence_refs"]
