@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta, timezone
@@ -584,4 +586,78 @@ def evaluate_knowledge_self_steering(
         "approved_knowledge_count": len(approved_knowledge_evaluations),
         "suggestion_count": len(suggestions),
         "suggestions": suggestions,
+    }
+
+
+def evaluate_knowledge_optimization_candidates(
+    approved_reports: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Derive deterministic, evidence-linked advisory candidates from approved reports."""
+    candidates: list[dict[str, Any]] = []
+    for report in approved_reports:
+        report_id = str(report["id"])
+        payload = report.get("report", {})
+        for suggestion in payload.get("suggestions", ()):
+            refs = sorted({str(ref) for ref in suggestion.get("evidence_refs", ()) if ref})
+            if not refs:
+                continue
+            source_type = suggestion.get("source_type")
+            action = suggestion.get("action")
+            # Only low-risk observation and evidence collection actions become candidates.
+            if action not in {
+                "complete_fact_evidence", "reinforce_fact_evidence",
+                "continue_fact_observation", "monitor_approved_knowledge",
+                "reinforce_approved_knowledge", "collect_knowledge_outcomes",
+            }:
+                continue
+            candidate = {
+                "source_report_id": report_id,
+                "area": str(suggestion.get("area", "")),
+                "source_type": source_type,
+                "action": action,
+                "priority": int(suggestion.get("priority", 0)),
+                "reason": str(suggestion.get("reason", "")),
+                "evidence_refs": refs,
+                "signals": dict(suggestion.get("signals", {})),
+                "risk": "low",
+                "advisory_only": True,
+            }
+            identity = json.dumps(
+                candidate, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            )
+            candidate["id"] = "knowledge-optimization:" + hashlib.sha256(
+                identity.encode("utf-8")
+            ).hexdigest()
+            candidates.append(candidate)
+    candidates.sort(key=lambda item: (
+        -item["priority"], item["source_report_id"], item["area"], item["id"],
+    ))
+    return candidates
+
+
+def evaluate_knowledge_optimization_candidate(
+    candidate: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return a stable safety and provenance evaluation without mutating knowledge."""
+    valid_actions = {
+        "complete_fact_evidence", "reinforce_fact_evidence",
+        "continue_fact_observation", "monitor_approved_knowledge",
+        "reinforce_approved_knowledge", "collect_knowledge_outcomes",
+    }
+    refs = sorted({str(ref) for ref in candidate.get("evidence_refs", ()) if ref})
+    eligible = (
+        candidate.get("action") in valid_actions
+        and candidate.get("risk") == "low"
+        and candidate.get("advisory_only") is True
+        and bool(candidate.get("source_report_id"))
+        and bool(refs)
+    )
+    return {
+        "candidate_id": candidate.get("id"),
+        "eligible": eligible,
+        "decision": (
+            "eligible_low_risk_advisory" if eligible
+            else "ineligible_missing_safety_or_evidence"
+        ),
+        "evidence_refs": refs,
     }

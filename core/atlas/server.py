@@ -706,6 +706,56 @@ async def list_memory_self_steering_reports(
     return await memory.list_knowledge_self_steering_reports(limit=limit)
 
 
+@app.post("/api/memory/self-steering-reports/{report_id}/approve")
+async def approve_memory_self_steering_report(report_id: str) -> dict[str, str]:
+    assert memory is not None
+    if not await memory.review_knowledge_self_steering_report(report_id, approved=True):
+        raise HTTPException(status_code=404, detail="Pending self-steering report not found")
+    return {"status": "approved", "id": report_id}
+
+
+@app.post("/api/memory/self-steering-reports/{report_id}/reject")
+async def reject_memory_self_steering_report(report_id: str) -> dict[str, str]:
+    assert memory is not None
+    if not await memory.review_knowledge_self_steering_report(report_id, approved=False):
+        raise HTTPException(status_code=404, detail="Pending self-steering report not found")
+    return {"status": "rejected", "id": report_id}
+
+
+@app.post("/api/memory/optimization-candidates")
+async def create_memory_optimization_candidates() -> list[dict[str, Any]]:
+    assert memory is not None
+    return await memory.create_knowledge_optimization_candidates()
+
+
+@app.get("/api/memory/optimization-candidates")
+async def list_memory_optimization_candidates(
+    status: str | None = Query(None), limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    assert memory is not None
+    if status not in (None, "pending", "approved", "rejected"):
+        raise HTTPException(status_code=400, detail="Invalid optimization candidate status")
+    return await memory.list_knowledge_optimization_candidates(status=status, limit=limit)
+
+
+@app.post("/api/memory/optimization-candidates/{candidate_id}/approve")
+async def approve_memory_optimization_candidate(candidate_id: str) -> dict[str, str]:
+    assert memory is not None
+    if not await memory.review_knowledge_optimization_candidate(candidate_id, approved=True):
+        raise HTTPException(
+            status_code=404, detail="Eligible pending optimization candidate not found"
+        )
+    return {"status": "approved", "id": candidate_id}
+
+
+@app.post("/api/memory/optimization-candidates/{candidate_id}/reject")
+async def reject_memory_optimization_candidate(candidate_id: str) -> dict[str, str]:
+    assert memory is not None
+    if not await memory.review_knowledge_optimization_candidate(candidate_id, approved=False):
+        raise HTTPException(status_code=404, detail="Pending optimization candidate not found")
+    return {"status": "rejected", "id": candidate_id}
+
+
 @app.get("/api/memory/goal-outcomes")
 async def list_goal_outcomes(
     status: str | None = Query(None),

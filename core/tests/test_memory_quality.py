@@ -10,10 +10,12 @@ import pytest
 from atlas.memory import MemoryStore
 from atlas.memory.quality import (
     evaluate_knowledge_maturity,
+    evaluate_knowledge_optimization_candidate,
+    evaluate_knowledge_optimization_candidates,
+    evaluate_knowledge_retrieval,
     evaluate_knowledge_self_steering,
     evaluate_memory_quality,
     evaluate_memory_optimization,
-    evaluate_knowledge_retrieval,
     evaluate_recall,
 )
 
@@ -332,6 +334,35 @@ def test_knowledge_self_steering_is_deterministic_and_preserves_evidence_sources
     ]
 
 
+def test_knowledge_optimization_candidates_are_deterministic_and_require_evidence() -> None:
+    reports = [{
+        "id": "steering-report-1",
+        "report": {"suggestions": [{
+            "area": "project_stack", "source_type": "fact",
+            "action": "continue_fact_observation", "priority": 20,
+            "reason": "Collect additional evidence.",
+            "evidence_refs": ["fact:project_stack", "usage:2"],
+            "signals": {"maturity_level": "developing"},
+        }, {
+            "area": "risky", "source_type": "fact", "action": "review_fact",
+            "priority": 100, "evidence_refs": ["fact:risky"],
+        }]},
+    }]
+    candidates = evaluate_knowledge_optimization_candidates(reports)
+    assert candidates == evaluate_knowledge_optimization_candidates(reports)
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["id"].startswith("knowledge-optimization:")
+    assert candidate["risk"] == "low"
+    assert candidate["advisory_only"] is True
+    assert candidate["evidence_refs"] == ["fact:project_stack", "usage:2"]
+    assert evaluate_knowledge_optimization_candidate(candidate) == {
+        "candidate_id": candidate["id"], "eligible": True,
+        "decision": "eligible_low_risk_advisory",
+        "evidence_refs": ["fact:project_stack", "usage:2"],
+    }
+
+
 async def test_self_steering_uses_approved_knowledge_only_and_leaves_facts_unchanged(
     store: MemoryStore,
 ) -> None:
@@ -374,6 +405,69 @@ async def test_self_steering_uses_approved_knowledge_only_and_leaves_facts_uncha
     assert pending_outcomes[0]["id"] == pending_outcome_id
     rejected_outcomes = await store.list_goal_outcomes(experience_status="rejected")
     assert rejected_outcomes[0]["id"] == rejected_outcome_id
+
+
+async def test_optimization_candidates_require_approved_report_and_audit_review(
+    store: MemoryStore,
+) -> None:
+    await store.set_fact("project_stack", "Python")
+    original_fact = await store.get_fact("project_stack")
+    snapshot = await store.create_knowledge_self_steering_report()
+
+    assert snapshot["status"] == "pending"
+    assert await store.create_knowledge_optimization_candidates() == []
+    assert await store.review_knowledge_self_steering_report(snapshot["id"], approved=True)
+    assert not await store.review_knowledge_self_steering_report(snapshot["id"], approved=False)
+
+    first = await store.create_knowledge_optimization_candidates()
+    second = await store.create_knowledge_optimization_candidates()
+    assert first == second
+    assert first and first[0]["source_report_id"] == snapshot["id"]
+    candidate = first[0]
+    assert candidate["evaluation"]["eligible"]
+    assert candidate["evidence_refs"]
+    assert await store.review_knowledge_optimization_candidate(candidate["id"], approved=True)
+    assert not await store.review_knowledge_optimization_candidate(
+        candidate["id"], approved=False
+    )
+
+    [reviewed] = await store.list_knowledge_optimization_candidates(status="approved")
+    assert reviewed["status"] == "approved"
+    assert reviewed["review_history"] == [{
+        "decision": "approved", "reviewed_at": reviewed["reviewed_at"],
+    }]
+    [approved_report] = await store.list_knowledge_self_steering_reports()
+    assert approved_report["status"] == "approved"
+    assert approved_report["reviewed_at"]
+    assert await store.get_fact("project_stack") == original_fact
+
+    rejected_report = await store.create_knowledge_self_steering_report()
+    assert await store.review_knowledge_self_steering_report(
+        rejected_report["id"], approved=False
+    )
+    assert not await store.review_knowledge_self_steering_report(
+        rejected_report["id"], approved=True
+    )
+    assert all(
+        item["source_report_id"] != rejected_report["id"]
+        for item in await store.create_knowledge_optimization_candidates()
+    )
+
+    another_report = await store.create_knowledge_self_steering_report()
+    assert await store.review_knowledge_self_steering_report(
+        another_report["id"], approved=True
+    )
+    [pending_candidate] = [
+        item for item in await store.create_knowledge_optimization_candidates()
+        if item["source_report_id"] == another_report["id"]
+    ]
+    assert await store.review_knowledge_optimization_candidate(
+        pending_candidate["id"], approved=False
+    )
+    [rejected_candidate] = await store.list_knowledge_optimization_candidates(
+        status="rejected"
+    )
+    assert rejected_candidate["review_history"][0]["decision"] == "rejected"
 
 
 async def test_maturity_report_tracks_approved_fact_evidence_without_mutation(

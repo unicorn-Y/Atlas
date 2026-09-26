@@ -485,6 +485,50 @@ class TestFacts:
             await isolated_memory.close()
             server.memory = original_memory
 
+    async def test_memory_optimization_candidates_require_api_approval(
+        self, client: AsyncClient, tmp_path,
+    ) -> None:
+        original_memory = server.memory
+        await original_memory.close()
+        isolated_memory = MemoryStore(db_path=tmp_path / "optimization-candidates.db")
+        await isolated_memory.init()
+        server.memory = isolated_memory
+        try:
+            await isolated_memory.set_fact("user_preference", "concise answers")
+            report = await client.post("/api/memory/self-steering-reports")
+            assert report.status_code == 200
+            report_id = report.json()["id"]
+
+            before_approval = await client.post("/api/memory/optimization-candidates")
+            assert before_approval.status_code == 200
+            assert before_approval.json() == []
+
+            approved = await client.post(
+                f"/api/memory/self-steering-reports/{report_id}/approve"
+            )
+            assert approved.status_code == 200
+            generated = await client.post("/api/memory/optimization-candidates")
+            assert generated.status_code == 200
+            assert generated.json()
+            candidate = generated.json()[0]
+            assert candidate["source_report_id"] == report_id
+            assert candidate["risk"] == "low"
+            assert candidate["advisory_only"] is True
+            assert candidate["evidence_refs"]
+
+            reviewed = await client.post(
+                f"/api/memory/optimization-candidates/{candidate['id']}/approve"
+            )
+            listed = await client.get(
+                "/api/memory/optimization-candidates", params={"status": "approved"}
+            )
+            assert reviewed.status_code == 200
+            assert listed.status_code == 200
+            assert listed.json()[0]["review_history"][0]["decision"] == "approved"
+        finally:
+            await isolated_memory.close()
+            server.memory = original_memory
+
     async def test_goal_experience_requires_explicit_api_approval(
         self, client: AsyncClient, tmp_path,
     ) -> None:

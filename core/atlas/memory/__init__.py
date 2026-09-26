@@ -16,6 +16,8 @@ import structlog
 from atlas.config import get_config
 from atlas.memory.quality import (
     evaluate_knowledge_maturity,
+    evaluate_knowledge_optimization_candidate,
+    evaluate_knowledge_optimization_candidates,
     evaluate_knowledge_self_steering,
     evaluate_memory_health,
     evaluate_memory_optimization,
@@ -254,7 +256,29 @@ class MemoryStore:
             CREATE TABLE IF NOT EXISTS memory_self_steering_reports (
                 id TEXT PRIMARY KEY,
                 report_json TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                reviewed_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_optimization_candidates (
+                id TEXT PRIMARY KEY,
+                source_report_id TEXT NOT NULL,
+                candidate_json TEXT NOT NULL,
+                evaluation_json TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending', 'approved', 'rejected')),
+                reviewed_at TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(source_report_id) REFERENCES memory_self_steering_reports(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_optimization_candidate_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                candidate_id TEXT NOT NULL,
+                decision TEXT NOT NULL CHECK(decision IN ('approved', 'rejected')),
+                reviewed_at TEXT NOT NULL,
+                FOREIGN KEY(candidate_id) REFERENCES memory_optimization_candidates(id)
             );
 
             CREATE TABLE IF NOT EXISTS agent_reflections (
@@ -504,6 +528,17 @@ class MemoryStore:
         if "memory_type" not in candidate_columns:
             await self._db.execute(
                 "ALTER TABLE memory_candidates ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'fact'"
+            )
+        cursor = await self._db.execute("PRAGMA table_info(memory_self_steering_reports)")
+        steering_columns = {row["name"] for row in await cursor.fetchall()}
+        if "status" not in steering_columns:
+            await self._db.execute(
+                "ALTER TABLE memory_self_steering_reports "
+                "ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'"
+            )
+        if "reviewed_at" not in steering_columns:
+            await self._db.execute(
+                "ALTER TABLE memory_self_steering_reports ADD COLUMN reviewed_at TEXT"
             )
         await self._db.commit()
 
@@ -2225,7 +2260,121 @@ class MemoryStore:
             (report_id, json.dumps(report, ensure_ascii=False, sort_keys=True), created_at),
         )
         await self._db.commit()
-        return {"id": report_id, "created_at": created_at, "report": report}
+        return {
+            "id": report_id, "created_at": created_at, "report": report,
+            "status": "pending", "reviewed_at": None,
+        }
+
+    async def review_knowledge_self_steering_report(
+        self, report_id: str, approved: bool,
+    ) -> bool:
+        """Explicitly approve or reject one immutable self-steering snapshot."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "UPDATE memory_self_steering_reports SET status = ?, reviewed_at = datetime('now') "
+            "WHERE id = ? AND status = 'pending'",
+            ("approved" if approved else "rejected", report_id),
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
+
+    async def create_knowledge_optimization_candidates(self) -> list[dict[str, Any]]:
+        """Create stable low-risk candidates only from explicitly approved reports."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, report_json FROM memory_self_steering_reports "
+            "WHERE status = 'approved' ORDER BY id"
+        )
+        approved_reports = [
+            {"id": row["id"], "report": json.loads(row["report_json"])}
+            for row in await cursor.fetchall()
+        ]
+        candidates = evaluate_knowledge_optimization_candidates(approved_reports)
+        candidate_ids = {candidate["id"] for candidate in candidates}
+        created_at = datetime.now(UTC).isoformat()
+        for candidate in candidates:
+            evaluation = evaluate_knowledge_optimization_candidate(candidate)
+            await self._db.execute(
+                "INSERT OR IGNORE INTO memory_optimization_candidates "
+                "(id, source_report_id, candidate_json, evaluation_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    candidate["id"], candidate["source_report_id"],
+                    json.dumps(candidate, ensure_ascii=False, sort_keys=True),
+                    json.dumps(evaluation, ensure_ascii=False, sort_keys=True), created_at,
+                ),
+            )
+        await self._db.commit()
+        persisted = await self.list_knowledge_optimization_candidates()
+        return [candidate for candidate in persisted if candidate["id"] in candidate_ids]
+
+    async def list_knowledge_optimization_candidates(
+        self, *, status: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        if status not in (None, "pending", "approved", "rejected"):
+            raise ValueError("Unsupported knowledge optimization candidate status")
+        if limit < 0:
+            raise ValueError("Candidate limit must be non-negative")
+        assert self._db is not None
+        query = (
+            "SELECT id, candidate_json, evaluation_json, status, reviewed_at, created_at "
+            "FROM memory_optimization_candidates"
+        )
+        params: list[Any] = []
+        if status is not None:
+            query += " WHERE status = ?"
+            params.append(status)
+        query += " ORDER BY id LIMIT ?"
+        params.append(limit)
+        cursor = await self._db.execute(query, params)
+        results = []
+        for row in await cursor.fetchall():
+            item = json.loads(row["candidate_json"])
+            item.update({
+                "status": row["status"], "reviewed_at": row["reviewed_at"],
+                "created_at": row["created_at"],
+                "evaluation": json.loads(row["evaluation_json"]),
+            })
+            review_cursor = await self._db.execute(
+                "SELECT decision, reviewed_at FROM memory_optimization_candidate_reviews "
+                "WHERE candidate_id = ? ORDER BY id", (row["id"],),
+            )
+            item["review_history"] = [dict(review) for review in await review_cursor.fetchall()]
+            results.append(item)
+        return results
+
+    async def review_knowledge_optimization_candidate(
+        self, candidate_id: str, approved: bool,
+    ) -> bool:
+        """Record an explicit candidate decision; approval remains advisory only."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT evaluation_json FROM memory_optimization_candidates "
+            "WHERE id = ? AND status = 'pending'", (candidate_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return False
+        evaluation = json.loads(row["evaluation_json"])
+        if approved and not evaluation.get("eligible"):
+            return False
+        decision = "approved" if approved else "rejected"
+        reviewed_at = datetime.now(UTC).isoformat()
+        cursor = await self._db.execute(
+            "UPDATE memory_optimization_candidates SET status = ?, reviewed_at = ? "
+            "WHERE id = ? AND status = 'pending'",
+            (decision, reviewed_at, candidate_id),
+        )
+        if cursor.rowcount == 0:
+            await self._db.commit()
+            return False
+        await self._db.execute(
+            "INSERT INTO memory_optimization_candidate_reviews "
+            "(candidate_id, decision, reviewed_at) VALUES (?, ?, ?)",
+            (candidate_id, decision, reviewed_at),
+        )
+        await self._db.commit()
+        return True
 
     async def list_knowledge_self_steering_reports(
         self, *, limit: int = 100,
@@ -2235,12 +2384,14 @@ class MemoryStore:
             raise ValueError("Report limit must be non-negative")
         assert self._db is not None
         cursor = await self._db.execute(
-            "SELECT id, report_json, created_at FROM memory_self_steering_reports "
+            "SELECT id, report_json, created_at, status, reviewed_at "
+            "FROM memory_self_steering_reports "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
         )
         return [
             {"id": row["id"], "created_at": row["created_at"],
-             "report": json.loads(row["report_json"])}
+             "report": json.loads(row["report_json"]), "status": row["status"],
+             "reviewed_at": row["reviewed_at"]}
             for row in await cursor.fetchall()
         ]
 
