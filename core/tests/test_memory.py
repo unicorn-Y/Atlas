@@ -1208,6 +1208,126 @@ class TestGoalOutcomes:
         ]
         assert outcome["experience_status"] == "approved"
 
+    async def test_refinement_requires_repeated_approved_candidates_and_explicit_review(
+        self, store: MemoryStore,
+    ) -> None:
+        source_outcome_id = await store.record_goal_outcome(
+            goal_id="migration-review",
+            goal="Review filesystem migration risks",
+            status="completed",
+            evaluation={"satisfied": True, "evidence": "Risks listed."},
+            steps=[{"id": "inspect", "title": "Inspect", "evidence": "Manifest reviewed."}],
+            source_conversation_id="source-conversation",
+            source_run_id="source-run",
+        )
+        assert await store.review_goal_experience(source_outcome_id, approved=True)
+        [source_knowledge] = await store.retrieve_approved_goal_knowledge("filesystem migration")
+
+        proposal_ids = []
+        for index in range(2):
+            conversation_id = f"execution-conversation-{index}"
+            run_id = f"execution-run-{index}"
+            await store.record_goal_knowledge_usage(
+                source_knowledge["id"], "execution", conversation_id, run_id,
+            )
+            await store.record_goal_outcome(
+                goal_id="migration-review",
+                goal="Review filesystem migration risks",
+                status="blocked",
+                evaluation={"satisfied": False, "reason": f"Manifest section {index} missing."},
+                steps=[],
+                source_conversation_id=conversation_id,
+                source_run_id=run_id,
+            )
+            [proposal] = [
+                item for item in await store.list_goal_knowledge_proposals()
+                if item["conversation_id"] == conversation_id
+            ]
+            assert await store.review_goal_knowledge_proposal(proposal["id"], approved=True)
+            proposal_ids.append(proposal["id"])
+
+        before = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        evaluations = await store.evaluate_goal_knowledge_refinements(source_knowledge["id"])
+        [evaluation] = evaluations
+        assert evaluation["approved_candidate_count"] == 2
+        assert evaluation["eligible"] is True
+        assert evaluation["proposal_ids"] == sorted(proposal_ids)
+        repeated = await store.evaluate_goal_knowledge_refinements(source_knowledge["id"])
+        assert repeated == evaluations
+        [refinement] = await store.list_goal_knowledge_refinements(status="pending")
+        assert refinement["knowledge_id"] == source_knowledge["id"]
+        assert refinement["proposal_ids"] == sorted(proposal_ids)
+        assert await store.retrieve_approved_goal_knowledge("filesystem migration") == before
+
+        assert await store.review_goal_knowledge_refinement(refinement["id"], approved=True)
+        assert not await store.review_goal_knowledge_refinement(refinement["id"], approved=False)
+        [updated] = [
+            item for item in await store.retrieve_approved_goal_knowledge("filesystem migration")
+            if item["id"] == source_knowledge["id"]
+        ]
+        assert "Manifest section 0 missing" in updated["goal"]
+        assert "Manifest section 1 missing" in updated["goal"]
+        assert any(
+            item.get("type") == "approved_knowledge_refinement"
+            and item.get("refinement_id") == refinement["id"]
+            and item.get("proposal_ids") == sorted(proposal_ids)
+            for item in updated["evidence"]
+        )
+
+    async def test_refinement_evaluation_records_ineligible_signal_without_candidate(
+        self, store: MemoryStore,
+    ) -> None:
+        knowledge_id, _, _ = await self._record_applied_goal_knowledge(store)
+        [proposal] = await store.list_goal_knowledge_proposals()
+        assert await store.review_goal_knowledge_proposal(proposal["id"], approved=True)
+
+        [evaluation] = await store.evaluate_goal_knowledge_refinements(knowledge_id)
+        assert evaluation["approved_candidate_count"] == 1
+        assert evaluation["eligible"] is False
+        assert evaluation["required_candidate_count"] == 2
+        assert evaluation["decision_reason"] == "insufficient_approved_improvements"
+        assert evaluation["refinement_id"] is None
+        [stored_evaluation] = await store.list_goal_knowledge_refinement_evaluations(
+            knowledge_id=knowledge_id,
+        )
+        assert stored_evaluation["eligible"] is False
+        assert stored_evaluation["proposal_ids"] == [proposal["id"]]
+        assert await store.list_goal_knowledge_refinements() == []
+
+    async def test_rejected_refinement_keeps_advisory_knowledge_unchanged(
+        self, store: MemoryStore,
+    ) -> None:
+        knowledge_id, _, _ = await self._record_applied_goal_knowledge(store)
+        [first_proposal] = await store.list_goal_knowledge_proposals()
+        assert await store.review_goal_knowledge_proposal(first_proposal["id"], approved=True)
+
+        await store.record_goal_knowledge_usage(
+            knowledge_id, "execution", "second-execution", "second-run",
+        )
+        await store.record_goal_outcome(
+            goal_id="migration-review",
+            goal="Review filesystem migration risks",
+            status="blocked",
+            evaluation={"satisfied": False, "reason": "The target was read only."},
+            steps=[],
+            source_conversation_id="second-execution",
+            source_run_id="second-run",
+        )
+        [second_proposal] = [
+            item for item in await store.list_goal_knowledge_proposals()
+            if item["conversation_id"] == "second-execution"
+        ]
+        assert await store.review_goal_knowledge_proposal(second_proposal["id"], approved=True)
+        before = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        [evaluation] = await store.evaluate_goal_knowledge_refinements(knowledge_id)
+        [refinement] = await store.list_goal_knowledge_refinements(status="pending")
+        assert evaluation["eligible"] is True
+
+        assert await store.review_goal_knowledge_refinement(refinement["id"], approved=False)
+        assert await store.retrieve_approved_goal_knowledge("filesystem migration") == before
+        [rejected] = await store.list_goal_knowledge_refinements(status="rejected")
+        assert rejected["id"] == refinement["id"]
+
     async def test_successful_execution_is_recorded_helpful_without_proposal(
         self, store: MemoryStore,
     ) -> None:

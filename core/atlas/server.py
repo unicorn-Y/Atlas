@@ -744,6 +744,57 @@ async def reject_goal_knowledge_proposal(proposal_id: str) -> dict[str, str]:
     return {"status": "rejected", "id": proposal_id}
 
 
+@app.post("/api/memory/goal-knowledge/refinements/evaluate")
+async def evaluate_goal_knowledge_refinements(
+    knowledge_id: str | None = Query(None),
+) -> list[dict[str, Any]]:
+    """Evaluate approved improvement candidates using the deterministic refinement gate."""
+    assert memory is not None
+    return await memory.evaluate_goal_knowledge_refinements(knowledge_id)
+
+
+@app.get("/api/memory/goal-knowledge/refinements")
+async def list_goal_knowledge_refinements(
+    status: str | None = Query(None),
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """List refinement candidates separately from advisory knowledge."""
+    assert memory is not None
+    if status not in (None, "pending", "approved", "rejected"):
+        raise HTTPException(status_code=400, detail="Invalid goal knowledge refinement status")
+    return await memory.list_goal_knowledge_refinements(status=status, limit=limit)
+
+
+@app.get("/api/memory/goal-knowledge/refinement-evaluations")
+async def list_goal_knowledge_refinement_evaluations(
+    knowledge_id: str | None = Query(None),
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """List deterministic refinement decisions and their supporting candidates."""
+    assert memory is not None
+    return await memory.list_goal_knowledge_refinement_evaluations(
+        knowledge_id=knowledge_id, limit=limit,
+    )
+
+
+@app.post("/api/memory/goal-knowledge/refinements/{refinement_id}/approve")
+async def approve_goal_knowledge_refinement(refinement_id: str) -> dict[str, str]:
+    """Apply a reviewed refinement to advisory knowledge."""
+    assert memory is not None
+    if not await memory.review_goal_knowledge_refinement(refinement_id, approved=True):
+        raise HTTPException(status_code=404, detail="Pending goal knowledge refinement not found")
+    return {"status": "approved", "id": refinement_id}
+
+
+@app.post("/api/memory/goal-knowledge/refinements/{refinement_id}/reject")
+async def reject_goal_knowledge_refinement(refinement_id: str) -> dict[str, str]:
+    """Reject a candidate without changing advisory or active knowledge."""
+    assert memory is not None
+    if not await memory.review_goal_knowledge_refinement(refinement_id, approved=False):
+        raise HTTPException(status_code=404, detail="Pending goal knowledge refinement not found")
+    return {"status": "rejected", "id": refinement_id}
+
+
 @app.post("/api/memory/candidates/{candidate_id}/approve")
 async def approve_memory_candidate(candidate_id: str) -> dict[str, str]:
     """Promote a pending candidate after explicit user approval."""

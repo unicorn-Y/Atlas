@@ -533,12 +533,58 @@ class TestFacts:
             )
             assert approved.status_code == 200
             assert approved.json()["status"] == "approved"
+
+            await isolated_memory.record_goal_knowledge_usage(
+                knowledge["id"], "execution", "execution-conversation-2", "execution-run-2",
+            )
+            await isolated_memory.record_goal_outcome(
+                goal_id="migration-review",
+                goal="Review filesystem migration risks",
+                status="blocked",
+                evaluation={"satisfied": False, "reason": "The target path was unavailable."},
+                steps=[],
+                source_conversation_id="execution-conversation-2",
+                source_run_id="execution-run-2",
+            )
+            [second_proposal] = [
+                item for item in await isolated_memory.list_goal_knowledge_proposals()
+                if item["conversation_id"] == "execution-conversation-2"
+            ]
+            assert await isolated_memory.review_goal_knowledge_proposal(
+                second_proposal["id"], approved=True,
+            )
+            evaluated = await client.post(
+                "/api/memory/goal-knowledge/refinements/evaluate",
+                params={"knowledge_id": knowledge["id"]},
+            )
+            assert evaluated.status_code == 200
+            [evaluation] = evaluated.json()
+            assert evaluation["eligible"] is True
+            evaluation_history = await client.get(
+                "/api/memory/goal-knowledge/refinement-evaluations",
+                params={"knowledge_id": knowledge["id"]},
+            )
+            assert evaluation_history.status_code == 200
+            [stored_evaluation] = evaluation_history.json()
+            assert stored_evaluation["decision_reason"] == "repeated_approved_improvements"
+            assert stored_evaluation["proposal_ids"] == evaluation["proposal_ids"]
+            listed_refinements = await client.get(
+                "/api/memory/goal-knowledge/refinements", params={"status": "pending"},
+            )
+            assert listed_refinements.status_code == 200
+            [refinement] = listed_refinements.json()
+            refined = await client.post(
+                f"/api/memory/goal-knowledge/refinements/{refinement['id']}/approve",
+            )
+            assert refined.status_code == 200
+            assert refined.json()["status"] == "approved"
             feedback = await client.get(
                 "/api/memory/goal-knowledge/feedback",
                 params={"knowledge_id": knowledge["id"]},
             )
             assert feedback.status_code == 200
-            assert feedback.json()[0]["signal"] == "failed"
+            assert len(feedback.json()) == 2
+            assert all(item["signal"] == "failed" for item in feedback.json())
         finally:
             await isolated_memory.close()
             server.memory = original_memory

@@ -29,6 +29,7 @@ _MEMORY_STOP_WORDS = {
     "in", "is", "it", "me", "my", "of", "on", "or", "should", "the",
     "to", "use", "what", "when", "where", "which", "who", "why", "with",
 }
+_GOAL_KNOWLEDGE_REFINEMENT_MIN_CANDIDATES = 2
 _REFLECTION_SECRET = re.compile(
     r"(?i)\b(api[_ -]?key|access[_ -]?token|password|passwd|secret|credential)\b"
     r"\s*[:=]\s*(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)"
@@ -347,6 +348,37 @@ class MemoryStore:
             );
             CREATE INDEX IF NOT EXISTS idx_goal_knowledge_proposals_status
                 ON goal_knowledge_proposals(status, created_at);
+
+            CREATE TABLE IF NOT EXISTS goal_knowledge_refinement_evaluations (
+                id TEXT PRIMARY KEY,
+                knowledge_id TEXT NOT NULL,
+                input_signature TEXT NOT NULL,
+                approved_candidate_count INTEGER NOT NULL,
+                required_candidate_count INTEGER NOT NULL,
+                eligible INTEGER NOT NULL CHECK(eligible IN (0, 1)),
+                decision_reason TEXT NOT NULL,
+                proposal_ids_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(knowledge_id, input_signature),
+                FOREIGN KEY(knowledge_id) REFERENCES goal_knowledge(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS goal_knowledge_refinements (
+                id TEXT PRIMARY KEY,
+                evaluation_id TEXT NOT NULL UNIQUE,
+                knowledge_id TEXT NOT NULL,
+                proposal_ids_json TEXT NOT NULL,
+                proposed_guidance TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending', 'approved', 'rejected')),
+                reviewed_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY(evaluation_id)
+                    REFERENCES goal_knowledge_refinement_evaluations(id),
+                FOREIGN KEY(knowledge_id) REFERENCES goal_knowledge(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_goal_knowledge_refinements_status
+                ON goal_knowledge_refinements(status, created_at);
         """)
         cursor = await self._db.execute("PRAGMA table_info(goal_outcomes)")
         goal_outcome_columns = {row["name"] for row in await cursor.fetchall()}
@@ -1148,6 +1180,191 @@ class MemoryStore:
         params.append(max(0, limit))
         cursor = await self._db.execute(query, params)
         return [dict(row) for row in await cursor.fetchall()]
+
+    async def evaluate_goal_knowledge_refinements(
+        self, knowledge_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Audit approved improvement candidates and create eligible refinement candidates."""
+        assert self._db is not None
+        query = (
+            "SELECT knowledge_id, id, proposed_guidance FROM goal_knowledge_proposals "
+            "WHERE status = 'approved'"
+        )
+        params: list[Any] = []
+        if knowledge_id is not None:
+            query += " AND knowledge_id = ?"
+            params.append(knowledge_id)
+        query += " ORDER BY knowledge_id, id"
+        cursor = await self._db.execute(query, params)
+        rows = await cursor.fetchall()
+        grouped: dict[str, list[Any]] = {}
+        for row in rows:
+            grouped.setdefault(row["knowledge_id"], []).append(row)
+
+        if knowledge_id is not None and knowledge_id not in grouped:
+            exists = await self._db.execute(
+                "SELECT 1 FROM goal_knowledge WHERE id = ? AND source_approval_status = 'approved'",
+                (knowledge_id,),
+            )
+            if await exists.fetchone():
+                grouped[knowledge_id] = []
+
+        evaluations: list[dict[str, Any]] = []
+        for source_id, candidates in sorted(grouped.items()):
+            approved_refinements = await self._db.execute(
+                "SELECT proposal_ids_json FROM goal_knowledge_refinements "
+                "WHERE knowledge_id = ? AND status = 'approved'",
+                (source_id,),
+            )
+            consumed_ids = {
+                proposal_id
+                for row in await approved_refinements.fetchall()
+                for proposal_id in json.loads(row["proposal_ids_json"])
+            }
+            candidates = [row for row in candidates if row["id"] not in consumed_ids]
+            proposal_ids = [row["id"] for row in candidates]
+            proposal_ids_json = json.dumps(proposal_ids, ensure_ascii=False)
+            input_signature = hashlib.sha256(proposal_ids_json.encode("utf-8")).hexdigest()
+            evaluation_id = f"goal-knowledge-refinement-evaluation:{source_id}:{input_signature}"
+            eligible = len(candidates) >= _GOAL_KNOWLEDGE_REFINEMENT_MIN_CANDIDATES
+            decision_reason = (
+                "repeated_approved_improvements"
+                if eligible else "insufficient_approved_improvements"
+            )
+            await self._db.execute(
+                "INSERT OR IGNORE INTO goal_knowledge_refinement_evaluations "
+                "(id, knowledge_id, input_signature, approved_candidate_count, "
+                "required_candidate_count, eligible, decision_reason, proposal_ids_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    evaluation_id, source_id, input_signature, len(candidates),
+                    _GOAL_KNOWLEDGE_REFINEMENT_MIN_CANDIDATES, int(eligible),
+                    decision_reason, proposal_ids_json,
+                ),
+            )
+            refinement_id = None
+            if eligible:
+                unique_guidance = list(dict.fromkeys(
+                    row["proposed_guidance"].strip() for row in candidates
+                    if row["proposed_guidance"].strip()
+                ))
+                guidance = " ".join(unique_guidance)[:4000]
+                refinement_id = f"goal-knowledge-refinement:{evaluation_id.rsplit(':', 1)[-1]}"
+                await self._db.execute(
+                    "INSERT OR IGNORE INTO goal_knowledge_refinements "
+                    "(id, evaluation_id, knowledge_id, proposal_ids_json, proposed_guidance) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (refinement_id, evaluation_id, source_id, proposal_ids_json, guidance),
+                )
+            evaluations.append({
+                "id": evaluation_id,
+                "knowledge_id": source_id,
+                "approved_candidate_count": len(candidates),
+                "required_candidate_count": _GOAL_KNOWLEDGE_REFINEMENT_MIN_CANDIDATES,
+                "eligible": eligible,
+                "decision_reason": decision_reason,
+                "proposal_ids": proposal_ids,
+                "refinement_id": refinement_id,
+            })
+        await self._db.commit()
+        return evaluations
+
+    async def list_goal_knowledge_refinement_evaluations(
+        self, knowledge_id: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return durable refinement decisions with thresholds and source candidates."""
+        assert self._db is not None
+        query = (
+            "SELECT id, knowledge_id, approved_candidate_count, required_candidate_count, "
+            "eligible, decision_reason, proposal_ids_json, created_at "
+            "FROM goal_knowledge_refinement_evaluations"
+        )
+        params: list[Any] = []
+        if knowledge_id is not None:
+            query += " WHERE knowledge_id = ?"
+            params.append(knowledge_id)
+        query += " ORDER BY id LIMIT ?"
+        params.append(max(0, limit))
+        cursor = await self._db.execute(query, params)
+        evaluations = []
+        for row in await cursor.fetchall():
+            item = dict(row)
+            item["eligible"] = bool(item["eligible"])
+            item["proposal_ids"] = json.loads(item.pop("proposal_ids_json"))
+            evaluations.append(item)
+        return evaluations
+
+    async def list_goal_knowledge_refinements(
+        self, status: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List candidate, reviewed, and source provenance for advisory refinements."""
+        if status not in (None, "pending", "approved", "rejected"):
+            raise ValueError("Unsupported goal knowledge refinement status")
+        assert self._db is not None
+        query = (
+            "SELECT id, evaluation_id, knowledge_id, proposal_ids_json, proposed_guidance, "
+            "status, reviewed_at, created_at FROM goal_knowledge_refinements"
+        )
+        params: list[Any] = []
+        if status is not None:
+            query += " WHERE status = ?"
+            params.append(status)
+        query += " ORDER BY id LIMIT ?"
+        params.append(max(0, limit))
+        cursor = await self._db.execute(query, params)
+        results = []
+        for row in await cursor.fetchall():
+            item = dict(row)
+            item["proposal_ids"] = json.loads(item.pop("proposal_ids_json"))
+            results.append(item)
+        return results
+
+    async def review_goal_knowledge_refinement(
+        self, refinement_id: str, approved: bool,
+    ) -> bool:
+        """Apply an approved refinement to advisory knowledge after explicit review."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "UPDATE goal_knowledge_refinements SET status = ?, reviewed_at = datetime('now') "
+            "WHERE id = ? AND status = 'pending'",
+            ("approved" if approved else "rejected", refinement_id),
+        )
+        if cursor.rowcount == 0:
+            await self._db.commit()
+            return False
+        if approved:
+            candidate_cursor = await self._db.execute(
+                "SELECT knowledge_id, proposal_ids_json, proposed_guidance "
+                "FROM goal_knowledge_refinements WHERE id = ?",
+                (refinement_id,),
+            )
+            candidate = await candidate_cursor.fetchone()
+            evidence_cursor = await self._db.execute(
+                "SELECT goal, evidence_json FROM goal_knowledge WHERE id = ? "
+                "AND source_approval_status = 'approved'",
+                (candidate["knowledge_id"],),
+            )
+            knowledge = await evidence_cursor.fetchone()
+            if knowledge is None:
+                await self._db.rollback()
+                return False
+            evidence = json.loads(knowledge["evidence_json"])
+            evidence.append({
+                "type": "approved_knowledge_refinement",
+                "refinement_id": refinement_id,
+                "proposal_ids": json.loads(candidate["proposal_ids_json"]),
+                "guidance": candidate["proposed_guidance"],
+            })
+            await self._db.execute(
+                "UPDATE goal_knowledge SET goal = ?, evidence_json = ? WHERE id = ?",
+                (
+                    knowledge["goal"] + " " + candidate["proposed_guidance"],
+                    json.dumps(evidence, ensure_ascii=False, sort_keys=True),
+                    candidate["knowledge_id"],
+                ),
+            )
+        await self._db.commit()
+        return True
 
     async def review_goal_knowledge_proposal(
         self, proposal_id: str, approved: bool,
