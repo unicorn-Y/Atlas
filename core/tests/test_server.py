@@ -527,6 +527,13 @@ class TestFacts:
             [proposal] = listed.json()
             assert proposal["status"] == "pending"
             assert proposal["execution_outcome_id"]
+            governance = await client.get(
+                "/api/memory/goal-knowledge/governance/evaluate",
+                params={"entity_type": "proposal", "entity_id": proposal["id"]},
+            )
+            assert governance.status_code == 200
+            [governance_decision] = governance.json()
+            assert governance_decision["eligible"] is True
 
             approved = await client.post(
                 f"/api/memory/goal-knowledge/proposals/{proposal['id']}/approve",
@@ -578,6 +585,14 @@ class TestFacts:
             )
             assert refined.status_code == 200
             assert refined.json()["status"] == "approved"
+            history = await client.get(
+                "/api/memory/goal-knowledge/governance/history",
+                params={"knowledge_id": knowledge["id"]},
+            )
+            assert history.status_code == 200
+            assert [item["entity_type"] for item in history.json()] == [
+                "proposal", "proposal", "refinement",
+            ]
             feedback = await client.get(
                 "/api/memory/goal-knowledge/feedback",
                 params={"knowledge_id": knowledge["id"]},

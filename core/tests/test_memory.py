@@ -1178,11 +1178,48 @@ class TestGoalOutcomes:
         [rejected] = await store.list_goal_knowledge_proposals(status="rejected")
         assert rejected["status"] == "rejected"
         assert rejected["knowledge_id"] == knowledge_id
+        [decision] = await store.list_goal_knowledge_governance_history(knowledge_id)
+        assert decision["entity_type"] == "proposal"
+        assert decision["entity_id"] == proposal["id"]
+        assert decision["decision"] == "rejected"
+        assert decision["provenance"]["execution_outcome_id"] == execution_outcome_id
         [outcome] = [
             item for item in await store.list_goal_outcomes()
             if item["id"] == execution_outcome_id
         ]
         assert outcome["experience_status"] == "pending"
+
+    async def test_governance_evaluation_is_deterministic_and_approval_is_audited(
+        self, store: MemoryStore,
+    ) -> None:
+        knowledge_id, usage_id, execution_outcome_id = (
+            await self._record_applied_goal_knowledge(store)
+        )
+        [proposal] = await store.list_goal_knowledge_proposals(status="pending")
+
+        first = await store.evaluate_goal_knowledge_governance("proposal", proposal["id"])
+        second = await store.evaluate_goal_knowledge_governance("proposal", proposal["id"])
+        assert first == second
+        assert first[0]["eligible"] is True
+        assert first[0]["decision_reason"] == "approved_advisory_source_with_complete_provenance"
+
+        before = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        assert await store.review_goal_knowledge_proposal(proposal["id"], approved=True)
+        after = await store.retrieve_approved_goal_knowledge("filesystem migration")
+        [decision] = await store.list_goal_knowledge_governance_history(knowledge_id)
+        assert decision["decision"] == "approved"
+        assert decision["provenance"] == {
+            "usage_event_id": usage_id,
+            "source_outcome_id": proposal["source_outcome_id"],
+            "execution_outcome_id": execution_outcome_id,
+            "conversation_id": "execution-conversation",
+            "source_run_id": "execution-run",
+        }
+        assert any(
+            evidence.get("governance_event_id") == decision["id"]
+            for item in after for evidence in item["evidence"]
+        )
+        assert after != before
 
     async def test_approved_improvement_proposal_is_promoted_as_advisory_knowledge(
         self, store: MemoryStore,
@@ -1200,6 +1237,7 @@ class TestGoalOutcomes:
         assert any(
             item.get("type") == "approved_improvement_proposal"
             and item.get("proposal_id") == proposal["id"]
+            and item.get("governance_event_id")
             for item in promoted_execution["evidence"]
         )
         [outcome] = [
@@ -1261,6 +1299,15 @@ class TestGoalOutcomes:
 
         assert await store.review_goal_knowledge_refinement(refinement["id"], approved=True)
         assert not await store.review_goal_knowledge_refinement(refinement["id"], approved=False)
+        governance_events = await store.list_goal_knowledge_governance_history(
+            source_knowledge["id"],
+        )
+        [governance_event] = [
+            item for item in governance_events if item["entity_type"] == "refinement"
+        ]
+        assert governance_event["entity_type"] == "refinement"
+        assert governance_event["entity_id"] == refinement["id"]
+        assert governance_event["decision"] == "approved"
         [updated] = [
             item for item in await store.retrieve_approved_goal_knowledge("filesystem migration")
             if item["id"] == source_knowledge["id"]
@@ -1270,6 +1317,7 @@ class TestGoalOutcomes:
         assert any(
             item.get("type") == "approved_knowledge_refinement"
             and item.get("refinement_id") == refinement["id"]
+            and item.get("governance_event_id") == governance_event["id"]
             and item.get("proposal_ids") == sorted(proposal_ids)
             for item in updated["evidence"]
         )

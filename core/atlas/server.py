@@ -777,6 +777,29 @@ async def list_goal_knowledge_refinement_evaluations(
     )
 
 
+@app.get("/api/memory/goal-knowledge/governance/evaluate")
+async def evaluate_goal_knowledge_governance(
+    entity_type: str | None = Query(None),
+    entity_id: str | None = Query(None),
+) -> list[dict[str, Any]]:
+    """Evaluate pending advisory reviews against deterministic provenance gates."""
+    assert memory is not None
+    try:
+        return await memory.evaluate_goal_knowledge_governance(entity_type, entity_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/memory/goal-knowledge/governance/history")
+async def list_goal_knowledge_governance_history(
+    knowledge_id: str | None = Query(None),
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """List append-only review decisions and their provenance."""
+    assert memory is not None
+    return await memory.list_goal_knowledge_governance_history(knowledge_id, limit)
+
+
 @app.post("/api/memory/goal-knowledge/refinements/{refinement_id}/approve")
 async def approve_goal_knowledge_refinement(refinement_id: str) -> dict[str, str]:
     """Apply a reviewed refinement to advisory knowledge."""

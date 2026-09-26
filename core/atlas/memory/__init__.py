@@ -379,6 +379,21 @@ class MemoryStore:
             );
             CREATE INDEX IF NOT EXISTS idx_goal_knowledge_refinements_status
                 ON goal_knowledge_refinements(status, created_at);
+
+            CREATE TABLE IF NOT EXISTS goal_knowledge_governance_events (
+                id TEXT PRIMARY KEY,
+                entity_type TEXT NOT NULL CHECK(entity_type IN ('proposal', 'refinement')),
+                entity_id TEXT NOT NULL,
+                knowledge_id TEXT NOT NULL,
+                decision TEXT NOT NULL CHECK(decision IN ('approved', 'rejected')),
+                decision_reason TEXT NOT NULL,
+                provenance_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(entity_type, entity_id),
+                FOREIGN KEY(knowledge_id) REFERENCES goal_knowledge(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_goal_knowledge_governance_knowledge
+                ON goal_knowledge_governance_events(knowledge_id, created_at);
         """)
         cursor = await self._db.execute("PRAGMA table_info(goal_outcomes)")
         goal_outcome_columns = {row["name"] for row in await cursor.fetchall()}
@@ -1319,11 +1334,172 @@ class MemoryStore:
             results.append(item)
         return results
 
+    async def evaluate_goal_knowledge_governance(
+        self, entity_type: str | None = None, entity_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Deterministically evaluate pending advisory candidates against approval gates."""
+        if entity_type not in (None, "proposal", "refinement"):
+            raise ValueError("Unsupported goal knowledge governance entity type")
+        assert self._db is not None
+        evaluated: list[dict[str, Any]] = []
+        for kind in ((entity_type,) if entity_type else ("proposal", "refinement")):
+            if kind == "proposal":
+                query = (
+                    "SELECT id, knowledge_id, usage_event_id, source_outcome_id, "
+                    "execution_outcome_id, conversation_id, source_run_id "
+                    "FROM goal_knowledge_proposals WHERE status = 'pending'"
+                )
+                params: list[Any] = []
+                if entity_id is not None:
+                    query += " AND id = ?"
+                    params.append(entity_id)
+                query += " ORDER BY id"
+                cursor = await self._db.execute(query, params)
+                for row in await cursor.fetchall():
+                    knowledge_cursor = await self._db.execute(
+                        "SELECT source_approval_status FROM goal_knowledge WHERE id = ?",
+                        (row["knowledge_id"],),
+                    )
+                    knowledge = await knowledge_cursor.fetchone()
+                    provenance = {
+                        key: row[key] for key in (
+                            "usage_event_id", "source_outcome_id", "execution_outcome_id",
+                            "conversation_id", "source_run_id",
+                        )
+                    }
+                    complete = all(value is not None for value in provenance.values())
+                    eligible = bool(
+                        knowledge and knowledge["source_approval_status"] == "approved"
+                        and complete
+                    )
+                    evaluated.append({
+                        "entity_type": "proposal", "entity_id": row["id"],
+                        "knowledge_id": row["knowledge_id"], "eligible": eligible,
+                        "decision_reason": (
+                            "approved_advisory_source_with_complete_provenance"
+                            if eligible else "missing_approved_source_or_provenance"
+                        ),
+                        "provenance": provenance,
+                    })
+            else:
+                query = (
+                    "SELECT id, evaluation_id, knowledge_id, proposal_ids_json "
+                    "FROM goal_knowledge_refinements WHERE status = 'pending'"
+                )
+                params = []
+                if entity_id is not None:
+                    query += " AND id = ?"
+                    params.append(entity_id)
+                query += " ORDER BY id"
+                cursor = await self._db.execute(query, params)
+                for row in await cursor.fetchall():
+                    proposal_ids = json.loads(row["proposal_ids_json"])
+                    evaluation_cursor = await self._db.execute(
+                        "SELECT eligible FROM goal_knowledge_refinement_evaluations "
+                        "WHERE id = ? AND knowledge_id = ?",
+                        (row["evaluation_id"], row["knowledge_id"]),
+                    )
+                    evaluation = await evaluation_cursor.fetchone()
+                    knowledge_cursor = await self._db.execute(
+                        "SELECT source_approval_status FROM goal_knowledge WHERE id = ?",
+                        (row["knowledge_id"],),
+                    )
+                    knowledge = await knowledge_cursor.fetchone()
+                    proposals_cursor = await self._db.execute(
+                        "SELECT id, knowledge_id, status FROM goal_knowledge_proposals "
+                        "WHERE id IN (" + ",".join("?" for _ in proposal_ids) + ") "
+                        "ORDER BY id" if proposal_ids else
+                        "SELECT id, knowledge_id, status FROM goal_knowledge_proposals WHERE 0",
+                        proposal_ids,
+                    )
+                    proposals = await proposals_cursor.fetchall()
+                    proposal_gate = (
+                        len(proposals) == len(proposal_ids)
+                        and all(
+                            item["knowledge_id"] == row["knowledge_id"]
+                            and item["status"] == "approved" for item in proposals
+                        )
+                    )
+                    eligible = bool(
+                        evaluation and evaluation["eligible"] == 1
+                        and knowledge and knowledge["source_approval_status"] == "approved"
+                        and proposal_ids and proposal_gate
+                    )
+                    evaluated.append({
+                        "entity_type": "refinement", "entity_id": row["id"],
+                        "knowledge_id": row["knowledge_id"], "eligible": eligible,
+                        "decision_reason": (
+                            "eligible_evaluation_with_approved_provenance"
+                            if eligible else "ineligible_evaluation_or_unapproved_provenance"
+                        ),
+                        "evaluation_id": row["evaluation_id"],
+                        "proposal_ids": proposal_ids,
+                    })
+        return evaluated
+
+    async def list_goal_knowledge_governance_history(
+        self, knowledge_id: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return immutable explicit-review decisions and their source provenance."""
+        assert self._db is not None
+        query = (
+            "SELECT id, entity_type, entity_id, knowledge_id, decision, "
+            "decision_reason, provenance_json, created_at "
+            "FROM goal_knowledge_governance_events"
+        )
+        params: list[Any] = []
+        if knowledge_id is not None:
+            query += " WHERE knowledge_id = ?"
+            params.append(knowledge_id)
+        query += " ORDER BY rowid LIMIT ?"
+        params.append(max(0, limit))
+        cursor = await self._db.execute(query, params)
+        events = []
+        for row in await cursor.fetchall():
+            item = dict(row)
+            item["provenance"] = json.loads(item.pop("provenance_json"))
+            events.append(item)
+        return events
+
+    async def _record_goal_knowledge_governance_event(
+        self, entity_type: str, entity_id: str, knowledge_id: str,
+        decision: str, decision_reason: str, provenance: dict[str, Any],
+    ) -> str:
+        assert self._db is not None
+        event_id = f"goal-knowledge-governance:{entity_type}:{entity_id}"
+        await self._db.execute(
+            "INSERT INTO goal_knowledge_governance_events "
+            "(id, entity_type, entity_id, knowledge_id, decision, decision_reason, "
+            "provenance_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                event_id, entity_type, entity_id, knowledge_id, decision, decision_reason,
+                json.dumps(provenance, ensure_ascii=False, sort_keys=True),
+            ),
+        )
+        return event_id
+
     async def review_goal_knowledge_refinement(
         self, refinement_id: str, approved: bool,
     ) -> bool:
         """Apply an approved refinement to advisory knowledge after explicit review."""
         assert self._db is not None
+        [governance] = await self.evaluate_goal_knowledge_governance(
+            entity_type="refinement", entity_id=refinement_id,
+        ) or [{}]
+        if approved and not governance.get("eligible"):
+            return False
+        refinement_cursor = await self._db.execute(
+            "SELECT knowledge_id, proposal_ids_json, evaluation_id "
+            "FROM goal_knowledge_refinements WHERE id = ? AND status = 'pending'",
+            (refinement_id,),
+        )
+        candidate = await refinement_cursor.fetchone()
+        if candidate is None:
+            return False
+        provenance = {
+            "evaluation_id": candidate["evaluation_id"],
+            "proposal_ids": json.loads(candidate["proposal_ids_json"]),
+        }
         cursor = await self._db.execute(
             "UPDATE goal_knowledge_refinements SET status = ?, reviewed_at = datetime('now') "
             "WHERE id = ? AND status = 'pending'",
@@ -1332,6 +1508,12 @@ class MemoryStore:
         if cursor.rowcount == 0:
             await self._db.commit()
             return False
+        event_id = await self._record_goal_knowledge_governance_event(
+            "refinement", refinement_id, candidate["knowledge_id"],
+            "approved" if approved else "rejected",
+            governance.get("decision_reason", "explicit_rejection_of_pending_candidate"),
+            provenance,
+        )
         if approved:
             candidate_cursor = await self._db.execute(
                 "SELECT knowledge_id, proposal_ids_json, proposed_guidance "
@@ -1352,6 +1534,7 @@ class MemoryStore:
             evidence.append({
                 "type": "approved_knowledge_refinement",
                 "refinement_id": refinement_id,
+                "governance_event_id": event_id,
                 "proposal_ids": json.loads(candidate["proposal_ids_json"]),
                 "guidance": candidate["proposed_guidance"],
             })
@@ -1371,6 +1554,26 @@ class MemoryStore:
     ) -> bool:
         """Reject a candidate or explicitly promote it as new advisory knowledge."""
         assert self._db is not None
+        [governance] = await self.evaluate_goal_knowledge_governance(
+            entity_type="proposal", entity_id=proposal_id,
+        ) or [{}]
+        if approved and not governance.get("eligible"):
+            return False
+        proposal_cursor = await self._db.execute(
+            "SELECT knowledge_id, usage_event_id, source_outcome_id, execution_outcome_id, "
+            "conversation_id, source_run_id FROM goal_knowledge_proposals "
+            "WHERE id = ? AND status = 'pending'",
+            (proposal_id,),
+        )
+        pending_proposal = await proposal_cursor.fetchone()
+        if pending_proposal is None:
+            return False
+        provenance = {
+            key: pending_proposal[key] for key in (
+                "usage_event_id", "source_outcome_id", "execution_outcome_id",
+                "conversation_id", "source_run_id",
+            )
+        }
         cursor = await self._db.execute(
             "UPDATE goal_knowledge_proposals SET status = ?, reviewed_at = datetime('now') "
             "WHERE id = ? AND status = 'pending'",
@@ -1379,6 +1582,12 @@ class MemoryStore:
         if cursor.rowcount == 0:
             await self._db.commit()
             return False
+        event_id = await self._record_goal_knowledge_governance_event(
+            "proposal", proposal_id, pending_proposal["knowledge_id"],
+            "approved" if approved else "rejected",
+            governance.get("decision_reason", "explicit_rejection_of_pending_candidate"),
+            provenance,
+        )
         if approved:
             proposal_cursor = await self._db.execute(
                 "SELECT execution_outcome_id, proposed_guidance "
@@ -1405,6 +1614,7 @@ class MemoryStore:
                 evidence.append({
                     "type": "approved_improvement_proposal",
                     "proposal_id": proposal_id,
+                    "governance_event_id": event_id,
                     "guidance": proposal["proposed_guidance"],
                 })
                 await self._db.execute(
