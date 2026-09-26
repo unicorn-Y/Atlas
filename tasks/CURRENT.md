@@ -2,19 +2,19 @@
 
 STATUS: READY
 
-TASK_ID: CODEX-ATLAS-P9I-MEMORY-AUTONOMOUS-IMPROVEMENT-LOOP
+TASK_ID: CODEX-ATLAS-P9J-MEMORY-EXPERIENCE-OPTIMIZATION
 
-TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P9I-MEMORY-AUTONOMOUS-IMPROVEMENT-LOOP.md
+TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P9J-MEMORY-EXPERIENCE-OPTIMIZATION.md
 
 WORKER: Luna
 
-CODE_BASE_HEAD: 743e87c47db6c34e6a9cb55e1d549d3c653ae35e
+CODE_BASE_HEAD: 340cdad5aca09ee4ac3284fcdd72c2715abe4f49
 
 BASE_HEAD_RULE:
 After pulling origin/main, record the actual starting HEAD as BASE_HEAD. Review/task-dispatch commits after CODE_BASE_HEAD are expected.
 
 PREVIOUS_REVIEW:
-P9H accepted with known limitations.
+P9I accepted with known limitations.
 
 BASELINE:
 Read docs/KNOWN-BASELINE-ISSUES-2026-09-26.md before execution.
