@@ -315,6 +315,26 @@ class MemoryStore:
                 FOREIGN KEY(activation_id) REFERENCES memory_knowledge_activations(id)
             );
 
+            CREATE TABLE IF NOT EXISTS memory_knowledge_verifications (
+                id TEXT PRIMARY KEY,
+                activation_id TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('verified', 'unverified')),
+                verification_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(activation_id) REFERENCES memory_knowledge_activations(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_memory_knowledge_verifications_activation
+                ON memory_knowledge_verifications(activation_id, created_at);
+
+            CREATE TABLE IF NOT EXISTS memory_knowledge_verification_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                verification_id TEXT NOT NULL,
+                event TEXT NOT NULL CHECK(event IN ('verification_recorded')),
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(verification_id) REFERENCES memory_knowledge_verifications(id)
+            );
+
             CREATE TABLE IF NOT EXISTS agent_reflections (
                 id TEXT PRIMARY KEY,
                 category TEXT NOT NULL CHECK(category IN ('tool', 'model', 'runtime')),
@@ -2592,6 +2612,107 @@ class MemoryStore:
             )
             activation["history"] = [dict(item) for item in await history_cursor.fetchall()]
             results.append(activation)
+        return results
+
+    async def verify_knowledge_activation_usage(
+        self,
+        activation_id: str,
+        *,
+        candidate_id: str,
+        evidence_refs: list[str],
+        usage_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Record whether a claimed advisory use is backed by activation provenance."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT activation_json FROM memory_knowledge_activations WHERE id = ?",
+            (activation_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+
+        activation = json.loads(row["activation_json"])
+        proposal = activation.get("proposal", {})
+        candidate_snapshot = next((
+            item for item in proposal.get("candidate_snapshots", [])
+            if item.get("candidate_id") == candidate_id
+        ), None)
+        checks = {
+            "activation_active": (
+                activation.get("activation_status") == "active"
+                and activation.get("advisory_only") is True
+                and proposal.get("status") == "approved"
+                and proposal.get("advisory_only") is True
+                and bool(activation.get("approval_history"))
+                and activation["approval_history"][-1].get("decision") == "approved"
+            ),
+            "candidate_in_provenance": (
+                candidate_id in proposal.get("source_candidate_ids", [])
+                and candidate_snapshot is not None
+            ),
+            "evidence_supported": bool(evidence_refs) and candidate_snapshot is not None and (
+                set(evidence_refs).issubset(set(candidate_snapshot.get("evidence_refs", [])))
+            ),
+        }
+        created_at = datetime.now(UTC).isoformat()
+        verification = {
+            "id": str(uuid.uuid4()),
+            "activation_id": activation_id,
+            "status": "verified" if all(checks.values()) else "unverified",
+            "advisory_only": True,
+            "usage": {
+                "usage_id": usage_id,
+                "candidate_id": candidate_id,
+                "evidence_refs": sorted(set(evidence_refs)),
+            },
+            "checks": checks,
+            "activation_snapshot": activation,
+            "created_at": created_at,
+            "history": [{"event": "verification_recorded", "created_at": created_at}],
+        }
+        await self._db.execute(
+            "INSERT INTO memory_knowledge_verifications "
+            "(id, activation_id, status, verification_json, created_at) VALUES (?, ?, ?, ?, ?)",
+            (
+                verification["id"], activation_id, verification["status"],
+                json.dumps(verification, ensure_ascii=False, sort_keys=True), created_at,
+            ),
+        )
+        await self._db.execute(
+            "INSERT INTO memory_knowledge_verification_history "
+            "(verification_id, event, created_at) VALUES (?, 'verification_recorded', ?)",
+            (verification["id"], created_at),
+        )
+        await self._db.commit()
+        return verification
+
+    async def list_knowledge_verifications(
+        self, *, activation_id: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return immutable verification snapshots and their append-only history."""
+        if limit < 0:
+            raise ValueError("Verification limit must be non-negative")
+        assert self._db is not None
+        query = (
+            "SELECT id, verification_json FROM memory_knowledge_verifications"
+        )
+        params: list[Any] = []
+        if activation_id is not None:
+            query += " WHERE activation_id = ?"
+            params.append(activation_id)
+        query += " ORDER BY created_at DESC, rowid DESC LIMIT ?"
+        params.append(limit)
+        cursor = await self._db.execute(query, params)
+        results = []
+        for row in await cursor.fetchall():
+            verification = json.loads(row["verification_json"])
+            history_cursor = await self._db.execute(
+                "SELECT event, created_at FROM memory_knowledge_verification_history "
+                "WHERE verification_id = ? ORDER BY id", (row["id"],),
+            )
+            verification["history"] = [dict(item) for item in await history_cursor.fetchall()]
+            results.append(verification)
         return results
 
     async def list_knowledge_self_steering_reports(

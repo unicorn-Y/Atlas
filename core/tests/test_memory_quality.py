@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timezone
 from pathlib import Path
 
@@ -541,6 +542,87 @@ async def test_optimization_reports_preserve_recommendation_audit_history(
         assert persisted[0]["report"] == second["report"]
         assert await reopened.get_fact("user_preference") == "concise answers"
         assert (await reopened.list_memory_candidates(status="rejected"))[0]["id"] == candidate["id"]
+    finally:
+        await reopened.close()
+
+
+async def test_activation_usage_verification_checks_provenance_and_persists_audit(
+    store: MemoryStore,
+) -> None:
+    candidate_id = "candidate-verified"
+    proposal_id = "proposal-verified"
+    activation_id = f"activation:{proposal_id}"
+    activation = {
+        "id": activation_id,
+        "proposal_id": proposal_id,
+        "advisory_only": True,
+        "activation_status": "active",
+        "proposal": {
+            "id": proposal_id,
+            "status": "approved",
+            "advisory_only": True,
+            "source_candidate_ids": [candidate_id],
+            "candidate_snapshots": [{
+                "candidate_id": candidate_id,
+                "source_report_id": "report-verified",
+                "evidence_refs": ["evidence:approved-source"],
+            }],
+        },
+        "approval_history": [{"decision": "approved", "reviewed_at": "2026-09-26T00:00:00Z"}],
+    }
+    await store._db.execute(
+        "INSERT INTO memory_consolidation_proposals "
+        "(id, proposal_json, status, reviewed_at, created_at) "
+        "VALUES (?, ?, 'approved', '2026-09-26T00:00:00Z', '2026-09-26T00:00:00Z')",
+        (proposal_id, json.dumps(activation["proposal"])),
+    )
+    await store._db.execute(
+        "INSERT INTO memory_knowledge_activations (id, proposal_id, activation_json, created_at) "
+        "VALUES (?, ?, ?, '2026-09-26T00:00:00Z')",
+        (activation_id, proposal_id, json.dumps(activation)),
+    )
+    await store._db.commit()
+
+    original_fact = await store.get_fact("project_stack")
+    verified = await store.verify_knowledge_activation_usage(
+        activation_id,
+        candidate_id=candidate_id,
+        evidence_refs=["evidence:approved-source"],
+        usage_id="run-42",
+    )
+    unsupported = await store.verify_knowledge_activation_usage(
+        activation_id,
+        candidate_id=candidate_id,
+        evidence_refs=["evidence:invented"],
+        usage_id="run-43",
+    )
+    history = await store.list_knowledge_verifications(activation_id=activation_id)
+
+    assert await store.verify_knowledge_activation_usage(
+        "activation:missing",
+        candidate_id=candidate_id,
+        evidence_refs=["evidence:approved-source"],
+    ) is None
+    assert verified["status"] == "verified"
+    assert verified["checks"] == {
+        "activation_active": True,
+        "candidate_in_provenance": True,
+        "evidence_supported": True,
+    }
+    assert verified["advisory_only"] is True
+    assert unsupported["status"] == "unverified"
+    assert unsupported["checks"]["evidence_supported"] is False
+    assert [item["id"] for item in history] == [unsupported["id"], verified["id"]]
+    assert await store.list_knowledge_verifications(activation_id="missing") == []
+    assert await store.get_fact("project_stack") == original_fact
+
+    database_path = store._db_path
+    await store.close()
+    reopened = MemoryStore(db_path=database_path)
+    await reopened.init()
+    try:
+        persisted = await reopened.list_knowledge_verifications(activation_id=activation_id)
+        assert persisted == history
     finally:
         await reopened.close()
 

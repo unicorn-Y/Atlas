@@ -610,6 +610,26 @@ class TestFacts:
                 f"/api/memory/consolidation-proposals/{proposal['id']}/activate"
             )
             activation_list = await client.get("/api/memory/knowledge-activations")
+            [candidate_id] = proposal["source_candidate_ids"]
+            verification = await client.post(
+                f"/api/memory/knowledge-activations/{activated.json()['id']}/verify",
+                json={
+                    "candidate_id": candidate_id,
+                    "evidence_refs": proposal["candidate_snapshots"][0]["evidence_refs"],
+                    "usage_id": "run-verification-1",
+                },
+            )
+            unsupported_verification = await client.post(
+                f"/api/memory/knowledge-activations/{activated.json()['id']}/verify",
+                json={
+                    "candidate_id": candidate_id,
+                    "evidence_refs": ["evidence:unsupported"],
+                },
+            )
+            verification_list = await client.get(
+                "/api/memory/knowledge-verifications",
+                params={"activation_id": activated.json()["id"]},
+            )
             approved = await client.get(
                 "/api/memory/consolidation-proposals",
                 params={"status": "approved"},
@@ -640,6 +660,16 @@ class TestFacts:
             }]
             assert activation_list.status_code == 200
             assert activation_list.json() == [activation]
+            assert verification.status_code == 200
+            assert verification.json()["status"] == "verified"
+            assert verification.json()["advisory_only"] is True
+            assert verification.json()["checks"]["candidate_in_provenance"] is True
+            assert unsupported_verification.json()["status"] == "unverified"
+            assert unsupported_verification.json()["checks"]["evidence_supported"] is False
+            assert verification_list.status_code == 200
+            assert [item["id"] for item in verification_list.json()] == [
+                unsupported_verification.json()["id"], verification.json()["id"],
+            ]
             assert approved.status_code == 200
             assert approved.json()[0]["review_history"][0]["decision"] == "approved"
             assert duplicate_review.status_code == 404

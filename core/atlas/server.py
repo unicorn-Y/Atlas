@@ -805,6 +805,36 @@ async def list_memory_knowledge_activations(
     return await memory.list_knowledge_activations(limit=limit)
 
 
+@app.post("/api/memory/knowledge-activations/{activation_id}/verify")
+async def verify_memory_knowledge_activation_usage(
+    activation_id: str,
+    candidate_id: str = Body(...),
+    evidence_refs: list[str] = Body(...),
+    usage_id: str | None = Body(None),
+) -> dict[str, Any]:
+    """Verify a claimed advisory use against its activated evidence provenance."""
+    assert memory is not None
+    verification = await memory.verify_knowledge_activation_usage(
+        activation_id,
+        candidate_id=candidate_id,
+        evidence_refs=evidence_refs,
+        usage_id=usage_id,
+    )
+    if verification is None:
+        raise HTTPException(status_code=404, detail="Knowledge activation not found")
+    return verification
+
+
+@app.get("/api/memory/knowledge-verifications")
+async def list_memory_knowledge_verifications(
+    activation_id: str | None = Query(None),
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """Query immutable advisory knowledge verification snapshots."""
+    assert memory is not None
+    return await memory.list_knowledge_verifications(activation_id=activation_id, limit=limit)
+
+
 @app.get("/api/memory/goal-outcomes")
 async def list_goal_outcomes(
     status: str | None = Query(None),
