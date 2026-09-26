@@ -67,6 +67,8 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
     approval_required = False
     progress = dict(task.goal_progress or {})
     prior_reflection_runs = list(progress.get("reflection_run_ids", []))
+    goal_evaluation_passed = False
+    goal_evaluation_processed = False
 
     async def approval_callback(
         event_id: str, tool_name: str, tool_args: dict[str, Any],
@@ -92,6 +94,7 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
         completed = [item.id for item in plan.subtasks if item.status == "completed"]
         pending = [item.id for item in plan.subtasks if item.status != "completed"]
         state = {
+            **dict(task.goal_progress or {}),
             **plan_value,
             "current_step": pending[0] if pending else None,
             "completed_steps": completed,
@@ -100,6 +103,52 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
         }
         await scheduler.update_goal_state(task_id, status="running", progress=state)
         await scheduler.record_goal_event(task_id, "plan.updated", {"plan": value})
+
+    async def persist_goal_evaluation(value: Any) -> None:
+        nonlocal goal_evaluation_passed, goal_evaluation_processed
+        evaluation = value if isinstance(value, dict) else {}
+        passed = (
+            evaluation.get("satisfied") is True
+            and isinstance(evaluation.get("evidence"), str)
+            and bool(evaluation["evidence"].strip())
+        )
+        decision = {
+            "satisfied": passed,
+            "evidence": evaluation.get("evidence", "")
+            if isinstance(evaluation.get("evidence"), str) else "",
+            "reason": evaluation.get("reason", "")
+            if isinstance(evaluation.get("reason"), str) else "",
+        }
+        goal_evaluation_passed = passed
+        goal_evaluation_processed = True
+        current_progress = dict(task.goal_progress or progress)
+        if passed:
+            current_progress["last_evaluation"] = decision
+            await scheduler.update_goal_state(
+                task_id, status="running", progress=current_progress,
+            )
+            await scheduler.record_goal_event(task_id, "goal.evaluated", decision)
+            return
+
+        next_replan_count = int(current_progress.get("replan_count", 0)) + 1
+        replan_progress = {
+            "goal": task.goal,
+            "subtasks": [],
+            "current_step": None,
+            "completed_steps": [],
+            "blocked": False,
+            "reflection_run_ids": prior_reflection_runs,
+            "replan_count": next_replan_count,
+            "last_evaluation": decision,
+        }
+        await scheduler.update_goal_state(
+            task_id, status="pending", progress=replan_progress,
+        )
+        await scheduler.record_goal_event(task_id, "goal.evaluation_failed", decision)
+        await scheduler.record_goal_event(task_id, "goal.replanned", {
+            "replan_count": next_replan_count,
+            "reason": decision["reason"] or "Goal evidence was insufficient.",
+        })
 
     saved_plan = task.goal_progress or None
     if saved_plan:
@@ -116,8 +165,12 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
             plan_state=saved_plan,
             plan_update_callback=persist_plan,
             force_plan=True,
+            evaluate_goal=True,
         ):
             event_type = event.get("type", "unknown")
+            if event_type == "goal_evaluated":
+                await persist_goal_evaluation(event.get("evaluation"))
+                continue
             if event_type not in {"plan_updated", "approval_required"}:
                 await scheduler.record_goal_event(
                     task_id,
@@ -140,13 +193,27 @@ async def _run_scheduled_goal(task_id: str, message: str) -> None:
             elif event_type == "done" and not approval_required:
                 final_progress = dict(task.goal_progress or progress)
                 subtasks = final_progress.get("subtasks", [])
+                plan_complete = bool(subtasks) and all(
+                    isinstance(item, dict) and item.get("status") == "completed"
+                    and isinstance(item.get("evidence"), str)
+                    and bool(item["evidence"].strip())
+                    for item in subtasks
+                )
+                if plan_complete and not goal_evaluation_processed:
+                    await persist_goal_evaluation({
+                        "satisfied": False,
+                        "evidence": "",
+                        "reason": "No valid goal evaluation was produced.",
+                    })
+                final_progress = dict(task.goal_progress or progress)
+                subtasks = final_progress.get("subtasks", [])
                 verified = bool(subtasks) and all(
                     isinstance(item, dict) and item.get("status") == "completed"
                     and isinstance(item.get("evidence"), str)
                     and bool(item["evidence"].strip())
                     for item in subtasks
                 )
-                if verified:
+                if verified and goal_evaluation_passed:
                     final_progress.update({
                         "current_step": None,
                         "completed_steps": [item["id"] for item in subtasks],

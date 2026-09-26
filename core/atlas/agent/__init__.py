@@ -382,6 +382,7 @@ class AgentOrchestrator:
         plan_state: dict[str, Any] | None = None,
         plan_update_callback: Callable[[dict[str, Any]], Any] | None = None,
         force_plan: bool = False,
+        evaluate_goal: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -580,6 +581,21 @@ class AgentOrchestrator:
                 except Exception as exc:
                     log.warning("agent.plan_verification_failed", error=str(exc))
 
+            if evaluate_goal and plan and all(
+                item.status == "completed" for item in plan.subtasks
+            ):
+                try:
+                    evaluation = await self._evaluate_goal(
+                        message, plan, full_response, litellm_model,
+                    )
+                except Exception as exc:
+                    evaluation = {
+                        "satisfied": False,
+                        "evidence": "",
+                        "reason": f"Goal evaluation failed: {exc}",
+                    }
+                yield {"type": "goal_evaluated", "evaluation": evaluation}
+
             try:
                 msg_id = await self._memory.save_message(
                     conversation_id=conversation_id,
@@ -704,6 +720,57 @@ class AgentOrchestrator:
         if not isinstance(results, list):
             raise ValueError("Verifier response requires a results list")
         return results
+
+    async def _evaluate_goal(
+        self, goal: str, plan: TaskPlan | None, response_text: str, model: str,
+    ) -> dict[str, Any]:
+        """Judge the complete goal using the response and verified plan evidence."""
+        if plan is None:
+            return {
+                "satisfied": False,
+                "evidence": "",
+                "reason": "No structured plan was available for goal evaluation.",
+            }
+        response = await acompletion(
+            model=model,
+            messages=[
+                {"role": "system", "content": (
+                    "Evaluate whether the user's complete goal is satisfied. Check the "
+                    "final response and every plan verification requirement and its "
+                    "recorded evidence. A completed subtask alone is not proof. Return "
+                    "only JSON with boolean satisfied, concise evidence, and reason. "
+                    "Set satisfied true only when the response and evidence together "
+                    "support every material part of the goal."
+                )},
+                {"role": "user", "content": json.dumps({
+                    "goal": goal,
+                    "plan": plan.to_dict(),
+                    "final_response": response_text,
+                }, ensure_ascii=False)},
+            ],
+            max_tokens=800,
+            stream=False,
+        )
+        value = self._json_object(response)
+        satisfied = value.get("satisfied")
+        evidence = value.get("evidence")
+        reason = value.get("reason")
+        if (
+            not isinstance(satisfied, bool)
+            or not isinstance(evidence, str)
+            or not isinstance(reason, str)
+            or (satisfied and not evidence.strip())
+        ):
+            return {
+                "satisfied": False,
+                "evidence": "",
+                "reason": "Goal evaluator returned an invalid decision or missing evidence.",
+            }
+        return {
+            "satisfied": satisfied,
+            "evidence": evidence.strip(),
+            "reason": reason.strip(),
+        }
 
     @staticmethod
     def _to_litellm_messages(messages: list[BaseMessage]) -> list[dict[str, Any]]:

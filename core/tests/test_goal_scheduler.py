@@ -211,6 +211,14 @@ async def test_goal_completes_only_after_each_step_has_verification_evidence(
                     "status": "completed", "evidence": "Summary saved",
                 }],
             })
+            yield {
+                "type": "goal_evaluated",
+                "evaluation": {
+                    "satisfied": True,
+                    "evidence": "Both plan requirements have supporting evidence.",
+                    "reason": "The requested review and priorities are present.",
+                },
+            }
             yield {"type": "done"}
 
     scheduler = AtlasScheduler(schedules_path=tmp_path / "schedules.toml")
@@ -225,6 +233,87 @@ async def test_goal_completes_only_after_each_step_has_verification_evidence(
     assert task.goal_progress["current_step"] is None
     assert task.goal_progress["completed_steps"] == ["inspect", "summarize"]
     assert any(event["event"] == "goal.verified" for event in task.goal_events)
+    assert task.goal_progress["last_evaluation"]["satisfied"] is True
+
+    recovered = AtlasScheduler(schedules_path=tmp_path / "schedules.toml")
+    await recovered.start()
+    try:
+        recovered_task = recovered.get_task(task.id)
+        assert recovered_task is not None
+        assert recovered_task.goal_status == "completed"
+        assert recovered_task.goal_progress["last_evaluation"]["satisfied"] is True
+        assert any(event["event"] == "goal.evaluated" for event in recovered_task.goal_events)
+    finally:
+        await recovered.stop()
+
+
+async def test_failed_goal_evaluation_persists_decision_and_resets_plan_for_replanning(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    class IncorrectOrchestrator:
+        async def run(self, **kwargs):
+            await kwargs["plan_update_callback"]({
+                "goal": kwargs["message"],
+                "subtasks": [{
+                    "id": "review", "title": "Review", "verification": "Review complete",
+                    "status": "completed", "evidence": "Review drafted",
+                }],
+            })
+            yield {
+                "type": "goal_evaluated",
+                "evaluation": {
+                    "satisfied": False,
+                    "evidence": "The list of priorities is missing.",
+                    "reason": "Only the review is evidenced; the goal asks for priorities too.",
+                },
+            }
+            yield {"type": "done"}
+
+    path = tmp_path / "schedules.toml"
+    scheduler = AtlasScheduler(schedules_path=path)
+    task = _goal_task()
+    await scheduler.add_task(task)
+    monkeypatch.setattr(server, "scheduler", scheduler)
+    monkeypatch.setattr(server, "orchestrator", IncorrectOrchestrator())
+
+    await server._run_scheduled_goal(task.id, task.goal)
+
+    assert task.goal_status == "pending"
+    assert task.goal_progress["subtasks"] == []
+    assert task.goal_progress["replan_count"] == 1
+    assert task.goal_progress["last_evaluation"]["satisfied"] is False
+    assert any(event["event"] == "goal.evaluation_failed" for event in task.goal_events)
+    assert any(event["event"] == "goal.replanned" for event in task.goal_events)
+
+    class ReplannedOrchestrator:
+        async def run(self, **kwargs):
+            await kwargs["plan_update_callback"]({
+                "goal": kwargs["message"],
+                "subtasks": [{
+                    "id": "priorities", "title": "List priorities",
+                    "verification": "Priorities are listed",
+                }],
+            })
+            yield {"type": "done"}
+
+    monkeypatch.setattr(server, "orchestrator", ReplannedOrchestrator())
+    await server._run_scheduled_goal(task.id, task.goal)
+    assert task.goal_progress["replan_count"] == 1
+    assert task.goal_progress["last_evaluation"]["satisfied"] is False
+    assert task.goal_progress["current_step"] == "priorities"
+
+    recovered = AtlasScheduler(schedules_path=path)
+    await recovered.start()
+    try:
+        recovered_task = recovered.get_task(task.id)
+        assert recovered_task is not None
+        assert recovered_task.goal_progress["last_evaluation"]["satisfied"] is False
+        assert any(
+            event["event"] == "goal.evaluation_failed"
+            for event in recovered_task.goal_events
+        )
+    finally:
+        await recovered.stop()
 
 
 async def test_goal_failure_is_reflected_and_blocks_until_requested_retry(

@@ -133,3 +133,50 @@ async def test_resumed_plan_skips_generation_and_only_verifies_pending_items():
     updated = [event for event in events if event["type"] == "plan_updated"][-1]
     assert updated["resumed"] is True
     assert all(item["status"] == "completed" for item in updated["plan"]["subtasks"])
+
+
+@pytest.mark.asyncio
+async def test_goal_evaluation_runs_after_plan_verification_and_emits_evidence():
+    orchestrator = _orchestrator()
+    calls = []
+    plan_payload = {
+        "goal": "Review this week and list priorities.",
+        "subtasks": [{
+            "id": "review", "title": "Review", "verification": "Review is complete",
+        }],
+    }
+
+    async def fake_acompletion(**kwargs):
+        if kwargs.get("stream") is not False:
+            return _stream("Review completed and priorities listed")
+        prompt = kwargs["messages"][0]["content"]
+        calls.append(prompt)
+        if "Break the user's multi-step task" in prompt:
+            return _completion(json.dumps(plan_payload))
+        if "Verify each pending subtask" in prompt:
+            return _completion(json.dumps({"results": [{
+                "id": "review", "completed": True, "evidence": "Review completed",
+            }]}))
+        assert "Evaluate whether the user's complete goal is satisfied" in prompt
+        return _completion(json.dumps({
+            "satisfied": True,
+            "evidence": "The final response contains the review and priorities.",
+            "reason": "All material parts of the goal are supported.",
+        }))
+
+    with patch("atlas.agent.acompletion", side_effect=fake_acompletion):
+        events = [event async for event in orchestrator.run(
+            "Review this week and list priorities.",
+            "goal-evaluation",
+            force_plan=True,
+            evaluate_goal=True,
+        )]
+
+    kinds = [event["type"] for event in events]
+    assert kinds.index("goal_evaluated") > kinds.index("plan_updated")
+    assert kinds.index("goal_evaluated") < kinds.index("done")
+    evaluation = next(event["evaluation"] for event in events
+                      if event["type"] == "goal_evaluated")
+    assert evaluation["satisfied"] is True
+    assert evaluation["evidence"]
+    assert len(calls) == 3
