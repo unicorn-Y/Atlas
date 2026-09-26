@@ -906,8 +906,91 @@ class MemoryStore:
     async def get_agent_context(
         self, query: str, limit: int = 10
     ) -> list[dict[str, Any]]:
-        """Return query-relevant validated facts for the current agent request."""
-        return await self.get_active_context(query, limit=limit)
+        """Return validated facts and traceable knowledge views for an agent request."""
+        if limit <= 0:
+            return []
+        views = await self.retrieve_user_knowledge(query, limit=1)
+        facts = await self.get_active_context(query, limit=limit - len(views))
+        return facts + views
+
+    async def generate_user_knowledge(self) -> list[dict[str, Any]]:
+        """Aggregate related active memories into deterministic, evidence-linked views."""
+        facts = await self.list_facts()
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for fact in facts:
+            if fact["memory_type"] in {"identity", "commitment"}:
+                if not await self._has_approved_user_evidence(
+                    fact, fact["memory_type"]
+                ):
+                    continue
+            if fact["memory_type"] == "commitment":
+                if fact["commitment_status"] != "active":
+                    continue
+            category = fact["category"]
+            if category in {"general", "extracted"}:
+                continue
+            grouped.setdefault(category, []).append(fact)
+
+        views: list[dict[str, Any]] = []
+        for category, memories in sorted(grouped.items()):
+            if len(memories) < 2:
+                continue
+            memories.sort(key=lambda fact: fact["key"])
+            evidence = [
+                {
+                    "key": fact["key"],
+                    "value": fact["value"],
+                    "memory_type": fact["memory_type"],
+                    "source_conversation_id": fact["source_conversation_id"],
+                    "source_message_id": fact["source_message_id"],
+                }
+                for fact in memories
+            ]
+            content = "\n".join(
+                f"{fact['key']}: {fact['value']}" for fact in memories
+            )
+            views.append({
+                "id": f"user-knowledge:{category}",
+                "key": f"user_knowledge_{category}",
+                "category": category,
+                "memory_type": "knowledge_view",
+                "value": content,
+                "evidence": evidence,
+            })
+        return views
+
+    async def retrieve_user_knowledge(
+        self, query: str, limit: int = 5
+    ) -> list[dict[str, Any]]:
+        """Return deterministic query-matched knowledge views with their evidence."""
+        if limit <= 0:
+            return []
+        terms = {
+            token.casefold()
+            for token in _MEMORY_TOKEN.findall(query)
+            if len(token) > 1 and token.casefold() not in _MEMORY_STOP_WORDS
+        }
+        if not terms:
+            return []
+        ranked: list[tuple[int, str, dict[str, Any]]] = []
+        for view in await self.generate_user_knowledge():
+            key_terms = {
+                token for token in re.split(r"[\W_]+", view["key"].casefold()) if token
+            }
+            value_terms = {
+                token.casefold()
+                for token in re.split(r"[\W_]+", view["value"])
+                if token
+            }
+            score = sum(
+                4 if term in key_terms else 1 if term in value_terms else 0
+                for term in terms
+            )
+            if score:
+                ranked.append((score, view["key"], view))
+        ranked.sort(key=lambda item: item[1])
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return [view for _, _, view in ranked[:limit]]
 
     async def get_active_context(
         self, query: str, limit: int = 10

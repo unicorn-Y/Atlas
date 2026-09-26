@@ -425,7 +425,7 @@ class AgentOrchestrator:
             history = await self._memory.get_conversation_messages(
                 conversation_id, limit=cfg.max_context_messages
             )
-            memories = await self._memory.get_active_context(message)
+            memories = await self._memory.get_agent_context(message)
         except Exception as exc:
             yield {
                 "type": "error",

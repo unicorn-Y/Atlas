@@ -217,6 +217,92 @@ class TestAgentContextRanking:
         assert first == second
         assert [fact["key"] for fact in first] == ["preferred_editor_language"]
 
+    async def test_user_knowledge_aggregates_related_facts_with_provenance(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("project_language", "Python", category="project")
+        await store.set_fact("project_framework", "FastAPI", category="project")
+
+        views = await store.generate_user_knowledge()
+
+        assert len(views) == 1
+        assert views[0]["key"] == "user_knowledge_project"
+        assert views[0]["value"] == "project_framework: FastAPI\nproject_language: Python"
+        assert [item["key"] for item in views[0]["evidence"]] == [
+            "project_framework", "project_language"
+        ]
+        assert all(item["source_conversation_id"] is None for item in views[0]["evidence"])
+
+    async def test_knowledge_retrieval_is_deterministic_and_used_in_agent_context(
+        self, store: MemoryStore
+    ) -> None:
+        await store.set_fact("project_language", "Python", category="project")
+        await store.set_fact("project_framework", "FastAPI", category="project")
+
+        first = await store.retrieve_user_knowledge("Which project framework?")
+        second = await store.retrieve_user_knowledge("Which project framework?")
+        context = await store.get_agent_context("Which project framework?")
+
+        assert first == second
+        assert len(first) == 1
+        assert first[0]["evidence"] == [
+            {
+                "key": "project_framework", "value": "FastAPI", "memory_type": "fact",
+                "source_conversation_id": None, "source_message_id": None,
+            },
+            {
+                "key": "project_language", "value": "Python", "memory_type": "fact",
+                "source_conversation_id": None, "source_message_id": None,
+            },
+        ]
+        assert context[-1] == first[0]
+        assert await store.retrieve_user_knowledge("irrelevant question") == []
+
+    async def test_knowledge_excludes_pending_and_unverified_memories(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation("Knowledge review")
+        await store.save_message(conversation_id, "user", "Our project uses Python")
+        [pending] = await store.extract_conversation_candidates(conversation_id)
+        await store.set_fact("project_framework", "FastAPI", category="project")
+        await store.set_fact(
+            "old_commitment", "deliver report", category="project",
+            memory_type="commitment",
+        )
+        await store.set_fact(
+            "unverified_identity", "user is a reviewer", category="project",
+            memory_type="identity",
+        )
+
+        assert await store.generate_user_knowledge() == []
+        assert pending["status"] == "pending"
+
+    async def test_knowledge_requires_approved_candidates_and_keeps_source_links(
+        self, store: MemoryStore
+    ) -> None:
+        conversation_id = await store.create_conversation("User profile")
+        first_message = await store.save_message(
+            conversation_id, "user", "My timezone is UTC"
+        )
+        second_message = await store.save_message(
+            conversation_id, "user", "My name is Alice"
+        )
+        candidates = await store.extract_conversation_candidates(conversation_id)
+        assert await store.promote_memory_candidate(candidates[0]["id"])
+        assert await store.generate_user_knowledge() == []
+        assert await store.promote_memory_candidate(candidates[1]["id"])
+
+        [view] = await store.generate_user_knowledge()
+
+        assert {
+            item["key"]: item["source_message_id"] for item in view["evidence"]
+        } == {"user_timezone": first_message, "user_name": second_message}
+        context = await store.get_agent_context("What timezone do I use?")
+        assert context[-1] == view
+        assert len(await store.get_agent_context(
+            "What timezone do I use?", limit=1
+        )) == 1
+
     async def test_active_context_carries_approved_fact_across_conversations(
         self, store: MemoryStore
     ) -> None:

@@ -45,6 +45,7 @@ def memory():
     mem.save_message.return_value = "msg-123"
     mem.extract_memories.return_value = []
     mem.get_active_context.return_value = []
+    mem.get_agent_context.return_value = []
     return mem
 
 
@@ -558,7 +559,7 @@ class TestRun:
     async def test_run_includes_retrieved_memories_in_model_context(
         self, orchestrator, memory
     ) -> None:
-        memory.get_active_context.return_value = [{
+        memory.get_agent_context.return_value = [{
             "key": "timezone", "value": "Asia/Hong_Kong", "category": "extracted",
         }]
         captured_messages = []
@@ -580,7 +581,7 @@ class TestRun:
         memory.extract_memories.assert_awaited_once_with(
             "memory-context-conv", "What timezone do I use?"
         )
-        memory.get_active_context.assert_awaited_once_with("What timezone do I use?")
+        memory.get_agent_context.assert_awaited_once_with("What timezone do I use?")
         assert captured_messages[1]["role"] == "system"
         assert '"Asia/Hong_Kong"' in captured_messages[1]["content"]
         assert "Use them only when relevant to the current request" in captured_messages[1]["content"]
