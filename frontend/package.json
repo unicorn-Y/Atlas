@@ -7,14 +7,19 @@
   "type": "module",
   "main": "dist-electron/main/electron.js",
   "scripts": {
+    "install:electron": "node ../node_modules/electron/install.js",
+    "predev": "npm run install:electron",
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"npm:dev:electron\"",
     "dev:electron": "tsc -p tsconfig.electron.json && wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
     "build": "tsc -p tsconfig.electron.json && tsc -p tsconfig.renderer.json --noEmit && vite build",
     "test": "vitest run --root .",
     "test:adapter": "vitest run --root .. backend-adapter/tests/client.test.ts",
     "start": "electron .",
+    "prestart": "npm run install:electron",
+    "package:backend": "node scripts/build-backend.mjs",
     "clean:packaging": "node scripts/clean-packaging-output.mjs",
     "dist:win": "npm run clean:packaging && npm run build && electron-builder --win nsis --x64 --publish never",
+    "predist:win": "npm run install:electron && npm run package:backend",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -34,7 +39,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
-    "electron": "33.4.11",
+    "electron": "44.4.5",
     "electron-builder": "^26.15.3",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
@@ -50,6 +55,7 @@
     "files": ["dist/**", "dist-electron/**", "package.json"],
     "extraResources": [
       { "from": "../core/atlas", "to": "atlas/core/atlas", "filter": ["**/*", "!**/__pycache__", "!**/__pycache__/**", "!**/*.pyc"] },
+      { "from": "./backend-release/atlas_backend", "to": "atlas/backend" },
       { "from": "../skills", "to": "atlas/skills", "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"] },
       { "from": "../config/atlas.example.toml", "to": "atlas/config/atlas.example.toml" }
     ],

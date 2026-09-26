@@ -4,34 +4,49 @@ All-in-one AI Personal Assistant. Local-first, model-agnostic, fully extensible.
 
 ## Quick Start
 
-```bash
-# Backend
-cd core
-pip install -e .
-uvicorn atlas.server:app --reload --port 8765
+For a Windows source checkout, install Node.js 22.12 or newer and Python 3.10 or
+newer, then double-click `start-atlas.bat`. On first launch it prepares a
+project-local Python environment and installs the desktop dependencies. Later
+launches open the Electron desktop app directly.
 
-# Frontend
-cd frontend
-npm install
+For end users, use the Windows installer; it includes the backend runtime and
+does not require Python to be installed on the target machine.
+
+Before sending a message, open **Settings** and enter an OpenAI-compatible API
+base URL and API key. Atlas stores these settings locally under the app data
+directory for installed builds, or in the local development data directory.
+The key is never part of the release package.
+
+```bash
+# Alternative: run the development desktop workflow from a terminal
+npm ci
+py -3 -m venv core/.venv
+core/.venv/Scripts/python.exe -m pip install -e core
 npm run dev
 ```
 
 ## Windows Desktop Build
 
-The Windows installer is written to `frontend/windows-release/Atlas-<version>-Setup.exe`:
+The Windows installer is written to `frontend/windows-release/Atlas-<version>-Setup.exe`.
+It creates a desktop/start-menu entry and includes the backend runtime. Build it
+from Windows with Node.js 22.12 or newer and Python 3.10 or newer:
 
 ```powershell
-npm install
-npm run dist:win
+npm ci
+npm --prefix frontend run dist:win
 ```
 
-The installer includes the Electron application, Atlas backend source, skills, and example configuration. The backend currently runs with the system Python installation, so prepare its dependencies once before launching Atlas:
-
-```powershell
-py -3 -m pip install -e .\core
-```
+The build command creates a local Python environment, bundles the backend with
+its dependencies, and places the finished installer in `windows-release`.
+Python is a build-time prerequisite only.
 
 Atlas stores its installed-app configuration, settings, and database under Electron's per-user application data directory. Development runs continue to use the repository's `config/` and `data/` directories.
+
+The example config binds the API to `127.0.0.1`. MCP tools are optional and may
+need Node.js, network access, or provider credentials. The filesystem server
+uses the current user's `Documents` folder by default and downloads its MCP
+package on first launch. Keep `config/atlas.toml`, user settings, and real API
+keys out of release artifacts and source control.
 
 ## Project Structure
 

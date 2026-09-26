@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from atlas.tools.mcp_client import (
@@ -11,7 +11,6 @@ from atlas.tools.mcp_client import (
     ToolInfo,
     _parse_server_configs,
 )
-
 
 # ---------------------------------------------------------------------------
 # ToolInfo
@@ -105,6 +104,19 @@ class TestConfigParsing:
             git = next(c for c in configs if c.name == "git")
             assert fs.enabled is True
             assert git.enabled is False
+
+    def test_expands_home_directory_in_server_arguments(self) -> None:
+        with patch("atlas.tools.mcp_client.get_config") as mock_cfg:
+            cfg = MagicMock()
+            cfg.get.side_effect = lambda key, default=None: {
+                "tools.servers": {"filesystem": {"command": "npx", "args": ["~/Documents"]}},
+                "tools.auto_start": ["filesystem"],
+            }.get(key, default)
+            mock_cfg.return_value = cfg
+
+            configs = _parse_server_configs()
+
+        assert Path(configs[0].args[0]) == Path.home() / "Documents"
 
 
 # ---------------------------------------------------------------------------

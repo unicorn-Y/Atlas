@@ -9,7 +9,7 @@ export interface BackendLaunchResult {
   pid?: number;
 }
 
-const HEALTH_URL = 'http://127.0.0.1:8765/api/health';
+const HEALTH_URL = `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/health`;
 const PROBE_TIMEOUT_MS = 700;
 const STARTUP_TIMEOUT_MS = 15_000;
 const STDERR_TAIL_LIMIT = 8_192;
@@ -56,20 +56,23 @@ function pythonCandidates(): Array<{ command: string; args: string[] }> {
   return candidates;
 }
 
+interface BackendCandidate {
+  command: string;
+  args: string[];
+  cwd: string;
+}
+
 type ProcessOutcome =
   | { kind: 'error'; error: NodeJS.ErrnoException }
   | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null };
 
 async function startCandidate(
   command: string,
-  prefixArgs: string[],
-  coreDir: string,
+  args: string[],
+  cwd: string,
 ): Promise<{ child: ChildProcess; stderr: () => string; outcome: Promise<ProcessOutcome> }> {
-  const child = spawn(command, [
-    ...prefixArgs,
-    '-m', 'uvicorn', 'atlas.server:app', '--host', '127.0.0.1', '--port', '8765',
-  ], {
-    cwd: coreDir,
+  const child = spawn(command, args, {
+    cwd,
     env: process.env,
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -125,12 +128,23 @@ async function terminate(child: ChildProcess): Promise<void> {
 export async function ensureBackendRunning(): Promise<BackendLaunchResult> {
   if (await isBackendHealthy()) return { ready: true, managed: false };
 
-  const coreDir = resolveCoreDir();
+  const packagedBackend = process.env.ATLAS_BACKEND_EXECUTABLE;
+  const rootDir = process.env.ATLAS_ROOT
+    ? path.resolve(process.env.ATLAS_ROOT)
+    : path.resolve(moduleDir, '../../..');
+  const coreDir = packagedBackend ? rootDir : resolveCoreDir();
+  const candidates: BackendCandidate[] = packagedBackend
+    ? [{ command: packagedBackend, args: [], cwd: rootDir }]
+    : pythonCandidates().map((candidate) => ({
+      command: candidate.command,
+      args: [...candidate.args, '-m', 'uvicorn', 'atlas.server:app', '--host', '127.0.0.1', '--port', process.env.ATLAS_PORT ?? '8765'],
+      cwd: coreDir,
+    }));
   let lastNotFound: NodeJS.ErrnoException | null = null;
-  for (const candidate of pythonCandidates()) {
+  for (const candidate of candidates) {
     let started: Awaited<ReturnType<typeof startCandidate>> | null = null;
     try {
-      started = await startCandidate(candidate.command, candidate.args, coreDir);
+      started = await startCandidate(candidate.command, candidate.args, candidate.cwd);
       managedChild = started.child;
       await waitUntilReady(started.child, started.stderr, started.outcome);
       return { ready: true, managed: true, pid: started.child.pid };
@@ -144,7 +158,7 @@ export async function ensureBackendRunning(): Promise<BackendLaunchResult> {
       throw error;
     }
   }
-  throw new Error(`Could not find a Python command to start Atlas backend.${lastNotFound ? ` ${lastNotFound.message}` : ''}`);
+  throw new Error(`Could not start the Atlas backend.${lastNotFound ? ` ${lastNotFound.message}` : ''}`);
 }
 
 export function stopManagedBackend(): Promise<void> {

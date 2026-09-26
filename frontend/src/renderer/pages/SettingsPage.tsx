@@ -42,6 +42,7 @@ export default function SettingsPage(props: SettingsPageProps) {
 
   return <section className={styles.settingsPage} aria-label="设置">
     <header className={styles.settingsHeader}><button className={styles.quietButton} onClick={props.onBack}><ChevronLeft size={16} />返回对话</button><div><h1>设置</h1><p>配置模型服务并管理 Atlas 用户偏好。</p></div></header>
+    {props.connected && !props.apiKeyConfigured && <section className={styles.settingsCard} role="status"><h2>首次设置</h2><p>先填写兼容 OpenAI 的 API 地址和密钥并保存，再测试当前模型连接。密钥仅保存在此设备。</p></section>}
     <section className={styles.settingsCard}>
       <h2>用户</h2>
       <form className={styles.settingsForm} onSubmit={(event) => { event.preventDefault(); props.onSaveUsername(username); }}>

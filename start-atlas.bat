@@ -1,26 +1,43 @@
 @echo off
+setlocal
 chcp 65001 >nul
-title Atlas Backend (8765)
-cd /d "%~dp0core"
+title Atlas Desktop
+cd /d "%~dp0"
 
-rem Atlas 目前没有独立 venv，依赖 Hermes venv 里的 litellm / fastapi / langgraph
-set "PY=%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\python.exe"
-if not exist "%PY%" set "PY=python"
-
-echo ============================================================
-echo  Atlas Backend
-echo    gateway : http://127.0.0.1:8045/v1   (antigravity local)
-echo    model   : gemini-3.8-flash-high
-echo    listen  : http://127.0.0.1:8765
-echo ============================================================
-echo.
-echo [check] 反重力网关 8045 是否在线...
-curl -s -m 3 http://127.0.0.1:8045/v1/models >nul 2>&1
+where node >nul 2>&1
 if errorlevel 1 (
-  echo   [WARN] 8045 无响应，模型调用会失败 —— 请先启动反重力网关
-) else (
-  echo   [OK] 8045 在线
+  echo Atlas requires Node.js 22.12 or newer to launch from source. Install Node.js, then try again.
+  goto :failed
 )
+
+where py >nul 2>&1
+if errorlevel 1 (
+  echo Atlas requires Python 3.10 or newer to launch from source. Install Python, then try again.
+  goto :failed
+)
+
+if not exist "core\.venv\Scripts\python.exe" (
+  echo [setup] Creating the Atlas Python environment...
+  py -3 -m venv "core\.venv"
+  if errorlevel 1 goto :failed
+  "core\.venv\Scripts\python.exe" -m pip install -e "core"
+  if errorlevel 1 goto :failed
+)
+
+if not exist "node_modules\.package-lock.json" (
+  echo [setup] Installing Atlas desktop dependencies...
+  call npm ci
+  if errorlevel 1 goto :failed
+)
+
+set "ATLAS_PYTHON=%CD%\core\.venv\Scripts\python.exe"
+echo [start] Opening Atlas Desktop. First startup may take a little longer.
+call npm run dev
+if errorlevel 1 goto :failed
+exit /b 0
+
+:failed
 echo.
-"%PY%" -m uvicorn atlas.server:app --host 127.0.0.1 --port 8765
+echo Atlas did not start. Review the message above, then try again.
 pause
+exit /b 1

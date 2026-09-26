@@ -21,7 +21,9 @@ log = structlog.get_logger()
 # Path resolution
 # ---------------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # D:\Atlas\core -> D:\Atlas
+PROJECT_ROOT = Path(
+    os.environ.get("ATLAS_ROOT", Path(__file__).resolve().parent.parent.parent)
+).resolve()  # D:\Atlas\core -> D:\Atlas
 DATA_ROOT = Path(os.environ.get("ATLAS_DATA_DIR", PROJECT_ROOT)).resolve()
 CONFIG_PATH = (DATA_ROOT if os.environ.get("ATLAS_DATA_DIR") else PROJECT_ROOT) / "config" / "atlas.toml"
 EXAMPLE_CONFIG_PATH = PROJECT_ROOT / "config" / "atlas.example.toml"

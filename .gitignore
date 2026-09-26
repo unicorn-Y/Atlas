@@ -6,6 +6,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.venv/
 .ruff_cache/
 
 # Data
@@ -30,6 +31,8 @@ voice-demo/config.json
 frontend/dist/
 frontend/dist-electron/
 frontend/out/
+frontend/backend-build/
+frontend/backend-release/
 # electron-builder 产物与中间目录（避免 269M+ 二进制被提交）
 frontend/release/
 frontend/windows-release/

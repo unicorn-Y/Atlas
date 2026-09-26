@@ -19,6 +19,6 @@
   "author": "",
   "license": "UNLICENSED",
   "allowScripts": {
-    "electron@33.4.11": true
+    "electron@44.4.5": true
   }
 }

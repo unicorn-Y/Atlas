@@ -13,8 +13,8 @@ from typing import Any
 
 import structlog
 from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
+from mcp.client.stdio import stdio_client
 
 from atlas.config import get_config
 
@@ -112,7 +112,7 @@ def _parse_server_configs() -> list[MCPServerConfig]:
             name=name,
             transport=data.get("transport", "stdio"),
             command=data.get("command", ""),
-            args=data.get("args", []),
+            args=[os.path.expanduser(os.path.expandvars(str(arg))) for arg in data.get("args", [])],
             env=data.get("env", {}),
             cwd=data.get("cwd"),
             url=data.get("url", ""),

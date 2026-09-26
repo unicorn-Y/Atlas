@@ -29,6 +29,9 @@ export default function App() {
   const messages = (store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user' || message.role === 'assistant');
 
   useEffect(() => { void store.initialize(); }, []);
+  useEffect(() => {
+    if (store.connected && !store.conversationsLoading && !store.apiKeyConfigured) setPage('settings');
+  }, [store.apiKeyConfigured, store.connected, store.conversationsLoading]);
   useEffect(() => window.atlasDesktop?.onMaximizeChange(setMaximized), []);
   useEffect(() => {
     if (!toast) return;

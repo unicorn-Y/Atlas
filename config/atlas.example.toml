@@ -7,7 +7,7 @@ version = "0.1.0"
 data_dir = "./data"
 
 [server]
-host = "0.0.0.0"
+host = "127.0.0.1"
 port = 8765
 
 [models]
@@ -57,7 +57,7 @@ auto_start = [
 [tools.servers.filesystem]
 transport = "stdio"
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem", "D:/Atlas"]
+args = ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents"]
 
 [tools.servers.brave-search]
 transport = "stdio"
@@ -68,7 +68,7 @@ env = { BRAVE_API_KEY = "" }
 [tools.servers.git]
 transport = "stdio"
 command = "mcp-server-git"
-args = ["--repository", "D:/Atlas"]
+args = ["--repository", "~/Documents"]
 
 # Example SSE server:
 # [tools.servers.custom-remote]
