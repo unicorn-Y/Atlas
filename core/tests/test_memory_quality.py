@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from atlas.memory import MemoryStore
 from atlas.memory.quality import (
+    evaluate_knowledge_maturity,
     evaluate_memory_quality,
     evaluate_memory_optimization,
     evaluate_knowledge_retrieval,
@@ -253,6 +254,72 @@ def test_memory_optimization_ranks_explainable_recommendations_deterministically
         "evidence": {"rejected_count": 1, "correction_count": 0},
     }
     assert evaluate_memory_optimization(health) == report
+
+
+def test_knowledge_maturity_is_deterministic_and_explains_every_recommendation() -> None:
+    as_of = datetime(2026, 9, 26, tzinfo=UTC)
+    memories = [
+        {
+            "key": "mature_fact", "memory_type": "fact", "confidence": 0.9,
+            "source_conversation_id": "conversation-1", "source_message_id": "message-1",
+            "updated_at": "2026-03-01T00:00:00+00:00", "change_count": 0,
+            "used_count": 25, "useful_count": 10, "evidence_refs": ["fact:mature_fact", "usage:1"],
+        },
+        {
+            "key": "review_fact", "memory_type": "fact", "confidence": 0.9,
+            "source_conversation_id": "conversation-2", "source_message_id": "message-2",
+            "updated_at": "2026-09-01T00:00:00+00:00", "change_count": 1,
+            "correction_count": 1, "evidence_refs": ["fact:review_fact", "feedback:2"],
+        },
+    ]
+
+    report = evaluate_knowledge_maturity(memories, as_of=as_of)
+
+    assert report == evaluate_knowledge_maturity(memories, as_of=as_of)
+    assert report["level_counts"] == {
+        "nascent": 0, "developing": 0, "established": 0, "mature": 1,
+        "review_required": 1,
+    }
+    assert report["criteria"]["mature"]["min_usage_count"] == 25
+    assert [item["level"] for item in report["memories"]] == ["mature", "review_required"]
+    assert report["recommendations"] == [{
+        "key": "review_fact", "action": "human_review",
+        "reason": "Review signals exist; a person should assess the active memory.",
+        "evidence_refs": ["fact:review_fact", "feedback:2"],
+    }]
+
+
+async def test_maturity_report_tracks_approved_fact_evidence_without_mutation(
+    store: MemoryStore,
+) -> None:
+    conversation_id = await store.create_conversation()
+    await store.save_message(conversation_id, "user", "I prefer concise answers.")
+    [candidate] = await store.extract_conversation_candidates(conversation_id)
+    assert await store.promote_memory_candidate(candidate["id"])
+    for _ in range(25):
+        await store.record_memory_usage(candidate["key"], "used")
+    for _ in range(10):
+        await store.record_memory_evaluation(candidate["key"], "useful")
+    await store._db.execute(
+        "UPDATE facts SET created_at='2026-03-01T00:00:00+00:00', "
+        "updated_at='2026-03-01T00:00:00+00:00' WHERE key=?", (candidate["key"],),
+    )
+    await store._db.commit()
+    original_value = await store.get_fact(candidate["key"])
+
+    snapshot = await store.create_knowledge_maturity_report(
+        as_of=datetime(2026, 9, 26, tzinfo=UTC)
+    )
+
+    entry = snapshot["report"]["memories"][0]
+    assert entry["level"] == "mature"
+    assert entry["evidence"]["usage_count"] == 25
+    assert entry["evidence"]["positive_signal_count"] == 10
+    assert "usage:1" in entry["evidence"]["references"]
+    assert "evaluation:1" in entry["evidence"]["references"]
+    assert await store.get_fact(candidate["key"]) == original_value
+    assert (await store.list_memory_candidates(status="approved"))[0]["id"] == candidate["id"]
+    assert (await store.list_knowledge_maturity_reports())[0]["report"] == snapshot["report"]
 
 
 async def test_optimization_reports_preserve_recommendation_audit_history(

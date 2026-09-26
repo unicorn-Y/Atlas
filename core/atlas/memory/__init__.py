@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +14,11 @@ import aiosqlite
 import structlog
 
 from atlas.config import get_config
-from atlas.memory.quality import evaluate_memory_health, evaluate_memory_optimization
+from atlas.memory.quality import (
+    evaluate_knowledge_maturity,
+    evaluate_memory_health,
+    evaluate_memory_optimization,
+)
 
 log = structlog.get_logger()
 
@@ -235,6 +239,12 @@ class MemoryStore:
             );
 
             CREATE TABLE IF NOT EXISTS memory_optimization_reports (
+                id TEXT PRIMARY KEY,
+                report_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_maturity_reports (
                 id TEXT PRIMARY KEY,
                 report_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
@@ -2107,6 +2117,81 @@ class MemoryStore:
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT id, report_json, created_at FROM memory_optimization_reports "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
+        )
+        return [
+            {"id": row["id"], "created_at": row["created_at"],
+             "report": json.loads(row["report_json"])}
+            for row in await cursor.fetchall()
+        ]
+
+    async def get_knowledge_maturity(
+        self, *, as_of: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Evaluate active facts using durable history, usage, and review evidence."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT key, memory_type, confidence, source_conversation_id, "
+            "source_message_id, created_at, updated_at FROM facts ORDER BY key"
+        )
+        memories = {row["key"]: dict(row) for row in await cursor.fetchall()}
+        evidence: dict[str, list[str]] = {key: [f"fact:{key}"] for key in memories}
+
+        cursor = await self._db.execute(
+            "SELECT key, id FROM memory_fact_history WHERE event_type='superseded' "
+            "ORDER BY id"
+        )
+        for row in await cursor.fetchall():
+            key = row["key"]
+            if key in memories:
+                memories[key]["change_count"] = memories[key].get("change_count", 0) + 1
+                evidence[key].append(f"history:{row['id']}")
+
+        for table, field, alias in (
+            ("memory_usage_events", "outcome", "usage"),
+            ("memory_feedback", "signal", "feedback"),
+            ("memory_evaluations", "rating", "evaluation"),
+        ):
+            cursor = await self._db.execute(
+                f"SELECT memory_key, {field}, id FROM {table} ORDER BY id"
+            )
+            for row in await cursor.fetchall():
+                key = row["memory_key"]
+                if key not in memories:
+                    continue
+                count_field = f"{row[field]}_count"
+                memories[key][count_field] = memories[key].get(count_field, 0) + 1
+                evidence[key].append(f"{alias}:{row['id']}")
+
+        for key, memory in memories.items():
+            memory["evidence_refs"] = evidence[key]
+        return evaluate_knowledge_maturity(list(memories.values()), as_of=as_of)
+
+    async def create_knowledge_maturity_report(
+        self, *, as_of: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Persist an advisory maturity snapshot without changing active facts."""
+        report = await self.get_knowledge_maturity(as_of=as_of)
+        report_id = str(uuid.uuid4())
+        created_at = datetime.now(UTC).isoformat()
+        assert self._db is not None
+        await self._db.execute(
+            "INSERT INTO memory_maturity_reports (id, report_json, created_at) "
+            "VALUES (?, ?, ?)",
+            (report_id, json.dumps(report, ensure_ascii=False, sort_keys=True), created_at),
+        )
+        await self._db.commit()
+        return {"id": report_id, "created_at": created_at, "report": report}
+
+    async def list_knowledge_maturity_reports(
+        self, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return immutable maturity report snapshots, newest first."""
+        if limit < 0:
+            raise ValueError("Report limit must be non-negative")
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, report_json, created_at FROM memory_maturity_reports "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
         )
         return [

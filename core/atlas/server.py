@@ -674,6 +674,22 @@ async def list_memory_optimization_reports(
     return await memory.list_memory_optimization_reports(limit=limit)
 
 
+@app.post("/api/memory/maturity-reports")
+async def create_memory_maturity_report() -> dict[str, Any]:
+    """Generate and preserve a deterministic, advisory knowledge maturity report."""
+    assert memory is not None
+    return await memory.create_knowledge_maturity_report()
+
+
+@app.get("/api/memory/maturity-reports")
+async def list_memory_maturity_reports(
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    """Return preserved maturity report snapshots, newest first."""
+    assert memory is not None
+    return await memory.list_knowledge_maturity_reports(limit=limit)
+
+
 @app.get("/api/memory/goal-outcomes")
 async def list_goal_outcomes(
     status: str | None = Query(None),

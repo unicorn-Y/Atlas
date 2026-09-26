@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from numbers import Real
 from typing import Any
 
@@ -325,5 +325,156 @@ def evaluate_memory_optimization(
         "evaluated_at": health_report.get("evaluated_at"),
         "metrics": metrics,
         "recommendation_count": len(recommendations),
+        "recommendations": recommendations,
+    }
+
+
+def evaluate_knowledge_maturity(
+    memories: Sequence[Mapping[str, Any]], *, as_of: datetime | None = None,
+) -> dict[str, Any]:
+    """Report deterministic maturity signals for active memories without changing them."""
+    criteria = {
+        "developing": {
+            "min_age_days": 30, "max_change_count": 1,
+            "min_usage_count": 3, "min_positive_signal_count": 2,
+        },
+        "established": {
+            "min_age_days": 90, "max_change_count": 0,
+            "min_usage_count": 10, "min_positive_signal_count": 5,
+        },
+        "mature": {
+            "min_age_days": 180, "max_change_count": 0,
+            "min_usage_count": 25, "min_positive_signal_count": 10,
+        },
+        "review_required": "one or more negative review signals",
+        "evidence_required": "valid confidence and complete source attribution",
+    }
+    now = as_of or datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    now = now.astimezone(UTC)
+
+    results: list[dict[str, Any]] = []
+    recommendations: list[dict[str, Any]] = []
+    for memory in sorted(memories, key=lambda item: str(item["key"])):
+        key = str(memory["key"])
+        updated_at = datetime.fromisoformat(str(memory["updated_at"]))
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        age_days = max(0, (now - updated_at.astimezone(UTC)).days)
+        confidence = memory.get("confidence")
+        confidence_complete = (
+            isinstance(confidence, Real)
+            and not isinstance(confidence, bool)
+            and math.isfinite(confidence)
+            and 0.0 <= confidence <= 1.0
+        )
+        source_conversation_id = memory.get("source_conversation_id")
+        source_message_id = memory.get("source_message_id")
+        provenance_complete = (
+            isinstance(source_conversation_id, str)
+            and bool(source_conversation_id.strip())
+            and isinstance(source_message_id, str)
+            and bool(source_message_id.strip())
+        )
+        counts = {
+            name: int(memory.get(f"{name}_count", 0))
+            for name in (
+                "used", "not_used", "helpful", "unhelpful", "correction",
+                "rejected", "useful", "not_useful", "uncertain",
+            )
+        }
+        usage_count = counts["used"] + counts["not_used"]
+        positive_count = counts["helpful"] + counts["useful"]
+        review_count = (
+            counts["unhelpful"] + counts["correction"] + counts["rejected"]
+            + counts["not_useful"]
+        )
+        change_count = int(memory.get("change_count", 0))
+        stability = (
+            "stable" if age_days >= 30 and change_count == 0
+            else "changed" if change_count
+            else "unproven"
+        )
+        evidence_refs = sorted(set(memory.get("evidence_refs", ())))
+
+        if review_count:
+            level = "review_required"
+            action = "human_review"
+            reason = "Review signals exist; a person should assess the active memory."
+        elif not confidence_complete or not provenance_complete:
+            level = "nascent"
+            action = "complete_evidence"
+            reason = "Confidence or source attribution is incomplete."
+        elif (
+            age_days >= criteria["mature"]["min_age_days"]
+            and change_count <= criteria["mature"]["max_change_count"]
+            and usage_count >= criteria["mature"]["min_usage_count"]
+            and positive_count >= criteria["mature"]["min_positive_signal_count"]
+        ):
+            level = "mature"
+            action = None
+            reason = "Long-lived, stable memory has repeated positive use evidence."
+        elif (
+            age_days >= criteria["established"]["min_age_days"]
+            and change_count <= criteria["established"]["max_change_count"]
+            and usage_count >= criteria["established"]["min_usage_count"]
+            and positive_count >= criteria["established"]["min_positive_signal_count"]
+        ):
+            level = "established"
+            action = "continue_observation"
+            reason = "Stable memory has repeated use and positive feedback."
+        elif (
+            age_days >= criteria["developing"]["min_age_days"]
+            and change_count <= criteria["developing"]["max_change_count"]
+            and usage_count >= criteria["developing"]["min_usage_count"]
+            and positive_count >= criteria["developing"]["min_positive_signal_count"]
+        ):
+            level = "developing"
+            action = "continue_observation"
+            reason = "Initial stability, use, and positive feedback evidence is present."
+        else:
+            level = "nascent"
+            action = "collect_evidence"
+            reason = "More time, usage, or feedback evidence is needed."
+
+        evidence = {
+            "confidence_complete": confidence_complete,
+            "provenance_complete": provenance_complete,
+            "usage_count": usage_count,
+            "positive_signal_count": positive_count,
+            "review_signal_count": review_count,
+            "stability": {
+                "status": stability,
+                "change_count": change_count,
+                "age_days": age_days,
+            },
+            "references": evidence_refs or [f"fact:{key}"],
+        }
+        results.append({
+            "key": key,
+            "memory_type": memory.get("memory_type", "fact"),
+            "level": level,
+            "evidence": evidence,
+        })
+        if action:
+            recommendations.append({
+                "key": key,
+                "action": action,
+                "reason": reason,
+                "evidence_refs": evidence["references"],
+            })
+
+    level_counts = {
+        level: sum(item["level"] == level for item in results)
+        for level in ("nascent", "developing", "established", "mature", "review_required")
+    }
+    return {
+        "evaluated_at": now.isoformat(),
+        "criteria": criteria,
+        "memory_count": len(results),
+        "level_counts": level_counts,
+        "recommendation_count": len(recommendations),
+        "memories": results,
         "recommendations": recommendations,
     }

@@ -434,6 +434,30 @@ class TestFacts:
             await isolated_memory.close()
             server.memory = original_memory
 
+    async def test_memory_maturity_reports_are_readable_through_api(
+        self, client: AsyncClient, tmp_path
+    ) -> None:
+        original_memory = server.memory
+        await original_memory.close()
+        isolated_memory = MemoryStore(db_path=tmp_path / "maturity-reports.db")
+        await isolated_memory.init()
+        server.memory = isolated_memory
+        try:
+            await isolated_memory.set_fact("user_preference", "concise answers")
+
+            created = await client.post("/api/memory/maturity-reports")
+            listed = await client.get("/api/memory/maturity-reports")
+
+            assert created.status_code == 200
+            assert created.json()["report"]["memory_count"] == 1
+            assert created.json()["report"]["recommendations"][0]["evidence_refs"]
+            assert listed.status_code == 200
+            assert listed.json()[0]["report"] == created.json()["report"]
+            assert await isolated_memory.get_fact("user_preference") == "concise answers"
+        finally:
+            await isolated_memory.close()
+            server.memory = original_memory
+
     async def test_goal_experience_requires_explicit_api_approval(
         self, client: AsyncClient, tmp_path,
     ) -> None:
