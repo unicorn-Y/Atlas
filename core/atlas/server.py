@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
-from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -26,6 +26,7 @@ from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
 from atlas.skills import SkillManager
+from atlas.skills.registry import SkillRegistry
 from atlas.tools.mcp_client import MCPClient
 
 # ---------------------------------------------------------------------------
@@ -37,6 +38,7 @@ memory: MemoryStore | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 skill_mgr: SkillManager | None = None
+skill_registry: SkillRegistry | None = None
 scheduler: AtlasScheduler | None = None
 
 
@@ -360,7 +362,7 @@ async def _record_goal_failure(
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle."""
-    global model_mgr, memory, orchestrator, mcp_client, skill_mgr, scheduler
+    global model_mgr, memory, orchestrator, mcp_client, skill_mgr, skill_registry, scheduler
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -372,6 +374,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     skill_mgr = SkillManager()
     await skill_mgr.scan_skills()
+    cfg = get_config()
+    skill_registry = SkillRegistry(cfg.db_path.parent / "skill-registry.db")
+    for skill in skill_mgr.list_skills():
+        if skill_registry.get(skill.name, skill.version) is None:
+            skill_registry.register({
+                "name": skill.name,
+                "version": skill.version,
+                "description": skill.description,
+                "capabilities": [],
+                "tools": [],
+                "requirements": skill.dependencies,
+                "examples": [],
+            }, source="local")
     capabilities = AgentCapabilityRegistry()
     register_skill_capabilities(capabilities, skill_mgr)
 
@@ -380,7 +395,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         capability_registry=capabilities,
     )
 
-    cfg = get_config()
     if cfg.scheduler_enabled:
         scheduler = AtlasScheduler(agent_callback=_run_scheduled_goal)
         await scheduler.start()
@@ -1349,6 +1363,69 @@ async def list_skills(
         "categories": skill_mgr.categories,
         "skills": [s.to_dict() for s in skills],
     }
+
+
+@app.post("/api/skill-registry")
+async def register_skill(metadata: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Validate and persist descriptive skill metadata."""
+    assert skill_registry is not None
+    try:
+        return skill_registry.register(metadata, source="api")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+@app.get("/api/skill-registry")
+async def list_registered_skills(status: str | None = Query(None)) -> dict[str, Any]:
+    """List registered skill versions in deterministic identity order."""
+    assert skill_registry is not None
+    if status not in (None, "active", "disabled"):
+        raise HTTPException(status_code=422, detail="status must be active or disabled")
+    skills = skill_registry.list(status=status)
+    return {"count": len(skills), "skills": skills}
+
+
+@app.get("/api/skill-registry/search")
+async def search_registered_skills(q: str = Query(..., min_length=1)) -> dict[str, Any]:
+    """Search active skill metadata by name, description, capability, or tool."""
+    assert skill_registry is not None
+    skills = skill_registry.search(q)
+    return {"count": len(skills), "skills": skills}
+
+
+@app.get("/api/skill-registry/{name}/{version}/status")
+async def get_registered_skill_status(name: str, version: str) -> dict[str, Any]:
+    assert skill_registry is not None
+    status = skill_registry.status(name, version)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return {"name": name, "version": version, "status": status}
+
+
+@app.post("/api/skill-registry/{name}/{version}/disable")
+async def disable_registered_skill(name: str, version: str) -> dict[str, Any]:
+    assert skill_registry is not None
+    skill = skill_registry.disable(name, version)
+    if skill is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return skill
+
+
+@app.delete("/api/skill-registry/{name}/{version}", status_code=204)
+async def remove_registered_skill(name: str, version: str) -> Response:
+    assert skill_registry is not None
+    if not skill_registry.remove(name, version):
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return Response(status_code=204)
+
+
+@app.get("/api/skill-registry/{name}/{version}")
+async def get_registered_skill(name: str, version: str) -> dict[str, Any]:
+    assert skill_registry is not None
+    skill = skill_registry.get(name, version)
+    if skill is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return skill
 
 
 @app.get("/api/skills/{name}")
