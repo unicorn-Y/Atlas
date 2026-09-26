@@ -690,6 +690,50 @@ async def list_memory_maturity_reports(
     return await memory.list_knowledge_maturity_reports(limit=limit)
 
 
+@app.post("/api/memory/knowledge-health-reports")
+async def create_knowledge_health_report() -> dict[str, Any]:
+    assert memory is not None
+    return await memory.create_knowledge_health_report()
+
+
+@app.get("/api/memory/knowledge-health-reports")
+async def list_knowledge_health_reports(
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    assert memory is not None
+    return await memory.list_knowledge_health_reports(limit=limit)
+
+
+@app.post("/api/memory/knowledge-health-reports/{report_id}/approve")
+async def approve_knowledge_health_report(report_id: str) -> dict[str, str]:
+    assert memory is not None
+    if not await memory.review_knowledge_health_report(report_id, approved=True):
+        raise HTTPException(status_code=404, detail="Pending knowledge health report not found")
+    return {"status": "approved", "id": report_id}
+
+
+@app.post("/api/memory/knowledge-health-reports/{report_id}/reject")
+async def reject_knowledge_health_report(report_id: str) -> dict[str, str]:
+    assert memory is not None
+    if not await memory.review_knowledge_health_report(report_id, approved=False):
+        raise HTTPException(status_code=404, detail="Pending knowledge health report not found")
+    return {"status": "rejected", "id": report_id}
+
+
+@app.post("/api/memory/consolidated-insights")
+async def create_knowledge_consolidated_insights() -> list[dict[str, Any]]:
+    assert memory is not None
+    return await memory.create_knowledge_consolidated_insights()
+
+
+@app.get("/api/memory/consolidated-insights")
+async def list_knowledge_consolidated_insights(
+    limit: int = Query(100, ge=0, le=500),
+) -> list[dict[str, Any]]:
+    assert memory is not None
+    return await memory.list_knowledge_consolidated_insights(limit=limit)
+
+
 @app.post("/api/memory/self-steering-reports")
 async def create_memory_self_steering_report() -> dict[str, Any]:
     """Create auditable suggestions from maturity and approved outcome signals."""

@@ -1317,3 +1317,48 @@ class TestWebSocketProtocol:
         assert socket.events[0]["sequence"] == 5
         assert socket.events[0]["event"] == "run.failed"
         assert socket.events[0]["data"]["category"] == "interrupted"
+
+
+async def test_knowledge_health_approval_and_consolidated_insights_api(
+    client: AsyncClient,
+) -> None:
+    created = await client.post("/api/memory/knowledge-health-reports")
+    assert created.status_code == 200
+    health_id = created.json()["id"]
+    assert created.json()["status"] == "pending"
+
+    rejected = await client.post(
+        f"/api/memory/knowledge-health-reports/{health_id}/reject"
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "rejected"
+    assert (await client.post(
+        f"/api/memory/knowledge-health-reports/{health_id}/approve"
+    )).status_code == 404
+
+    approved_created = await client.post("/api/memory/knowledge-health-reports")
+    assert approved_created.status_code == 200
+    approved_id = approved_created.json()["id"]
+    approved = await client.post(
+        f"/api/memory/knowledge-health-reports/{approved_id}/approve"
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    assert (await client.post(
+        f"/api/memory/knowledge-health-reports/{approved_id}/reject"
+    )).status_code == 404
+
+    listed = await client.get("/api/memory/knowledge-health-reports")
+    assert listed.status_code == 200
+    listed_by_id = {item["id"]: item for item in listed.json()}
+    assert listed_by_id[health_id]["status"] == "rejected"
+    assert listed_by_id[health_id]["review_history"][0]["decision"] == "rejected"
+    assert listed_by_id[approved_id]["status"] == "approved"
+    assert listed_by_id[approved_id]["review_history"][0]["decision"] == "approved"
+
+    insights = await client.post("/api/memory/consolidated-insights")
+    assert insights.status_code == 200
+    assert insights.json() == []
+    listed_insights = await client.get("/api/memory/consolidated-insights")
+    assert listed_insights.status_code == 200
+    assert listed_insights.json() == []

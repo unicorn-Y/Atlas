@@ -359,6 +359,54 @@ def evaluate_knowledge_health(
     }
 
 
+def evaluate_consolidated_knowledge_insights(
+    approved_reports: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Group repeated, evidence-linked advisory health observations deterministically."""
+    groups: dict[tuple[str, str, str], list[tuple[str, Mapping[str, Any]]]] = {}
+    for source in approved_reports:
+        if source.get("status") != "approved" or not source.get("id"):
+            continue
+        report = source.get("report", {})
+        if not isinstance(report, Mapping) or report.get("advisory_only") is not True:
+            continue
+        activations = report.get("activations", ())
+        if not isinstance(activations, Sequence) or isinstance(activations, (str, bytes)):
+            continue
+        for activation in activations:
+            if not isinstance(activation, Mapping) or activation.get("advisory_only") is not True:
+                continue
+            refs = sorted({str(ref) for ref in activation.get("evidence_refs", ()) if ref})
+            knowledge_id = activation.get("knowledge_id")
+            decision = activation.get("decision")
+            if not knowledge_id or not decision or not refs:
+                continue
+            key = (str(knowledge_id), str(decision), str(activation.get("recommendation", "")))
+            groups.setdefault(key, []).append((str(source["id"]), activation))
+
+    insights = []
+    for (knowledge_id, decision, recommendation), observations in sorted(groups.items()):
+        observations.sort(key=lambda item: (item[0], str(item[1].get("activation_id", ""))))
+        report_ids = sorted({report_id for report_id, _ in observations})
+        evidence_refs = sorted({
+            str(ref) for _, item in observations for ref in item.get("evidence_refs", ()) if ref
+        })
+        insight = {
+            "insight_type": "repeated_knowledge_health_observation",
+            "knowledge_id": knowledge_id,
+            "decision": decision,
+            "recommendation": recommendation,
+            "source_health_report_ids": report_ids,
+            "observation_count": len(observations),
+            "evidence_refs": evidence_refs,
+            "advisory_only": True,
+        }
+        identity = json.dumps(insight, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        insight["id"] = "knowledge-insight:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+        insights.append(insight)
+    return insights
+
+
 def evaluate_memory_optimization(
     health_report: Mapping[str, Any],
 ) -> dict[str, Any]:

@@ -10,6 +10,7 @@ import pytest
 
 from atlas.memory import MemoryStore
 from atlas.memory.quality import (
+    evaluate_consolidated_knowledge_insights,
     evaluate_knowledge_consolidation_proposals,
     evaluate_knowledge_health,
     evaluate_knowledge_maturity,
@@ -251,6 +252,82 @@ async def test_knowledge_health_persists_verified_usage_and_feedback_snapshot(
     [stored] = await store.list_knowledge_health_reports()
     assert stored == first
     assert await store.retrieve_approved_goal_knowledge("filesystem migration") == [knowledge]
+
+
+def test_consolidated_knowledge_insights_are_deterministic_and_filter_unapproved_reports() -> None:
+    approved = {
+        "status": "approved",
+        "id": "health-1",
+        "report": {"advisory_only": True, "activations": [{
+            "activation_id": "activation-1", "knowledge_id": "knowledge-1",
+            "decision": "monitor_after_failure", "recommendation": "Monitor outcome.",
+            "evidence_refs": ["feedback:1", "usage:1"], "advisory_only": True,
+        }]},
+    }
+    second = {
+        **approved,
+        "id": "health-2",
+        "report": {"advisory_only": True, "activations": [{
+            "activation_id": "activation-1", "knowledge_id": "knowledge-1",
+            "decision": "monitor_after_failure", "recommendation": "Monitor outcome.",
+            "evidence_refs": ["feedback:2", "usage:2"], "advisory_only": True,
+        }]},
+    }
+    pending = {**approved, "id": "health-pending", "status": "pending"}
+    rejected = {**approved, "id": "health-rejected", "status": "rejected"}
+
+    insights = evaluate_consolidated_knowledge_insights(
+        [rejected, second, pending, approved]
+    )
+
+    assert insights == evaluate_consolidated_knowledge_insights(
+        [approved, pending, rejected, second]
+    )
+    [insight] = insights
+    assert insight["source_health_report_ids"] == ["health-1", "health-2"]
+    assert insight["observation_count"] == 2
+    assert insight["evidence_refs"] == ["feedback:1", "feedback:2", "usage:1", "usage:2"]
+    assert insight["advisory_only"] is True
+
+
+async def test_consolidated_insights_require_approved_health_snapshots_and_keep_audit(
+    store: MemoryStore,
+) -> None:
+    await store.set_fact("project_stack", "Python")
+    original_fact = await store.get_fact("project_stack")
+    snapshot = {
+        "advisory_only": True,
+        "activations": [{
+            "activation_id": "activation-1", "knowledge_id": "knowledge-1",
+            "decision": "monitor_after_failure", "recommendation": "Monitor outcome.",
+            "evidence_refs": ["feedback:1", "usage:1"], "advisory_only": True,
+        }],
+    }
+    for report_id in ("health-approved", "health-rejected"):
+        await store._db.execute(
+            "INSERT INTO memory_knowledge_health_reports (id, report_json, created_at) "
+            "VALUES (?, ?, ?)",
+            (report_id, json.dumps(snapshot, sort_keys=True), "2026-09-27T00:00:00+00:00"),
+        )
+    await store._db.commit()
+
+    assert await store.review_knowledge_health_report("health-approved", approved=True)
+    assert await store.review_knowledge_health_report("health-rejected", approved=False)
+    assert not await store.review_knowledge_health_report("health-approved", approved=False)
+    [insight] = await store.create_knowledge_consolidated_insights()
+    listed_health = await store.list_knowledge_health_reports()
+    approved = next(item for item in listed_health if item["id"] == "health-approved")
+    rejected = next(item for item in listed_health if item["id"] == "health-rejected")
+    [stored_insight] = await store.list_knowledge_consolidated_insights()
+
+    assert insight["source_health_report_ids"] == ["health-approved"]
+    assert rejected["status"] == "rejected"
+    assert rejected["review_history"] == [{
+        "decision": "rejected", "reviewed_at": rejected["review_history"][0]["reviewed_at"],
+    }]
+    assert approved["status"] == "approved"
+    assert stored_insight == insight
+    assert await store.get_fact("project_stack") == original_fact
 
 
 @pytest.mark.parametrize(

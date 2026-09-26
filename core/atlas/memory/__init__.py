@@ -15,6 +15,7 @@ import structlog
 
 from atlas.config import get_config
 from atlas.memory.quality import (
+    evaluate_consolidated_knowledge_insights,
     evaluate_knowledge_consolidation_proposals,
     evaluate_knowledge_health,
     evaluate_knowledge_maturity,
@@ -339,6 +340,20 @@ class MemoryStore:
             CREATE TABLE IF NOT EXISTS memory_knowledge_health_reports (
                 id TEXT PRIMARY KEY,
                 report_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_knowledge_health_report_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_id TEXT NOT NULL,
+                decision TEXT NOT NULL CHECK(decision IN ('approved', 'rejected')),
+                reviewed_at TEXT NOT NULL,
+                FOREIGN KEY(report_id) REFERENCES memory_knowledge_health_reports(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_knowledge_consolidated_insights (
+                id TEXT PRIMARY KEY,
+                insight_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
 
@@ -2796,7 +2811,16 @@ class MemoryStore:
             (report_id,),
         )
         row = await cursor.fetchone()
-        return {"id": report_id, "created_at": row["created_at"], "report": report}
+        review_cursor = await self._db.execute(
+            "SELECT decision, reviewed_at FROM memory_knowledge_health_report_reviews "
+            "WHERE report_id = ? ORDER BY id", (report_id,),
+        )
+        review_history = [dict(item) for item in await review_cursor.fetchall()]
+        return {
+            "id": report_id, "created_at": row["created_at"], "report": report,
+            "status": review_history[-1]["decision"] if review_history else "pending",
+            "review_history": review_history,
+        }
 
     async def list_knowledge_health_reports(
         self, *, limit: int = 100,
@@ -2809,11 +2833,78 @@ class MemoryStore:
             "SELECT id, report_json, created_at FROM memory_knowledge_health_reports "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
         )
-        return [
-            {"id": row["id"], "created_at": row["created_at"],
-             "report": json.loads(row["report_json"])}
+        reports = []
+        for row in await cursor.fetchall():
+            item = {"id": row["id"], "created_at": row["created_at"],
+                    "report": json.loads(row["report_json"])}
+            review_cursor = await self._db.execute(
+                "SELECT decision, reviewed_at FROM memory_knowledge_health_report_reviews "
+                "WHERE report_id = ? ORDER BY id", (row["id"],),
+            )
+            item["review_history"] = [dict(review) for review in await review_cursor.fetchall()]
+            item["status"] = item["review_history"][-1]["decision"] \
+                if item["review_history"] else "pending"
+            reports.append(item)
+        return reports
+
+    async def review_knowledge_health_report(self, report_id: str, approved: bool) -> bool:
+        """Append one explicit approval decision for an immutable health snapshot."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "INSERT INTO memory_knowledge_health_report_reviews "
+            "(report_id, decision, reviewed_at) "
+            "SELECT ?, ?, ? WHERE EXISTS ("
+            "SELECT 1 FROM memory_knowledge_health_reports WHERE id = ?) "
+            "AND NOT EXISTS (SELECT 1 FROM memory_knowledge_health_report_reviews "
+            "WHERE report_id = ?)",
+            (report_id, "approved" if approved else "rejected", datetime.now(UTC).isoformat(),
+             report_id, report_id),
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
+
+    async def create_knowledge_consolidated_insights(self) -> list[dict[str, Any]]:
+        """Persist deterministic advisory insights from explicitly approved health snapshots."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT report.id, report.report_json, review.decision AS status "
+            "FROM memory_knowledge_health_reports AS report "
+            "JOIN memory_knowledge_health_report_reviews AS review "
+            "ON review.report_id = report.id AND review.decision = 'approved' "
+            "ORDER BY report.id"
+        )
+        approved_reports = [
+            {"id": row["id"], "report": json.loads(row["report_json"]),
+             "status": row["status"]}
             for row in await cursor.fetchall()
         ]
+        insights = evaluate_consolidated_knowledge_insights(approved_reports)
+        created_at = datetime.now(UTC).isoformat()
+        for insight in insights:
+            await self._db.execute(
+                "INSERT OR IGNORE INTO memory_knowledge_consolidated_insights "
+                "(id, insight_json, created_at) VALUES (?, ?, ?)",
+                (
+                    insight["id"],
+                    json.dumps(insight, ensure_ascii=False, sort_keys=True),
+                    created_at,
+                ),
+            )
+        await self._db.commit()
+        return insights
+
+    async def list_knowledge_consolidated_insights(
+        self, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List immutable advisory insight snapshots newest first."""
+        if limit < 0:
+            raise ValueError("Consolidated insight limit must be non-negative")
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT insight_json FROM memory_knowledge_consolidated_insights "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,),
+        )
+        return [json.loads(row["insight_json"]) for row in await cursor.fetchall()]
 
     async def list_knowledge_self_steering_reports(
         self, *, limit: int = 100,
