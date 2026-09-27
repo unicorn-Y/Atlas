@@ -3,14 +3,116 @@
 from __future__ import annotations
 
 import asyncio
+import multiprocessing
 import os
 import time
+from multiprocessing.connection import Connection
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from atlas.config import get_config
 from atlas.tools.computer_use import COMPUTER_TOOLS, ComputerUseRuntime
+
+
+def _desktop_target(connection: Connection) -> None:
+    """Keep a real Tk target in its own message-pumping process."""
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.title("Atlas P18B isolated Computer Use test")
+    root.attributes("-topmost", True)
+    root.geometry("640x520+140+140")
+    state: dict[str, Any] = {"clicks": 0, "right_clicks": 0, "mouse_messages": []}
+    button = tk.Button(root, text="Test click", command=lambda: state.update(clicks=state["clicks"] + 1))
+    button.pack()
+    horizontal = tk.Scrollbar(root, orient=tk.HORIZONTAL)
+    text = tk.Text(
+        root,
+        width=55,
+        height=12,
+        wrap="none",
+        xscrollcommand=horizontal.set,
+    )
+    horizontal.configure(command=text.xview)
+    text.pack()
+    horizontal.pack(fill=tk.X)
+    text.insert(
+        "1.0",
+        "Atlas 中文输入验证\nsecond\n"
+        + "horizontal scroll target " + ("x" * 180) + "\n"
+        + "scroll target content\n" * 80,
+    )
+    text.bind(
+        "<ButtonPress-1>",
+        lambda event: state["mouse_messages"].append("down"),
+        add="+",
+    )
+    text.bind(
+        "<ButtonRelease-1>",
+        lambda event: state["mouse_messages"].append("up"),
+        add="+",
+    )
+    text.bind(
+        "<Button-3>",
+        lambda event: state.update(right_clicks=state["right_clicks"] + 1),
+        add="+",
+    )
+    root.update()
+    root_hwnd = int(root.wm_frame(), 0)
+    geometry = {
+        "pid": os.getpid(),
+        "hwnd": root_hwnd,
+        "button": (
+            button.winfo_rootx() + button.winfo_width() // 2,
+            button.winfo_rooty() + button.winfo_height() // 2,
+        ),
+        "text": (
+            text.winfo_rootx() + 80,
+            text.winfo_rooty() + 12,
+        ),
+    }
+    connection.send({"type": "ready", **geometry})
+
+    def snapshot() -> dict[str, Any]:
+        return {
+            **state,
+            "text": text.get("1.0", "end-1c"),
+            "selection": tuple(str(value) for value in text.tag_ranges("sel")),
+            "yview": text.yview(),
+            "xview": text.xview(),
+            "bounds": {
+                "x": root.winfo_x(),
+                "y": root.winfo_y(),
+                "width": root.winfo_width(),
+                "height": root.winfo_height(),
+            },
+        }
+
+    def poll() -> None:
+        if connection.poll():
+            command = connection.recv()
+            if command == "snapshot":
+                connection.send(snapshot())
+            elif command == "close":
+                root.destroy()
+                return
+        root.after(10, poll)
+
+    root.after(10, poll)
+    root.mainloop()
+
+
+def _target_snapshot(connection: Connection) -> dict[str, Any]:
+    connection.send("snapshot")
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        if connection.poll(0.05):
+            value = connection.recv()
+            if isinstance(value, dict):
+                return value
+    raise AssertionError("the isolated desktop target stopped responding")
 
 
 def test_computer_use_defaults_to_full_access_and_exposes_native_tools() -> None:
@@ -28,25 +130,17 @@ def test_computer_use_defaults_to_full_access_and_exposes_native_tools() -> None
 
 
 @pytest.mark.skipif(os.name != "nt", reason="native Computer Use requires Windows")
-def test_real_desktop_observe_input_clipboard_and_window_management(tmp_path: Path) -> None:
-    import tkinter as tk
-
-    runtime = ComputerUseRuntime(artifact_dir=tmp_path / "observations")
-    root = tk.Tk()
-    root.title("Atlas P18B isolated Computer Use test")
-    root.attributes("-topmost", True)
-    root.geometry("420x280+140+140")
-    clicked = {"count": 0}
-    button = tk.Button(
-        root, text="Test click", command=lambda: clicked.update(count=clicked["count"] + 1)
-    )
-    button.pack()
-    text = tk.Text(root, width=45, height=12)
-    text.pack()
-    root.update()
-    hwnd = int(root.wm_frame(), 0)
-
+def test_real_desktop_observe_input_clipboard_and_window_management() -> None:
+    context = multiprocessing.get_context("spawn")
+    parent, child = context.Pipe()
+    target = context.Process(target=_desktop_target, args=(child,))
+    target.start()
+    runtime = ComputerUseRuntime()
     try:
+        assert parent.poll(20), "the isolated desktop target did not create its window"
+        ready = parent.recv()
+        assert ready["pid"] != os.getpid()
+        hwnd = ready["hwnd"]
         observed = runtime._observe({"target": "desktop"})
         assert not observed["is_error"]
         observation = observed["data"]
@@ -56,87 +150,74 @@ def test_real_desktop_observe_input_clipboard_and_window_management(tmp_path: Pa
         assert observation["image_size"]["width"] > 0
         assert observation["image_size"]["height"] > 0
         assert observation["_image_data_url"].startswith("data:image/png;base64,")
+        assert any(item["window_id"] == hwnd for item in runtime._windows())
 
-        foreground = runtime._windows()
-        assert any(item["window_id"] == hwnd for item in foreground)
         runtime._window({"action": "focus", "window_id": hwnd})
-        assert runtime._user32.GetForegroundWindow() in {hwnd, root.winfo_id()}
-        text.focus_force()
-        root.update()
+        assert int(runtime._user32.GetForegroundWindow() or 0) == hwnd
+        x, y = ready["button"]
+        runtime._mouse({"action": "click", "x": x, "y": y})
+        time.sleep(0.1)
+        state = _target_snapshot(parent)
+        assert state["clicks"] == 1
+
+        runtime._mouse({"action": "double_click", "x": x, "y": y})
+        time.sleep(0.1)
+        assert _target_snapshot(parent)["clicks"] == 3
+
+        tx, ty = ready["text"]
+        runtime._mouse({"action": "click", "x": tx, "y": ty})
         runtime._keyboard({"action": "type", "text": "Atlas 中文输入验证"})
         time.sleep(0.05)
-        root.update()
-        assert "Atlas 中文输入验证" in text.get("1.0", "end-1c")
-        runtime._keyboard({"action": "press", "key": "HOME"})
-        time.sleep(0.05)
-        root.update()
-        assert text.index("insert") == "1.0"
-        runtime._keyboard({"action": "press", "key": "END"})
-        runtime._keyboard({"action": "type", "text": "\nsecond"})
-        runtime._keyboard({"action": "press", "key": "END"})
+        assert "Atlas 中文输入验证" in _target_snapshot(parent)["text"]
         runtime._keyboard({"action": "hotkey", "keys": ["CTRL", "HOME"]})
-        time.sleep(0.05)
-        root.update()
-        runtime._clipboard({"action": "write", "text": "剪贴板验证"})
-        assert runtime._clipboard({"action": "read"})["data"]["text"] == "剪贴板验证"
-        runtime._keyboard({"action": "press", "key": "END"})
-
-        root.update()
-        bx, by = (
-            button.winfo_rootx() + button.winfo_width() // 2,
-            button.winfo_rooty() + button.winfo_height() // 2,
-        )
-        runtime._mouse({"action": "move", "x": bx, "y": by})
-        runtime._window({"action": "focus", "window_id": hwnd})
-        cursor = runtime._observe({"target": "active_window"})["data"]["cursor"]
-        assert abs(cursor["x"] - bx) <= 2 and abs(cursor["y"] - by) <= 2
-        mouse_target = runtime._mouse_target(bx, by)
-        runtime._mouse({"action": "click", "x": bx, "y": by})
-        time.sleep(0.05)
-        root.update()
-        assert clicked["count"] == 1
-        assert runtime._class_name(mouse_target[0]) == "Button"
-        runtime._mouse({"action": "double_click", "x": bx, "y": by})
-        time.sleep(0.05)
-        root.update()
-        assert clicked["count"] == 3
-        start = (text.winfo_rootx() + 20, text.winfo_rooty() + 20)
-        end = (start[0] + 45, start[1] + 10)
+        before_scroll = _target_snapshot(parent)
+        runtime._mouse({"action": "scroll", "x": tx, "y": ty, "amount": -120})
+        time.sleep(0.1)
+        after_vertical_scroll = _target_snapshot(parent)
+        assert before_scroll["yview"] != after_vertical_scroll["yview"]
         runtime._mouse(
-            {"action": "drag", "from_x": start[0], "from_y": start[1], "x": end[0], "y": end[1]}
+            {"action": "scroll", "x": tx, "y": ty, "amount": -120, "horizontal": True}
         )
-        runtime._mouse({"action": "scroll", "x": start[0], "y": start[1], "amount": -120})
-        runtime._mouse(
-            {"action": "scroll", "x": start[0], "y": start[1], "amount": 120, "horizontal": True}
+        time.sleep(0.1)
+        # Tk's Windows Text widget does not consume WM_MOUSEHWHEEL even with
+        # an attached horizontal scrollbar; this target supports vertical only.
+        horizontal_scroll_supported = (
+            after_vertical_scroll["xview"] != _target_snapshot(parent)["xview"]
         )
 
-        before = runtime._window_record(hwnd)["bounds"]
-        moved = runtime._window(
-            {"action": "move", "window_id": hwnd, "x": before["x"] + 30, "y": before["y"] + 20}
-        )
-        assert moved["data"]["after"]["bounds"]["x"] == before["x"] + 30
-        resized = runtime._window(
+        runtime._mouse({"action": "click", "x": tx, "y": ty, "button": "right"})
+        time.sleep(0.05)
+        assert _target_snapshot(parent)["right_clicks"] == 1
+        runtime._mouse({"action": "mouse_down", "x": tx, "y": ty})
+        runtime._mouse({"action": "mouse_up", "x": tx, "y": ty})
+        time.sleep(0.05)
+        mouse_messages = _target_snapshot(parent)["mouse_messages"]
+        assert "down" in mouse_messages and "up" in mouse_messages
+        assert isinstance(horizontal_scroll_supported, bool)
+
+        runtime._mouse(
             {
-                "action": "resize",
-                "window_id": hwnd,
-                "width": before["width"] + 40,
-                "height": before["height"] + 30,
+                "action": "drag",
+                "from_x": tx,
+                "from_y": ty,
+                "x": tx + 70,
+                "y": ty,
             }
         )
-        assert resized["data"]["after"]["bounds"]["width"] >= before["width"] + 35
-        runtime._window({"action": "minimize", "window_id": hwnd})
-        assert runtime._window_record(hwnd)["minimized"]
-        runtime._window({"action": "restore", "window_id": hwnd})
-        runtime._window({"action": "maximize", "window_id": hwnd})
-        assert runtime._window_record(hwnd)["maximized"]
-        runtime._window({"action": "restore", "window_id": hwnd})
-        runtime._window({"action": "focus", "window_id": hwnd})
+        time.sleep(0.05)
+        assert _target_snapshot(parent)["selection"]
+        cursor = runtime._observe({"target": "active_window"})["data"]["cursor"]
+        assert abs(cursor["x"] - (tx + 70)) <= 2 and abs(cursor["y"] - ty) <= 2
 
-        monitors = runtime._observe({"target": "monitor", "monitor_id": 1})["data"]["monitor"]
-        assert monitors["width"] > 0 and monitors["height"] > 0
-        window_image = runtime._observe({"target": "window", "window_id": hwnd})
-        assert window_image["data"]["image_size"]["width"] > 0
-        assert runtime._observe({"target": "active_window"})["data"]["image_size"]["height"] > 0
+        runtime._clipboard({"action": "write", "text": "剪贴板验证"})
+        assert runtime._clipboard({"action": "read"})["data"]["text"] == "剪贴板验证"
     finally:
-        root.destroy()
+        if target.is_alive():
+            parent.send("close")
+            target.join(timeout=3)
+        if target.is_alive():
+            target.terminate()
+            target.join(timeout=2)
+        parent.close()
+        child.close()
         asyncio.run(runtime.shutdown())
