@@ -14,7 +14,11 @@ type Review = { acquisition_id: string; record: RemoteSkill & { version: string;
 type Lifecycle = { lifecycle: { state: string; trust_state: string; pin_policy: string; pinned_hash?: string | null; content_hash?: string | null; actual_hash?: string | null; drifted: boolean }; provenance: Record<string, unknown>; dependency_state: { name: string; state: string }[]; history: { event_id: string; action: string; skill_version: string; previous_hash?: string; resulting_hash?: string; timestamp: string; result: string; details?: Record<string, unknown> }[] };
 type Dependency = { name: string; kind: string; requested?: string | null; detected: unknown; state: string; source: string; blocking_reason?: string | null };
 type LocalPackageReview = { acquisition_id: string; record: { name: string; version: string; description: string; provider: string; source_url: string }; files: Record<string, string>; security: { result: string; risks: string[]; note: string }; computed_sha256: string; dependency_state: Dependency[]; already_installed: boolean; name_conflict: boolean; exact_version_conflict: boolean; same_name_existing: boolean; import_state: 'new_skill' | 'exact_version_conflict' | 'update_candidate'; existing_version?: string | null; install_target: string };
-interface Props { apiBaseUrl: string }
+interface Props {
+  apiBaseUrl: string;
+  activeSkills: string[];
+  onApplySkill: (name: string) => void;
+}
 
 async function skillCenterHeaders(): Promise<Record<string, string>> {
   const token = await window.atlasDesktop?.getSkillCenterToken();
@@ -22,7 +26,7 @@ async function skillCenterHeaders(): Promise<Record<string, string>> {
   return { 'Content-Type': 'application/json', 'X-Atlas-Skill-Center-Token': token };
 }
 
-export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
+export default function SkillDiscoveryPage({ apiBaseUrl, activeSkills, onApplySkill }: Props) {
   const [query, setQuery] = useState('');
   const [capability, setCapability] = useState('');
   const [tool, setTool] = useState('');
@@ -405,7 +409,13 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
         </div>}
         {dependenciesReady && dependencies.some((item) => item.state !== 'satisfied') && <p role="alert">依赖状态包含阻塞项；缺失、不兼容或未知的依赖必须先解决，技能不会启动。</p>}
         {canActivateLocalSkill(selected, lifecycle?.lifecycle) && <button className={styles.skillActivateButton} disabled={!dependenciesReady || dependencies.some((item) => item.state !== 'satisfied')} onClick={() => void activate(selected)}><WandSparkles size={15} />打开本地技能</button>}
-        {activation && <pre className={styles.skillActivationContent} role="status">{activation}</pre>}
+        {activation && <>
+          <pre className={styles.skillActivationContent} role="status">{activation}</pre>
+          <button type="button" onClick={() => onApplySkill(selected.name)}>
+            {activeSkills.includes(selected.name) ? '从后续对话移除此技能' : '应用到后续 Agent 对话'}
+          </button>
+          {activeSkills.includes(selected.name) && <p role="status">此技能会在后续运行时由 Registry 重新校验并应用。</p>}
+        </>}
       </article>}
     </div>
     {installState && <div role="status">{installState}</div>}

@@ -3,6 +3,7 @@ import type { AtlasDesktopApi } from '../shared/ipc.js';
 
 const desktopApi: AtlasDesktopApi = {
   platform: process.platform,
+  apiBaseUrl: process.env.ATLAS_API_BASE_URL ?? `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}`,
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),

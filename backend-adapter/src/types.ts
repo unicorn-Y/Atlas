@@ -73,6 +73,7 @@ export interface RunStartRequest {
   conversation_id: string;
   model?: string;
   attachments?: string[];
+  active_skills?: string[];
 }
 
 export interface SkillInfo {

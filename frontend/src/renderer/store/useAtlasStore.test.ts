@@ -4,6 +4,25 @@ import { useAtlasStore } from './useAtlasStore';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('conversation creation', () => {
+  it('persists Skill activation by name for later run requests', () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    });
+    localStorage.removeItem('atlas.active-skills');
+    useAtlasStore.setState({ activeSkills: [] });
+    useAtlasStore.getState().applySkill('coding-discipline');
+    useAtlasStore.getState().applySkill('coding-discipline');
+
+    expect(useAtlasStore.getState().activeSkills).toEqual(['coding-discipline']);
+    expect(localStorage.getItem('atlas.active-skills')).toBe('["coding-discipline"]');
+
+    useAtlasStore.getState().removeSkill('coding-discipline');
+    expect(useAtlasStore.getState().activeSkills).toEqual([]);
+  });
+
   it('does not inject demo conversations when the backend history is empty', async () => {
     useAtlasStore.setState({ conversations: [], activeConversationId: '', conversationMessages: {} });
     const fetchMock = vi.fn()

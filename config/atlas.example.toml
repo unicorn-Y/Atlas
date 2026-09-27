@@ -45,30 +45,14 @@ toast_enabled = true
 # chat_id = "..."
 
 [tools]
-# MCP servers to auto-start (names must match [tools.servers.*] keys)
-auto_start = [
-    "filesystem",
-    # "brave-search",
-    # "git",
-]
+# MCP servers are configured explicitly after first launch.
+auto_start = []
 
-# -- MCP server definitions --
-
-[tools.servers.filesystem]
-transport = "stdio"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents"]
-
-[tools.servers.brave-search]
-transport = "stdio"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-brave-search"]
-env = { BRAVE_API_KEY = "" }
-
-[tools.servers.git]
-transport = "stdio"
-command = "mcp-server-git"
-args = ["--repository", "~/Documents"]
+# Example MCP configuration (add it after first launch):
+# [tools.servers.filesystem]
+# transport = "stdio"
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents"]
 
 # Example SSE server:
 # [tools.servers.custom-remote]

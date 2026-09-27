@@ -1337,6 +1337,18 @@ async def check_runtime_dependencies() -> dict[str, Any]:
     }
 
 
+@app.post("/api/runtime/shutdown", status_code=202)
+async def request_runtime_shutdown(request: Request) -> dict[str, str]:
+    """Gracefully stop an Electron-managed packaged backend with its launch token."""
+    expected = os.environ.get("ATLAS_SHUTDOWN_TOKEN", "")
+    supplied = request.headers.get("x-atlas-backend-shutdown-token", "")
+    callback = getattr(app.state, "desktop_shutdown_callback", None)
+    if not expected or not secrets.compare_digest(supplied, expected) or not callable(callback):
+        raise HTTPException(status_code=403, detail="Backend shutdown is not authorized")
+    asyncio.get_running_loop().call_soon(callback)
+    return {"status": "shutting_down"}
+
+
 @app.post("/api/mcp/servers")
 async def add_mcp_server(req: MCPServerAddRequest) -> dict[str, Any]:
     """Dynamically add and connect a new MCP server."""
@@ -2889,6 +2901,20 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
 
     content = data.get("content", "")
     try:
+        active_skill_instructions = await _resolve_active_skill_instructions(
+            data.get("active_skills", [])
+        )
+    except (TypeError, ValueError, PermissionError) as exc:
+        invalid_run = RunState(
+            run_id,
+            str(data.get("conversation_id", "")),
+            str(data.get("model", "")),
+        )
+        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "skill", "detail": str(exc),
+        }))
+        return
+    try:
         image_attachments = _validated_image_attachments(data.get("attachments"))
     except ValueError as exc:
         invalid_run = RunState(
@@ -2926,8 +2952,53 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             conn_id, run, content, model_id,
             plan_state=recovered_plan,
             image_attachments=image_attachments,
+            active_skill_instructions=active_skill_instructions,
         )
     )
+
+
+async def _resolve_active_skill_instructions(
+    names: Any,
+) -> list[dict[str, str]]:
+    """Resolve client-selected Skill names through the canonical activation gate."""
+    if names is None:
+        names = []
+    if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
+        raise ValueError("active_skills must be a list of Skill names")
+    if len(names) > 8:
+        raise ValueError("at most eight Skills may be active for one run")
+    if skill_mgr is None:
+        if names:
+            raise ValueError("Skill Manager is unavailable")
+        return []
+
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    connected = mcp_client.get_server_names() if mcp_client else None
+    configured = mcp_client.get_configured_server_names() if mcp_client else None
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        info = skill_mgr.get_skill(name)
+        if info is None:
+            raise ValueError(f"Skill not found: {name}")
+        record = skill_registry.get(name, info.version) if skill_registry else None
+        lifecycle = (record or {}).get("lifecycle", {})
+        if lifecycle.get("trust_state") in {"revoked", "blocked"} or lifecycle.get(
+            "state"
+        ) in {"quarantined", "removed"}:
+            raise PermissionError(f"Skill lifecycle policy blocks activation: {name}")
+        content = await skill_mgr.activate(
+            name,
+            connected_servers=connected,
+            configured_servers=configured,
+            registry=skill_registry,
+        )
+        if content is None:
+            raise ValueError(f"Skill content is unavailable: {name}")
+        result.append({"name": name, "version": info.version, "content": content})
+    return result
 
 
 async def _handle_resume(conn_id: str, data: dict[str, Any]) -> None:
@@ -3014,6 +3085,7 @@ async def _execute_run(
     model_id: str | None,
     plan_state: dict[str, Any] | None = None,
     image_attachments: list[str] | None = None,
+    active_skill_instructions: list[dict[str, str]] | None = None,
 ) -> None:
     """Execute agent run, emitting Runtime Event envelopes."""
     assert orchestrator is not None
@@ -3136,6 +3208,7 @@ async def _execute_run(
             plan_update_callback=persist_plan,
             source_run_id=run.run_id,
             image_attachments=image_attachments,
+            active_skill_instructions=active_skill_instructions,
         ):
             if await check_pause_cancel():
                 run.status = "cancelled"

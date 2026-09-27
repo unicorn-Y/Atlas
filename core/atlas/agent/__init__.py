@@ -6,8 +6,9 @@ import asyncio
 import inspect
 import json
 import uuid
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from typing import Annotated, Any, AsyncIterator, Callable, Literal
+from typing import Annotated, Any, Literal
 
 import structlog
 from langchain_core.messages import (
@@ -70,7 +71,7 @@ class AgentRunContext:
 _EVENT_STREAM_DONE = object()
 
 
-class _RuntimeFailure(Exception):
+class _RuntimeFailureError(Exception):
     """An agent failure with a user-facing runtime category."""
 
     def __init__(self, category: str, detail: str) -> None:
@@ -230,8 +231,10 @@ class AgentOrchestrator:
                     if function is not None:
                         aggregate["name"] += get_value(function, "name", "") or ""
                         aggregate["arguments"] += get_value(function, "arguments", "") or ""
+                if get_value(chunk.choices[0], "finish_reason") is not None:
+                    break
         except Exception as exc:
-            raise _RuntimeFailure("model", f"Model call failed: {exc}") from exc
+            raise _RuntimeFailureError("model", f"Model call failed: {exc}") from exc
 
         tc_list: list[dict[str, Any]] = []
         for index in sorted(tool_fragments):
@@ -262,7 +265,10 @@ class AgentOrchestrator:
             if event_queue is not None:
                 await event_queue.put(event)
 
-        ai_msg = AIMessage(content=full_text, tool_calls=tc_list) if tc_list else AIMessage(content=full_text)
+        ai_msg = (
+            AIMessage(content=full_text, tool_calls=tc_list)
+            if tc_list else AIMessage(content=full_text)
+        )
 
         return {
             "messages": [ai_msg],
@@ -385,6 +391,7 @@ class AgentOrchestrator:
         evaluate_goal: bool = False,
         source_run_id: str | None = None,
         image_attachments: list[str] | None = None,
+        active_skill_instructions: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -418,7 +425,10 @@ class AgentOrchestrator:
             try:
                 self._model_mgr.select(model)
             except Exception as exc:
-                yield {"type": "error", "category": "model", "detail": f"Model selection failed: {exc}"}
+                yield {
+                    "type": "error", "category": "model",
+                    "detail": f"Model selection failed: {exc}",
+                }
                 return
         litellm_model = self._model_mgr.current_litellm_model
 
@@ -542,6 +552,12 @@ class AgentOrchestrator:
             return
 
         initial_messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
+        for skill in active_skill_instructions or []:
+            initial_messages.append(SystemMessage(content=(
+                f"Activated Atlas Skill: {skill['name']}@{skill['version']}. "
+                "Apply its instructions to this run.\n\n"
+                + skill["content"]
+            )))
         if plan:
             initial_messages.append(SystemMessage(content=(
                 "Follow this structured task plan. Complete pending subtasks in order. "

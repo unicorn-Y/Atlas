@@ -237,6 +237,73 @@ class TestAgentCapabilities:
         assert invoked.json()["name"] == "skill.coding-discipline"
         assert "## Instructions" in invoked.json()["result"]
 
+    async def test_active_skill_run_context_uses_registry_activation_content(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from types import SimpleNamespace
+
+        from atlas import server
+
+        class SkillManager:
+            def get_skill(self, name: str):
+                if name == "coding-discipline":
+                    return SimpleNamespace(name=name, version="1.0.0")
+                return None
+
+            async def activate(self, name: str, **kwargs: object) -> str:
+                return "Canonical Skill instructions: 简洁优先。"
+
+        class Registry:
+            def get(self, name: str, version: str) -> dict[str, object]:
+                return {"lifecycle": {"trust_state": "trusted", "state": "active"}}
+
+        monkeypatch.setattr(server, "skill_mgr", SkillManager())
+        monkeypatch.setattr(server, "skill_registry", Registry())
+        monkeypatch.setattr(server, "mcp_client", None)
+
+        result = await server._resolve_active_skill_instructions(["coding-discipline"])
+
+        assert result == [
+            {
+                "name": "coding-discipline",
+                "version": "1.0.0",
+                "content": "Canonical Skill instructions: 简洁优先。",
+            }
+        ]
+        with pytest.raises(ValueError, match="Skill not found"):
+            await server._resolve_active_skill_instructions(["unknown-skill"])
+        with pytest.raises(ValueError, match="list of Skill names"):
+            await server._resolve_active_skill_instructions([{"name": "coding-discipline"}])
+
+    async def test_runtime_shutdown_requires_managed_launch_token(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from atlas.server import app
+
+        called: list[bool] = []
+        monkeypatch.setenv("ATLAS_SHUTDOWN_TOKEN", "p17-test-token")
+        monkeypatch.setattr(
+            app.state,
+            "desktop_shutdown_callback",
+            lambda: called.append(True),
+            raising=False,
+        )
+        denied = await client.post(
+            "/api/runtime/shutdown",
+            headers={"X-Atlas-Backend-Shutdown-Token": "wrong"},
+        )
+        assert denied.status_code == 403
+        accepted = await client.post(
+            "/api/runtime/shutdown",
+            headers={"X-Atlas-Backend-Shutdown-Token": "p17-test-token"},
+        )
+        assert accepted.status_code == 202
+        await asyncio.sleep(0)
+        assert called == [True]
+
 
 # ---------------------------------------------------------------------------
 # Models

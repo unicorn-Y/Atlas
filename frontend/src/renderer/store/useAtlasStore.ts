@@ -5,7 +5,8 @@ import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
 
-const backend = new BackendAdapter({ baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8765' });
+const desktopApiBaseUrl = typeof window === 'undefined' ? undefined : window.atlasDesktop?.apiBaseUrl;
+const backend = new BackendAdapter({ baseUrl: desktopApiBaseUrl || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8765' });
 
 interface AtlasState {
   apiBaseUrl: string;
@@ -22,6 +23,7 @@ interface AtlasState {
   models: ModelListResponse['models'];
   tools: ToolListResponse['tools'];
   skills: SkillInfo[];
+  activeSkills: string[];
   capabilities: AgentCapabilityInfo[];
   conversations: ConversationSummary[];
   conversationsLoading: boolean;
@@ -36,6 +38,8 @@ interface AtlasState {
   openConversation: (conversation: ConversationSummary) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
   selectModel: (model: string) => Promise<void>;
+  applySkill: (name: string) => void;
+  removeSkill: (name: string) => void;
   saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
   addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
   testModelConnection: (model?: string) => Promise<void>;
@@ -55,12 +59,22 @@ interface AtlasState {
 const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
 const getPreferredModel = () => typeof localStorage === 'undefined' ? null : localStorage.getItem('atlas.preference.model');
 const setPreferredModel = (model: string) => { if (typeof localStorage !== 'undefined') localStorage.setItem('atlas.preference.model', model); };
+const getActiveSkills = (): string[] => {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem('atlas.active-skills') ?? '[]');
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  } catch { return []; }
+};
+const setActiveSkills = (skills: string[]) => {
+  if (typeof localStorage !== 'undefined') localStorage.setItem('atlas.active-skills', JSON.stringify(skills));
+};
 
 export const useAtlasStore = create<AtlasState>((set, get) => ({
   apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, settingsBusy: false, connectionTest: null,
   mode: 'mock', connected: false, busy: false, paused: false, error: null,
   model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
-  runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [],
+  runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: getActiveSkills(),
 
   initialize: async () => {
     set({ conversationsLoading: true });
@@ -119,6 +133,17 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
     try { await backend.selectModel(model); setPreferredModel(model); set({ model }); }
     catch (error) { set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '切换模型失败' }); }
   },
+
+  applySkill: (name) => set((state) => {
+    const activeSkills = state.activeSkills.includes(name) ? state.activeSkills : [...state.activeSkills, name];
+    setActiveSkills(activeSkills);
+    return { activeSkills };
+  }),
+  removeSkill: (name) => set((state) => {
+    const activeSkills = state.activeSkills.filter((item) => item !== name);
+    setActiveSkills(activeSkills);
+    return { activeSkills };
+  }),
 
   saveProviderSettings: async (baseUrl, apiKey) => {
     set({ settingsBusy: true, connectionTest: null });
@@ -229,7 +254,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => ({
       const event = normalizeRuntimeEvent(envelope);
       if (event) get().appendEvent(event);
     };
-    void backend.startRun({ type: 'run.start', run_id: run.id, content: message, conversation_id: run.conversationId, model: get().model, attachments }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
+    void backend.startRun({ type: 'run.start', run_id: run.id, content: message, conversation_id: run.conversationId, model: get().model, attachments, active_skills: get().activeSkills }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
       .catch((error) => {
         set({ mode: backend.mode, connected: backend.mode === 'backend', error: error instanceof Error ? error.message : '运行启动失败' });
         const current = get().getRun(run.id);

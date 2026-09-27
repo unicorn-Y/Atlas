@@ -6,7 +6,7 @@ import { approveSkillInstallation, formatCanonicalDependencies, lifecycleUpdateA
 
 describe('Skill discovery page', () => {
   it('renders task search and structured filters without affecting chat', () => {
-    const html = renderToStaticMarkup(<SkillDiscoveryPage apiBaseUrl="http://localhost:8765" />);
+    const html = renderToStaticMarkup(<SkillDiscoveryPage apiBaseUrl="http://localhost:8765" activeSkills={[]} onApplySkill={() => undefined} />);
     expect(html).toContain('aria-label="技能发现"');
     expect(html).toContain('aria-label="任务或技能搜索"');
     expect(html).toContain('能力筛选');

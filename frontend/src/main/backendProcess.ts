@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +14,7 @@ const HEALTH_URL = `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/hea
 const PROBE_TIMEOUT_MS = 700;
 const STARTUP_TIMEOUT_MS = 15_000;
 const STDERR_TAIL_LIMIT = 8_192;
+const shutdownToken = randomBytes(32).toString('hex');
 
 let managedChild: ChildProcess | null = null;
 let stopPromise: Promise<void> | null = null;
@@ -73,15 +75,19 @@ async function startCandidate(
 ): Promise<{ child: ChildProcess; stderr: () => string; outcome: Promise<ProcessOutcome> }> {
   const child = spawn(command, args, {
     cwd,
-    env: process.env,
+    env: { ...process.env, ATLAS_SHUTDOWN_TOKEN: shutdownToken },
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   let stderrTail = '';
-  child.stdout?.on('data', () => undefined);
+  child.stdout?.on('data', (chunk: Buffer | string) => {
+    if (process.env.ATLAS_DEBUG_BACKEND === '1') process.stderr.write(chunk);
+  });
   child.stderr?.on('data', (chunk: Buffer | string) => {
-    stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_LIMIT);
+    const text = chunk.toString();
+    stderrTail = (stderrTail + text).slice(-STDERR_TAIL_LIMIT);
+    if (process.env.ATLAS_DEBUG_BACKEND === '1') process.stderr.write(text);
   });
 
   const outcome = new Promise<ProcessOutcome>((resolve) => {
@@ -111,6 +117,20 @@ async function waitUntilReady(child: ChildProcess, stderr: () => string, outcome
 
 async function terminate(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3_000);
+  try {
+    const response = await fetch(new URL('/api/runtime/shutdown', HEALTH_URL), {
+      method: 'POST',
+      headers: { 'X-Atlas-Backend-Shutdown-Token': shutdownToken },
+      signal: controller.signal,
+    });
+    if (response.status === 202 && await waitForExit(child, 15_000)) return;
+  } catch {
+    // Source-mode or older backends do not expose the packaged graceful-stop endpoint.
+  } finally {
+    clearTimeout(timeout);
+  }
   if (process.platform === 'win32' && child.pid) {
     await new Promise<void>((resolve) => {
       const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
@@ -123,6 +143,14 @@ async function terminate(child: ChildProcess): Promise<void> {
     return;
   }
   child.kill('SIGTERM');
+}
+
+function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return Promise.race([
+    new Promise<boolean>((resolve) => child.once('exit', () => resolve(true))),
+    sleep(timeoutMs).then(() => false),
+  ]);
 }
 
 export async function ensureBackendRunning(): Promise<BackendLaunchResult> {

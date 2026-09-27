@@ -1,5 +1,6 @@
 export interface AtlasDesktopApi {
   platform: string;
+  apiBaseUrl: string;
   minimize(): void;
   maximize(): void;
   close(): void;
