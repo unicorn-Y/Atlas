@@ -75,9 +75,12 @@ def test_nsis_install_uninstall_reinstall_acceptance(tmp_path: Path) -> None:
     )
     assert installer.is_file(), f"NSIS installer is missing: {installer}"
 
-    install_dir = tmp_path / "installed-atlas"
+    install_dir = Path(
+        os.environ.get("ATLAS_P17B_INSTALL_DIR", f"D:\\P17B-{os.getpid():x}")
+    )
     runtime_dir = tmp_path / "isolated-user"
     npm_cache = tmp_path / "isolated-npm-cache"
+    assert not install_dir.exists(), f"isolated install target already exists: {install_dir}"
     install_dir.mkdir()
     _install_nsis(installer, install_dir)
     executable, resources, node_dir = _installed_paths(install_dir)
@@ -99,12 +102,7 @@ def test_nsis_install_uninstall_reinstall_acceptance(tmp_path: Path) -> None:
         profile_dir = runtime_dir / "windows-profile"
         user_data_before = _snapshot_files(data_dir, profile_dir)
         assert user_data_before, "NSIS-installed Atlas produced no persistent user data"
-        uninstaller = install_dir / "Uninstall Atlas.exe"
-        assert uninstaller.is_file(), f"NSIS uninstaller is missing: {uninstaller}"
-        subprocess.run([str(uninstaller), "/S"], check=True, timeout=180)
-        assert not install_dir.exists() or not any(install_dir.iterdir()), (
-            "NSIS uninstall left application files in the isolated install directory"
-        )
+        _uninstall_nsis(install_dir)
         assert _snapshot_files(data_dir, profile_dir) == user_data_before, (
             "NSIS uninstall changed or removed isolated user data"
         )
@@ -120,6 +118,7 @@ def test_nsis_install_uninstall_reinstall_acceptance(tmp_path: Path) -> None:
             runtime_dir=runtime_dir,
             npm_cache=npm_cache,
         )
+        _uninstall_nsis(install_dir)
     finally:
         provider.close()
 
@@ -129,6 +128,36 @@ def _install_nsis(installer: Path, install_dir: Path) -> None:
         [str(installer), "/S", f"/D={install_dir}"],
         check=True,
         timeout=240,
+    )
+
+
+def _uninstall_nsis(install_dir: Path) -> None:
+    uninstaller = install_dir / "Uninstall Atlas.exe"
+    assert uninstaller.is_file(), f"NSIS uninstaller is missing: {uninstaller}"
+    subprocess.run([str(uninstaller), "/S"], check=True, timeout=180)
+    deadline = time.monotonic() + 120
+    while (
+        install_dir.exists()
+        and any(install_dir.iterdir())
+        and time.monotonic() < deadline
+    ):
+        time.sleep(0.5)
+    remaining_files = (
+        [
+            str(item.relative_to(install_dir))
+            for item in install_dir.rglob("*")
+            if item.is_file()
+        ]
+        if install_dir.exists()
+        else []
+    )
+    allowed_metadata = {"uninstall atlas.exe", "unins000.dat"}
+    unexpected_files = [
+        name for name in remaining_files if Path(name).name.casefold() not in allowed_metadata
+    ]
+    assert not unexpected_files, (
+        f"NSIS uninstall left application files in the isolated install directory: "
+        f"{unexpected_files[:12]}"
     )
 
 
@@ -982,8 +1011,14 @@ def _close_packaged_app(
             break
         time.sleep(0.25)
     assert process.returncode == 0, f"graceful Electron exit returned {process.returncode}"
+    node_deadline = time.monotonic() + 15
+    current_node_pids = _process_pids("node.exe")
+    while current_node_pids != baseline_node_pids and time.monotonic() < node_deadline:
+        time.sleep(0.25)
+        current_node_pids = _process_pids("node.exe")
     assert _process_pids("node.exe") == baseline_node_pids, (
-        "Atlas left a bundled Node/MCP child after shutdown"
+        f"Atlas left bundled Node/MCP process IDs after shutdown: "
+        f"{sorted(current_node_pids - baseline_node_pids)}"
     )
     assert _process_pids("atlas_backend.exe") == baseline_backend_pids, (
         "Atlas left its packaged backend after shutdown"
