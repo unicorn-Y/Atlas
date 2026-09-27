@@ -13,6 +13,7 @@ const workRoot = path.join(frontendDir, 'backend-build', 'node-runtime');
 const archivePath = path.join(workRoot, manifest.archive);
 const extractDir = path.join(workRoot, 'extract');
 const targetDir = path.join(outputRoot, 'runtime', 'node');
+const localArchive = process.env.ATLAS_NODE_ARCHIVE?.trim();
 
 function inside(parent, child) {
   const relative = path.relative(parent, child);
@@ -32,11 +33,33 @@ if (!inside(frontendDir, outputRoot) || !inside(frontendDir, workRoot) || !insid
   throw new Error('Unsafe Node runtime build path.');
 }
 
+let archive;
+let sourceSelection;
+if (localArchive) {
+  const resolvedArchive = path.resolve(localArchive);
+  if (!fs.statSync(resolvedArchive, { throwIfNoEntry: false })?.isFile()) {
+    throw new Error(`ATLAS_NODE_ARCHIVE does not point to a file: ${resolvedArchive}`);
+  }
+  sourceSelection = `local archive ${resolvedArchive}`;
+  archive = fs.readFileSync(resolvedArchive);
+}
+
+console.log(`Clearing Node runtime staging: ${targetDir}`);
+fs.rmSync(targetDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+fs.rmSync(workRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
 fs.mkdirSync(workRoot, { recursive: true });
-const response = await fetch(manifest.source, { signal: AbortSignal.timeout(120_000) });
-if (!response.ok) throw new Error(`Node download failed with HTTP ${response.status}`);
-const archive = Buffer.from(await response.arrayBuffer());
+
+if (!localArchive) {
+  sourceSelection = `official source ${manifest.source}`;
+  console.log(`Node runtime source: ${sourceSelection}`);
+  const response = await fetch(manifest.source, { signal: AbortSignal.timeout(120_000) });
+  if (!response.ok) throw new Error(`Node download failed with HTTP ${response.status}`);
+  archive = Buffer.from(await response.arrayBuffer());
+}
+
 const actualHash = crypto.createHash('sha256').update(archive).digest('hex');
+console.log(`Node runtime source selection: ${sourceSelection}`);
+console.log(`Node runtime archive SHA-256: ${actualHash}`);
 if (actualHash !== manifest.sha256) {
   throw new Error(`Node archive SHA-256 mismatch: expected ${manifest.sha256}, got ${actualHash}`);
 }
@@ -51,7 +74,6 @@ const npmRoot = path.join(extractedRoot, 'node_modules', 'npm');
 for (const required of [path.join(extractedRoot, 'node.exe'), path.join(npmRoot, 'bin', 'npm-cli.js'), path.join(npmRoot, 'bin', 'npx-cli.js')]) {
   if (!fs.existsSync(required)) throw new Error(`Official Node archive is missing ${path.relative(extractedRoot, required)}`);
 }
-fs.rmSync(targetDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
 fs.mkdirSync(targetDir, { recursive: true });
 fs.copyFileSync(path.join(extractedRoot, 'node.exe'), path.join(targetDir, 'node.exe'));
 fs.cpSync(npmRoot, path.join(targetDir, 'npm'), { recursive: true });
@@ -71,4 +93,4 @@ for (const script of ['npm-cli.js', 'npx-cli.js']) {
   const checked = spawnSync(node, [cli, '--version'], { encoding: 'utf8', windowsHide: true, timeout: 30_000 });
   if (checked.status !== 0) throw new Error(`Bundled ${script} validation failed: ${checked.stderr ?? ''}`);
 }
-console.log(`Bundled Node ${version.stdout.trim()} and npm/npx under ${path.relative(repoRoot, targetDir)}; archive SHA-256 ${actualHash}`);
+console.log(`Bundled Node ${version.stdout.trim()} and npm/npx under ${path.relative(repoRoot, targetDir)}; verified ${sourceSelection}; archive SHA-256 ${actualHash}`);

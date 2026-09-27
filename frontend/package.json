@@ -19,8 +19,8 @@
     "package:backend": "node scripts/build-backend.mjs",
     "package:node": "node scripts/package-node.mjs",
     "clean:packaging": "node scripts/clean-packaging-output.mjs",
-    "dist:win": "npm run clean:packaging && npm run build && electron-builder --win nsis --x64 --publish never",
-    "predist:win": "npm run install:electron && npm run package:backend && npm run package:node",
+    "clean:release": "node scripts/clean-release-output.mjs",
+    "dist:win": "npm run clean:release && npm run build && npm run package:backend && npm run package:node && electron-builder --win nsis --x64 --publish never && node scripts/write-release-manifest.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

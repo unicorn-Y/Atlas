@@ -61,6 +61,192 @@ def test_clean_packaged_daily_usability_twice(tmp_path: Path) -> None:
         provider.close()
 
 
+@pytest.mark.skipif(
+    os.environ.get("ATLAS_P17B_RUN_INSTALLER_ACCEPTANCE") != "1",
+    reason="set ATLAS_P17B_RUN_INSTALLER_ACCEPTANCE=1 to run NSIS install lifecycle acceptance",
+)
+def test_nsis_install_uninstall_reinstall_acceptance(tmp_path: Path) -> None:
+    repository = Path(__file__).parents[2]
+    installer = Path(
+        os.environ.get(
+            "ATLAS_P17B_INSTALLER",
+            repository / "frontend" / "windows-release" / "Atlas-0.1.0-Setup.exe",
+        )
+    )
+    assert installer.is_file(), f"NSIS installer is missing: {installer}"
+
+    install_dir = tmp_path / "installed-atlas"
+    runtime_dir = tmp_path / "isolated-user"
+    npm_cache = tmp_path / "isolated-npm-cache"
+    install_dir.mkdir()
+    _install_nsis(installer, install_dir)
+    executable, resources, node_dir = _installed_paths(install_dir)
+    _assert_installed_paths_are_self_contained(repository, resources)
+
+    provider = _LocalOpenAIProvider()
+    try:
+        _run_clean_user_flow(
+            resources=resources,
+            executable=executable,
+            node_dir=node_dir,
+            runtime_dir=runtime_dir,
+            npm_cache=npm_cache,
+            provider=provider,
+            iteration=1,
+        )
+
+        data_dir = runtime_dir / "atlas-data"
+        profile_dir = runtime_dir / "windows-profile"
+        user_data_before = _snapshot_files(data_dir, profile_dir)
+        assert user_data_before, "NSIS-installed Atlas produced no persistent user data"
+        uninstaller = install_dir / "Uninstall Atlas.exe"
+        assert uninstaller.is_file(), f"NSIS uninstaller is missing: {uninstaller}"
+        subprocess.run([str(uninstaller), "/S"], check=True, timeout=180)
+        assert not install_dir.exists() or not any(install_dir.iterdir()), (
+            "NSIS uninstall left application files in the isolated install directory"
+        )
+        assert _snapshot_files(data_dir, profile_dir) == user_data_before, (
+            "NSIS uninstall changed or removed isolated user data"
+        )
+
+        install_dir.mkdir(exist_ok=True)
+        _install_nsis(installer, install_dir)
+        executable, resources, node_dir = _installed_paths(install_dir)
+        _assert_installed_paths_are_self_contained(repository, resources)
+        _verify_reinstalled_user_state(
+            executable=executable,
+            resources=resources,
+            node_dir=node_dir,
+            runtime_dir=runtime_dir,
+            npm_cache=npm_cache,
+        )
+    finally:
+        provider.close()
+
+
+def _install_nsis(installer: Path, install_dir: Path) -> None:
+    subprocess.run(
+        [str(installer), "/S", f"/D={install_dir}"],
+        check=True,
+        timeout=240,
+    )
+
+
+def _installed_paths(install_dir: Path) -> tuple[Path, Path, Path]:
+    executable = install_dir / "Atlas.exe"
+    resources = install_dir / "resources" / "atlas"
+    node_dir = resources / "runtime" / "node"
+    assert executable.is_file(), f"installed Atlas executable is missing: {executable}"
+    assert (resources / "backend" / "atlas_backend.exe").is_file()
+    assert (node_dir / "node.exe").is_file()
+    return executable, resources, node_dir
+
+
+def _assert_installed_paths_are_self_contained(repository: Path, resources: Path) -> None:
+    expected = [
+        resources / "backend" / "atlas_backend.exe",
+        resources / "runtime" / "node" / "node.exe",
+    ]
+    for path in expected:
+        assert path.is_file() and path.is_relative_to(resources), (
+            f"installed resource does not resolve inside the installation: {path}"
+        )
+    root_text = str(repository).replace("/", "\\").casefold()
+    for relative in ("config/atlas.example.toml", "runtime/node/node-runtime.json"):
+        text = (resources / relative).read_text(encoding="utf-8").casefold()
+        assert root_text not in text, (
+            f"installed metadata references the development checkout: {relative}"
+        )
+    forbidden_names = {"atlas.toml", ".env", "user-settings.json"}
+    forbidden_suffixes = {".db", ".db-journal", ".log"}
+    for item in resources.rglob("*"):
+        if item.is_file():
+            assert item.name.casefold() not in forbidden_names, (
+                f"user configuration or secret file was packaged: {item.relative_to(resources)}"
+            )
+            assert item.suffix.casefold() not in forbidden_suffixes, (
+                f"user database/log was packaged: {item.relative_to(resources)}"
+            )
+
+
+def _snapshot_files(*roots: Path) -> dict[str, int]:
+    snapshot: dict[str, int] = {}
+    for root in roots:
+        if root.exists():
+            for item in root.rglob("*"):
+                if item.is_file():
+                    snapshot[str(item)] = item.stat().st_size
+    return snapshot
+
+
+def _verify_reinstalled_user_state(
+    *,
+    executable: Path,
+    resources: Path,
+    node_dir: Path,
+    runtime_dir: Path,
+    npm_cache: Path,
+) -> None:
+    profile = runtime_dir / "windows-profile"
+    env = os.environ.copy()
+    env["PATH"] = _without_system_node(env.get("PATH", ""))
+    port = _free_port()
+    debug_port = _free_port()
+    env.update(
+        {
+            "APPDATA": str(profile / "roaming"),
+            "LOCALAPPDATA": str(profile / "local"),
+            "ATLAS_ROOT": str(resources),
+            "ATLAS_DATA_DIR": str(runtime_dir / "atlas-data"),
+            "ATLAS_NODE_RUNTIME_DIR": str(node_dir),
+            "ATLAS_NODE_RUNTIME_REQUIRED": "1",
+            "ATLAS_PORT": str(port),
+            "ATLAS_SCHEDULER_ENABLED": "false",
+            "ATLAS_DEBUG_BACKEND": "1",
+            "npm_config_cache": str(npm_cache),
+            "npm_config_yes": "true",
+        }
+    )
+    for name in ("ATLAS_API_BASE", "ATLAS_API_KEY", "ATLAS_API_BASE_URL", "VITE_API_BASE_URL"):
+        env.pop(name, None)
+    env.pop("VITE_DEV_SERVER_URL", None)
+    baseline_node_pids = _process_pids("node.exe")
+    baseline_backend_pids = _process_pids("atlas_backend.exe")
+    process = subprocess.Popen(
+        [str(executable), f"--remote-debugging-port={debug_port}", "--remote-allow-origins=*"],
+        cwd=runtime_dir,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+    )
+    try:
+        base_url = f"http://127.0.0.1:{port}"
+        _wait_for_health(base_url, process, runtime_dir / "atlas-desktop.log")
+        with httpx.Client(trust_env=False, timeout=10) as http:
+            config = http.get(f"{base_url}/api/settings/configuration").json()
+            assert config["api_key_configured"] is True
+            assert config["current"] == "gpt-4o-mini"
+            assert "p17a-local-secret-1" not in json.dumps(config)
+            conversations = http.get(f"{base_url}/api/conversations").json()
+            assert any(
+                "P17A_FIRST_TURN_DONE" in str(item)
+                for item in [
+                    http.get(f"{base_url}/api/conversations/{row['id']}/messages").json()
+                    for row in conversations
+                ]
+            ), "conversation history was not available after reinstall"
+    finally:
+        if process.poll() is None:
+            _close_packaged_app(
+                process,
+                debug_port,
+                f"http://127.0.0.1:{port}",
+                baseline_node_pids,
+                baseline_backend_pids,
+            )
+
+
 class _LocalOpenAIProvider:
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []

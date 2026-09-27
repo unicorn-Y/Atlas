@@ -36,9 +36,12 @@ npm ci
 npm --prefix frontend run dist:win
 ```
 
-The build command creates a local Python environment, bundles the backend with
-its dependencies, and places the finished installer in `windows-release`.
-Python is a build-time prerequisite only.
+The build command starts from clean packaging outputs, bundles the backend,
+verifies and stages the pinned official Node 22.23.3 archive, and places the
+installer plus `release-manifest.json` in `frontend/windows-release`. To use an
+already downloaded archive as a cache input, set `ATLAS_NODE_ARCHIVE` to its
+path before running the build; its SHA-256 must still match
+`frontend/node-runtime.json`. Python is a build-time prerequisite only.
 
 Atlas stores its installed-app configuration, settings, and database under Electron's per-user application data directory. Development runs continue to use the repository's `config/` and `data/` directories.
 
