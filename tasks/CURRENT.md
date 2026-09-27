@@ -1,29 +1,29 @@
 # Atlas Current Task
 
-CURRENT: CODEX-ATLAS-P18B-GUI-DESKTOP-COMPUTER-USE
+CURRENT: CODEX-ATLAS-P18B-FIX1-REAL-MOUSE-INJECTION-AND-E2E-CLOSEOUT
 STATUS: READY
 
-PREVIOUS: CODEX-ATLAS-P18A-FULL-LOCAL-EXECUTION-CLI-AGENT
-STATUS: COMPLETE
-RESULT: tasks/results/CODEX-ATLAS-P18A-FULL-LOCAL-EXECUTION-CLI-AGENT.result.md
-REVIEW: tasks/reviews/CODEX-ATLAS-P18A-FULL-LOCAL-EXECUTION-CLI-AGENT.review.md
-REVIEW_RESULT: PASS
-IMPLEMENTATION_HEAD: c3f128eeb6fd0d6dee6bc58e6f5740d3a903eea7
+PREVIOUS: CODEX-ATLAS-P18B-GUI-DESKTOP-COMPUTER-USE
+STATUS: REWORK
+RESULT: tasks/results/CODEX-ATLAS-P18B-GUI-DESKTOP-COMPUTER-USE.result.md
+REVIEW: tasks/reviews/CODEX-ATLAS-P18B-GUI-DESKTOP-COMPUTER-USE.review.md
+REVIEW_RESULT: REWORK
+IMPLEMENTATION_HEAD: eb5e9fe4d41a00eeaee13397e580236ceb7a2545
 
-TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P18B-GUI-DESKTOP-COMPUTER-USE.md
+TASKBOOK: tasks/taskbooks/CODEX-ATLAS-P18B-FIX1-REAL-MOUSE-INJECTION-AND-E2E-CLOSEOUT.md
 
 WORKER: Luna
 
-CODE_BASE_HEAD: c3f128eeb6fd0d6dee6bc58e6f5740d3a903eea7
+CODE_BASE_HEAD: eb5e9fe4d41a00eeaee13397e580236ceb7a2545
 
 NEXT: CODEX-ATLAS-P18C-SEMANTIC-UI-AUTOMATION
 NEXT_STATUS: BLOCKED
 
 QUEUE_GUARD:
-P18B is the only READY task.
-P18A CLI-level FULL_ACCESS local execution is complete.
-P18B default Computer Use permission mode is FULL_ACCESS with no per-action approval prompts or application whitelist.
-P18C semantic UI Automation / richer desktop perception remains BLOCKED until P18B review.
+P18B-FIX1 is the only READY task.
+P18B foundation is retained but not accepted because real mouse click delivery and required GUI E2E gates are still open.
+P18C remains BLOCKED until P18B-FIX1 review.
+FULL_ACCESS remains the default; no per-action approval or application whitelist may be introduced.
 Voice, mobile/remote-device and camera remain deferred.
 
 BASE_HEAD_RULE:
