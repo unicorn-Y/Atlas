@@ -14,6 +14,11 @@ export function buildSkillDiscoveryUrl(baseUrl: string, filters: SkillDiscoveryF
   return `${baseUrl}/api/skills/discover?${params}`;
 }
 
-export function canActivateLocalSkill(skill: { source: string; status: string }): boolean {
-  return skill.source === 'local' && skill.status === 'active';
+export function canActivateLocalSkill(
+  skill: { source: string; status: string },
+  lifecycle?: { state?: string; trust_state?: string },
+): boolean {
+  return skill.source === 'local' && skill.status === 'active'
+    && lifecycle?.trust_state !== 'revoked' && lifecycle?.trust_state !== 'blocked'
+    && lifecycle?.state !== 'quarantined' && lifecycle?.state !== 'removed';
 }

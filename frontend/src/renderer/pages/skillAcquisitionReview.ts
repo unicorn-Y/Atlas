@@ -14,6 +14,17 @@ export function remoteSkillLabel(installed: boolean): string {
   return installed ? '已安装' : 'Remote / Uninstalled';
 }
 
+export function lifecycleUpdateAction(currentVersion: string, incomingVersion: string): 'update' | 'downgrade' {
+  const current = currentVersion.split('-')[0].split('.').map(Number);
+  const incoming = incomingVersion.split('-')[0].split('.').map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const left = incoming[index] ?? 0;
+    const right = current[index] ?? 0;
+    if (left !== right) return left < right ? 'downgrade' : 'update';
+  }
+  return 'update';
+}
+
 export async function approveSkillInstallation(
   apiBaseUrl: string,
   acquisitionId: string,

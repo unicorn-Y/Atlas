@@ -17,6 +17,7 @@ from typing import Any
 
 import aiosqlite
 import httpx
+import structlog
 from fastapi import Body, FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -41,8 +42,27 @@ from atlas.skills.acquisition import (
     install_acquisition,
 )
 from atlas.skills.discovery import SkillDiscovery
+from atlas.skills.lifecycle import (
+    dependency_states,
+    transition_pin,
+    transition_trust,
+)
+from atlas.skills.lifecycle import (
+    inspect_skill as inspect_skill_lifecycle,
+)
+from atlas.skills.lifecycle import (
+    remove_skill as remove_lifecycle_skill,
+)
+from atlas.skills.lifecycle import (
+    rollback_skill as rollback_lifecycle_skill,
+)
+from atlas.skills.lifecycle import (
+    update_skill as update_lifecycle_skill,
+)
 from atlas.skills.registry import SkillRegistry
 from atlas.tools.mcp_client import MCPClient
+
+log = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
 # Singletons (populated by lifespan)
@@ -411,9 +431,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 "use_cases": [],
             }, source="local")
     capabilities = AgentCapabilityRegistry()
-    register_skill_capabilities(capabilities, skill_mgr)
+    register_skill_capabilities(capabilities, skill_mgr, skill_registry)
     register_skill_discovery_capability(capabilities, skill_registry)
-    register_skill_catalog_capabilities(capabilities, skill_catalog_provider)
+    register_skill_catalog_capabilities(capabilities, skill_catalog_provider, skill_registry)
 
     orchestrator = AgentOrchestrator(
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
@@ -596,7 +616,8 @@ async def update_configuration(req: ProviderSettingsRequest) -> dict[str, Any]:
     base_url = req.gateway_base_url.strip()
     if not base_url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="服务地址必须以 http:// 或 https:// 开头")
-    model_mgr.update_provider(base_url, req.api_key.strip() if req.api_key and req.api_key.strip() else None)
+    api_key = req.api_key.strip() if req.api_key and req.api_key.strip() else None
+    model_mgr.update_provider(base_url, api_key)
     return await get_configuration()
 
 
@@ -1468,15 +1489,50 @@ async def inspect_skill_catalog(payload: dict[str, Any] = Body(...)) -> dict[str
         "approval_state": "pending",
         "acquisition": acquisition,
     }
-    existing = (
-        skill_registry.get(acquisition.record["name"], acquisition.record["version"])
-        if skill_registry else None
-    )
+    existing = None
+    if skill_registry:
+        candidates = [item for item in skill_registry.list()
+                      if item.get("name") == acquisition.record["name"]]
+        exact = skill_registry.get(acquisition.record["name"], acquisition.record["version"])
+        existing = exact or next((item for item in candidates if
+                                  (item.get("provenance") or {}).get("external_id") ==
+                                  acquisition.record.get("external_id")), None)
+        if existing and (existing.get("provenance") or {}).get("installed_path"):
+            try:
+                current_state = inspect_skill_lifecycle(
+                    skill_registry, skill_mgr._skills_dir if skill_mgr else SKILLS_DIR,
+                    existing["name"], existing["version"],
+                )
+                existing = {
+                    **existing, "lifecycle_summary": current_state["lifecycle"],
+                    "file_hashes": current_state["file_hashes"],
+                }
+            except (OSError, ValueError):
+                pass
+    prior_hashes = (existing or {}).get("file_hashes", {})
+    incoming_hashes = {
+        path: hashlib.sha256(content.encode("utf-8")).hexdigest()
+        for path, content in acquisition.files.items()
+    }
+    file_diff = {
+        "added": sorted(set(incoming_hashes) - set(prior_hashes)),
+        "removed": sorted(set(prior_hashes) - set(incoming_hashes)),
+        "changed": sorted(path for path in set(incoming_hashes) & set(prior_hashes)
+                           if incoming_hashes[path] != prior_hashes[path]),
+        "unchanged": sorted(path for path in set(incoming_hashes) & set(prior_hashes)
+                             if incoming_hashes[path] == prior_hashes[path]),
+    }
     return {
         "acquisition_id": acquisition_id, "record": acquisition.record,
         "files": acquisition.files, "validation": acquisition.validation,
         "security": acquisition.security, "computed_sha256": acquisition.computed_hash,
-        "already_installed": existing is not None,
+        "dependency_state": dependency_states(
+            skill_registry, acquisition.validation.get("dependencies", []),
+        ) if skill_registry else [],
+        "file_diff": file_diff,
+        "already_installed": bool(skill_registry and skill_registry.get(
+            acquisition.record["name"], acquisition.record["version"]
+        )),
         "existing_local": existing,
         "install_target": f"skills/community/{acquisition.record['name']}",
     }
@@ -1574,6 +1630,251 @@ async def install_catalog_skill(payload: dict[str, Any] = Body(...)) -> dict[str
     return result
 
 
+def _lifecycle_context(name: str, version: str) -> tuple[SkillRegistry, Path, dict[str, Any]]:
+    if skill_registry is None:
+        raise HTTPException(status_code=503, detail="Skill Registry is unavailable")
+    record = skill_registry.get(name, version)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    if not (record.get("provenance") or {}).get("installed_path"):
+        raise HTTPException(
+            status_code=404, detail="Skill is outside the external lifecycle manager",
+        )
+    skills_dir = skill_mgr._skills_dir if skill_mgr else SKILLS_DIR
+    try:
+        state = inspect_skill_lifecycle(skill_registry, skills_dir, name, version)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return skill_registry, skills_dir, state
+
+
+@app.get("/api/skills/lifecycle/{name}/{version}")
+async def get_skill_lifecycle(name: str, version: str) -> dict[str, Any]:
+    _, _, state = _lifecycle_context(name, version)
+    return state
+
+
+@app.get("/api/skills/lifecycle/{name}/{version}/history")
+async def get_skill_lifecycle_history(name: str, version: str) -> dict[str, Any]:
+    registry, _, state = _lifecycle_context(name, version)
+    return {"name": name, "version": version, "history": registry.lifecycle_history(name),
+            "lifecycle": state["lifecycle"]}
+
+
+@app.post("/api/skills/lifecycle/approve")
+async def approve_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    action, name, version = (payload.get(key) for key in ("action", "name", "version"))
+    reason = payload.get("reason")
+    if action not in {"update", "downgrade", "rollback", "remove", "trust", "pin", "unpin"}:
+        raise HTTPException(status_code=422, detail="unsupported lifecycle action")
+    if not all(isinstance(value, str) and value.strip() for value in (name, version, reason)):
+        raise HTTPException(status_code=422, detail="name, version, and reason are required")
+    registry, skills_dir, state = _lifecycle_context(name, version)
+    rollback_event = None
+    if action == "rollback":
+        requested_event = payload.get("event_id")
+        rollback_event = next((item for item in registry.lifecycle_history(name)
+                              if item["event_id"] == requested_event), None)
+        if (rollback_event is None or rollback_event["action"] != "remove"
+                or state["lifecycle"].get("actual_hash") is not None):
+            if state["lifecycle"]["drifted"]:
+                raise HTTPException(status_code=409, detail="filesystem drift blocks rollback")
+        if rollback_event is None:
+            raise HTTPException(status_code=404, detail="rollback record not found")
+    elif state["lifecycle"]["drifted"]:
+        raise HTTPException(status_code=409, detail="filesystem drift blocks lifecycle actions")
+    content_hash = state["lifecycle"].get("actual_hash")
+    acquisition_id = None
+    if rollback_event is not None:
+        content_hash = rollback_event["details"].get("snapshot_hash")
+    if action in {"update", "downgrade"}:
+        acquisition_id = payload.get("acquisition_id")
+        session = (
+            skill_acquisitions.get(acquisition_id)
+            if isinstance(acquisition_id, str) else None
+        )
+        if not session or datetime.now(UTC) >= session["expires_at"]:
+            raise HTTPException(status_code=410, detail="reviewed update is missing or expired")
+        acquisition = session["acquisition"]
+        if acquisition.record["name"] != name:
+            raise HTTPException(status_code=403, detail="update review targets another skill")
+        current_version = tuple(int(part.split("-")[0]) for part in version.split(".")[:3])
+        incoming_version = tuple(
+            int(part.split("-")[0]) for part in acquisition.record["version"].split(".")[:3]
+        )
+        expected_action = "downgrade" if incoming_version < current_version else "update"
+        if action != expected_action:
+            raise HTTPException(status_code=409, detail=f"review action must be {expected_action}")
+        if acquisition.security.get("result") == "BLOCK":
+            raise HTTPException(status_code=403, detail="blocked update cannot be approved")
+        if (acquisition.security.get("result") == "WARN"
+                and payload.get("warnings_confirmed") is not True):
+            raise HTTPException(
+                status_code=403, detail="WARN update requires a second confirmation",
+            )
+        content_hash = acquisition.computed_hash
+        acquisition_id = session.get("acquisition_id", acquisition_id)
+    if not isinstance(content_hash, str):
+        raise HTTPException(status_code=409, detail="installed content hash is unavailable")
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(UTC)
+    approval_id = str(uuid.uuid4())
+    try:
+        registry.issue_lifecycle_approval({
+            "approval_event_id": approval_id,
+            "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            "action": action, "name": name, "version": version,
+            "content_hash": content_hash, "acquisition_id": acquisition_id,
+            "reason": reason.strip(),
+            "created_at": now.isoformat(),
+            "expires_at": (now + SKILL_ACQUISITION_TTL).isoformat(),
+        })
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return {"approval_event_id": approval_id, "approval_token": token,
+            "action": action, "name": name, "version": version,
+            "content_hash": content_hash, "expires_at": (now + SKILL_ACQUISITION_TTL).isoformat()}
+
+
+def _consume_lifecycle_approval(
+    registry: SkillRegistry, payload: dict[str, Any], *, action: str, name: str,
+    version: str, content_hash: str,
+) -> dict[str, str]:
+    token = payload.get("approval_token")
+    if not isinstance(token, str):
+        raise HTTPException(status_code=403, detail="server-issued lifecycle approval is required")
+    approval = registry.consume_lifecycle_approval(
+        token=token, action=action, name=name, version=version, content_hash=content_hash,
+        acquisition_id=(payload.get("acquisition_id")
+                        if action in {"update", "downgrade"} else None),
+    )
+    if approval is None:
+        raise HTTPException(
+            status_code=403, detail="approval is invalid, expired, mismatched, or replayed",
+        )
+    return approval
+
+
+@app.post("/api/skills/lifecycle/update")
+async def update_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    acquisition_id, version = payload.get("acquisition_id"), payload.get("version")
+    session = skill_acquisitions.get(acquisition_id) if isinstance(acquisition_id, str) else None
+    if not session or datetime.now(UTC) >= session["expires_at"]:
+        raise HTTPException(status_code=410, detail="reviewed update is missing or expired")
+    acquisition = session["acquisition"]
+    name = acquisition.record["name"]
+    registry, skills_dir, state = _lifecycle_context(name, str(version or ""))
+    if state["lifecycle"]["drifted"]:
+        raise HTTPException(status_code=409, detail="filesystem drift blocks update")
+    current_tuple = tuple(int(part.split("-")[0]) for part in str(version).split(".")[:3])
+    incoming_tuple = tuple(
+        int(part.split("-")[0]) for part in acquisition.record["version"].split(".")[:3]
+    )
+    action = "downgrade" if incoming_tuple < current_tuple else "update"
+    approval = _consume_lifecycle_approval(
+        registry, payload, action=action, name=name, version=str(version),
+        content_hash=acquisition.computed_hash,
+    )
+    try:
+        result = await update_lifecycle_skill(
+            acquisition, registry=registry, skills_dir=skills_dir, current_version=str(version),
+            approval_event_id=approval["approval_event_id"], reason=approval["reason"],
+        )
+    except (ValueError, PermissionError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    if skill_mgr:
+        skill_mgr.scan_skills_sync()
+    skill_acquisitions.pop(acquisition_id, None)
+    return result
+
+
+@app.post("/api/skills/lifecycle/remove")
+async def remove_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    name, version = str(payload.get("name", "")), str(payload.get("version", ""))
+    registry, skills_dir, state = _lifecycle_context(name, version)
+    actual_hash = state["lifecycle"].get("actual_hash")
+    approval = _consume_lifecycle_approval(
+        registry, payload, action="remove", name=name, version=version,
+        content_hash=str(actual_hash or ""),
+    )
+    try:
+        result = remove_lifecycle_skill(
+            registry, skills_dir, name, version,
+            approval_event_id=approval["approval_event_id"], reason=approval["reason"],
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if skill_mgr:
+        skill_mgr.scan_skills_sync()
+    return result
+
+
+@app.post("/api/skills/lifecycle/rollback")
+async def rollback_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    name, version, event_id = (str(payload.get(key, "")) for key in ("name", "version", "event_id"))
+    registry, skills_dir, state = _lifecycle_context(name, version)
+    rollback_event = next((item for item in registry.lifecycle_history(name)
+                           if item["event_id"] == event_id), None)
+    if rollback_event is None:
+        raise HTTPException(status_code=404, detail="rollback record not found")
+    rollback_hash = rollback_event["details"].get("snapshot_hash")
+    approval = _consume_lifecycle_approval(
+        registry, payload, action="rollback", name=name, version=version,
+        content_hash=str(rollback_hash or ""),
+    )
+    try:
+        result = rollback_lifecycle_skill(
+            registry, skills_dir, name, version, event_id=event_id,
+            approval_event_id=approval["approval_event_id"], reason=approval["reason"],
+        )
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if skill_mgr:
+        skill_mgr.scan_skills_sync()
+    return result
+
+
+@app.post("/api/skills/lifecycle/trust")
+async def trust_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    name, version, target = (
+        str(payload.get(key, "")) for key in ("name", "version", "trust_state")
+    )
+    registry, _, state = _lifecycle_context(name, version)
+    action = "trust"
+    approval = _consume_lifecycle_approval(
+        registry, payload, action=action, name=name, version=version,
+        content_hash=str(state["lifecycle"].get("actual_hash") or ""),
+    )
+    try:
+        return transition_trust(
+            registry, name, version, target, reason=approval["reason"],
+            approval_event_id=approval["approval_event_id"],
+            content_hash=state["lifecycle"].get("actual_hash"),
+        )
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+
+@app.post("/api/skills/lifecycle/pin")
+async def pin_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    name, version, policy = (str(payload.get(key, "")) for key in ("name", "version", "policy"))
+    registry, skills_dir, state = _lifecycle_context(name, version)
+    action = "unpin" if policy == "unpinned" else "pin"
+    approval = _consume_lifecycle_approval(
+        registry, payload, action=action, name=name, version=version,
+        content_hash=str(state["lifecycle"].get("actual_hash") or ""),
+    )
+    try:
+        return transition_pin(
+            registry, skills_dir, name, version, policy, reason=approval["reason"],
+            approval_event_id=approval["approval_event_id"],
+        )
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+
 @app.get("/api/skills/discover/{name}")
 async def get_discovered_skill(name: str, version: str | None = Query(None)) -> dict[str, Any]:
     """Return one registered skill with stable explainability and provenance fields."""
@@ -1636,6 +1937,12 @@ async def disable_registered_skill(name: str, version: str) -> dict[str, Any]:
 @app.delete("/api/skill-registry/{name}/{version}", status_code=204)
 async def remove_registered_skill(name: str, version: str) -> Response:
     assert skill_registry is not None
+    record = skill_registry.get(name, version)
+    if record and (record.get("provenance") or {}).get("installed_path"):
+        raise HTTPException(
+            status_code=409,
+            detail="installed skills require the audited lifecycle removal flow",
+        )
     if not skill_registry.remove(name, version):
         raise HTTPException(status_code=404, detail="Skill not found")
     return Response(status_code=204)
@@ -1664,11 +1971,17 @@ async def get_skill(name: str) -> dict[str, Any]:
 async def activate_skill(name: str) -> dict[str, Any]:
     """Activate a skill and return its full content."""
     assert skill_mgr is not None
+    info = skill_mgr.get_skill(name)
+    record = skill_registry.get(name, info.version) if skill_registry and info else None
+    lifecycle = (record or {}).get("lifecycle", {})
+    if lifecycle.get("trust_state") in {"revoked", "blocked"} or lifecycle.get(
+        "state"
+    ) in {"quarantined", "removed"}:
+        raise HTTPException(status_code=403, detail="skill lifecycle policy blocks activation")
     body = await skill_mgr.activate(name)
     if body is None:
         raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
 
-    skill = skill_mgr.get_skill(name)
     deps = skill_mgr.check_dependencies(
         name,
         connected_servers=mcp_client.get_server_names() if mcp_client else [],
@@ -2033,7 +2346,8 @@ async def ws_chat(ws: WebSocket) -> None:
     """Runtime Event Protocol 1.2 WebSocket endpoint.
 
     Client sends:
-        {"type": "run.start", "run_id": "...", "content": "...", "conversation_id": "...", "model": "..."}
+        {"type": "run.start", "run_id": "...", "content": "...",
+         "conversation_id": "...", "model": "..."}
         {"type": "resume", "run_id": "...", "after_sequence": N}
         {"type": "run.cancel", "run_id": "..."}
         {"type": "run.pause", "run_id": "..."}
@@ -2423,7 +2737,7 @@ async def _execute_run(
                         category,
                         run.model if category == "model" else category,
                         str(event.get("detail", "Unknown error")),
-                        "Review the failure evidence and validate any proposed resolution before reuse.",
+                        "Review failure evidence and validate a proposed resolution before reuse.",
                     )
                 await emit("run.failed", {
                     "category": category,

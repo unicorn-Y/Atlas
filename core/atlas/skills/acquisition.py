@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -853,6 +854,29 @@ async def _install_acquisition_locked(
         manager.scan_skills_sync()
         if manager.get_skill(name) is None:
             raise RuntimeError("installed skill did not pass local SkillManager discovery")
+        lifecycle_metadata = {
+            **metadata,
+            "lifecycle": {
+                "state": "active", "trust_state": "unreviewed", "pin_policy": "unpinned",
+                "pinned_version": None, "pinned_hash": None,
+                "content_hash": acquisition.computed_hash,
+            },
+        }
+        registry.record_lifecycle_event({
+            "event_id": str(uuid.uuid4()), "name": name,
+            "timestamp": datetime.now(UTC).isoformat(), "action": "install",
+            "skill_version": version, "previous_version": None, "previous_hash": None,
+            "resulting_version": version, "resulting_hash": acquisition.computed_hash,
+            "source": acquisition.record.get("source_url"),
+            "provider": acquisition.record.get("provider"), "trust_before": None,
+            "trust_after": "unreviewed", "pin_before": None, "pin_after": "unpinned",
+            "approval_event_id": approval_event_id, "actor": "user",
+            "reason": "explicit Skill Center installation approval", "result": "success",
+            "error_code": None,
+            "details": {"installed_path": str(target), "security_result": acquisition.security[
+                "result"
+            ]},
+        }, metadata=lifecycle_metadata, version=version)
         return {
             "status": "installed",
             "name": name,

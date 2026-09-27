@@ -66,12 +66,22 @@ class AgentCapabilityRegistry:
         return result
 
 
-def register_skill_capabilities(registry: AgentCapabilityRegistry, skill_manager: Any) -> None:
+def register_skill_capabilities(
+    registry: AgentCapabilityRegistry, skill_manager: Any, skill_registry: Any | None = None,
+) -> None:
     """Expose each indexed skill as an agent capability that activates it."""
     for skill in skill_manager.list_skills():
         skill_name = skill.name
 
         async def activate(_inputs: dict[str, Any], name: str = skill_name) -> str | None:
+            if skill_registry is not None:
+                info = skill_manager.get_skill(name)
+                record = skill_registry.get(name, info.version) if info is not None else None
+                lifecycle = (record or {}).get("lifecycle", {})
+                if lifecycle.get("trust_state") in {"revoked", "blocked"} or lifecycle.get(
+                    "state"
+                ) in {"quarantined", "removed"}:
+                    raise PermissionError("skill lifecycle policy blocks activation")
             return await skill_manager.activate(name)
 
         registry.register(
@@ -112,10 +122,35 @@ def register_skill_discovery_capability(
         source="skill-registry",
     )
 
+    def inspect_lifecycle(inputs: dict[str, Any]) -> dict[str, Any]:
+        name, version = inputs.get("name"), inputs.get("version")
+        if not isinstance(name, str) or not isinstance(version, str):
+            raise ValueError("name and version are required")
+        skill = skill_registry.get(name, version)
+        if skill is None:
+            raise KeyError(name)
+        return {
+            "name": name, "version": version, "status": skill.get("status"),
+            "lifecycle": skill.get("lifecycle", {
+                "trust_state": "unreviewed", "pin_policy": "unpinned",
+            }),
+            "provenance": skill.get("provenance", {}),
+            "dependencies": skill.get("requirements", []),
+            "history": skill_registry.lifecycle_history(name),
+        }
+
+    capabilities.register(
+        "skill.lifecycle.inspect",
+        description="Inspect installed skill lifecycle state and provenance; read-only.",
+        handler=inspect_lifecycle,
+        source="skill-registry",
+    )
+
 
 def register_skill_catalog_capabilities(
     capabilities: AgentCapabilityRegistry,
     provider: Any,
+    skill_registry: Any | None = None,
 ) -> None:
     """Expose remote search and inspection only; installation remains a UI/API approval action."""
 
@@ -130,13 +165,31 @@ def register_skill_catalog_capabilities(
         if not isinstance(external_id, str):
             raise ValueError("external_id is required")
         acquisition = await provider.inspect(external_id)
-        return {
+        result = {
             "record": acquisition.record,
             "files": acquisition.files,
             "validation": acquisition.validation,
             "security": acquisition.security,
             "computed_sha256": acquisition.computed_hash,
         }
+        if skill_registry is not None:
+            existing = next((item for item in skill_registry.list()
+                             if (item.get("provenance") or {}).get("external_id") == external_id),
+                            None)
+            if existing:
+                provenance = existing.get("provenance") or {}
+                result["lifecycle_update"] = {
+                    "available": provenance.get("computed_sha256") != acquisition.computed_hash,
+                    "current_version": existing.get("version"),
+                    "current_hash": provenance.get("computed_sha256"),
+                    "trust_state": (existing.get("lifecycle") or {}).get(
+                        "trust_state", "unreviewed",
+                    ),
+                    "pin_policy": (existing.get("lifecycle") or {}).get(
+                        "pin_policy", "unpinned",
+                    ),
+                }
+        return result
 
     def install(_inputs: dict[str, Any]) -> None:
         raise PermissionError(

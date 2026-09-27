@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Search, WandSparkles } from 'lucide-react';
 import styles from '../App.module.css';
 import { buildSkillDiscoveryUrl, canActivateLocalSkill } from './skillDiscoveryUrl';
-import { approveSkillInstallation, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
+import { approveSkillInstallation, lifecycleUpdateAction, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
 
 type SkillResult = {
   name: string; version: string; description: string; capabilities: string[]; tools: string[];
@@ -10,7 +10,8 @@ type SkillResult = {
   relevance_score: number; match_reasons: string[]; matched_fields: string[];
 };
 type RemoteSkill = { provider: string; external_id: string; name: string; description: string; source: string; source_type: string; source_url: string; install_url: string; remote_hash?: string | null; provider_computed_hash?: string | null; audit?: unknown; provider_integrity?: { provider_hash?: string | null; provider_computed_hash?: string | null; provider_mismatch?: boolean; fallback_reason?: string; github_source?: string; github_source_revision?: string; github_tree_sha?: string }; integrity_diagnostic?: { status?: string; message?: string; provider_hash?: string | null; provider_computed_hash?: string | null; github_source?: string; github_source_revision?: string; github_tree_sha?: string; github_source_error?: string }; installed: boolean; state: string };
-type Review = { acquisition_id: string; record: RemoteSkill & { version: string; description: string }; files: Record<string, string>; validation: { result: string; dependencies: string[] }; security: { result: 'PASS' | 'WARN' | 'BLOCK'; risks: string[]; note: string }; computed_sha256: string; already_installed: boolean; existing_local?: Record<string, unknown> | null; install_target: string };
+type Review = { acquisition_id: string; record: RemoteSkill & { version: string; description: string }; files: Record<string, string>; validation: { result: string; dependencies: string[] }; security: { result: 'PASS' | 'WARN' | 'BLOCK'; risks: string[]; note: string }; computed_sha256: string; already_installed: boolean; existing_local?: Record<string, unknown> | null; install_target: string; dependency_state?: { name: string; state: string }[]; file_diff?: { added: string[]; removed: string[]; changed: string[]; unchanged: string[] } };
+type Lifecycle = { lifecycle: { state: string; trust_state: string; pin_policy: string; pinned_hash?: string | null; content_hash?: string | null; actual_hash?: string | null; drifted: boolean }; provenance: Record<string, unknown>; dependency_state: { name: string; state: string }[]; history: { event_id: string; action: string; skill_version: string; previous_hash?: string; resulting_hash?: string; timestamp: string; result: string; details?: Record<string, unknown> }[] };
 interface Props { apiBaseUrl: string }
 
 export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
@@ -32,6 +33,7 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
   const [installState, setInstallState] = useState('');
   const [githubSource, setGithubSource] = useState('');
   const [githubPath, setGithubPath] = useState('');
+  const [lifecycle, setLifecycle] = useState<Lifecycle | null>(null);
 
   const search = async (event?: FormEvent, requestedMode = mode) => {
     event?.preventDefault();
@@ -68,6 +70,72 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
 
   useEffect(() => { void search(); }, [apiBaseUrl]);
 
+  useEffect(() => {
+    setLifecycle(null);
+    if (!selected) return;
+    void fetch(`${apiBaseUrl}/api/skills/lifecycle/${encodeURIComponent(selected.name)}/${encodeURIComponent(selected.version)}`)
+      .then(async (response) => response.ok ? response.json() as Promise<Lifecycle> : null)
+      .then((value) => setLifecycle(value))
+      .catch(() => setLifecycle(null));
+  }, [apiBaseUrl, selected?.name, selected?.version]);
+
+  const lifecycleAction = async (action: 'remove' | 'trust' | 'pin' | 'unpin' | 'rollback', extra: Record<string, unknown> = {}) => {
+    if (!selected) return;
+    const reason = window.prompt(`确认 ${action} 操作的审计原因`, `在 Skill Center 明确确认 ${action}`);
+    if (!reason?.trim()) return;
+    if (!window.confirm(`确认对 ${selected.name}@${selected.version} 执行 ${action}？`)) return;
+    try {
+      const approval = await fetch(`${apiBaseUrl}/api/skills/lifecycle/approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action === 'trust' ? 'trust' : action, name: selected.name,
+          version: selected.version, reason, ...extra }),
+      });
+      const auth = await approval.json() as { approval_token?: string; detail?: string };
+      if (!approval.ok || !auth.approval_token) throw new Error(auth.detail ?? '生命周期批准失败');
+      const endpoint = action === 'remove' ? 'remove' : action === 'rollback' ? 'rollback' : action === 'trust' ? 'trust' : 'pin';
+      const response = await fetch(`${apiBaseUrl}/api/skills/lifecycle/${endpoint}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: selected.name, version: selected.version,
+          approval_token: auth.approval_token, ...extra }),
+      });
+      const result = await response.json() as { detail?: string; status?: string };
+      if (!response.ok) throw new Error(result.detail ?? `${action} 失败`);
+      setInstallState(`生命周期操作完成：${result.status ?? action}`);
+      await search();
+    } catch (cause) { setInstallState(cause instanceof Error ? cause.message : `${action} 失败`); }
+  };
+
+  const updateReviewed = async (warningsConfirmed = false) => {
+    if (!review || !review.existing_local || review.security.result === 'BLOCK') return;
+    if (review.security.result === 'WARN' && !warningsConfirmed) { setConfirmWarnings(true); return; }
+    const existing = review.existing_local as { name: string; version: string };
+    const action = lifecycleUpdateAction(existing.version, review.record.version);
+    const reason = window.prompt('确认更新的审计原因', `审查并批准更新到 ${review.record.version}`);
+    if (!reason?.trim()) return;
+    setInstalling(true);
+    try {
+      const approval = await fetch(`${apiBaseUrl}/api/skills/lifecycle/approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, name: existing.name, version: existing.version,
+          acquisition_id: review.acquisition_id, reason,
+          warnings_confirmed: warningsConfirmed }),
+      });
+      const auth = await approval.json() as { approval_token?: string; detail?: string };
+      if (!approval.ok || !auth.approval_token) throw new Error(auth.detail ?? '更新批准失败');
+      const response = await fetch(`${apiBaseUrl}/api/skills/lifecycle/update`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acquisition_id: review.acquisition_id, version: existing.version,
+          approval_token: auth.approval_token }),
+      });
+      const result = await response.json() as { detail?: string; version?: string };
+      if (!response.ok) throw new Error(result.detail ?? '更新失败');
+      setReview(null); setConfirmWarnings(false);
+      setInstallState(`已更新到 ${result.version}，更新前版本已生成回滚快照。`);
+      await search();
+    } catch (cause) { setInstallState(cause instanceof Error ? cause.message : '更新失败'); }
+    finally { setInstalling(false); }
+  };
+
   const inspectRemote = async (skill: RemoteSkill) => {
     setReview(null); setInstallState('正在获取不可信内容并执行预检…');
     try {
@@ -90,6 +158,11 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
 
   const installReviewed = async (warningsConfirmed = false) => {
     if (!review) return;
+    if (review.existing_local
+      && (review.existing_local.provenance as Record<string, unknown> | undefined)?.external_id === review.record.external_id) {
+      await updateReviewed(warningsConfirmed);
+      return;
+    }
     const gate = reviewGateState(review.security.result, review.already_installed);
     if (!gate.canInstall) return;
     if (gate.requiresWarningConfirmation && !warningsConfirmed) { setConfirmWarnings(true); return; }
@@ -148,11 +221,37 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
         <div className={styles.skillDetailSection}><strong>匹配原因</strong>{selected.match_reasons.length ? <ul>{selected.match_reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : <small>该技能符合当前筛选条件。</small>}</div>
         <div className={styles.skillDetailSection}><strong>能力 / 工具</strong><p>{selected.capabilities.join(' · ') || '未声明能力'} / {selected.tools.join(' · ') || '未声明工具'}</p></div>
         <div className={styles.skillDetailSection}><strong>依赖 / Requirements</strong><pre>{JSON.stringify(selected.requirements ?? [], null, 2)}</pre></div>
-        {canActivateLocalSkill(selected) && <button className={styles.skillActivateButton} onClick={() => void activate(selected)}><WandSparkles size={15} />打开本地技能</button>}
+        {lifecycle && <div className={styles.skillDetailSection} aria-label="生命周期状态">
+          <strong>生命周期 / Trust / Pin</strong>
+          <p>状态：{lifecycle.lifecycle.state} · Trust：{lifecycle.lifecycle.trust_state} · Pin：{lifecycle.lifecycle.pin_policy}</p>
+          <p>记录哈希：{lifecycle.lifecycle.content_hash ?? '未知'} · 实际哈希：{lifecycle.lifecycle.actual_hash ?? '不可读取'}</p>
+          {lifecycle.lifecycle.drifted && <p role="alert">检测到文件漂移；更新、回滚和移除已阻止。</p>}
+          <p>来源：{String(lifecycle.provenance.source_url ?? lifecycle.provenance.provider ?? '本地来源')}</p>
+          <p>依赖状态：{lifecycle.dependency_state.map((item) => `${item.name}: ${item.state}`).join(' · ') || '无声明依赖'}</p>
+          <div>
+            {lifecycle.lifecycle.trust_state === 'unreviewed' && <button type="button" onClick={() => void lifecycleAction('trust', { trust_state: 'trusted' })}>审查并信任</button>}
+            {lifecycle.lifecycle.trust_state === 'trusted' && <button type="button" onClick={() => void lifecycleAction('trust', { trust_state: 'revoked' })}>撤销信任</button>}
+            {lifecycle.lifecycle.pin_policy === 'unpinned' ? <><button type="button" onClick={() => void lifecycleAction('pin', { policy: 'exact' })}>固定版本</button><button type="button" onClick={() => void lifecycleAction('pin', { policy: 'hash' })}>固定哈希</button></> : <button type="button" onClick={() => void lifecycleAction('unpin', { policy: 'unpinned' })}>解除固定</button>}
+            <button type="button" disabled={lifecycle.lifecycle.drifted} onClick={() => void lifecycleAction('remove')}>移除 Skill</button>
+          </div>
+          <strong>生命周期历史</strong>
+          <ul>{lifecycle.history.map((event) => <li key={event.event_id}>{event.timestamp} · {event.action} · {event.skill_version} · {event.result}{Boolean(event.details?.snapshot) && <button type="button" onClick={() => void lifecycleAction('rollback', { event_id: event.event_id })}>回滚到 {String(event.details?.snapshot_version ?? event.skill_version)} ({String(event.details?.snapshot_hash ?? '').slice(0, 12)})</button>}</li>)}</ul>
+        </div>}
+        {canActivateLocalSkill(selected, lifecycle?.lifecycle) && <button className={styles.skillActivateButton} onClick={() => void activate(selected)}><WandSparkles size={15} />打开本地技能</button>}
         {activation && <pre className={styles.skillActivationContent} role="status">{activation}</pre>}
       </article>}
     </div>
     {installState && <div role="status">{installState}</div>}
+    {review?.existing_local && (review.existing_local.provenance as Record<string, unknown> | undefined)?.external_id === review.record.external_id && <section role="dialog" aria-modal="true" aria-label="更新审查">
+      <h2>更新审查：{review.record.name}</h2>
+      <p>当前版本 {String(review.existing_local.version)} · 当前哈希 {String((review.existing_local.provenance as Record<string, unknown> | undefined)?.computed_sha256 ?? '未知')}</p>
+      <p>候选版本 {review.record.version} · 候选来源 {review.record.source_url} · 候选哈希 {review.computed_sha256}</p>
+      <p>依赖状态：{review.dependency_state?.map((item) => `${item.name}: ${item.state}`).join(' · ') || '无声明依赖'} · 风险：{review.security.risks.join(', ') || '未发现已知风险模式'}</p>
+      <p>文件变化：新增 {review.file_diff?.added.join(', ') || '无'} · 修改 {review.file_diff?.changed.join(', ') || '无'} · 移除 {review.file_diff?.removed.join(', ') || '无'}</p>
+      <button type="button" disabled={installing || review.security.result === 'BLOCK'} onClick={() => void updateReviewed()}>{review.security.result === 'BLOCK' ? '已阻止更新' : '我已审查并批准更新'}</button>
+      {review.security.result === 'WARN' && <button type="button" disabled={installing} onClick={() => void updateReviewed(true)}>二次确认风险并更新</button>}
+      <button type="button" onClick={() => setReview(null)}>取消更新</button>
+    </section>}
     {review && <section role="dialog" aria-modal="true" aria-label="安装前安全审查"><h2>安装前审查：{review.record.name}</h2><p>版本 {review.record.version} · {review.record.provider} · {review.record.source_url}</p><p>{review.record.description}</p>{review.record.integrity_diagnostic?.message && <p role="alert">完整性诊断：{review.record.integrity_diagnostic.message}{review.record.integrity_diagnostic.github_source_revision ? ` GitHub revision ${review.record.integrity_diagnostic.github_source_revision}.` : ''}{review.record.integrity_diagnostic.github_tree_sha ? ` Tree ${review.record.integrity_diagnostic.github_tree_sha}.` : ''}{review.record.integrity_diagnostic.github_source_error ? ` ${review.record.integrity_diagnostic.github_source_error}` : ''}</p>}<p>Provider 参考哈希：{review.record.provider_integrity?.provider_computed_hash ?? review.record.integrity_diagnostic?.provider_computed_hash ?? review.record.provider_computed_hash ?? '不可用'}</p><p>安全检查：{review.security.result} · {review.security.risks.join(', ') || '未发现已知风险模式'}</p><p>{review.security.note}</p><p>审计：{JSON.stringify(review.record.audit ?? '无可用审计')}</p><p>远程哈希：{review.record.remote_hash ?? '未提供'}</p><p>本地 SHA-256：{review.computed_sha256}</p><p>验证：{review.validation.result} · 声明依赖：{review.validation.dependencies.join(', ') || '无'}</p><p>已安装：{review.already_installed ? '是' : '否'} · 目标：{review.install_target}</p>{review.already_installed && <section aria-label="已安装版本冲突"><h3>本地版本与来源</h3><pre>{JSON.stringify({ existing: review.existing_local, incoming: { source: review.record.source_url, hash: review.computed_sha256 } }, null, 2)}</pre></section>}<h3>文件树与内容预览</h3><ul>{Object.keys(review.files).map((file) => <li key={file}>{file}</li>)}</ul>{Object.entries(review.files).map(([file, content]) => <details key={file}><summary>{file}</summary><pre>{content}</pre></details>)}<button type="button" onClick={() => { setReview(null); setConfirmWarnings(false); }}>取消</button><button type="button" disabled={installing || review.security.result === 'BLOCK' || review.already_installed} onClick={() => void installReviewed()}>{review.security.result === 'BLOCK' ? '已阻止安装' : '我已审查并批准安装'}</button></section>}
     {confirmWarnings && review && <section role="dialog" aria-modal="true" aria-label="确认风险后安装"><h2>此 Skill 包含风险提示</h2><p>{review.security.risks.join('、')}</p><p>风险扫描只提供证据，不能证明内容绝对安全。确认后将安装到 {review.install_target}。</p><button type="button" onClick={() => setConfirmWarnings(false)}>返回审查</button><button type="button" disabled={installing} onClick={() => void installReviewed(true)}>我理解风险，仍然安装</button></section>}
   </section>;

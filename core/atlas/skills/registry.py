@@ -8,9 +8,11 @@ the latter fields default to empty lists (``requirements`` also accepts an objec
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
+import uuid
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -53,6 +55,106 @@ class SkillRegistry:
                     PRIMARY KEY (name, version)
                 )
             """)
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS skill_lifecycle_history (
+                    event_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    skill_version TEXT,
+                    previous_version TEXT,
+                    previous_hash TEXT,
+                    resulting_version TEXT,
+                    resulting_hash TEXT,
+                    source TEXT,
+                    provider TEXT,
+                    trust_before TEXT,
+                    trust_after TEXT,
+                    pin_before TEXT,
+                    pin_after TEXT,
+                    approval_event_id TEXT,
+                    actor TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    result TEXT NOT NULL,
+                    error_code TEXT,
+                    details TEXT NOT NULL
+                );
+                CREATE TRIGGER IF NOT EXISTS skill_lifecycle_history_no_update
+                BEFORE UPDATE ON skill_lifecycle_history BEGIN
+                    SELECT RAISE(ABORT, 'lifecycle history is append-only');
+                END;
+                CREATE TRIGGER IF NOT EXISTS skill_lifecycle_history_no_delete
+                BEFORE DELETE ON skill_lifecycle_history BEGIN
+                    SELECT RAISE(ABORT, 'lifecycle history is append-only');
+                END;
+                CREATE TABLE IF NOT EXISTS skill_lifecycle_approvals (
+                    approval_event_id TEXT PRIMARY KEY,
+                    token_hash TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    version TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    acquisition_id TEXT,
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    consumed_at TEXT
+                );
+            """)
+            approval_columns = {
+                row["name"] for row in db.execute(
+                    "PRAGMA table_info(skill_lifecycle_approvals)"
+                ).fetchall()
+            }
+            if "acquisition_id" not in approval_columns:
+                db.execute("ALTER TABLE skill_lifecycle_approvals ADD COLUMN acquisition_id TEXT")
+            rows = db.execute(
+                "SELECT name,version,metadata,status FROM skill_registry"
+            ).fetchall()
+            for row in rows:
+                metadata = json.loads(row["metadata"])
+                provenance = metadata.get("provenance") or {}
+                if "lifecycle" in metadata or not provenance.get("installed_path"):
+                    continue
+                lifecycle = {
+                    "state": "active" if row["status"] == "active" else "disabled",
+                    "trust_state": "unreviewed", "pin_policy": "unpinned",
+                    "pinned_version": None, "pinned_hash": None,
+                    "content_hash": provenance.get("computed_sha256"),
+                }
+                metadata["lifecycle"] = lifecycle
+                timestamp = self._now()
+                event = {
+                    "event_id": str(uuid.uuid4()), "name": row["name"],
+                    "timestamp": timestamp, "action": "lifecycle_initialized",
+                    "skill_version": row["version"], "previous_version": None,
+                    "previous_hash": None, "resulting_version": row["version"],
+                    "resulting_hash": lifecycle["content_hash"],
+                    "source": provenance.get("source_url"),
+                    "provider": provenance.get("provider"), "trust_before": None,
+                    "trust_after": "unreviewed", "pin_before": None,
+                    "pin_after": "unpinned", "approval_event_id": None,
+                    "actor": "system", "reason": "initialize lifecycle state for installed skill",
+                    "result": "success", "error_code": None,
+                    "details": {"migration": "P15D"},
+                }
+                db.execute(
+                    "UPDATE skill_registry SET metadata=?,updated_at=? WHERE name=? AND version=?",
+                    (json.dumps(metadata, sort_keys=True), timestamp, row["name"], row["version"]),
+                )
+                db.execute(
+                    "INSERT INTO skill_lifecycle_history "
+                    "(event_id,name,timestamp,action,skill_version,previous_version,previous_hash,"
+                    "resulting_version,resulting_hash,source,provider,trust_before,trust_after,"
+                    "pin_before,pin_after,approval_event_id,actor,reason,result,"
+                    "error_code,details) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (event["event_id"], event["name"], timestamp, event["action"],
+                     event["skill_version"], None, None, event["resulting_version"],
+                     event["resulting_hash"], event["source"], event["provider"], None,
+                     "unreviewed", None, "unpinned", None, "system", event["reason"],
+                     "success", None, json.dumps(event["details"], sort_keys=True)),
+                )
 
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path)
@@ -123,6 +225,27 @@ class SkillRegistry:
             except (TypeError, ValueError):
                 raise ValueError("provenance must contain JSON-compatible values") from None
             normalized["provenance"] = provenance
+        lifecycle = metadata.get("lifecycle")
+        if lifecycle is not None:
+            if not isinstance(lifecycle, dict):
+                raise ValueError("lifecycle must be an object")
+            allowed = {
+                "state", "trust_state", "pin_policy", "pinned_version", "pinned_hash",
+                "content_hash",
+            }
+            clean = {key: value for key, value in lifecycle.items() if key in allowed}
+            if clean.get("state", "active") not in {
+                "active", "disabled", "update-available", "superseded", "removed",
+                "rollback-available", "quarantined",
+            }:
+                raise ValueError("invalid lifecycle state")
+            if clean.get("trust_state", "unreviewed") not in {
+                "unreviewed", "trusted", "revoked", "blocked",
+            }:
+                raise ValueError("invalid lifecycle trust state")
+            if clean.get("pin_policy", "unpinned") not in {"unpinned", "exact", "hash"}:
+                raise ValueError("invalid lifecycle pin policy")
+            normalized["lifecycle"] = clean
         return normalized
 
     @staticmethod
@@ -138,18 +261,31 @@ class SkillRegistry:
 
     def register(self, metadata: dict[str, Any], *, source: str = "api") -> dict[str, Any]:
         """Validate and upsert a skill identity, retaining its original registration time."""
+        if "lifecycle" in metadata:
+            raise ValueError("lifecycle state may only change through audited lifecycle actions")
         normalized = self._validate(metadata)
         if not isinstance(source, str) or not source.strip():
             raise ValueError("source must be a non-empty string")
         if self._contains_secret_key(source):
             raise ValueError("Registration source must not contain credentials or secrets")
-        try:
-            serialized = json.dumps(normalized, sort_keys=True)
-        except (TypeError, ValueError):
-            raise ValueError("Skill metadata must contain JSON-compatible values") from None
         name, version = normalized["name"], normalized["version"]
         now = self._now()
         with closing(self._connect()) as db, db:
+            existing = db.execute(
+                "SELECT metadata FROM skill_registry WHERE name=? AND version=?",
+                (name, version),
+            ).fetchone()
+            if existing:
+                prior = json.loads(existing["metadata"])
+                if isinstance(prior.get("lifecycle"), dict):
+                    normalized["lifecycle"] = prior["lifecycle"]
+                prior_provenance = prior.get("provenance")
+                if isinstance(prior_provenance, dict) and prior_provenance.get("installed_path"):
+                    normalized["provenance"] = prior_provenance
+            try:
+                serialized = json.dumps(normalized, sort_keys=True)
+            except (TypeError, ValueError):
+                raise ValueError("Skill metadata must contain JSON-compatible values") from None
             db.execute("""
                 INSERT INTO skill_registry
                     (name, version, metadata, source, registered_at, updated_at,
@@ -215,3 +351,180 @@ class SkillRegistry:
                 "DELETE FROM skill_registry WHERE name=? AND version=?", (name, version),
             )
             return cursor.rowcount > 0
+
+    def lifecycle_history(self, name: str, *, limit: int = 100) -> list[dict[str, Any]]:
+        with closing(self._connect()) as db, db:
+            rows = db.execute(
+                "SELECT * FROM skill_lifecycle_history WHERE name=? "
+                "ORDER BY timestamp DESC, event_id DESC LIMIT ?", (name, limit),
+            ).fetchall()
+        return [{**dict(row), "details": json.loads(row["details"])} for row in rows]
+
+    def record_lifecycle_event(
+        self, event: dict[str, Any], *, metadata: dict[str, Any] | None = None,
+        version: str | None = None, status: str | None = None,
+    ) -> None:
+        """Atomically persist lifecycle metadata and an immutable audit event."""
+        details = event.get("details", {})
+        if any(self._contains_secret_key(event.get(key, "")) for key in (
+            "source", "provider", "reason",
+        )) or self._contains_secret_key(details):
+            raise ValueError("lifecycle audit must not contain credentials or secrets")
+        columns = (
+            "event_id", "name", "timestamp", "action", "skill_version",
+            "previous_version", "previous_hash", "resulting_version", "resulting_hash",
+            "source", "provider", "trust_before", "trust_after", "pin_before", "pin_after",
+            "approval_event_id", "actor", "reason", "result", "error_code",
+        )
+        values = tuple(event.get(key) for key in columns)
+        with closing(self._connect()) as db, db:
+            if metadata is not None and version is not None:
+                row = db.execute(
+                    "SELECT metadata,status FROM skill_registry WHERE name=? AND version=?",
+                    (event["name"], version),
+                ).fetchone()
+                if row is None:
+                    raise KeyError("lifecycle registry record not found")
+                normalized = self._validate(metadata)
+                db.execute(
+                    "UPDATE skill_registry SET metadata=?, status=?, updated_at=? "
+                    "WHERE name=? AND version=?",
+                    (json.dumps(normalized, sort_keys=True), status or row["status"],
+                     self._now(), event["name"], version),
+                )
+            db.execute(
+                f"INSERT INTO skill_lifecycle_history ({','.join(columns)},details) "
+                f"VALUES ({','.join('?' for _ in range(len(columns) + 1))})",
+                (*values, json.dumps(details, sort_keys=True)),
+            )
+
+    def issue_lifecycle_approval(self, approval: dict[str, str]) -> None:
+        if self._contains_secret_key(approval.get("reason", "")):
+            raise ValueError("lifecycle approval reason must not contain credentials or secrets")
+        with closing(self._connect()) as db, db:
+            db.execute(
+                "INSERT INTO skill_lifecycle_approvals "
+                "(approval_event_id,token_hash,action,name,version,content_hash,acquisition_id,reason,"
+                "created_at,expires_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (approval["approval_event_id"], approval["token_hash"], approval["action"],
+                 approval["name"], approval["version"], approval["content_hash"],
+                 approval.get("acquisition_id"), approval["reason"],
+                 approval["created_at"], approval["expires_at"]),
+            )
+
+    def commit_lifecycle_update(
+        self, *, previous: dict[str, Any], resulting: dict[str, Any],
+        event: dict[str, Any], old_version: str,
+    ) -> None:
+        old_normalized = self._validate(previous)
+        new_normalized = self._validate(resulting)
+        columns = (
+            "event_id", "name", "timestamp", "action", "skill_version",
+            "previous_version", "previous_hash", "resulting_version", "resulting_hash",
+            "source", "provider", "trust_before", "trust_after", "pin_before", "pin_after",
+            "approval_event_id", "actor", "reason", "result", "error_code",
+        )
+        if (self._contains_secret_key(event.get("details", {}))
+                or any(self._contains_secret_key(event.get(key, "")) for key in (
+                    "source", "provider", "reason",
+                ))):
+            raise ValueError("lifecycle audit must not contain credentials or secrets")
+        with closing(self._connect()) as db, db:
+            cursor = db.execute(
+                "UPDATE skill_registry SET metadata=?, status='disabled', updated_at=? "
+                "WHERE name=? AND version=?",
+                (json.dumps(old_normalized, sort_keys=True), self._now(),
+                 previous["name"], old_version),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("current registry state changed before update commit")
+            now = self._now()
+            db.execute(
+                "INSERT INTO skill_registry (name,version,metadata,source,registered_at,updated_at,"
+                "validation_status,status) VALUES (?,?,?,?,?,?,'valid','active') "
+                "ON CONFLICT(name,version) DO UPDATE SET metadata=excluded.metadata,"
+                "source=excluded.source,updated_at=excluded.updated_at,"
+                "validation_status='valid',status='active'",
+                (new_normalized["name"], new_normalized["version"],
+                 json.dumps(new_normalized, sort_keys=True), resulting.get("source", "lifecycle"),
+                 now, now),
+            )
+            db.execute(
+                f"INSERT INTO skill_lifecycle_history ({','.join(columns)},details) "
+                f"VALUES ({','.join('?' for _ in range(len(columns) + 1))})",
+                (*(event.get(key) for key in columns),
+                 json.dumps(event.get("details", {}), sort_keys=True)),
+            )
+
+    def commit_lifecycle_rollback(
+        self, *, current_version: str, current: dict[str, Any],
+        restored_version: str, restored: dict[str, Any], event: dict[str, Any],
+        restored_source: str | None = None,
+    ) -> None:
+        current_normalized = self._validate(current)
+        restored_normalized = self._validate(restored)
+        columns = (
+            "event_id", "name", "timestamp", "action", "skill_version",
+            "previous_version", "previous_hash", "resulting_version", "resulting_hash",
+            "source", "provider", "trust_before", "trust_after", "pin_before", "pin_after",
+            "approval_event_id", "actor", "reason", "result", "error_code",
+        )
+        with closing(self._connect()) as db, db:
+            now = self._now()
+            cursor = db.execute(
+                "UPDATE skill_registry SET metadata=?,status='disabled',updated_at=? "
+                "WHERE name=? AND version=?",
+                (json.dumps(current_normalized, sort_keys=True), now,
+                 event["name"], current_version),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("current registry state changed before rollback commit")
+            if restored_version == current_version:
+                cursor = db.execute(
+                    "UPDATE skill_registry SET metadata=?,source=?,status='active',updated_at=? "
+                    "WHERE name=? AND version=?",
+                    (json.dumps(restored_normalized, sort_keys=True),
+                     restored_source or "lifecycle", now,
+                     event["name"], restored_version),
+                )
+            else:
+                cursor = db.execute(
+                    "UPDATE skill_registry SET metadata=?,source=?,status='active',updated_at=? "
+                    "WHERE name=? AND version=?",
+                    (json.dumps(restored_normalized, sort_keys=True),
+                     restored_source or "lifecycle", now,
+                     event["name"], restored_version),
+                )
+            if cursor.rowcount != 1:
+                raise RuntimeError("rollback target registry record is missing")
+            db.execute(
+                f"INSERT INTO skill_lifecycle_history ({','.join(columns)},details) "
+                f"VALUES ({','.join('?' for _ in range(len(columns) + 1))})",
+                (*(event.get(key) for key in columns),
+                 json.dumps(event.get("details", {}), sort_keys=True)),
+            )
+
+    def consume_lifecycle_approval(
+        self, *, token: str, action: str, name: str, version: str, content_hash: str,
+        acquisition_id: str | None = None,
+    ) -> dict[str, str] | None:
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        now = self._now()
+        with closing(self._connect()) as db, db:
+            row = db.execute(
+                "SELECT * FROM skill_lifecycle_approvals WHERE token_hash=? AND action=? "
+                "AND name=? AND version=? AND content_hash=? AND consumed_at IS NULL "
+                "AND acquisition_id IS ? AND expires_at>?",
+                (token_hash, action, name, version, content_hash, acquisition_id, now),
+            ).fetchone()
+            if row is None:
+                return None
+            cursor = db.execute(
+                "UPDATE skill_lifecycle_approvals SET consumed_at=? "
+                "WHERE approval_event_id=? AND consumed_at IS NULL",
+                (now, row["approval_event_id"]),
+            )
+            if cursor.rowcount != 1:
+                return None
+        return {"approval_event_id": row["approval_event_id"], "reason": row["reason"]}

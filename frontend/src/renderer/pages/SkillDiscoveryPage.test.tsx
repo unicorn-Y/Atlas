@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import SkillDiscoveryPage from './SkillDiscoveryPage';
 import { buildSkillDiscoveryUrl, canActivateLocalSkill } from './skillDiscoveryUrl';
-import { approveSkillInstallation, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
+import { approveSkillInstallation, lifecycleUpdateAction, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
 
 describe('Skill discovery page', () => {
   it('renders task search and structured filters without affecting chat', () => {
@@ -30,6 +30,12 @@ describe('Skill discovery page', () => {
     expect(reviewGateState('WARN', false)).toMatchObject({ canInstall: true, requiresWarningConfirmation: true });
     expect(reviewGateState('BLOCK', false)).toMatchObject({ canInstall: false });
     expect(reviewGateState('PASS', true)).toMatchObject({ canInstall: false });
+  });
+
+  it('requires downgrade review when the incoming version is older', () => {
+    expect(lifecycleUpdateAction('1.2.0', '1.3.0')).toBe('update');
+    expect(lifecycleUpdateAction('1.2.0', '1.1.9')).toBe('downgrade');
+    expect(lifecycleUpdateAction('1.2.0', '1.2.0')).toBe('update');
   });
 
   it('uses the server approval and one-time authorization contract', async () => {
@@ -64,6 +70,9 @@ describe('Skill discovery page', () => {
       q: 'research papers', capability: 'literature search', tool: 'arxiv', source: 'local',
     });
     expect(canActivateLocalSkill({ source: 'local', status: 'active' })).toBe(true);
+    expect(canActivateLocalSkill({ source: 'local', status: 'active' }, { trust_state: 'trusted' })).toBe(true);
+    expect(canActivateLocalSkill({ source: 'local', status: 'active' }, { trust_state: 'blocked' })).toBe(false);
+    expect(canActivateLocalSkill({ source: 'local', status: 'active' }, { state: 'quarantined' })).toBe(false);
     expect(canActivateLocalSkill({ source: 'api', status: 'active' })).toBe(false);
     expect(canActivateLocalSkill({ source: 'local', status: 'disabled' })).toBe(false);
   });
