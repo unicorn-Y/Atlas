@@ -122,6 +122,9 @@
 .settingsError { color: #9b514a !important; background: #fbf0ee; }
 .settingsSpinner { vertical-align: middle; margin-right: 6px; animation: settings-spin 1s linear infinite; }
 .settingsFooter { max-width: 720px; margin: 4px 0 0 93px; color: #a09d95; font-size: 9px; overflow-wrap: anywhere; }
+.dependencySkill { margin: 8px 0; padding: 8px 10px; border: 1px solid #efede7; border-radius: 7px; background: #fffefa; }
+.dependencySkill strong { color: #5f5d56; font-size: 10px; }
+.dependencySkill p { margin: 5px 0 0; }
 .attachmentStrip { display: flex; gap: 8px; padding: 6px 10px 0; }
 .attachmentStrip > div { position: relative; width: 48px; height: 48px; }
 .attachmentStrip img { width: 100%; height: 100%; border-radius: 6px; object-fit: cover; }

@@ -61,6 +61,8 @@ app.whenReady().then(async () => {
     process.env.ATLAS_ROOT ??= path.join(process.resourcesPath, 'atlas');
     process.env.ATLAS_DATA_DIR ??= app.getPath('userData');
     process.env.ATLAS_BACKEND_EXECUTABLE ??= path.join(process.resourcesPath, 'atlas', 'backend', 'atlas_backend.exe');
+    process.env.ATLAS_NODE_RUNTIME_DIR = path.join(process.resourcesPath, 'atlas', 'runtime', 'node');
+    process.env.ATLAS_NODE_RUNTIME_REQUIRED = '1';
   }
   try {
     await ensureBackendRunning();

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -17,6 +18,7 @@ from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 
 from atlas.config import get_config
+from atlas.tools.node_runtime import get_node_runtime_status, resolve_node_runtime
 
 log = structlog.get_logger()
 
@@ -146,12 +148,24 @@ class MCPClient:
         self._servers: dict[str, MCPServerHandle] = {}
         self._tool_index: dict[str, ToolInfo] = {}  # qualified_name → ToolInfo
         self._server_configs: dict[str, MCPServerConfig] = {}  # name → config
+        self._configured_configs: dict[str, MCPServerConfig] = {}
+        self._server_status: dict[str, dict[str, Any]] = {}
 
     # -- lifecycle -----------------------------------------------------------
 
     async def start(self) -> None:
         """Connect to all configured & enabled MCP servers."""
         configs = _parse_server_configs()
+        self._configured_configs = {config.name: config for config in configs}
+        for config in configs:
+            self._server_status[config.name] = {
+                "name": config.name, "configured": True, "enabled": config.enabled,
+                "transport": config.transport, "connected": False,
+                "state": "starting" if config.enabled else "disabled",
+                "tool_discovery": "pending" if config.enabled else "not_started",
+                "tool_count": 0,
+                "blocking_reason": None if config.enabled else "server is disabled",
+            }
         enabled = [c for c in configs if c.enabled]
         if not enabled:
             log.info("mcp.no_servers_configured")
@@ -166,6 +180,10 @@ class MCPClient:
         )
         for cfg, result in zip(enabled, results):
             if isinstance(result, Exception):
+                self._server_status[cfg.name].update({
+                    "state": "failed", "tool_discovery": "failed",
+                    "blocking_reason": _failure_reason(result),
+                })
                 log.error("mcp.server_failed", server=cfg.name,
                           error=str(result))
 
@@ -175,6 +193,9 @@ class MCPClient:
             try:
                 if handle._cleanup:
                     await handle._cleanup.__aexit__(None, None, None)
+                self._server_status.setdefault(name, {"name": name}).update({
+                    "connected": False, "state": "stopped",
+                })
                 log.info("mcp.server_stopped", server=name)
             except Exception as e:
                 log.warning("mcp.stop_error", server=name, error=str(e))
@@ -185,49 +206,74 @@ class MCPClient:
 
     async def _connect_server(self, cfg: MCPServerConfig) -> None:
         """Connect to a single MCP server."""
+        self._configured_configs[cfg.name] = cfg
+        status = self._server_status.setdefault(cfg.name, {"name": cfg.name})
+        status.update({
+            "configured": True, "enabled": cfg.enabled, "transport": cfg.transport,
+            "state": "starting", "connected": False,
+            "tool_discovery": "pending", "tool_count": 0,
+            "blocking_reason": None,
+        })
         handle = MCPServerHandle(name=cfg.name, transport=cfg.transport)
+        try:
+            if cfg.transport == "stdio":
+                await self._connect_stdio(cfg, handle)
+            elif cfg.transport == "sse":
+                await self._connect_sse(cfg, handle)
+            else:
+                raise ValueError(f"Unknown transport: {cfg.transport}")
 
-        if cfg.transport == "stdio":
-            await self._connect_stdio(cfg, handle)
-        elif cfg.transport == "sse":
-            await self._connect_sse(cfg, handle)
-        else:
-            raise ValueError(f"Unknown transport: {cfg.transport}")
+            assert handle.session is not None
+            init_result = await handle.session.initialize()
+            log.info("mcp.server_initialized", server=cfg.name,
+                     protocol=init_result.protocol_version,
+                     server_info=str(init_result.server_info))
 
-        # Initialize the session
-        assert handle.session is not None
-        init_result = await handle.session.initialize()
-        log.info("mcp.server_initialized",
-                 server=cfg.name,
-                 protocol=init_result.protocol_version,
-                 server_info=str(init_result.server_info))
+            tools_result = await handle.session.list_tools()
+            for tool in tools_result.tools:
+                info = ToolInfo(
+                    name=tool.name,
+                    description=tool.description or "",
+                    input_schema=tool.input_schema,
+                    server_name=cfg.name,
+                )
+                handle.tools.append(info)
+                self._tool_index[info.qualified_name] = info
 
-        # Discover tools
-        tools_result = await handle.session.list_tools()
-        for tool in tools_result.tools:
-            info = ToolInfo(
-                name=tool.name,
-                description=tool.description or "",
-                input_schema=tool.input_schema,
-                server_name=cfg.name,
-            )
-            handle.tools.append(info)
-            self._tool_index[info.qualified_name] = info
-
-        self._servers[cfg.name] = handle
-        self._server_configs[cfg.name] = cfg
-        log.info("mcp.server_ready", server=cfg.name,
-                 tools=[t.name for t in handle.tools])
+            self._servers[cfg.name] = handle
+            self._server_configs[cfg.name] = cfg
+            status.update({
+                "state": "connected", "connected": True,
+                "tool_discovery": "complete", "tool_count": len(handle.tools),
+                "blocking_reason": None,
+            })
+            log.info("mcp.server_ready", server=cfg.name,
+                     tools=[t.name for t in handle.tools])
+        except Exception as exc:
+            if handle._cleanup:
+                await handle._cleanup.__aexit__(None, None, None)
+            status.update({
+                "state": "failed", "connected": False,
+                "tool_discovery": "failed", "blocking_reason": _failure_reason(exc),
+            })
+            raise
 
     async def _connect_stdio(self, cfg: MCPServerConfig,
                              handle: MCPServerHandle) -> None:
         """Set up stdio transport."""
-        # Merge env: inherit current env + overrides from config
+        command, args = _resolve_stdio_command(cfg.command, cfg.args)
+        basename = Path(cfg.command).name.lower().removesuffix(".cmd").removesuffix(".exe")
         env = {**os.environ, **cfg.env} if cfg.env else None
-
+        runtime = resolve_node_runtime()
+        if basename in {"node", "npm", "npx"} and runtime.bundled and runtime.executable:
+            env = {**os.environ, **cfg.env}
+            node_directory = str(runtime.executable.parent)
+            env["PATH"] = os.pathsep.join(
+                value for value in (node_directory, env.get("PATH", "")) if value
+            )
         params = StdioServerParameters(
-            command=cfg.command,
-            args=cfg.args,
+            command=command,
+            args=args,
             env=env,
             cwd=cfg.cwd,
         )
@@ -344,7 +390,50 @@ class MCPClient:
 
     def get_configured_server_names(self) -> list[str]:
         """Return names present in the locally registered MCP configuration."""
-        return [config.name for config in _parse_server_configs()]
+        return list(self._configured_configs) or [
+            config.name for config in _parse_server_configs()
+        ]
+
+    def get_runtime_status(self) -> dict[str, Any]:
+        """Return configured server lifecycle and tool-discovery state."""
+        configs = self._configured_configs or {
+            config.name: config for config in _parse_server_configs()
+        }
+        statuses = []
+        for name, config in configs.items():
+            status = self._server_status.get(name, {})
+            statuses.append({
+                "name": name,
+                "configured": True,
+                "enabled": config.enabled,
+                "transport": config.transport,
+                "connected": name in self._servers,
+                "state": status.get("state", "not_started"),
+                "tool_discovery": status.get("tool_discovery", "not_started"),
+                "tool_count": len(self.get_server_tools(name)),
+                "blocking_reason": status.get("blocking_reason"),
+            })
+        node_status = get_node_runtime_status()
+        needs_node = any(
+            config.transport == "stdio"
+            and Path(config.command).name.lower().removesuffix(".cmd")
+            in {"node", "npm", "npx"}
+            for config in configs.values()
+        )
+        node_blocker = needs_node and not node_status["available"]
+        failed_servers = [
+            item for item in statuses
+            if item["enabled"] and item["state"] == "failed"
+        ]
+        server_blocker = failed_servers[0]["blocking_reason"] if failed_servers else None
+        return {
+            "available": not node_blocker and not failed_servers,
+            "node_required": needs_node,
+            "blocking_reason": (
+                node_status["blocking_reason"] if node_blocker else server_blocker
+            ),
+            "servers": statuses,
+        }
 
     def get_server_tools(self, server_name: str) -> list[ToolInfo]:
         """Return tools for a specific server."""
@@ -371,6 +460,9 @@ class MCPClient:
         except Exception as e:
             log.warning("mcp.stop_error", server=server_name, error=str(e))
         self._server_configs.pop(server_name, None)
+        self._server_status.setdefault(server_name, {"name": server_name}).update({
+            "connected": False, "state": "stopped",
+        })
 
     async def restart_server(self, server_name: str) -> None:
         """Disconnect then reconnect a server using its stored config."""
@@ -410,3 +502,37 @@ class _StackedCleanup:
             await self._transport.__aexit__(None, None, None)
         except Exception:
             pass
+
+
+def _resolve_stdio_command(command: str, args: list[str]) -> tuple[str, list[str]]:
+    """Route node/npm/npx MCP processes through the bundled Node when present."""
+    basename = Path(command).name.lower().removesuffix(".cmd").removesuffix(".exe")
+    if basename not in {"node", "npm", "npx"}:
+        return command, args
+
+    runtime = resolve_node_runtime()
+    if runtime.executable is None:
+        raise FileNotFoundError(
+            "Node-based MCP server requires Atlas bundled Node or a development Node installation"
+        )
+    if not runtime.bundled:
+        return command, args
+    if basename == "node":
+        return str(runtime.executable), args
+
+    script = runtime.npm_script if basename == "npm" else runtime.npx_script
+    if script is None:
+        raise FileNotFoundError(f"Atlas bundled Node is missing its {basename} script")
+    return str(runtime.executable), [str(script), *args]
+
+
+def _failure_reason(exc: Exception) -> str:
+    """Keep actionable failure status without reflecting configured arguments or secrets."""
+    message = str(exc)
+    if isinstance(exc, FileNotFoundError) and (
+        "Node-based MCP server" in message or "Atlas bundled Node" in message
+    ):
+        return message
+    if isinstance(exc, ValueError) and message.startswith("Unknown transport:"):
+        return message
+    return f"MCP server failed during launch or initialization ({type(exc).__name__})"

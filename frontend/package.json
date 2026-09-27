@@ -17,9 +17,10 @@
     "start": "electron .",
     "prestart": "npm run install:electron",
     "package:backend": "node scripts/build-backend.mjs",
+    "package:node": "node scripts/package-node.mjs",
     "clean:packaging": "node scripts/clean-packaging-output.mjs",
     "dist:win": "npm run clean:packaging && npm run build && electron-builder --win nsis --x64 --publish never",
-    "predist:win": "npm run install:electron && npm run package:backend",
+    "predist:win": "npm run install:electron && npm run package:backend && npm run package:node",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -56,6 +57,7 @@
     "extraResources": [
       { "from": "../core/atlas", "to": "atlas/core/atlas", "filter": ["**/*", "!**/__pycache__", "!**/__pycache__/**", "!**/*.pyc"] },
       { "from": "./backend-release/atlas_backend", "to": "atlas/backend" },
+      { "from": "./backend-release/runtime/node", "to": "atlas/runtime/node" },
       { "from": "../skills", "to": "atlas/skills", "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"] },
       { "from": "../config/atlas.example.toml", "to": "atlas/config/atlas.example.toml" }
     ],

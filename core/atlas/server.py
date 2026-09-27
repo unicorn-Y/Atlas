@@ -77,6 +77,7 @@ from atlas.skills.lifecycle import (
 )
 from atlas.skills.registry import SkillRegistry
 from atlas.tools.mcp_client import MCPClient
+from atlas.tools.node_runtime import get_node_runtime_status
 
 log = structlog.get_logger()
 
@@ -1286,6 +1287,54 @@ async def list_mcp_servers() -> dict[str, Any]:
             "tools": [t.qualified_name for t in tools],
         })
     return {"servers": servers}
+
+
+@app.get("/api/runtime/dependency-check")
+async def check_runtime_dependencies() -> dict[str, Any]:
+    """Read the current bundled runtime, MCP lifecycle, and canonical Skill dependencies."""
+    node_status = get_node_runtime_status()
+    runtime_status = mcp_client.get_runtime_status() if mcp_client else {
+        "available": False, "blocking_reason": "MCP runtime is unavailable", "servers": [],
+    }
+    server_states = runtime_status.get("servers", [])
+    connected = {item["name"] for item in server_states if item.get("connected")}
+    configured = {item["name"] for item in server_states if item.get("configured")}
+    skills = []
+    if skill_registry is not None:
+        for record in skill_registry.list(status="active"):
+            dependencies = dependency_preflight(
+                record.get("requirements", []), connected_servers=connected,
+                configured_servers=configured, registry=skill_registry,
+            )
+            blocking = [item for item in dependencies if item["state"] != "satisfied"]
+            skills.append({
+                "name": record["name"], "version": record["version"],
+                "dependencies": dependencies, "blocking": blocking,
+                "can_use": not blocking,
+            })
+
+    blockers = []
+    if (not node_status["bundled"]["available"]
+            or not node_status["bundled"]["npm_npx_available"]):
+        blockers.append({
+            "scope": "runtime", "reason": node_status["blocking_reason"]
+            or node_status["bundled"]["blocking_reason"]
+            or "Atlas bundled Node/npm/npx is unavailable",
+        })
+    if not runtime_status.get("available", False):
+        blockers.append({
+            "scope": "mcp_runtime",
+            "reason": runtime_status.get("blocking_reason") or "MCP runtime is unavailable",
+        })
+    return {
+        "checked_at": datetime.now(UTC).isoformat(),
+        "read_only": True,
+        "node": node_status,
+        "mcp_runtime": runtime_status,
+        "mcp_servers": server_states,
+        "skills": skills,
+        "blocking": blockers,
+    }
 
 
 @app.post("/api/mcp/servers")

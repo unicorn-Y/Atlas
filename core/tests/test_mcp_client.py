@@ -12,6 +12,114 @@ from atlas.tools.mcp_client import (
     _parse_server_configs,
 )
 
+
+def test_bundled_node_resolves_from_installed_application_directory(tmp_path, monkeypatch):
+    from atlas.tools.node_runtime import resolve_node_runtime
+
+    runtime_dir = tmp_path / "runtime" / "node"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "node.exe").write_bytes(b"node")
+    npm_bin = runtime_dir / "npm" / "bin"
+    npm_bin.mkdir(parents=True)
+    (npm_bin / "npx-cli.js").write_text("", encoding="utf-8")
+    monkeypatch.setenv("ATLAS_ROOT", str(tmp_path))
+    monkeypatch.delenv("ATLAS_NODE_RUNTIME_DIR", raising=False)
+
+    runtime = resolve_node_runtime()
+
+    assert runtime.executable == runtime_dir / "node.exe"
+    assert runtime.npx_script == npm_bin / "npx-cli.js"
+
+
+def test_node_release_manifest_pins_official_binary_and_sha256():
+    import json
+
+    from atlas.tools.node_runtime import NODE_ARCHIVE_SHA256, NODE_VERSION
+
+    manifest_path = Path(__file__).resolve().parents[2] / "frontend" / "node-runtime.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert manifest["version"] == NODE_VERSION.removeprefix("v")
+    assert manifest["archive"] == "node-v22.23.3-win-x64.zip"
+    assert manifest["source"].startswith("https://nodejs.org/dist/v22.23.3/")
+    assert manifest["sha256"] == NODE_ARCHIVE_SHA256
+
+
+def test_npx_uses_bundled_node_when_system_node_is_unavailable(tmp_path, monkeypatch):
+    from atlas.tools.mcp_client import _resolve_stdio_command
+
+    runtime_dir = tmp_path / "node"
+    runtime_dir.mkdir()
+    node = runtime_dir / "node.exe"
+    node.write_bytes(b"node")
+    npm_bin = runtime_dir / "npm" / "bin"
+    npm_bin.mkdir(parents=True)
+    npx_script = npm_bin / "npx-cli.js"
+    npx_script.write_text("", encoding="utf-8")
+    monkeypatch.setenv("ATLAS_NODE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setattr("atlas.tools.node_runtime.shutil.which", lambda _name: None)
+
+    command, args = _resolve_stdio_command("npx", ["-y", "example-mcp"])
+
+    assert command == str(node)
+    assert args == [str(npx_script), "-y", "example-mcp"]
+
+
+def test_packaged_runtime_never_falls_back_to_system_node(tmp_path, monkeypatch):
+    from atlas.tools.node_runtime import resolve_node_runtime
+
+    monkeypatch.setenv("ATLAS_NODE_RUNTIME_DIR", str(tmp_path / "missing-node"))
+    monkeypatch.setenv("ATLAS_NODE_RUNTIME_REQUIRED", "1")
+    monkeypatch.setattr("atlas.tools.node_runtime.shutil.which", lambda _name: "C:/node.exe")
+
+    runtime = resolve_node_runtime()
+
+    assert runtime.executable is None
+    assert runtime.source == "missing"
+
+
+async def test_start_records_runtime_config_discovery_and_restart_state():
+    client = MCPClient()
+    mock_session = AsyncMock()
+    mock_session.initialize.return_value = MagicMock(
+        protocol_version="2025-03-26", server_info={"name": "filesystem"}
+    )
+    mock_session.list_tools.return_value = MagicMock(tools=[])
+
+    async def connect_stdio(config, handle):
+        handle.session = mock_session
+
+    with patch("atlas.tools.mcp_client._parse_server_configs", return_value=[
+        MCPServerConfig(name="filesystem", command="npx", args=["-y", "example"]),
+    ]), patch.object(client, "_connect_stdio", side_effect=connect_stdio):
+        await client.start()
+        state = client.get_runtime_status()
+        assert state["servers"][0]["configured"] is True
+        assert state["servers"][0]["connected"] is True
+        assert state["servers"][0]["tool_discovery"] == "complete"
+        await client.restart_server("filesystem")
+        await client.stop()
+
+    assert client.get_runtime_status()["servers"][0]["connected"] is False
+
+
+async def test_failed_configured_server_blocks_mcp_runtime_without_echoing_arguments():
+    client = MCPClient()
+    secret_argument = "argument-secret-must-not-appear"
+    with (
+        patch("atlas.tools.mcp_client._parse_server_configs", return_value=[
+            MCPServerConfig(name="broken", command="node", args=[secret_argument]),
+        ]),
+        patch.object(client, "_connect_server", side_effect=RuntimeError(secret_argument)),
+        patch("atlas.tools.mcp_client.get_node_runtime_status", return_value={"available": True}),
+    ):
+        await client.start()
+
+    status = client.get_runtime_status()
+    assert status["available"] is False
+    assert status["servers"][0]["state"] == "failed"
+    assert secret_argument not in status["blocking_reason"]
+
 # ---------------------------------------------------------------------------
 # ToolInfo
 # ---------------------------------------------------------------------------

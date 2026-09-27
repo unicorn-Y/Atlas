@@ -935,6 +935,61 @@ class TestMCPServerManagement:
         resp = await client.post("/api/mcp/servers/nonexistent/restart")
         assert resp.status_code == 404
 
+    async def test_read_only_dependency_check_reports_runtime_and_skill_blockers(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from atlas import server
+
+        class Registry:
+            def list(self, *, status=None):
+                return [{
+                    "name": "sample", "version": "1.0.0", "status": "active",
+                    "requirements": [
+                        {"kind": "python_packages", "name": "present", "requested": ">=2"},
+                        {"kind": "python_packages", "name": "absent", "requested": None},
+                        {"kind": "python_packages", "name": "old", "requested": ">=3"},
+                        {"kind": "unknown", "name": "opaque", "requested": None},
+                    ],
+                }]
+
+        class Runtime:
+            def get_runtime_status(self):
+                return {"servers": [{
+                    "name": "filesystem", "configured": True, "enabled": True,
+                    "connected": False, "tool_discovery": "failed", "tool_count": 0,
+                    "blocking_reason": "Node runtime unavailable",
+                }]}
+
+        monkeypatch.setattr(server, "skill_registry", Registry())
+        monkeypatch.setattr(server, "mcp_client", Runtime())
+        monkeypatch.setattr(
+            "atlas.skills.dependencies._installed_package_version",
+            lambda name: {"present": "2.5.0", "old": "2.5.0"}.get(name),
+        )
+        monkeypatch.setattr(server, "get_node_runtime_status", lambda: {
+            "available": False, "source": "missing", "version": None,
+            "bundled": {"available": False, "blocking_reason": "bundled Node unavailable"},
+            "blocking_reason": "bundled Node executable is missing",
+        })
+
+        transport = ASGITransport(app=server.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/runtime/dependency-check")
+
+        assert response.status_code == 200
+        report = response.json()
+        assert report["read_only"] is True
+        assert report["node"]["available"] is False
+        assert report["mcp_servers"][0]["tool_discovery"] == "failed"
+        states = {item["name"]: item["state"] for item in report["skills"][0]["dependencies"]}
+        assert states == {
+            "present": "satisfied", "absent": "missing", "old": "incompatible",
+            "opaque": "unknown",
+        }
+        assert {item["state"] for item in report["skills"][0]["blocking"]} == {
+            "missing", "incompatible", "unknown",
+        }
+
 
 # ---------------------------------------------------------------------------
 # Knowledge Base
