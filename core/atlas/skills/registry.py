@@ -94,7 +94,30 @@ class SkillRegistry:
                     name TEXT NOT NULL,
                     version TEXT NOT NULL,
                     content_hash TEXT NOT NULL,
+                    current_hash TEXT,
                     acquisition_id TEXT,
+                    target_trust_state TEXT,
+                    target_pin_policy TEXT,
+                    rollback_event_id TEXT,
+                    rollback_snapshot_hash TEXT,
+                    decision_id TEXT,
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    consumed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS skill_lifecycle_decisions (
+                    decision_id TEXT PRIMARY KEY,
+                    action TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    version TEXT NOT NULL,
+                    current_hash TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    acquisition_id TEXT,
+                    target_trust_state TEXT,
+                    target_pin_policy TEXT,
+                    rollback_event_id TEXT,
+                    rollback_snapshot_hash TEXT,
                     reason TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     expires_at TEXT NOT NULL,
@@ -108,6 +131,15 @@ class SkillRegistry:
             }
             if "acquisition_id" not in approval_columns:
                 db.execute("ALTER TABLE skill_lifecycle_approvals ADD COLUMN acquisition_id TEXT")
+            for column, definition in (
+                ("current_hash", "TEXT"), ("target_trust_state", "TEXT"),
+                ("target_pin_policy", "TEXT"), ("rollback_event_id", "TEXT"),
+                ("rollback_snapshot_hash", "TEXT"), ("decision_id", "TEXT"),
+            ):
+                if column not in approval_columns:
+                    db.execute(
+                        f"ALTER TABLE skill_lifecycle_approvals ADD COLUMN {column} {definition}"
+                    )
             rows = db.execute(
                 "SELECT name,version,metadata,status FROM skill_registry"
             ).fetchall()
@@ -398,20 +430,97 @@ class SkillRegistry:
                 (*values, json.dumps(details, sort_keys=True)),
             )
 
-    def issue_lifecycle_approval(self, approval: dict[str, str]) -> None:
+    def create_lifecycle_decision(self, decision: dict[str, str]) -> None:
+        if self._contains_secret_key(decision.get("reason", "")):
+            raise ValueError("lifecycle approval reason must not contain credentials or secrets")
+        fields = (
+            "decision_id", "action", "name", "version", "current_hash", "content_hash",
+            "acquisition_id", "target_trust_state", "target_pin_policy", "rollback_event_id",
+            "rollback_snapshot_hash", "reason", "created_at", "expires_at",
+        )
+        with closing(self._connect()) as db, db:
+            db.execute(
+                f"INSERT INTO skill_lifecycle_decisions ({','.join(fields)}) "
+                f"VALUES ({','.join('?' for _ in fields)})",
+                tuple(decision.get(field) for field in fields),
+            )
+
+    def issue_lifecycle_approval(
+        self, approval: dict[str, str], *, decision_id: str,
+    ) -> bool:
         if self._contains_secret_key(approval.get("reason", "")):
             raise ValueError("lifecycle approval reason must not contain credentials or secrets")
         with closing(self._connect()) as db, db:
+            decision = db.execute(
+                "SELECT * FROM skill_lifecycle_decisions WHERE decision_id=? "
+                "AND consumed_at IS NULL AND expires_at>?",
+                (decision_id, approval["created_at"]),
+            ).fetchone()
+            scope = (
+                "action", "name", "version", "current_hash", "content_hash", "acquisition_id",
+                "target_trust_state", "target_pin_policy", "rollback_event_id",
+                "rollback_snapshot_hash", "reason",
+            )
+            if decision is None or any(decision[key] != approval.get(key) for key in scope):
+                return False
+            cursor = db.execute(
+                "UPDATE skill_lifecycle_decisions SET consumed_at=? "
+                "WHERE decision_id=? AND consumed_at IS NULL",
+                (approval["created_at"], decision_id),
+            )
+            if cursor.rowcount != 1:
+                return False
             db.execute(
                 "INSERT INTO skill_lifecycle_approvals "
-                "(approval_event_id,token_hash,action,name,version,content_hash,acquisition_id,reason,"
-                "created_at,expires_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "(approval_event_id,token_hash,action,name,version,content_hash,current_hash,"
+                "acquisition_id,target_trust_state,target_pin_policy,rollback_event_id,"
+                "rollback_snapshot_hash,decision_id,reason,created_at,expires_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (approval["approval_event_id"], approval["token_hash"], approval["action"],
                  approval["name"], approval["version"], approval["content_hash"],
-                 approval.get("acquisition_id"), approval["reason"],
+                 approval["current_hash"], approval.get("acquisition_id"),
+                 approval.get("target_trust_state"), approval.get("target_pin_policy"),
+                 approval.get("rollback_event_id"), approval.get("rollback_snapshot_hash"),
+                 decision_id, approval["reason"],
                  approval["created_at"], approval["expires_at"]),
             )
+        return True
+
+    def issue_lifecycle_approval_from_decision(
+        self, *, decision_id: str, approval_event_id: str, token_hash: str,
+        created_at: str, expires_at: str,
+    ) -> dict[str, str] | None:
+        with closing(self._connect()) as db, db:
+            decision = db.execute(
+                "SELECT * FROM skill_lifecycle_decisions WHERE decision_id=? "
+                "AND consumed_at IS NULL AND expires_at>?",
+                (decision_id, created_at),
+            ).fetchone()
+            if decision is None:
+                return None
+            cursor = db.execute(
+                "UPDATE skill_lifecycle_decisions SET consumed_at=? "
+                "WHERE decision_id=? AND consumed_at IS NULL",
+                (created_at, decision_id),
+            )
+            if cursor.rowcount != 1:
+                return None
+            db.execute(
+                "INSERT INTO skill_lifecycle_approvals "
+                "(approval_event_id,token_hash,action,name,version,content_hash,current_hash,"
+                "acquisition_id,target_trust_state,target_pin_policy,rollback_event_id,"
+                "rollback_snapshot_hash,decision_id,reason,created_at,expires_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (approval_event_id, token_hash, decision["action"], decision["name"],
+                 decision["version"], decision["content_hash"], decision["current_hash"],
+                 decision["acquisition_id"], decision["target_trust_state"],
+                 decision["target_pin_policy"], decision["rollback_event_id"],
+                 decision["rollback_snapshot_hash"], decision_id, decision["reason"],
+                 created_at, expires_at),
+            )
+        return {key: decision[key] for key in (
+            "action", "name", "version", "content_hash", "current_hash", "reason",
+        )}
 
     def commit_lifecycle_update(
         self, *, previous: dict[str, Any], resulting: dict[str, Any],
@@ -430,6 +539,14 @@ class SkillRegistry:
                     "source", "provider", "reason",
                 ))):
             raise ValueError("lifecycle audit must not contain credentials or secrets")
+        if new_normalized["version"] == old_version:
+            old_provenance = old_normalized.get("provenance") or {}
+            new_provenance = new_normalized.get("provenance") or {}
+            identity_fields = ("provider", "external_id", "source_url")
+            if (previous.get("source") != resulting.get("source")
+                    or any(old_provenance.get(key) != new_provenance.get(key)
+                           for key in identity_fields)):
+                raise ValueError("same-version lifecycle transition changed source identity")
         with closing(self._connect()) as db, db:
             cursor = db.execute(
                 "UPDATE skill_registry SET metadata=?, status='disabled', updated_at=? "
@@ -440,16 +557,29 @@ class SkillRegistry:
             if cursor.rowcount != 1:
                 raise RuntimeError("current registry state changed before update commit")
             now = self._now()
-            db.execute(
-                "INSERT INTO skill_registry (name,version,metadata,source,registered_at,updated_at,"
-                "validation_status,status) VALUES (?,?,?,?,?,?,'valid','active') "
-                "ON CONFLICT(name,version) DO UPDATE SET metadata=excluded.metadata,"
-                "source=excluded.source,updated_at=excluded.updated_at,"
-                "validation_status='valid',status='active'",
-                (new_normalized["name"], new_normalized["version"],
-                 json.dumps(new_normalized, sort_keys=True), resulting.get("source", "lifecycle"),
-                 now, now),
-            )
+            if new_normalized["version"] == old_version:
+                db.execute(
+                    "UPDATE skill_registry SET metadata=?,source=?,updated_at=?,"
+                    "validation_status='valid',status='active' WHERE name=? AND version=?",
+                    (json.dumps(new_normalized, sort_keys=True),
+                     resulting.get("source", "lifecycle"),
+                     now, new_normalized["name"], new_normalized["version"]),
+                )
+            else:
+                try:
+                    db.execute(
+                        "INSERT INTO skill_registry "
+                        "(name,version,metadata,source,registered_at,updated_at,"
+                        "validation_status,status) VALUES (?,?,?,?,?,?,'valid','active')",
+                        (new_normalized["name"], new_normalized["version"],
+                         json.dumps(new_normalized, sort_keys=True),
+                         resulting.get("source", "lifecycle"),
+                         now, now),
+                    )
+                except sqlite3.IntegrityError as exc:
+                    raise ValueError(
+                        "target skill name and version already exist in Registry"
+                    ) from exc
             db.execute(
                 f"INSERT INTO skill_lifecycle_history ({','.join(columns)},details) "
                 f"VALUES ({','.join('?' for _ in range(len(columns) + 1))})",
@@ -507,7 +637,9 @@ class SkillRegistry:
 
     def consume_lifecycle_approval(
         self, *, token: str, action: str, name: str, version: str, content_hash: str,
-        acquisition_id: str | None = None,
+        current_hash: str, acquisition_id: str | None = None,
+        target_trust_state: str | None = None, target_pin_policy: str | None = None,
+        rollback_event_id: str | None = None, rollback_snapshot_hash: str | None = None,
     ) -> dict[str, str] | None:
         token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
         now = self._now()
@@ -515,8 +647,12 @@ class SkillRegistry:
             row = db.execute(
                 "SELECT * FROM skill_lifecycle_approvals WHERE token_hash=? AND action=? "
                 "AND name=? AND version=? AND content_hash=? AND consumed_at IS NULL "
-                "AND acquisition_id IS ? AND expires_at>?",
-                (token_hash, action, name, version, content_hash, acquisition_id, now),
+                "AND current_hash=? AND acquisition_id IS ? AND target_trust_state IS ? "
+                "AND target_pin_policy IS ? AND rollback_event_id IS ? "
+                "AND rollback_snapshot_hash IS ? AND expires_at>?",
+                (token_hash, action, name, version, content_hash, current_hash, acquisition_id,
+                 target_trust_state, target_pin_policy, rollback_event_id,
+                 rollback_snapshot_hash, now),
             ).fetchone()
             if row is None:
                 return None

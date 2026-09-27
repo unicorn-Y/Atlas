@@ -1,10 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let windowRef: BrowserWindow | null = null;
+process.env.ATLAS_SKILL_CENTER_TOKEN ??= randomBytes(32).toString('base64url');
 
 function createWindow() {
   windowRef = new BrowserWindow({
@@ -39,6 +41,20 @@ ipcMain.on('window:maximize', () => {
   else windowRef.maximize();
 });
 ipcMain.on('window:close', () => windowRef?.close());
+ipcMain.handle('skill-center:token', (event) => {
+  if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {
+    throw new Error('Skill Center authority is available only to the Atlas main window');
+  }
+  const frameUrl = event.senderFrame.url;
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  const appFileUrl = pathToFileURL(path.resolve(here, '../../dist/index.html')).href;
+  const isTrustedFile = frameUrl === appFileUrl;
+  const isTrustedDevOrigin = Boolean(devUrl && new URL(frameUrl).origin === new URL(devUrl).origin);
+  if (!isTrustedFile && !isTrustedDevOrigin) {
+    throw new Error('Skill Center authority is unavailable to untrusted pages');
+  }
+  return process.env.ATLAS_SKILL_CENTER_TOKEN;
+});
 
 app.whenReady().then(async () => {
   if (app.isPackaged) {

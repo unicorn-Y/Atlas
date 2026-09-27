@@ -253,6 +253,7 @@ def transition_trust(
         if skill is None:
             raise KeyError("skill not found")
         meta = _lifecycle(skill)
+        before_hash = content_hash or meta.get("content_hash")
         before = meta["trust_state"]
         if before in {"revoked", "blocked"} and state != before:
             raise PermissionError("revoked or blocked trust cannot be restored by lifecycle action")
@@ -264,7 +265,7 @@ def transition_trust(
         skill["lifecycle"] = meta
         provenance = skill.get("provenance") or {}
         event = _event(name=name, action="trust", version=version, actor="user", reason=reason,
-                       result="success", previous_hash=meta.get("content_hash"),
+                       result="success", previous_hash=before_hash,
                        resulting_version=version, resulting_hash=meta.get("content_hash"),
                        source=provenance.get("source_url"), provider=provenance.get("provider"),
                        trust_before=before, trust_after=state, approval_event_id=approval_event_id)
@@ -284,7 +285,9 @@ def transition_pin(
         meta = _lifecycle(inspected)
         if meta["drifted"]:
             raise PermissionError("filesystem drift blocks pin changes")
-        meta["content_hash"] = inspected["lifecycle"]["actual_hash"]
+        before_hash = meta.get("content_hash")
+        resulting_hash = inspected["lifecycle"]["actual_hash"]
+        meta["content_hash"] = resulting_hash
         before = meta["pin_policy"]
         meta["pin_policy"] = policy
         meta["pinned_version"] = version if policy == "exact" else None
@@ -295,8 +298,8 @@ def transition_pin(
         provenance = skill.get("provenance") or {}
         event = _event(name=name, action="unpin" if policy == "unpinned" else "pin",
                        version=version, actor="user", reason=reason, result="success",
-                       previous_hash=meta.get("content_hash"), pin_before=before, pin_after=policy,
-                       resulting_version=version, resulting_hash=meta.get("content_hash"),
+                       previous_hash=before_hash, pin_before=before, pin_after=policy,
+                       resulting_version=version, resulting_hash=resulting_hash,
                        source=provenance.get("source_url"), provider=provenance.get("provider"),
                        approval_event_id=approval_event_id)
         registry.record_lifecycle_event(event, metadata=skill, version=version)
@@ -367,6 +370,9 @@ async def update_skill(
             raise PermissionError("filesystem drift blocks update")
         if meta["trust_state"] in {"revoked", "blocked"}:
             raise PermissionError("revoked or blocked skill cannot be updated")
+        target_record = registry.get(name, acquisition.record["version"])
+        if target_record is not None and acquisition.record["version"] != current_version:
+            raise ValueError("target skill name and version already exist in Registry")
         if meta["pin_policy"] != "unpinned":
             raise PermissionError("pinned skill must be explicitly unpinned before update")
         new_dependencies = dependency_states(
@@ -377,10 +383,10 @@ async def update_skill(
         if blockers:
             raise PermissionError("update dependencies are not satisfied: " + ", ".join(blockers))
         old_source = (current.get("provenance") or {}).get("external_id")
-        if old_source and old_source != acquisition.record.get("external_id"):
+        if old_source != acquisition.record.get("external_id"):
             raise PermissionError("source identity changed; update requires a separate review")
         old_provider = (current.get("provenance") or {}).get("provider")
-        if old_provider and old_provider != acquisition.record.get("provider"):
+        if old_provider != acquisition.record.get("provider"):
             raise PermissionError("provider changed; update requires a separate review")
         if acquisition.security.get("result") == "BLOCK":
             raise PermissionError("blocked update cannot be installed")
@@ -528,6 +534,7 @@ def remove_skill(
 def rollback_skill(
     registry: SkillRegistry, skills_dir: Path, name: str, version: str, *,
     event_id: str, approval_event_id: str, reason: str,
+    expected_current_hash: str | None = None,
 ) -> dict[str, Any]:
     with _lock(registry, name):
         history = registry.lifecycle_history(name, limit=1000)
@@ -558,6 +565,17 @@ def rollback_skill(
         if current is None:
             raise KeyError("skill provenance for rollback target is missing")
         meta = _lifecycle(current)
+        current_path = skills_dir / "community" / name
+        current_hash = None
+        if current_path.exists():
+            current_state = inspect_skill(registry, skills_dir, name, version)
+            if current_state["lifecycle"]["drifted"]:
+                raise PermissionError("filesystem drift blocks rollback")
+            current_hash = current_state["lifecycle"].get("actual_hash")
+        else:
+            current_hash = meta.get("content_hash")
+        if expected_current_hash is not None and current_hash != expected_current_hash:
+            raise PermissionError("current skill hash changed after rollback approval")
         if meta["trust_state"] in {"revoked", "blocked"}:
             raise PermissionError("revoked or blocked skill cannot be restored")
         restored_version = details.get("snapshot_version") or version

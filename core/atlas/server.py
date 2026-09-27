@@ -6,6 +6,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import os
 import re
 import secrets
 import uuid
@@ -18,7 +19,16 @@ from typing import Any
 import aiosqlite
 import httpx
 import structlog
-from fastapi import Body, FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Body,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -76,8 +86,21 @@ skill_mgr: SkillManager | None = None
 skill_registry: SkillRegistry | None = None
 skill_catalog_provider = SkillsShProvider()
 SKILL_ACQUISITION_TTL = timedelta(minutes=10)
+SKILL_CENTER_TOKEN = os.environ.get("ATLAS_SKILL_CENTER_TOKEN")
 skill_acquisitions: dict[str, dict[str, Any]] = {}
 scheduler: AtlasScheduler | None = None
+
+
+def _require_skill_center_authority(request: Request) -> None:
+    supplied = request.headers.get("x-atlas-skill-center-token", "")
+    origin = request.headers.get("origin")
+    trusted_origin = origin in {
+        "null", "http://127.0.0.1:5173", "http://localhost:5173",
+        "http://127.0.0.1:4173", "http://localhost:4173",
+    }
+    if (not SKILL_CENTER_TOKEN or not supplied
+            or not secrets.compare_digest(supplied, SKILL_CENTER_TOKEN) or not trusted_origin):
+        raise HTTPException(status_code=403, detail="trusted Skill Center decision is required")
 
 
 async def _run_scheduled_goal(task_id: str, message: str) -> None:
@@ -1661,8 +1684,11 @@ async def get_skill_lifecycle_history(name: str, version: str) -> dict[str, Any]
             "lifecycle": state["lifecycle"]}
 
 
-@app.post("/api/skills/lifecycle/approve")
-async def approve_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+@app.post("/api/skills/lifecycle/decision")
+async def create_skill_lifecycle_decision(
+    request: Request, payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    _require_skill_center_authority(request)
     action, name, version = (payload.get(key) for key in ("action", "name", "version"))
     reason = payload.get("reason")
     if action not in {"update", "downgrade", "rollback", "remove", "trust", "pin", "unpin"}:
@@ -1683,7 +1709,9 @@ async def approve_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[s
             raise HTTPException(status_code=404, detail="rollback record not found")
     elif state["lifecycle"]["drifted"]:
         raise HTTPException(status_code=409, detail="filesystem drift blocks lifecycle actions")
-    content_hash = state["lifecycle"].get("actual_hash")
+    current_hash = (state["lifecycle"].get("actual_hash")
+                    or state["lifecycle"].get("content_hash"))
+    content_hash = current_hash
     acquisition_id = None
     if rollback_event is not None:
         content_hash = rollback_event["details"].get("snapshot_hash")
@@ -1716,37 +1744,76 @@ async def approve_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[s
         acquisition_id = session.get("acquisition_id", acquisition_id)
     if not isinstance(content_hash, str):
         raise HTTPException(status_code=409, detail="installed content hash is unavailable")
-    token = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
-    approval_id = str(uuid.uuid4())
+    decision_id = str(uuid.uuid4())
+    target_trust_state = payload.get("trust_state") if action == "trust" else None
+    target_pin_policy = payload.get("policy") if action in {"pin", "unpin"} else None
+    if action == "trust" and target_trust_state not in {"trusted", "revoked", "blocked"}:
+        raise HTTPException(status_code=422, detail="valid target trust state is required")
+    if action in {"pin", "unpin"} and target_pin_policy not in {"exact", "hash", "unpinned"}:
+        raise HTTPException(status_code=422, detail="valid target pin policy is required")
     try:
-        registry.issue_lifecycle_approval({
-            "approval_event_id": approval_id,
-            "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        registry.create_lifecycle_decision({
+            "decision_id": decision_id,
             "action": action, "name": name, "version": version,
-            "content_hash": content_hash, "acquisition_id": acquisition_id,
+            "current_hash": current_hash or "", "content_hash": content_hash,
+            "acquisition_id": acquisition_id, "target_trust_state": target_trust_state,
+            "target_pin_policy": target_pin_policy,
+            "rollback_event_id": rollback_event["event_id"] if rollback_event else None,
+            "rollback_snapshot_hash": content_hash if rollback_event else None,
             "reason": reason.strip(),
             "created_at": now.isoformat(),
             "expires_at": (now + SKILL_ACQUISITION_TTL).isoformat(),
         })
     except Exception as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
-    return {"approval_event_id": approval_id, "approval_token": token,
-            "action": action, "name": name, "version": version,
-            "content_hash": content_hash, "expires_at": (now + SKILL_ACQUISITION_TTL).isoformat()}
+    return {"decision_id": decision_id, "action": action, "name": name,
+            "version": version, "content_hash": content_hash,
+            "expires_at": (now + SKILL_ACQUISITION_TTL).isoformat()}
+
+
+@app.post("/api/skills/lifecycle/approve")
+async def approve_skill_lifecycle(
+    request: Request, payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    _require_skill_center_authority(request)
+    decision_id = payload.get("decision_id")
+    if not isinstance(decision_id, str) or not decision_id:
+        raise HTTPException(status_code=403, detail="server-held Skill Center decision is required")
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(UTC)
+    approval_id = str(uuid.uuid4())
+    assert skill_registry is not None
+    approval_scope = skill_registry.issue_lifecycle_approval_from_decision(
+        decision_id=decision_id, approval_event_id=approval_id,
+        token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        created_at=now.isoformat(), expires_at=(now + SKILL_ACQUISITION_TTL).isoformat(),
+    )
+    if approval_scope is None:
+        raise HTTPException(
+            status_code=403, detail="valid unconsumed Skill Center decision is required",
+        )
+    return {"approval_event_id": approval_id, "approval_token": token, **approval_scope,
+            "expires_at": (now + SKILL_ACQUISITION_TTL).isoformat()}
 
 
 def _consume_lifecycle_approval(
     registry: SkillRegistry, payload: dict[str, Any], *, action: str, name: str,
-    version: str, content_hash: str,
+    version: str, current_hash: str, content_hash: str,
+    target_trust_state: str | None = None, target_pin_policy: str | None = None,
+    rollback_event_id: str | None = None, rollback_snapshot_hash: str | None = None,
 ) -> dict[str, str]:
     token = payload.get("approval_token")
     if not isinstance(token, str):
         raise HTTPException(status_code=403, detail="server-issued lifecycle approval is required")
     approval = registry.consume_lifecycle_approval(
         token=token, action=action, name=name, version=version, content_hash=content_hash,
+        current_hash=current_hash,
         acquisition_id=(payload.get("acquisition_id")
                         if action in {"update", "downgrade"} else None),
+        target_trust_state=target_trust_state, target_pin_policy=target_pin_policy,
+        rollback_event_id=rollback_event_id,
+        rollback_snapshot_hash=rollback_snapshot_hash,
     )
     if approval is None:
         raise HTTPException(
@@ -1773,6 +1840,8 @@ async def update_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[st
     action = "downgrade" if incoming_tuple < current_tuple else "update"
     approval = _consume_lifecycle_approval(
         registry, payload, action=action, name=name, version=str(version),
+        current_hash=str(state["lifecycle"].get("actual_hash")
+                         or state["lifecycle"].get("content_hash") or ""),
         content_hash=acquisition.computed_hash,
     )
     try:
@@ -1797,6 +1866,7 @@ async def remove_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[st
     actual_hash = state["lifecycle"].get("actual_hash")
     approval = _consume_lifecycle_approval(
         registry, payload, action="remove", name=name, version=version,
+        current_hash=str(actual_hash or state["lifecycle"].get("content_hash") or ""),
         content_hash=str(actual_hash or ""),
     )
     try:
@@ -1822,12 +1892,17 @@ async def rollback_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[
     rollback_hash = rollback_event["details"].get("snapshot_hash")
     approval = _consume_lifecycle_approval(
         registry, payload, action="rollback", name=name, version=version,
-        content_hash=str(rollback_hash or ""),
+        current_hash=str(state["lifecycle"].get("actual_hash")
+                         or state["lifecycle"].get("content_hash") or ""),
+        content_hash=str(rollback_hash or ""), rollback_event_id=event_id,
+        rollback_snapshot_hash=str(rollback_hash or ""),
     )
     try:
         result = rollback_lifecycle_skill(
             registry, skills_dir, name, version, event_id=event_id,
             approval_event_id=approval["approval_event_id"], reason=approval["reason"],
+            expected_current_hash=str(state["lifecycle"].get("actual_hash")
+                                      or state["lifecycle"].get("content_hash") or ""),
         )
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
@@ -1845,7 +1920,10 @@ async def trust_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[str
     action = "trust"
     approval = _consume_lifecycle_approval(
         registry, payload, action=action, name=name, version=version,
+        current_hash=str(state["lifecycle"].get("actual_hash")
+                         or state["lifecycle"].get("content_hash") or ""),
         content_hash=str(state["lifecycle"].get("actual_hash") or ""),
+        target_trust_state=target,
     )
     try:
         return transition_trust(
@@ -1864,7 +1942,10 @@ async def pin_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[str, 
     action = "unpin" if policy == "unpinned" else "pin"
     approval = _consume_lifecycle_approval(
         registry, payload, action=action, name=name, version=version,
+        current_hash=str(state["lifecycle"].get("actual_hash")
+                         or state["lifecycle"].get("content_hash") or ""),
         content_hash=str(state["lifecycle"].get("actual_hash") or ""),
+        target_pin_policy=policy,
     )
     try:
         return transition_pin(

@@ -33,6 +33,14 @@ from atlas.skills.registry import SkillRegistry
 
 NAME = "sample-skill"
 SOURCE = "owner/repo/sample-skill"
+SKILL_CENTER_TOKEN = "test-skill-center-authority"
+
+
+def _skill_center_headers(*, trusted_origin: bool = True) -> dict[str, str]:
+    headers = {"X-Atlas-Skill-Center-Token": SKILL_CENTER_TOKEN}
+    if trusted_origin:
+        headers["Origin"] = "null"
+    return headers
 
 
 def _files(version: str, *, note: str = "safe") -> dict[str, str]:
@@ -415,26 +423,252 @@ def test_one_time_lifecycle_approval_is_bound_and_replay_safe(tmp_path):
 
     token = secrets.token_urlsafe(20)
     now = datetime.now(UTC)
+    decision = {
+        "decision_id": "decision-event", "current_hash": digest,
+        "content_hash": digest, "target_trust_state": None,
+        "target_pin_policy": None, "rollback_event_id": None,
+        "rollback_snapshot_hash": None,
+        "action": "update", "name": NAME, "version": "1.0.0",
+        "acquisition_id": "acq-1", "reason": "approved",
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(minutes=1)).isoformat(),
+    }
+    registry.create_lifecycle_decision(decision)
     registry.issue_lifecycle_approval({
         "approval_event_id": "approval-event",
         "token_hash": hashlib.sha256(token.encode()).hexdigest(),
         "action": "update", "name": NAME, "version": "1.0.0", "content_hash": digest,
+        "current_hash": digest,
         "acquisition_id": "acq-1",
         "reason": "approved", "created_at": now.isoformat(),
         "expires_at": (now + timedelta(minutes=1)).isoformat(),
-    })
+    }, decision_id="decision-event")
     assert registry.consume_lifecycle_approval(
         token=token, action="update", name=NAME, version="1.0.0", content_hash=digest,
-        acquisition_id="acq-2",
+        current_hash=digest, acquisition_id="acq-2",
     ) is None
     assert registry.consume_lifecycle_approval(
         token=token, action="update", name=NAME, version="1.0.0", content_hash=digest,
-        acquisition_id="acq-1",
+        current_hash=digest, acquisition_id="acq-1",
     ) == {"approval_event_id": "approval-event", "reason": "approved"}
     assert registry.consume_lifecycle_approval(
         token=token, action="update", name=NAME, version="1.0.0", content_hash=digest,
-        acquisition_id="acq-1",
+        current_hash=digest, acquisition_id="acq-1",
     ) is None
+
+
+def test_lifecycle_approval_rejects_wrong_hash_version_expiry_and_rollback_event(tmp_path):
+    registry, _, _, digest = _installed(tmp_path)
+    import secrets
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC)
+    token = secrets.token_urlsafe(20)
+    registry.create_lifecycle_decision({
+        "decision_id": "rollback-decision", "action": "rollback", "name": NAME,
+        "version": "1.0.0", "current_hash": digest, "content_hash": "snapshot",
+        "acquisition_id": None, "target_trust_state": None, "target_pin_policy": None,
+        "rollback_event_id": "event-a", "rollback_snapshot_hash": "snapshot",
+        "reason": "restore", "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(minutes=1)).isoformat(),
+    })
+    assert registry.issue_lifecycle_approval({
+        "approval_event_id": "rollback-approval",
+        "token_hash": hashlib.sha256(token.encode()).hexdigest(),
+        "action": "rollback", "name": NAME, "version": "1.0.0",
+        "content_hash": "snapshot", "current_hash": digest, "acquisition_id": None,
+        "target_trust_state": None, "target_pin_policy": None,
+        "rollback_event_id": "event-a", "rollback_snapshot_hash": "snapshot",
+        "reason": "restore", "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(seconds=1)).isoformat(),
+    }, decision_id="rollback-decision")
+    base = dict(token=token, action="rollback", name=NAME, version="1.0.0",
+                current_hash=digest, content_hash="snapshot",
+                rollback_snapshot_hash="snapshot")
+    assert registry.consume_lifecycle_approval(**base, rollback_event_id="event-b") is None
+    assert registry.consume_lifecycle_approval(**{**base, "version": "2.0.0"},
+                                               rollback_event_id="event-a") is None
+    assert registry.consume_lifecycle_approval(**{**base, "current_hash": "wrong"},
+                                               rollback_event_id="event-a") is None
+    import time
+    time.sleep(1.05)
+    assert registry.consume_lifecycle_approval(**base, rollback_event_id="event-a") is None
+
+
+@pytest.mark.asyncio
+async def test_trust_and_pin_http_approvals_bind_exact_targets(tmp_path, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+
+    registry, skills_dir, _, digest = _installed(tmp_path)
+    monkeypatch.setattr(server, "skill_registry", registry)
+    monkeypatch.setattr(server, "skill_mgr", SkillManager(skills_dir=skills_dir))
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", SKILL_CENTER_TOKEN)
+    async with AsyncClient(transport=ASGITransport(app=server.app),
+                           base_url="http://test") as client:
+        for action, target_key, target, wrong in (
+            ("trust", "trust_state", "trusted", "revoked"),
+            ("pin", "policy", "exact", "hash"),
+            ("pin", "policy", "hash", "exact"),
+        ):
+            decision = await client.post(
+                "/api/skills/lifecycle/decision", headers=_skill_center_headers(), json={
+                "action": action, "name": NAME, "version": "1.0.0",
+                target_key: target, "reason": "reviewed exact target",
+            })
+            assert decision.status_code == 200
+            approval = await client.post("/api/skills/lifecycle/approve",
+                                         headers=_skill_center_headers(), json={
+                "decision_id": decision.json()["decision_id"],
+            })
+            assert approval.status_code == 200
+            endpoint = "trust" if action == "trust" else "pin"
+            mismatch = await client.post(f"/api/skills/lifecycle/{endpoint}", json={
+                "name": NAME, "version": "1.0.0", target_key: wrong,
+                "approval_token": approval.json()["approval_token"],
+            })
+            assert mismatch.status_code == 403
+            success = await client.post(f"/api/skills/lifecycle/{endpoint}", json={
+                "name": NAME, "version": "1.0.0", target_key: target,
+                "approval_token": approval.json()["approval_token"],
+            })
+            assert success.status_code == 200
+    events = registry.lifecycle_history(NAME)
+    assert events[0]["previous_hash"] == digest
+    assert events[1]["previous_hash"] == digest
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_approval_requires_server_held_decision(tmp_path, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+
+    registry, skills_dir, _, _ = _installed(tmp_path)
+    monkeypatch.setattr(server, "skill_registry", registry)
+    monkeypatch.setattr(server, "skill_mgr", SkillManager(skills_dir=skills_dir))
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", SKILL_CENTER_TOKEN)
+    async with AsyncClient(transport=ASGITransport(app=server.app),
+                           base_url="http://test") as client:
+        direct = await client.post("/api/skills/lifecycle/approve",
+                                   headers=_skill_center_headers(), json={
+            "action": "trust", "name": NAME, "version": "1.0.0", "reason": "asserted",
+        })
+        assert direct.status_code == 403
+        no_origin = await client.post("/api/skills/lifecycle/decision",
+                                      headers=_skill_center_headers(trusted_origin=False), json={
+            "action": "trust", "name": NAME, "version": "1.0.0",
+            "trust_state": "trusted", "reason": "asserted",
+        })
+        assert no_origin.status_code == 403
+        spoofed_origin = await client.post("/api/skills/lifecycle/decision",
+                                           headers={"Origin": "null"}, json={
+            "action": "trust", "name": NAME, "version": "1.0.0",
+            "trust_state": "trusted", "reason": "asserted",
+        })
+        assert spoofed_origin.status_code == 403
+        invalid = await client.post("/api/skills/lifecycle/approve",
+                                    headers=_skill_center_headers(), json={
+            "decision_id": "client-invented", "action": "trust", "name": NAME,
+            "version": "1.0.0", "reason": "asserted",
+        })
+        assert invalid.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_http_rollback_approval_binds_event_id_even_when_snapshot_hash_matches(
+    tmp_path, monkeypatch,
+):
+    from httpx import ASGITransport, AsyncClient
+
+    registry, skills_dir, _, digest = _installed(tmp_path)
+    snapshot = tmp_path / ".atlas-skill-rollback" / NAME / "shared-snapshot"
+    snapshot.mkdir(parents=True)
+    for relative, content in _files("1.0.0").items():
+        (snapshot / relative).write_text(content, encoding="utf-8")
+    from atlas.skills.lifecycle import _event
+
+    now = registry._now()
+    for event_id in ("rollback-a", "rollback-b"):
+        registry.record_lifecycle_event(_event(
+            name=NAME, action="update", version="1.0.0", actor="user", reason="test",
+            result="success", previous_hash=digest, resulting_version="1.1.0",
+            resulting_hash=digest, approval_event_id="seed",
+            details={"snapshot": str(snapshot), "snapshot_hash": digest,
+                     "snapshot_version": "1.0.0", "snapshot_metadata": registry.get(NAME, "1.0.0")},
+        ) | {"event_id": event_id, "timestamp": now})
+    monkeypatch.setattr(server, "skill_registry", registry)
+    monkeypatch.setattr(server, "skill_mgr", SkillManager(skills_dir=skills_dir))
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", SKILL_CENTER_TOKEN)
+    async with AsyncClient(transport=ASGITransport(app=server.app),
+                           base_url="http://test") as client:
+        decision = await client.post(
+            "/api/skills/lifecycle/decision", headers=_skill_center_headers(), json={
+            "action": "rollback", "name": NAME, "version": "1.0.0",
+            "event_id": "rollback-a", "reason": "restore event A",
+        })
+        assert decision.status_code == 200
+        approval = await client.post("/api/skills/lifecycle/approve",
+                                     headers=_skill_center_headers(), json={
+            "decision_id": decision.json()["decision_id"],
+        })
+        assert approval.status_code == 200
+        mismatch = await client.post("/api/skills/lifecycle/rollback", json={
+            "name": NAME, "version": "1.0.0", "event_id": "rollback-b",
+            "approval_token": approval.json()["approval_token"],
+        })
+        assert mismatch.status_code == 403
+    assert (skills_dir / "community" / NAME / "SKILL.md").read_text(encoding="utf-8") \
+        == _files("1.0.0")["SKILL.md"]
+
+
+@pytest.mark.parametrize("conflict", ["hash", "source_provider", "disabled_history"])
+@pytest.mark.asyncio
+async def test_update_registry_conflict_preserves_filesystem_and_registry(tmp_path, conflict):
+    registry, skills_dir, target, _ = _installed(tmp_path)
+    conflict_meta = {
+        "name": NAME, "version": "1.1.0", "description": "existing historical target",
+        "provenance": {
+            "provider": "gitlab" if conflict == "source_provider" else "github",
+            "external_id": "other/source" if conflict == "source_provider" else SOURCE,
+            "source_url": "https://gitlab.com/other/source" if conflict == "source_provider"
+            else "https://github.com/owner/repo",
+            "computed_sha256": "f" * 64 if conflict == "hash" else "e" * 64,
+            "installed_path": str(target),
+        },
+    }
+    registry.register(conflict_meta, source="different:" + SOURCE)
+    if conflict == "disabled_history":
+        with sqlite3.connect(registry.path) as db:
+            db.execute("UPDATE skill_registry SET status='disabled' WHERE name=? AND version=?",
+                       (NAME, "1.1.0"))
+    before = (target / "SKILL.md").read_bytes()
+    prior = registry.get(NAME, "1.1.0")
+    prior_history = registry.lifecycle_history(NAME)
+    with pytest.raises(ValueError, match="target skill name and version"):
+        await update_skill(_acquisition("1.1.0", note="replacement"), registry=registry,
+                           skills_dir=skills_dir, current_version="1.0.0",
+                           approval_event_id="conflict", reason="reviewed")
+    assert (target / "SKILL.md").read_bytes() == before
+    assert registry.get(NAME, "1.1.0") == prior
+    after_history = registry.lifecycle_history(NAME)
+    assert {event["event_id"] for event in prior_history}.issubset(
+        {event["event_id"] for event in after_history}
+    )
+    assert not any(event["result"] == "success" and event["action"] == "update"
+                   for event in after_history)
+
+
+@pytest.mark.asyncio
+async def test_repeated_identical_update_is_deterministic(tmp_path):
+    registry, skills_dir, _, _ = _installed(tmp_path)
+    acquisition = _acquisition("1.1.0", note="same payload")
+    first = await update_skill(acquisition, registry=registry, skills_dir=skills_dir,
+                               current_version="1.0.0", approval_event_id="first",
+                               reason="approved")
+    second = await update_skill(acquisition, registry=registry, skills_dir=skills_dir,
+                                current_version="1.1.0", approval_event_id="second",
+                                reason="approved")
+    assert first["status"] == "updated"
+    assert second == {"status": "unchanged", "name": NAME, "version": "1.1.0",
+                      "hash": acquisition.computed_hash}
 
 
 @pytest.mark.asyncio
@@ -444,11 +678,24 @@ async def test_lifecycle_http_approval_replay_and_agent_boundary(tmp_path, monke
     registry, skills_dir, _, _ = _installed(tmp_path)
     monkeypatch.setattr(server, "skill_registry", registry)
     monkeypatch.setattr(server, "skill_mgr", SkillManager(skills_dir=skills_dir))
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", SKILL_CENTER_TOKEN)
     server.skill_mgr.scan_skills_sync()
     async with AsyncClient(transport=ASGITransport(app=server.app),
                            base_url="http://test") as client:
-        approval = await client.post("/api/skills/lifecycle/approve", json={
+        direct = await client.post("/api/skills/lifecycle/approve",
+                                   headers=_skill_center_headers(), json={
             "action": "trust", "name": NAME, "version": "1.0.0", "reason": "manual review",
+        })
+        assert direct.status_code == 403
+        decision = await client.post(
+            "/api/skills/lifecycle/decision", headers=_skill_center_headers(), json={
+            "action": "trust", "name": NAME, "version": "1.0.0",
+            "trust_state": "trusted", "reason": "manual review",
+        })
+        assert decision.status_code == 200
+        approval = await client.post("/api/skills/lifecycle/approve",
+                                     headers=_skill_center_headers(), json={
+            "decision_id": decision.json()["decision_id"],
         })
         assert approval.status_code == 200
         auth = approval.json()
@@ -458,7 +705,7 @@ async def test_lifecycle_http_approval_replay_and_agent_boundary(tmp_path, monke
         })
         assert changed.status_code == 200
         replay = await client.post("/api/skills/lifecycle/trust", json={
-            "name": NAME, "version": "1.0.0", "trust_state": "trusted",
+            "name": NAME, "version": "1.0.0", "trust_state": "revoked",
             "approval_token": auth["approval_token"],
         })
         assert replay.status_code == 403
@@ -467,7 +714,9 @@ async def test_lifecycle_http_approval_replay_and_agent_boundary(tmp_path, monke
     names = {item["name"] for item in capabilities.discover()}
     assert "skill.lifecycle.inspect" in names
     for forbidden in ("skill.lifecycle.approve", "skill.lifecycle.update",
-                      "skill.lifecycle.remove", "skill.lifecycle.rollback"):
+                      "skill.lifecycle.remove", "skill.lifecycle.rollback",
+                      "skill.lifecycle.trust", "skill.lifecycle.pin",
+                      "skill.lifecycle.consume"):
         assert forbidden not in names
     with pytest.raises(KeyError):
         await capabilities.invoke("skill.lifecycle.approve", {"name": NAME})
@@ -483,15 +732,22 @@ async def test_downgrade_uses_separate_server_approval_and_lifecycle_event(tmp_p
     acquisition = _acquisition("0.9.0", note="reviewed downgrade")
     monkeypatch.setattr(server, "skill_registry", registry)
     monkeypatch.setattr(server, "skill_mgr", SkillManager(skills_dir=skills_dir))
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", SKILL_CENTER_TOKEN)
     monkeypatch.setattr(server, "skill_acquisitions", {
         "downgrade-review": {"acquisition": acquisition,
                              "expires_at": datetime.now(UTC) + timedelta(minutes=5)},
     })
     async with AsyncClient(transport=ASGITransport(app=server.app),
                            base_url="http://test") as client:
-        approval = await client.post("/api/skills/lifecycle/approve", json={
+        decision = await client.post(
+            "/api/skills/lifecycle/decision", headers=_skill_center_headers(), json={
             "action": "downgrade", "name": NAME, "version": "1.0.0",
             "acquisition_id": "downgrade-review", "reason": "reviewed downgrade",
+        })
+        assert decision.status_code == 200
+        approval = await client.post("/api/skills/lifecycle/approve",
+                                     headers=_skill_center_headers(), json={
+            "decision_id": decision.json()["decision_id"],
         })
         assert approval.status_code == 200
         response = await client.post("/api/skills/lifecycle/update", json={

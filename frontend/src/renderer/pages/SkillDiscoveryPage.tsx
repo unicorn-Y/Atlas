@@ -14,6 +14,12 @@ type Review = { acquisition_id: string; record: RemoteSkill & { version: string;
 type Lifecycle = { lifecycle: { state: string; trust_state: string; pin_policy: string; pinned_hash?: string | null; content_hash?: string | null; actual_hash?: string | null; drifted: boolean }; provenance: Record<string, unknown>; dependency_state: { name: string; state: string }[]; history: { event_id: string; action: string; skill_version: string; previous_hash?: string; resulting_hash?: string; timestamp: string; result: string; details?: Record<string, unknown> }[] };
 interface Props { apiBaseUrl: string }
 
+async function skillCenterHeaders(): Promise<Record<string, string>> {
+  const token = await window.atlasDesktop?.getSkillCenterToken();
+  if (!token) throw new Error('可信 Skill Center 会话不可用');
+  return { 'Content-Type': 'application/json', 'X-Atlas-Skill-Center-Token': token };
+}
+
 export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
   const [query, setQuery] = useState('');
   const [capability, setCapability] = useState('');
@@ -85,10 +91,17 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
     if (!reason?.trim()) return;
     if (!window.confirm(`确认对 ${selected.name}@${selected.version} 执行 ${action}？`)) return;
     try {
-      const approval = await fetch(`${apiBaseUrl}/api/skills/lifecycle/approve`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const headers = await skillCenterHeaders();
+      const decision = await fetch(`${apiBaseUrl}/api/skills/lifecycle/decision`, {
+        method: 'POST', headers,
         body: JSON.stringify({ action: action === 'trust' ? 'trust' : action, name: selected.name,
           version: selected.version, reason, ...extra }),
+      });
+      const decisionResult = await decision.json() as { decision_id?: string; detail?: string };
+      if (!decision.ok || !decisionResult.decision_id) throw new Error(decisionResult.detail ?? '生命周期决策绑定失败');
+      const approval = await fetch(`${apiBaseUrl}/api/skills/lifecycle/approve`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ decision_id: decisionResult.decision_id }),
       });
       const auth = await approval.json() as { approval_token?: string; detail?: string };
       if (!approval.ok || !auth.approval_token) throw new Error(auth.detail ?? '生命周期批准失败');
@@ -114,11 +127,18 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
     if (!reason?.trim()) return;
     setInstalling(true);
     try {
-      const approval = await fetch(`${apiBaseUrl}/api/skills/lifecycle/approve`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const headers = await skillCenterHeaders();
+      const decision = await fetch(`${apiBaseUrl}/api/skills/lifecycle/decision`, {
+        method: 'POST', headers,
         body: JSON.stringify({ action, name: existing.name, version: existing.version,
           acquisition_id: review.acquisition_id, reason,
           warnings_confirmed: warningsConfirmed }),
+      });
+      const decisionResult = await decision.json() as { decision_id?: string; detail?: string };
+      if (!decision.ok || !decisionResult.decision_id) throw new Error(decisionResult.detail ?? '更新决策绑定失败');
+      const approval = await fetch(`${apiBaseUrl}/api/skills/lifecycle/approve`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ decision_id: decisionResult.decision_id }),
       });
       const auth = await approval.json() as { approval_token?: string; detail?: string };
       if (!approval.ok || !auth.approval_token) throw new Error(auth.detail ?? '更新批准失败');

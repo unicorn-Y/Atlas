@@ -3,5 +3,6 @@ export interface AtlasDesktopApi {
   minimize(): void;
   maximize(): void;
   close(): void;
+  getSkillCenterToken(): Promise<string | undefined>;
   onMaximizeChange(callback: (maximized: boolean) => void): () => void;
 }
