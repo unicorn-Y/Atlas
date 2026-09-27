@@ -6,177 +6,270 @@ BASE_BRANCH: main
 PREDECESSOR: CODEX-ATLAS-P18B-GUI-DESKTOP-COMPUTER-USE
 CODE_BASE_HEAD: eb5e9fe4d41a00eeaee13397e580236ceb7a2545
 
+## Strategy Change: REUSE FIRST, DO NOT REINVENT
+
+本任务改为 **成熟开源实现优先**。
+
+核心原则：
+
+> 不再让 Atlas 从 Win32 / ctypes 层自己慢慢搓 Computer Use。
+> 先找已经跑通 Windows GUI automation 的成熟开源项目，直接复用/移植其实现与依赖；Atlas 只写薄适配层接入现有 Agent loop。
+
+执行优先级：
+
+1. **Microsoft UFO / UFO²** — Windows 专用，优先复用 UIA / pywinauto / Win32 / screenshot / control inspection / click / type / scroll / window management。
+2. **ByteDance UI-TARS Desktop** — 优先参考/复用其 screenshot → mouse/keyboard → continuous GUI operator 行为和 action schema。
+3. 若以上项目内部依赖成熟库（如 pywinauto / nut.js / agent-infra operator），优先直接采用成熟库，而不是把行为重新用 ctypes 复刻一遍。
+4. 只有当成熟项目没有对应能力时，才允许保留 Atlas 自己的 Win32 小实现。
+
+### Mandatory upstream sources to inspect first
+
+- `microsoft/UFO`
+  - `ufo/client/mcp/local_servers/ui_mcp_server.py`
+  - `ufo/automator/action_execution.py`
+  - `ufo/automator/puppeteer.py`
+  - `ufo/automator/ui_control/inspector.py`
+  - `ufo/automator/ui_control/screenshot.py`
+  - related click/type/scroll implementations and UIA wrappers
+- `bytedance/UI-TARS-desktop`
+  - `multimodal/gui-agent/operator-aio/src/AIOComputer.ts`
+  - `multimodal/gui-agent/operator-nutjs/`
+  - related operator/action implementation for CLICK / DOUBLE_CLICK / DRAG_TO / SCROLL / TYPING / HOTKEY / screenshot
+
+Before editing Atlas, inspect these real upstream implementations and record which pieces will be reused.
+
+### License discipline
+
+Direct reuse is allowed only when license permits it.
+
+- Microsoft UFO code carries MIT license headers.
+- UI-TARS Desktop uses Apache-2.0.
+- Preserve required copyright/license notices for copied/adapted code.
+- Record source repo + source path + upstream commit in the result file for every materially copied/adapted implementation.
+
+Do not paste third-party code without attribution.
+
 ## Objective
 
-只修复 P18B 当前唯一真实阻塞：Windows 鼠标事件能够移动指针但 click 未触发真实控件。
+用成熟实现替换/修正 Atlas 当前未通过验收的 GUI input 层，并一次性关闭 P18B 剩余验收。
 
-修复后一次性补齐原 P18B 尚缺的端到端验收：
+当前已工作的 Atlas 能力：
 
-- click / double-click / drag / scroll；
-- Notepad 保存回读；
-- 两应用工作流；
-- observe -> reason -> act -> observe；
-- P18A CLI + P18B GUI 混合调用；
-- packaged/installed GUI workflow。
+- screenshot;
+- monitor/window observation;
+- window management;
+- Unicode typing;
+- clipboard;
+- multimodal screenshot handoff;
+- Agent loop integration;
+- FULL_ACCESS default.
 
-不要重写已经工作的 screenshot/window/keyboard/clipboard/Agent integration。
+这些不要重写，除非成熟上游实现能明显减少代码并提高可靠性。
 
-## A. Diagnose real mouse injection first
+当前真实 blocker：
 
-必须先建立最小诊断，不允许直接堆 fallback。
+- pointer 可以移动到目标；
+- `computer_mouse(click)` 未触发真实控件 callback。
 
-对当前 Tk isolated test 至少记录：
+## A. Stop hand-rolling mouse injection
 
-- Atlas process integrity/elevation context;
-- target test process integrity/elevation context;
-- foreground HWND;
-- focused child HWND;
-- `WindowFromPoint` target HWND/class;
-- cursor coordinates before/down/up/after;
-- virtual desktop metrics;
-- DPI awareness context;
-- `ctypes.sizeof(_MOUSEINPUT)`, `ctypes.sizeof(_INPUT)`;
-- SendInput return count;
-- GetLastError when count is not expected;
-- whether WM_MOUSEMOVE / WM_LBUTTONDOWN / WM_LBUTTONUP are observed by target;
-- whether target receives activation/focus changes.
+### First choice: use mature upstream input backend
 
-Determine the actual failure layer before changing behavior.
+优先选择下面之一：
 
-Candidate areas to verify include:
+- pywinauto/UIA action backend derived from UFO;
+- UI-TARS Desktop's proven operator backend / nut.js path;
+- another mature dependency already used by those projects.
 
-- Win32 ctypes structure/layout correctness on Windows x64;
-- INPUT/MOUSEINPUT field types and pointer-size alignment;
-- SendInput flags;
-- absolute virtual-desktop normalization;
-- focus/foreground ordering;
-- DPI-awareness coordinate mismatch;
-- UIPI/integrity-level blocking;
-- timing/message-pump behavior.
+Atlas production path 不再以当前自写 `ctypes.SendInput` 鼠标实现作为必须保留的核心。
 
-Do not assume the cause from this taskbook.
+如果成熟 backend 可以可靠完成：
 
-## B. Fix one canonical real-input path
+- click;
+- double click;
+- right click;
+- mouse down/up;
+- drag;
+- scroll;
+- Unicode typing;
+- window focus;
 
-After diagnosis, implement the smallest correct fix.
+则允许直接把 Atlas 的 `ComputerUseRuntime` 变成该 backend 的薄 wrapper。
 
-Requirements:
+### Forbidden
 
-- `computer_mouse(click)` must produce a real user-session click;
-- primary behavior must represent actual desktop input, not app-specific control invocation;
-- do not special-case Tk;
-- do not special-case Notepad;
-- do not hardcode window class `Button`;
-- do not use BM_CLICK as the normal Computer Use click implementation;
-- do not claim success based only on cursor movement;
-- input failure must be observable as failure, not silently swallowed.
+不得继续：
 
-Window-message helper functions may be removed, retained for diagnostics, or used only if there is a principled reason, but there must not be two ambiguous competing normal click paths.
+- 花大量时间调自写 INPUT/MOUSEINPUT struct；
+- 给每个 Win32 控件写特判；
+- 用 Tk/Notepad 专用 hack；
+- 自己重新实现成熟库已经有的 UIA/control click；
+- 一边保留坏的 SendInput 主路径，一边堆多个隐式 fallback。
 
-## C. Primitive live acceptance
+## B. Prefer semantic UIA actions when possible
 
-Using real Windows UI targets, prove:
+采用 UFO 的思路：
 
-1. single left click invokes target action once;
-2. double-click invokes expected double-click behavior;
-3. drag changes a real target state/position/selection;
-4. vertical scroll changes real scroll position/content;
-5. horizontal scroll if supported by target;
-6. right click opens or triggers a real context behavior where stable;
-7. mouse_down/mouse_up sequence is observable;
-8. pointer coordinates remain aligned with screenshot coordinate space.
+- 先发现窗口/control；
+- 能通过 UIA/pywinauto 对真实 control 做可靠 action 时，优先 semantic action；
+- 无 UIA control 或视觉任务时，再使用坐标级 mouse action。
 
-Tests must assert effects, not merely API return values.
+Computer Use 应是 hybrid：
 
-## D. Notepad Agent workflow
+`UIA/native control action + coordinate mouse fallback + visual screenshot reasoning`
 
-Through the normal Agent loop, with FULL_ACCESS and no approvals:
+而不是所有东西都强制转成裸坐标点击。
 
-1. P18A launches Notepad;
-2. Agent observes desktop;
-3. Agent identifies/focuses Notepad;
-4. Agent types a Chinese/Unicode marker;
-5. Agent saves to an isolated temporary file using real GUI interaction;
-6. Agent closes or otherwise completes the GUI save flow;
-7. P18A `local_file` reads the file;
-8. exact marker is verified.
+但用户体验仍保持一个统一 Atlas tool interface。
 
-The test must not call internal runtime methods directly for the main workflow.
+## C. Preserve FULL_ACCESS
 
-## E. Cross-application workflow
+默认仍为：
 
-One Agent run must use at least two ordinary Windows desktop apps.
+`computer_use.permission_mode = "full_access"`
 
-Preferred stable flow:
+不得因为换成熟项目而引入：
 
-- File Explorer + Notepad
+- sandbox;
+- per-click approval;
+- per-window approval;
+- app whitelist;
+- browser-only restriction.
 
-or another pair available on the test host.
+如果上游库带 sandbox/approval 层，只取执行 backend，不照搬限制层。
 
-The Agent must:
+## D. Live primitive acceptance
 
-- observe;
-- act in app A;
-- switch/focus app B;
-- act in app B;
-- verify resulting state using screenshot and/or P18A local tools.
+使用真实 Windows UI target，必须验证效果而不是只看 API return：
 
-No user intervention.
+1. single click;
+2. double click;
+3. right click;
+4. drag;
+5. vertical scroll;
+6. mouse down/up;
+7. Unicode typing;
+8. hotkey;
+9. clipboard;
+10. focus/window switching.
 
-## F. Real observe -> reason -> act -> observe
+如果 UIA semantic click 与 coordinate click 两种路径都存在，至少各有一条真实验收。
 
-This gate is mandatory.
+## E. Notepad Agent workflow
 
-Use a deterministic/local multimodal test provider if needed, but the normal Agent path must receive actual screenshot image content and choose subsequent GUI tool calls based on that observation.
+通过正常 Atlas Agent loop：
 
-Required sequence:
+1. P18A launch Notepad;
+2. P18B observe;
+3. locate/focus Notepad;
+4. type Chinese/Unicode marker;
+5. save through GUI;
+6. P18A `local_file` read back exact file;
+7. finish without user intervention;
+8. no `approval.required`.
+
+允许 Agent 使用：
+
+- screenshot reasoning;
+- UIA semantic controls;
+- coordinate click fallback;
+- keyboard/hotkey.
+
+不要为了“纯视觉”故意放弃更可靠的 UIA。
+
+## F. Cross-application workflow
+
+至少两个普通 Windows 应用。
+
+优先：
+
+- File Explorer;
+- Notepad.
+
+Agent 必须能：
+
+observe
+→ select/focus app A
+→ act
+→ switch app B
+→ act
+→ verify.
+
+## G. Observe → reason → act → observe
+
+正常 Agent path 至少两轮真实截图：
 
 `computer_observe`
-→ model receives image
-→ model emits GUI action
-→ action executes
+→ model receives screenshot
+→ model chooses action
+→ real action
 → `computer_observe`
-→ model receives new image/state
-→ next action or completion
+→ model receives changed desktop
+→ next action/completion.
 
-At least two observation rounds.
+允许 deterministic multimodal provider 让测试稳定，但截图必须是真截图，tool call 必须由 Agent loop 发出。
 
-Do not hardcode the entire action sequence outside the Agent.
+## H. Mixed CLI + GUI
 
-Coordinates/actions may be deterministic in the provider response for test repeatability, but they must be derived from/conditioned on the observation turn and executed through the real Agent tool loop.
+同一 run 中必须同时使用：
 
-## G. Mixed CLI + GUI in one run
+- P18A `local_*`;
+- P18B `computer_*`.
 
-At least one normal Agent run must use both:
+例如：
 
-- a P18A `local_*` tool;
-- a P18B `computer_*` tool.
+`local_exec -> Notepad`
+→ `computer_observe`
+→ UI action
+→ save
+→ `local_file` verify.
 
-Example:
+## I. Packaged/installed acceptance
 
-- local_exec launches Notepad;
-- computer_observe/focus/type/save;
-- local_file verifies output.
+必须在 packaged 或 NSIS-installed Atlas 中跑真实 GUI workflow：
 
-Assert that no `approval.required` event is emitted.
-
-## H. Packaged/installed P18B acceptance
-
-Run a P18B-specific workflow against actual packaged or NSIS-installed Atlas.
-
-Requirements:
-
+- screenshot;
+- click;
+- keyboard;
+- window focus;
+- local execution;
 - no source checkout dependency;
-- real desktop observation;
-- real mouse click;
-- real keyboard input;
-- one complete GUI workflow;
-- P18A local tools and P18B computer tools visible in same packaged Agent schema;
-- FULL_ACCESS default;
-- no approval event;
+- no approval;
 - clean shutdown;
-- no Atlas-owned process residue;
-- screenshot artifacts follow defined cleanup lifecycle.
+- no Atlas-owned residue.
+
+## J. Minimal Atlas integration layer
+
+目标不是把 UFO 或 UI-TARS 整个框架搬进 Atlas。
+
+Atlas 应保留：
+
+- existing Agent loop;
+- existing runtime events;
+- P18A local execution;
+- existing frontend.
+
+只拿成熟项目的：
+
+- Windows UI execution backend;
+- control discovery;
+- input primitives;
+- screenshot/operator pieces;
+- useful action abstractions.
+
+Prefer adapter over rewrite.
+
+## Required upstream evidence in result
+
+Result 文件必须列出：
+
+- upstream repo;
+- upstream commit SHA;
+- reused source paths;
+- license;
+- copied/adapted concepts/files;
+- Atlas adapter files;
+- why this approach replaced the custom implementation.
 
 ## Required regression
 
@@ -196,57 +289,51 @@ Must keep green:
 
 不得：
 
-- 重写 ComputerUseRuntime；
-- 换成浏览器沙箱；
-- 引入完整 RPA 平台；
-- 用 Tk/Notepad 专用 hack；
-- 用 BM_CLICK 伪装真实鼠标 click 作为生产主路径；
-- 只让测试过、不验证真实输入；
-- 跳过 click/double-click/drag/scroll；
-- 用固定脚本冒充 Agent loop；
-- 默认增加 approval；
+- 继续大规模手搓 Computer Use 底层；
+- 重写整个 Agent loop；
+- 把 UFO 的多 Agent 架构整个复制进 Atlas；
+- 把 UI-TARS 整个桌面 app 整包塞进 Atlas；
+- 默认 approval；
 - 降低 FULL_ACCESS；
 - 开始 P18C；
-- 开始语音、摄像头、手机/远程设备；
-- 做无关 UI 重构。
+- 开始语音、摄像头、手机/remote-device；
+- 无关 UI 重构。
 
 ## Delivery
 
 1. Read `LUNA_WORKER.md`.
 2. Pull `origin/main`.
-3. Record actual starting HEAD as BASE_HEAD.
-4. Read P18B task/result/review.
-5. Reproduce the live click failure before editing.
-6. Record concrete diagnosis evidence.
-7. Fix the root cause.
-8. Complete all remaining P18B E2E gates.
-9. Write:
+3. Record actual BASE_HEAD.
+4. Read P18B result/review.
+5. Inspect UFO and UI-TARS upstream source FIRST.
+6. Choose a mature reusable backend.
+7. Record upstream commit/license.
+8. Replace/adapt the broken Atlas input path with the mature implementation.
+9. Close all P18B E2E gates.
+10. Write:
    `tasks/results/CODEX-ATLAS-P18B-FIX1-REAL-MOUSE-INJECTION-AND-E2E-CLOSEOUT.result.md`
-10. Commit implementation + result.
-11. Push `origin/main`.
-12. Verify LOCAL_HEAD == origin/main.
-13. Verify git status clean.
-14. Stop.
+11. Commit implementation + result.
+12. Push `origin/main`.
+13. Verify LOCAL_HEAD == origin/main.
+14. Verify git status clean.
+15. Stop.
 
 ## Acceptance Gate
 
-FIX1 passes only when real Windows mouse effects are demonstrated and the original P18B Agent/packaged GUI acceptance is closed.
+FIX1 passes only when P18B works through a mature reused backend and real Windows GUI effects are demonstrated end-to-end.
 
-Cursor movement without click delivery is failure.
+A new custom Win32 mouse implementation is NOT the desired outcome.
 
-Internal direct-runtime tests without normal Agent E2E are insufficient.
+The preferred outcome is:
 
-A Tk/Notepad-specific production workaround is insufficient.
+`mature upstream backend + thin Atlas adapter + existing Atlas Agent loop`
 
 ## Queue Guard
 
-P18B-FIX1 is the only READY task.
-
-P18B remains not accepted until FIX1 review.
+P18B-FIX1 remains the only READY task.
 
 P18C remains BLOCKED.
 
-Voice, camera and mobile/remote-device remain deferred.
+FULL_ACCESS remains default.
 
-BASE_HEAD_RULE:
-After pulling origin/main, record the actual starting HEAD as BASE_HEAD.
+Voice, camera and mobile/remote-device remain deferred.
