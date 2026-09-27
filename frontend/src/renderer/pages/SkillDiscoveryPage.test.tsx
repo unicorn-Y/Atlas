@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import SkillDiscoveryPage from './SkillDiscoveryPage';
 import { buildSkillDiscoveryUrl, canActivateLocalSkill } from './skillDiscoveryUrl';
-import { remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
+import { approveSkillInstallation, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
 
 describe('Skill discovery page', () => {
   it('renders task search and structured filters without affecting chat', () => {
@@ -30,6 +30,29 @@ describe('Skill discovery page', () => {
     expect(reviewGateState('WARN', false)).toMatchObject({ canInstall: true, requiresWarningConfirmation: true });
     expect(reviewGateState('BLOCK', false)).toMatchObject({ canInstall: false });
     expect(reviewGateState('PASS', true)).toMatchObject({ canInstall: false });
+  });
+
+  it('uses the server approval and one-time authorization contract', async () => {
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const responses = [
+      new Response(JSON.stringify({ install_authorization: 'server-one-time-token' }), { status: 200 }),
+      new Response(JSON.stringify({ status: 'installed' }), { status: 200 }),
+    ];
+    const fetcher: typeof fetch = async (input, init) => {
+      requests.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+      return responses.shift()!;
+    };
+
+    const response = await approveSkillInstallation('http://localhost:8765', 'acq-1', true, fetcher);
+    expect(response.status).toBe(200);
+    expect(requests.map((request) => request.url)).toEqual([
+      'http://localhost:8765/api/skill-catalog/approve',
+      'http://localhost:8765/api/skill-catalog/install',
+    ]);
+    expect(requests[0].body).toEqual({ acquisition_id: 'acq-1', warnings_confirmed: true });
+    expect(requests[1].body).toEqual({ acquisition_id: 'acq-1', install_authorization: 'server-one-time-token' });
+    expect(requests[1].body).not.toHaveProperty('approved');
+    expect(requests[1].body).not.toHaveProperty('approval_event_id');
   });
 
   it('builds an encoded discovery request and only offers local active activation', () => {

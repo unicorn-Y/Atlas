@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 
 import httpx
@@ -15,6 +16,7 @@ from atlas.skills.acquisition import (
     SkillsShProvider,
     inspect_github_source,
     install_acquisition,
+    payload_sha256,
     prepare_acquisition,
 )
 from atlas.skills.registry import SkillRegistry
@@ -43,7 +45,33 @@ def test_security_gate_pass_warn_block_and_hash_mismatch():
     blocked = prepare_acquisition(_record(), {"SKILL.md": SKILL + "api_key=sk-abcdefghijklmnop"})
     assert blocked.security["result"] == "BLOCK"
     mismatch = prepare_acquisition(_record(remote_hash="0" * 64), {"SKILL.md": SKILL})
+    assert mismatch.security["result"] == "BLOCK"
     assert "remote_hash_mismatch" in mismatch.security["risks"]
+
+
+def test_skills_sh_snapshot_hash_includes_sorted_relative_paths():
+    single = hashlib.sha256(b"SKILL.md" + SKILL.encode("utf-8")).hexdigest()
+    assert prepare_acquisition(_record(), {"SKILL.md": SKILL}).computed_hash == single
+    files = {"SKILL.md": SKILL, "a.txt": "note"}
+    expected = hashlib.sha256(b"a.txt" + b"note" + b"SKILL.md" + SKILL.encode("utf-8")).hexdigest()
+    acquisition = prepare_acquisition(_record(), files)
+    assert acquisition.computed_hash == expected
+    assert payload_sha256(files) != hashlib.sha256(("note" + SKILL).encode()).hexdigest()
+
+
+def test_missing_manifest_version_normalizes_and_malformed_version_rejects():
+    versionless = SKILL.replace("version: 1.2.3\n", "")
+    acquisition = prepare_acquisition(_record(), {"SKILL.md": versionless})
+    assert acquisition.record["version"] == "0.0.0"
+    with pytest.raises(ValueError, match="manifest version"):
+        prepare_acquisition(
+            _record(),
+            {
+                "SKILL.md": versionless.replace(
+                    "name: sample-skill", "name: sample-skill\nversion: nope"
+                )
+            },
+        )
 
 
 @pytest.mark.parametrize("path", ["../escape", "/absolute", "C:/escape", "a\\b"])
@@ -96,7 +124,8 @@ async def test_public_github_repository_and_skill_path_fetch_manifest_and_suppor
                             "size": 4,
                         },
                         {"path": "other/SKILL.md", "type": "blob", "mode": "100644", "size": 3},
-                    ]
+                    ],
+                    "truncated": False,
                 },
             )
         if request.url.host == "raw.githubusercontent.com":
@@ -150,6 +179,24 @@ async def test_public_github_symlink_is_rejected_before_file_download():
 
 
 @pytest.mark.asyncio
+async def test_public_github_truncated_tree_is_rejected():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/repos/owner/repo":
+            return httpx.Response(200, json={"default_branch": "main"})
+        return httpx.Response(
+            200, json={"tree": [{"path": "skills/sample-skill/SKILL.md"}], "truncated": True}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(CatalogUnavailableError, match="incomplete.*truncated"):
+            await inspect_github_source(
+                "https://github.com/owner/repo",
+                "skills/sample-skill",
+                client=client,
+            )
+
+
+@pytest.mark.asyncio
 async def test_public_search_normalizes_results_and_provider_failures_are_explicit():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/search":
@@ -181,7 +228,9 @@ async def test_public_search_normalizes_results_and_provider_failures_are_explic
 
 @pytest.mark.asyncio
 async def test_skills_sh_detail_normalizes_payload_hash_and_optional_audit():
-    remote_hash = hashlib.sha256(SKILL.encode()).hexdigest()
+    remote_hash = hashlib.sha256(
+        b"notes.mdnoteSKILL.md" + SKILL.encode("utf-8")
+    ).hexdigest()
 
     def handler(request: httpx.Request) -> httpx.Response:
         if "/audit/" in request.url.path:
@@ -193,7 +242,10 @@ async def test_skills_sh_detail_normalizes_payload_hash_and_optional_audit():
                 "source": "owner/repo",
                 "slug": "sample-skill",
                 "hash": remote_hash,
-                "files": [{"path": "SKILL.md", "contents": SKILL}],
+                "files": [
+                    {"path": "SKILL.md", "contents": SKILL},
+                    {"path": "notes.md", "contents": "note"},
+                ],
             },
         )
 
@@ -202,6 +254,8 @@ async def test_skills_sh_detail_normalizes_payload_hash_and_optional_audit():
     assert acquisition.record["provider"] == "skills.sh"
     assert acquisition.record["remote_hash"] == remote_hash
     assert acquisition.record["audit"] is None
+    assert acquisition.computed_hash == remote_hash
+    assert len(acquisition.files) == 2
     assert acquisition.security["result"] == "PASS"
 
 
@@ -211,18 +265,22 @@ async def test_install_requires_approval_scans_into_discovery_and_persists_prove
     acquisition = prepare_acquisition(_record(), {"SKILL.md": SKILL})
     with pytest.raises(PermissionError, match="approval"):
         await install_acquisition(
-            acquisition, skills_dir=tmp_path / "skills", registry=registry, approval_event_id=""
+            acquisition, skills_dir=tmp_path / "skills", registry=registry, approval_event={}
         )
     assert registry.list() == []
     result = await install_acquisition(
         acquisition,
         skills_dir=tmp_path / "skills",
         registry=registry,
-        approval_event_id="user-approved-1",
+        approval_event={
+            "approval_event_id": "server-approved-1",
+            "approved_at": "2026-01-01T00:00:00+00:00",
+            "computed_sha256": acquisition.computed_hash,
+        },
     )
     stored = registry.get("sample-skill", "1.2.3")
     assert result["status"] == "installed"
-    assert stored["provenance"]["user_approval_event_id"] == "user-approved-1"
+    assert stored["provenance"]["user_approval_event_id"] == "server-approved-1"
     assert stored["provenance"]["computed_sha256"] == acquisition.computed_hash
     from atlas.skills import SkillManager
 
@@ -240,7 +298,14 @@ async def test_conflict_is_not_overwritten_and_agent_has_no_install_capability(t
     acquisition = prepare_acquisition(_record(), {"SKILL.md": SKILL})
     with pytest.raises(FileExistsError):
         await install_acquisition(
-            acquisition, skills_dir=tmp_path / "unused", registry=registry, approval_event_id="ok"
+            acquisition,
+            skills_dir=tmp_path / "unused",
+            registry=registry,
+            approval_event={
+                "approval_event_id": "ok",
+                "approved_at": "now",
+                "computed_sha256": acquisition.computed_hash,
+            },
         )
     assert registry.get("sample-skill", "1.2.3")["description"] == "Existing"
     capabilities = AgentCapabilityRegistry()
@@ -252,6 +317,40 @@ async def test_conflict_is_not_overwritten_and_agent_has_no_install_capability(t
     }
     with pytest.raises(PermissionError, match="explicit Skill Center"):
         await capabilities.invoke("skill.catalog.install", {"approved": True})
+    with pytest.raises((KeyError, ValueError)):
+        await capabilities.invoke("skill.catalog.approve", {"acquisition_id": "anything"})
+
+
+@pytest.mark.asyncio
+async def test_concurrent_duplicate_install_keeps_existing_registry_and_directory(tmp_path):
+    registry = SkillRegistry(tmp_path / "concurrent.db")
+    skills_dir = tmp_path / "skills"
+    acquisition = prepare_acquisition(_record(), {"SKILL.md": SKILL})
+
+    def approval(suffix):
+        return {
+            "approval_event_id": f"server-{suffix}",
+            "approved_at": "2026-01-01T00:00:00+00:00",
+            "computed_sha256": acquisition.computed_hash,
+        }
+
+    results = await asyncio.gather(
+        install_acquisition(
+            acquisition, skills_dir=skills_dir, registry=registry, approval_event=approval("one")
+        ),
+        install_acquisition(
+            acquisition, skills_dir=skills_dir, registry=registry, approval_event=approval("two")
+        ),
+        return_exceptions=True,
+    )
+    assert (
+        sum(isinstance(result, dict) and result.get("status") == "installed" for result in results)
+        == 1
+    )
+    assert sum(isinstance(result, FileExistsError) for result in results) == 1
+    stored = registry.get("sample-skill", "1.2.3")
+    assert stored["provenance"]["user_approval_event_id"] in {"server-one", "server-two"}
+    assert (skills_dir / "community" / "sample-skill" / "SKILL.md").read_text("utf-8") == SKILL
 
 
 @pytest.mark.asyncio
@@ -267,7 +366,11 @@ async def test_registry_failure_rolls_back_installed_directory_and_cleans_stage(
             acquisition,
             skills_dir=skills_dir,
             registry=FailingRegistry(tmp_path / "fail.db"),
-            approval_event_id="approved",
+            approval_event={
+                "approval_event_id": "approved",
+                "approved_at": "now",
+                "computed_sha256": acquisition.computed_hash,
+            },
         )
     assert not (skills_dir / "community" / "sample-skill").exists()
     assert not (tmp_path / ".atlas-skill-staging").exists()
@@ -320,30 +423,156 @@ async def test_catalog_api_keeps_preview_read_only_and_requires_warn_confirmatio
             "/api/skill-catalog/install",
             json={"acquisition_id": acquisition_id},
         )
-        no_warn = await client.post(
+        arbitrary = await client.post(
             "/api/skill-catalog/install",
             json={
                 "acquisition_id": acquisition_id,
                 "approved": True,
-                "warnings_confirmed": False,
-                "approval_event_id": "approval-1",
+                "approval_event_id": "client-generated",
             },
         )
+        no_warn = await client.post(
+            "/api/skill-catalog/approve",
+            json={
+                "acquisition_id": acquisition_id,
+                "warnings_confirmed": False,
+            },
+        )
+        approval_response = await client.post(
+            "/api/skill-catalog/approve",
+            json={"acquisition_id": acquisition_id, "warnings_confirmed": True},
+        )
+        approval = approval_response.json()
         installed = await client.post(
             "/api/skill-catalog/install",
             json={
                 "acquisition_id": acquisition_id,
-                "approved": True,
-                "warnings_confirmed": True,
-                "approval_event_id": "approval-2",
+                "install_authorization": approval["install_authorization"],
+            },
+        )
+        replay = await client.post(
+            "/api/skill-catalog/install",
+            json={
+                "acquisition_id": acquisition_id,
+                "install_authorization": approval["install_authorization"],
             },
         )
     assert search.json()["status"] == "available"
     assert preview.json()["security"]["result"] == "WARN"
-    assert denied.status_code == 403 and no_warn.status_code == 403
+    assert denied.status_code == 403 and arbitrary.status_code == 403
+    assert no_warn.status_code == 403
+    assert approval["approval_event_id"] != "client-generated"
+    assert approval["approval_state"] == "approved"
+    assert approval["computed_sha256"] == acquisition.computed_hash
     assert installed.status_code == 200
+    assert replay.status_code == 404
     stored = registry.get("sample-skill", "1.2.3")
-    assert stored["provenance"]["user_approval_event_id"] == "approval-2"
+    assert stored["provenance"]["user_approval_event_id"] == approval["approval_event_id"]
+    assert stored["provenance"]["user_approval_timestamp"] == approval["approved_at"]
+    server.skill_acquisitions.clear()
+
+
+@pytest.mark.asyncio
+async def test_catalog_approval_is_acquisition_hash_and_expiry_bound(tmp_path, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from httpx import ASGITransport, AsyncClient
+
+    from atlas import server
+    from atlas.server import app
+
+    class Provider:
+        async def inspect(self, external_id):
+            return prepare_acquisition(_record(), {"SKILL.md": SKILL})
+
+    monkeypatch.setattr(server, "skill_registry", SkillRegistry(tmp_path / "registry.db"))
+    monkeypatch.setattr(server, "skill_mgr", SkillManager(tmp_path / "skills"))
+    monkeypatch.setattr(server, "skill_catalog_provider", Provider())
+    server.skill_acquisitions.clear()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = (await client.post("/api/skill-catalog/inspect", json={"external_id": "id"})).json()
+        second = (
+            await client.post("/api/skill-catalog/inspect", json={"external_id": "id"})
+        ).json()
+        third = (await client.post("/api/skill-catalog/inspect", json={"external_id": "id"})).json()
+        approval = (
+            await client.post(
+                "/api/skill-catalog/approve",
+                json={"acquisition_id": first["acquisition_id"]},
+            )
+        ).json()
+        cross_acquisition = await client.post(
+            "/api/skill-catalog/install",
+            json={
+                "acquisition_id": second["acquisition_id"],
+                "install_authorization": approval["install_authorization"],
+            },
+        )
+        server.skill_acquisitions[first["acquisition_id"]]["acquisition"].computed_hash = "0" * 64
+        changed_hash = await client.post(
+            "/api/skill-catalog/install",
+            json={
+                "acquisition_id": first["acquisition_id"],
+                "install_authorization": approval["install_authorization"],
+            },
+        )
+        server.skill_acquisitions[second["acquisition_id"]]["expires_at"] = datetime.now(
+            UTC
+        ) - timedelta(seconds=1)
+        expired = await client.post(
+            "/api/skill-catalog/approve",
+            json={"acquisition_id": second["acquisition_id"]},
+        )
+        third_approval = (
+            await client.post(
+                "/api/skill-catalog/approve",
+                json={"acquisition_id": third["acquisition_id"]},
+            )
+        ).json()
+        server.skill_acquisitions[third["acquisition_id"]]["approval_expires_at"] = datetime.now(
+            UTC
+        ) - timedelta(seconds=1)
+        expired_approval = await client.post(
+            "/api/skill-catalog/install",
+            json={
+                "acquisition_id": third["acquisition_id"],
+                "install_authorization": third_approval["install_authorization"],
+            },
+        )
+    assert cross_acquisition.status_code == 403
+    assert changed_hash.status_code == 409
+    assert expired.status_code == 410
+    assert expired_approval.status_code == 403
+    server.skill_acquisitions.clear()
+
+
+@pytest.mark.asyncio
+async def test_blocked_catalog_skill_cannot_receive_server_approval(tmp_path, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+
+    from atlas import server
+    from atlas.server import app
+
+    blocked = prepare_acquisition(
+        _record(),
+        {"SKILL.md": SKILL + "api_key=sk-abcdefghijklmnop"},
+    )
+
+    class Provider:
+        async def inspect(self, external_id):
+            return blocked
+
+    monkeypatch.setattr(server, "skill_registry", SkillRegistry(tmp_path / "registry.db"))
+    monkeypatch.setattr(server, "skill_catalog_provider", Provider())
+    server.skill_acquisitions.clear()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        preview = await client.post("/api/skill-catalog/inspect", json={"external_id": "id"})
+        approved = await client.post(
+            "/api/skill-catalog/approve",
+            json={"acquisition_id": preview.json()["acquisition_id"], "warnings_confirmed": True},
+        )
+    assert preview.json()["security"]["result"] == "BLOCK"
+    assert approved.status_code == 403
     server.skill_acquisitions.clear()
 
 

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import re
+import secrets
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +35,6 @@ from atlas.models.manager import ModelManager
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
 from atlas.skills import SKILLS_DIR, SkillManager
 from atlas.skills.acquisition import (
-    Acquisition,
     CatalogUnavailableError,
     SkillsShProvider,
     inspect_github_source,
@@ -54,7 +55,8 @@ mcp_client: MCPClient | None = None
 skill_mgr: SkillManager | None = None
 skill_registry: SkillRegistry | None = None
 skill_catalog_provider = SkillsShProvider()
-skill_acquisitions: dict[str, Acquisition] = {}
+SKILL_ACQUISITION_TTL = timedelta(minutes=10)
+skill_acquisitions: dict[str, dict[str, Any]] = {}
 scheduler: AtlasScheduler | None = None
 
 
@@ -1451,7 +1453,21 @@ async def inspect_skill_catalog(payload: dict[str, Any] = Body(...)) -> dict[str
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     acquisition_id = str(uuid.uuid4())
-    skill_acquisitions[acquisition_id] = acquisition
+    created_at = datetime.now(UTC)
+    expires_at = created_at + SKILL_ACQUISITION_TTL
+    skill_acquisitions[acquisition_id] = {
+        "acquisition_id": acquisition_id,
+        "provider": acquisition.record["provider"],
+        "external_id": acquisition.record["external_id"],
+        "computed_sha256": acquisition.computed_hash,
+        "name": acquisition.record["name"],
+        "version": acquisition.record["version"],
+        "security": acquisition.security,
+        "created_at": created_at,
+        "expires_at": expires_at,
+        "approval_state": "pending",
+        "acquisition": acquisition,
+    }
     existing = (
         skill_registry.get(acquisition.record["name"], acquisition.record["version"])
         if skill_registry else None
@@ -1466,23 +1482,85 @@ async def inspect_skill_catalog(payload: dict[str, Any] = Body(...)) -> dict[str
     }
 
 
+@app.post("/api/skill-catalog/approve")
+async def approve_catalog_skill(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    acquisition_id = payload.get("acquisition_id")
+    session = skill_acquisitions.get(acquisition_id) if isinstance(acquisition_id, str) else None
+    if session is None:
+        raise HTTPException(status_code=404, detail="Reviewed acquisition not found; inspect again")
+    if datetime.now(UTC) >= session["expires_at"]:
+        session["approval_state"] = "expired"
+        raise HTTPException(status_code=410, detail="Reviewed acquisition expired; inspect again")
+    acquisition = session["acquisition"]
+    if acquisition.computed_hash != session["computed_sha256"]:
+        raise HTTPException(status_code=409, detail="Reviewed payload changed; inspect again")
+    if session["approval_state"] != "pending":
+        raise HTTPException(status_code=409, detail="Acquisition approval is no longer pending")
+    if acquisition.security["result"] == "BLOCK":
+        raise HTTPException(status_code=403, detail="Blocked skill cannot be approved")
+    if acquisition.security["result"] == "WARN" and payload.get("warnings_confirmed") is not True:
+        raise HTTPException(
+            status_code=403, detail="WARN risks require explicit second confirmation",
+        )
+    approved_at = datetime.now(UTC).isoformat()
+    event = {
+        "approval_event_id": str(uuid.uuid4()),
+        "acquisition_id": acquisition_id,
+        "computed_sha256": session["computed_sha256"],
+        "approved_at": approved_at,
+        "approval_state": "approved",
+    }
+    authorization = secrets.token_urlsafe(32)
+    session["approval_event"] = event
+    session["authorization_sha256"] = hashlib.sha256(authorization.encode("utf-8")).hexdigest()
+    session["approval_state"] = "approved"
+    session["approval_expires_at"] = datetime.now(UTC) + SKILL_ACQUISITION_TTL
+    return {**event, "install_authorization": authorization}
+
+
 @app.post("/api/skill-catalog/install")
 async def install_catalog_skill(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     acquisition_id = payload.get("acquisition_id")
-    acquisition = (
-        skill_acquisitions.get(acquisition_id) if isinstance(acquisition_id, str) else None
-    )
-    if acquisition is None:
+    session = skill_acquisitions.get(acquisition_id) if isinstance(acquisition_id, str) else None
+    if session is None:
         raise HTTPException(status_code=404, detail="Reviewed acquisition not found; inspect again")
-    if payload.get("approved") is not True or not isinstance(payload.get("approval_event_id"), str):
-        raise HTTPException(status_code=403, detail="Explicit user approval is required")
-    if acquisition.security["result"] == "WARN" and payload.get("warnings_confirmed") is not True:
-        raise HTTPException(status_code=403, detail="WARN risks require explicit confirmation")
+    acquisition = session["acquisition"]
+    if "approval_event_id" in payload or "approved" in payload:
+        raise HTTPException(
+            status_code=403, detail="Client-supplied approval claims are not accepted",
+        )
+    if datetime.now(UTC) >= session["expires_at"]:
+        session["approval_state"] = "expired"
+        raise HTTPException(status_code=410, detail="Reviewed acquisition expired; inspect again")
+    if acquisition.computed_hash != session["computed_sha256"]:
+        raise HTTPException(status_code=409, detail="Reviewed payload changed; inspect again")
+    authorization = payload.get("install_authorization")
+    approval_event = session.get("approval_event")
+    if (
+        session["approval_state"] != "approved"
+        or not isinstance(authorization, str)
+        or not isinstance(approval_event, dict)
+        or datetime.now(UTC) >= session.get("approval_expires_at", datetime.min.replace(tzinfo=UTC))
+        or not secrets.compare_digest(
+            hashlib.sha256(authorization.encode("utf-8")).hexdigest(),
+            session.get("authorization_sha256", ""),
+        )
+    ):
+        raise HTTPException(status_code=403, detail="Valid one-time server approval is required")
+    if (
+        approval_event["acquisition_id"] != acquisition_id
+        or approval_event["computed_sha256"] != acquisition.computed_hash
+    ):
+        raise HTTPException(
+            status_code=403, detail="Approval does not match the reviewed acquisition",
+        )
+    session["approval_state"] = "consumed"
+    session.pop("authorization_sha256", None)
     assert skill_registry is not None
     try:
         result = await install_acquisition(
             acquisition, skills_dir=skill_mgr._skills_dir if skill_mgr else SKILLS_DIR,
-            registry=skill_registry, approval_event_id=payload["approval_event_id"],
+            registry=skill_registry, approval_event=approval_event,
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from None

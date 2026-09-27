@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -25,6 +26,8 @@ MAX_FILE_BYTES = 512_000
 MAX_PAYLOAD_BYTES = 2_000_000
 NAME_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 VERSION_RE = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\Z")
+_INSTALL_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+_INSTALL_LOCKS_GUARD = threading.Lock()
 SECRET_RE = re.compile(
     r"(?i)(?:api[_ -]?key|access[_ -]?token|password|passwd|secret|credential)"
     r"\s*[:=]\s*\S+|\bBearer\s+\S+|\bsk-[A-Za-z0-9_-]{12,}"
@@ -159,6 +162,14 @@ class SkillsShProvider:
             f"{self.base_url}/api/v1/skills/" + "/".join(quote(p, safe="") for p in parts)
         )
 
+    async def get_snapshot(self, external_id: str) -> dict[str, Any] | None:
+        parts = external_id.split("/")
+        if len(parts) != 3 or any(not re.fullmatch(r"[A-Za-z0-9_.-]+", part) for part in parts):
+            raise ValueError("invalid skills.sh external_id")
+        return await self._get(
+            f"{self.base_url}/api/download/" + "/".join(quote(part, safe="") for part in parts)
+        )
+
     async def get_audit(self, external_id: str) -> dict[str, Any] | None:
         parts = external_id.split("/")
         if len(parts) != 3:
@@ -169,6 +180,38 @@ class SkillsShProvider:
 
     async def inspect(self, external_id: str) -> Acquisition:
         parts = external_id.split("/")
+        try:
+            snapshot = await self.get_snapshot(external_id)
+        except CatalogUnavailableError:
+            snapshot = None
+        if isinstance(snapshot, dict) and isinstance(snapshot.get("files"), list):
+            files = {
+                item["path"]: item["contents"]
+                for item in snapshot["files"]
+                if isinstance(item, dict)
+                and isinstance(item.get("path"), str)
+                and isinstance(item.get("contents"), str)
+            }
+            source = "/".join(parts[:2])
+            record = {
+                "provider": self.name,
+                "external_id": external_id,
+                "name": parts[2],
+                "description": "",
+                "source": source,
+                "source_type": "github",
+                "version": None,
+                "source_url": f"https://github.com/{source}",
+                "install_url": f"{self.base_url}/{quote(source)}/{quote(parts[2])}",
+                "remote_hash": snapshot.get("hash"),
+                "audit": None,
+                "fetched_at": datetime.now(UTC).isoformat(),
+            }
+            try:
+                record["audit"] = await self.get_audit(external_id)
+            except CatalogUnavailableError:
+                pass
+            return prepare_acquisition(record, files)
         try:
             detail = await self.get_detail(external_id)
         except CatalogUnavailableError:
@@ -226,11 +269,16 @@ def _parse_manifest(content: str, expected_name: str) -> tuple[dict[str, Any], l
     raw = yaml.safe_load(match.group(1))
     if not isinstance(raw, dict):
         raise ValueError("SKILL.md frontmatter must be a mapping")
-    name, version, description = raw.get("name"), raw.get("version"), raw.get("description")
+    name, version, description = (
+        raw.get("name"),
+        raw.get("version", "0.0.0"),
+        raw.get("description"),
+    )
     if not isinstance(name, str) or not NAME_RE.fullmatch(name) or name != expected_name:
         raise ValueError("manifest name must match the target identity")
     if not isinstance(version, str) or not VERSION_RE.fullmatch(version):
         raise ValueError("manifest version must be MAJOR.MINOR.PATCH")
+    raw["version"] = version
     if not isinstance(description, str) or not description.strip():
         raise ValueError("manifest description is required")
     if _contains_secret(raw):
@@ -303,9 +351,10 @@ def _security_scan(files: dict[str, str], manifest: dict[str, Any]) -> dict[str,
 def prepare_acquisition(record: dict[str, Any], files: dict[str, str]) -> Acquisition:
     _validate_files(files)
     manifest, dependencies = _parse_manifest(files["SKILL.md"], str(record.get("name", "")))
-    normalized = {name: files[name] for name in sorted(files)}
-    payload = "".join(normalized[name] for name in normalized).encode("utf-8")
-    digest = hashlib.sha256(payload).hexdigest()
+    normalized = {PurePosixPath(name).as_posix(): files[name] for name in files}
+    if len(normalized) != len(files):
+        raise ValueError("payload contains duplicate normalized paths")
+    digest = payload_sha256(normalized)
     remote_hash = record.get("remote_hash")
     if remote_hash:
         normalized_remote = str(remote_hash).removeprefix("sha256:").lower()
@@ -333,6 +382,18 @@ def prepare_acquisition(record: dict[str, Any], files: dict[str, str]) -> Acquis
         security=security,
         computed_hash=digest,
     )
+
+
+def payload_sha256(files: dict[str, str]) -> str:
+    """Return the skills.sh snapshot digest over sorted relative paths and UTF-8 contents."""
+    normalized_files = {PurePosixPath(name).as_posix(): content for name, content in files.items()}
+    if len(normalized_files) != len(files):
+        raise ValueError("payload contains duplicate normalized paths")
+    digest = hashlib.sha256()
+    for path in sorted(normalized_files, key=lambda value: (value.casefold(), value)):
+        digest.update(path.encode("utf-8"))
+        digest.update(normalized_files[path].encode("utf-8"))
+    return digest.hexdigest()
 
 
 async def inspect_github_source(
@@ -373,8 +434,11 @@ async def inspect_github_source(
         tree_response = await using.get(tree_url)
         if tree_response.status_code != 200:
             raise CatalogUnavailableError("GitHub repository tree is unavailable")
+        tree_data = tree_response.json()
+        if tree_data.get("truncated") is True:
+            raise CatalogUnavailableError("GitHub repository tree is incomplete (truncated)")
         prefix = f"{path}/" if path else ""
-        entries = tree_response.json().get("tree", [])
+        entries = tree_data.get("tree", [])
         selected = [
             item
             for item in entries
@@ -443,12 +507,39 @@ async def install_acquisition(
     *,
     skills_dir: Path,
     registry: SkillRegistry,
-    approval_event_id: str,
+    approval_event: dict[str, str],
 ) -> dict[str, Any]:
-    if not approval_event_id.strip():
+    approval_event_id = approval_event.get("approval_event_id", "")
+    approved_at = approval_event.get("approved_at", "")
+    if (
+        not approval_event_id
+        or not approved_at
+        or approval_event.get("computed_sha256") != acquisition.computed_hash
+    ):
         raise PermissionError("explicit user approval is required")
     if acquisition.security["result"] == "BLOCK":
         raise PermissionError("blocked skill cannot be installed")
+    name = acquisition.record["name"]
+    with _INSTALL_LOCKS_GUARD:
+        lock = _INSTALL_LOCKS.setdefault((str(registry.path.resolve()), name), threading.Lock())
+    with lock:
+        return await _install_acquisition_locked(
+            acquisition,
+            skills_dir=skills_dir,
+            registry=registry,
+            approval_event_id=approval_event_id,
+            approved_at=approved_at,
+        )
+
+
+async def _install_acquisition_locked(
+    acquisition: Acquisition,
+    *,
+    skills_dir: Path,
+    registry: SkillRegistry,
+    approval_event_id: str,
+    approved_at: str,
+) -> dict[str, Any]:
     name, version = acquisition.record["name"], acquisition.record["version"]
     existing = registry.get(name, version)
     if existing:
@@ -464,11 +555,11 @@ async def install_acquisition(
             )
         )
     target = skills_dir / "community" / name
-    if target.exists():
+    is_junction = getattr(os.path, "isjunction", lambda _path: False)
+    if target.exists() or target.is_symlink() or is_junction(target):
         raise FileExistsError(f"install target already exists: {target}")
     skills_dir.mkdir(parents=True, exist_ok=True)
     stage_parent = skills_dir.parent / ".atlas-skill-staging"
-    is_junction = getattr(os.path, "isjunction", lambda _path: False)
     if stage_parent.is_symlink() or is_junction(stage_parent):
         raise ValueError("staging directory must not be a symlink or junction")
     stage_parent.mkdir(exist_ok=True)
@@ -514,7 +605,7 @@ async def install_acquisition(
                 "manifest": {"name": name, "version": version},
                 "security_gate": acquisition.security,
                 "user_approval_event_id": approval_event_id,
-                "user_approval_timestamp": datetime.now(UTC).isoformat(),
+                "user_approval_timestamp": approved_at,
             },
         }
         registry.register(

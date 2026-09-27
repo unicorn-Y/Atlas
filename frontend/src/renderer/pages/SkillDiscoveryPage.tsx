@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Search, WandSparkles } from 'lucide-react';
 import styles from '../App.module.css';
 import { buildSkillDiscoveryUrl, canActivateLocalSkill } from './skillDiscoveryUrl';
-import { remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
+import { approveSkillInstallation, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
 
 type SkillResult = {
   name: string; version: string; description: string; capabilities: string[]; tools: string[];
@@ -11,7 +11,6 @@ type SkillResult = {
 };
 type RemoteSkill = { provider: string; external_id: string; name: string; description: string; source: string; source_type: string; source_url: string; install_url: string; remote_hash?: string | null; audit?: unknown; installed: boolean; state: string };
 type Review = { acquisition_id: string; record: RemoteSkill & { version: string; description: string }; files: Record<string, string>; validation: { result: string; dependencies: string[] }; security: { result: 'PASS' | 'WARN' | 'BLOCK'; risks: string[]; note: string }; computed_sha256: string; already_installed: boolean; existing_local?: Record<string, unknown> | null; install_target: string };
-
 interface Props { apiBaseUrl: string }
 
 export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
@@ -94,9 +93,9 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
     const gate = reviewGateState(review.security.result, review.already_installed);
     if (!gate.canInstall) return;
     if (gate.requiresWarningConfirmation && !warningsConfirmed) { setConfirmWarnings(true); return; }
-    setInstalling(true); setInstallState('正在安全安装…');
+    setInstalling(true); setInstallState('正在记录明确批准并安全安装…');
     try {
-      const response = await fetch(`${apiBaseUrl}/api/skill-catalog/install`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acquisition_id: review.acquisition_id, approved: true, warnings_confirmed: warningsConfirmed, approval_event_id: crypto.randomUUID() }) });
+      const response = await approveSkillInstallation(apiBaseUrl, review.acquisition_id, warningsConfirmed);
       const data = await response.json() as { detail?: string; name?: string };
       if (!response.ok) throw new Error(data.detail ?? '安装失败');
       setInstallState(`已安装 ${data.name}，本地索引已刷新。`); setReview(null); setConfirmWarnings(false); await search();
