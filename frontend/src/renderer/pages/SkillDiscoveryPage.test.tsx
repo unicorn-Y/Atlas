@@ -16,6 +16,8 @@ describe('Skill discovery page', () => {
     expect(html).toContain('External Catalog');
     expect(html).toContain('All');
     expect(html).toContain('本地搜索保持离线可用');
+    expect(html).toContain('aria-label="导入 Skill package"');
+    expect(html).toContain('lifecycle 审批');
   });
 
   it('does not offer the local activation path for remote records', () => {

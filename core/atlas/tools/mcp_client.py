@@ -323,7 +323,7 @@ class MCPClient:
                 "is_error": bool(result.is_error),
             }
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning("mcp.call_tool.timeout", tool=qualified_name,
                         timeout=timeout)
             return {"content": [{"type": "text",
@@ -341,6 +341,10 @@ class MCPClient:
     def get_server_names(self) -> list[str]:
         """Return names of all connected servers."""
         return list(self._servers.keys())
+
+    def get_configured_server_names(self) -> list[str]:
+        """Return names present in the locally registered MCP configuration."""
+        return [config.name for config in _parse_server_configs()]
 
     def get_server_tools(self, server_name: str) -> list[ToolInfo]:
         """Return tools for a specific server."""

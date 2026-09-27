@@ -21,6 +21,7 @@ except ModuleNotFoundError:
 import yaml
 
 from atlas.config import PROJECT_ROOT
+from atlas.skills.dependencies import dependency_preflight
 
 log = structlog.get_logger()
 
@@ -163,9 +164,13 @@ def _frontmatter_to_skill_info(
     for key in ("mcp_servers", "python_packages", "commands"):
         values = deps.get(key, []) or []
         if not isinstance(values, list) or any(
-            not isinstance(value, str) or not value for value in values
+            not (isinstance(value, str) and value.strip())
+            and not (isinstance(value, dict) and isinstance(value.get("name"), str)
+                     and value["name"].strip()
+                     and all(field in {"name", "version", "constraint"} for field in value))
+            for value in values
         ):
-            invalid(f"dependencies.{key} must be a list of non-empty strings")
+            invalid(f"dependencies.{key} must be a list of names or named version constraints")
             return None
 
     # Accept Atlas fields and Hermes-compatible nested metadata.
@@ -378,7 +383,14 @@ class SkillManager:
 
     # -- activation ------------------------------------------------------------
 
-    async def activate(self, name: str) -> str | None:
+    async def activate(
+        self,
+        name: str,
+        *,
+        connected_servers: list[str] | None = None,
+        configured_servers: list[str] | None = None,
+        registry: Any | None = None,
+    ) -> str | None:
         """Activate a skill: read its full SKILL.md and return the body content.
 
         Returns None if the skill is not found.
@@ -386,6 +398,16 @@ class SkillManager:
         skill = self._index.get(name)
         if skill is None:
             return None
+
+        blockers = [item for item in self.preflight_dependencies(
+            name, connected_servers=connected_servers,
+            configured_servers=configured_servers, registry=registry,
+        ) if item["state"] != "satisfied"]
+        if blockers:
+            detail = ", ".join(
+                f"{item['kind']}:{item['name']} ({item['state']})" for item in blockers
+            )
+            raise PermissionError("skill dependencies block activation: " + detail)
 
         parsed = _parse_skill_md(Path(skill.path))
         if parsed is None:
@@ -412,29 +434,31 @@ class SkillManager:
         Returns:
             Dict mapping dependency names to satisfied (True/False).
         """
+        dependencies = self.preflight_dependencies(
+            name, connected_servers=connected_servers, configured_servers=connected_servers,
+        )
+        kind_aliases = {"mcp_servers": "mcp", "python_packages": "python", "commands": "command"}
+        return {
+            f"{kind_aliases.get(item['kind'], item['kind'])}:{item['name']}":
+            item["state"] == "satisfied"
+            for item in dependencies
+        }
+
+    def preflight_dependencies(
+        self,
+        name: str,
+        *,
+        connected_servers: list[str] | None = None,
+        configured_servers: list[str] | None = None,
+        registry: Any | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return the structured dependency state without making environment changes."""
         skill = self._index.get(name)
         if skill is None:
-            return {}
-
-        results: dict[str, bool] = {}
-        deps = skill.dependencies
-
-        # Check MCP servers
-        servers = connected_servers or []
-        for srv in deps.get("mcp_servers", []) or []:
-            results[f"mcp:{srv}"] = srv in servers
-
-        # Check Python packages
-        for pkg in deps.get("python_packages", []) or []:
-            try:
-                __import__(pkg)
-                results[f"python:{pkg}"] = True
-            except ImportError:
-                results[f"python:{pkg}"] = False
-
-        # Check system commands
-        import shutil
-        for cmd in deps.get("commands", []) or []:
-            results[f"command:{cmd}"] = shutil.which(cmd) is not None
-
-        return results
+            return []
+        return dependency_preflight(
+            skill.dependencies,
+            connected_servers=set(connected_servers) if connected_servers is not None else None,
+            configured_servers=set(configured_servers) if configured_servers is not None else None,
+            registry=registry,
+        )

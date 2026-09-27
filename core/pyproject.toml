@@ -24,6 +24,7 @@ dependencies = [
     "structlog>=24.4.0",
     "mcp>=2.0.0",
     "pyyaml>=6.0",
+    "packaging>=23.0",
 ]
 
 [project.optional-dependencies]

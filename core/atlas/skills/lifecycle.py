@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import inspect
 import os
-import re
 import shutil
 import tempfile
 import threading
@@ -23,6 +21,7 @@ from atlas.skills.acquisition import (
     payload_sha256,
     prepare_acquisition,
 )
+from atlas.skills.dependencies import dependency_preflight
 from atlas.skills.registry import SkillRegistry
 
 _LOCKS: dict[tuple[str, str], threading.RLock] = {}
@@ -68,51 +67,9 @@ def _managed_path(skills_dir: Path, skill: dict[str, Any]) -> Path:
 
 
 def dependency_states(registry: SkillRegistry, requirements: Any) -> list[dict[str, Any]]:
-    declared = requirements if isinstance(requirements, list) else (
-        list(requirements.values()) if isinstance(requirements, dict) else []
+    return dependency_preflight(
+        requirements, registry=registry,
     )
-    states = []
-    for dependency in declared:
-        if not isinstance(dependency, str):
-            states.append({"name": str(dependency), "declared": True,
-                           "detected": None, "state": "unknown"})
-            continue
-        skill_match = re.fullmatch(r"skill:([a-z0-9-]+)(?:@(.+))?", dependency)
-        if skill_match:
-            target = (
-                registry.get(skill_match.group(1), skill_match.group(2))
-                if skill_match.group(2) else None
-            )
-            if skill_match.group(2):
-                if target and target["status"] == "active":
-                    state = "satisfied"
-                elif any(item["name"] == skill_match.group(1) for item in registry.list()):
-                    state = "incompatible"
-                else:
-                    state = "missing"
-            else:
-                state = "satisfied" if any(
-                    item["name"] == skill_match.group(1) and item["status"] == "active"
-                    for item in registry.list()
-                ) else "missing"
-            states.append({"name": dependency, "declared": True,
-                           "detected": state == "satisfied", "state": state})
-            continue
-        python_match = re.fullmatch(r"python:([A-Za-z_][A-Za-z0-9_]*)(?:@(.+))?", dependency)
-        if python_match:
-            try:
-                detected = importlib.util.find_spec(python_match.group(1)) is not None
-            except (ImportError, ValueError, ModuleNotFoundError):
-                detected = False
-            state = "unknown" if python_match.group(2) else (
-                "satisfied" if detected else "missing"
-            )
-            states.append({"name": dependency, "declared": True,
-                           "detected": detected, "state": state})
-            continue
-        states.append({"name": dependency, "declared": True, "detected": None,
-                       "state": "unknown"})
-    return states
 
 
 def _payload(path: Path) -> dict[str, str]:

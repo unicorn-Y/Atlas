@@ -828,7 +828,11 @@ async def _install_acquisition_locked(
                 "provider": acquisition.record["provider"],
                 "external_id": acquisition.record["external_id"],
                 "source_url": acquisition.record["source_url"],
+                "original_source": acquisition.record.get("original_source",
+                                                            acquisition.record["source_url"]),
+                "package_source": acquisition.record.get("package_source"),
                 "fetched_at": acquisition.record.get("fetched_at"),
+                "imported_at": acquisition.record.get("imported_at"),
                 "remote_hash": acquisition.record.get("remote_hash"),
                 "provider_computed_hash": acquisition.record.get("provider_computed_hash")
                 or acquisition.record.get("provider_integrity", {}).get(

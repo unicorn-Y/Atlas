@@ -9,6 +9,8 @@ import json
 import os
 import re
 import secrets
+import subprocess
+import sys
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -30,12 +32,14 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from pydantic import BaseModel
 
 from atlas.agent.capabilities import (
     AgentCapabilityRegistry,
     register_skill_capabilities,
     register_skill_catalog_capabilities,
+    register_skill_dependency_capability,
     register_skill_discovery_capability,
 )
 from atlas.agent.orchestrator import AgentOrchestrator
@@ -51,7 +55,9 @@ from atlas.skills.acquisition import (
     inspect_github_source,
     install_acquisition,
 )
+from atlas.skills.dependencies import dependency_preflight
 from atlas.skills.discovery import SkillDiscovery
+from atlas.skills.distribution import inspect_skill_package
 from atlas.skills.lifecycle import (
     dependency_states,
     transition_pin,
@@ -88,6 +94,7 @@ skill_catalog_provider = SkillsShProvider()
 SKILL_ACQUISITION_TTL = timedelta(minutes=10)
 SKILL_CENTER_TOKEN = os.environ.get("ATLAS_SKILL_CENTER_TOKEN")
 skill_acquisitions: dict[str, dict[str, Any]] = {}
+skill_dependency_plans: dict[str, dict[str, Any]] = {}
 scheduler: AtlasScheduler | None = None
 
 
@@ -454,7 +461,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 "use_cases": [],
             }, source="local")
     capabilities = AgentCapabilityRegistry()
-    register_skill_capabilities(capabilities, skill_mgr, skill_registry)
+    register_skill_capabilities(capabilities, skill_mgr, skill_registry, mcp_client)
+    register_skill_dependency_capability(capabilities, skill_mgr, skill_registry, mcp_client)
     register_skill_discovery_capability(capabilities, skill_registry)
     register_skill_catalog_capabilities(capabilities, skill_catalog_provider, skill_registry)
 
@@ -1434,6 +1442,94 @@ async def list_skills(
     }
 
 
+@app.get("/api/skills/{name}/dependencies")
+async def inspect_skill_dependencies(name: str) -> dict[str, Any]:
+    """Return a read-only dependency preflight for one indexed Skill."""
+    assert skill_mgr is not None
+    info = skill_mgr.get_skill(name)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
+    dependencies = skill_mgr.preflight_dependencies(
+        name,
+        connected_servers=mcp_client.get_server_names() if mcp_client else None,
+        configured_servers=mcp_client.get_configured_server_names() if mcp_client else None,
+        registry=skill_registry,
+    )
+    blockers = [item for item in dependencies if item["state"] != "satisfied"]
+    return {"name": name, "dependencies": dependencies, "blocking": blockers,
+            "can_activate": not blockers, "read_only": True}
+
+
+@app.post("/api/skills/{name}/dependencies/prepare")
+async def prepare_skill_dependencies(
+    name: str, request: Request, payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    """Create a dependency plan; execution remains behind lifecycle approval."""
+    _require_skill_center_authority(request)
+    if skill_mgr is None:
+        raise HTTPException(status_code=503, detail="Skill Manager is unavailable")
+    info = skill_mgr.get_skill(name)
+    if info is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    record = skill_registry.get(name, info.version) if skill_registry else None
+    if record is None or not (record.get("provenance") or {}).get("installed_path"):
+        raise HTTPException(
+            status_code=409, detail="dependency installation requires a managed Skill",
+        )
+    _, _, lifecycle_state = _lifecycle_context(name, info.version)
+    lifecycle = lifecycle_state["lifecycle"]
+    if (lifecycle["drifted"] or lifecycle.get("trust_state") in {"revoked", "blocked"}
+            or lifecycle.get("state") in {"removed", "quarantined"}
+            or lifecycle.get("pin_policy") != "unpinned"):
+        raise HTTPException(
+            status_code=409, detail="Skill lifecycle policy blocks dependency preparation",
+        )
+    states = skill_mgr.preflight_dependencies(
+        name, connected_servers=mcp_client.get_server_names() if mcp_client else None,
+        configured_servers=mcp_client.get_configured_server_names() if mcp_client else None,
+        registry=skill_registry,
+    )
+    selected = payload.get("dependencies")
+    if selected is not None and (not isinstance(selected, list)
+                                 or any(not isinstance(value, str) for value in selected)):
+        raise HTTPException(status_code=422, detail="dependencies must be a list of names")
+    targets = [item for item in states if item["state"] != "satisfied"
+               and (selected is None or item["name"] in selected)]
+    if selected is not None and set(selected) != {item["name"] for item in targets}:
+        raise HTTPException(
+            status_code=409, detail="selected dependency is absent or already satisfied",
+        )
+    plan_items = []
+    for item in targets:
+        supported = item["kind"] == "python_packages" and bool(
+            re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", item["name"])
+        )
+        if item["kind"] == "python_packages" and item.get("requested"):
+            try:
+                SpecifierSet(item["requested"])
+            except InvalidSpecifier:
+                supported = False
+        plan_items.append({
+            **item, "adapter": "pip" if supported else None,
+            "source": "https://pypi.org/simple" if supported else item["source"],
+            "executable": supported,
+            "blocked_reason": None if supported else (
+                "no approved adapter for this dependency kind or declaration"
+            ),
+        })
+    if not plan_items:
+        raise HTTPException(status_code=409, detail="no missing dependencies were selected")
+    plan_id = str(uuid.uuid4())
+    plan = {
+        "plan_id": plan_id, "name": name, "version": info.version,
+        "items": plan_items, "created_at": datetime.now(UTC),
+        "expires_at": datetime.now(UTC) + SKILL_ACQUISITION_TTL,
+        "approval_state": "pending",
+    }
+    skill_dependency_plans[plan_id] = plan
+    return {**plan, "approval_state": "approval_required", "read_only": True}
+
+
 @app.get("/api/skills/discover")
 async def discover_skills(
     q: str = Query(""),
@@ -1558,6 +1654,48 @@ async def inspect_skill_catalog(payload: dict[str, Any] = Body(...)) -> dict[str
         )),
         "existing_local": existing,
         "install_target": f"skills/community/{acquisition.record['name']}",
+    }
+
+
+@app.post("/api/skill-packages/inspect")
+async def inspect_local_skill_package(request: Request) -> dict[str, Any]:
+    """Review a bounded ZIP package in memory; this route never extracts or installs it."""
+    length = request.headers.get("content-length")
+    if length and (not length.isdigit() or int(length) > 2_128_000):
+        raise HTTPException(status_code=413, detail="package exceeds the upload size limit")
+    try:
+        acquisition = inspect_skill_package(
+            await request.body(), request.headers.get("x-atlas-package-name", "skill-package.zip"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    acquisition_id = str(uuid.uuid4())
+    created_at = datetime.now(UTC)
+    skill_acquisitions[acquisition_id] = {
+        "acquisition_id": acquisition_id, "provider": acquisition.record["provider"],
+        "external_id": acquisition.record["external_id"],
+        "computed_sha256": acquisition.computed_hash,
+        "name": acquisition.record["name"], "version": acquisition.record["version"],
+        "security": acquisition.security, "created_at": created_at,
+        "expires_at": created_at + SKILL_ACQUISITION_TTL,
+        "approval_state": "pending", "acquisition": acquisition, "local_package": True,
+    }
+    exact = skill_registry.get(acquisition.record["name"], acquisition.record["version"])
+    same_name = any(item["name"] == acquisition.record["name"] for item in skill_registry.list())
+    states = dependency_preflight(
+        acquisition.validation.get("dependencies", []),
+        connected_servers=set(mcp_client.get_server_names()) if mcp_client else None,
+        configured_servers=(set(mcp_client.get_configured_server_names()) if mcp_client else None),
+        registry=skill_registry,
+    )
+    return {
+        "acquisition_id": acquisition_id, "record": acquisition.record,
+        "files": acquisition.files, "validation": acquisition.validation,
+        "security": acquisition.security, "computed_sha256": acquisition.computed_hash,
+        "dependency_state": states, "already_installed": exact is not None,
+        "name_conflict": same_name,
+        "install_target": f"skills/community/{acquisition.record['name']}",
+        "import_requires_lifecycle_approval": True,
     }
 
 
@@ -1691,13 +1829,63 @@ async def create_skill_lifecycle_decision(
     _require_skill_center_authority(request)
     action, name, version = (payload.get(key) for key in ("action", "name", "version"))
     reason = payload.get("reason")
-    if action not in {"update", "downgrade", "rollback", "remove", "trust", "pin", "unpin"}:
+    if action not in {"install", "update", "downgrade", "dependency-install", "rollback",
+                      "remove", "trust", "pin", "unpin"}:
         raise HTTPException(status_code=422, detail="unsupported lifecycle action")
     if not all(isinstance(value, str) and value.strip() for value in (name, version, reason)):
         raise HTTPException(status_code=422, detail="name, version, and reason are required")
-    registry, skills_dir, state = _lifecycle_context(name, version)
+    acquisition_id = None
+    if action == "install":
+        acquisition_id = payload.get("acquisition_id")
+        session = (skill_acquisitions.get(acquisition_id)
+                   if isinstance(acquisition_id, str) else None)
+        if (not session or not session.get("local_package")
+                or datetime.now(UTC) >= session["expires_at"]):
+            raise HTTPException(
+                status_code=410, detail="reviewed local package is missing or expired",
+            )
+        acquisition = session["acquisition"]
+        if acquisition.record["name"] != name or acquisition.record["version"] != version:
+            raise HTTPException(status_code=403, detail="package review targets another Skill")
+        if acquisition.security.get("result") == "BLOCK":
+            raise HTTPException(status_code=403, detail="blocked package cannot be approved")
+        if (acquisition.security.get("result") == "WARN"
+                and payload.get("warnings_confirmed") is not True):
+            raise HTTPException(
+                status_code=403, detail="WARN package requires a second confirmation",
+            )
+        registry = skill_registry
+        if registry is None:
+            raise HTTPException(status_code=503, detail="Skill Registry is unavailable")
+        if any(item["name"] == name for item in registry.list()):
+            raise HTTPException(status_code=409, detail="Skill name already exists in Registry")
+        if session.get("computed_sha256") != acquisition.computed_hash:
+            raise HTTPException(status_code=409, detail="reviewed package hash changed")
+        skills_dir = skill_mgr._skills_dir if skill_mgr else SKILLS_DIR
+        current_hash = ""
+        content_hash = acquisition.computed_hash
+    else:
+        registry, skills_dir, state = _lifecycle_context(name, version)
+        current_hash = (state["lifecycle"].get("actual_hash")
+                        or state["lifecycle"].get("content_hash"))
+        content_hash = current_hash
     rollback_event = None
-    if action == "rollback":
+    if action == "dependency-install":
+        acquisition_id = payload.get("dependency_plan_id")
+        plan = (skill_dependency_plans.get(acquisition_id)
+                if isinstance(acquisition_id, str) else None)
+        if (not plan or plan["name"] != name or plan["version"] != version
+                or datetime.now(UTC) >= plan["expires_at"]):
+            raise HTTPException(status_code=410, detail="dependency plan is missing or expired")
+        state = _lifecycle_context(name, version)[2]
+        if state["lifecycle"]["drifted"]:
+            raise HTTPException(
+                status_code=409, detail="filesystem drift blocks dependency installation",
+            )
+        current_hash = (state["lifecycle"].get("actual_hash")
+                        or state["lifecycle"].get("content_hash"))
+        content_hash = current_hash
+    elif action == "rollback":
         requested_event = payload.get("event_id")
         rollback_event = next((item for item in registry.lifecycle_history(name)
                               if item["event_id"] == requested_event), None)
@@ -1707,12 +1895,8 @@ async def create_skill_lifecycle_decision(
                 raise HTTPException(status_code=409, detail="filesystem drift blocks rollback")
         if rollback_event is None:
             raise HTTPException(status_code=404, detail="rollback record not found")
-    elif state["lifecycle"]["drifted"]:
+    elif action != "install" and state["lifecycle"]["drifted"]:
         raise HTTPException(status_code=409, detail="filesystem drift blocks lifecycle actions")
-    current_hash = (state["lifecycle"].get("actual_hash")
-                    or state["lifecycle"].get("content_hash"))
-    content_hash = current_hash
-    acquisition_id = None
     if rollback_event is not None:
         content_hash = rollback_event["details"].get("snapshot_hash")
     if action in {"update", "downgrade"}:
@@ -1809,8 +1993,9 @@ def _consume_lifecycle_approval(
     approval = registry.consume_lifecycle_approval(
         token=token, action=action, name=name, version=version, content_hash=content_hash,
         current_hash=current_hash,
-        acquisition_id=(payload.get("acquisition_id")
-                        if action in {"update", "downgrade"} else None),
+        acquisition_id=(payload.get("dependency_plan_id") if action == "dependency-install"
+                        else payload.get("acquisition_id")
+                        if action in {"install", "update", "downgrade"} else None),
         target_trust_state=target_trust_state, target_pin_policy=target_pin_policy,
         rollback_event_id=rollback_event_id,
         rollback_snapshot_hash=rollback_snapshot_hash,
@@ -1857,6 +2042,111 @@ async def update_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[st
         skill_mgr.scan_skills_sync()
     skill_acquisitions.pop(acquisition_id, None)
     return result
+
+
+@app.post("/api/skills/lifecycle/install")
+async def install_local_skill_package(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    acquisition_id = payload.get("acquisition_id")
+    session = skill_acquisitions.get(acquisition_id) if isinstance(acquisition_id, str) else None
+    if (not session or not session.get("local_package")
+            or datetime.now(UTC) >= session["expires_at"]):
+        raise HTTPException(status_code=410, detail="reviewed local package is missing or expired")
+    acquisition = session["acquisition"]
+    if session.get("computed_sha256") != acquisition.computed_hash:
+        raise HTTPException(status_code=409, detail="reviewed package hash changed")
+    if acquisition.security.get("result") == "BLOCK":
+        raise HTTPException(status_code=403, detail="blocked package cannot be installed")
+    if (acquisition.security.get("result") == "WARN"
+            and payload.get("warnings_confirmed") is not True):
+        raise HTTPException(status_code=403, detail="WARN package requires a second confirmation")
+    if "approval_event_id" in payload or "approved" in payload:
+        raise HTTPException(
+            status_code=403, detail="client-supplied approval claims are not accepted",
+        )
+    registry = skill_registry
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Skill Registry is unavailable")
+    name, version = acquisition.record["name"], acquisition.record["version"]
+    if any(item["name"] == name for item in registry.list()):
+        raise HTTPException(status_code=409, detail="Skill name already exists in Registry")
+    approval = _consume_lifecycle_approval(
+        registry, payload, action="install", name=name, version=version,
+        current_hash="", content_hash=acquisition.computed_hash,
+    )
+    try:
+        result = await install_acquisition(
+            acquisition, skills_dir=skill_mgr._skills_dir if skill_mgr else SKILLS_DIR,
+            registry=registry,
+            approval_event={
+                "approval_event_id": approval["approval_event_id"],
+                "approved_at": datetime.now(UTC).isoformat(),
+                "computed_sha256": acquisition.computed_hash,
+            },
+        )
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except (PermissionError, ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    if skill_mgr:
+        skill_mgr.scan_skills_sync()
+    skill_acquisitions.pop(acquisition_id, None)
+    return {**result, "package_import": {"status": "installed", "lifecycle_approval": True}}
+
+
+@app.post("/api/skills/dependencies/install")
+async def install_prepared_dependencies(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    plan_id = payload.get("dependency_plan_id")
+    plan = skill_dependency_plans.get(plan_id) if isinstance(plan_id, str) else None
+    if not plan or datetime.now(UTC) >= plan["expires_at"]:
+        raise HTTPException(status_code=410, detail="dependency plan is missing or expired")
+    registry = skill_registry
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Skill Registry is unavailable")
+    current = _lifecycle_context(plan["name"], plan["version"])[2]
+    current_lifecycle = current["lifecycle"]
+    if (current_lifecycle["drifted"]
+            or current_lifecycle.get("trust_state") in {"revoked", "blocked"}
+            or current_lifecycle.get("state") in {"removed", "quarantined"}
+            or current_lifecycle.get("pin_policy") != "unpinned"):
+        raise HTTPException(
+            status_code=409, detail="filesystem drift blocks dependency installation",
+        )
+    current_hash = str(current["lifecycle"].get("actual_hash")
+                        or current["lifecycle"].get("content_hash") or "")
+    approval = _consume_lifecycle_approval(
+        registry, {**payload, "dependency_plan_id": plan_id},
+        action="dependency-install", name=plan["name"], version=plan["version"],
+        current_hash=current_hash, content_hash=current_hash,
+    )
+    plan["approval_state"] = "consumed"
+    results: list[dict[str, Any]] = []
+    for item in plan["items"]:
+        if not item["executable"]:
+            results.append({"name": item["name"], "kind": item["kind"],
+                            "status": "unsupported", "reason": item["blocked_reason"]})
+            continue
+        requirement = item["name"] + (item.get("requested") or "")
+        try:
+            completed = await asyncio.to_thread(
+                subprocess.run,
+                [sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
+                 "--index-url", "https://pypi.org/simple", requirement],
+                check=False, capture_output=True, text=True, timeout=180,
+            )
+            status = "installed" if completed.returncode == 0 else "failed"
+            output = (completed.stderr or completed.stdout or "").splitlines()[-4:]
+            results.append({"name": item["name"], "kind": item["kind"],
+                            "status": status, "return_code": completed.returncode,
+                            "output": output})
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            results.append({"name": item["name"], "kind": item["kind"],
+                            "status": "failed", "error": type(exc).__name__})
+    return {
+        "name": plan["name"], "version": plan["version"],
+        "approval_event_id": approval["approval_event_id"],
+        "status": "completed" if all(item["status"] == "installed" for item in results)
+        else "partial_or_failed", "results": results,
+    }
 
 
 @app.post("/api/skills/lifecycle/remove")
@@ -2059,18 +2349,28 @@ async def activate_skill(name: str) -> dict[str, Any]:
         "state"
     ) in {"quarantined", "removed"}:
         raise HTTPException(status_code=403, detail="skill lifecycle policy blocks activation")
-    body = await skill_mgr.activate(name)
+    dependencies = skill_mgr.preflight_dependencies(
+        name, connected_servers=mcp_client.get_server_names() if mcp_client else None,
+        configured_servers=mcp_client.get_configured_server_names() if mcp_client else None,
+        registry=skill_registry,
+    )
+    blockers = [item for item in dependencies if item["state"] != "satisfied"]
+    if blockers:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "skill dependencies block activation", "dependencies": blockers},
+        )
+    body = await skill_mgr.activate(
+        name, connected_servers=mcp_client.get_server_names() if mcp_client else None,
+        configured_servers=mcp_client.get_configured_server_names() if mcp_client else None,
+        registry=skill_registry,
+    )
     if body is None:
         raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
-
-    deps = skill_mgr.check_dependencies(
-        name,
-        connected_servers=mcp_client.get_server_names() if mcp_client else [],
-    )
     return {
         "name": name,
         "content": body,
-        "dependencies": deps,
+        "dependencies": dependencies,
     }
 
 

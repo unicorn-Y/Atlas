@@ -68,6 +68,7 @@ class AgentCapabilityRegistry:
 
 def register_skill_capabilities(
     registry: AgentCapabilityRegistry, skill_manager: Any, skill_registry: Any | None = None,
+    mcp_client: Any | None = None,
 ) -> None:
     """Expose each indexed skill as an agent capability that activates it."""
     for skill in skill_manager.list_skills():
@@ -82,6 +83,28 @@ def register_skill_capabilities(
                     "state"
                 ) in {"quarantined", "removed"}:
                     raise PermissionError("skill lifecycle policy blocks activation")
+            connected = mcp_client.get_server_names() if mcp_client is not None else None
+            configured = (
+                mcp_client.get_configured_server_names() if mcp_client is not None else None
+            )
+            if hasattr(skill_manager, "preflight_dependencies"):
+                dependencies = skill_manager.preflight_dependencies(
+                    name, connected_servers=connected, configured_servers=configured,
+                    registry=skill_registry,
+                )
+            else:
+                dependencies = []
+            blockers = [item for item in dependencies if item["state"] != "satisfied"]
+            if blockers:
+                detail = ", ".join(
+                    f"{item['kind']}:{item['name']} ({item['state']})" for item in blockers
+                )
+                raise PermissionError("skill dependencies block activation: " + detail)
+            if hasattr(skill_manager, "preflight_dependencies"):
+                return await skill_manager.activate(
+                    name, connected_servers=connected, configured_servers=configured,
+                    registry=skill_registry,
+                )
             return await skill_manager.activate(name)
 
         registry.register(
@@ -90,6 +113,39 @@ def register_skill_capabilities(
             handler=activate,
             source="skill",
         )
+
+
+
+def register_skill_dependency_capability(
+    registry: AgentCapabilityRegistry, skill_manager: Any,
+    skill_registry: Any | None = None, mcp_client: Any | None = None,
+) -> None:
+    """Expose read-only dependency preflight; no mutation or approval handlers exist."""
+
+    async def inspect_dependencies(inputs: dict[str, Any]) -> dict[str, Any]:
+        name = inputs.get("name")
+        if not isinstance(name, str):
+            raise ValueError("name is required")
+        items = skill_manager.preflight_dependencies(
+            name,
+            connected_servers=mcp_client.get_server_names() if mcp_client else None,
+            configured_servers=(mcp_client.get_configured_server_names() if mcp_client else None),
+            registry=skill_registry,
+        )
+        return {
+            "name": name,
+            "dependencies": items,
+            "blocking": [item for item in items if item["state"] != "satisfied"],
+            "read_only": True,
+        }
+
+    registry.register(
+        "skill.dependencies.inspect",
+        description=("Read dependency declarations and preflight status without changing "
+                    "the environment."),
+        handler=inspect_dependencies,
+        source="skill-registry",
+    )
 
 
 def register_skill_discovery_capability(
