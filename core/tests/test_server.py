@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -12,13 +14,28 @@ from atlas.memory import MemoryStore
 from atlas.server import app
 
 
-@pytest.fixture
-async def client(tmp_path, monkeypatch):
-    """Async test client using httpx + ASGI transport with lifespan."""
-    import os
+@pytest.fixture(autouse=True)
+def isolated_atlas_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep server tests off machine-local config and external MCP processes."""
     from atlas import config
 
-    monkeypatch.setattr(config, "USER_SETTINGS_PATH", tmp_path / "user-settings.json")
+    data_root = tmp_path / "atlas-data"
+    config_path = tmp_path / "config" / "atlas.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "[scheduler]\nenabled = false\n\n[tools]\nauto_start = []\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(config, "DATA_ROOT", data_root)
+    monkeypatch.setattr(config, "USER_SETTINGS_PATH", data_root / "data" / "user-settings.json")
+    monkeypatch.setattr(config, "_config", None)
+
+
+@pytest.fixture
+async def client(monkeypatch):
+    """Async test client using httpx + ASGI transport with lifespan."""
+    import os
     for key in ("OPENAI_API_BASE", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
         monkeypatch.delenv(key, raising=False)
     old_val = os.environ.get("ATLAS_SCHEDULER_ENABLED")
@@ -31,6 +48,16 @@ async def client(tmp_path, monkeypatch):
 
         async with lifespan(app):
             yield ac
+
+    current_task = asyncio.current_task()
+    pending_tasks = [
+        task for task in asyncio.all_tasks()
+        if task is not current_task and not task.done()
+    ]
+    assert not pending_tasks, [
+        f"{task.get_name()}: {task.get_coro().__qualname__}"
+        for task in pending_tasks
+    ]
 
     # Restore
     if old_val is None:
@@ -74,10 +101,10 @@ class TestRuntimeProtocol:
     async def test_recovery_is_idempotent_and_never_reexecutes_run(
         self, tmp_path, monkeypatch,
     ) -> None:
-        import asyncio
-        import aiosqlite
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
+
+        import aiosqlite
 
         from atlas import server
 
@@ -239,7 +266,9 @@ class TestModels:
         )
         assert resp.status_code == 400
 
-    async def test_configuration_persists_provider_and_hides_secret(self, client: AsyncClient) -> None:
+    async def test_configuration_persists_provider_and_hides_secret(
+        self, client: AsyncClient
+    ) -> None:
         saved = await client.put("/api/settings/configuration", json={
             "gateway_base_url": "https://api.example.test/v1",
             "api_key": "test-secret-value",
@@ -262,8 +291,15 @@ class TestModels:
         response = await client.put("/api/settings/configuration", json={"gateway_base_url": "file:///tmp"})
         assert response.status_code == 400
 
-    async def test_custom_model_persists_and_duplicate_is_rejected(self, client: AsyncClient) -> None:
-        model = {"id": "custom-test", "name": "Custom Test", "provider": "openai", "litellm_model": "openai/custom-test"}
+    async def test_custom_model_persists_and_duplicate_is_rejected(
+        self, client: AsyncClient
+    ) -> None:
+        model = {
+            "id": "custom-test",
+            "name": "Custom Test",
+            "provider": "openai",
+            "litellm_model": "openai/custom-test",
+        }
         response = await client.post("/api/models/custom", json=model)
         assert response.status_code == 200
         assert any(item["id"] == "custom-test" for item in response.json()["models"])
@@ -273,7 +309,9 @@ class TestModels:
         duplicate = await client.post("/api/models/custom", json=model)
         assert duplicate.status_code == 409
 
-    async def test_connection_test_uses_litellm_and_does_not_change_selection(self, client: AsyncClient, monkeypatch) -> None:
+    async def test_connection_test_uses_litellm_and_does_not_change_selection(
+        self, client: AsyncClient, monkeypatch
+    ) -> None:
         from atlas.server import model_mgr
 
         call = {}
@@ -334,7 +372,10 @@ class TestConversations:
         messages = resp.json()
         assert [message["role"] for message in messages] == ["user", "assistant"]
         assert [message["content"] for message in messages] == ["hello", "hi"]
-        assert all({"id", "role", "content", "created_at"} <= message.keys() for message in messages)
+        assert all(
+            {"id", "role", "content", "created_at"} <= message.keys()
+            for message in messages
+        )
 
     async def test_update_conversation_404(self, client: AsyncClient) -> None:
         resp = await client.put(
@@ -883,7 +924,7 @@ class TestMCPServerManagement:
         assert resp.status_code == 200
         data = resp.json()
         assert "servers" in data
-        assert isinstance(data["servers"], list)
+        assert data["servers"] == []
 
     async def test_list_tools_exposes_connected_server_tools(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
@@ -1077,6 +1118,7 @@ class TestWebSocketProtocol:
     async def test_backend_failure_emits_terminal_protocol_event(self, monkeypatch) -> None:
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
+
         from atlas import server
 
         class Socket:
@@ -1089,7 +1131,9 @@ class TestWebSocketProtocol:
         socket = Socket()
         conn_id = "backend-failure-test"
         run = server.RunState("backend-failure-run", "conv-1", "test-model")
-        memory_mock = SimpleNamespace(save_message=AsyncMock(side_effect=OSError("database unavailable")))
+        memory_mock = SimpleNamespace(
+            save_message=AsyncMock(side_effect=OSError("database unavailable"))
+        )
         monkeypatch.setattr(server, "memory", memory_mock)
         monkeypatch.setattr(server, "orchestrator", SimpleNamespace())
         monkeypatch.setitem(server.runtime_mgr.connections, conn_id, socket)
@@ -1107,6 +1151,7 @@ class TestWebSocketProtocol:
     async def test_tool_failure_reaches_runtime_event_and_run_completes(self, monkeypatch) -> None:
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
+
         from atlas import server
 
         class Socket:
@@ -1150,7 +1195,9 @@ class TestWebSocketProtocol:
             category="tool",
             component="fs__read",
             summary="Tool call failed: tool timed out",
-            resolution_hint="Review the tool error and validate a corrected request before retrying.",
+            resolution_hint=(
+                "Review the tool error and validate a corrected request before retrying."
+            ),
             source_conversation_id="conv-2",
             source_run_id="tool-failure-run",
             model="test-model",
@@ -1164,6 +1211,7 @@ class TestWebSocketProtocol:
     ) -> None:
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
+
         from atlas import server
 
         async def events(**kwargs):
@@ -1187,6 +1235,7 @@ class TestWebSocketProtocol:
     ) -> None:
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
+
         from atlas import server
 
         class Socket:
@@ -1234,7 +1283,9 @@ class TestWebSocketProtocol:
         """A run.start message should produce agent_event envelopes."""
         import json as _json
         from types import SimpleNamespace
+
         from starlette.testclient import TestClient
+
         from atlas import server
         from atlas.server import app as _app
 
