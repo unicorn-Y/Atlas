@@ -49,6 +49,114 @@ Direct reuse is allowed only when license permits it.
 
 Do not paste third-party code without attribution.
 
+
+
+## Agent-level reuse is explicitly allowed
+
+不只允许抄底层 input backend，**允许直接复用成熟 Computer Use Agent 的 operator / planner / observation-action loop / tool policy / retry loop**。
+
+优先评估：
+
+### 1. simular-ai/Agent-S — first priority
+
+- Python;
+- Windows/macOS/Linux;
+- 直接面向 ordinary desktop/web applications;
+- mature screenshot → reasoning → click/type/scroll loop;
+- Apache-2.0;
+- 当前 GitHub 约 12k stars;
+- 允许直接复用其 Agent loop、grounding/action abstraction、computer interface、observation/action cadence。
+
+如果 Agent-S 的执行/loop 能直接适配 Atlas，优先“搬 Agent-S 的 Computer Use engine + Atlas adapter”，而不是继续扩 Atlas 自己的 GUI loop。
+
+### 2. bytedance/UI-TARS-desktop / Agent TARS
+
+- 当前 GitHub 约 39k stars;
+- Apache-2.0;
+- 成熟 local desktop operator;
+- screenshot / CLICK / DOUBLE_CLICK / DRAG_TO / SCROLL / TYPING / HOTKEY;
+- Agent TARS 已经把 GUI Agent + Vision + CLI + MCP 放在同一 Agent stack 中。
+
+特别适合复用：
+
+- operator action schema;
+- desktop operator;
+- screenshot/action feedback loop;
+- GUI + CLI mixed workflow;
+- multimodal Agent loop。
+
+### 3. microsoft/UFO
+
+- Windows-first;
+- 当前 GitHub 约 9.8k stars;
+- MIT;
+- UIA + pywinauto + Win32;
+- semantic control discovery/action;
+- application/window/control grounding。
+
+特别适合做 Windows semantic/UIA backend。
+
+### 4. Open Interpreter OS mode
+
+优先参考/复用：
+
+- persistent shell + computer control;
+- one Agent mixing CLI and GUI;
+- screenshot/computer action loop;
+- model-agnostic LiteLLM integration。
+
+## Selection rule
+
+Luna 不需要自己设计新的 Computer Use architecture。
+
+先做 1 个短 fit check：
+
+- 哪个项目最接近 Atlas 当前 Python backend + existing Agent loop;
+- 哪个最容易保留 FULL_ACCESS;
+- 哪个能最快通过真实 Windows workflow;
+- 哪个许可证允许直接复用;
+- 哪个依赖最少。
+
+然后选择 **一个主 Agent/operator 实现作为 P18B 主体**。
+
+可以混合：
+
+- Agent-S / UI-TARS：Agent loop/operator;
+- UFO：Windows UIA semantic backend;
+- Atlas P18A：CLI/filesystem/Git;
+- Atlas existing runtime events/UI：展示层。
+
+但不得为了“架构纯洁”把这些成熟逻辑重新实现一遍。
+
+## Copy whole working modules when cheaper
+
+若一个 upstream module 已经完整解决某个问题，允许：
+
+- 整文件复制并最小改名/适配;
+- vendoring 小型模块;
+- 直接添加 upstream dependency;
+- 保留 upstream API 再写 Atlas adapter。
+
+优先级：
+
+`direct dependency > copy/adapt complete module > thin adapter > rewrite`
+
+只有依赖冲突、许可证不兼容、打包不可行时才自己重写。
+
+## Do not preserve Atlas code merely because it already exists
+
+当前 P18B 的自写 `computer_use.py` 不是必须保留。
+
+如果成熟项目实现明显更完整可靠，可以：
+
+- 删除自写 mouse backend;
+- 替换 observation/action loop;
+- 替换 tool implementation;
+- 仅保留 Atlas tool names/schema compatibility adapter。
+
+目标是最终效果，不是保护已有代码投入。
+
+
 ## Objective
 
 用成熟实现替换/修正 Atlas 当前未通过验收的 GUI input 层，并一次性关闭 P18B 剩余验收。
