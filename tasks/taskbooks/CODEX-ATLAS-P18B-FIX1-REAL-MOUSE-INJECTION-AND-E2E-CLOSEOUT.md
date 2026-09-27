@@ -445,3 +445,131 @@ P18C remains BLOCKED.
 FULL_ACCESS remains default.
 
 Voice, camera and mobile/remote-device remain deferred.
+
+
+## FIRST-TIER SOURCE PRIORITY — OVERRIDES EARLIER ORDER
+
+For P18B Computer Use, evaluate these first-tier upstreams BEFORE UFO/Open Interpreter or lower-level backends.
+
+### Tier 1A — full Computer Use agents
+
+#### xlang-ai/OpenCUA
+Priority: HIGHEST for Agent architecture / perception-action loop.
+
+Why:
+- dedicated open foundations for Computer-Use Agents;
+- includes Computer Use Agent, models, data, tooling and OSWorld-oriented execution;
+- screenshot perception -> reflective reasoning -> action prediction loop is already implemented;
+- suitable for copying Agent state/observation/action/history patterns.
+
+Inspect:
+- OpenCUA agent/evaluation runner;
+- screenshot history handling;
+- action representation;
+- coordinate grounding;
+- retry/step loop;
+- multimodal prompt construction;
+- execution feedback integration.
+
+Do NOT require Atlas to use OpenCUA weights. Reuse the agent/operator architecture with Atlas-selected models when practical.
+
+#### simular-ai/Agent-S (S3)
+Priority: HIGHEST for production-grade desktop Agent loop.
+
+Why:
+- complete open-source Computer Use Agent;
+- Windows/macOS/Linux;
+- ordinary real desktop apps;
+- mature observe -> reason -> act loop;
+- high OSWorld / WindowsAgentArena results;
+- Python, making Atlas integration comparatively direct.
+
+Inspect and prefer reusing:
+- gui_agents package;
+- S3 planner/executor loop;
+- screenshot/grounding;
+- computer interface;
+- action abstraction;
+- retry/recovery;
+- history/state management;
+- model adapters.
+
+If Agent-S can replace Atlas's current custom Computer Use loop cleanly, prefer that.
+
+#### bytedance/UI-TARS-desktop / Agent TARS
+Priority: HIGHEST for multimodal GUI operator + full-stack integration.
+
+Why:
+- very popular open-source multimodal agent stack;
+- native desktop GUI Agent;
+- local/remote computer operators;
+- GUI + Vision + CLI + MCP already combined;
+- mature action schema for CLICK/DOUBLE_CLICK/DRAG/SCROLL/TYPING/HOTKEY.
+
+Inspect:
+- Agent TARS loop;
+- UI-TARS Desktop local operator;
+- operator-nutjs;
+- operator-aio;
+- screenshot/action feedback;
+- tool orchestration;
+- GUI+CLI mixed workflows.
+
+### Tier 1B — browser subsystem
+
+#### browser-use/browser-use
+Priority: HIGHEST for future Atlas browser agent, and useful now for Agent loop design.
+
+Why:
+- extremely mature/popular browser agent;
+- open-source Agent class;
+- state/history/retry/tool loop;
+- browser task planning and execution;
+- model-agnostic usage.
+
+P18B should NOT replace full desktop control with browser-only automation, but Atlas may directly reuse its Agent architecture patterns. Future browser subsystem should prefer direct integration instead of hand-rolled browser automation.
+
+### Tier 2 — backend/support projects
+
+Only after Tier 1 assessment:
+
+- microsoft/UFO — Windows UIA/pywinauto semantic backend;
+- Open Interpreter OS mode — CLI+GUI orchestration reference;
+- other lower-level automation libraries.
+
+These are support sources, not the first architectural choice.
+
+## Selection requirement
+
+Before coding, Luna must create a short fit table in the result notes:
+
+| Project | Full Agent loop | Windows desktop | GUI action backend | multimodal screenshot loop | CLI+GUI | license | integration cost |
+|---|---|---|---|---|---|---|---|
+
+At minimum compare:
+- OpenCUA
+- Agent-S3
+- UI-TARS / Agent TARS
+- Browser Use
+- UFO
+
+Then choose:
+- ONE primary Computer Use Agent/operator architecture;
+- optional ONE Windows semantic backend;
+- Atlas adapters only where necessary.
+
+Do not combine five frameworks into a new complicated framework.
+
+## Strong preference
+
+If a first-tier project already solves an Atlas requirement end-to-end, copy/adapt that working module/loop instead of reimplementing it.
+
+The desired P18B outcome is closer to:
+
+first-tier Computer Use Agent
++ Atlas P18A CLI
++ Atlas Memory/Skills/MCP/runtime UI
+
+not:
+
+Atlas custom GUI agent rebuilt from scratch.
