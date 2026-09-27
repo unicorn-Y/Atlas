@@ -414,6 +414,88 @@ async def test_modern_only_dependency_is_shared_by_registry_preflight_and_activa
     server.skill_acquisitions.clear()
 
 
+@pytest.mark.parametrize(("declaration", "expected_names"), [
+    ("dependencies:\n  python_packages: [requests, pydantic]\n", {"requests", "pydantic"}),
+    ("requirements:\n  - 'python:requests'\n", {"requests"}),
+    (
+        "dependencies:\n  python_packages: [requests, pydantic]\n"
+        "requirements:\n  - 'python:requests'\n",
+        {"requests", "pydantic"},
+    ),
+])
+def test_startup_local_registration_persists_canonical_dependencies(
+    tmp_path, declaration, expected_names,
+):
+    from atlas import server
+
+    skill_dir = tmp_path / "skills" / "dev" / "local-contract"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: local-contract\nversion: 1.0.0\ndescription: Local test\n"
+        f"{declaration}"
+        "---\nLocal skill body.\n",
+        encoding="utf-8",
+    )
+    manager = SkillManager(tmp_path / "skills")
+    manager.scan_skills_sync()
+    registry = SkillRegistry(tmp_path / "registry.db")
+
+    # Exercise the exact registration function called by server lifespan.
+    server._register_local_skills(manager, registry)
+
+    skill = manager.get_skill("local-contract")
+    record = registry.get("local-contract", "1.0.0")
+    assert skill is not None and record is not None
+    assert record["requirements"] == skill.dependency_contract
+    assert {item["name"] for item in record["requirements"]} == expected_names
+    assert len({
+        (item["kind"], item["name"], item["requested"])
+        for item in record["requirements"]
+    }) == len(record["requirements"])
+    registry_state = dependency_preflight(record["requirements"], registry=registry)
+    manager_state = manager.preflight_dependencies("local-contract", registry=registry)
+    assert registry_state == manager_state
+
+
+@pytest.mark.parametrize(("installed_version", "should_activate"), [
+    (None, False),
+    ("2.31.0", True),
+])
+@pytest.mark.asyncio
+async def test_startup_modern_only_dependency_controls_activation(
+    tmp_path, monkeypatch, installed_version, should_activate,
+):
+    from atlas import server
+    from atlas.skills import dependencies
+
+    monkeypatch.setattr(dependencies, "_installed_package_version", lambda _name: installed_version)
+    skill_dir = tmp_path / "skills" / "dev" / "startup-modern"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: startup-modern\nversion: 1.0.0\ndescription: Modern local\n"
+        "dependencies:\n  python_packages: [p15e-startup-modern]\n"
+        "---\nModern local body.\n",
+        encoding="utf-8",
+    )
+    manager = SkillManager(tmp_path / "skills")
+    manager.scan_skills_sync()
+    registry = SkillRegistry(tmp_path / "registry.db")
+    server._register_local_skills(manager, registry)
+
+    record = registry.get("startup-modern", "1.0.0")
+    assert record is not None
+    registry_state = dependency_preflight(record["requirements"], registry=registry)
+    manager_state = manager.preflight_dependencies("startup-modern", registry=registry)
+    assert registry_state == manager_state
+    assert len(registry_state) == 1
+    assert registry_state[0]["state"] == ("satisfied" if should_activate else "missing")
+    if should_activate:
+        assert "Modern local body." in await manager.activate("startup-modern", registry=registry)
+    else:
+        with pytest.raises(PermissionError, match="dependencies block activation"):
+            await manager.activate("startup-modern", registry=registry)
+
+
 @pytest.mark.asyncio
 async def test_failed_package_import_is_atomic(tmp_path, monkeypatch):
     from httpx import ASGITransport, AsyncClient

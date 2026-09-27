@@ -49,7 +49,7 @@ class SkillInfo:
     author: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize for API responses."""
+        """Serialize for API responses with canonical dependencies."""
         return {
             "name": self.name,
             "description": self.description,
@@ -57,7 +57,7 @@ class SkillInfo:
             "category": self.category,
             "tags": self.tags,
             "triggers": self.triggers,
-            "dependencies": self.dependencies,
+            "dependencies": self.dependency_contract,
             "related_skills": self.related_skills,
             "author": self.author,
         }

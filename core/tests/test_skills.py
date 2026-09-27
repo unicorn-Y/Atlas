@@ -474,3 +474,17 @@ class TestSerialization:
         assert d["category"] == "dev"
         assert d["triggers"] == [{"command": "/test"}]
         assert "path" not in d  # path not exposed in API
+
+    def test_to_dict_exposes_canonical_dependency_contract(self) -> None:
+        contract = [{"kind": "python_packages", "name": "pydantic", "requested": None}]
+        info = SkillInfo(
+            name="test", description="desc", version="1.0.0",
+            category="dev", path="/fake/path",
+            dependencies={"python_packages": ["requests"]},
+            dependency_contract=contract,
+        )
+
+        serialized = info.to_dict()
+
+        assert serialized["dependencies"] == contract
+        assert serialized["dependencies"] != info.dependencies

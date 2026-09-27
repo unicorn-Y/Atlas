@@ -110,6 +110,27 @@ def _require_skill_center_authority(request: Request) -> None:
         raise HTTPException(status_code=403, detail="trusted Skill Center decision is required")
 
 
+def _register_local_skills(skill_manager: SkillManager, registry: SkillRegistry) -> None:
+    """Register local Skills with their canonical dependency contract."""
+    for skill in skill_manager.list_skills():
+        if registry.get(skill.name, skill.version) is not None:
+            continue
+        registry.register({
+            "name": skill.name,
+            "version": skill.version,
+            "description": skill.description,
+            "capabilities": [],
+            "tools": [],
+            "requirements": skill.dependency_contract,
+            "examples": [],
+            "aliases": [],
+            "tags": skill.tags,
+            "category": skill.category,
+            "keywords": skill.tags,
+            "use_cases": [],
+        }, source="local")
+
+
 async def _run_scheduled_goal(task_id: str, message: str) -> None:
     """Run one verified goal iteration through the normal planner and tool gates."""
     if scheduler is None:
@@ -444,22 +465,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await skill_mgr.scan_skills()
     cfg = get_config()
     skill_registry = SkillRegistry(cfg.db_path.parent / "skill-registry.db")
-    for skill in skill_mgr.list_skills():
-        if skill_registry.get(skill.name, skill.version) is None:
-            skill_registry.register({
-                "name": skill.name,
-                "version": skill.version,
-                "description": skill.description,
-                "capabilities": [],
-                "tools": [],
-                "requirements": skill.dependencies,
-                "examples": [],
-                "aliases": [],
-                "tags": skill.tags,
-                "category": skill.category,
-                "keywords": skill.tags,
-                "use_cases": [],
-            }, source="local")
+    _register_local_skills(skill_mgr, skill_registry)
     capabilities = AgentCapabilityRegistry()
     register_skill_capabilities(capabilities, skill_mgr, skill_registry, mcp_client)
     register_skill_dependency_capability(capabilities, skill_mgr, skill_registry, mcp_client)
