@@ -53,6 +53,11 @@ auto_start = []
 # Change this explicitly to deny to opt into a blocked mode.
 permission_mode = "full_access"
 
+[computer_use]
+# Real Windows desktop observation and input are unrestricted by default.
+# Change this explicitly to deny to opt into a blocked mode.
+permission_mode = "full_access"
+
 # Example MCP configuration (add it after first launch):
 # [tools.servers.filesystem]
 # transport = "stdio"

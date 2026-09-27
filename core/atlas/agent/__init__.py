@@ -28,6 +28,7 @@ from atlas.agent.planning import TaskPlan, requires_plan
 from atlas.config import get_config
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
+from atlas.tools.computer_use import ComputerUseRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 
@@ -124,11 +125,13 @@ class AgentOrchestrator:
         mcp_client: MCPClient | None = None,
         capability_registry: AgentCapabilityRegistry | None = None,
         local_execution: LocalExecutionRuntime | None = None,
+        computer_use: ComputerUseRuntime | None = None,
     ) -> None:
         self._model_mgr = model_mgr
         self._memory = memory
         self._mcp = mcp_client
         self._local_execution = local_execution
+        self._computer_use = computer_use
         self._capabilities = capability_registry or AgentCapabilityRegistry()
         self._graph = self._build_graph()
 
@@ -189,6 +192,8 @@ class AgentOrchestrator:
         tools = self._mcp.get_tools_for_llm() if self._mcp else []
         if self._local_execution:
             tools = [*tools, *self._local_execution.get_tools_for_llm()]
+        if self._computer_use:
+            tools = [*tools, *self._computer_use.get_tools_for_llm()]
 
         # Convert LangChain messages to dicts for LiteLLM
         lc_messages = self._to_litellm_messages(state["messages"])
@@ -240,6 +245,20 @@ class AgentOrchestrator:
                 if get_value(chunk.choices[0], "finish_reason") is not None:
                     break
         except Exception as exc:
+            has_image = any(
+                isinstance(message.content, list)
+                and any(
+                    isinstance(part, dict) and part.get("type") == "image_url"
+                    for part in message.content
+                )
+                for message in state["messages"]
+            )
+            if has_image:
+                raise _RuntimeFailureError(
+                    "model_capability",
+                    "The selected model could not process the desktop screenshot. "
+                    "Select a multimodal model and retry.",
+                ) from exc
             raise _RuntimeFailureError("model", f"Model call failed: {exc}") from exc
 
         tc_list: list[dict[str, Any]] = []
@@ -293,6 +312,7 @@ class AgentOrchestrator:
 
         events: list[dict[str, Any]] = []
         tool_messages: list[ToolMessage] = []
+        screenshot_urls: list[str] = []
         ctx = state["runtime"]
 
         for tc in last.tool_calls:
@@ -361,6 +381,8 @@ class AgentOrchestrator:
                         fn_name, fn_args, run_id=ctx.run_id,
                         output_callback=report_process_output,
                     )
+                elif fn_name.startswith("computer_") and self._computer_use:
+                    result = await self._computer_use.call_tool(fn_name, fn_args)
                 elif self._mcp:
                     result = await self._mcp.call_tool(fn_name, fn_args)
                 else:
@@ -385,7 +407,7 @@ class AgentOrchestrator:
             if isinstance(event_data, dict):
                 event_data = {
                     key: value for key, value in event_data.items()
-                    if key not in {"content", "stdout", "stderr"}
+                    if key not in {"content", "stdout", "stderr", "_image_data_url"}
                 }
 
             events.append({
@@ -406,8 +428,34 @@ class AgentOrchestrator:
                 str(b.get("text", b)) if isinstance(b, dict) else str(b)
                 for b in result.get("content", [])
             )
+            image_url = (
+                result.get("data", {}).get("_image_data_url")
+                if isinstance(result.get("data"), dict)
+                else None
+            )
+            if isinstance(image_url, str):
+                screenshot_urls.append(image_url)
             tool_messages.append(
                 ToolMessage(content=result_text, tool_call_id=tc_id)
+            )
+
+        if screenshot_urls:
+            tool_messages.append(
+                HumanMessage(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": (
+                                "Inspect the attached desktop screenshot before choosing "
+                                "the next action."
+                            ),
+                        },
+                        *[
+                            {"type": "image_url", "image_url": {"url": url}}
+                            for url in screenshot_urls
+                        ],
+                    ]
+                )
             )
 
         return {

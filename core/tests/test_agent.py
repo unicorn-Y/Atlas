@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
-from typing import Any
 from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from atlas.agent import AgentOrchestrator, AgentState, SYSTEM_PROMPT, MAX_TOOL_ROUNDS
-from atlas.tools.mcp_client import MCPClient, ToolInfo
+from atlas.agent import MAX_TOOL_ROUNDS, AgentOrchestrator, AgentState
+from atlas.tools.computer_use import COMPUTER_TOOLS
+from atlas.tools.mcp_client import MCPClient
 
 
 def _agent_state(ai: AIMessage, *, runtime: Any | None = None) -> AgentState:
@@ -188,6 +189,42 @@ class TestMessageConversion:
 # ---------------------------------------------------------------------------
 
 class TestExecuteTools:
+    async def test_computer_screenshot_is_returned_as_multimodal_message(
+        self, model_mgr, memory, mcp_client
+    ) -> None:
+        image = "data:image/png;base64,aW1hZ2U="
+        computer = MagicMock()
+        computer.call_tool = AsyncMock(
+            return_value={
+                "data": {
+                    "observation_id": "obs-1",
+                    "artifact_path": "screen.png",
+                    "_image_data_url": image,
+                },
+                "content": [{"type": "text", "text": "observation metadata"}],
+                "is_error": False,
+            }
+        )
+        agent = AgentOrchestrator(model_mgr, memory, mcp_client=mcp_client, computer_use=computer)
+        state: AgentState = {
+            "messages": [AIMessage(content="", tool_calls=[{
+                "name": "computer_observe", "args": {"target": "desktop"}, "id": "screen-1"
+            }])],
+            "pending_events": [],
+            "tool_rounds": 0,
+            "runtime": SimpleNamespace(cancel_event=None, pause_event=None, approval_callback=None),
+        }
+
+        result = await agent._execute_tools_node(state)
+
+        assert isinstance(result["messages"][0], ToolMessage)
+        image_message = result["messages"][1]
+        assert isinstance(image_message, HumanMessage)
+        assert image_message.content[1] == {"type": "image_url", "image_url": {"url": image}}
+        event = next(item for item in result["pending_events"] if item["type"] == "tool_result")
+        assert event["data"] == {"observation_id": "obs-1", "artifact_path": "screen.png"}
+        assert "computer_observe" in {item["function"]["name"] for item in COMPUTER_TOOLS}
+
     async def test_execute_single_tool(self, orchestrator, mcp_client) -> None:
         """Execute one tool call."""
         mcp_client.call_tool = AsyncMock(return_value={
@@ -280,7 +317,9 @@ class TestExecuteTools:
         tr = next(e for e in events if e["type"] == "tool_result")
         assert tr["is_error"] is True
 
-    async def test_execute_tool_exception_is_recoverable_error(self, orchestrator, mcp_client) -> None:
+    async def test_execute_tool_exception_is_recoverable_error(
+        self, orchestrator, mcp_client
+    ) -> None:
         """A raised tool failure is returned to the model as a typed tool result."""
         mcp_client.call_tool = AsyncMock(side_effect=TimeoutError("tool timed out"))
         state = _agent_state(AIMessage(

@@ -25,7 +25,9 @@ PROJECT_ROOT = Path(
     os.environ.get("ATLAS_ROOT", Path(__file__).resolve().parent.parent.parent)
 ).resolve()  # D:\Atlas\core -> D:\Atlas
 DATA_ROOT = Path(os.environ.get("ATLAS_DATA_DIR", PROJECT_ROOT)).resolve()
-CONFIG_PATH = (DATA_ROOT if os.environ.get("ATLAS_DATA_DIR") else PROJECT_ROOT) / "config" / "atlas.toml"
+CONFIG_PATH = (
+    (DATA_ROOT if os.environ.get("ATLAS_DATA_DIR") else PROJECT_ROOT) / "config" / "atlas.toml"
+)
 EXAMPLE_CONFIG_PATH = PROJECT_ROOT / "config" / "atlas.example.toml"
 USER_SETTINGS_PATH = DATA_ROOT / "data" / "user-settings.json"
 
@@ -158,6 +160,12 @@ class AtlasConfig:
     def local_execution_permission_mode(self) -> str:
         """Return the opt-in permission policy for Atlas-owned local tools."""
         mode = str(self.get("local_execution.permission_mode", "full_access")).lower()
+        return mode if mode in {"full_access", "deny"} else "full_access"
+
+    @property
+    def computer_use_permission_mode(self) -> str:
+        """Return the opt-in policy for native Windows desktop control."""
+        mode = str(self.get("computer_use.permission_mode", "full_access")).lower()
         return mode if mode in {"full_access", "deny"} else "full_access"
 
     @property

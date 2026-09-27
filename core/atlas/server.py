@@ -76,6 +76,7 @@ from atlas.skills.lifecycle import (
     update_skill as update_lifecycle_skill,
 )
 from atlas.skills.registry import SkillRegistry
+from atlas.tools.computer_use import ComputerUseRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 from atlas.tools.node_runtime import get_node_runtime_status
@@ -91,6 +92,7 @@ memory: MemoryStore | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 local_execution: LocalExecutionRuntime | None = None
+computer_use: ComputerUseRuntime | None = None
 skill_mgr: SkillManager | None = None
 skill_registry: SkillRegistry | None = None
 skill_catalog_provider = SkillsShProvider()
@@ -454,7 +456,7 @@ async def _record_goal_failure(
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle."""
-    global model_mgr, memory, orchestrator, mcp_client, local_execution
+    global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
 
     model_mgr = ModelManager()
@@ -465,6 +467,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     mcp_client = MCPClient()
     await mcp_client.start()
     local_execution = LocalExecutionRuntime()
+    computer_use = ComputerUseRuntime()
 
     skill_mgr = SkillManager()
     await skill_mgr.scan_skills()
@@ -481,6 +484,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
         capability_registry=capabilities,
         local_execution=local_execution,
+        computer_use=computer_use,
     )
 
     if cfg.scheduler_enabled:
@@ -496,6 +500,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await mcp_client.stop()
     if local_execution:
         await local_execution.shutdown()
+    if computer_use:
+        await computer_use.shutdown()
     if memory:
         await memory.close()
     await runtime_mgr.close()
