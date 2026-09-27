@@ -21,7 +21,7 @@ from atlas.skills.acquisition import (
     payload_sha256,
     prepare_acquisition,
 )
-from atlas.skills.dependencies import parse_dependencies
+from atlas.skills.dependencies import normalize_dependencies
 
 PACKAGE_MANIFEST = "atlas-skill-package.json"
 MAX_PACKAGE_BYTES = MAX_PAYLOAD_BYTES + 128_000
@@ -101,7 +101,7 @@ def inspect_skill_package(data: bytes, filename: str) -> Acquisition:
     if skill_manifest["version"] != version:
         raise ValueError("package identity version does not match SKILL.md")
     declared = package.get("dependencies", [])
-    if parse_dependencies(declared) != parse_dependencies(dependencies):
+    if normalize_dependencies(declared) != normalize_dependencies(dependencies):
         raise ValueError("package dependency declaration does not match SKILL.md")
     provider = source.get("provider", "local-package")
     source_url = source.get("source_url")
@@ -114,7 +114,7 @@ def inspect_skill_package(data: bytes, filename: str) -> Acquisition:
         raise ValueError("package external_id must be text")
     record: dict[str, Any] = {
         "provider": provider.strip(),
-        "external_id": external_id or digest,
+        "external_id": external_id or source_url or f"local-package:{name}",
         "name": name,
         "version": version,
         "description": skill_manifest["description"],

@@ -14,6 +14,16 @@ export function remoteSkillLabel(installed: boolean): string {
   return installed ? '已安装' : 'Remote / Uninstalled';
 }
 
+export function localPackageReviewState(state: 'new_skill' | 'exact_version_conflict' | 'update_candidate') {
+  if (state === 'exact_version_conflict') {
+    return { message: '同名同版本已存在；不会覆盖 Registry 或文件。', action: '已存在同版本', canProceed: false };
+  }
+  if (state === 'update_candidate') {
+    return { message: '这是更新/降级候选，将进入现有 lifecycle 更新/降级审批。', action: '经现有 lifecycle 审批更新/降级', canProceed: true };
+  }
+  return { message: '新 Skill 导入候选。', action: '经 lifecycle 审批导入', canProceed: true };
+}
+
 export function lifecycleUpdateAction(currentVersion: string, incomingVersion: string): 'update' | 'downgrade' {
   const current = currentVersion.split('-')[0].split('.').map(Number);
   const incoming = incomingVersion.split('-')[0].split('.').map(Number);

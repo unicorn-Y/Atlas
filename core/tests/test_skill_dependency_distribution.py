@@ -28,12 +28,15 @@ SKILL_TEXT = (
 
 def _bundle(*, skill: str = SKILL_TEXT, name: str = "packaged-sample",
             version: str = "1.0.0", hash_override: str | None = None,
-            source: dict | None = None, extra: dict[str, str] | None = None) -> bytes:
+            source: dict | None = None, extra: dict[str, str] | None = None,
+            dependencies=None) -> bytes:
+    if skill == SKILL_TEXT and version != "1.0.0":
+        skill = skill.replace("version: 1.0.0", f"version: {version}")
     payload = {"SKILL.md": skill, **(extra or {})}
     manifest = {
         "format": "atlas-skill-package-v1",
         "identity": {"name": name, "version": version},
-        "dependencies": ["python:requests@>=2.0"],
+        "dependencies": dependencies if dependencies is not None else ["python:requests@>=2.0"],
         "source": source or {"provider": "local-package", "source_url": "file:bundle.zip"},
         "content_sha256": hash_override or payload_sha256(payload),
     }
@@ -59,6 +62,61 @@ def test_dependency_contract_parses_all_kinds_and_constraints():
         ("mcp_servers", "filesystem", None), ("mcp_servers", "git", ">=1.0"),
         ("python_packages", "requests", ">=2,<4"), ("commands", "git", None),
     }
+
+
+def test_canonical_dependencies_accept_normalized_records_and_legacy_requirements():
+    from atlas.skills.dependencies import normalize_dependencies
+
+    canonical = normalize_dependencies({
+        "python_packages": [{"name": "requests", "constraint": ">=2,<4"}],
+        "commands": ["ffmpeg"], "mcp_servers": ["filesystem"],
+    })
+    assert canonical == [
+        {"name": "requests", "kind": "python_packages", "requested": ">=2,<4"},
+        {"name": "ffmpeg", "kind": "commands", "requested": None},
+        {"name": "filesystem", "kind": "mcp_servers", "requested": None},
+    ]
+    assert normalize_dependencies(["python:requests@>=2,<4"]) == [canonical[0]]
+    assert parse_dependencies(canonical) == parse_dependencies({
+        "python_packages": [{"name": "requests", "version": ">=2,<4"}],
+        "commands": ["ffmpeg"], "mcp_servers": ["filesystem"],
+    })
+
+
+@pytest.mark.parametrize(("kind", "value", "expected"), [
+    ("python_packages", "requests", "python_packages"),
+    ("commands", "ffmpeg", "commands"),
+    ("mcp_servers", "filesystem", "mcp_servers"),
+])
+def test_documented_structured_dependency_mappings_normalize(kind, value, expected):
+    from atlas.skills.acquisition import _parse_manifest
+
+    content = ("---\nname: mapping-skill\nversion: 1.0.0\ndescription: Mapping\n"
+               f"dependencies:\n  {kind}: [{value}]\n---\nbody\n")
+    _manifest, dependencies = _parse_manifest(content, "mapping-skill")
+    assert dependencies == [{"name": value, "kind": expected, "requested": None}]
+
+
+def test_structured_named_version_constraint_is_canonicalized():
+    from atlas.skills.acquisition import _parse_manifest
+
+    content = ("---\nname: constrained\nversion: 1.0.0\ndescription: Constrained\n"
+               "dependencies:\n  python_packages:\n    - name: requests\n"
+               "      constraint: '>=2,<4'\n---\nbody\n")
+    _manifest, dependencies = _parse_manifest(content, "constrained")
+    assert dependencies == [{"name": "requests", "kind": "python_packages",
+                             "requested": ">=2,<4"}]
+
+
+def test_package_inspection_preserves_structured_dependency_semantics():
+    skill = ("---\nname: packaged-sample\nversion: 1.0.0\ndescription: Package sample\n"
+             "dependencies:\n  commands: [ffmpeg]\n---\nSafe skill instructions.\n")
+    acquisition = inspect_skill_package(_bundle(
+        skill=skill, dependencies={"commands": ["ffmpeg"]},
+    ), "structured.zip")
+    assert acquisition.validation["dependencies"] == [
+        {"name": "ffmpeg", "kind": "commands", "requested": None},
+    ]
 
 
 def test_dependency_preflight_reports_satisfied_missing_incompatible_unknown(monkeypatch):
@@ -185,6 +243,9 @@ async def test_package_import_uses_lifecycle_approval_and_is_atomic(tmp_path, mo
     from httpx import ASGITransport, AsyncClient
 
     from atlas import server
+    from atlas.skills import dependencies
+
+    monkeypatch.setattr(dependencies, "_installed_package_version", lambda _name: "2.31.0")
 
     registry = SkillRegistry(tmp_path / "registry.db")
     skills_dir = tmp_path / "skills"
@@ -222,6 +283,9 @@ async def test_package_import_uses_lifecycle_approval_and_is_atomic(tmp_path, mo
         })
         conflict = await client.post("/api/skill-packages/inspect", content=_bundle())
         assert conflict.json()["name_conflict"] is True
+        assert conflict.json()["exact_version_conflict"] is True
+        assert conflict.json()["same_name_existing"] is True
+        assert conflict.json()["import_state"] == "exact_version_conflict"
         denied_conflict = await client.post(
             "/api/skills/lifecycle/decision", headers=_headers(), json={
                 "action": "install", "name": "packaged-sample", "version": "1.0.0",
@@ -230,6 +294,10 @@ async def test_package_import_uses_lifecycle_approval_and_is_atomic(tmp_path, mo
         )
     assert installed.status_code == 200
     record = registry.get("packaged-sample", "1.0.0")
+    assert record["requirements"] == [{
+        "name": "requests", "kind": "python_packages", "requested": ">=2.0",
+    }]
+    assert "Safe skill instructions." in await server.skill_mgr.activate("packaged-sample")
     assert record["provenance"]["package_source"] == "sample.zip"
     assert record["provenance"]["user_approval_event_id"] == approval.json()["approval_event_id"]
     assert record["provenance"]["imported_at"]
@@ -274,6 +342,249 @@ async def test_failed_package_import_is_atomic(tmp_path, monkeypatch):
     assert response.status_code == 422
     assert registry.list() == []
     assert not skills_dir.exists()
+    server.skill_acquisitions.clear()
+
+
+@pytest.mark.asyncio
+async def test_same_name_different_version_uses_approved_update_path(tmp_path, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+
+    from atlas import server
+    from atlas.skills import dependencies
+
+    monkeypatch.setattr(dependencies, "_installed_package_version", lambda _name: "2.31.0")
+    registry = SkillRegistry(tmp_path / "registry.db")
+    skills_dir = tmp_path / "skills"
+    manager = SkillManager(skills_dir)
+    monkeypatch.setattr(server, "skill_registry", registry)
+    monkeypatch.setattr(server, "skill_mgr", manager)
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", "p15e-test-token")
+    server.skill_acquisitions.clear()
+    transport = ASGITransport(app=server.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        first = (await client.post("/api/skill-packages/inspect", content=_bundle())).json()
+        first_decision = await client.post(
+            "/api/skills/lifecycle/decision", headers=_headers(), json={
+                "action": "install", "name": "packaged-sample", "version": "1.0.0",
+                "acquisition_id": first["acquisition_id"], "reason": "install v1",
+            },
+        )
+        first_approval = await client.post(
+            "/api/skills/lifecycle/approve", headers=_headers(), json={
+                "decision_id": first_decision.json()["decision_id"],
+            },
+        )
+        installed = await client.post("/api/skills/lifecycle/install", json={
+            "acquisition_id": first["acquisition_id"],
+            "approval_token": first_approval.json()["approval_token"],
+        })
+        assert installed.status_code == 200
+        old_file = skills_dir / "community" / "packaged-sample" / "SKILL.md"
+        old_content = old_file.read_bytes()
+
+        second = (await client.post(
+            "/api/skill-packages/inspect", content=_bundle(version="2.0.0"),
+        )).json()
+        assert second["import_state"] == "update_candidate"
+        assert second["exact_version_conflict"] is False
+        assert second["same_name_existing"] is True
+        assert second["existing_version"] == "1.0.0"
+        decision = await client.post("/api/skills/lifecycle/decision", headers=_headers(), json={
+            "action": "update", "name": "packaged-sample", "version": "1.0.0",
+            "acquisition_id": second["acquisition_id"], "reason": "review package update",
+        })
+        approval = await client.post("/api/skills/lifecycle/approve", headers=_headers(), json={
+            "decision_id": decision.json()["decision_id"],
+        })
+        token = approval.json()["approval_token"]
+        retargeted = await client.post("/api/skills/lifecycle/update", json={
+            "acquisition_id": "another-acquisition", "version": "1.0.0",
+            "approval_token": token,
+        })
+        updated = await client.post("/api/skills/lifecycle/update", json={
+            "acquisition_id": second["acquisition_id"], "version": "1.0.0",
+            "approval_token": token,
+        })
+        replay = await client.post("/api/skills/lifecycle/update", json={
+            "acquisition_id": second["acquisition_id"], "version": "1.0.0",
+            "approval_token": token,
+        })
+
+    assert retargeted.status_code == 410
+    assert updated.status_code == 200 and updated.json()["version"] == "2.0.0"
+    assert replay.status_code == 410
+    assert registry.get("packaged-sample", "1.0.0")["lifecycle"]["state"] == "rollback-available"
+    assert registry.get("packaged-sample", "2.0.0")["requirements"] == [{
+        "name": "requests", "kind": "python_packages", "requested": ">=2.0",
+    }]
+    assert old_file.read_bytes() != old_content
+    assert "version: 2.0.0" in old_file.read_text(encoding="utf-8")
+    server.skill_acquisitions.clear()
+
+
+@pytest.mark.asyncio
+async def test_failed_version_update_preserves_registry_and_files(tmp_path, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+
+    from atlas import server
+    from atlas.skills import dependencies
+
+    monkeypatch.setattr(dependencies, "_installed_package_version", lambda _name: "2.31.0")
+    registry = SkillRegistry(tmp_path / "registry.db")
+    skills_dir = tmp_path / "skills"
+    monkeypatch.setattr(server, "skill_registry", registry)
+    monkeypatch.setattr(server, "skill_mgr", SkillManager(skills_dir))
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", "p15e-test-token")
+    original_update = server.update_lifecycle_skill
+
+    async def controlled_failure(*args, **kwargs):
+        raise ValueError("controlled update failure")
+
+    server.skill_acquisitions.clear()
+    transport = ASGITransport(app=server.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        first = (await client.post("/api/skill-packages/inspect", content=_bundle())).json()
+        choice = await client.post("/api/skills/lifecycle/decision", headers=_headers(), json={
+            "action": "install", "name": "packaged-sample", "version": "1.0.0",
+            "acquisition_id": first["acquisition_id"], "reason": "install old version",
+        })
+        auth = await client.post("/api/skills/lifecycle/approve", headers=_headers(), json={
+            "decision_id": choice.json()["decision_id"],
+        })
+        await client.post("/api/skills/lifecycle/install", json={
+            "acquisition_id": first["acquisition_id"],
+            "approval_token": auth.json()["approval_token"],
+        })
+        old_record = registry.get("packaged-sample", "1.0.0")
+        old_path = skills_dir / "community" / "packaged-sample" / "SKILL.md"
+        old_bytes = old_path.read_bytes()
+        second = (await client.post(
+            "/api/skill-packages/inspect", content=_bundle(version="2.0.0"),
+        )).json()
+        choice = await client.post("/api/skills/lifecycle/decision", headers=_headers(), json={
+            "action": "update", "name": "packaged-sample", "version": "1.0.0",
+            "acquisition_id": second["acquisition_id"], "reason": "controlled update failure",
+        })
+        auth = await client.post("/api/skills/lifecycle/approve", headers=_headers(), json={
+            "decision_id": choice.json()["decision_id"],
+        })
+        monkeypatch.setattr(server, "update_lifecycle_skill", controlled_failure)
+        response = await client.post("/api/skills/lifecycle/update", json={
+            "acquisition_id": second["acquisition_id"], "version": "1.0.0",
+            "approval_token": auth.json()["approval_token"],
+        })
+    monkeypatch.setattr(server, "update_lifecycle_skill", original_update)
+    assert response.status_code == 409
+    assert registry.get("packaged-sample", "1.0.0") == old_record
+    assert registry.get("packaged-sample", "2.0.0") is None
+    assert old_path.read_bytes() == old_bytes
+    server.skill_acquisitions.clear()
+
+
+@pytest.mark.asyncio
+async def test_local_package_downgrade_uses_lifecycle_approval(tmp_path, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+
+    from atlas import server
+    from atlas.skills import dependencies
+
+    monkeypatch.setattr(dependencies, "_installed_package_version", lambda _name: "2.31.0")
+    registry = SkillRegistry(tmp_path / "registry.db")
+    skills_dir = tmp_path / "skills"
+    monkeypatch.setattr(server, "skill_registry", registry)
+    monkeypatch.setattr(server, "skill_mgr", SkillManager(skills_dir))
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", "p15e-test-token")
+    server.skill_acquisitions.clear()
+    transport = ASGITransport(app=server.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        current = (await client.post(
+            "/api/skill-packages/inspect", content=_bundle(version="2.0.0"),
+        )).json()
+        choice = await client.post(
+            "/api/skills/lifecycle/decision", headers=_headers(), json={
+                "action": "install", "name": "packaged-sample", "version": "2.0.0",
+                "acquisition_id": current["acquisition_id"], "reason": "install current package",
+            },
+        )
+        auth = await client.post(
+            "/api/skills/lifecycle/approve", headers=_headers(), json={
+                "decision_id": choice.json()["decision_id"],
+            },
+        )
+        await client.post("/api/skills/lifecycle/install", json={
+            "acquisition_id": current["acquisition_id"],
+            "approval_token": auth.json()["approval_token"],
+        })
+        candidate = (await client.post(
+            "/api/skill-packages/inspect", content=_bundle(version="1.5.0"),
+        )).json()
+        choice = await client.post(
+            "/api/skills/lifecycle/decision", headers=_headers(), json={
+                "action": "downgrade", "name": "packaged-sample", "version": "2.0.0",
+                "acquisition_id": candidate["acquisition_id"], "reason": "review downgrade",
+            },
+        )
+        auth = await client.post(
+            "/api/skills/lifecycle/approve", headers=_headers(), json={
+                "decision_id": choice.json()["decision_id"],
+            },
+        )
+        updated = await client.post("/api/skills/lifecycle/update", json={
+            "acquisition_id": candidate["acquisition_id"], "version": "2.0.0",
+            "approval_token": auth.json()["approval_token"],
+        })
+    assert candidate["import_state"] == "update_candidate"
+    assert updated.status_code == 200 and updated.json()["version"] == "1.5.0"
+    assert registry.lifecycle_history("packaged-sample")[0]["action"] == "downgrade"
+    server.skill_acquisitions.clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("name", "declaration", "package_dependencies", "expected_state"), [
+    ("missing-import", "dependencies:\n  python_packages: [p15e-definitely-missing]",
+     {"python_packages": ["p15e-definitely-missing"]}, "missing"),
+    ("unknown-import", "requirements:\n  - unrecognized:dependency",
+     ["unrecognized:dependency"], "unknown"),
+])
+async def test_imported_missing_or_unknown_dependency_blocks_activation(
+    tmp_path, monkeypatch, name, declaration, package_dependencies, expected_state,
+):
+    from httpx import ASGITransport, AsyncClient
+
+    from atlas import server
+
+    skill = (f"---\nname: {name}\nversion: 1.0.0\ndescription: Test\n"
+             f"{declaration}\n---\nblocked body\n")
+    registry = SkillRegistry(tmp_path / "registry.db")
+    skills_dir = tmp_path / "skills"
+    manager = SkillManager(skills_dir)
+    monkeypatch.setattr(server, "skill_registry", registry)
+    monkeypatch.setattr(server, "skill_mgr", manager)
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", "p15e-test-token")
+    server.skill_acquisitions.clear()
+    transport = ASGITransport(app=server.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        preview = await client.post("/api/skill-packages/inspect", content=_bundle(
+            name=name, skill=skill, dependencies=package_dependencies,
+        ))
+        assert preview.status_code == 200
+        assert preview.json()["dependency_state"][0]["state"] == expected_state
+        choice = await client.post("/api/skills/lifecycle/decision", headers=_headers(), json={
+            "action": "install", "name": name, "version": "1.0.0",
+            "acquisition_id": preview.json()["acquisition_id"], "reason": "install for preflight",
+        })
+        approval = await client.post("/api/skills/lifecycle/approve", headers=_headers(), json={
+            "decision_id": choice.json()["decision_id"],
+        })
+        installed = await client.post("/api/skills/lifecycle/install", json={
+            "acquisition_id": preview.json()["acquisition_id"],
+            "approval_token": approval.json()["approval_token"],
+        })
+    assert installed.status_code == 200
+    requirements = registry.get(name, "1.0.0")["requirements"]
+    assert requirements == preview.json()["validation"]["dependencies"]
+    with pytest.raises(PermissionError, match="dependencies block activation"):
+        await manager.activate(name, registry=registry)
     server.skill_acquisitions.clear()
 
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import SkillDiscoveryPage from './SkillDiscoveryPage';
 import { buildSkillDiscoveryUrl, canActivateLocalSkill } from './skillDiscoveryUrl';
-import { approveSkillInstallation, lifecycleUpdateAction, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
+import { approveSkillInstallation, lifecycleUpdateAction, localPackageReviewState, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
 
 describe('Skill discovery page', () => {
   it('renders task search and structured filters without affecting chat', () => {
@@ -38,6 +38,17 @@ describe('Skill discovery page', () => {
     expect(lifecycleUpdateAction('1.2.0', '1.3.0')).toBe('update');
     expect(lifecycleUpdateAction('1.2.0', '1.1.9')).toBe('downgrade');
     expect(lifecycleUpdateAction('1.2.0', '1.2.0')).toBe('update');
+  });
+
+  it('renders explicit local package conflict and update candidate states', () => {
+    expect(localPackageReviewState('exact_version_conflict')).toMatchObject({
+      message: '同名同版本已存在；不会覆盖 Registry 或文件。', canProceed: false,
+    });
+    expect(localPackageReviewState('update_candidate')).toMatchObject({
+      message: '这是更新/降级候选，将进入现有 lifecycle 更新/降级审批。',
+      action: '经现有 lifecycle 审批更新/降级', canProceed: true,
+    });
+    expect(localPackageReviewState('new_skill').canProceed).toBe(true);
   });
 
   it('uses the server approval and one-time authorization contract', async () => {

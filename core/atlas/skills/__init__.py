@@ -21,7 +21,7 @@ except ModuleNotFoundError:
 import yaml
 
 from atlas.config import PROJECT_ROOT
-from atlas.skills.dependencies import dependency_preflight
+from atlas.skills.dependencies import dependency_preflight, normalize_dependencies
 
 log = structlog.get_logger()
 
@@ -42,7 +42,8 @@ class SkillInfo:
     category: str
     path: str  # absolute path to SKILL.md
     triggers: list[dict[str, str]] = field(default_factory=list)
-    dependencies: dict[str, Any] = field(default_factory=dict)
+    dependencies: Any = field(default_factory=dict)
+    dependency_contract: list[dict[str, Any]] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     related_skills: list[str] = field(default_factory=list)
     author: str = ""
@@ -172,6 +173,13 @@ def _frontmatter_to_skill_info(
         ):
             invalid(f"dependencies.{key} must be a list of names or named version constraints")
             return None
+    requirements = fm.get("requirements", []) or []
+    if not isinstance(requirements, (list, dict)):
+        invalid("requirements must be a list or mapping")
+        return None
+    dependency_contract = normalize_dependencies([
+        *normalize_dependencies(deps), *normalize_dependencies(requirements),
+    ])
 
     # Accept Atlas fields and Hermes-compatible nested metadata.
     tags = fm.get("tags", []) or []
@@ -244,6 +252,7 @@ def _frontmatter_to_skill_info(
         path=str(path),
         triggers=triggers,
         dependencies=deps,
+        dependency_contract=dependency_contract,
         tags=tags,
         related_skills=related,
         author=author,
@@ -457,7 +466,7 @@ class SkillManager:
         if skill is None:
             return []
         return dependency_preflight(
-            skill.dependencies,
+            skill.dependency_contract or skill.dependencies,
             connected_servers=set(connected_servers) if connected_servers is not None else None,
             configured_servers=set(configured_servers) if configured_servers is not None else None,
             registry=registry,

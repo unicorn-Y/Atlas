@@ -21,6 +21,7 @@ from urllib.parse import quote, urlparse
 import httpx
 import yaml
 
+from atlas.skills.dependencies import normalize_dependencies
 from atlas.skills.registry import SkillRegistry
 
 MAX_FILES = 100
@@ -411,7 +412,9 @@ class SkillsShProvider:
         return safe_acquisition
 
 
-def _parse_manifest(content: str, expected_name: str) -> tuple[dict[str, Any], list[str]]:
+def _parse_manifest(
+    content: str, expected_name: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     match = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", content, re.DOTALL)
     if not match:
         raise ValueError("SKILL.md frontmatter is missing or not closed")
@@ -433,11 +436,9 @@ def _parse_manifest(content: str, expected_name: str) -> tuple[dict[str, Any], l
     if _contains_secret(raw):
         raise ValueError("manifest contains credential-like content")
     requirements = raw.get("requirements", raw.get("dependencies", []))
-    if isinstance(requirements, dict):
-        requirements = [f"{key}: {value}" for key, value in requirements.items()]
-    if not isinstance(requirements, list) or any(not isinstance(x, str) for x in requirements):
+    if not isinstance(requirements, (list, dict)):
         raise ValueError("declared dependencies must be a list or mapping")
-    return raw, requirements
+    return raw, normalize_dependencies(requirements)
 
 
 def _contains_secret(value: Any) -> bool:

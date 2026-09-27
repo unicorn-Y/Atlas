@@ -336,7 +336,7 @@ async def update_skill(
             registry, acquisition.validation.get("dependencies", []),
         )
         blockers = [item["name"] for item in new_dependencies
-                    if item["state"] in {"missing", "incompatible"}]
+                    if item["state"] != "satisfied"]
         if blockers:
             raise PermissionError("update dependencies are not satisfied: " + ", ".join(blockers))
         old_source = (current.get("provenance") or {}).get("external_id")

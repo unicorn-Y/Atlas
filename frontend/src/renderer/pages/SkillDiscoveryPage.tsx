@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Search, WandSparkles } from 'lucide-react';
 import styles from '../App.module.css';
 import { buildSkillDiscoveryUrl, canActivateLocalSkill } from './skillDiscoveryUrl';
-import { approveSkillInstallation, lifecycleUpdateAction, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
+import { approveSkillInstallation, lifecycleUpdateAction, localPackageReviewState, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
 
 type SkillResult = {
   name: string; version: string; description: string; capabilities: string[]; tools: string[];
@@ -13,7 +13,7 @@ type RemoteSkill = { provider: string; external_id: string; name: string; descri
 type Review = { acquisition_id: string; record: RemoteSkill & { version: string; description: string }; files: Record<string, string>; validation: { result: string; dependencies: string[] }; security: { result: 'PASS' | 'WARN' | 'BLOCK'; risks: string[]; note: string }; computed_sha256: string; already_installed: boolean; existing_local?: Record<string, unknown> | null; install_target: string; dependency_state?: { name: string; state: string }[]; file_diff?: { added: string[]; removed: string[]; changed: string[]; unchanged: string[] } };
 type Lifecycle = { lifecycle: { state: string; trust_state: string; pin_policy: string; pinned_hash?: string | null; content_hash?: string | null; actual_hash?: string | null; drifted: boolean }; provenance: Record<string, unknown>; dependency_state: { name: string; state: string }[]; history: { event_id: string; action: string; skill_version: string; previous_hash?: string; resulting_hash?: string; timestamp: string; result: string; details?: Record<string, unknown> }[] };
 type Dependency = { name: string; kind: string; requested?: string | null; detected: unknown; state: string; source: string; blocking_reason?: string | null };
-type LocalPackageReview = { acquisition_id: string; record: { name: string; version: string; description: string; provider: string; source_url: string }; files: Record<string, string>; security: { result: string; risks: string[]; note: string }; computed_sha256: string; dependency_state: Dependency[]; already_installed: boolean; name_conflict: boolean; install_target: string };
+type LocalPackageReview = { acquisition_id: string; record: { name: string; version: string; description: string; provider: string; source_url: string }; files: Record<string, string>; security: { result: string; risks: string[]; note: string }; computed_sha256: string; dependency_state: Dependency[]; already_installed: boolean; name_conflict: boolean; exact_version_conflict: boolean; same_name_existing: boolean; import_state: 'new_skill' | 'exact_version_conflict' | 'update_candidate'; existing_version?: string | null; install_target: string };
 interface Props { apiBaseUrl: string }
 
 async function skillCenterHeaders(): Promise<Record<string, string>> {
@@ -256,16 +256,23 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
   };
 
   const importReviewedPackage = async () => {
-    if (!packageReview || packageReview.name_conflict || packageReview.security.result === 'BLOCK') return;
+    if (!packageReview || packageReview.exact_version_conflict || packageReview.security.result === 'BLOCK') return;
     setPackageBusy(true);
     try {
       const headers = await skillCenterHeaders();
       const confirmed = packageReview.security.result !== 'WARN' || confirmWarnings;
+      const isUpdate = packageReview.import_state === 'update_candidate';
+      const currentVersion = packageReview.existing_version;
+      if (isUpdate && !currentVersion) throw new Error('已安装版本信息不可用，无法创建更新审查');
+      const action = isUpdate && currentVersion
+        ? lifecycleUpdateAction(currentVersion, packageReview.record.version) : 'install';
       const decision = await fetch(`${apiBaseUrl}/api/skills/lifecycle/decision`, {
         method: 'POST', headers,
-        body: JSON.stringify({ action: 'install', name: packageReview.record.name,
-          version: packageReview.record.version, acquisition_id: packageReview.acquisition_id,
-          reason: '在 Skill Center 审查本地 package 并批准导入', warnings_confirmed: confirmed }),
+        body: JSON.stringify({ action, name: packageReview.record.name,
+          version: isUpdate ? currentVersion : packageReview.record.version,
+          acquisition_id: packageReview.acquisition_id,
+          reason: isUpdate ? '在 Skill Center 审查本地 package 更新/降级候选' : '在 Skill Center 审查本地 package 并批准导入',
+          warnings_confirmed: confirmed }),
       });
       const choice = await decision.json() as { decision_id?: string; detail?: string };
       if (!decision.ok || !choice.decision_id) throw new Error(choice.detail ?? '导入决策创建失败');
@@ -274,15 +281,16 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
       });
       const auth = await approval.json() as { approval_token?: string; detail?: string };
       if (!approval.ok || !auth.approval_token) throw new Error(auth.detail ?? '导入审批失败');
-      const response = await fetch(`${apiBaseUrl}/api/skills/lifecycle/install`, {
+      const response = await fetch(`${apiBaseUrl}/api/skills/lifecycle/${isUpdate ? 'update' : 'install'}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ acquisition_id: packageReview.acquisition_id,
+          ...(isUpdate ? { version: currentVersion } : {}),
           approval_token: auth.approval_token, warnings_confirmed: confirmed }),
       });
       const result = await response.json() as { detail?: string; name?: string };
       if (!response.ok) throw new Error(result.detail ?? 'package 导入失败');
       setPackageReview(null); setConfirmWarnings(false);
-      setInstallState(`已导入 ${result.name ?? packageReview.record.name}，lifecycle 审批已记录。`);
+      setInstallState(`${isUpdate ? '已更新' : '已导入'} ${result.name ?? packageReview.record.name}，lifecycle 审批已记录。`);
       await search();
     } catch (cause) { setInstallState(cause instanceof Error ? cause.message : 'package 导入失败'); }
     finally { setPackageBusy(false); }
@@ -413,6 +421,6 @@ export default function SkillDiscoveryPage({ apiBaseUrl }: Props) {
     </section>}
     {review && <section role="dialog" aria-modal="true" aria-label="安装前安全审查"><h2>安装前审查：{review.record.name}</h2><p>版本 {review.record.version} · {review.record.provider} · {review.record.source_url}</p><p>{review.record.description}</p>{review.record.integrity_diagnostic?.message && <p role="alert">完整性诊断：{review.record.integrity_diagnostic.message}{review.record.integrity_diagnostic.github_source_revision ? ` GitHub revision ${review.record.integrity_diagnostic.github_source_revision}.` : ''}{review.record.integrity_diagnostic.github_tree_sha ? ` Tree ${review.record.integrity_diagnostic.github_tree_sha}.` : ''}{review.record.integrity_diagnostic.github_source_error ? ` ${review.record.integrity_diagnostic.github_source_error}` : ''}</p>}<p>Provider 参考哈希：{review.record.provider_integrity?.provider_computed_hash ?? review.record.integrity_diagnostic?.provider_computed_hash ?? review.record.provider_computed_hash ?? '不可用'}</p><p>安全检查：{review.security.result} · {review.security.risks.join(', ') || '未发现已知风险模式'}</p><p>{review.security.note}</p><p>审计：{JSON.stringify(review.record.audit ?? '无可用审计')}</p><p>远程哈希：{review.record.remote_hash ?? '未提供'}</p><p>本地 SHA-256：{review.computed_sha256}</p><p>验证：{review.validation.result} · 声明依赖：{review.validation.dependencies.join(', ') || '无'}</p><p>已安装：{review.already_installed ? '是' : '否'} · 目标：{review.install_target}</p>{review.already_installed && <section aria-label="已安装版本冲突"><h3>本地版本与来源</h3><pre>{JSON.stringify({ existing: review.existing_local, incoming: { source: review.record.source_url, hash: review.computed_sha256 } }, null, 2)}</pre></section>}<h3>文件树与内容预览</h3><ul>{Object.keys(review.files).map((file) => <li key={file}>{file}</li>)}</ul>{Object.entries(review.files).map(([file, content]) => <details key={file}><summary>{file}</summary><pre>{content}</pre></details>)}<button type="button" onClick={() => { setReview(null); setConfirmWarnings(false); }}>取消</button><button type="button" disabled={installing || review.security.result === 'BLOCK' || review.already_installed} onClick={() => void installReviewed()}>{review.security.result === 'BLOCK' ? '已阻止安装' : '我已审查并批准安装'}</button></section>}
     {confirmWarnings && review && <section role="dialog" aria-modal="true" aria-label="确认风险后安装"><h2>此 Skill 包含风险提示</h2><p>{review.security.risks.join('、')}</p><p>风险扫描只提供证据，不能证明内容绝对安全。确认后将安装到 {review.install_target}。</p><button type="button" onClick={() => setConfirmWarnings(false)}>返回审查</button><button type="button" disabled={installing} onClick={() => void installReviewed(true)}>我理解风险，仍然安装</button></section>}
-    {packageReview && <section role="dialog" aria-modal="true" aria-label="本地 Skill package 审查"><h2>本地 package 审查：{packageReview.record.name}</h2><p>版本 {packageReview.record.version} · 来源 {packageReview.record.source_url}</p><p>{packageReview.record.description}</p><p>内容 SHA-256：{packageReview.computed_sha256}</p><p>安全检查：{packageReview.security.result} · {packageReview.security.risks.join(', ') || '无已知风险'}</p><p>{packageReview.security.note}</p><p>依赖：{packageReview.dependency_state.map((item) => `${item.kind}:${item.name} ${item.state}`).join(' · ') || '无'}</p><pre>{Object.keys(packageReview.files).join('\n')}</pre>{packageReview.name_conflict && <p role="alert">Registry 已有此 Skill identity；导入不会覆盖现有 package。</p>}{packageReview.security.result === 'WARN' && <label><input type="checkbox" checked={confirmWarnings} onChange={(event) => setConfirmWarnings(event.target.checked)} />我已审查并理解风险</label>}<button type="button" onClick={() => setPackageReview(null)}>取消</button><button type="button" disabled={packageBusy || packageReview.name_conflict || packageReview.security.result === 'BLOCK' || (packageReview.security.result === 'WARN' && !confirmWarnings)} onClick={() => void importReviewedPackage()}>经 lifecycle 审批导入</button></section>}
+    {packageReview && <section role="dialog" aria-modal="true" aria-label="本地 Skill package 审查"><h2>本地 package 审查：{packageReview.record.name}</h2><p>版本 {packageReview.record.version} · 来源 {packageReview.record.source_url}</p><p>{packageReview.record.description}</p><p>内容 SHA-256：{packageReview.computed_sha256}</p><p>安全检查：{packageReview.security.result} · {packageReview.security.risks.join(', ') || '无已知风险'}</p><p>{packageReview.security.note}</p><p>依赖：{packageReview.dependency_state.map((item) => `${item.kind}:${item.name} ${item.state}`).join(' · ') || '无'}</p><pre>{Object.keys(packageReview.files).join('\n')}</pre>{packageReview.import_state !== 'new_skill' && <p role={packageReview.exact_version_conflict ? 'alert' : 'status'}>{packageReview.import_state === 'update_candidate' ? `当前 ${packageReview.record.name}@${packageReview.existing_version} → 候选 ${packageReview.record.version}。` : ''}{localPackageReviewState(packageReview.import_state).message}</p>}{packageReview.security.result === 'WARN' && <label><input type="checkbox" checked={confirmWarnings} onChange={(event) => setConfirmWarnings(event.target.checked)} />我已审查并理解风险</label>}<button type="button" onClick={() => setPackageReview(null)}>取消</button><button type="button" disabled={packageBusy || !localPackageReviewState(packageReview.import_state).canProceed || packageReview.security.result === 'BLOCK' || (packageReview.security.result === 'WARN' && !confirmWarnings)} onClick={() => void importReviewedPackage()}>{localPackageReviewState(packageReview.import_state).action}</button></section>}
   </section>;
 }

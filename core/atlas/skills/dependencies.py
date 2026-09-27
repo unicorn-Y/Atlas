@@ -52,6 +52,16 @@ def parse_dependencies(declarations: Any) -> list[SkillDependency]:
         return _deduplicate(items)
     if isinstance(declarations, list):
         for value in declarations:
+            if (isinstance(value, dict) and isinstance(value.get("kind"), str)
+                    and isinstance(value.get("name"), str)):
+                kind = value["kind"]
+                if kind not in _KINDS and kind != "skills":
+                    kind = "unknown"
+                requested = value.get("requested")
+                items.append(SkillDependency(
+                    value["name"], kind, requested if isinstance(requested, str) else None,
+                ))
+                continue
             if not isinstance(value, str) or not value.strip():
                 items.append(SkillDependency(str(value), "unknown"))
                 continue
@@ -63,6 +73,11 @@ def parse_dependencies(declarations: Any) -> list[SkillDependency]:
             else:
                 items.append(SkillDependency(value.strip(), "unknown"))
     return _deduplicate(items)
+
+
+def normalize_dependencies(declarations: Any) -> list[dict[str, Any]]:
+    """Return the single persisted dependency representation used by Skills and packages."""
+    return [dependency.to_dict() for dependency in parse_dependencies(declarations)]
 
 
 def _split_requested(value: str) -> tuple[str, str | None]:

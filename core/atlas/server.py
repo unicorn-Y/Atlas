@@ -1682,6 +1682,8 @@ async def inspect_local_skill_package(request: Request) -> dict[str, Any]:
     }
     exact = skill_registry.get(acquisition.record["name"], acquisition.record["version"])
     same_name = any(item["name"] == acquisition.record["name"] for item in skill_registry.list())
+    existing = next((item for item in skill_registry.list(status="active")
+                     if item["name"] == acquisition.record["name"]), None)
     states = dependency_preflight(
         acquisition.validation.get("dependencies", []),
         connected_servers=set(mcp_client.get_server_names()) if mcp_client else None,
@@ -1693,7 +1695,12 @@ async def inspect_local_skill_package(request: Request) -> dict[str, Any]:
         "files": acquisition.files, "validation": acquisition.validation,
         "security": acquisition.security, "computed_sha256": acquisition.computed_hash,
         "dependency_state": states, "already_installed": exact is not None,
-        "name_conflict": same_name,
+        "name_conflict": exact is not None,
+        "exact_version_conflict": exact is not None,
+        "same_name_existing": same_name,
+        "import_state": ("exact_version_conflict" if exact is not None else
+                         "update_candidate" if existing is not None else "new_skill"),
+        "existing_version": existing["version"] if existing is not None else None,
         "install_target": f"skills/community/{acquisition.record['name']}",
         "import_requires_lifecycle_approval": True,
     }
@@ -1857,8 +1864,11 @@ async def create_skill_lifecycle_decision(
         registry = skill_registry
         if registry is None:
             raise HTTPException(status_code=503, detail="Skill Registry is unavailable")
-        if any(item["name"] == name for item in registry.list()):
-            raise HTTPException(status_code=409, detail="Skill name already exists in Registry")
+        if registry.get(name, version) is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Skill package with this exact name and version already exists",
+            )
         if session.get("computed_sha256") != acquisition.computed_hash:
             raise HTTPException(status_code=409, detail="reviewed package hash changed")
         skills_dir = skill_mgr._skills_dir if skill_mgr else SKILLS_DIR
@@ -1910,6 +1920,8 @@ async def create_skill_lifecycle_decision(
         acquisition = session["acquisition"]
         if acquisition.record["name"] != name:
             raise HTTPException(status_code=403, detail="update review targets another skill")
+        if acquisition.record["version"] == version:
+            raise HTTPException(status_code=409, detail="exact name and version already exists")
         current_version = tuple(int(part.split("-")[0]) for part in version.split(".")[:3])
         incoming_version = tuple(
             int(part.split("-")[0]) for part in acquisition.record["version"].split(".")[:3]
@@ -2015,6 +2027,8 @@ async def update_skill_lifecycle(payload: dict[str, Any] = Body(...)) -> dict[st
         raise HTTPException(status_code=410, detail="reviewed update is missing or expired")
     acquisition = session["acquisition"]
     name = acquisition.record["name"]
+    if acquisition.record["version"] == version:
+        raise HTTPException(status_code=409, detail="exact name and version already exists")
     registry, skills_dir, state = _lifecycle_context(name, str(version or ""))
     if state["lifecycle"]["drifted"]:
         raise HTTPException(status_code=409, detail="filesystem drift blocks update")
@@ -2067,8 +2081,11 @@ async def install_local_skill_package(payload: dict[str, Any] = Body(...)) -> di
     if registry is None:
         raise HTTPException(status_code=503, detail="Skill Registry is unavailable")
     name, version = acquisition.record["name"], acquisition.record["version"]
-    if any(item["name"] == name for item in registry.list()):
-        raise HTTPException(status_code=409, detail="Skill name already exists in Registry")
+    if registry.get(name, version) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Skill package with this exact name and version already exists",
+        )
     approval = _consume_lifecycle_approval(
         registry, payload, action="install", name=name, version=version,
         current_hash="", content_hash=acquisition.computed_hash,
