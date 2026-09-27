@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -58,6 +59,56 @@ class Acquisition:
 
 class CatalogUnavailableError(RuntimeError):
     pass
+
+
+def _provider_reference_sha256(files: dict[str, str]) -> str:
+    """Run the skills CLI reference hash implementation under Node Intl."""
+    reference = (
+        "const {createHash}=require('node:crypto');"
+        "let input='';process.stdin.setEncoding('utf8');"
+        "process.stdin.on('data',chunk=>input+=chunk);"
+        "process.stdin.on('end',()=>{const files=JSON.parse(input);"
+        "const hash=createHash('sha256');"
+        "for(const file of files.sort((a,b)=>a.path.localeCompare(b.path))){"
+        "hash.update(file.path);hash.update(file.contents);"
+        "}process.stdout.write(hash.digest('hex'));});"
+    )
+    try:
+        result = subprocess.run(
+            ["node", "-e", reference],
+            input=json.dumps(
+                [{"path": path, "contents": content} for path, content in files.items()],
+                ensure_ascii=False,
+            ),
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            timeout=5,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise CatalogUnavailableError("provider reference hash verifier unavailable") from exc
+    digest = result.stdout.strip()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise CatalogUnavailableError("provider reference hash verifier failed")
+    return digest
+
+
+def _provider_snapshot_files(items: list[Any]) -> dict[str, str]:
+    if len(items) > MAX_FILES:
+        raise ValueError("payload exceeds file count limit")
+    files: dict[str, str] = {}
+    for item in items:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("path"), str)
+            or not isinstance(item.get("contents"), str)
+        ):
+            raise ValueError("provider snapshot contains an invalid file entry")
+        if item["path"] in files:
+            raise ValueError("provider snapshot contains duplicate paths")
+        files[item["path"]] = item["contents"]
+    return files
 
 
 class SkillsShProvider:
@@ -185,13 +236,7 @@ class SkillsShProvider:
         except CatalogUnavailableError:
             snapshot = None
         if isinstance(snapshot, dict) and isinstance(snapshot.get("files"), list):
-            files = {
-                item["path"]: item["contents"]
-                for item in snapshot["files"]
-                if isinstance(item, dict)
-                and isinstance(item.get("path"), str)
-                and isinstance(item.get("contents"), str)
-            }
+            files = _provider_snapshot_files(snapshot["files"])
             source = "/".join(parts[:2])
             record = {
                 "provider": self.name,
@@ -211,7 +256,13 @@ class SkillsShProvider:
                 record["audit"] = await self.get_audit(external_id)
             except CatalogUnavailableError:
                 pass
-            return prepare_acquisition(record, files)
+            acquisition = prepare_acquisition(record, files)
+            if (
+                acquisition.security["result"] != "BLOCK"
+                or "remote_hash_mismatch" not in acquisition.security["risks"]
+            ):
+                return acquisition
+            return await self._resolve_provider_mismatch(external_id, acquisition)
         try:
             detail = await self.get_detail(external_id)
         except CatalogUnavailableError:
@@ -232,14 +283,7 @@ class SkillsShProvider:
             )
         source = str(detail.get("source", "/".join(parts[:2])))
         slug = str(detail.get("slug", parts[-1]))
-        files: dict[str, str] = {}
-        for item in detail["files"]:
-            if (
-                isinstance(item, dict)
-                and isinstance(item.get("path"), str)
-                and isinstance(item.get("contents"), str)
-            ):
-                files[item["path"]] = item["contents"]
+        files = _provider_snapshot_files(detail["files"])
         audit = None
         try:
             audit = await self.get_audit(external_id)
@@ -259,7 +303,111 @@ class SkillsShProvider:
             "audit": audit,
             "fetched_at": datetime.now(UTC).isoformat(),
         }
-        return prepare_acquisition(record, files)
+        acquisition = prepare_acquisition(record, files)
+        if (
+            acquisition.security["result"] != "BLOCK"
+            or "remote_hash_mismatch" not in acquisition.security["risks"]
+        ):
+            return acquisition
+        return await self._resolve_provider_mismatch(external_id, acquisition)
+
+    async def _resolve_provider_mismatch(
+        self, external_id: str, provider_acquisition: Acquisition
+    ) -> Acquisition:
+        parts = external_id.split("/")
+        source = "/".join(parts[:2])
+        slug = parts[2]
+        provider_hash = provider_acquisition.record.get("remote_hash")
+        provider_reference_hash = provider_acquisition.record.get("provider_computed_hash")
+        diagnostic = {
+            "provider_hash": provider_hash,
+            "provider_computed_hash": provider_reference_hash,
+            "provider_mismatch": True,
+            "fallback_reason": "provider_hash_mismatch",
+        }
+        github_acquisition = None
+        github_error = None
+        candidates = (
+            f"skills/{slug}",
+            slug,
+            f".agents/skills/{slug}",
+            f".claude/skills/{slug}",
+        )
+        for candidate in candidates:
+            try:
+                github_acquisition = await inspect_github_source(
+                    f"https://github.com/{source}", candidate, client=self._client
+                )
+                break
+            except ValueError as exc:
+                github_error = str(exc)
+                continue
+            except (CatalogUnavailableError, httpx.HTTPError) as exc:
+                github_error = str(exc)
+                break
+        if github_acquisition is None and github_error and "GitHub skill path" in github_error:
+            try:
+                github_acquisition = await inspect_github_source(
+                    f"https://github.com/{source}", expected_name=slug, client=self._client
+                )
+            except (CatalogUnavailableError, ValueError, httpx.HTTPError) as exc:
+                github_error = str(exc)
+        if github_acquisition is None:
+            provider_acquisition.security = {
+                "result": "BLOCK",
+                "risks": ["remote_hash_mismatch", "github_source_unavailable"],
+                "note": "Provider hash mismatch; GitHub source could not be verified.",
+            }
+            diagnostic["github_source_error"] = github_error or "GitHub skill source not found"
+            diagnostic["status"] = "github_source_unavailable"
+            diagnostic["message"] = (
+                "Catalog snapshot and provider hash mismatch; "
+                "GitHub source could not be verified."
+            )
+            provider_acquisition.record["integrity_diagnostic"] = diagnostic
+            return provider_acquisition
+        if github_acquisition.files != provider_acquisition.files:
+            provider_acquisition.security = {
+                "result": "BLOCK",
+                "risks": ["remote_hash_mismatch", "catalog_source_mismatch"],
+                "note": "The catalog snapshot does not match the current GitHub source.",
+            }
+            diagnostic.update({
+                "status": "catalog_source_mismatch",
+                "message": (
+                    "Catalog snapshot differs from the current GitHub source; "
+                    "installation is blocked."
+                ),
+                "github_source": github_acquisition.record["source_url"],
+                "github_source_revision": github_acquisition.record.get("github_source_revision"),
+                "github_tree_sha": github_acquisition.record.get("github_tree_sha"),
+                "source_match": False,
+            })
+            provider_acquisition.record["integrity_diagnostic"] = diagnostic
+            return provider_acquisition
+
+        record = {
+            **github_acquisition.record,
+            "provider": self.name,
+            "external_id": external_id,
+            "remote_hash": provider_hash,
+            "provider_integrity": {
+                **diagnostic,
+                "source_match": True,
+                "github_source": github_acquisition.record["source_url"],
+                "github_source_revision": github_acquisition.record.get("github_source_revision"),
+                "github_tree_sha": github_acquisition.record.get("github_tree_sha"),
+            },
+            "integrity_diagnostic": {
+                "status": "github_fallback",
+                "message": (
+                    "Catalog snapshot matched GitHub source; "
+                    "acquisition uses verified GitHub files."
+                ),
+            },
+        }
+        safe_acquisition = prepare_acquisition(record, github_acquisition.files)
+        return safe_acquisition
 
 
 def _parse_manifest(content: str, expected_name: str) -> tuple[dict[str, Any], list[str]]:
@@ -356,13 +504,30 @@ def prepare_acquisition(record: dict[str, Any], files: dict[str, str]) -> Acquis
         raise ValueError("payload contains duplicate normalized paths")
     digest = payload_sha256(normalized)
     remote_hash = record.get("remote_hash")
+    provider_reference_hash = None
+    integrity = record.get("provider_integrity")
+    is_verified_fallback = isinstance(integrity, dict) and integrity.get("source_match") is True
     if remote_hash:
         normalized_remote = str(remote_hash).removeprefix("sha256:").lower()
-        if not re.fullmatch(r"[0-9a-f]{64}", normalized_remote) or normalized_remote != digest:
+        try:
+            provider_reference_hash = _provider_reference_sha256(normalized)
+        except CatalogUnavailableError:
+            provider_reference_hash = None
+        if is_verified_fallback:
+            security = _security_scan(normalized, manifest)
+        elif (
+            provider_reference_hash is None
+            or not re.fullmatch(r"[0-9a-f]{64}", normalized_remote)
+            or normalized_remote != provider_reference_hash
+        ):
             security = {
                 "result": "BLOCK",
-                "risks": ["remote_hash_mismatch"],
-                "note": "Remote hash did not match the fetched payload.",
+                "risks": ["remote_hash_mismatch"] if provider_reference_hash is not None else [
+                    "provider_reference_verifier_unavailable"
+                ],
+                "note": "Provider hash did not match the skills CLI reference hash."
+                if provider_reference_hash is not None
+                else "Provider hash could not be checked with the skills CLI reference verifier.",
             }
         else:
             security = _security_scan(normalized, manifest)
@@ -376,6 +541,7 @@ def prepare_acquisition(record: dict[str, Any], files: dict[str, str]) -> Acquis
             "version": manifest["version"],
             "description": manifest["description"],
             "remote_hash": remote_hash,
+            **({"provider_computed_hash": provider_reference_hash} if remote_hash else {}),
         },
         files=normalized,
         validation={"result": "PASS", "file_count": len(normalized), "dependencies": dependencies},
@@ -385,7 +551,7 @@ def prepare_acquisition(record: dict[str, Any], files: dict[str, str]) -> Acquis
 
 
 def payload_sha256(files: dict[str, str]) -> str:
-    """Return the skills.sh snapshot digest over sorted relative paths and UTF-8 contents."""
+    """Return Atlas's deterministic local digest over case-folded path order."""
     normalized_files = {PurePosixPath(name).as_posix(): content for name, content in files.items()}
     if len(normalized_files) != len(files):
         raise ValueError("payload contains duplicate normalized paths")
@@ -400,6 +566,7 @@ async def inspect_github_source(
     source: str,
     skill_path: str = "",
     *,
+    expected_name: str | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> Acquisition:
     parsed = urlparse(source)
@@ -427,29 +594,89 @@ async def inspect_github_source(
         if response.status_code != 200:
             raise CatalogUnavailableError("GitHub repository unavailable, private, or rate limited")
         active_branch = branch or response.json().get("default_branch")
+        commit_response = await using.get(
+            f"https://api.github.com/repos/{owner}/{repo}/commits/"
+            f"{quote(str(active_branch), safe='')}"
+        )
+        if commit_response.status_code != 200:
+            raise CatalogUnavailableError("GitHub source revision is unavailable")
+        commit_data = commit_response.json()
+        commit_sha = commit_data.get("sha")
+        if not isinstance(commit_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", commit_sha):
+            raise CatalogUnavailableError("GitHub source revision is invalid")
+        tree_sha = commit_data.get("commit", {}).get("tree", {}).get("sha")
+        if not isinstance(tree_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", tree_sha):
+            raise CatalogUnavailableError("GitHub source tree revision is invalid")
         tree_url = (
             f"https://api.github.com/repos/{owner}/{repo}/git/trees/"
-            f"{quote(str(active_branch), safe='')}?recursive=1"
+            f"{quote(tree_sha, safe='')}?recursive=1"
         )
         tree_response = await using.get(tree_url)
         if tree_response.status_code != 200:
             raise CatalogUnavailableError("GitHub repository tree is unavailable")
         tree_data = tree_response.json()
+        if tree_data.get("sha") != tree_sha:
+            raise CatalogUnavailableError("GitHub repository tree revision changed")
         if tree_data.get("truncated") is True:
             raise CatalogUnavailableError("GitHub repository tree is incomplete (truncated)")
-        prefix = f"{path}/" if path else ""
         entries = tree_data.get("tree", [])
+        resolved_path = path
+        if not resolved_path and expected_name:
+            candidates = [
+                item for item in entries
+                if item.get("type") == "blob"
+                and isinstance(item.get("path"), str)
+                and item["path"].endswith("SKILL.md")
+                and item.get("mode") != "120000"
+                and isinstance(item.get("size"), int)
+                and 0 <= item["size"] <= MAX_FILE_BYTES
+            ]
+            if len(candidates) > MAX_FILES:
+                raise CatalogUnavailableError(
+                    "GitHub repository has too many skills to resolve safely"
+                )
+            matching_paths = []
+            for candidate in candidates:
+                response = await using.get(
+                    "https://raw.githubusercontent.com/"
+                    f"{owner}/{repo}/{quote(commit_sha, safe='')}/"
+                    f"{quote(candidate['path'], safe='/')}"
+                )
+                if response.status_code != 200:
+                    continue
+                try:
+                    frontmatter = re.match(
+                        r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)",
+                        response.content.decode("utf-8"),
+                        re.DOTALL,
+                    )
+                    metadata = yaml.safe_load(frontmatter.group(1)) if frontmatter else None
+                except (UnicodeDecodeError, yaml.YAMLError):
+                    continue
+                if isinstance(metadata, dict) and metadata.get("name") == expected_name:
+                    candidate_path = candidate["path"]
+                    matching_paths.append(
+                        candidate_path[: -len("/SKILL.md")]
+                        if "/" in candidate_path
+                        else ""
+                    )
+            if len(matching_paths) != 1:
+                raise CatalogUnavailableError(
+                    "GitHub source does not resolve to one matching Skill manifest"
+                )
+            resolved_path = matching_paths[0]
+        prefix = f"{resolved_path}/" if resolved_path else ""
         selected = [
             item
             for item in entries
             if item.get("type") == "blob"
             and isinstance(item.get("path"), str)
             and item["path"].startswith(prefix)
-            and (not path or item["path"] != path)
+            and (not resolved_path or item["path"] != resolved_path)
         ]
-        if not path:
+        if not resolved_path:
             selected = [item for item in selected if item["path"] == "SKILL.md"]
-        elif not any(item["path"] == f"{path}/SKILL.md" for item in selected):
+        elif not any(item["path"] == f"{resolved_path}/SKILL.md" for item in selected):
             raise ValueError("GitHub skill path does not contain SKILL.md")
         if any(item.get("mode") == "120000" for item in selected):
             raise ValueError("GitHub skill payload contains a symlink")
@@ -464,7 +691,7 @@ async def inspect_github_source(
             async with semaphore:
                 download = await using.get(
                     "https://raw.githubusercontent.com/"
-                    f"{owner}/{repo}/{quote(str(active_branch), safe='')}/"
+                    f"{owner}/{repo}/{quote(commit_sha, safe='')}/"
                     f"{quote(item['path'], safe='/')}"
                 )
             if download.status_code != 200:
@@ -483,16 +710,19 @@ async def inspect_github_source(
             if line.startswith("name:"):
                 skill_name = line.split(":", 1)[1].strip().strip("\"'")
                 break
-        suffix = f"/{path}" if path else ""
+        suffix = f"/{resolved_path}" if resolved_path else ""
         record = {
             "provider": "github",
-            "external_id": f"{owner}/{repo}/{path or '.'}",
+            "external_id": f"{owner}/{repo}/{resolved_path or '.'}",
             "name": skill_name,
             "source": f"https://github.com/{owner}/{repo}",
             "source_type": "github",
-            "source_url": f"https://github.com/{owner}/{repo}/tree/{active_branch}{suffix}",
-            "install_url": f"https://github.com/{owner}/{repo}/tree/{active_branch}{suffix}",
+            "source_url": f"https://github.com/{owner}/{repo}/tree/{commit_sha}{suffix}",
+            "install_url": f"https://github.com/{owner}/{repo}/tree/{commit_sha}{suffix}",
             "remote_hash": None,
+            "github_source_revision": commit_sha,
+            "github_source_branch": str(active_branch),
+            "github_tree_sha": tree_sha,
         }
         return prepare_acquisition(record, files)
 
@@ -599,7 +829,12 @@ async def _install_acquisition_locked(
                 "source_url": acquisition.record["source_url"],
                 "fetched_at": acquisition.record.get("fetched_at"),
                 "remote_hash": acquisition.record.get("remote_hash"),
+                "provider_computed_hash": acquisition.record.get("provider_computed_hash")
+                or acquisition.record.get("provider_integrity", {}).get(
+                    "provider_computed_hash"
+                ),
                 "computed_sha256": acquisition.computed_hash,
+                "provider_integrity": acquisition.record.get("provider_integrity"),
                 "installed_at": datetime.now(UTC).isoformat(),
                 "installed_path": str(target),
                 "manifest": {"name": name, "version": version},

@@ -1,0 +1,26 @@
+{
+  "locale": "zh-Hans-HK",
+  "sha256": "1a63c16047cbab7120e9d76d5c0a5fb131b6c1b800f5d355544af6f31ffea81c",
+  "atlas_local_sha256": "6865336dc11ee7d54b30a21c526b900756efdb31bff52dc5d4d5a675712f36e6",
+  "reference_sha256_by_locale": {
+    "en-US": "1a63c16047cbab7120e9d76d5c0a5fb131b6c1b800f5d355544af6f31ffea81c",
+    "en-GB": "1a63c16047cbab7120e9d76d5c0a5fb131b6c1b800f5d355544af6f31ffea81c",
+    "zh-Hans-HK": "1a63c16047cbab7120e9d76d5c0a5fb131b6c1b800f5d355544af6f31ffea81c",
+    "de-DE": "1a63c16047cbab7120e9d76d5c0a5fb131b6c1b800f5d355544af6f31ffea81c",
+    "sv-SE": "12c80887f37d98ef791ae555f69b94bf7af47197de4a06ab7c3274e5399b3f11"
+  },
+  "files": {
+    "SKILL.md": "manifest",
+    "README.md": "upper",
+    "a.txt": "alpha",
+    "folder/Item!.md": "punctuation",
+    "folder/item.md": "lower",
+    "folder-1/readme.md": "nested numeric",
+    "notes_v2.md": "underscore",
+    "punctuation [draft].txt": "draft",
+    "variants/Foo.txt": "upper variant",
+    "variants/foo.txt": "lower variant",
+    "locale/ä.md": "umlaut",
+    "locale/z.md": "zee"
+  }
+}
