@@ -155,6 +155,12 @@ class AtlasConfig:
     # -- tools --
 
     @property
+    def local_execution_permission_mode(self) -> str:
+        """Return the opt-in permission policy for Atlas-owned local tools."""
+        mode = str(self.get("local_execution.permission_mode", "full_access")).lower()
+        return mode if mode in {"full_access", "deny"} else "full_access"
+
+    @property
     def tools_auto_start(self) -> list[str]:
         return self.get("tools.auto_start", []) or []
 

@@ -76,6 +76,7 @@ from atlas.skills.lifecycle import (
     update_skill as update_lifecycle_skill,
 )
 from atlas.skills.registry import SkillRegistry
+from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 from atlas.tools.node_runtime import get_node_runtime_status
 
@@ -89,6 +90,7 @@ model_mgr: ModelManager | None = None
 memory: MemoryStore | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
+local_execution: LocalExecutionRuntime | None = None
 skill_mgr: SkillManager | None = None
 skill_registry: SkillRegistry | None = None
 skill_catalog_provider = SkillsShProvider()
@@ -452,7 +454,8 @@ async def _record_goal_failure(
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle."""
-    global model_mgr, memory, orchestrator, mcp_client, skill_mgr, skill_registry, scheduler
+    global model_mgr, memory, orchestrator, mcp_client, local_execution
+    global skill_mgr, skill_registry, scheduler
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -461,6 +464,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     mcp_client = MCPClient()
     await mcp_client.start()
+    local_execution = LocalExecutionRuntime()
 
     skill_mgr = SkillManager()
     await skill_mgr.scan_skills()
@@ -476,6 +480,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     orchestrator = AgentOrchestrator(
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
         capability_registry=capabilities,
+        local_execution=local_execution,
     )
 
     if cfg.scheduler_enabled:
@@ -489,6 +494,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await scheduler.stop()
     if mcp_client:
         await mcp_client.stop()
+    if local_execution:
+        await local_execution.shutdown()
     if memory:
         await memory.close()
     await runtime_mgr.close()
@@ -3046,9 +3053,19 @@ def _map_tool_runtime_event(
             "result": event.get("content", []),
             "is_error": event.get("is_error", False),
         }
+        if event.get("data") is not None:
+            data["execution"] = event["data"]
         if data["is_error"]:
             data["error_category"] = event.get("error_category", "tool")
         return "tool.completed", data
+    if event_type == "tool_output":
+        return "tool.output", {
+            "tool_call_id": event.get("id", ""),
+            "name": event.get("name", ""),
+            "execution_id": event.get("execution_id", ""),
+            "stream": event.get("stream", "stdout"),
+            "text": event.get("text", ""),
+        }
     return None
 
 
@@ -3124,6 +3141,10 @@ async def _execute_run(
         except Exception as exc:
             log.warning("agent.reflection_recovery_failed", run_id=run.run_id, error=str(exc))
 
+    async def cancel_local_foreground() -> None:
+        if local_execution is not None:
+            await local_execution.cancel_run(run.run_id)
+
     async def check_pause_cancel() -> bool:
         """Wait while paused; return True if cancelled."""
         if run.cancel_event.is_set():
@@ -3168,6 +3189,7 @@ async def _execute_run(
 
         if await check_pause_cancel():
             run.status = "cancelled"
+            await cancel_local_foreground()
             await emit("run.cancelled", {})
             return
 
@@ -3209,9 +3231,11 @@ async def _execute_run(
             source_run_id=run.run_id,
             image_attachments=image_attachments,
             active_skill_instructions=active_skill_instructions,
+            run_id=run.run_id,
         ):
             if await check_pause_cancel():
                 run.status = "cancelled"
+                await cancel_local_foreground()
                 await emit("run.cancelled", {})
                 return
 
@@ -3223,10 +3247,10 @@ async def _execute_run(
                 full_response += chunk_content
                 await emit("message.delta", {"content": chunk_content})
 
-            elif etype in ("tool_call", "tool_result"):
+            elif etype in ("tool_call", "tool_result", "tool_output"):
                 mapped = _map_tool_runtime_event(event)
-                assert mapped is not None
-                await emit(*mapped)
+                if mapped is not None:
+                    await emit(*mapped)
                 if etype == "tool_result" and event.get("error_category") == "tool":
                     had_tool_failure = True
                     detail = "\n".join(

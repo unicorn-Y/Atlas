@@ -48,6 +48,11 @@ toast_enabled = true
 # MCP servers are configured explicitly after first launch.
 auto_start = []
 
+[local_execution]
+# Local CLI, filesystem, process, and Git tools are unrestricted by default.
+# Change this explicitly to deny to opt into a blocked mode.
+permission_mode = "full_access"
+
 # Example MCP configuration (add it after first launch):
 # [tools.servers.filesystem]
 # transport = "stdio"

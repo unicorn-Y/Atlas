@@ -53,10 +53,14 @@ function renderRuntimeEvent(
   if (event.type === 'tool.started' || event.type === 'tool.completed') {
     const result = data.result;
     const input = data.arguments;
+    const execution = data.execution && typeof data.execution === 'object' ? data.execution as Record<string, unknown> : undefined;
     const value = result ?? input;
     const detail = typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value, null, 2);
-    return <details className={styles.activityCard} key={event.id} open={event.type === 'tool.started'}><summary><span className={styles.activityIcon}><Activity /></span><span>{String(data.name ?? 'Tool')} · {event.type === 'tool.started' ? '执行中' : '已完成'}</span><span className={styles.activityMeta}>{event.type === 'tool.started' ? '运行中' : 'Runtime'}</span></summary>{detail && <div className={styles.activityDetail}><span>{result !== undefined ? '结果' : '输入'}</span><pre>{detail}</pre></div>}</details>;
+    const label = execution?.state === 'cancelled' ? '已取消' : data.is_error ? '失败' : event.type === 'tool.started' ? '执行中' : '已完成';
+    const executionDetails = execution ? `\nexecution_id: ${String(execution.execution_id ?? '')}\ncommand: ${String(execution.command ?? '')}\ncwd: ${String(execution.cwd ?? '')}\nstate: ${String(execution.state ?? '')}\nexit_code: ${String(execution.exit_code ?? '')}\nstdout: ${String(execution.stdout ?? '')}\nstderr: ${String(execution.stderr ?? '')}` : '';
+    return <details className={styles.activityCard} key={event.id} open={event.type === 'tool.started'}><summary><span className={styles.activityIcon}><Activity /></span><span>{String(data.name ?? 'Tool')} · {label}</span><span className={styles.activityMeta}>{String(execution?.execution_id ?? 'Runtime')}</span></summary>{(detail || executionDetails) && <div className={styles.activityDetail}><span>{result !== undefined ? '结果' : '输入'}</span><pre>{`${detail}${executionDetails}`}</pre></div>}</details>;
   }
+  if (event.type === 'tool.output') return <details className={styles.activityCard} key={event.id}><summary><span className={styles.activityIcon}><Activity /></span><span>{String(data.name ?? 'Tool')} · {String(data.stream ?? 'stdout')}</span><span className={styles.activityMeta}>{String(data.execution_id ?? '')}</span></summary><div className={styles.activityDetail}><pre>{String(data.text ?? '')}</pre></div></details>;
   if (event.type === 'artifact.updated') return <div className={styles.fileChange} key={event.id}><div className={styles.fileHead}><FileText /><div><strong>{String(data.name ?? data.path ?? 'Artifact')}</strong><small>{String(data.artifact_type ?? 'file')} · Runtime 更新</small></div></div><p>{String(data.summary ?? data.change ?? '')}</p><button className={styles.quietButton} onClick={() => setTab('artifacts')}>在产物中查看</button></div>;
   if (event.type === 'approval.required') {
     const response = store.getRun(event.runId)?.events.find((item) => item.type === 'approval.responded' && (item.data.event_id === event.id || item.data.approval_id === data.approval_id));

@@ -25,7 +25,8 @@ import pytest
     reason="set ATLAS_P16A_RUN_LIVE_MCP=1 to run the bundled Node MCP smoke",
 )
 async def test_bundled_node_filesystem_mcp_discovery_agent_call_and_restart(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from langchain_core.messages import AIMessage
 
@@ -41,9 +42,12 @@ async def test_bundled_node_filesystem_mcp_discovery_agent_call_and_restart(
 
     search_path = os.environ.get("PATH", "").split(os.pathsep)
     search_path = [
-        item for item in search_path
-        if not item or not any((Path(item.strip('"')) / name).is_file()
-                               for name in ("node.exe", "node.cmd", "node"))
+        item
+        for item in search_path
+        if not item
+        or not any(
+            (Path(item.strip('"')) / name).is_file() for name in ("node.exe", "node.cmd", "node")
+        )
     ]
     monkeypatch.setenv("PATH", os.pathsep.join(search_path))
     assert shutil.which("node") is None, "smoke PATH must not expose system Node"
@@ -58,7 +62,8 @@ async def test_bundled_node_filesystem_mcp_discovery_agent_call_and_restart(
             return {
                 "tools.servers": {
                     "filesystem": {
-                        "transport": "stdio", "command": "npx",
+                        "transport": "stdio",
+                        "command": "npx",
                         "args": ["-y", "@modelcontextprotocol/server-filesystem", str(allowed_dir)],
                     },
                 },
@@ -74,14 +79,19 @@ async def test_bundled_node_filesystem_mcp_discovery_agent_call_and_restart(
             tool_name = next(tool.qualified_name for tool in tools if tool.name == "read_file")
             orchestrator = AgentOrchestrator(MagicMock(), MagicMock(), mcp_client=client)
             tool_call = {
-                "name": tool_name, "args": {"path": str(allowed_dir / "sample.txt")},
+                "name": tool_name,
+                "args": {"path": str(allowed_dir / "sample.txt")},
                 "id": "p16a-filesystem-call",
             }
-            result = await orchestrator._execute_tools_node({
-                "messages": [AIMessage(content="", tool_calls=[tool_call])],
-                "pending_events": [], "tool_rounds": 0, "cancelled": False,
-                "runtime": AgentRunContext(),
-            })
+            result = await orchestrator._execute_tools_node(
+                {
+                    "messages": [AIMessage(content="", tool_calls=[tool_call])],
+                    "pending_events": [],
+                    "tool_rounds": 0,
+                    "cancelled": False,
+                    "runtime": AgentRunContext(),
+                }
+            )
             assert expected in result["messages"][0].content
             assert result["pending_events"][-1]["is_error"] is False
 
@@ -99,7 +109,8 @@ async def test_bundled_node_filesystem_mcp_discovery_agent_call_and_restart(
     reason="set ATLAS_P16B_RUN_PACKAGED_AGENT_E2E=1 to run the Windows packaged Agent E2E",
 )
 def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     resources = Path(os.environ["ATLAS_P16A_RESOURCES_DIR"])
     executable = resources / "backend" / "atlas_backend.exe"
@@ -109,6 +120,7 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
     assert (node_dir / "npm" / "bin" / "npx-cli.js").is_file()
 
     marker = "ATLAS_PACKAGED_MCP_AGENT_E2E_OK"
+    local_marker = "ATLAS_PACKAGED_LOCAL_EXECUTION_E2E_OK"
     fixture = Path(__file__).parent / "fixtures" / "packaged-mcp-agent-e2e.txt"
     assert fixture.read_text(encoding="utf-8").strip() == marker
     provider_requests: list[dict[str, object]] = []
@@ -118,21 +130,60 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             provider_requests.append(body)
             tool_messages = [
-                message for message in body["messages"]
-                if message.get("role") == "tool"
+                message for message in body["messages"] if message.get("role") == "tool"
             ]
-            if tool_messages:
+            is_local_run = any(
+                local_marker in str(message.get("content", ""))
+                for message in body["messages"]
+                if message.get("role") == "user"
+            )
+            if is_local_run:
+                step = len(tool_messages)
+                local_calls = [
+                    (
+                        "local_file",
+                        {"action": "write", "path": str(local_file), "content": local_marker},
+                    ),
+                    (
+                        "local_shell",
+                        {
+                            "shell": "powershell",
+                            "command": f"Get-Content -Raw -LiteralPath '{local_file}'",
+                            "cwd": str(local_project),
+                        },
+                    ),
+                    ("local_git", {"action": "status", "repo": str(local_project)}),
+                ]
+                if step < len(local_calls):
+                    name, arguments = local_calls[step]
+                    chunks = [
+                        {
+                            "tool_call": {
+                                "id": f"p18-local-{step}",
+                                "name": name,
+                                "arguments": json.dumps(arguments),
+                            }
+                        },
+                        {"content": None, "finish_reason": "tool_calls"},
+                    ]
+                else:
+                    chunks = [{"content": local_marker}, {"content": None, "finish_reason": "stop"}]
+            elif tool_messages:
                 chunks = [{"content": marker}, {"content": None, "finish_reason": "stop"}]
             else:
                 tool = next(
-                    item for item in body["tools"]
+                    item
+                    for item in body["tools"]
                     if item["function"]["name"] == "filesystem__read_file"
                 )
                 chunks = [
-                    {"tool_call": {
-                        "id": "p16b-read-file", "name": tool["function"]["name"],
-                        "arguments": json.dumps({"path": str(allowed_fixture)}),
-                    }},
+                    {
+                        "tool_call": {
+                            "id": "p16b-read-file",
+                            "name": tool["function"]["name"],
+                            "arguments": json.dumps({"path": str(allowed_fixture)}),
+                        }
+                    },
                     {"content": None, "finish_reason": "tool_calls"},
                 ]
 
@@ -146,15 +197,22 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
                     delta["content"] = chunk["content"]
                 if "tool_call" in chunk:
                     call = chunk["tool_call"]
-                    delta["tool_calls"] = [{
-                        "index": 0, "id": call["id"], "type": "function",
-                        "function": {"name": call["name"], "arguments": call["arguments"]},
-                    }]
+                    delta["tool_calls"] = [
+                        {
+                            "index": 0,
+                            "id": call["id"],
+                            "type": "function",
+                            "function": {"name": call["name"], "arguments": call["arguments"]},
+                        }
+                    ]
                 value = {
-                    "id": "chatcmpl-p16b-smoke", "object": "chat.completion.chunk",
-                    "created": 0, "model": "gpt-4o-mini",
-                    "choices": [{"index": 0, "delta": delta,
-                                 "finish_reason": chunk.get("finish_reason")}],
+                    "id": "chatcmpl-p16b-smoke",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {"index": 0, "delta": delta, "finish_reason": chunk.get("finish_reason")}
+                    ],
                 }
                 self.wfile.write(f"data: {json.dumps(value)}\n\n".encode())
                 self.wfile.flush()
@@ -175,6 +233,17 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
             run_dir = tmp_path / f"packaged-run-{iteration + 1}"
             allowed_dir = run_dir / "allowed"
             allowed_dir.mkdir(parents=True)
+            local_project = run_dir / "任意工作目录 Project With Spaces"
+            local_project.mkdir()
+            local_file = local_project / "本机执行结果.txt"
+            subprocess.run(["git", "init", "--quiet", str(local_project)], check=True)
+            subprocess.run(
+                ["git", "-C", str(local_project), "config", "user.email", "atlas@example.test"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(local_project), "config", "user.name", "Atlas Test"], check=True
+            )
             allowed_fixture = allowed_dir / fixture.name
             shutil.copyfile(fixture, allowed_fixture)
             data_dir = run_dir / "data"
@@ -193,30 +262,39 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
 
             search_path = os.environ.get("PATH", "").split(os.pathsep)
             search_path = [
-                item for item in search_path
-                if not item or not any((Path(item.strip('"')) / name).is_file()
-                                       for name in ("node.exe", "node.cmd", "node"))
+                item
+                for item in search_path
+                if not item
+                or not any(
+                    (Path(item.strip('"')) / name).is_file()
+                    for name in ("node.exe", "node.cmd", "node")
+                )
             ]
             env = os.environ.copy()
-            env.update({
-                "PATH": os.pathsep.join(search_path),
-                "ATLAS_ROOT": str(resources),
-                "ATLAS_DATA_DIR": str(data_dir),
-                "ATLAS_NODE_RUNTIME_DIR": str(node_dir),
-                "ATLAS_NODE_RUNTIME_REQUIRED": "1",
-                "ATLAS_PORT": str(port),
-                "ATLAS_SCHEDULER_ENABLED": "false",
-                "npm_config_cache": str(npm_cache),
-                "npm_config_yes": "true",
-            })
+            env.update(
+                {
+                    "PATH": os.pathsep.join(search_path),
+                    "ATLAS_ROOT": str(resources),
+                    "ATLAS_DATA_DIR": str(data_dir),
+                    "ATLAS_NODE_RUNTIME_DIR": str(node_dir),
+                    "ATLAS_NODE_RUNTIME_REQUIRED": "1",
+                    "ATLAS_PORT": str(port),
+                    "ATLAS_SCHEDULER_ENABLED": "false",
+                    "npm_config_cache": str(npm_cache),
+                    "npm_config_yes": "true",
+                }
+            )
             env.pop("ATLAS_API_KEY", None)
             env.pop("ATLAS_API_BASE", None)
 
             log_path = run_dir / "backend-smoke.log"
             with log_path.open("wb") as log_file:
                 process = subprocess.Popen(
-                    [str(executable)], cwd=run_dir, env=env,
-                    stdout=log_file, stderr=subprocess.STDOUT,
+                    [str(executable)],
+                    cwd=run_dir,
+                    env=env,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
                     creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
                 )
                 base_url = f"http://127.0.0.1:{port}"
@@ -235,11 +313,13 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
                                 pass
                             time.sleep(0.5)
                         assert health is not None and health.status_code == 200, log_path.read_text(
-                            encoding="utf-8", errors="replace",
+                            encoding="utf-8",
+                            errors="replace",
                         )[-4000:]
 
                         report = http.get(
-                            f"{base_url}/api/runtime/dependency-check", timeout=10,
+                            f"{base_url}/api/runtime/dependency-check",
+                            timeout=10,
                         ).json()
                         assert report["node"]["source"] == "bundled", report
                         assert report["node"]["version"] == "v22.23.3", report
@@ -250,14 +330,15 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
                         assert filesystem["tool_discovery"] == "complete", report
                         tools = http.get(f"{base_url}/api/tools", timeout=10).json()
                         assert any(
-                            tool["name"] == "filesystem__read_file"
-                            for tool in tools["tools"]
+                            tool["name"] == "filesystem__read_file" for tool in tools["tools"]
                         ), tools
 
                         configured = http.put(
                             f"{base_url}/api/settings/configuration",
-                            json={"gateway_base_url": f"http://127.0.0.1:{provider.server_port}/v1",
-                                  "api_key": "p16b-local-provider"},
+                            json={
+                                "gateway_base_url": f"http://127.0.0.1:{provider.server_port}/v1",
+                                "api_key": "p16b-local-provider",
+                            },
                             timeout=10,
                         )
                         assert configured.status_code == 200, configured.text
@@ -266,15 +347,20 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
 
                     events: list[dict[str, object]] = []
                     with connect(f"ws://127.0.0.1:{port}/ws/chat", open_timeout=10) as ws:
-                        ws.send(json.dumps({
-                            "type": "run.start", "run_id": f"p16b-run-{iteration}",
-                            "conversation_id": f"p16b-conversation-{iteration}",
-                            "model": "gpt-4o-mini",
-                            "content": (
-                                f"Read {allowed_fixture} with filesystem MCP read_file "
-                                "and return its exact marker."
-                            ),
-                        }))
+                        ws.send(
+                            json.dumps(
+                                {
+                                    "type": "run.start",
+                                    "run_id": f"p16b-run-{iteration}",
+                                    "conversation_id": f"p16b-conversation-{iteration}",
+                                    "model": "gpt-4o-mini",
+                                    "content": (
+                                        f"Read {allowed_fixture} with filesystem MCP read_file "
+                                        "and return its exact marker."
+                                    ),
+                                }
+                            )
+                        )
                         deadline = time.monotonic() + 60
                         while time.monotonic() < deadline:
                             envelope = json.loads(
@@ -296,8 +382,7 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
                         for item in started
                     ), events
                     result = next(
-                        item for item in completed
-                        if item.get("name") == "filesystem__read_file"
+                        item for item in completed if item.get("name") == "filesystem__read_file"
                     )
                     assert result["is_error"] is False, result
                     assert marker in json.dumps(result["result"]), result
@@ -307,13 +392,75 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
                         for item in events
                     ), events
                     assert any(
-                        any(tool["function"]["name"] == "filesystem__read_file"
-                            for tool in request.get("tools", []))
-                        and any(message.get("role") == "user"
-                                and str(allowed_fixture) in message.get("content", "")
-                                for message in request.get("messages", []))
+                        any(
+                            tool["function"]["name"] == "filesystem__read_file"
+                            for tool in request.get("tools", [])
+                        )
+                        and any(
+                            message.get("role") == "user"
+                            and str(allowed_fixture) in message.get("content", "")
+                            for message in request.get("messages", [])
+                        )
                         for request in provider_requests
                     ), provider_requests
+
+                    local_events: list[dict[str, object]] = []
+                    with connect(f"ws://127.0.0.1:{port}/ws/chat", open_timeout=10) as ws:
+                        ws.send(
+                            json.dumps(
+                                {
+                                    "type": "run.start",
+                                    "run_id": f"p18-local-run-{iteration}",
+                                    "conversation_id": f"p18-local-conversation-{iteration}",
+                                    "model": "gpt-4o-mini",
+                                    "content": f"Complete this local CLI smoke: {local_marker}",
+                                }
+                            )
+                        )
+                        deadline = time.monotonic() + 60
+                        while time.monotonic() < deadline:
+                            envelope = json.loads(
+                                ws.recv(timeout=max(0.1, deadline - time.monotonic()))
+                            )
+                            local_events.append(envelope)
+                            if envelope.get("event") in {"run.completed", "run.failed"}:
+                                break
+                    assert local_events[-1]["event"] == "run.completed", local_events
+                    local_started = [
+                        item["data"] for item in local_events if item.get("event") == "tool.started"
+                    ]
+                    local_completed = [
+                        item["data"]
+                        for item in local_events
+                        if item.get("event") == "tool.completed"
+                    ]
+                    assert [item["name"] for item in local_started] == [
+                        "local_file",
+                        "local_shell",
+                        "local_git",
+                    ], local_events
+                    assert local_file.read_text(encoding="utf-8") == local_marker
+                    assert local_started[2]["arguments"]["repo"] == str(local_project)
+                    shell_result = next(
+                        item for item in local_completed if item["name"] == "local_shell"
+                    )
+                    assert shell_result["execution"]["exit_code"] == 0, shell_result
+                    assert local_marker in json.dumps(shell_result["result"]), shell_result
+                    git_result = next(
+                        item for item in local_completed if item["name"] == "local_git"
+                    )
+                    assert git_result["execution"]["exit_code"] == 0, git_result
+                    assert any(item.get("event") == "tool.output" for item in local_events), (
+                        local_events
+                    )
+                    assert not any(
+                        item.get("event") == "approval.required" for item in local_events
+                    ), local_events
+                    assert any(
+                        item.get("event") == "message.completed"
+                        and local_marker in item["data"].get("content", "")
+                        for item in local_events
+                    ), local_events
                 finally:
                     if process.poll() is None:
                         try:
@@ -322,15 +469,17 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
                         except (OSError, subprocess.TimeoutExpired):
                             subprocess.run(
                                 ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                                check=False, capture_output=True, timeout=10,
+                                check=False,
+                                capture_output=True,
+                                timeout=10,
                             )
                             process.wait(timeout=10)
                     shutdown_log = log_path.read_text(
-                        encoding="utf-8", errors="replace",
+                        encoding="utf-8",
+                        errors="replace",
                     )[-4000:]
                     assert (
-                        "mcp.server_stopped" in shutdown_log
-                        and "server=filesystem" in shutdown_log
+                        "mcp.server_stopped" in shutdown_log and "server=filesystem" in shutdown_log
                     ), shutdown_log
                     assert process.returncode in (0, 3), shutdown_log
             assert _windows_node_pids() == initial_node_pids, (
@@ -345,7 +494,9 @@ def test_packaged_backend_bundled_node_filesystem_agent_read_file_e2e(
 def _windows_node_pids() -> set[str]:
     result = subprocess.run(
         ["tasklist", "/FI", "IMAGENAME eq node.exe", "/FO", "CSV", "/NH"],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     rows = csv.reader(io.StringIO(result.stdout))
     return {row[1] for row in rows if len(row) > 1 and row[0].lower() == "node.exe"}

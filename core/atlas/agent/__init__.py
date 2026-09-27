@@ -28,6 +28,7 @@ from atlas.agent.planning import TaskPlan, requires_plan
 from atlas.config import get_config
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
+from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 
 log = structlog.get_logger()
@@ -66,6 +67,7 @@ class AgentRunContext:
     pause_event: asyncio.Event | None = None
     approval_callback: Callable[[str, str, dict], Any] | None = None
     event_queue: asyncio.Queue[Any] = field(default_factory=asyncio.Queue)
+    run_id: str | None = None
 
 
 _EVENT_STREAM_DONE = object()
@@ -121,10 +123,12 @@ class AgentOrchestrator:
         memory: MemoryStore,
         mcp_client: MCPClient | None = None,
         capability_registry: AgentCapabilityRegistry | None = None,
+        local_execution: LocalExecutionRuntime | None = None,
     ) -> None:
         self._model_mgr = model_mgr
         self._memory = memory
         self._mcp = mcp_client
+        self._local_execution = local_execution
         self._capabilities = capability_registry or AgentCapabilityRegistry()
         self._graph = self._build_graph()
 
@@ -183,6 +187,8 @@ class AgentOrchestrator:
         """Call the LLM, possibly producing tool calls."""
         litellm_model = self._model_mgr.current_litellm_model
         tools = self._mcp.get_tools_for_llm() if self._mcp else []
+        if self._local_execution:
+            tools = [*tools, *self._local_execution.get_tools_for_llm()]
 
         # Convert LangChain messages to dicts for LiteLLM
         lc_messages = self._to_litellm_messages(state["messages"])
@@ -339,31 +345,66 @@ class AgentOrchestrator:
                     )
                     continue
 
-            # Call the MCP tool
-            assert self._mcp is not None
+            async def report_process_output(
+                execution_id: str, stream_name: str, text: str,
+            ) -> None:
+                if ctx.event_queue is not None:
+                    await ctx.event_queue.put({
+                        "type": "tool_output", "id": tc_id, "name": fn_name,
+                        "execution_id": execution_id, "stream": stream_name,
+                        "text": text,
+                    })
+
             try:
-                result = await self._mcp.call_tool(fn_name, fn_args)
+                if fn_name.startswith("local_") and self._local_execution:
+                    result = await self._local_execution.call_tool(
+                        fn_name, fn_args, run_id=ctx.run_id,
+                        output_callback=report_process_output,
+                    )
+                elif self._mcp:
+                    result = await self._mcp.call_tool(fn_name, fn_args)
+                else:
+                    raise RuntimeError("No executor is available for this tool")
             except Exception as exc:
                 result = {
+                    "data": {"error": str(exc)},
                     "content": [{"type": "text", "text": f"Tool call failed: {exc}"}],
                     "is_error": True,
+                }
+
+            # Keep user-facing runtime events bounded. The full process log
+            # remains available through local_process.read using execution_id.
+            event_content = []
+            for block in result.get("content", []):
+                item = dict(block) if isinstance(block, dict) else {"text": str(block)}
+                if isinstance(item.get("text"), str) and len(item["text"]) > 12000:
+                    item["text"] = item["text"][-12000:]
+                    item["truncated"] = True
+                event_content.append(item)
+            event_data = result.get("data")
+            if isinstance(event_data, dict):
+                event_data = {
+                    key: value for key, value in event_data.items()
+                    if key not in {"content", "stdout", "stderr"}
                 }
 
             events.append({
                 "type": "tool_result",
                 "id": tc_id,
                 "name": fn_name,
-                "content": result["content"],
-                "is_error": result["is_error"],
+                "content": event_content,
+                "data": event_data,
+                "is_error": bool(result.get("is_error", False)),
             })
-            if result["is_error"]:
+            if result.get("is_error"):
                 events[-1]["error_category"] = "tool"
             if getattr(ctx, "event_queue", None) is not None:
                 await ctx.event_queue.put(events[-1])
 
             # Build ToolMessage for the LLM
             result_text = "\n".join(
-                b.get("text", str(b)) for b in result["content"]
+                str(b.get("text", b)) if isinstance(b, dict) else str(b)
+                for b in result.get("content", [])
             )
             tool_messages.append(
                 ToolMessage(content=result_text, tool_call_id=tc_id)
@@ -392,6 +433,7 @@ class AgentOrchestrator:
         source_run_id: str | None = None,
         image_attachments: list[str] | None = None,
         active_skill_instructions: list[dict[str, str]] | None = None,
+        run_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -418,6 +460,7 @@ class AgentOrchestrator:
             cancel_event=cancel_event,
             pause_event=pause_event,
             approval_callback=approval_callback,
+            run_id=run_id or source_run_id,
         )
 
         # Resolve model
@@ -651,7 +694,15 @@ class AgentOrchestrator:
         graph_task = asyncio.create_task(execute_graph())
         try:
             while True:
-                event = await runtime.event_queue.get()
+                try:
+                    event = await asyncio.wait_for(runtime.event_queue.get(), timeout=0.2)
+                except TimeoutError:
+                    if cancel_event and cancel_event.is_set():
+                        graph_task.cancel()
+                        await asyncio.gather(graph_task, return_exceptions=True)
+                        yield {"type": "cancelled"}
+                        return
+                    continue
                 if event is _EVENT_STREAM_DONE:
                     break
                 yield event
@@ -736,6 +787,8 @@ class AgentOrchestrator:
             if not graph_task.done():
                 graph_task.cancel()
             await asyncio.gather(graph_task, return_exceptions=True)
+            if self._local_execution and runtime.run_id:
+                await self._local_execution.cancel_run(runtime.run_id)
 
     # -- helpers -------------------------------------------------------------
 
