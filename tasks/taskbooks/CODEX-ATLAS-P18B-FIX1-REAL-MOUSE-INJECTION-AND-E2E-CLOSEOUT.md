@@ -573,3 +573,193 @@ first-tier Computer Use Agent
 not:
 
 Atlas custom GUI agent rebuilt from scratch.
+
+
+## AGENT CORE FIRST — OVERRIDES COMPUTER-USE-ONLY FRAMING
+
+The architectural priority for Atlas is now:
+
+1. reuse a first-tier general Agent harness/core;
+2. attach mature Computer Use backends to that Agent;
+3. keep Atlas-specific Memory/Skills/MCP/UI as integration layers.
+
+Do NOT design Atlas Agent behavior primarily from Computer Use benchmark projects.
+
+### First-tier Agent sources
+
+#### 1. openai/codex — PRIMARY OPEN AGENT CORE REFERENCE
+
+Priority: HIGHEST.
+
+Why:
+- official OpenAI coding agent;
+- local-first terminal agent;
+- open-source Apache-2.0;
+- mature tool loop, session lifecycle, resume/continuation, context handling, execution state;
+- desktop/CLI/product surfaces are built around the same Codex agent family.
+
+Inspect and reuse/adapt where license-compatible:
+- codex-rs agent/session core;
+- model/tool turn loop;
+- tool execution lifecycle;
+- cancellation/interruption;
+- conversation/session persistence;
+- context compaction;
+- resume/replay;
+- task status/progress;
+- shell/file tool contracts;
+- app/CLI protocol boundaries.
+
+Atlas should prefer Codex-style execution semantics over inventing a new orchestration model.
+
+#### 2. anthropics/claude-code — PRIMARY BEHAVIOR / ARCHITECTURE REFERENCE
+
+Priority: HIGHEST for product behavior and agent lifecycle.
+
+Claude Code is a first-tier target behavior even where its full production source is not available for direct reuse.
+
+Reuse documented/public behavior and architecture patterns:
+- single central query/tool loop;
+- subagents;
+- hooks lifecycle;
+- project instructions/context files;
+- tool lifecycle;
+- interruption/stop behavior;
+- agent-based hooks;
+- task delegation;
+- context management;
+- terminal-native autonomous workflow.
+
+Do NOT copy unavailable/proprietary source code. Implement equivalent public behavior using open-source Atlas/Codex/Hermes/Pi components.
+
+#### 3. NousResearch/hermes-agent — PRIMARY OPEN PERSONAL AGENT REFERENCE
+
+Priority: HIGHEST for long-lived personal Agent capabilities.
+
+Why:
+- MIT;
+- broad built-in tool registry;
+- terminal/files/browser/vision/delegation;
+- persistent memory and session search;
+- skills that improve/reuse experience;
+- MCP;
+- scheduled tasks;
+- multiple surfaces from one agent core.
+
+Inspect and reuse/adapt:
+- tool registry/toolsets;
+- terminal/process/file tools;
+- browser tools;
+- delegation;
+- skills loading/creation;
+- memory/session_search;
+- plugin architecture;
+- session persistence;
+- gateway/multi-surface architecture.
+
+Atlas MemoryOS remains separate where already stronger; do not blindly replace it.
+
+#### 4. zai-org/ZCode — PRIMARY MULTI-SURFACE AGENT RUNTIME REFERENCE
+
+Priority: HIGHEST for desktop/browser/terminal unification.
+
+Why:
+- official Z.ai coding agent harness;
+- Apache-2.0;
+- desktop + browser + terminal;
+- Agent CLI/runtime source included in repository;
+- directly relevant to Atlas desktop architecture.
+
+Inspect and reuse/adapt:
+- apps/zcode-cli Agent runtime;
+- desktop-to-agent transport;
+- terminal/desktop shared runtime;
+- model/tool session state;
+- streaming;
+- task lifecycle;
+- UI integration boundaries.
+
+#### 5. Pi / pi-mono — PRIMARY EMBEDDABLE MINIMAL AGENT HARNESS REFERENCE
+
+Priority: HIGHEST for minimal reusable agent-core design.
+
+Why:
+- small core;
+- dedicated agent-core with tool calling/state;
+- coding-agent built on top;
+- extensions/skills/prompt templates;
+- RPC and SDK embedding modes;
+- multi-provider model layer.
+
+Inspect and reuse/adapt:
+- agent-core;
+- tool-call state machine;
+- session persistence/branching;
+- extension API;
+- RPC/SDK embedding;
+- context file loading;
+- provider abstraction.
+
+### Agent-core selection rule
+
+Luna must compare at least:
+
+| Agent | Open core usable directly | Session/resume | tool loop | compaction/context | subagents/delegation | skills/plugins | multi-surface | Atlas fit |
+|---|---|---|---|---|---|---|---|---|
+| Codex | | | | | | | | |
+| Claude Code | behavior reference | | | | | | | |
+| Hermes | | | | | | | | |
+| ZCode | | | | | | | | |
+| Pi | | | | | | | | |
+
+Then choose:
+
+- ONE primary Agent core/harness direction;
+- optional components from the others;
+- Computer Use as a replaceable executor/backend.
+
+Do NOT create a sixth custom Agent architecture unless a concrete Atlas requirement cannot be met by these first-tier systems.
+
+## Computer Use sources become execution backends
+
+After Agent-core selection, evaluate:
+
+- OpenCUA;
+- Agent-S3;
+- UI-TARS / Agent TARS;
+- UFO;
+- Browser Use.
+
+These supply:
+- screenshot/grounding;
+- GUI operator;
+- UIA/control semantics;
+- browser automation;
+- observation-action loops.
+
+But Atlas's top-level Agent lifecycle should primarily follow the first-tier general Agent harnesses above.
+
+## Preferred Atlas composition
+
+Target composition should converge toward:
+
+`Codex / Hermes / ZCode / Pi-class Agent core`
++ `P18A full local CLI execution`
++ `Agent-S / UI-TARS / UFO-class Computer Use backend`
++ `Atlas MemoryOS / Skills / MCP`
++ `Atlas desktop UI`
+
+Claude Code serves as a first-tier behavioral benchmark for the resulting experience.
+
+## Reuse policy
+
+For open-source first-tier components:
+
+`direct dependency > vendor/copy complete module with attribution > thin adapter > rewrite`
+
+For proprietary/non-open implementation details:
+
+`documented/public behavior replication > compatible open-source substitute`
+
+Always preserve license notices and record upstream repo, commit, paths, and license in task results.
+
