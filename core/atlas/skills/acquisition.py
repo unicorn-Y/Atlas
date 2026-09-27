@@ -21,7 +21,7 @@ from urllib.parse import quote, urlparse
 import httpx
 import yaml
 
-from atlas.skills.dependencies import normalize_dependencies
+from atlas.skills.dependencies import canonical_skill_dependencies
 from atlas.skills.registry import SkillRegistry
 
 MAX_FILES = 100
@@ -435,10 +435,13 @@ def _parse_manifest(
         raise ValueError("manifest description is required")
     if _contains_secret(raw):
         raise ValueError("manifest contains credential-like content")
-    requirements = raw.get("requirements", raw.get("dependencies", []))
+    dependencies = raw.get("dependencies", [])
+    requirements = raw.get("requirements", [])
+    if not isinstance(dependencies, (list, dict)):
+        raise ValueError("dependencies must be a list or mapping")
     if not isinstance(requirements, (list, dict)):
-        raise ValueError("declared dependencies must be a list or mapping")
-    return raw, normalize_dependencies(requirements)
+        raise ValueError("requirements must be a list or mapping")
+    return raw, canonical_skill_dependencies(dependencies, requirements)
 
 
 def _contains_secret(value: Any) -> bool:

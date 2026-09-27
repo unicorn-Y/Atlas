@@ -1,4 +1,5 @@
 export type SecurityGate = 'PASS' | 'WARN' | 'BLOCK';
+export type CanonicalDependency = { kind: string; name: string; requested?: string | null };
 
 type ApprovalResponse = { install_authorization?: string; detail?: string };
 
@@ -12,6 +13,12 @@ export function reviewGateState(result: SecurityGate, alreadyInstalled: boolean)
 
 export function remoteSkillLabel(installed: boolean): string {
   return installed ? '已安装' : 'Remote / Uninstalled';
+}
+
+export function formatCanonicalDependencies(dependencies: CanonicalDependency[]): string {
+  return dependencies.map(({ kind, name, requested }) =>
+    `${kind}:${name}${requested ? ` ${requested}` : ''}`,
+  ).join(', ');
 }
 
 export function localPackageReviewState(state: 'new_skill' | 'exact_version_conflict' | 'update_candidate') {

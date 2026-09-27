@@ -21,7 +21,7 @@ except ModuleNotFoundError:
 import yaml
 
 from atlas.config import PROJECT_ROOT
-from atlas.skills.dependencies import dependency_preflight, normalize_dependencies
+from atlas.skills.dependencies import canonical_skill_dependencies, dependency_preflight
 
 log = structlog.get_logger()
 
@@ -177,9 +177,7 @@ def _frontmatter_to_skill_info(
     if not isinstance(requirements, (list, dict)):
         invalid("requirements must be a list or mapping")
         return None
-    dependency_contract = normalize_dependencies([
-        *normalize_dependencies(deps), *normalize_dependencies(requirements),
-    ])
+    dependency_contract = canonical_skill_dependencies(deps, requirements)
 
     # Accept Atlas fields and Hermes-compatible nested metadata.
     tags = fm.get("tags", []) or []

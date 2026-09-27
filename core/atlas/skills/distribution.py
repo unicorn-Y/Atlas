@@ -101,7 +101,9 @@ def inspect_skill_package(data: bytes, filename: str) -> Acquisition:
     if skill_manifest["version"] != version:
         raise ValueError("package identity version does not match SKILL.md")
     declared = package.get("dependencies", [])
-    if normalize_dependencies(declared) != normalize_dependencies(dependencies):
+    if set(_dependency_keys(normalize_dependencies(declared))) != set(
+        _dependency_keys(dependencies)
+    ):
         raise ValueError("package dependency declaration does not match SKILL.md")
     provider = source.get("provider", "local-package")
     source_url = source.get("source_url")
@@ -124,3 +126,9 @@ def inspect_skill_package(data: bytes, filename: str) -> Acquisition:
         "imported_at": datetime.now(UTC).isoformat(),
     }
     return prepare_acquisition(record, payload)
+
+
+def _dependency_keys(dependencies: list[dict[str, Any]]) -> list[tuple[str, str, str | None]]:
+    return [
+        (item["kind"], item["name"], item.get("requested")) for item in dependencies
+    ]

@@ -80,6 +80,13 @@ def normalize_dependencies(declarations: Any) -> list[dict[str, Any]]:
     return [dependency.to_dict() for dependency in parse_dependencies(declarations)]
 
 
+def canonical_skill_dependencies(dependencies: Any, requirements: Any) -> list[dict[str, Any]]:
+    """Merge modern and legacy Skill declarations into one de-duplicated contract."""
+    return normalize_dependencies([
+        *normalize_dependencies(dependencies), *normalize_dependencies(requirements),
+    ])
+
+
 def _split_requested(value: str) -> tuple[str, str | None]:
     if "@" not in value:
         return value, None

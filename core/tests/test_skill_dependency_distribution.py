@@ -108,6 +108,53 @@ def test_structured_named_version_constraint_is_canonicalized():
                              "requested": ">=2,<4"}]
 
 
+def test_skill_dependency_sources_are_merged_and_deduplicated():
+    from atlas.skills.acquisition import _parse_manifest
+    from atlas.skills.dependencies import canonical_skill_dependencies
+
+    content = ("---\nname: merged-skill\nversion: 1.0.0\ndescription: Merged\n"
+               "dependencies:\n  python_packages: [requests, pydantic]\n"
+               "requirements:\n  - 'python:requests'\n  - 'command:ffmpeg'\n---\nbody\n")
+    _manifest, dependencies = _parse_manifest(content, "merged-skill")
+    assert dependencies == [
+        {"name": "requests", "kind": "python_packages", "requested": None},
+        {"name": "pydantic", "kind": "python_packages", "requested": None},
+        {"name": "ffmpeg", "kind": "commands", "requested": None},
+    ]
+    assert canonical_skill_dependencies(
+        {"python_packages": [{"name": "requests", "version": ">=2,<4"}]},
+        ["python:requests@>=2,<4"],
+    ) == [{"name": "requests", "kind": "python_packages", "requested": ">=2,<4"}]
+
+
+def test_legacy_requirements_only_manifest_still_normalizes():
+    from atlas.skills.acquisition import _parse_manifest
+
+    content = ("---\nname: legacy-only\nversion: 1.0.0\ndescription: Legacy\n"
+               "requirements:\n  - 'python:requests@>=2,<4'\n---\nbody\n")
+    _manifest, dependencies = _parse_manifest(content, "legacy-only")
+    assert dependencies == [{"name": "requests", "kind": "python_packages",
+                             "requested": ">=2,<4"}]
+
+
+def test_package_manifest_must_include_every_modern_dependency():
+    skill = ("---\nname: packaged-sample\nversion: 1.0.0\ndescription: Package sample\n"
+             "dependencies:\n  python_packages: [requests, pydantic]\n"
+             "requirements:\n  - 'python:requests'\n---\nSafe skill instructions.\n")
+    with pytest.raises(ValueError, match="does not match SKILL.md"):
+        inspect_skill_package(_bundle(
+            skill=skill, dependencies=["python:requests"],
+        ), "missing-modern-dependency.zip")
+
+    acquisition = inspect_skill_package(_bundle(
+        skill=skill, dependencies=["python:requests", "python:pydantic"],
+    ), "complete-dependencies.zip")
+    assert acquisition.validation["dependencies"] == [
+        {"name": "requests", "kind": "python_packages", "requested": None},
+        {"name": "pydantic", "kind": "python_packages", "requested": None},
+    ]
+
+
 def test_package_inspection_preserves_structured_dependency_semantics():
     skill = ("---\nname: packaged-sample\nversion: 1.0.0\ndescription: Package sample\n"
              "dependencies:\n  commands: [ffmpeg]\n---\nSafe skill instructions.\n")
@@ -307,6 +354,63 @@ async def test_package_import_uses_lifecycle_approval_and_is_atomic(tmp_path, mo
     original_payload = installed_file.read_bytes()
     assert denied_conflict.status_code == 409
     assert installed_file.read_bytes() == original_payload
+    server.skill_acquisitions.clear()
+
+
+@pytest.mark.asyncio
+async def test_modern_only_dependency_is_shared_by_registry_preflight_and_activation(
+    tmp_path, monkeypatch,
+):
+    from httpx import ASGITransport, AsyncClient
+
+    from atlas import server
+    from atlas.skills import dependencies
+
+    monkeypatch.setattr(dependencies, "_installed_package_version", lambda _name: "2.31.0")
+    registry = SkillRegistry(tmp_path / "registry.db")
+    skills_dir = tmp_path / "skills"
+    manager = SkillManager(skills_dir)
+    monkeypatch.setattr(server, "skill_registry", registry)
+    monkeypatch.setattr(server, "skill_mgr", manager)
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", "p15e-test-token")
+    server.skill_acquisitions.clear()
+    skill = ("---\nname: modern-only\nversion: 1.0.0\ndescription: Modern only\n"
+             "dependencies:\n  python_packages: [requests, pydantic]\n"
+             "requirements:\n  - 'python:requests'\n---\nModern dependency body.\n")
+    transport = ASGITransport(app=server.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        preview_response = await client.post(
+            "/api/skill-packages/inspect",
+            content=_bundle(name="modern-only", skill=skill,
+                            dependencies=["python:requests", "python:pydantic"]),
+        )
+        preview = preview_response.json()
+        assert preview_response.status_code == 200
+        assert [item["name"] for item in preview["validation"]["dependencies"]] == [
+            "requests", "pydantic",
+        ]
+        decision = await client.post("/api/skills/lifecycle/decision", headers=_headers(), json={
+            "action": "install", "name": "modern-only", "version": "1.0.0",
+            "acquisition_id": preview["acquisition_id"], "reason": "verify canonical dependencies",
+        })
+        approval = await client.post("/api/skills/lifecycle/approve", headers=_headers(), json={
+            "decision_id": decision.json()["decision_id"],
+        })
+        installed = await client.post("/api/skills/lifecycle/install", json={
+            "acquisition_id": preview["acquisition_id"],
+            "approval_token": approval.json()["approval_token"],
+        })
+    assert installed.status_code == 200
+    expected = preview["validation"]["dependencies"]
+    record = registry.get("modern-only", "1.0.0")
+    assert record["requirements"] == expected
+    registry_state = dependency_preflight(record["requirements"], registry=registry)
+    manager.scan_skills_sync()
+    manager_state = manager.preflight_dependencies("modern-only", registry=registry)
+    assert registry_state == manager_state
+    assert {item["name"] for item in registry_state} == {"requests", "pydantic"}
+    assert all(item["state"] == "satisfied" for item in registry_state)
+    assert "Modern dependency body." in await manager.activate("modern-only", registry=registry)
     server.skill_acquisitions.clear()
 
 

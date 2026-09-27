@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import SkillDiscoveryPage from './SkillDiscoveryPage';
 import { buildSkillDiscoveryUrl, canActivateLocalSkill } from './skillDiscoveryUrl';
-import { approveSkillInstallation, lifecycleUpdateAction, localPackageReviewState, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
+import { approveSkillInstallation, formatCanonicalDependencies, lifecycleUpdateAction, localPackageReviewState, remoteSkillLabel, reviewGateState } from './skillAcquisitionReview';
 
 describe('Skill discovery page', () => {
   it('renders task search and structured filters without affecting chat', () => {
@@ -49,6 +49,13 @@ describe('Skill discovery page', () => {
       action: '经现有 lifecycle 审批更新/降级', canProceed: true,
     });
     expect(localPackageReviewState('new_skill').canProceed).toBe(true);
+  });
+
+  it('formats canonical dependency records with requested constraints', () => {
+    expect(formatCanonicalDependencies([
+      { kind: 'python_packages', name: 'requests', requested: '>=2,<4' },
+      { kind: 'commands', name: 'ffmpeg', requested: null },
+    ])).toBe('python_packages:requests >=2,<4, commands:ffmpeg');
   });
 
   it('uses the server approval and one-time authorization contract', async () => {
