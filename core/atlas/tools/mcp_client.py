@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -516,6 +517,9 @@ def _resolve_stdio_command(command: str, args: list[str]) -> tuple[str, list[str
             "Node-based MCP server requires Atlas bundled Node or a development Node installation"
         )
     if not runtime.bundled:
+        executable = shutil.which(command)
+        if os.name == "nt" and executable and executable.lower().endswith((".cmd", ".bat")):
+            return "cmd.exe", ["/d", "/c", "call", executable, *args]
         return command, args
     if basename == "node":
         return str(runtime.executable), args

@@ -528,6 +528,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ), source="browser-use/browser-use",
     )
     capabilities.register(
+        "browser.use.task", description="Run a Browser Use Agent task against a web page.",
+        handler=lambda inputs: browser_use.task(
+            str(inputs["goal"]),
+            start_url=inputs.get("start_url"),
+            model=inputs.get("model"),
+            session_options=dict(inputs.get("session_options", {})),
+        ), source="browser-use/browser-use",
+    )
+    capabilities.register(
         "coding.ast_grep.run", description="Run ast-grep against a repository path.",
         handler=lambda inputs: ast_grep_capability.run(
             list(inputs.get("arguments", [])), cwd=str(inputs["cwd"]),
@@ -1373,6 +1382,26 @@ async def list_integrations() -> dict[str, Any]:
             record["connected"] = bool(server.get("connected"))
             if not server.get("connected") and server.get("blocking_reason"):
                 record["last_error"] = server["blocking_reason"]
+        if record["id"].startswith("agent.") and agent_backend_host:
+            backend_name = record["id"].split(".", 1)[1]
+            record["connected"] = backend_name in agent_backend_host.connected_names()
+            record["smoke_verified"] = backend_name in agent_backend_host.smoke_verified
+            record["status"] = (
+                "ready" if record["smoke_verified"] else
+                "misconfigured"
+                if record["authenticated"] is False or record["configured"] is False
+                else "degraded"
+            )
+        if record["id"] == "browser.browser_use" and browser_use:
+            record["connected"] = bool(browser_use._sessions)
+            record["authenticated"] = browser_use.authenticated
+            record["smoke_verified"] = browser_use.smoke_verified
+            if browser_use.last_error:
+                record["last_error"] = browser_use.last_error
+            record["status"] = (
+                "misconfigured" if browser_use.authenticated is False else
+                "ready" if browser_use.smoke_verified else "degraded"
+            )
     return result
 
 

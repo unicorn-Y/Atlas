@@ -8,6 +8,14 @@ dist/
 build/
 .venv/
 .ruff_cache/
+/core/.pytest-temp-wave1/
+/core/.pytest-p18b*/
+/core/.p18x-packaged-*/
+/core/.p18x-pyinstaller-*/
+/core/.p18x-pytest-*/
+/core/.p18x-packaged-path.txt
+/.aider.chat.history.md
+/.aider.tags.cache.v4/
 
 # Data
 data/*.db
@@ -77,3 +85,4 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+.aider*

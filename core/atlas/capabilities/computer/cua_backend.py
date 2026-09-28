@@ -40,9 +40,15 @@ class CuaBackend:
         result = await self._driver.call_tool(name, json.dumps(arguments))
         if hasattr(result, "model_dump"):
             return result.model_dump(mode="json")
+        structured_json = getattr(result, "structured_json", None)
+        try:
+            structured_content = json.loads(structured_json) if structured_json else None
+        except (TypeError, ValueError):
+            structured_content = None
         return {
             "text": getattr(result, "text", str(result)),
             "is_error": getattr(result, "is_error", False),
+            "structured_content": structured_content,
         }
 
     async def close(self) -> None:

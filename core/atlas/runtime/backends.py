@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,13 +44,29 @@ class AgentBackend(Protocol):
     async def close(self, session: AgentSession) -> None: ...
 
 
+def full_access_permission_response(options: Any) -> Any:
+    """Select ACP's broadest offered normal allow option by its protocol id."""
+    from acp.schema import AllowedOutcome, DeniedOutcome, RequestPermissionResponse
+
+    allowed = [option for option in options if option.kind in {"allow_always", "allow_once"}]
+    if not allowed:
+        return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
+    option = min(allowed, key=lambda item: (item.kind != "allow_always", item.option_id))
+    return RequestPermissionResponse(
+        outcome=AllowedOutcome(optionId=option.option_id, outcome="selected")
+    )
+
+
 class ACPBackend:
     """ACP client adapter for upstream Agent processes."""
 
-    def __init__(self, name: str, command: str, args: list[str]) -> None:
+    def __init__(
+        self, name: str, command: str, args: list[str], *, mcp_servers: list[Any] | None = None
+    ) -> None:
         self.name = name
         self.command = command
         self.args = args
+        self.mcp_servers = mcp_servers if mcp_servers is not None else [atlas_bridge_descriptor()]
         self._states: dict[str, Any] = {}
 
     async def start_session(self, cwd: str | None = None) -> AgentSession:
@@ -72,9 +89,7 @@ class ACPBackend:
             async def request_permission(
                 self, session_id: str, tool_call: Any, options: Any, **_kwargs: Any
             ) -> Any:
-                from acp.schema import DeniedOutcome, RequestPermissionResponse
-
-                return RequestPermissionResponse(outcome=DeniedOutcome())
+                return full_access_permission_response(options)
 
         command, args = self.command, self.args
         if command == "npx":
@@ -82,12 +97,17 @@ class ACPBackend:
 
             command, args = _resolve_stdio_command(command, args)
         manager = spawn_agent_process(EventClient(), command, *args, cwd=cwd)
-        connection, process = await manager.__aenter__()
         try:
+            connection, process = await manager.__aenter__()
             await connection.initialize(protocol_version=PROTOCOL_VERSION)
-            response = await connection.new_session(cwd=cwd or str(Path.cwd()), mcp_servers=[])
+            response = await connection.new_session(
+                cwd=cwd or str(Path.cwd()), mcp_servers=self.mcp_servers
+            )
         except BaseException:
-            await manager.__aexit__(None, None, None)
+            try:
+                await manager.__aexit__(None, None, None)
+            except BaseException:
+                pass
             raise
         session = AgentSession(
             id=response.session_id,
@@ -150,7 +170,7 @@ class ACPBackend:
                 await new_state["connection"].load_session(
                     cwd=cwd or str(Path.cwd()),
                     session_id=session_id,
-                    mcp_servers=[],
+                    mcp_servers=self.mcp_servers,
                 )
             except BaseException:
                 await new_state["manager"].__aexit__(None, None, None)
@@ -168,3 +188,26 @@ class ACPBackend:
         if task and not task.done():
             task.cancel()
         await state["manager"].__aexit__(None, None, None)
+
+
+def atlas_bridge_descriptor() -> Any:
+    """Describe the shared local Atlas MCP server using ACP's stdio schema."""
+    import sys
+
+    from acp.schema import McpServerStdio
+
+    frozen = bool(getattr(sys, "frozen", False))
+    args = ["--atlas-mcp-bridge"] if frozen else ["-m", "atlas.tools.agent_bridge"]
+    env = []
+    if not frozen:
+        repo_root = str(Path(__file__).resolve().parents[2])
+        python_path = os.environ.get("PYTHONPATH", "")
+        env.append({"name": "PYTHONPATH", "value": os.pathsep.join(
+            part for part in (repo_root, python_path) if part
+        )})
+    return McpServerStdio(
+        name="Atlas capabilities",
+        command=sys.executable,
+        args=args,
+        env=env,
+    )

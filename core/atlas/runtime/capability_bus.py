@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass, field
@@ -19,10 +20,14 @@ class CapabilityRecord:
     source: str
     version: str | None
     status: str
+    installed: bool = False
+    configured: bool | None = None
+    authenticated: bool | None = None
     capabilities: list[str] = field(default_factory=list)
     enabled: bool = True
     available: bool = False
     connected: bool = False
+    smoke_verified: bool = False
     last_error: str | None = None
     install_method: str | None = None
     license: str | None = None
@@ -76,7 +81,7 @@ class CapabilityBus:
             try:
                 invocation = [executable, "--version"]
                 if executable.lower().endswith((".cmd", ".bat")):
-                    invocation = ["cmd.exe", "/d", "/s", "/c", '"' + " ".join(invocation) + '"']
+                    invocation = ["cmd.exe", "/d", "/c", "call", *invocation]
                 result = subprocess.run(
                     invocation,
                     capture_output=True,
@@ -134,26 +139,39 @@ class CapabilityBus:
         license: str | None = None,
         adapter: str | None = None,
         connected: bool = False,
+        authenticated: bool | None = None,
+        configured: bool | None = None,
+        smoke_verified: bool = False,
     ) -> CapabilityRecord:
-        available = bool(version) and enabled
-        if error and version and enabled:
+        installed = bool(version)
+        available = installed and enabled and error is None
+        is_agent = kind in {"agent_backend", "browser_backend"}
+        if error and installed and enabled:
             status = "misconfigured"
-            available = False
         elif error and enabled:
             status = "missing_dependency" if error == "Executable not found" else "failed"
-            available = False
         else:
-            status = "disabled" if not enabled else ("ready" if available else "missing_dependency")
+            status = "disabled" if not enabled else (
+                "missing_dependency" if not installed else
+                "degraded" if is_agent and not smoke_verified else "ready"
+            )
         return CapabilityRecord(
             id=id,
             kind=kind,
             source=source,
             version=version,
             status=status,
+            installed=installed,
+            configured=(
+                configured if configured is not None else
+                None if is_agent else error is None
+            ),
+            authenticated=authenticated,
             capabilities=capabilities,
             enabled=enabled,
             available=available,
             connected=connected,
+            smoke_verified=smoke_verified,
             last_error=error
             or (None if available or not enabled else "Dependency or executable unavailable"),
             install_method=install_method,
@@ -210,15 +228,14 @@ class CapabilityBus:
             install: str | None = None,
         ) -> None:
             version, error = self._command_version(*commands)
+            authenticated: bool | None = None
+            configured: bool | None = None
             if id == "agent.codex" and version:
                 executable = shutil.which("codex")
                 if executable:
                     invocation = [executable, "login", "status"]
                     if executable.lower().endswith((".cmd", ".bat")):
-                        invocation = [
-                            "cmd.exe", "/d", "/s", "/c",
-                            '"' + " ".join(invocation) + '"',
-                        ]
+                        invocation = ["cmd.exe", "/d", "/c", "call", *invocation]
                     try:
                         auth = subprocess.run(
                             invocation, capture_output=True, text=True,
@@ -229,8 +246,29 @@ class CapabilityBus:
                             (auth.stdout or "") + (auth.stderr or "")
                         ).lower():
                             error = "Codex CLI is not authenticated"
+                            authenticated = False
+                        else:
+                            authenticated = True
                     except (OSError, subprocess.SubprocessError):
                         error = "Codex CLI authentication status could not be checked"
+            if id == "agent.zcode" and version:
+                executable = shutil.which("zcode")
+                shim = Path(executable) if executable else None
+                match = None
+                if shim and shim.suffix.lower() in {".cmd", ".bat"}:
+                    try:
+                        match = re.search(
+                            r'(?im)^\s*node\s+"([^"]+\.cjs)"\s+%\*',
+                            shim.read_text(encoding="utf-8", errors="replace"),
+                        )
+                    except OSError:
+                        match = None
+                configured = bool(
+                    match
+                    and (Path(match.group(1)).parent / "provider" / "zcode-builtin.json").is_file()
+                )
+                if not configured:
+                    error = "ZCode bundled provider configuration is missing"
             records.append(
                 self._record(
                     id=id,
@@ -243,6 +281,8 @@ class CapabilityBus:
                     install_method=install or f"command: {commands[0]}",
                     license=license,
                     adapter=adapter,
+                    authenticated=authenticated,
+                    configured=authenticated if id == "agent.codex" else configured,
                 )
             )
 

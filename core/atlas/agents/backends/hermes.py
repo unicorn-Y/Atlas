@@ -1,7 +1,7 @@
-"""Hermes external process entry point."""
+"""Hermes' supported ACP protocol entry point."""
 
-from atlas.runtime.external_process import ExternalProcessAdapter
+from atlas.runtime.backends import ACPBackend
 
 
-def create() -> ExternalProcessAdapter:
-    return ExternalProcessAdapter("hermes", "hermes", ["--cli", "chat"])
+def create() -> ACPBackend:
+    return ACPBackend("hermes", "hermes", ["acp"])
