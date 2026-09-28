@@ -910,3 +910,66 @@ class TestUseSkill:
 
         empty = await orchestrator._use_skill_result("   ")
         assert empty["is_error"] is True
+
+
+# ---------------------------------------------------------------------------
+# remember: direct durable memory writes
+# ---------------------------------------------------------------------------
+
+
+class TestRemember:
+    async def test_remember_persists_kind_namespaced_fact(self, tmp_path) -> None:
+        from unittest.mock import MagicMock
+
+        from atlas.agent import AgentOrchestrator
+        from atlas.memory import MemoryStore
+
+        memory = MemoryStore(db_path=tmp_path / "remember.db")
+        await memory.init()
+        try:
+            orchestrator = AgentOrchestrator(
+                model_mgr=MagicMock(), memory=memory, mcp_client=None,
+            )
+            names = {
+                tool["function"]["name"] for tool in orchestrator._model_facing_tools()
+            }
+            assert "remember" in names
+
+            result = await orchestrator._remember_result(
+                "editor", "用户偏好 VS Code", "preference",
+            )
+            assert result["is_error"] is False
+            stored = await memory.get_fact("agent-preference:editor")
+            assert stored == "用户偏好 VS Code"
+            facts = await memory.list_facts(category="agent-preference")
+            assert facts[0]["memory_type"] == "identity"
+
+            result = await orchestrator._remember_result(
+                "deploy", "先跑 tests 再 push", "convention",
+            )
+            assert result["is_error"] is False
+            assert await memory.get_fact("agent-convention:deploy") == "先跑 tests 再 push"
+
+        finally:
+            await memory.close()
+
+    async def test_remember_rejects_empty_and_bad_kind(self, tmp_path) -> None:
+        from unittest.mock import MagicMock
+
+        from atlas.agent import AgentOrchestrator
+        from atlas.memory import MemoryStore
+
+        memory = MemoryStore(db_path=tmp_path / "remember2.db")
+        await memory.init()
+        try:
+            orchestrator = AgentOrchestrator(
+                model_mgr=MagicMock(), memory=memory, mcp_client=None,
+            )
+            empty = await orchestrator._remember_result("", "x")
+            assert empty["is_error"] is True
+
+            result = await orchestrator._remember_result("k", "v", "bogus-kind")
+            assert result["is_error"] is False  # falls back to kind=fact
+            assert result["data"]["kind"] == "fact"
+        finally:
+            await memory.close()

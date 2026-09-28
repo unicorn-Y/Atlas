@@ -181,6 +181,39 @@ class AgentOrchestrator:
         """Public access to the capability registry (plugin/endpoint use)."""
         return self._capabilities
 
+    async def _remember_result(
+        self, key: str, value: str, kind: str = "fact",
+    ) -> dict[str, Any]:
+        """Write a durable memory fact directly (no approval gate)."""
+        if not key.strip() or not value.strip():
+            message = "remember requires both key and value"
+            return {
+                "data": {"error": message},
+                "content": [{"type": "text", "text": message}],
+                "is_error": True,
+            }
+        if kind not in {"preference", "convention", "feedback", "fact"}:
+            kind = "fact"
+        memory_type = "identity" if kind == "preference" else "fact"
+        try:
+            await self._memory.set_fact(
+                f"agent-{kind}:{key.strip()}", value.strip(),
+                category=f"agent-{kind}", memory_type=memory_type,
+            )
+        except Exception as exc:
+            message = f"remember failed: {exc}"
+            return {
+                "data": {"error": message},
+                "content": [{"type": "text", "text": message}],
+                "is_error": True,
+            }
+        data = {"remembered": True, "key": f"agent-{kind}:{key.strip()}", "kind": kind}
+        return {
+            "data": data,
+            "content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}],
+            "is_error": False,
+        }
+
     async def _use_skill_result(self, raw_name: str) -> dict[str, Any]:
         """Activate a skill and wrap its instructions as a tool result."""
         name = raw_name.strip()
@@ -337,6 +370,25 @@ class AgentOrchestrator:
             tools = [*tools, *self._computer_use.get_tools_for_llm()]
         if self._web is not None:
             tools = [*tools, *_WEB_TOOLS]
+        if self._memory is not None:
+            tools = [*tools, {
+                "type": "function",
+                "function": {
+                    "name": "remember",
+                    "description": (
+                        "Persist a durable memory about the user or project without "
+                        "asking. Use for stable preferences, project conventions, and "
+                        "corrective feedback (kind: preference|convention|feedback|fact)."
+                    ),
+                    "parameters": {"type": "object", "properties": {
+                        "key": {"type": "string"},
+                        "value": {"type": "string"},
+                        "kind": {"type": "string", "enum": [
+                            "preference", "convention", "feedback", "fact",
+                        ]},
+                    }, "required": ["key", "value"], "additionalProperties": False},
+                },
+            }]
         if self._skills is not None:
             tools = [*tools, {
                 "type": "function",
@@ -747,6 +799,12 @@ class AgentOrchestrator:
                     )
                 elif fn_name.startswith("computer_") and self._computer_use:
                     result = await self._computer_use.call_tool(fn_name, fn_args)
+                elif fn_name == "remember" and self._memory is not None:
+                    result = await self._remember_result(
+                        str(fn_args.get("key", "")),
+                        str(fn_args.get("value", "")),
+                        str(fn_args.get("kind", "fact")),
+                    )
                 elif fn_name == "use_skill" and self._skills is not None:
                     result = await self._use_skill_result(str(fn_args.get("name", "")))
                 elif fn_name in {"web_search", "web_fetch"} and self._web is not None:
