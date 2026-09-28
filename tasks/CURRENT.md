@@ -1,37 +1,37 @@
 # Atlas Current Task
 
-CURRENT: CODEX-ATLAS-CAPABILITY-ENRICHMENT-WAVE1
+CURRENT: CODEX-ATLAS-ENRICHMENT-DEBUG-WAVE1
 STATUS: READY
 
-PREVIOUS: CODEX-ATLAS-INTEGRATION-DEBUG-WAVE1
+PREVIOUS: CODEX-ATLAS-CAPABILITY-ENRICHMENT-WAVE1
 STATUS: PASS
-RESULT: tasks/results/CODEX-ATLAS-INTEGRATION-DEBUG-WAVE1.result.md
-REVIEW: tasks/reviews/CODEX-ATLAS-INTEGRATION-DEBUG-WAVE1.review.md
+RESULT: tasks/results/CODEX-ATLAS-CAPABILITY-ENRICHMENT-WAVE1.result.md
+REVIEW: tasks/reviews/CODEX-ATLAS-CAPABILITY-ENRICHMENT-WAVE1.review.md
 REVIEW_RESULT: PASS
-IMPLEMENTATION_HEAD: c4d17f4ce9e48b1692252c4e4bbeec3a7739270b
+IMPLEMENTATION_HEAD: 2b0fdf39873ccf3c9cd4136572f18edc041326b9
 
-TASKBOOK: tasks/taskbooks/CODEX-ATLAS-CAPABILITY-ENRICHMENT-WAVE1.md
+TASKBOOK: tasks/taskbooks/CODEX-ATLAS-ENRICHMENT-DEBUG-WAVE1.md
 
 WORKER: Luna
 
-CODE_BASE_HEAD: c4d17f4ce9e48b1692252c4e4bbeec3a7739270b
+CODE_BASE_HEAD: 2b0fdf39873ccf3c9cd4136572f18edc041326b9
 
-NEXT: CODEX-ATLAS-ENRICHMENT-DEBUG-WAVE1
+NEXT: CODEX-ATLAS-REAL-WORLD-AGENT-E2E-WAVE1
 NEXT_STATUS: BLOCKED
 
 QUEUE_GUARD:
-Capability Enrichment Wave 1 is the only READY task.
-Do not split hooks/subagents/CodeAct/compaction/reminders/reviewer/checkpoints/reflection/plugin schema into separate taskbooks.
-The P18X shared integration runtime is accepted and must be preserved.
-Known environment/auth degradations (Codex login, Browser Use credential, ZCode provider config, DBOS DB config, Claude ACP timeout) do not block this wave.
+Enrichment Debug Wave 1 is the only READY task.
+Do not split reminder/compaction/reflection/reviewer convergence into separate tasks.
+Capability Enrichment Wave 1 is accepted and must be preserved.
+Known external environment/auth degradations do not block this wave.
 FULL_ACCESS remains the default.
-Do not reintroduce per-tool approval prompts.
-Voice, camera and mobile remain outside this wave.
+Do not create new approval prompts.
+Do not start voice, camera, or mobile.
 
 BASE_HEAD_RULE:
 After pulling origin/main, record the actual starting HEAD as BASE_HEAD.
 
 RULE:
-Read LUNA_WORKER.md, PLAN.md, the integration-debug review, and the current taskbook.
-Execute the enrichment wave as one task.
+Read LUNA_WORKER.md, PLAN.md, the enrichment review, and the current taskbook.
+Execute the entire convergence pass as one task.
 Do not create FIX1/FIX2 after completion.
