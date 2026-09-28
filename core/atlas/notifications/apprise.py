@@ -10,14 +10,31 @@ that reports ``disabled`` instead of failing.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from typing import Any
 
 from atlas.config import get_config
 
 
+def _file_urls() -> list[str]:
+    """UI-managed targets persisted at data/notification-urls.json."""
+    try:
+        data = json.loads(
+            (get_config().db_path.parent / "notification-urls.json").read_text(
+                encoding="utf-8",
+            ),
+        )
+    except (OSError, ValueError):
+        return []
+    urls = data.get("urls") if isinstance(data, dict) else None
+    if not isinstance(urls, list):
+        return []
+    return [str(url).strip() for url in urls if str(url).strip()]
+
+
 def configured_urls() -> list[str]:
-    """Notification target URLs from config/environment (empty = disabled)."""
+    """Notification target URLs: env overrides config overrides UI file."""
     env = os.environ.get("ATLAS_NOTIFY_URLS", "")
     candidates = [line.strip() for line in env.replace(",", "\n").splitlines()]
     if not candidates:
@@ -26,6 +43,8 @@ def configured_urls() -> list[str]:
             urls = raw.get("urls", [])
             if isinstance(urls, list):
                 candidates = [str(url).strip() for url in urls]
+    if not candidates:
+        candidates = _file_urls()
     return [url for url in candidates if url]
 
 
@@ -38,6 +57,13 @@ class NotificationBus:
     @property
     def enabled(self) -> bool:
         return bool(self._urls)
+
+    @property
+    def urls(self) -> list[str]:
+        return list(self._urls)
+
+    def set_urls(self, urls: list[str]) -> None:
+        self._urls = [url for url in urls if url.strip()]
 
     def status(self) -> dict[str, Any]:
         return {"enabled": self.enabled, "targets": len(self._urls)}

@@ -65,6 +65,7 @@ from atlas.models.manager import ModelManager
 from atlas.notifications import NotificationBus
 from atlas.plugins import PluginRuntime
 from atlas.projects import ProjectStore
+from atlas.runtime import hub_control
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.capability_bus import CapabilityBus
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
@@ -1696,6 +1697,44 @@ async def notification_status() -> dict[str, Any]:
     return notifications.status()
 
 
+@app.get("/api/hub/status")
+async def hub_status() -> dict[str, Any]:
+    """Report the background Hub's running state and scheduler summary."""
+    return await hub_control.status()
+
+
+@app.post("/api/hub/start")
+async def hub_start() -> dict[str, Any]:
+    """Start the detached background Hub (no-op when already running)."""
+    return await hub_control.start()
+
+
+@app.post("/api/hub/stop")
+async def hub_stop() -> dict[str, Any]:
+    """Gracefully stop the background Hub."""
+    return await hub_control.stop()
+
+
+@app.get("/api/hub/tasks")
+async def hub_tasks() -> dict[str, Any]:
+    return {"tasks": await hub_control.list_tasks()}
+
+
+@app.post("/api/hub/tasks")
+async def hub_create_task(req: dict[str, Any]) -> dict[str, Any]:
+    return await hub_control.create_task(req)
+
+
+@app.post("/api/hub/tasks/{task_id}/run")
+async def hub_run_task(task_id: str) -> dict[str, Any]:
+    return await hub_control.run_task(task_id)
+
+
+@app.delete("/api/hub/tasks/{task_id}")
+async def hub_delete_task(task_id: str) -> dict[str, Any]:
+    return await hub_control.delete_task(task_id)
+
+
 @app.post("/api/notifications/test")
 async def notification_test() -> dict[str, Any]:
     """Send a test notification to every configured target."""
@@ -1703,6 +1742,26 @@ async def notification_test() -> dict[str, Any]:
     return await notifications.notify(
         "Atlas notification test", "If you can read this, notifications work.",
     )
+
+
+@app.get("/api/notifications/urls")
+async def get_notification_urls() -> dict[str, Any]:
+    assert notifications is not None
+    return {"urls": notifications.urls}
+
+
+@app.put("/api/notifications/urls")
+async def set_notification_urls(req: dict[str, Any]) -> dict[str, Any]:
+    """Persist notification target URLs (Apprise) and apply them immediately."""
+    assert notifications is not None
+    urls = req.get("urls")
+    if not isinstance(urls, list) or not all(isinstance(u, str) for u in urls):
+        raise HTTPException(status_code=400, detail="urls must be a list of strings")
+    notifications.set_urls([u.strip() for u in urls if u.strip()])
+    path = get_config().db_path.parent / "notification-urls.json"
+    path.write_text(json.dumps({"urls": notifications.urls}, ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+    return {"urls": notifications.urls}
 
 
 @app.get("/api/plugins")

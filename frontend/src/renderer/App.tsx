@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, FileText, Mic, MoreHorizontal, PanelRight, Paperclip, Pause, Play, Plus, Search, Send, Settings, Square, Volume2, X } from 'lucide-react';
+import { BookOpen, LayoutDashboard, Check, ChevronDown, ChevronRight, CircleHelp, FileText, Mic, MoreHorizontal, PanelRight, Paperclip, Pause, Play, Plus, Search, Send, Settings, Square, Volume2, X } from 'lucide-react';
 import { useAtlasStore } from './store/useAtlasStore';
 import styles from './App.module.css';
 import ConversationActivity from './components/ConversationActivity';
 import ConversationMessage from './components/ConversationMessage';
 import SettingsPage from './pages/SettingsPage';
 import SkillDiscoveryPage from './pages/SkillDiscoveryPage';
+import ConsolePage from './pages/ConsolePage';
 
 type InspectorTab = 'context' | 'artifacts' | 'activity' | 'skills';
 type SpeechRecognitionLike = {
@@ -19,7 +20,7 @@ type SpeechRecognitionLike = {
 };
 
 export default function App() {
-  const [page, setPage] = useState<'chat' | 'settings' | 'skills'>('chat');
+  const [page, setPage] = useState<'chat' | 'console' | 'settings' | 'skills'>('chat');
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [modelOpen, setModelOpen] = useState(false);
   const [tab, setTab] = useState<InspectorTab>('context');
@@ -149,6 +150,7 @@ export default function App() {
       <nav className={styles.navList} aria-label="主导航">
         <button className={`${styles.navItem} ${page === 'chat' ? styles.active : ''}`} onClick={() => setPage('chat')}><BookOpen /><span>对话</span></button>
         <button className={`${styles.navItem} ${page === 'skills' ? styles.active : ''}`} onClick={() => setPage('skills')}><Search /><span>技能发现</span></button>
+        <button className={`${styles.navItem} ${page === 'console' ? styles.active : ''}`} onClick={() => setPage('console')}><LayoutDashboard /><span>控制台</span></button>
       </nav>
       <div className={styles.sectionLabel}>最近对话 <button aria-label="新建对话" disabled={store.creatingConversation} onClick={() => { setPage('chat'); void store.createConversation(); }}><Plus size={15} /></button></div>
       <div className={styles.historyList}>
@@ -164,7 +166,7 @@ export default function App() {
     </aside>
 
     <main className={styles.main}>
-      {page === 'settings' ? <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; localStorage.setItem('atlas.preference.username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setPage('chat')} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} /> : page === 'skills' ? <SkillDiscoveryPage apiBaseUrl={store.apiBaseUrl} activeSkills={store.activeSkills} onApplySkill={(name) => store.activeSkills.includes(name) ? store.removeSkill(name) : store.applySkill(name)} /> : <>
+      {page === 'settings' ? <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; localStorage.setItem('atlas.preference.username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setPage('chat')} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} /> : page === 'console' ? <div className={styles.settingsPage} aria-label="控制台容器"><header className={styles.settingsHeader}><div><h1>控制台</h1><p>项目、后台任务、插件与通知——Atlas 的长期记忆和后台都在这里。</p></div></header><ConsolePage apiBaseUrl={store.apiBaseUrl} /></div> : page === 'skills' ? <SkillDiscoveryPage apiBaseUrl={store.apiBaseUrl} activeSkills={store.activeSkills} onApplySkill={(name) => store.activeSkills.includes(name) ? store.removeSkill(name) : store.applySkill(name)} /> : <>
         <header className={styles.topbar}>
           <div className={styles.topbarTitle}>对话 <span>/</span> {activeConversation?.title ?? '新对话'}</div>
           <div className={styles.topbarActions}>
