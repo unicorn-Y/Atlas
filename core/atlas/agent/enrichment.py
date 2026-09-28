@@ -352,6 +352,7 @@ class MemoryReflectionBridge:
         self, *, conversation_id: str, goal: str, task_result: str,
         reviewer_evidence: list[dict[str, Any]] | None = None,
         memory_candidates: list[dict[str, Any]] | None = None,
+        source_run_id: str | None = None,
     ) -> dict[str, Any]:
         candidates = [{
             "type": "experience", "category": "reusable_experience",
@@ -379,4 +380,13 @@ class MemoryReflectionBridge:
                 candidates[0]["memory_candidates"] = (
                     await self.memory.extract_conversation_candidates(conversation_id)
                 )
+            persist = getattr(type(self.memory), "persist_reflection_proposals", None)
+            if callable(persist):
+                proposal_ids = await self.memory.persist_reflection_proposals(
+                    candidates, conversation_id=conversation_id,
+                    source_run_id=source_run_id,
+                    reviewer_evidence=reviewer_evidence or [],
+                )
+                for candidate, proposal_id in zip(candidates, proposal_ids):
+                    candidate["proposal_id"] = proposal_id
         return {"candidates": candidates, "promoted": False}

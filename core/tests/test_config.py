@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from atlas.config import AtlasConfig, load_config
 
 
@@ -21,6 +19,9 @@ class TestAtlasConfigDefaults:
         assert cfg.log_level == "INFO"
         assert cfg.scheduler_enabled is True
         assert cfg.scheduler_timezone == "Asia/Shanghai"
+        assert cfg.context_maintenance_message_limit == 80
+        assert cfg.context_maintenance_character_limit == 80000
+        assert cfg.trajectory_reviewer_enabled is False
 
     def test_get_missing_key_returns_default(self) -> None:
         cfg = AtlasConfig()
@@ -35,6 +36,12 @@ class TestAtlasConfigFromData:
             "server": {"host": "127.0.0.1", "port": 9999},
             "models": {"default": "gpt-4o"},
             "memory": {"db_path": "/tmp/test.db", "max_context_messages": 100},
+            "agent": {
+                "context_maintenance": {"message_limit": 12, "character_limit": 4000},
+                "trajectory_reviewer": {
+                    "enabled": True, "backend": "litellm", "model": "openai/gpt-4o-mini",
+                },
+            },
             "logging": {"level": "DEBUG"},
         }
         cfg = AtlasConfig(data)
@@ -42,17 +49,26 @@ class TestAtlasConfigFromData:
         assert cfg.server_port == 9999
         assert cfg.default_model == "gpt-4o"
         assert cfg.max_context_messages == 100
+        assert cfg.context_maintenance_message_limit == 12
+        assert cfg.context_maintenance_character_limit == 4000
+        assert cfg.trajectory_reviewer_enabled is True
+        assert cfg.trajectory_reviewer_backend == "litellm"
+        assert cfg.trajectory_reviewer_model == "openai/gpt-4o-mini"
         assert cfg.log_level == "DEBUG"
 
     def test_db_path_absolute(self) -> None:
-        cfg = AtlasConfig({"memory": {"db_path": "/absolute/path/test.db"}})
-        assert cfg.db_path == Path("/absolute/path/test.db")
+        absolute_path = (Path.cwd() / "absolute" / "path" / "test.db").resolve()
+        cfg = AtlasConfig({"memory": {"db_path": str(absolute_path)}})
+        assert cfg.db_path == absolute_path
 
     def test_db_path_relative(self) -> None:
         cfg = AtlasConfig({"memory": {"db_path": "./data/test.db"}})
         # Should be resolved relative to PROJECT_ROOT
         assert cfg.db_path.is_absolute()
-        assert str(cfg.db_path).endswith("data/test.db") or str(cfg.db_path).endswith("data\\test.db")
+        assert (
+            str(cfg.db_path).endswith("data/test.db")
+            or str(cfg.db_path).endswith("data\\test.db")
+        )
 
 
 class TestLoadConfig:

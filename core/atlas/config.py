@@ -135,6 +135,28 @@ class AtlasConfig:
     def max_context_messages(self) -> int:
         return int(self.get("memory.max_context_messages", 50))
 
+    @property
+    def context_maintenance_message_limit(self) -> int:
+        return int(self.get("agent.context_maintenance.message_limit", 80))
+
+    @property
+    def context_maintenance_character_limit(self) -> int:
+        return int(self.get("agent.context_maintenance.character_limit", 80000))
+
+    @property
+    def trajectory_reviewer_enabled(self) -> bool:
+        return bool(self.get("agent.trajectory_reviewer.enabled", False))
+
+    @property
+    def trajectory_reviewer_backend(self) -> str | None:
+        value = self.get("agent.trajectory_reviewer.backend")
+        return str(value).strip() if value else None
+
+    @property
+    def trajectory_reviewer_model(self) -> str | None:
+        value = self.get("agent.trajectory_reviewer.model")
+        return str(value).strip() if value else None
+
     # -- scheduler --
 
     @property

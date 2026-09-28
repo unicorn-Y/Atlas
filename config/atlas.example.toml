@@ -31,6 +31,16 @@ base_url = "https://api.monkeyapi.net"
 db_path = "./data/atlas.db"
 # max_context_messages = 50
 
+[agent.context_maintenance]
+message_limit = 80
+character_limit = 80000
+
+[agent.trajectory_reviewer]
+enabled = false
+# Set backend = "litellm" and model = "provider/model" to enable the reviewer.
+# backend = "litellm"
+# model = "openai/gpt-4o-mini"
+
 [scheduler]
 enabled = true
 # timezone = "Asia/Shanghai"

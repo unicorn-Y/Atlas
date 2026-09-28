@@ -890,6 +890,63 @@ class MemoryStore:
         )
         return [dict(row) for row in await cursor.fetchall()]
 
+    async def persist_reflection_proposals(
+        self,
+        candidates: list[dict[str, Any]],
+        *,
+        conversation_id: str,
+        source_run_id: str | None,
+        reviewer_evidence: list[dict[str, Any]],
+    ) -> list[str]:
+        """Store advisory Agent reflections in MemoryOS's governed proposal queue."""
+        assert self._db is not None
+        allowed = {"experience", "fact", "preference", "project_state", "decision"}
+        proposal_ids: list[str] = []
+
+        def clean(value: Any, limit: int) -> str:
+            text = value if isinstance(value, str) else ""
+            text = _REFLECTION_SECRET.sub(
+                lambda match: f"{match.group(1) or 'credential'}=[redacted]", text
+            )
+            return " ".join(text.split())[:limit]
+
+        safe_evidence = clean(json.dumps(reviewer_evidence, ensure_ascii=False), 2000)
+        for candidate in candidates:
+            category = str(candidate.get("type", ""))
+            summary = clean(candidate.get("summary"), 500)
+            goal = clean(candidate.get("goal"), 1000)
+            if category not in allowed or not summary or _SENSITIVE_MEMORY.search(summary):
+                continue
+            identity = "\0".join((
+                conversation_id, source_run_id or "", category, summary.casefold(),
+            ))
+            proposal_id = "agent-reflection:" + hashlib.sha256(
+                identity.encode("utf-8")
+            ).hexdigest()[:32]
+            proposal = {
+                "id": proposal_id,
+                "type": category,
+                "category": str(candidate.get("category", category)),
+                "summary": summary,
+                "goal": goal,
+                "source_conversation_id": conversation_id,
+                "source_run_id": source_run_id,
+                "reviewer_evidence": safe_evidence,
+                "advisory_only": True,
+            }
+            await self._db.execute(
+                "INSERT OR IGNORE INTO memory_consolidation_proposals "
+                "(id, proposal_json, created_at) VALUES (?, ?, ?)",
+                (
+                    proposal_id,
+                    json.dumps(proposal, ensure_ascii=False, sort_keys=True),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+            proposal_ids.append(proposal_id)
+        await self._db.commit()
+        return proposal_ids
+
     async def promote_memory_candidate(self, candidate_id: str) -> bool:
         assert self._db is not None
         await self._db.execute("BEGIN IMMEDIATE")

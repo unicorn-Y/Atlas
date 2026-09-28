@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from atlas.agent import AgentOrchestrator, AgentRunContext
 from atlas.agent.checkpoints import ShadowGitCheckpointStore
@@ -23,6 +24,7 @@ from atlas.agent.enrichment import (
     SystemReminders,
     TrajectoryReviewer,
 )
+from atlas.config import AtlasConfig
 from atlas.memory import MemoryStore
 from atlas.runtime.backends import AgentEvent, AgentSession
 from atlas.skills.bundles import PluginBundleDiscovery, parse_plugin_bundle
@@ -105,6 +107,40 @@ async def test_context_compaction_preserves_resume_critical_state() -> None:
     assert "large_transcript" not in snapshot
 
 
+async def test_reminder_uses_canonical_goal_after_tool_message(model_mgr, memory) -> None:
+    runtime = AgentRunContext(
+        goal="Original user goal", reminders=SystemReminders(ReminderPolicy(cadence=1)),
+    )
+    agent = AgentOrchestrator(model_mgr, memory)
+
+    class Completion:
+        def __aiter__(self):
+            async def iterate():
+                yield SimpleNamespace(choices=[SimpleNamespace(
+                    delta=SimpleNamespace(content="continue", tool_calls=[]),
+                    finish_reason="stop",
+                )])
+            return iterate()
+
+    state = {
+        "messages": [
+            HumanMessage(content="Original user goal"),
+            AIMessage(content="", tool_calls=[{
+                "name": "inspect", "args": {}, "id": "call-1",
+            }]),
+            ToolMessage(content="tool output that is not the goal", tool_call_id="call-1"),
+        ],
+        "pending_events": [], "tool_rounds": 1, "runtime": runtime,
+    }
+    with patch("atlas.agent.acompletion", AsyncMock(return_value=Completion())) as complete:
+        await agent._think_node(state)
+    reminder = await runtime.event_queue.get()
+    assert reminder["type"] == "system_reminder"
+    assert "Original user goal" in reminder["content"]
+    assert "tool output" not in reminder["content"]
+    assert "Original user goal" in complete.call_args.kwargs["messages"][-1]["content"]
+
+
 def test_system_reminder_fires_at_configured_cadence_once() -> None:
     reminders = SystemReminders(ReminderPolicy(cadence=3, max_reminders=2))
     assert reminders.at_turn(2, goal="goal") is None
@@ -128,6 +164,33 @@ async def test_trajectory_reviewer_is_optional_and_records_correction() -> None:
         "decision": "corrective_guidance", "guidance": "Return to the requested scope.",
         "backend": None, "model": None,
     }]
+
+
+async def test_trajectory_reviewer_config_defaults_off_and_supports_litellm(
+    model_mgr, memory, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from atlas import agent as agent_module
+
+    monkeypatch.setattr(agent_module, "get_config", lambda: AtlasConfig())
+    disabled = AgentOrchestrator(model_mgr, memory).trajectory_reviewer
+    with patch("atlas.agent.acompletion", AsyncMock()) as complete:
+        assert (await disabled.review_trajectory([], "goal"))["enabled"] is False
+        complete.assert_not_awaited()
+
+    monkeypatch.setattr(agent_module, "get_config", lambda: AtlasConfig({
+        "agent": {"trajectory_reviewer": {
+            "enabled": True, "backend": "litellm", "model": "openai/test-reviewer",
+        }},
+    }))
+    configured = AgentOrchestrator(model_mgr, memory).trajectory_reviewer
+    response = {"choices": [{"message": {"content": json.dumps({
+        "decision": "corrective_guidance", "guidance": "Check the output once more.",
+    })}}]}
+    with patch("atlas.agent.acompletion", AsyncMock(return_value=response)) as complete:
+        result = await configured.review_trajectory([{"type": "tool_result"}], "goal")
+    assert result["decision"] == "corrective_guidance"
+    assert result["guidance"] == "Check the output once more."
+    assert complete.call_args.kwargs["model"] == "openai/test-reviewer"
 
 
 async def test_codeact_subprocess_uses_atlas_bridge_for_three_operations(tmp_path: Path) -> None:
@@ -274,20 +337,52 @@ async def test_reflection_proposes_without_promotion_through_memoryos_path() -> 
 async def test_reflection_reaches_real_memoryos_candidate_governance(tmp_path: Path) -> None:
     memory = MemoryStore(tmp_path / "reflection.db")
     await memory.init()
+    conversation_id = await memory.create_conversation("Synthetic completed task")
+    await memory.save_message(conversation_id, "user", "I prefer concise answers.")
+    await memory.save_message(conversation_id, "assistant", "Task completed with evidence.")
+    task_result = (
+        "Reusable experience: verify the result\nProject state: migration complete\n"
+        "Decision: retain SQLite\nPreference: concise answers\nFact memory: UTC"
+    )
+    result = await MemoryReflectionBridge(memory).reflect(
+        conversation_id=conversation_id, goal="complete a small task",
+        task_result=task_result,
+        source_run_id="run-reflection-1",
+        reviewer_evidence=[{"decision": "continue"}],
+    )
+    candidates = result["candidates"]
+    assert {candidate["type"] for candidate in candidates} == {
+        "experience", "project_state", "decision", "preference", "fact",
+    }
+    assert all(candidate.get("proposal_id") for candidate in candidates)
+    [memory_candidate] = result["candidates"][0]["memory_candidates"]
+    assert memory_candidate["key"] == "user_preference"
+    assert memory_candidate["status"] == "pending"
+    assert await memory.get_fact("user_preference") is None
+    proposals = await memory.list_knowledge_consolidation_proposals(status="pending")
+    assert len(proposals) == 5
+    assert all(item["source_run_id"] == "run-reflection-1" for item in proposals)
+    repeated = await MemoryReflectionBridge(memory).reflect(
+        conversation_id=conversation_id, goal="complete a small task",
+        task_result=task_result, source_run_id="run-reflection-1",
+        reviewer_evidence=[{"decision": "continue"}],
+    )
+    assert [item["proposal_id"] for item in repeated["candidates"]] == [
+        item["proposal_id"] for item in candidates
+    ]
+    assert len(await memory.list_knowledge_consolidation_proposals(status="pending")) == 5
+    await memory.close()
+
+    reopened = MemoryStore(tmp_path / "reflection.db")
+    await reopened.init()
     try:
-        conversation_id = await memory.create_conversation("Synthetic completed task")
-        await memory.save_message(conversation_id, "user", "I prefer concise answers.")
-        await memory.save_message(conversation_id, "assistant", "Task completed with evidence.")
-        result = await MemoryReflectionBridge(memory).reflect(
-            conversation_id=conversation_id, goal="complete a small task",
-            task_result="Completed and verified the requested change.",
-        )
-        [candidate] = result["candidates"][0]["memory_candidates"]
-        assert candidate["key"] == "user_preference"
-        assert candidate["status"] == "pending"
-        assert await memory.get_fact("user_preference") is None
+        persisted = await reopened.list_knowledge_consolidation_proposals(status="pending")
+        assert {item["type"] for item in persisted} == {
+            "experience", "project_state", "decision", "preference", "fact",
+        }
+        assert await reopened.get_fact("user_preference") is None
     finally:
-        await memory.close()
+        await reopened.close()
 
 
 def test_shadow_git_checkpoint_restores_scoped_file_without_repo_mutation(tmp_path: Path) -> None:
@@ -384,3 +479,152 @@ async def test_agent_turn_runs_hooks_around_real_tool_call(
         "before_model", "after_model", "before_tool", "after_tool",
         "before_model", "after_model", "before_response", "after_response", "agent_stop",
     ]
+
+
+async def test_normal_run_composes_enrichment_maintenance_reviewer_and_memoryos(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from atlas import agent as agent_module
+
+    cfg = AtlasConfig({
+        "memory": {"max_context_messages": 50},
+        "agent": {
+            "context_maintenance": {"message_limit": 1, "character_limit": 100000},
+            "trajectory_reviewer": {"enabled": False},
+        },
+    })
+    monkeypatch.setattr(agent_module, "get_config", lambda: cfg)
+    memory = MemoryStore(tmp_path / "combined.db")
+    await memory.init()
+    conversation_id = await memory.create_conversation("Combined enrichment smoke")
+    goal = "Update the temporary note."
+    await memory.save_message(conversation_id, "user", goal)
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "note.txt"
+    target.write_text("before", encoding="utf-8")
+    checkpoints = ShadowGitCheckpointStore(tmp_path / "shadow")
+    local = LocalExecutionRuntime()
+    model_mgr = MagicMock()
+    model_mgr.current_model = "test-model"
+    model_mgr.current_litellm_model = "openai/test-model"
+    mcp = MagicMock(spec=MCPClient)
+    mcp.get_tools_for_llm.return_value = []
+    mcp.call_tool = AsyncMock()
+
+    tool_calls = [{
+        "name": "local_file", "arguments": {
+            "action": "write", "path": str(target), "content": "after",
+        },
+    }, {
+        "name": "execute_code", "arguments": {
+            "code": (
+                "result = atlas.call_tool('local_file', "
+                f"{{'action': 'stat', 'path': {str(target)!r}}})"
+            ),
+        },
+    }]
+    tool_calls.extend([{
+        "name": "local_file", "arguments": {"action": "stat", "path": str(target)},
+    } for _ in range(7)])
+    assert len(tool_calls) == 9
+    prompt_history: list[list[dict[str, Any]]] = []
+    responses = list(tool_calls)
+
+    class Completion:
+        def __init__(self, chunks):
+            self.chunks = chunks
+
+        def __aiter__(self):
+            async def iterate():
+                for item in self.chunks:
+                    yield item
+            return iterate()
+
+    async def complete(**kwargs):
+        prompt_history.append(kwargs["messages"])
+        if responses:
+            call = responses.pop(0)
+            fragment = SimpleNamespace(
+                index=0, id=f"call-{len(prompt_history)}",
+                function=SimpleNamespace(
+                    name=call["name"], arguments=json.dumps(call["arguments"]),
+                ),
+            )
+            delta = SimpleNamespace(content=None, tool_calls=[fragment])
+            return Completion([SimpleNamespace(choices=[SimpleNamespace(
+                delta=delta, finish_reason="tool_calls",
+            )])])
+        return Completion([SimpleNamespace(choices=[SimpleNamespace(
+            delta=SimpleNamespace(
+                content=(
+                    "Reusable experience: verify file updates\n"
+                    "Project state: temporary note updated\n"
+                    "Decision: keep the existing workspace\n"
+                    "Preference: concise verification\n"
+                    "Fact memory: preferred unit test runner is pytest"
+                ),
+                tool_calls=[],
+            ), finish_reason="stop",
+        )])])
+
+    review_calls: list[int] = []
+
+    def reviewer(events, _goal):
+        review_calls.append(len(events))
+        if len(review_calls) == 1:
+            return "Recheck the updated file before concluding."
+        return {"decision": "continue"}
+
+    reviewer_adapter = TrajectoryReviewer(reviewer, backend="deterministic", model="test")
+    hooks = HookBus()
+    hook_points: list[str] = []
+    for point in ("before_model", "before_tool", "after_tool", "before_compact", "after_compact"):
+        hooks.register(point, lambda _point=point, **_: hook_points.append(_point))
+    agent = AgentOrchestrator(
+        model_mgr, memory, mcp_client=mcp, local_execution=local,
+        trajectory_reviewer=reviewer_adapter, checkpoint_store=checkpoints, hooks=hooks,
+    )
+    try:
+        with patch("atlas.agent.acompletion", side_effect=complete):
+            events = [event async for event in agent.run(
+                goal, conversation_id, run_id="combined-run-1",
+            )]
+
+        assert target.read_text(encoding="utf-8") == "after", events
+        checkpoint_index = next(
+            index for index, event in enumerate(events)
+            if event["type"] == "checkpoint_created"
+        )
+        first_tool_result_index = next(
+            index for index, event in enumerate(events) if event["type"] == "tool_result"
+        )
+        assert checkpoint_index < first_tool_result_index
+        assert any(event["type"] == "context_compacted" for event in events)
+        reminder_index = next(
+            index for index, event in enumerate(events)
+            if event["type"] == "system_reminder" and goal in event["content"]
+        )
+        assert sum(event["type"] == "tool_result" for event in events[:reminder_index]) >= 8
+        assert any(event["type"] == "trajectory_review" for event in events)
+        assert any(event["type"] == "memory_reflection" for event in events)
+        assert any(event["type"] == "done" for event in events)
+        assert any("Trajectory reviewer guidance" in item.get("content", "")
+                   for prompt in prompt_history for item in prompt)
+        assert any(
+            "Original user goal" in item.get("content", "")
+            or goal in item.get("content", "")
+            for prompt in prompt_history for item in prompt
+        )
+        assert "before_compact" in hook_points and "after_compact" in hook_points
+        assert "before_tool" in hook_points and "after_tool" in hook_points
+        assert review_calls and mcp.call_tool.await_count == 0
+        proposals = await memory.list_knowledge_consolidation_proposals(status="pending")
+        assert {item["type"] for item in proposals} >= {
+            "experience", "project_state", "decision", "preference", "fact",
+        }
+        assert all(item["source_run_id"] == "combined-run-1" for item in proposals)
+        assert await memory.get_fact("user_preference") is None
+    finally:
+        await memory.close()

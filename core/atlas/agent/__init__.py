@@ -86,6 +86,8 @@ class AgentRunContext:
     goal: str | None = None
     conversation_id: str | None = None
     reminders: SystemReminders = field(default_factory=SystemReminders)
+    maintenance_snapshot: dict[str, Any] | None = None
+    maintenance_context: dict[str, Any] = field(default_factory=dict)
 
 
 _EVENT_STREAM_DONE = object()
@@ -157,7 +159,7 @@ class AgentOrchestrator:
         self.hooks = hooks or HookBus()
         self.context_maintenance = ContextMaintenance(self.hooks)
         self.reminder_policy = reminder_policy or ReminderPolicy()
-        self.trajectory_reviewer = trajectory_reviewer or TrajectoryReviewer()
+        self.trajectory_reviewer = trajectory_reviewer or self._configured_trajectory_reviewer()
         self._reflection = MemoryReflectionBridge(memory)
         self.checkpoints = checkpoint_store or ShadowGitCheckpointStore()
         self._delegation = (
@@ -218,6 +220,35 @@ class AgentOrchestrator:
         errors = await self.hooks.emit(point, **payload)
         if errors and runtime.event_queue is not None:
             await runtime.event_queue.put({"type": "hook_error", "point": point, "errors": errors})
+
+    @staticmethod
+    def _configured_trajectory_reviewer() -> TrajectoryReviewer:
+        cfg = get_config()
+        backend, model = cfg.trajectory_reviewer_backend, cfg.trajectory_reviewer_model
+        if not cfg.trajectory_reviewer_enabled or backend != "litellm" or not model:
+            return TrajectoryReviewer(backend=backend, model=model)
+
+        async def review(events: list[dict[str, Any]], goal: str) -> dict[str, str]:
+            response = await acompletion(
+                model=model,
+                messages=[
+                    {"role": "system", "content": (
+                        "Review recent tool execution for a single concrete correction. "
+                        "Return JSON with decision=continue or corrective_guidance and "
+                        "optional concise guidance. Do not propose new work."
+                    )},
+                    {"role": "user", "content": json.dumps({
+                        "goal": goal, "events": events,
+                    }, ensure_ascii=False)},
+                ],
+                max_tokens=256,
+            )
+            try:
+                return AgentOrchestrator._json_object(response)
+            except (ValueError, json.JSONDecodeError):
+                return {"decision": "continue"}
+
+        return TrajectoryReviewer(review, backend=backend, model=model)
 
     # -- graph construction --------------------------------------------------
 
@@ -313,10 +344,66 @@ class AgentOrchestrator:
                 },
             })
 
-        # Convert LangChain messages to dicts for LiteLLM
-        lc_messages = self._to_litellm_messages(state["messages"])
+        runtime = state["runtime"]
+        goal = str(getattr(runtime, "goal", None) or state["messages"][-1].content)[:240]
+        cfg = get_config()
+        if getattr(runtime, "maintenance_snapshot", None) is None:
+            compact_inputs = self._to_litellm_messages(state["messages"])
+            text_inputs = [str(item.get("content", "")) for item in compact_inputs]
+            if self.context_maintenance.should_compact(
+                text_inputs,
+                message_limit=cfg.context_maintenance_message_limit,
+                character_limit=cfg.context_maintenance_character_limit,
+            ):
+                recent = [
+                    f"{item.type}: {str(item.content)[:240]}"
+                    for item in state["messages"][-12:]
+                    if not isinstance(item, SystemMessage)
+                ]
+                context = {
+                    **getattr(runtime, "maintenance_context", {}),
+                    "goal": getattr(runtime, "goal", None) or goal,
+                    "session_summary": " | ".join(recent),
+                }
+                snapshot = await self.context_maintenance.compact(context)
+                runtime.maintenance_snapshot = snapshot
+                runtime.maintenance_summary = json.dumps(snapshot, ensure_ascii=False)
+                event = {
+                    "type": "context_compacted",
+                    "snapshot_id": snapshot["snapshot_id"],
+                    "summary": runtime.maintenance_summary,
+                }
+                if getattr(runtime, "event_queue", None) is not None:
+                    await runtime.event_queue.put(event)
+
+        if getattr(runtime, "maintenance_snapshot", None) is not None:
+            first_system = next(
+                (item for item in state["messages"] if isinstance(item, SystemMessage)),
+                SystemMessage(content=SYSTEM_PROMPT),
+            )
+            recent_messages = [
+                item for item in state["messages"][-12:]
+                if not isinstance(item, SystemMessage)
+            ]
+            reviewer_messages = [
+                item for item in state["messages"]
+                if isinstance(item, SystemMessage)
+                and str(item.content).startswith("Trajectory reviewer guidance ")
+            ]
+            compact_messages = [
+                first_system,
+                SystemMessage(content=(
+                    "Context maintenance summary (resume-critical, advisory): "
+                    + str(runtime.maintenance_summary)
+                )),
+                *reviewer_messages[-1:],
+                *recent_messages,
+            ]
+            lc_messages = self._to_litellm_messages(compact_messages)
+        else:
+            lc_messages = self._to_litellm_messages(state["messages"])
         reminder = state["runtime"].reminders.at_turn(
-            state["tool_rounds"], goal=str(state["messages"][-1].content)[:240],
+            state["tool_rounds"], goal=goal,
             constraints=[
                 "Preserve FULL_ACCESS policy",
                 "Verify the task before reporting completion",
@@ -335,7 +422,6 @@ class AgentOrchestrator:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        runtime = state["runtime"]
         event_queue = getattr(runtime, "event_queue", None)
         events: list[dict[str, Any]] = []
         full_text = ""
@@ -467,6 +553,11 @@ class AgentOrchestrator:
                 await ctx.pause_event.wait()
 
             await self._emit_hook(ctx, "before_tool", name=fn_name, arguments=fn_args)
+            if hasattr(ctx, "maintenance_context"):
+                refs = ctx.maintenance_context.setdefault("active_tool_refs", [])
+                reference = {"name": fn_name, "tool_call_id": tc_id}
+                if reference not in refs:
+                    refs.append(reference)
 
             # Approval gate for sensitive tools
             if fn_name in self.APPROVAL_REQUIRED_TOOLS and ctx.approval_callback:
@@ -508,6 +599,10 @@ class AgentOrchestrator:
             async def report_process_output(
                 execution_id: str, stream_name: str, text: str,
             ) -> None:
+                if hasattr(ctx, "maintenance_context"):
+                    refs = ctx.maintenance_context.setdefault("active_process_refs", [])
+                    if execution_id not in refs:
+                        refs.append(execution_id)
                 if ctx.event_queue is not None:
                     await ctx.event_queue.put({
                         "type": "tool_output", "id": tc_id, "name": fn_name,
@@ -863,6 +958,24 @@ class AgentOrchestrator:
                     await usage(
                         knowledge["id"], "execution", conversation_id, source_run_id,
                     )
+            runtime.maintenance_context = {
+                "project_state": plan.to_dict() if plan else None,
+                "unresolved_work": [
+                    {"id": item.id, "title": item.title, "status": item.status}
+                    for item in plan.subtasks if item.status != "completed"
+                ] if plan else None,
+                "user_constraints": [
+                    "Preserve FULL_ACCESS policy",
+                    "Verify the task before reporting completion",
+                ],
+                "memory_refs": [
+                    item.get("key") or item.get("id")
+                    for item in context.get("memories", [])
+                    if isinstance(item, dict) and (item.get("key") or item.get("id"))
+                ],
+                "active_tool_refs": [],
+                "active_process_refs": [],
+            }
         except Exception as exc:
             yield {
                 "type": "error",
@@ -1061,6 +1174,7 @@ class AgentOrchestrator:
                     conversation_id=conversation_id,
                     goal=message,
                     task_result=full_response,
+                    source_run_id=runtime.run_id,
                     reviewer_evidence=[
                         item for item in self.trajectory_reviewer.evidence
                         if item.get("goal") == message
