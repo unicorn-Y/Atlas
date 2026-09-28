@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import os
 import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import structlog
@@ -24,6 +26,18 @@ from litellm import acompletion
 from typing_extensions import TypedDict
 
 from atlas.agent.capabilities import AgentCapabilityRegistry
+from atlas.agent.checkpoints import ShadowGitCheckpointStore
+from atlas.agent.enrichment import (
+    AtlasToolBridge,
+    CodeActRuntime,
+    ContextMaintenance,
+    DelegationService,
+    HookBus,
+    MemoryReflectionBridge,
+    ReminderPolicy,
+    SystemReminders,
+    TrajectoryReviewer,
+)
 from atlas.agent.planning import TaskPlan, requires_plan
 from atlas.config import get_config
 from atlas.memory import MemoryStore
@@ -69,6 +83,9 @@ class AgentRunContext:
     approval_callback: Callable[[str, str, dict], Any] | None = None
     event_queue: asyncio.Queue[Any] = field(default_factory=asyncio.Queue)
     run_id: str | None = None
+    goal: str | None = None
+    conversation_id: str | None = None
+    reminders: SystemReminders = field(default_factory=SystemReminders)
 
 
 _EVENT_STREAM_DONE = object()
@@ -126,12 +143,29 @@ class AgentOrchestrator:
         capability_registry: AgentCapabilityRegistry | None = None,
         local_execution: LocalExecutionRuntime | None = None,
         computer_use: ComputerUseRuntime | None = None,
+        agent_backend_host: Any | None = None,
+        hooks: HookBus | None = None,
+        trajectory_reviewer: TrajectoryReviewer | None = None,
+        checkpoint_store: ShadowGitCheckpointStore | None = None,
+        reminder_policy: ReminderPolicy | None = None,
     ) -> None:
         self._model_mgr = model_mgr
         self._memory = memory
         self._mcp = mcp_client
         self._local_execution = local_execution
         self._computer_use = computer_use
+        self.hooks = hooks or HookBus()
+        self.context_maintenance = ContextMaintenance(self.hooks)
+        self.reminder_policy = reminder_policy or ReminderPolicy()
+        self.trajectory_reviewer = trajectory_reviewer or TrajectoryReviewer()
+        self._reflection = MemoryReflectionBridge(memory)
+        self.checkpoints = checkpoint_store or ShadowGitCheckpointStore()
+        self._delegation = (
+            DelegationService(agent_backend_host, self.hooks) if agent_backend_host else None
+        )
+        self._codeact = CodeActRuntime(
+            AtlasToolBridge(local_execution, computer_use, mcp_client, self.checkpoints)
+        )
         self._capabilities = capability_registry or AgentCapabilityRegistry()
         self._graph = self._build_graph()
 
@@ -144,6 +178,46 @@ class AgentOrchestrator:
     ) -> Any:
         """Invoke a registered capability independently of the model provider."""
         return await self._capabilities.invoke(name, inputs)
+
+    async def delegate_task(
+        self, goal: str, context: str | None = None,
+        tool_profile: list[str] | None = None,
+    ) -> dict[str, Any]:
+        if self._delegation is None:
+            raise RuntimeError("No AgentBackendHost is configured for delegation")
+        return await self._delegation.delegate_task(goal, context, tool_profile)
+
+    async def execute_code(self, code: str) -> dict[str, Any]:
+        return await self._codeact.execute(code)
+
+    async def compact_context(self, context: dict[str, Any]) -> dict[str, Any]:
+        return await self.context_maintenance.compact(context)
+
+    def _checkpoint_path(self, raw_path: str, cwd: str | None = None) -> dict[str, Any]:
+        path = Path(os.path.expandvars(os.path.expanduser(raw_path)))
+        if not path.is_absolute():
+            path = Path(cwd or Path.cwd()) / path
+        path = path.resolve()
+        root = path.parent
+        while not root.exists() and root != root.parent:
+            root = root.parent
+        if not root.is_dir():
+            raise ValueError("no existing workspace directory for checkpoint")
+        relative = path.relative_to(root).as_posix()
+        return self.checkpoints.create_checkpoint(root, [relative])
+
+    async def reflect_completed_task(
+        self, *, conversation_id: str, goal: str, task_result: str,
+    ) -> dict[str, Any]:
+        return await self._reflection.reflect(
+            conversation_id=conversation_id, goal=goal, task_result=task_result,
+            reviewer_evidence=self.trajectory_reviewer.evidence,
+        )
+
+    async def _emit_hook(self, runtime: AgentRunContext, point: str, **payload: Any) -> None:
+        errors = await self.hooks.emit(point, **payload)
+        if errors and runtime.event_queue is not None:
+            await runtime.event_queue.put({"type": "hook_error", "point": point, "errors": errors})
 
     # -- graph construction --------------------------------------------------
 
@@ -194,9 +268,63 @@ class AgentOrchestrator:
             tools = [*tools, *self._local_execution.get_tools_for_llm()]
         if self._computer_use:
             tools = [*tools, *self._computer_use.get_tools_for_llm()]
+        tools = [*tools, {
+            "type": "function",
+            "function": {
+                "name": "execute_code",
+                "description": (
+                    "Run a bounded Python workflow using atlas.call_tool(name, arguments)."
+                ),
+                "parameters": {"type": "object", "properties": {
+                    "code": {"type": "string"},
+                }, "required": ["code"], "additionalProperties": False},
+            },
+        }]
+        tools.extend([
+            {"type": "function", "function": {"name": "create_checkpoint",
+             "description": "Create an Atlas shadow Git snapshot for explicit workspace paths.",
+             "parameters": {"type": "object", "properties": {
+                 "workspace": {"type": "string"}, "paths": {"type": "array",
+                 "items": {"type": "string"}},
+             }, "required": ["workspace", "paths"], "additionalProperties": False}}},
+            {"type": "function", "function": {"name": "list_checkpoints",
+             "description": "List shadow checkpoints for an optional workspace.",
+             "parameters": {"type": "object", "properties": {
+                 "workspace": {"type": "string"},
+             }, "additionalProperties": False}}},
+            {"type": "function", "function": {"name": "restore_checkpoint",
+             "description": "Restore the scoped files from an Atlas shadow checkpoint.",
+             "parameters": {"type": "object", "properties": {
+                 "checkpoint_id": {"type": "string"},
+             }, "required": ["checkpoint_id"], "additionalProperties": False}}},
+        ])
+        if self._delegation:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "delegate_task",
+                    "description": (
+                        "Delegate one bounded investigation to a disposable Agent session."
+                    ),
+                    "parameters": {"type": "object", "properties": {
+                        "goal": {"type": "string"}, "context": {"type": "string"},
+                        "tool_profile": {"type": "array", "items": {"type": "string"}},
+                    }, "required": ["goal"], "additionalProperties": False},
+                },
+            })
 
         # Convert LangChain messages to dicts for LiteLLM
         lc_messages = self._to_litellm_messages(state["messages"])
+        reminder = state["runtime"].reminders.at_turn(
+            state["tool_rounds"], goal=str(state["messages"][-1].content)[:240],
+            constraints=[
+                "Preserve FULL_ACCESS policy",
+                "Verify the task before reporting completion",
+            ],
+        )
+        if reminder:
+            lc_messages.append({"role": "system", "content": reminder})
+            await state["runtime"].event_queue.put({"type": "system_reminder", "content": reminder})
 
         kwargs: dict[str, Any] = {
             "model": litellm_model,
@@ -219,6 +347,10 @@ class AgentOrchestrator:
             return getattr(value, key, default)
 
         try:
+            await self._emit_hook(
+                runtime, "before_model", model=litellm_model, messages=lc_messages,
+                tools=[item["function"]["name"] for item in tools],
+            )
             response = await acompletion(**kwargs, stream=True)
             async for chunk in response:
                 delta = chunk.choices[0].delta
@@ -245,6 +377,7 @@ class AgentOrchestrator:
                 if get_value(chunk.choices[0], "finish_reason") is not None:
                     break
         except Exception as exc:
+            await self._emit_hook(runtime, "after_model", model=litellm_model, error=str(exc))
             has_image = any(
                 isinstance(message.content, list)
                 and any(
@@ -295,6 +428,11 @@ class AgentOrchestrator:
             if tc_list else AIMessage(content=full_text)
         )
 
+        await self._emit_hook(
+            runtime, "after_model", model=litellm_model, text=full_text,
+            tool_calls=tc_list,
+        )
+
         return {
             "messages": [ai_msg],
             "pending_events": state["pending_events"] + events,
@@ -327,6 +465,8 @@ class AgentOrchestrator:
             # Wait if paused
             if ctx.pause_event:
                 await ctx.pause_event.wait()
+
+            await self._emit_hook(ctx, "before_tool", name=fn_name, arguments=fn_args)
 
             # Approval gate for sensitive tools
             if fn_name in self.APPROVAL_REQUIRED_TOOLS and ctx.approval_callback:
@@ -376,7 +516,60 @@ class AgentOrchestrator:
                     })
 
             try:
-                if fn_name.startswith("local_") and self._local_execution:
+                if fn_name == "create_checkpoint":
+                    data = self.checkpoints.create_checkpoint(
+                        str(fn_args["workspace"]), list(fn_args["paths"]),
+                    )
+                    result = {"data": data, "content": [{"type": "text", "text": json.dumps(
+                        data, ensure_ascii=False,
+                    )}], "is_error": False}
+                elif fn_name == "list_checkpoints":
+                    data = self.checkpoints.list_checkpoints(fn_args.get("workspace"))
+                    result = {"data": data, "content": [{"type": "text", "text": json.dumps(
+                        data, ensure_ascii=False,
+                    )}], "is_error": False}
+                elif fn_name == "restore_checkpoint":
+                    data = self.checkpoints.restore_checkpoint(str(fn_args["checkpoint_id"]))
+                    result = {"data": data, "content": [{"type": "text", "text": json.dumps(
+                        data, ensure_ascii=False,
+                    )}], "is_error": False}
+                elif fn_name == "execute_code":
+                    result = {"data": await self.execute_code(str(fn_args.get("code", "")))}
+                    result["content"] = [{"type": "text", "text": json.dumps(
+                        result["data"], ensure_ascii=False,
+                    )}]
+                    result["is_error"] = result["data"].get("exit_code") != 0
+                elif fn_name == "delegate_task":
+                    result = {"data": await self.delegate_task(
+                        str(fn_args["goal"]), fn_args.get("context"), fn_args.get("tool_profile"),
+                    )}
+                    result["content"] = [{"type": "text", "text": json.dumps(
+                        result["data"], ensure_ascii=False,
+                    )}]
+                    result["is_error"] = False
+                elif fn_name.startswith("local_") and self._local_execution:
+                    if fn_name == "local_file" and fn_args.get("action") in {
+                        "write", "append", "mkdir", "copy", "move", "delete",
+                    }:
+                        try:
+                            checkpoint = self._checkpoint_path(
+                                str(fn_args["path"]), fn_args.get("cwd"),
+                            )
+                            if fn_args.get("destination") and fn_args["action"] in {
+                                "copy", "move",
+                            }:
+                                self._checkpoint_path(
+                                    str(fn_args["destination"]), fn_args.get("cwd"),
+                                )
+                            await ctx.event_queue.put({
+                                "type": "checkpoint_created", "checkpoint": checkpoint,
+                                "tool": fn_name,
+                            })
+                        except Exception as exc:
+                            await ctx.event_queue.put({
+                                "type": "checkpoint_error", "tool": fn_name,
+                                "detail": str(exc),
+                            })
                     result = await self._local_execution.call_tool(
                         fn_name, fn_args, run_id=ctx.run_id,
                         output_callback=report_process_output,
@@ -393,6 +586,8 @@ class AgentOrchestrator:
                     "content": [{"type": "text", "text": f"Tool call failed: {exc}"}],
                     "is_error": True,
                 }
+
+            await self._emit_hook(ctx, "after_tool", name=fn_name, arguments=fn_args, result=result)
 
             # Keep user-facing runtime events bounded. The full process log
             # remains available through local_process.read using execution_id.
@@ -458,6 +653,37 @@ class AgentOrchestrator:
                 )
             )
 
+        if self.trajectory_reviewer.reviewer is not None:
+            try:
+                review = await self.trajectory_reviewer.review_trajectory(
+                    events[-8:], ctx.goal or "",
+                )
+            except Exception as exc:
+                review = {
+                    "decision": "continue", "guidance": None, "enabled": True,
+                    "error": str(exc),
+                }
+                log.warning("agent.trajectory_review_failed", error=str(exc))
+                await ctx.event_queue.put({"type": "trajectory_review_error", "detail": str(exc)})
+            if review["decision"] == "corrective_guidance" and review.get("guidance"):
+                guidance = str(review["guidance"])[:1000]
+                tool_messages.append(SystemMessage(
+                    content="Trajectory reviewer guidance (advisory; continue the task): "
+                    + guidance,
+                ))
+                await ctx.event_queue.put({"type": "trajectory_review", **review})
+            if ctx.conversation_id:
+                try:
+                    await self._memory.record_agent_reflection(
+                        category="runtime", component="trajectory_reviewer",
+                        summary=f"Trajectory review: {review['decision']}",
+                        resolution_hint=str(review.get("guidance") or "Continue task."),
+                        source_conversation_id=ctx.conversation_id,
+                        source_run_id=ctx.run_id, model=self._model_mgr.current_litellm_model,
+                    )
+                except Exception as exc:
+                    log.warning("agent.trajectory_evidence_failed", error=str(exc))
+
         return {
             "messages": tool_messages,
             "pending_events": state["pending_events"] + events,
@@ -509,6 +735,9 @@ class AgentOrchestrator:
             pause_event=pause_event,
             approval_callback=approval_callback,
             run_id=run_id or source_run_id,
+            goal=message,
+            conversation_id=conversation_id,
+            reminders=SystemReminders(self.reminder_policy),
         )
 
         # Resolve model
@@ -728,6 +957,7 @@ class AgentOrchestrator:
                 content=self._multimodal_content(message, image_attachments)
             )
 
+
         async def execute_graph() -> dict[str, Any]:
             try:
                 return await self._graph.ainvoke({
@@ -781,6 +1011,11 @@ class AgentOrchestrator:
                 except Exception as exc:
                     log.warning("agent.plan_verification_failed", error=str(exc))
 
+            await self._emit_hook(
+                runtime, "before_response", conversation_id=conversation_id,
+                goal=message, response=full_response,
+            )
+
             if evaluate_goal and plan and all(
                 item.status == "completed" for item in plan.subtasks
             ):
@@ -810,14 +1045,39 @@ class AgentOrchestrator:
                     "detail": f"Unable to save assistant message: {e}",
                 }
                 return
+            memory_candidates: list[dict[str, Any]] | None = None
             try:
-                await self._memory.extract_conversation_candidates(conversation_id)
+                memory_candidates = await self._memory.extract_conversation_candidates(
+                    conversation_id,
+                )
             except Exception as exc:
                 log.warning(
                     "memory.candidate_extraction_failed",
                     conversation_id=conversation_id,
                     error=str(exc),
                 )
+            try:
+                reflection = await self._reflection.reflect(
+                    conversation_id=conversation_id,
+                    goal=message,
+                    task_result=full_response,
+                    reviewer_evidence=[
+                        item for item in self.trajectory_reviewer.evidence
+                        if item.get("goal") == message
+                    ],
+                    memory_candidates=memory_candidates,
+                )
+                yield {"type": "memory_reflection", "reflection": reflection}
+            except Exception as exc:
+                log.warning(
+                    "memory.reflection_failed", conversation_id=conversation_id,
+                    error=str(exc),
+                )
+                yield {"type": "memory_reflection_error", "detail": str(exc)}
+            await self._emit_hook(
+                runtime, "after_response", conversation_id=conversation_id,
+                goal=message, response=full_response,
+            )
             yield {
                 "type": "done",
                 "message_id": msg_id,
@@ -832,6 +1092,7 @@ class AgentOrchestrator:
                 "detail": str(e),
             }
         finally:
+            await self._emit_hook(runtime, "agent_stop", conversation_id=conversation_id)
             if not graph_task.done():
                 graph_task.cancel()
             await asyncio.gather(graph_task, return_exceptions=True)

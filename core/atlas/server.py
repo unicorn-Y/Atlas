@@ -43,6 +43,13 @@ from atlas.agent.capabilities import (
     register_skill_dependency_capability,
     register_skill_discovery_capability,
 )
+from atlas.agent.checkpoints import ShadowGitCheckpointStore
+from atlas.agent.enrichment import (
+    AtlasToolBridge,
+    CodeActRuntime,
+    DelegationService,
+    MemoryReflectionBridge,
+)
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.agent.planning import TaskPlan
 from atlas.capabilities.browser.browser_use import BrowserUseAdapter
@@ -64,6 +71,7 @@ from atlas.skills.acquisition import (
     inspect_github_source,
     install_acquisition,
 )
+from atlas.skills.bundles import PluginBundleDiscovery
 from atlas.skills.dependencies import dependency_preflight
 from atlas.skills.discovery import SkillDiscovery
 from atlas.skills.distribution import inspect_skill_package
@@ -497,6 +505,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     register_skill_dependency_capability(capabilities, skill_mgr, skill_registry, mcp_client)
     register_skill_discovery_capability(capabilities, skill_registry)
     register_skill_catalog_capabilities(capabilities, skill_catalog_provider, skill_registry)
+    checkpoints = ShadowGitCheckpointStore(cfg.db_path.parent / "checkpoints")
+    bundles = PluginBundleDiscovery()
     capabilities.register(
         "local.full_access",
         description="Canonical P18A local execution tools (PowerShell, process, files, Git).",
@@ -551,12 +561,86 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "durable.dbos.status", description="Report DBOS installation and database readiness.",
         handler=lambda _inputs: dbos_status(), source="dbos-inc/dbos-transact-py",
     )
+    capabilities.register(
+        "agent.execute_code",
+        description="Run a bounded Python workflow through the shared Atlas tool bridge.",
+        handler=lambda inputs: CodeActRuntime(
+            AtlasToolBridge(local_execution, computer_use, mcp_client, checkpoints),
+        ).execute(str(inputs["code"])),
+        source="Hermes execute_code pattern",
+    )
+    capabilities.register(
+        "agent.compact_context",
+        description="Snapshot resume-critical task context before compaction.",
+        handler=lambda inputs: orchestrator.context_maintenance.compact(inputs),
+        source="Codex/OpenCode context maintenance",
+    )
+    capabilities.register(
+        "agent.compaction.should_trigger",
+        description="Return whether a session has reached its configured compaction threshold.",
+        handler=lambda inputs: {
+            "should_compact": orchestrator.context_maintenance.should_compact(
+                list(inputs.get("messages", [])),
+                message_limit=int(inputs.get("message_limit", 80)),
+                character_limit=int(inputs.get("character_limit", 80_000)),
+            ),
+        },
+        source="Codex/OpenCode context maintenance",
+    )
+    capabilities.register(
+        "agent.memory.reflect",
+        description="Propose task learning through the governed MemoryOS candidate path.",
+        handler=lambda inputs: MemoryReflectionBridge(memory).reflect(
+            conversation_id=str(inputs.get("conversation_id", "")),
+            goal=str(inputs["goal"]), task_result=str(inputs["task_result"]),
+            reviewer_evidence=list(inputs.get("reviewer_evidence", [])),
+        ),
+        source="Letta/Hermes reflection pattern",
+    )
+    capabilities.register(
+        "workspace.checkpoint.create",
+        description="Snapshot explicitly scoped workspace paths outside the repository.",
+        handler=lambda inputs: checkpoints.create_checkpoint(
+            str(inputs["workspace"]), list(inputs["paths"]),
+        ),
+        source="google-gemini/gemini-cli",
+    )
+    capabilities.register(
+        "workspace.checkpoint.list",
+        description="List Atlas shadow checkpoints, optionally for one workspace.",
+        handler=lambda inputs: checkpoints.list_checkpoints(inputs.get("workspace")),
+        source="google-gemini/gemini-cli",
+    )
+    capabilities.register(
+        "workspace.checkpoint.restore",
+        description="Restore the scoped paths in an Atlas shadow checkpoint.",
+        handler=lambda inputs: checkpoints.restore_checkpoint(str(inputs["checkpoint_id"])),
+        source="google-gemini/gemini-cli",
+    )
+    capabilities.register(
+        "plugin.bundle.discover",
+        description="Discover normalized plugin bundle declarations and plain Atlas Skills.",
+        handler=lambda _inputs: bundles.discover([SKILLS_DIR], skill_mgr.list_skills()),
+        source="ZCode/Gemini plugin manifest pattern",
+    )
+    if agent_backend_host:
+        capabilities.register(
+            "agent.delegate_task",
+            description="Delegate one bounded investigation to a disposable Agent session.",
+            handler=lambda inputs: DelegationService(
+                agent_backend_host, orchestrator.hooks,
+            ).delegate_task(
+                str(inputs["goal"]), inputs.get("context"), inputs.get("tool_profile"),
+            ),
+            source="Claude/Hermes disposable delegation pattern",
+        )
 
     orchestrator = AgentOrchestrator(
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
         capability_registry=capabilities,
         local_execution=local_execution,
         computer_use=computer_use,
+        agent_backend_host=agent_backend_host,
     )
 
     if cfg.scheduler_enabled:
