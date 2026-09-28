@@ -57,6 +57,7 @@ from atlas.capabilities.coding import ast_grep as ast_grep_capability
 from atlas.capabilities.coding.repo_map import repo_map
 from atlas.capabilities.computer.cua_backend import CuaBackend
 from atlas.capabilities.computer.uia_backend import list_windows as list_uia_windows
+from atlas.capabilities.durable.dbos_backend import DurableBackend
 from atlas.capabilities.durable.dbos_backend import status as dbos_status
 from atlas.config import get_config
 from atlas.memory.store import MemoryStore
@@ -108,6 +109,7 @@ log = structlog.get_logger()
 model_mgr: ModelManager | None = None
 memory: MemoryStore | None = None
 projects: ProjectStore | None = None
+durable: DurableBackend | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 local_execution: LocalExecutionRuntime | None = None
@@ -157,6 +159,25 @@ def _register_local_skills(skill_manager: SkillManager, registry: SkillRegistry)
             "keywords": skill.tags,
             "use_cases": [],
         }, source="local")
+
+
+async def _durable_dispatcher(payload: dict[str, Any]) -> dict[str, Any]:
+    """Bridge a durable workflow step back onto the live server runtime."""
+    task_id = str(payload.get("task_id", ""))
+    message = str(payload.get("message", ""))
+    await _run_scheduled_goal(task_id, message)
+    return {"status": "completed", "task_id": task_id}
+
+
+async def _scheduled_goal(task_id: str, message: str) -> None:
+    """Durable-first scheduler callback with direct fallback."""
+    if durable is not None and durable.started:
+        try:
+            await durable.run_agent_task({"task_id": task_id, "message": message})
+            return
+        except Exception as exc:
+            log.error("durable.agent_task_failed", task_id=task_id, error=str(exc))
+    await _run_scheduled_goal(task_id, message)
 
 
 async def _run_scheduled_goal(task_id: str, message: str) -> None:
@@ -482,13 +503,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
     global capability_bus, cua_backend, browser_use, agent_backend_host
-    global projects
+    global projects, durable
 
     model_mgr = ModelManager()
     memory = MemoryStore()
     await memory.init()
     projects = ProjectStore(get_config().db_path.parent / "projects.db")
     await projects.init()
+    durable = DurableBackend(get_config().db_path.parent / "dbos.sqlite")
+    durable.set_dispatcher(_durable_dispatcher, asyncio.get_running_loop())
+    durable.start()
     await runtime_mgr.init(get_config().db_path)
 
     mcp_client = MCPClient()
@@ -565,6 +589,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     capabilities.register(
         "durable.dbos.status", description="Report DBOS installation and database readiness.",
         handler=lambda _inputs: dbos_status(), source="dbos-inc/dbos-transact-py",
+    )
+    capabilities.register(
+        "durable.agent_task.run",
+        description="Run one agent task as a DBOS durable workflow (crash-resumable).",
+        handler=lambda inputs: durable.run_agent_task({
+            "task_id": str(inputs.get("task_id", "adhoc")),
+            "message": str(inputs.get("message", "")),
+        }),
+        source="dbos-inc/dbos-transact-py",
     )
     capabilities.register(
         "memory.session_search",
@@ -659,7 +692,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     if cfg.scheduler_enabled:
-        scheduler = AtlasScheduler(agent_callback=_run_scheduled_goal)
+        scheduler = AtlasScheduler(agent_callback=_scheduled_goal)
         await scheduler.start()
 
     yield  # app is running
@@ -680,6 +713,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await browser_use.close(session_id)
     if agent_backend_host:
         await agent_backend_host.shutdown()
+    if durable:
+        durable.stop()
     if projects:
         await projects.close()
     if memory:
