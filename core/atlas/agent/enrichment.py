@@ -164,9 +164,11 @@ class AtlasToolBridge:
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if name.startswith("local_") and self.local is not None:
-            if name == "local_file" and arguments.get("action") in {
-                "write", "append", "mkdir", "copy", "move", "delete",
-            } and self.checkpoints is not None:
+            if (name == "local_edit" or (
+                name == "local_file" and arguments.get("action") in {
+                    "write", "append", "mkdir", "copy", "move", "delete",
+                }
+            )) and self.checkpoints is not None:
                 self._checkpoint_file_targets(arguments)
             return await self.local.call_tool(name, arguments)
         if name.startswith("computer_") and self.computer is not None:

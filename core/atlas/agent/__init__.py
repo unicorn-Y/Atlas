@@ -771,9 +771,11 @@ class AgentOrchestrator:
                     )}]
                     result["is_error"] = False
                 elif fn_name.startswith("local_") and self._local_execution:
-                    if fn_name == "local_file" and fn_args.get("action") in {
-                        "write", "append", "mkdir", "copy", "move", "delete",
-                    }:
+                    if fn_name == "local_edit" or (
+                        fn_name == "local_file" and fn_args.get("action") in {
+                            "write", "append", "mkdir", "copy", "move", "delete",
+                        }
+                    ):
                         try:
                             checkpoint = self._checkpoint_path(
                                 str(fn_args["path"]), fn_args.get("cwd"),

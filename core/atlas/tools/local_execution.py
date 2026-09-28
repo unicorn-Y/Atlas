@@ -144,6 +144,23 @@ LOCAL_TOOLS = [
         ["action", "path"],
     ),
     _tool(
+        "local_edit",
+        (
+            "Make a precise string-replacement edit in an existing text file. "
+            "You must local_file-read the file first; old_string must match exactly "
+            "and uniquely unless replace_all is set."
+        ),
+        {
+            "path": {"type": "string"},
+            "old_string": {"type": "string"},
+            "new_string": {"type": "string"},
+            "replace_all": {"type": "boolean"},
+            "encoding": {"type": "string"},
+            "cwd": {"type": "string"},
+        },
+        ["path", "old_string", "new_string"],
+    ),
+    _tool(
         "local_git",
         (
             "Use the installed Git CLI in any local repository. Supports status, diff, log, "
@@ -217,6 +234,7 @@ class LocalExecutionRuntime:
         self.output_callback = output_callback
         self._processes: dict[str, LocalProcess] = {}
         self._closed = False
+        self._read_paths: set[str] = set()
 
     def get_tools_for_llm(self) -> list[dict[str, Any]]:
         return LOCAL_TOOLS
@@ -240,6 +258,8 @@ class LocalExecutionRuntime:
         try:
             if name == "local_file":
                 data = await asyncio.to_thread(self._file_operation, args)
+            elif name == "local_edit":
+                data = await asyncio.to_thread(self._edit_operation, args)
             elif name == "local_git":
                 data = await self._git_operation(args, run_id, output_callback)
             elif name == "local_shell":
@@ -272,6 +292,45 @@ class LocalExecutionRuntime:
         }
 
     @staticmethod
+    def _error(message: str) -> dict[str, Any]:
+        return {
+            "data": {"error": message},
+            "content": [{"type": "text", "text": message}],
+            "is_error": True,
+        }
+
+    def _edit_operation(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Precise string-replacement edit: read-before-edit + uniqueness."""
+        path = self._path(args.get("path"), args.get("cwd"))
+        old_string = str(args.get("old_string", ""))
+        new_string = str(args.get("new_string", ""))
+        replace_all = bool(args.get("replace_all", False))
+        if not old_string:
+            raise ValueError("old_string is required (use local_file write for new files)")
+        if str(path) not in self._read_paths:
+            raise ValueError(
+                f"read the file first with local_file action=read ({path})"
+            )
+        content = path.read_text(encoding=str(args.get("encoding", "utf-8")))
+        count = content.count(old_string)
+        if count == 0:
+            raise ValueError("old_string not found in file (file may have changed)")
+        if count > 1 and not replace_all:
+            raise ValueError(
+                f"old_string matches {count} locations; add more context or set replace_all"
+            )
+        updated = content.replace(old_string, new_string) if replace_all else (
+            content.replace(old_string, new_string, 1)
+        )
+        path.write_text(updated, encoding=str(args.get("encoding", "utf-8")))
+        replacements = count if replace_all else 1
+        return {
+            "path": str(path),
+            "replacements": replacements,
+            "size": len(updated.encode(str(args.get("encoding", "utf-8")))),
+        }
+
+    @staticmethod
     def _path(raw: str | None, cwd: str | None = None) -> Path:
         if not raw:
             raise ValueError("path is required")
@@ -286,6 +345,7 @@ class LocalExecutionRuntime:
         encoding = str(args.get("encoding", "utf-8"))
         if action == "read":
             raw = path.read_bytes()
+            self._read_paths.add(str(path))
             return {
                 "path": str(path),
                 "size": len(raw),
