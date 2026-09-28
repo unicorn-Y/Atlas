@@ -19,6 +19,7 @@
 - Cua observation identified PID `30536`, HWND `11278348`, editor role `Document`, and snapshot `s00000001`.
 - Targeted semantic Cua editing and File-menu save completed. P18A reread the exact target file and confirmed the intended content (`p18a_exact_readback: pass`).
 - The exact test tab was located by its UIA `TabItem` and its own child close button; only that test tab was closed. The pre-existing `atlas-cua-probe.txt` tab and Notepad process were preserved.
+- The real desktop flow above used the target-addressed Computer Use runtime directly. An extra opt-in `AgentOrchestrator`→Notepad harness attempt failed before any Notepad action: its deterministic provider received a tool-less auxiliary request (`model`, `messages`, `max_tokens`) and could not emit the scripted `local_file` call. That harness was not accepted as passing and was removed; full normal-Agent orchestration through Notepad remains unverified. This does not invalidate the separately completed desktop target/edit/save/readback flow or the normal-Agent browser acceptance.
 
 ## Packaged responsiveness and clean-user acceptance
 
@@ -60,6 +61,7 @@
 - The user's external Gemini token remains invalid; acceptance used the taskbook's local deterministic provider.
 - Hermes emitted its existing warning that a prior update had not restarted running gateways, but the requested minimal prompt still returned `PONG`.
 - Release build emitted existing optional-module warnings for Redis/OCI collection, a Vite large-chunk warning, and unsigned-package notices; the build completed and generated the installer manifest.
+- Temporary verification directories remain untracked at `_tmp/` and `data/pytest-tmp/`; the shell policy rejected the requested recursive cleanup. They are excluded from the commit. The pre-existing untracked product-comparison `.docx` was also preserved and excluded.
 
 ## Commit and remote verification
 
