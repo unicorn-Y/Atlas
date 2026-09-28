@@ -62,8 +62,8 @@ from atlas.capabilities.durable.dbos_backend import status as dbos_status
 from atlas.config import get_config
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
-from atlas.plugins import PluginRuntime
 from atlas.notifications import NotificationBus
+from atlas.plugins import PluginRuntime
 from atlas.projects import ProjectStore
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.capability_bus import CapabilityBus
@@ -101,6 +101,7 @@ from atlas.tools.computer_use import ComputerUseRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 from atlas.tools.node_runtime import get_node_runtime_status
+from atlas.tools.web import WebRuntime
 
 log = structlog.get_logger()
 
@@ -605,6 +606,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "durable.dbos.status", description="Report DBOS installation and database readiness.",
         handler=lambda _inputs: dbos_status(), source="dbos-inc/dbos-transact-py",
     )
+    web_runtime = WebRuntime()
+    capabilities.register(
+        "web.search",
+        description="Search the public web (DuckDuckGo) and return result links.",
+        handler=lambda inputs: web_runtime.web_search(
+            str(inputs.get("query", "")), int(inputs.get("max_results", 5)),
+        ),
+        source="duckduckgo/html",
+    )
+    capabilities.register(
+        "web.fetch",
+        description="Download a web page and return readable text.",
+        handler=lambda inputs: web_runtime.web_fetch(
+            str(inputs.get("url", "")), int(inputs.get("max_chars", 8000)),
+        ),
+        source="duckduckgo/html",
+    )
     capabilities.register(
         "notifications.send",
         description="Send a user notification through the configured Apprise targets.",
@@ -712,6 +730,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         local_execution=local_execution,
         computer_use=computer_use,
         agent_backend_host=agent_backend_host,
+        web_runtime=WebRuntime(),
     )
 
     plugin_runtime = PluginRuntime(

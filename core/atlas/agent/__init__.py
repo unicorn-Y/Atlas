@@ -45,6 +45,7 @@ from atlas.models import ModelManager
 from atlas.tools.computer_use import ComputerUseRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
+from atlas.tools.web import WEB_TOOLS as _WEB_TOOLS
 
 log = structlog.get_logger()
 
@@ -145,6 +146,7 @@ class AgentOrchestrator:
         capability_registry: AgentCapabilityRegistry | None = None,
         local_execution: LocalExecutionRuntime | None = None,
         computer_use: ComputerUseRuntime | None = None,
+        web_runtime: Any | None = None,
         agent_backend_host: Any | None = None,
         hooks: HookBus | None = None,
         trajectory_reviewer: TrajectoryReviewer | None = None,
@@ -156,6 +158,7 @@ class AgentOrchestrator:
         self._mcp = mcp_client
         self._local_execution = local_execution
         self._computer_use = computer_use
+        self._web = web_runtime
         self.hooks = hooks or HookBus()
         self.context_maintenance = ContextMaintenance(self.hooks)
         self.reminder_policy = reminder_policy or ReminderPolicy()
@@ -303,6 +306,8 @@ class AgentOrchestrator:
             tools = [*tools, *self._local_execution.get_tools_for_llm()]
         if self._computer_use:
             tools = [*tools, *self._computer_use.get_tools_for_llm()]
+        if self._web is not None:
+            tools = [*tools, *_WEB_TOOLS]
         if self._memory is not None:
             tools = [*tools, {
                 "type": "function",
@@ -698,6 +703,8 @@ class AgentOrchestrator:
                     )
                 elif fn_name.startswith("computer_") and self._computer_use:
                     result = await self._computer_use.call_tool(fn_name, fn_args)
+                elif fn_name in {"web_search", "web_fetch"} and self._web is not None:
+                    result = await self._web.call_tool(fn_name, fn_args)
                 elif fn_name == "session_search" and self._memory is not None:
                     results = await self._memory.session_search(
                         str(fn_args.get("query", "")),
