@@ -147,6 +147,7 @@ class AgentOrchestrator:
         local_execution: LocalExecutionRuntime | None = None,
         computer_use: ComputerUseRuntime | None = None,
         web_runtime: Any | None = None,
+        skill_manager: Any | None = None,
         agent_backend_host: Any | None = None,
         hooks: HookBus | None = None,
         trajectory_reviewer: TrajectoryReviewer | None = None,
@@ -159,6 +160,7 @@ class AgentOrchestrator:
         self._local_execution = local_execution
         self._computer_use = computer_use
         self._web = web_runtime
+        self._skills = skill_manager
         self.hooks = hooks or HookBus()
         self.context_maintenance = ContextMaintenance(self.hooks)
         self.reminder_policy = reminder_policy or ReminderPolicy()
@@ -178,6 +180,33 @@ class AgentOrchestrator:
     def capabilities(self) -> AgentCapabilityRegistry:
         """Public access to the capability registry (plugin/endpoint use)."""
         return self._capabilities
+
+    async def _use_skill_result(self, raw_name: str) -> dict[str, Any]:
+        """Activate a skill and wrap its instructions as a tool result."""
+        name = raw_name.strip()
+        if not name:
+            return {
+                "data": {"error": "skill name is required"},
+                "content": [{"type": "text", "text": "skill name is required"}],
+                "is_error": True,
+            }
+        try:
+            content = await self._skills.activate(name.strip())
+        except Exception as exc:
+            content = None
+            log.warning("agent.use_skill.failed", name=name, error=str(exc))
+        if not content:
+            message = f"Unknown skill: {name}"
+            return {
+                "data": {"error": message},
+                "content": [{"type": "text", "text": message}],
+                "is_error": True,
+            }
+        return {
+            "data": {"skill": name, "loaded": True},
+            "content": [{"type": "text", "text": str(content)}],
+            "is_error": False,
+        }
 
     def discover_capabilities(self) -> list[dict[str, str]]:
         """Return registered capabilities without involving model execution."""
@@ -308,6 +337,21 @@ class AgentOrchestrator:
             tools = [*tools, *self._computer_use.get_tools_for_llm()]
         if self._web is not None:
             tools = [*tools, *_WEB_TOOLS]
+        if self._skills is not None:
+            tools = [*tools, {
+                "type": "function",
+                "function": {
+                    "name": "use_skill",
+                    "description": (
+                        "Load an Atlas Skill's full instructions into this conversation. "
+                        "Call this when the task matches one of the skills listed in the "
+                        "skill index system message, then follow the returned instructions."
+                    ),
+                    "parameters": {"type": "object", "properties": {
+                        "name": {"type": "string"},
+                    }, "required": ["name"], "additionalProperties": False},
+                },
+            }]
         if self._memory is not None:
             tools = [*tools, {
                 "type": "function",
@@ -703,6 +747,8 @@ class AgentOrchestrator:
                     )
                 elif fn_name.startswith("computer_") and self._computer_use:
                     result = await self._computer_use.call_tool(fn_name, fn_args)
+                elif fn_name == "use_skill" and self._skills is not None:
+                    result = await self._use_skill_result(str(fn_args.get("name", "")))
                 elif fn_name in {"web_search", "web_fetch"} and self._web is not None:
                     result = await self._web.call_tool(fn_name, fn_args)
                 elif fn_name == "session_search" and self._memory is not None:
@@ -1038,6 +1084,20 @@ class AgentOrchestrator:
                 "Apply its instructions to this run.\n\n"
                 + skill["content"]
             )))
+        if self._skills is not None:
+            try:
+                skill_index = [
+                    {"name": item.name, "description": item.description[:80]}
+                    for item in self._skills.list_skills()[:60]
+                ]
+            except Exception:
+                skill_index = []
+            if skill_index:
+                initial_messages.append(SystemMessage(content=(
+                    "Atlas Skill index (call use_skill(name) to load full instructions "
+                    "when one matches this task):\n"
+                    + json.dumps(skill_index, ensure_ascii=False)
+                )))
         if plan:
             initial_messages.append(SystemMessage(content=(
                 "Follow this structured task plan. Complete pending subtasks in order. "

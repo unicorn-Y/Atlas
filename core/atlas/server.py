@@ -731,6 +731,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         computer_use=computer_use,
         agent_backend_host=agent_backend_host,
         web_runtime=WebRuntime(),
+        skill_manager=skill_mgr,
     )
 
     plugin_runtime = PluginRuntime(
