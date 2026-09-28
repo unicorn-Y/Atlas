@@ -9,6 +9,7 @@ from typing import Any
 class CuaBackend:
     def __init__(self) -> None:
         self._driver: Any = None
+        self._tools: list[dict[str, Any]] | None = None
 
     async def connect(self) -> dict[str, Any]:
         from cua_driver import CuaDriver
@@ -30,16 +31,48 @@ class CuaBackend:
     async def tools(self) -> list[dict[str, Any]]:
         if self._driver is None:
             await self.connect()
-        raw = await self._driver.list_tools_json()
-        result = json.loads(raw) if isinstance(raw, str) else raw
-        return result if isinstance(result, list) else result.get("tools", [])
+        if self._tools is None:
+            raw = await self._driver.list_tools_json()
+            result = json.loads(raw) if isinstance(raw, str) else raw
+            self._tools = result if isinstance(result, list) else result.get("tools", [])
+        return self._tools
 
     async def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if self._driver is None:
             await self.connect()
-        result = await self._driver.call_tool(name, json.dumps(arguments))
-        if hasattr(result, "model_dump"):
-            return result.model_dump(mode="json")
+        tool = next((item for item in await self.tools() if item.get("name") == name), None)
+        if tool is None:
+            raise ValueError(f"Cua Driver does not expose tool {name!r}")
+        schema = tool.get("inputSchema", tool.get("input_schema", {}))
+        properties = schema.get("properties", {})
+        supported = {key: value for key, value in arguments.items() if key in properties}
+        missing = set(schema.get("required", [])) - supported.keys()
+        if missing:
+            raise ValueError(f"Cua Driver tool {name!r} requires {sorted(missing)}")
+        result = await self._driver.call_tool(name, json.dumps(supported))
+        raw = (
+            result.model_dump(mode="json", by_alias=True)
+            if hasattr(result, "model_dump")
+            else None
+        )
+        if isinstance(raw, dict):
+            text = raw.get("text", "")
+            structured_content = raw.get(
+                "structuredContent", raw.get("structured_content"),
+            )
+            if structured_content is None:
+                structured_json = raw.get("structured_json")
+                if structured_json:
+                    try:
+                        structured_content = json.loads(structured_json)
+                    except (TypeError, ValueError):
+                        structured_content = None
+            return {
+                "text": text,
+                "content": raw.get("content", []),
+                "is_error": raw.get("isError", raw.get("is_error", False)),
+                "structured_content": structured_content,
+            }
         structured_json = getattr(result, "structured_json", None)
         try:
             structured_content = json.loads(structured_json) if structured_json else None
@@ -47,6 +80,7 @@ class CuaBackend:
             structured_content = None
         return {
             "text": getattr(result, "text", str(result)),
+            "content": getattr(result, "content", []),
             "is_error": getattr(result, "is_error", False),
             "structured_content": structured_content,
         }

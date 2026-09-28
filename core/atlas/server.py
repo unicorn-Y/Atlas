@@ -489,9 +489,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     mcp_client = MCPClient()
     await mcp_client.start()
     local_execution = LocalExecutionRuntime()
-    computer_use = ComputerUseRuntime()
-    capability_bus = CapabilityBus(dict(get_config().raw.get("integrations", {})))
     cua_backend = CuaBackend()
+    computer_use = ComputerUseRuntime(cua_backend=cua_backend)
+    capability_bus = CapabilityBus(dict(get_config().raw.get("integrations", {})))
     browser_use = BrowserUseAdapter()
     agent_backend_host = AgentBackendHost()
 
@@ -1449,11 +1449,11 @@ async def list_tools() -> dict[str, Any]:
 
 
 @app.get("/api/integrations")
-async def list_integrations() -> dict[str, Any]:
+async def list_integrations(refresh: bool = Query(False)) -> dict[str, Any]:
     """Return the shared upstream capability registry."""
     if capability_bus is None:
         return {"count": 0, "ready": 0, "degraded": 0, "capabilities": []}
-    result = capability_bus.status()
+    result = await asyncio.to_thread(capability_bus.status, refresh)
     runtime = mcp_client.get_runtime_status() if mcp_client else {"servers": []}
     server_states = {item["name"]: item for item in runtime.get("servers", [])}
     server_ids = {"playwright": "mcp.playwright", "chrome-devtools": "mcp.chrome_devtools"}
@@ -1494,7 +1494,9 @@ async def set_integration_enabled(
     capability_id: str, req: IntegrationToggleRequest,
 ) -> dict[str, Any]:
     """Enable or disable an optional integration for this runtime."""
-    if capability_bus is None or not capability_bus.set_enabled(capability_id, req.enabled):
+    if capability_bus is None or not await asyncio.to_thread(
+        capability_bus.set_enabled, capability_id, req.enabled,
+    ):
         raise HTTPException(status_code=404, detail=f"Integration not found: {capability_id}")
     server_names = {"mcp.playwright": "playwright", "mcp.chrome_devtools": "chrome-devtools"}
     server_name = server_names.get(capability_id)

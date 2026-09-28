@@ -129,6 +129,160 @@ def test_computer_use_defaults_to_full_access_and_exposes_native_tools() -> None
     }
 
 
+def test_native_focus_denial_remains_an_explicit_failure(monkeypatch) -> None:
+    runtime = ComputerUseRuntime.__new__(ComputerUseRuntime)
+    runtime._user32 = type("User32", (), {"IsWindow": staticmethod(lambda _hwnd: True)})()
+    monkeypatch.setattr(runtime, "_window_record", lambda _hwnd: {"bounds": {}})
+    monkeypatch.setattr(
+        runtime, "_focus_window",
+        lambda _hwnd: (_ for _ in ()).throw(RuntimeError("Windows denied focus activation")),
+    )
+
+    with pytest.raises(RuntimeError, match="Windows denied focus activation"):
+        runtime._window({"action": "focus", "window_id": 123})
+
+
+@pytest.mark.asyncio
+async def test_targeted_keyboard_uses_cua_background_and_keeps_thin_tool_surface() -> None:
+    class Cua:
+        calls = []
+
+        async def call(self, name, arguments):
+            self.calls.append((name, arguments))
+            return {"text": "typed", "is_error": False, "structured_content": {"ok": True}}
+
+    cua = Cua()
+    runtime = ComputerUseRuntime(cua_backend=cua)
+    result = await runtime.call_tool("computer_keyboard", {
+        "action": "type", "text": "Targeted text", "pid": 22, "window_id": 33,
+    })
+
+    assert not result["is_error"]
+    assert cua.calls == [("type_text", {
+        "text": "Targeted text", "pid": 22, "window_id": 33,
+        "delivery_mode": "background",
+    })]
+    assert {item["function"]["name"] for item in runtime.get_tools_for_llm()} == {
+        "computer_observe", "computer_window", "computer_mouse",
+        "computer_keyboard", "computer_clipboard",
+    }
+
+
+@pytest.mark.asyncio
+async def test_targeted_text_uses_semantic_cua_value_action_for_snapshot_element() -> None:
+    class Cua:
+        calls = []
+
+        async def call(self, name, arguments):
+            self.calls.append((name, arguments.copy()))
+            return {"text": "set", "is_error": False}
+
+    cua = Cua()
+    runtime = ComputerUseRuntime(cua_backend=cua)
+    result = await runtime.call_tool("computer_keyboard", {
+        "action": "type", "text": "Document content", "pid": 22, "window_id": 33,
+        "element_token": "s12345678:0",
+    })
+
+    assert not result["is_error"]
+    assert cua.calls == [("set_value", {
+        "pid": 22, "window_id": 33, "element_token": "s12345678:0",
+        "value": "Document content",
+    })]
+
+
+@pytest.mark.asyncio
+async def test_targeted_text_falls_back_to_pywinauto_for_cached_uia_element(monkeypatch) -> None:
+    class Cua:
+        async def call(self, name, arguments):
+            if name == "get_window_state":
+                return {
+                    "text": "snapshot", "is_error": False,
+                    "structured_content": {
+                        "snapshot_id": "s12345678",
+                        "elements": [{
+                            "element_index": 0, "element_token": "s12345678:0",
+                            "label": "Text editor", "role": "Document",
+                        }],
+                    },
+                }
+            return {"text": "Cua UIA set_value failed", "is_error": True}
+
+    runtime = ComputerUseRuntime(cua_backend=Cua())
+    observed = await runtime.call_tool("computer_observe", {
+        "target": "window", "pid": 22, "window_id": 33,
+    })
+    assert not observed["is_error"]
+    fallback = []
+    monkeypatch.setattr(
+        runtime, "_pywinauto_set_value",
+        lambda pid, hwnd, element, value: fallback.append((pid, hwnd, element, value)) or True,
+    )
+
+    result = await runtime.call_tool("computer_keyboard", {
+        "action": "type", "text": "UIA fallback", "pid": 22, "window_id": 33,
+        "element_token": "s12345678:0",
+    })
+
+    assert not result["is_error"]
+    assert result["data"]["backend"] == "pywinauto_uia"
+    assert fallback == [(22, 33, {
+        "element_index": 0, "element_token": "s12345678:0",
+        "label": "Text editor", "role": "Document",
+    }, "UIA fallback")]
+
+
+@pytest.mark.asyncio
+async def test_targeted_keyboard_escalates_only_when_explicitly_permitted() -> None:
+    class Cua:
+        calls = []
+
+        async def call(self, name, arguments):
+            self.calls.append((name, arguments))
+            if arguments.get("delivery_mode") == "background":
+                return {"text": "unavailable", "is_error": True,
+                        "structured_content": {"code": "background_unavailable"}}
+            return {"text": "typed", "is_error": False, "structured_content": {"ok": True}}
+
+    cua = Cua()
+    runtime = ComputerUseRuntime(cua_backend=cua)
+    result = await runtime.call_tool("computer_keyboard", {
+        "action": "type", "text": "Targeted text", "pid": 22, "window_id": 33,
+        "delivery_mode": "foreground",
+    })
+
+    assert not result["is_error"]
+    assert [args["delivery_mode"] for _, args in cua.calls] == ["background", "foreground"]
+
+
+@pytest.mark.asyncio
+async def test_targeted_keyboard_escalates_on_cua_uia_unavailable_diagnostic() -> None:
+    class Cua:
+        calls = []
+
+        async def call(self, name, arguments):
+            self.calls.append((name, arguments.copy()))
+            if arguments.get("delivery_mode") == "background":
+                return {
+                    "text": (
+                        "hotkey on a modern XAML target could not find a UIA AcceleratorKey. "
+                        "PostMessage WM_KEYDOWN/UP is ignored by this target's input pipeline."
+                    ),
+                    "is_error": True,
+                }
+            return {"text": "sent", "is_error": False}
+
+    cua = Cua()
+    runtime = ComputerUseRuntime(cua_backend=cua)
+    result = await runtime.call_tool("computer_keyboard", {
+        "action": "hotkey", "keys": ["CTRL", "A"], "pid": 22, "window_id": 33,
+        "delivery_mode": "foreground",
+    })
+
+    assert not result["is_error"]
+    assert [args["delivery_mode"] for _, args in cua.calls] == ["background", "foreground"]
+
+
 @pytest.mark.skipif(os.name != "nt", reason="native Computer Use requires Windows")
 def test_real_desktop_observe_input_clipboard_and_window_management() -> None:
     context = multiprocessing.get_context("spawn")
@@ -152,7 +306,11 @@ def test_real_desktop_observe_input_clipboard_and_window_management() -> None:
         assert observation["_image_data_url"].startswith("data:image/png;base64,")
         assert any(item["window_id"] == hwnd for item in runtime._windows())
 
-        runtime._window({"action": "focus", "window_id": hwnd})
+        try:
+            runtime._window({"action": "focus", "window_id": hwnd})
+        except RuntimeError as exc:
+            assert "Windows denied focus activation" in str(exc)
+            pytest.skip("Windows denied foreground activation; native injection needs focus")
         assert int(runtime._user32.GetForegroundWindow() or 0) == hwnd
         x, y = ready["button"]
         runtime._mouse({"action": "click", "x": x, "y": y})

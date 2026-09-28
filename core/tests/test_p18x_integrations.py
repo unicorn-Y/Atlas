@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -46,6 +48,28 @@ def test_capability_bus_can_disable_and_reenable_optional_integrations() -> None
         assert not item["enabled"]
     assert bus.set_enabled("coding.ast_grep", True)
     assert not bus.set_enabled("unknown.integration", False)
+
+
+def test_capability_status_cache_can_be_forced_and_toggle_invalidates() -> None:
+    bus = CapabilityBus()
+    calls = 0
+
+    def discover():
+        nonlocal calls
+        calls += 1
+        return [bus._record(
+            id="coding.ast_grep", kind="coding_backend", source="test",
+            capabilities=["search"], version="1.0",
+        )]
+
+    bus.discover = discover
+    assert bus.status() == bus.status()
+    assert calls == 1
+    bus.status(refresh=True)
+    assert calls == 2
+    assert bus.set_enabled("coding.ast_grep", False)
+    bus.status()
+    assert calls == 4
 
 
 def test_packaged_node_versions_are_reported_from_electron_manifest(monkeypatch) -> None:
@@ -169,7 +193,14 @@ async def test_acp_backend_cleans_manager_when_process_startup_fails(monkeypatch
 @pytest.mark.asyncio
 async def test_cua_backend_preserves_structured_snapshot_handles() -> None:
     class Driver:
+        async def list_tools_json(self):
+            return json.dumps({"tools": [{"name": "get_window_state", "inputSchema": {
+                "type": "object", "properties": {"window_id": {"type": "integer"}},
+                "required": ["window_id"],
+            }}]})
+
         async def call_tool(self, _name: str, _arguments: str) -> SimpleNamespace:
+            assert json.loads(_arguments) == {"window_id": 77}
             return SimpleNamespace(
                 text="window snapshot",
                 is_error=False,
@@ -180,10 +211,37 @@ async def test_cua_backend_preserves_structured_snapshot_handles() -> None:
 
     backend = CuaBackend()
     backend._driver = Driver()
-    result = await backend.call("get_window_state", {})
+    result = await backend.call("get_window_state", {"window_id": 77, "unknown": "ignored"})
 
     assert result["structured_content"]["snapshot_id"] == "s12345678"
     assert result["structured_content"]["elements"][0]["element_token"] == "s12345678:0"
+
+
+@pytest.mark.asyncio
+async def test_targeted_cua_observation_returns_snapshot_handles_and_image() -> None:
+    from atlas.tools.computer_use import ComputerUseRuntime
+
+    class Cua:
+        async def call(self, name, arguments):
+            assert name == "get_window_state"
+            assert arguments == {"pid": 12, "window_id": 34}
+            return {
+                "text": "target snapshot",
+                "content": [],
+                "is_error": False,
+                "structured_content": {
+                    "snapshot_id": "s12345678",
+                    "elements": [{"element_token": "s12345678:0"}],
+                    "screenshot_base64": "c2NyZWVu",
+                },
+            }
+
+    result = await ComputerUseRuntime(cua_backend=Cua()).call_tool(
+        "computer_observe", {"target": "window", "pid": 12, "window_id": 34},
+    )
+    assert not result["is_error"]
+    assert result["data"]["snapshot_id"] == "s12345678"
+    assert result["data"]["_image_data_url"] == "data:image/png;base64,c2NyZWVu"
 
 
 @pytest.mark.asyncio
@@ -191,7 +249,7 @@ async def test_integrations_api_keeps_unconfigured_agent_misconfigured(monkeypat
     from atlas import server
 
     class Bus:
-        def status(self):
+        def status(self, _refresh=False):
             return {
                 "capabilities": [
                     {
@@ -217,6 +275,24 @@ async def test_integrations_api_keeps_unconfigured_agent_misconfigured(monkeypat
 
     assert result["capabilities"][0]["status"] == "misconfigured"
     assert result["capabilities"][0]["configured"] is False
+
+
+@pytest.mark.asyncio
+async def test_blocking_integration_probe_does_not_block_health(monkeypatch) -> None:
+    from atlas import server
+
+    class SlowBus:
+        def status(self, _refresh=False):
+            time.sleep(0.25)
+            return {"count": 0, "ready": 0, "degraded": 0, "capabilities": []}
+
+    monkeypatch.setattr(server, "capability_bus", SlowBus())
+    started = time.monotonic()
+    task = asyncio.create_task(server.list_integrations())
+    await asyncio.sleep(0.01)
+    assert (await server.health())["status"] == "ok"
+    assert time.monotonic() - started < 0.15
+    await task
 
 
 @pytest.mark.asyncio

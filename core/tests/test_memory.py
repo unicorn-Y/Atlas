@@ -107,10 +107,21 @@ class TestMessages:
         )
         msgs = await store.get_conversation_messages(conv_id)
         assert len(msgs) == 1
-        # metadata is stored as JSON string
-        import json
-        meta = json.loads(msgs[0]["metadata"])
-        assert meta["model"] == "claude-sonnet-4"
+        assert msgs[0]["metadata"] == {"model": "claude-sonnet-4"}
+
+    async def test_invalid_legacy_message_metadata_becomes_empty_dict(
+        self, store: MemoryStore
+    ) -> None:
+        conv_id = await store.create_conversation("Legacy metadata")
+        msg_id = await store.save_message(conv_id, "assistant", "Response")
+        assert store._db is not None
+        await store._db.execute(
+            "UPDATE messages SET metadata = ? WHERE id = ?", ("not-json", msg_id)
+        )
+        await store._db.commit()
+
+        [message] = await store.get_conversation_messages(conv_id)
+        assert message["metadata"] == {}
 
     async def test_message_limit(self, store: MemoryStore) -> None:
         conv_id = await store.create_conversation("Limit")

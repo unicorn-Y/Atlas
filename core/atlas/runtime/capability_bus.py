@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import importlib.metadata
 import json
 import os
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -42,6 +44,8 @@ class CapabilityBus:
 
     def __init__(self, integrations: dict[str, Any] | None = None) -> None:
         self.integrations = integrations or {}
+        self._status_cache: dict[str, Any] | None = None
+        self._status_cached_at = 0.0
 
     def _enabled(self, key: str, default: bool = True) -> bool:
         value: Any = self.integrations
@@ -518,13 +522,23 @@ class CapabilityBus:
         elif capability_id == "mcp.chrome_devtools":
             name = "devtools_mcp"
         self.integrations.setdefault(key, {})[name] = enabled
+        self._status_cache = None
         return True
 
-    def status(self) -> dict[str, Any]:
+    def status(self, refresh: bool = False) -> dict[str, Any]:
+        if (
+            not refresh
+            and self._status_cache is not None
+            and time.monotonic() - self._status_cached_at < 5
+        ):
+            return copy.deepcopy(self._status_cache)
         records = [record.to_dict() for record in self.discover()]
-        return {
+        result = {
             "count": len(records),
             "ready": sum(item["status"] == "ready" for item in records),
             "degraded": sum(item["status"] not in {"ready", "disabled"} for item in records),
             "capabilities": records,
         }
+        self._status_cache = result
+        self._status_cached_at = time.monotonic()
+        return copy.deepcopy(result)

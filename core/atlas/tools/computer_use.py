@@ -48,6 +48,10 @@ COMPUTER_TOOLS = [
             "target": {"type": "string", "enum": ["desktop", "monitor", "active_window", "window"]},
             "monitor_id": {"type": "integer", "minimum": 1},
             "window_id": {"type": "integer", "minimum": 1},
+            "pid": {"type": "integer", "minimum": 1},
+            "snapshot_id": {"type": "string"},
+            "element_index": {"type": "integer", "minimum": 0},
+            "element_token": {"type": "string"},
         },
         [],
     ),
@@ -105,6 +109,12 @@ COMPUTER_TOOLS = [
             "horizontal": {"type": "boolean"},
             "from_x": {"type": "integer"},
             "from_y": {"type": "integer"},
+            "window_id": {"type": "integer", "minimum": 1},
+            "pid": {"type": "integer", "minimum": 1},
+            "snapshot_id": {"type": "string"},
+            "element_index": {"type": "integer", "minimum": 0},
+            "element_token": {"type": "string"},
+            "delivery_mode": {"type": "string", "enum": ["background", "foreground"]},
         },
         ["action"],
     ),
@@ -119,6 +129,12 @@ COMPUTER_TOOLS = [
             "text": {"type": "string"},
             "key": {"type": "string"},
             "keys": {"type": "array", "items": {"type": "string"}},
+            "window_id": {"type": "integer", "minimum": 1},
+            "pid": {"type": "integer", "minimum": 1},
+            "snapshot_id": {"type": "string"},
+            "element_index": {"type": "integer", "minimum": 0},
+            "element_token": {"type": "string"},
+            "delivery_mode": {"type": "string", "enum": ["background", "foreground"]},
         },
         ["action"],
     ),
@@ -223,13 +239,15 @@ _KEYS.update({chr(i): i for i in range(ord("A"), ord("Z") + 1)})
 class ComputerUseRuntime:
     """Native Windows computer-use runtime. All actions are FULL_ACCESS by default."""
 
-    def __init__(self, artifact_dir: Path | None = None) -> None:
+    def __init__(self, artifact_dir: Path | None = None, cua_backend: Any = None) -> None:
         self.permission_mode = get_config().computer_use_permission_mode
+        self.cua_backend = cua_backend
         self.artifact_dir = (
             artifact_dir
             or Path(os.environ.get("ATLAS_DATA_DIR", Path.cwd() / "data")) / "computer-use"
         )
         self._artifacts: list[Path] = []
+        self._cua_snapshots: dict[tuple[int, int], list[dict[str, Any]]] = {}
         self._closed = False
         self._user32: Any = None
         self._kernel32: Any = None
@@ -334,12 +352,14 @@ class ComputerUseRuntime:
             return self._error(
                 f"Computer Use is disabled by permission_mode={self.permission_mode!r}."
             )
-        if os.name != "nt" or self._user32 is None:
-            return self._error("Computer Use requires the active Windows desktop session.")
         if self._closed:
             return self._error("Computer Use runtime is shutting down.")
         args = arguments or {}
         try:
+            if self.cua_backend is not None and self._is_target_addressed(name, args):
+                return await self._call_targeted(name, args)
+            if os.name != "nt" or self._user32 is None:
+                return self._error("Computer Use requires the active Windows desktop session.")
             if name == "computer_observe":
                 return await asyncio.to_thread(self._observe, args)
             if name == "computer_window":
@@ -353,6 +373,194 @@ class ComputerUseRuntime:
             return self._error(f"Unknown Computer Use tool: {name}")
         except Exception as exc:
             return self._error(f"{name} failed: {exc}")
+
+    @staticmethod
+    def _is_target_addressed(name: str, args: dict[str, Any]) -> bool:
+        targeted = bool(args.get("window_id") or args.get("pid"))
+        return targeted and (
+            name == "computer_observe"
+            or name == "computer_keyboard"
+            or name == "computer_mouse" and args.get("action") in {"click", "double_click"}
+        )
+
+    def _target_identity(self, args: dict[str, Any]) -> tuple[int, int]:
+        window_id = int(args.get("window_id") or 0)
+        pid = int(args.get("pid") or 0)
+        if window_id and not pid and os.name == "nt" and self._user32 is not None:
+            for window in self._windows():
+                if window["window_id"] == window_id:
+                    pid = int(window["pid"])
+                    break
+        if not window_id or not pid:
+            raise ValueError("Targeted Computer Use requires both pid and window_id")
+        return pid, window_id
+
+    async def _call_targeted(
+        self, name: str, args: dict[str, Any],
+    ) -> dict[str, Any]:
+        pid, window_id = self._target_identity(args)
+        target_args: dict[str, Any] = {"pid": pid, "window_id": window_id}
+        if args.get("element_token"):
+            target_args["element_token"] = str(args["element_token"])
+        elif args.get("element_index") is not None:
+            if not args.get("snapshot_id"):
+                raise ValueError("element_index requires the matching snapshot_id")
+            target_args["element_index"] = int(args["element_index"])
+            target_args["snapshot_id"] = str(args["snapshot_id"])
+
+        if name == "computer_observe":
+            cua_name = "get_window_state"
+            cua_args = {"pid": pid, "window_id": window_id}
+        elif name == "computer_keyboard":
+            action = args.get("action")
+            cua_name = (
+                "set_value"
+                if action == "type" and (
+                    args.get("element_token") or args.get("element_index") is not None
+                )
+                else {"type": "type_text", "press": "press_key", "hotkey": "hotkey"}.get(action, "")
+            )
+            if not cua_name:
+                return await asyncio.to_thread(self._keyboard, args)
+            cua_args = {**target_args}
+            if cua_name != "set_value":
+                cua_args["delivery_mode"] = "background"
+            if cua_name == "set_value":
+                cua_args["value"] = str(args.get("text", ""))
+            elif action == "type":
+                cua_args["text"] = str(args.get("text", ""))
+            elif action == "press":
+                cua_args["key"] = str(args.get("key", "")).lower()
+            else:
+                cua_args["keys"] = [str(key).lower() for key in args.get("keys", [])]
+        else:
+            action = args.get("action")
+            cua_name = "click" if action == "click" else "double_click"
+            cua_args = {
+                **target_args,
+                "button": args.get("button", "left"),
+                "count": 2 if action == "double_click" else 1,
+                "delivery_mode": "background",
+            }
+            for coordinate in ("x", "y"):
+                if args.get(coordinate) is not None:
+                    cua_args[coordinate] = args[coordinate]
+
+        try:
+            result = await self.cua_backend.call(cua_name, cua_args)
+        except Exception:
+            if name == "computer_observe" and os.name == "nt" and self._user32 is not None:
+                return await asyncio.to_thread(
+                    self._observe, {"target": "window", "window_id": window_id},
+                )
+            raise
+        normalized = self._normalize_cua_result(result)
+        if name == "computer_observe" and not normalized["is_error"]:
+            elements = normalized["data"].get("elements")
+            if isinstance(elements, list):
+                self._cua_snapshots[(pid, window_id)] = elements
+        if normalized["is_error"] and name == "computer_observe" and os.name == "nt":
+            return await asyncio.to_thread(
+                self._observe, {"target": "window", "window_id": window_id},
+            )
+        if (
+            normalized["is_error"]
+            and args.get("delivery_mode") == "foreground"
+            and self._background_unavailable(result)
+            and cua_name not in {"get_window_state", "set_value"}
+        ):
+            retry_args = {**cua_args, "delivery_mode": "foreground"}
+            normalized = self._normalize_cua_result(
+                await self.cua_backend.call(cua_name, retry_args)
+            )
+        if normalized["is_error"] and name == "computer_keyboard" and cua_name == "set_value":
+            element = self._snapshot_element(pid, window_id, args)
+            if element and element.get("label") and element.get("role"):
+                try:
+                    updated = await asyncio.to_thread(
+                        self._pywinauto_set_value, pid, window_id, element,
+                        str(args.get("text", "")),
+                    )
+                except Exception:
+                    updated = False
+                if updated:
+                    return self._success({
+                        "action": "type", "backend": "pywinauto_uia",
+                        "pid": pid, "window_id": window_id,
+                        "element_token": element.get("element_token"),
+                        "text_length": len(str(args.get("text", ""))),
+                    })
+        return normalized
+
+    def _snapshot_element(
+        self, pid: int, window_id: int, args: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        elements = self._cua_snapshots.get((pid, window_id), [])
+        token = args.get("element_token")
+        if token:
+            return next((item for item in elements if item.get("element_token") == token), None)
+        index = args.get("element_index")
+        return next((
+            item for item in elements if index is not None
+            and item.get("element_index") == int(index)
+        ), None)
+
+    @staticmethod
+    def _pywinauto_set_value(
+        _pid: int, window_id: int, element: dict[str, Any], value: str,
+    ) -> bool:
+        from pywinauto import Desktop
+
+        wrapper = Desktop(backend="uia").window(handle=window_id).child_window(
+            title=str(element["label"]), control_type=str(element["role"]),
+        ).wrapper_object()
+        if not wrapper.is_enabled():
+            return False
+        setter = getattr(wrapper, "set_edit_text", None) or getattr(wrapper, "set_value", None)
+        if setter is None:
+            return False
+        setter(value)
+        return True
+
+    @staticmethod
+    def _background_unavailable(result: dict[str, Any]) -> bool:
+        detail = json.dumps(result, ensure_ascii=False, default=str).casefold()
+        return "background_unavailable" in detail or (
+            "could not find a uia" in detail and "postmessage" in detail
+        ) or "background delivery is unavailable" in detail
+
+    @staticmethod
+    def _normalize_cua_result(result: dict[str, Any]) -> dict[str, Any]:
+        structured = result.get("structured_content") or result.get("structuredContent")
+        text = str(result.get("text", ""))
+        content = result.get("content") or []
+        if isinstance(structured, dict):
+            data = structured
+        else:
+            data = {"result": structured} if structured else {}
+        image_data = None
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "image" and block.get("data"):
+                image_data = (
+                    "data:" + str(block.get("mimeType", "image/png"))
+                    + ";base64," + str(block["data"])
+                )
+                break
+        if not image_data and isinstance(data.get("screenshot_base64"), str):
+            image_data = "data:image/png;base64," + data["screenshot_base64"]
+        if image_data:
+            data["_image_data_url"] = image_data
+        blocks = [
+            dict(block) if isinstance(block, dict) else {"type": "text", "text": str(block)}
+            for block in content
+        ]
+        if not blocks and text:
+            blocks = [{"type": "text", "text": text}]
+        elif structured and text and not any(block.get("text") == text for block in blocks):
+            blocks.append({"type": "text", "text": text})
+        if not blocks and structured is not None:
+            blocks = [{"type": "text", "text": json.dumps(structured, ensure_ascii=False)}]
+        return {"data": data, "content": blocks, "is_error": bool(result.get("is_error", False))}
 
     @staticmethod
     def _error(message: str) -> dict[str, Any]:

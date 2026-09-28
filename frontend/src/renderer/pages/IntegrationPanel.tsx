@@ -35,7 +35,7 @@ export default function IntegrationPanel({ apiBaseUrl }: { apiBaseUrl: string })
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/integrations`);
+      const response = await fetch(`${apiBaseUrl}/api/integrations?refresh=true`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const body = await response.json() as RegistryResponse;
       setItems(body.capabilities);

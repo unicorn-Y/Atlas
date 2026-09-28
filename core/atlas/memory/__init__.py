@@ -652,12 +652,21 @@ class MemoryStore:
     ) -> list[dict[str, Any]]:
         assert self._db is not None
         cursor = await self._db.execute(
-            "SELECT id, role, content, created_at FROM messages "
+            "SELECT id, role, content, metadata, created_at FROM messages "
             "WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC LIMIT ?",
             (conversation_id, limit),
         )
         rows = await cursor.fetchall()
-        return [dict(r) for r in rows]
+        messages: list[dict[str, Any]] = []
+        for row in rows:
+            message = dict(row)
+            try:
+                metadata = json.loads(message["metadata"] or "{}")
+            except (TypeError, json.JSONDecodeError):
+                metadata = {}
+            message["metadata"] = metadata if isinstance(metadata, dict) else {}
+            messages.append(message)
+        return messages
 
     # ----- Messages -----
 
