@@ -121,6 +121,7 @@ async def hub_main() -> None:
     from atlas.memory import MemoryStore
     from atlas.models import ModelManager
     from atlas.scheduler import AtlasScheduler
+    from atlas.notifications import NotificationBus
     from atlas.tools.local_execution import LocalExecutionRuntime
 
     cfg = get_config()
@@ -133,12 +134,18 @@ async def hub_main() -> None:
 
     orchestrator = AgentOrchestrator(manager, memory, local_execution=local)
 
+    notifier = NotificationBus()
+
     async def agent_callback(task_id: str, message: str) -> None:
         run_id = uuid.uuid4().hex[:8]
         print(f"[hub] task {task_id} run {run_id}: {message}", flush=True)
         events = orchestrator.run(message, f"hub-{task_id}-{run_id}")
         async for _event in events:
             pass
+        await notifier.notify(
+            f"Atlas Hub task {task_id} finished",
+            f"Background task completed. Message: {message[:200]}",
+        )
 
     scheduler = AtlasScheduler(
         agent_callback=agent_callback,

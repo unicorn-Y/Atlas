@@ -63,6 +63,7 @@ from atlas.config import get_config
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
 from atlas.plugins import PluginRuntime
+from atlas.notifications import NotificationBus
 from atlas.projects import ProjectStore
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.capability_bus import CapabilityBus
@@ -112,6 +113,7 @@ memory: MemoryStore | None = None
 projects: ProjectStore | None = None
 durable: DurableBackend | None = None
 plugin_runtime: PluginRuntime | None = None
+notifications: NotificationBus | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 local_execution: LocalExecutionRuntime | None = None
@@ -172,13 +174,23 @@ async def _durable_dispatcher(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _scheduled_goal(task_id: str, message: str) -> None:
-    """Durable-first scheduler callback with direct fallback."""
+    """Durable-first scheduler callback with direct fallback and user notify."""
     if durable is not None and durable.started:
         try:
             await durable.run_agent_task({"task_id": task_id, "message": message})
+            if notifications is not None:
+                await notifications.notify(
+                    "Atlas task finished",
+                    f"Scheduled task {task_id} completed. Message: {message[:200]}",
+                )
             return
         except Exception as exc:
             log.error("durable.agent_task_failed", task_id=task_id, error=str(exc))
+            if notifications is not None:
+                await notifications.notify(
+                    "Atlas task failed",
+                    f"Scheduled task {task_id} failed: {str(exc)[:300]}",
+                )
     await _run_scheduled_goal(task_id, message)
 
 
@@ -505,7 +517,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
     global capability_bus, cua_backend, browser_use, agent_backend_host
-    global projects, durable, plugin_runtime
+    global projects, durable, plugin_runtime, notifications
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -592,6 +604,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     capabilities.register(
         "durable.dbos.status", description="Report DBOS installation and database readiness.",
         handler=lambda _inputs: dbos_status(), source="dbos-inc/dbos-transact-py",
+    )
+    capabilities.register(
+        "notifications.send",
+        description="Send a user notification through the configured Apprise targets.",
+        handler=lambda inputs: notifications.notify(
+            str(inputs.get("title", "Atlas")), str(inputs.get("body", "")),
+        ),
+        source="caronc/apprise",
     )
     capabilities.register(
         "durable.agent_task.run",
@@ -703,6 +723,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         mcp_client=mcp_client,
         capabilities=capabilities,
     )
+
+    notifications = NotificationBus()
     if plugin_load_report.get("errors"):
         log.warning("plugins.load_errors", errors=plugin_load_report["errors"])
 
@@ -1645,6 +1667,21 @@ async def list_integrations(refresh: bool = Query(False)) -> dict[str, Any]:
                 "ready" if browser_use.smoke_verified else "degraded"
             )
     return result
+
+
+@app.get("/api/notifications/status")
+async def notification_status() -> dict[str, Any]:
+    assert notifications is not None
+    return notifications.status()
+
+
+@app.post("/api/notifications/test")
+async def notification_test() -> dict[str, Any]:
+    """Send a test notification to every configured target."""
+    assert notifications is not None
+    return await notifications.notify(
+        "Atlas notification test", "If you can read this, notifications work.",
+    )
 
 
 @app.get("/api/plugins")
