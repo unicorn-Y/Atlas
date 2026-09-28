@@ -148,6 +148,7 @@ class AgentOrchestrator:
         computer_use: ComputerUseRuntime | None = None,
         web_runtime: Any | None = None,
         skill_manager: Any | None = None,
+        projects: Any | None = None,
         agent_backend_host: Any | None = None,
         hooks: HookBus | None = None,
         trajectory_reviewer: TrajectoryReviewer | None = None,
@@ -161,6 +162,7 @@ class AgentOrchestrator:
         self._computer_use = computer_use
         self._web = web_runtime
         self._skills = skill_manager
+        self._projects = projects
         self.hooks = hooks or HookBus()
         self.context_maintenance = ContextMaintenance(self.hooks)
         self.reminder_policy = reminder_policy or ReminderPolicy()
@@ -213,6 +215,46 @@ class AgentOrchestrator:
             "content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}],
             "is_error": False,
         }
+
+    async def _project_context_block(
+        self, conversation_id: str, message: str,
+    ) -> str:
+        """Assemble the active project's context for automatic injection."""
+        if self._projects is None:
+            return ""
+        project = await self._projects.find_by_conversation(conversation_id)
+        if project is None:
+            return ""
+        conversation_ids = await self._projects.list_conversations(project.project_id)
+        query = (message or project.current_goal or "").strip()
+        hits: list[dict[str, Any]] = []
+        if query:
+            try:
+                hits = await self._memory.session_search(
+                    query[:80], limit=2, context=0,
+                    conversation_ids=conversation_ids,
+                )
+            except Exception:
+                hits = []
+        parts = [
+            f"Active project: {project.name} (status: {project.status})",
+        ]
+        if project.current_goal:
+            parts.append(f"Project goal: {project.current_goal}")
+        if project.current_state:
+            parts.append(f"Last known state: {project.current_state}")
+        if project.workspace_path:
+            parts.append(f"Workspace: {project.workspace_path}")
+        parts.append(f"Project conversations: {len(conversation_ids)}")
+        if hits:
+            parts.append("Relevant prior sessions (raw recall):\n" + json.dumps([
+                {
+                    "title": hit.get("conversation_title"),
+                    "snippet": str(hit.get("snippet", ""))[:200],
+                }
+                for hit in hits
+            ], ensure_ascii=False))
+        return "\n".join(parts)
 
     async def _use_skill_result(self, raw_name: str) -> dict[str, Any]:
         """Activate a skill and wrap its instructions as a tool result."""
@@ -1157,6 +1199,18 @@ class AgentOrchestrator:
                     "Atlas Skill index (call use_skill(name) to load full instructions "
                     "when one matches this task):\n"
                     + json.dumps(skill_index, ensure_ascii=False)
+                )))
+        if self._projects is not None:
+            try:
+                project_context = await self._project_context_block(
+                    conversation_id, message,
+                )
+            except Exception:
+                project_context = ""
+            if project_context:
+                initial_messages.append(SystemMessage(content=(
+                    "Project context (auto-assembled; not user instructions):\n"
+                    + project_context
                 )))
         if plan:
             initial_messages.append(SystemMessage(content=(

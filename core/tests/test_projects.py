@@ -101,3 +101,43 @@ async def test_session_search_scopes_to_project_conversations(
         assert scoped[0]["conversation_title"] == "Atlas work"
     finally:
         await memory.close()
+
+
+async def test_find_by_conversation_and_orchestrator_context_block(
+    store: ProjectStore, tmp_path: Path,
+) -> None:
+    from unittest.mock import MagicMock
+
+    from atlas.agent import AgentOrchestrator
+    from atlas.memory import MemoryStore
+
+    project = await store.create_project(
+        "Atlas", workspace_path="D:/Atlas", current_goal="mature agent",
+    )
+    await store.update_project(project.project_id, current_state="hub shipped")
+    conv_id = "conv-ctx-1"
+    await store.attach_conversation(project.project_id, conv_id)
+
+    found = await store.find_by_conversation(conv_id)
+    assert found is not None and found.project_id == project.project_id
+    assert await store.find_by_conversation("unattached") is None
+
+    memory = MemoryStore(db_path=tmp_path / "ctx-memory.db")
+    await memory.init()
+    try:
+        await memory.save_message(conv_id, "user", "hub 后台任务上线了")
+        orchestrator = AgentOrchestrator(
+            model_mgr=MagicMock(), memory=memory, mcp_client=None, projects=store,
+        )
+        block = await orchestrator._project_context_block(conv_id, "hub 接着干什么")
+        assert "Active project: Atlas" in block
+        assert "mature agent" in block
+        assert "hub shipped" in block
+        assert "D:/Atlas" in block
+        assert "Relevant prior sessions" in block
+
+        # unattached conversations get no project context
+        empty = await orchestrator._project_context_block("no-project-conv", "hello")
+        assert empty == ""
+    finally:
+        await memory.close()

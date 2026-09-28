@@ -216,6 +216,18 @@ class ProjectStore:
         await db.commit()
         return cursor.rowcount > 0
 
+    async def find_by_conversation(self, conversation_id: str) -> Project | None:
+        """Return the project a conversation is attached to, if any."""
+        db = self._require_db()
+        cursor = await db.execute(
+            "SELECT p.* FROM projects p "
+            "JOIN project_conversations pc ON pc.project_id = p.project_id "
+            "WHERE pc.conversation_id = ? LIMIT 1",
+            (conversation_id,),
+        )
+        row = await cursor.fetchone()
+        return _row_to_project(row) if row else None
+
     async def list_conversations(self, project_id: str) -> list[str]:
         db = self._require_db()
         cursor = await db.execute(
