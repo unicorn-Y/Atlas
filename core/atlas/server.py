@@ -32,6 +32,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from pydantic import BaseModel
 
@@ -44,9 +45,17 @@ from atlas.agent.capabilities import (
 )
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.agent.planning import TaskPlan
+from atlas.capabilities.browser.browser_use import BrowserUseAdapter
+from atlas.capabilities.coding import ast_grep as ast_grep_capability
+from atlas.capabilities.coding.repo_map import repo_map
+from atlas.capabilities.computer.cua_backend import CuaBackend
+from atlas.capabilities.computer.uia_backend import list_windows as list_uia_windows
+from atlas.capabilities.durable.dbos_backend import status as dbos_status
 from atlas.config import get_config
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
+from atlas.runtime.backend_host import AgentBackendHost
+from atlas.runtime.capability_bus import CapabilityBus
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
 from atlas.skills import SKILLS_DIR, SkillManager
 from atlas.skills.acquisition import (
@@ -93,6 +102,10 @@ orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 local_execution: LocalExecutionRuntime | None = None
 computer_use: ComputerUseRuntime | None = None
+capability_bus: CapabilityBus | None = None
+cua_backend: CuaBackend | None = None
+browser_use: BrowserUseAdapter | None = None
+agent_backend_host: AgentBackendHost | None = None
 skill_mgr: SkillManager | None = None
 skill_registry: SkillRegistry | None = None
 skill_catalog_provider = SkillsShProvider()
@@ -458,6 +471,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle."""
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
+    global capability_bus, cua_backend, browser_use, agent_backend_host
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -468,6 +482,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await mcp_client.start()
     local_execution = LocalExecutionRuntime()
     computer_use = ComputerUseRuntime()
+    capability_bus = CapabilityBus(dict(get_config().raw.get("integrations", {})))
+    cua_backend = CuaBackend()
+    browser_use = BrowserUseAdapter()
+    agent_backend_host = AgentBackendHost()
 
     skill_mgr = SkillManager()
     await skill_mgr.scan_skills()
@@ -479,6 +497,51 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     register_skill_dependency_capability(capabilities, skill_mgr, skill_registry, mcp_client)
     register_skill_discovery_capability(capabilities, skill_registry)
     register_skill_catalog_capabilities(capabilities, skill_catalog_provider, skill_registry)
+    capabilities.register(
+        "local.full_access",
+        description="Canonical P18A local execution tools (PowerShell, process, files, Git).",
+        handler=lambda _inputs: local_execution.get_tools_for_llm(),
+        source="atlas-p18a",
+    )
+    capabilities.register(
+        "computer.cua.status", description="Connect to Cua Driver and return runtime metadata.",
+        handler=lambda _inputs: cua_backend.connect(), source="trycua/cua",
+    )
+    capabilities.register(
+        "computer.cua.tools", description="List installed Cua Driver computer tools.",
+        handler=lambda _inputs: cua_backend.tools(), source="trycua/cua",
+    )
+    capabilities.register(
+        "computer.cua.call", description="Call a Cua Driver computer tool by name.",
+        handler=lambda inputs: cua_backend.call(
+            str(inputs["name"]), dict(inputs.get("arguments", {})),
+        ), source="trycua/cua",
+    )
+    capabilities.register(
+        "computer.pywinauto.windows", description="List visible Windows UIA windows.",
+        handler=lambda _inputs: list_uia_windows(), source="pywinauto",
+    )
+    capabilities.register(
+        "browser.use.open", description="Open a URL in Browser Use and return page state.",
+        handler=lambda inputs: browser_use.open(
+            str(inputs["url"]), cdp_url=inputs.get("cdp_url"),
+        ), source="browser-use/browser-use",
+    )
+    capabilities.register(
+        "coding.ast_grep.run", description="Run ast-grep against a repository path.",
+        handler=lambda inputs: ast_grep_capability.run(
+            list(inputs.get("arguments", [])), cwd=str(inputs["cwd"]),
+        ), source="ast-grep/ast-grep",
+    )
+    capabilities.register(
+        "coding.repo_map", description="Generate an Aider repository map.",
+        handler=lambda inputs: repo_map(str(inputs["path"]), int(inputs.get("budget", 1024))),
+        source="Aider-AI/aider",
+    )
+    capabilities.register(
+        "durable.dbos.status", description="Report DBOS installation and database readiness.",
+        handler=lambda _inputs: dbos_status(), source="dbos-inc/dbos-transact-py",
+    )
 
     orchestrator = AgentOrchestrator(
         model_mgr=model_mgr, memory=memory, mcp_client=mcp_client,
@@ -502,6 +565,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await local_execution.shutdown()
     if computer_use:
         await computer_use.shutdown()
+    if cua_backend:
+        await cua_backend.close()
+    if browser_use:
+        for session_id in list(browser_use._sessions):
+            await browser_use.close(session_id)
+    if agent_backend_host:
+        await agent_backend_host.shutdown()
     if memory:
         await memory.close()
     await runtime_mgr.close()
@@ -593,6 +663,18 @@ class GoalCreateRequest(BaseModel):
     trigger_type: str = "cron"
     trigger_args: dict[str, Any] = {}
     tags: list[str] = []
+
+
+class IntegrationToggleRequest(BaseModel):
+    enabled: bool
+
+
+class AgentSessionStartRequest(BaseModel):
+    cwd: str | None = None
+
+
+class AgentPromptRequest(BaseModel):
+    prompt: str
 
 
 # ---------------------------------------------------------------------------
@@ -1273,6 +1355,49 @@ async def list_tools() -> dict[str, Any]:
     }
 
 
+@app.get("/api/integrations")
+async def list_integrations() -> dict[str, Any]:
+    """Return the shared upstream capability registry."""
+    if capability_bus is None:
+        return {"count": 0, "ready": 0, "degraded": 0, "capabilities": []}
+    result = capability_bus.status()
+    runtime = mcp_client.get_runtime_status() if mcp_client else {"servers": []}
+    server_states = {item["name"]: item for item in runtime.get("servers", [])}
+    server_ids = {"playwright": "mcp.playwright", "chrome-devtools": "mcp.chrome_devtools"}
+    for record in result["capabilities"]:
+        server_name = next(
+            (name for name, item_id in server_ids.items() if item_id == record["id"]), None,
+        )
+        if server_name and server_name in server_states:
+            server = server_states[server_name]
+            record["connected"] = bool(server.get("connected"))
+            if not server.get("connected") and server.get("blocking_reason"):
+                record["last_error"] = server["blocking_reason"]
+    return result
+
+
+@app.patch("/api/integrations/{capability_id}/enabled")
+async def set_integration_enabled(
+    capability_id: str, req: IntegrationToggleRequest,
+) -> dict[str, Any]:
+    """Enable or disable an optional integration for this runtime."""
+    if capability_bus is None or not capability_bus.set_enabled(capability_id, req.enabled):
+        raise HTTPException(status_code=404, detail=f"Integration not found: {capability_id}")
+    server_names = {"mcp.playwright": "playwright", "mcp.chrome_devtools": "chrome-devtools"}
+    server_name = server_names.get(capability_id)
+    if server_name and mcp_client:
+        configured = mcp_client.get_server_config(server_name)
+        if configured is not None:
+            if req.enabled:
+                await mcp_client.restart_server(server_name)
+            else:
+                await mcp_client.disconnect_server(server_name)
+    return next(
+        item for item in (await list_integrations())["capabilities"]
+        if item["id"] == capability_id
+    )
+
+
 # ---------------------------------------------------------------------------
 # MCP Server Management
 # ---------------------------------------------------------------------------
@@ -1507,6 +1632,90 @@ async def invoke_agent_capability(
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Capability not found: {name}") from None
     return {"name": name, "result": result}
+
+
+@app.get("/api/agent/backends")
+async def list_agent_backends() -> dict[str, Any]:
+    """List external Agent adapters without starting their processes."""
+    return {"backends": agent_backend_host.names() if agent_backend_host else []}
+
+
+@app.post("/api/agent/backends/{name}/sessions")
+async def start_agent_backend_session(
+    name: str, req: AgentSessionStartRequest,
+) -> dict[str, Any]:
+    if agent_backend_host is None:
+        raise HTTPException(status_code=503, detail="Agent backend host is unavailable")
+    try:
+        session = await agent_backend_host.start(name, req.cwd)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Agent backend not found: {name}") from None
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Agent backend failed to start: {type(exc).__name__}",
+        ) from None
+    return {"backend": name, "session_id": session.id, "cwd": session.cwd}
+
+
+@app.post("/api/agent/backends/{name}/sessions/{session_id}/resume")
+async def resume_agent_backend_session(
+    name: str, session_id: str, req: AgentSessionStartRequest,
+) -> dict[str, Any]:
+    if agent_backend_host is None:
+        raise HTTPException(status_code=503, detail="Agent backend host is unavailable")
+    try:
+        session = await agent_backend_host.resume(name, session_id, req.cwd)
+    except (KeyError, NotImplementedError):
+        raise HTTPException(
+            status_code=404, detail="Agent backend session cannot be resumed",
+        ) from None
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Agent backend resume failed: {type(exc).__name__}",
+        ) from None
+    return {"backend": name, "session_id": session.id, "cwd": session.cwd}
+
+
+@app.post("/api/agent/sessions/{session_id}/prompt")
+async def prompt_agent_backend(
+    session_id: str, req: AgentPromptRequest,
+) -> StreamingResponse:
+    if agent_backend_host is None:
+        raise HTTPException(status_code=503, detail="Agent backend host is unavailable")
+    try:
+        await agent_backend_host.send(session_id, req.prompt)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Agent session not found") from None
+
+    async def stream_events() -> AsyncIterator[str]:
+        assert agent_backend_host is not None
+        async for event in agent_backend_host.events(session_id):
+            payload = {"type": event.type, **event.data}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(stream_events(), media_type="text/event-stream")
+
+
+@app.post("/api/agent/sessions/{session_id}/cancel")
+async def cancel_agent_backend_session(session_id: str) -> dict[str, str]:
+    if agent_backend_host is None:
+        raise HTTPException(status_code=503, detail="Agent backend host is unavailable")
+    try:
+        await agent_backend_host.cancel(session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Agent session not found") from None
+    return {"status": "cancelled", "session_id": session_id}
+
+
+@app.delete("/api/agent/sessions/{session_id}")
+async def close_agent_backend_session(session_id: str) -> dict[str, str]:
+    if agent_backend_host is None:
+        raise HTTPException(status_code=503, detail="Agent backend host is unavailable")
+    try:
+        await agent_backend_host.close(session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Agent session not found") from None
+    return {"status": "closed", "session_id": session_id}
 
 @app.get("/api/skills")
 async def list_skills(

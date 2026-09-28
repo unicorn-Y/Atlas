@@ -44,6 +44,12 @@ run(venvPython, [
   '--collect-all', 'uvicorn',
   '--collect-all', 'fastapi',
   '--collect-all', 'apscheduler',
+  '--collect-all', 'cua_driver', '--copy-metadata', 'cua-driver',
+  '--collect-all', 'pywinauto', '--copy-metadata', 'pywinauto',
+  '--collect-all', 'browser_use', '--copy-metadata', 'browser-use',
+  '--collect-all', 'dbos', '--copy-metadata', 'dbos',
+  '--collect-all', 'claude_agent_sdk', '--copy-metadata', 'claude-agent-sdk',
+  '--collect-all', 'acp', '--copy-metadata', 'agent-client-protocol',
   '--hidden-import', 'tiktoken_ext.openai_public',
   path.join(repoRoot, 'core', 'atlas', 'desktop_entry.py'),
 ]);

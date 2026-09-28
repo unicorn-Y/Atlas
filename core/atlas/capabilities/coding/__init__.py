@@ -1,0 +1,1 @@
+"""Coding intelligence adapters."""

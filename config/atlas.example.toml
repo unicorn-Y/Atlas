@@ -48,6 +48,50 @@ toast_enabled = true
 # MCP servers are configured explicitly after first launch.
 auto_start = []
 
+# P18X capability toggles; integrations remain independently disableable.
+[integrations.agents]
+codex = true
+claude = true
+hermes = true
+pi = true
+zcode = true
+
+[integrations.computer]
+cua = true
+pywinauto = true
+
+[integrations.browser]
+browser_use = true
+playwright_mcp = true
+devtools_mcp = true
+
+[integrations.coding]
+serena = true
+ast_grep = true
+repo_map = true
+
+[integrations.durable]
+dbos = true
+
+# MCP launchers use pinned npm versions through Atlas's bundled Node runtime.
+[tools.servers.playwright]
+transport = "stdio"
+command = "npx"
+args = ["--yes", "@playwright/mcp@0.0.45"]
+enabled = true
+
+[tools.servers.chrome-devtools]
+transport = "stdio"
+command = "npx"
+args = ["--yes", "chrome-devtools-mcp@1.9.0", "--headless", "--no-usage-statistics"]
+enabled = true
+
+[tools.servers.serena]
+transport = "stdio"
+command = "serena"
+args = ["start-mcp-server", "--project-from-cwd", "--context", "claude-code", "--open-web-dashboard", "false"]
+enabled = true
+
 [local_execution]
 # Local CLI, filesystem, process, and Git tools are unrestricted by default.
 # Change this explicitly to deny to opt into a blocked mode.

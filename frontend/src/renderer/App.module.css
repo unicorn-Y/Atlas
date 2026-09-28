@@ -111,6 +111,14 @@
 .settingsInputGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .settingsFormFooter,.settingsCardHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .settingsCardHeading h2 { margin-bottom: 0; }
+.integrationList { display: grid; gap: 6px; margin-top: 12px; }
+.integrationRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 8px 9px; border: 1px solid #efede7; border-radius: 7px; background: #fffefa; }
+.integrationRow > div { display: grid; gap: 3px; min-width: 0; }
+.integrationRow strong { color: #5f5d56; font-size: 10px; font-weight: 550; }
+.integrationRow small { overflow-wrap: anywhere; color: #99968d; font: 8px "SFMono-Regular",Consolas,monospace; }
+.integrationRow .integrationError { color: #9b514a; }
+.integrationState { color: #9b514a; font-size: 9px; }
+.integrationReady { color: #54744d; }
 .settingsAction,.settingsActionSecondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 11px; border: 1px solid #e8ddcd; border-radius: 7px; color: #665b4e; background: #faf7f1; font-size: 10px; }
 .settingsAction:disabled,.settingsActionSecondary:disabled { opacity: .55; cursor: not-allowed; }
 .settingsActionSecondary { background: #fffefa; }

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
@@ -63,6 +64,18 @@ app.whenReady().then(async () => {
     process.env.ATLAS_BACKEND_EXECUTABLE ??= path.join(process.resourcesPath, 'atlas', 'backend', 'atlas_backend.exe');
     process.env.ATLAS_NODE_RUNTIME_DIR = path.join(process.resourcesPath, 'atlas', 'runtime', 'node');
     process.env.ATLAS_NODE_RUNTIME_REQUIRED = '1';
+    const packageJson = JSON.parse(readFileSync(path.join(app.getAppPath(), 'package.json'), 'utf8'));
+    const selectedPackages = [
+      '@agentclientprotocol/claude-agent-acp',
+      '@agentclientprotocol/codex-acp',
+      '@ast-grep/cli',
+      '@mariozechner/pi-coding-agent',
+      '@playwright/mcp',
+      'chrome-devtools-mcp',
+    ];
+    process.env.ATLAS_NPM_PACKAGE_VERSIONS = JSON.stringify(
+      Object.fromEntries(selectedPackages.map((name) => [name, packageJson.dependencies?.[name]])),
+    );
   }
   try {
     await ensureBackendRunning();
