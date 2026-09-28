@@ -61,6 +61,7 @@ from atlas.capabilities.durable.dbos_backend import status as dbos_status
 from atlas.config import get_config
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
+from atlas.projects import ProjectStore
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.capability_bus import CapabilityBus
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
@@ -106,6 +107,7 @@ log = structlog.get_logger()
 
 model_mgr: ModelManager | None = None
 memory: MemoryStore | None = None
+projects: ProjectStore | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 local_execution: LocalExecutionRuntime | None = None
@@ -480,10 +482,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
     global capability_bus, cua_backend, browser_use, agent_backend_host
+    global projects
 
     model_mgr = ModelManager()
     memory = MemoryStore()
     await memory.init()
+    projects = ProjectStore(get_config().db_path.parent / "projects.db")
+    await projects.init()
     await runtime_mgr.init(get_config().db_path)
 
     mcp_client = MCPClient()
@@ -675,6 +680,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await browser_use.close(session_id)
     if agent_backend_host:
         await agent_backend_host.shutdown()
+    if projects:
+        await projects.close()
     if memory:
         await memory.close()
     await runtime_mgr.close()
@@ -952,6 +959,97 @@ async def delete_conversation(conversation_id: str) -> dict[str, str]:
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"status": "ok", "conversation_id": conversation_id}
+
+
+@app.get("/api/projects")
+async def list_projects(status: str | None = None) -> dict[str, Any]:
+    assert projects is not None
+    return {"projects": [p.to_dict() for p in await projects.list_projects(status)]}
+
+
+@app.post("/api/projects", status_code=201)
+async def create_project(req: dict[str, Any]) -> dict[str, Any]:
+    assert projects is not None
+    try:
+        project = await projects.create_project(
+            str(req.get("name", "")),
+            workspace_path=str(req.get("workspace_path", "") or ""),
+            repo_url=str(req.get("repo_url", "") or ""),
+            current_goal=str(req.get("current_goal", "") or ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return project.to_dict()
+
+
+@app.get("/api/projects/{project_id}")
+async def get_project(project_id: str) -> dict[str, Any]:
+    assert projects is not None
+    project = await projects.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    result = project.to_dict()
+    result["conversation_ids"] = await projects.list_conversations(project_id)
+    return result
+
+
+@app.put("/api/projects/{project_id}")
+async def update_project(project_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    assert projects is not None
+    try:
+        project = await projects.update_project(project_id, **req)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project.to_dict()
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str) -> dict[str, str]:
+    assert projects is not None
+    if not await projects.delete_project(project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"status": "ok", "project_id": project_id}
+
+
+@app.post("/api/projects/{project_id}/conversations", status_code=201)
+async def attach_project_conversation(project_id: str, req: dict[str, Any]) -> dict[str, str]:
+    assert projects is not None
+    conversation_id = str(req.get("conversation_id", ""))
+    if not conversation_id:
+        raise HTTPException(status_code=400, detail="conversation_id is required")
+    try:
+        await projects.attach_conversation(project_id, conversation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"status": "ok", "project_id": project_id, "conversation_id": conversation_id}
+
+
+@app.delete("/api/projects/{project_id}/conversations/{conversation_id}")
+async def detach_project_conversation(project_id: str, conversation_id: str) -> dict[str, str]:
+    assert projects is not None
+    if not await projects.detach_conversation(project_id, conversation_id):
+        raise HTTPException(status_code=404, detail="Association not found")
+    return {"status": "ok"}
+
+
+@app.get("/api/projects/{project_id}/recall")
+async def project_recall(project_id: str, query: str, limit: int = 8) -> dict[str, Any]:
+    """Project-scoped raw session recall: project state + scoped session_search."""
+    assert projects is not None and memory is not None
+    project = await projects.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    conversation_ids = await projects.list_conversations(project_id)
+    results = await memory.session_search(
+        query, limit=limit, conversation_ids=conversation_ids,
+    )
+    return {
+        "project": project.to_dict(),
+        "conversation_ids": conversation_ids,
+        "results": results,
+    }
 
 
 # ---------------------------------------------------------------------------

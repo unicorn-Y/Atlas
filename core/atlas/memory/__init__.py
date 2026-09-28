@@ -729,11 +729,14 @@ class MemoryStore:
 
     async def session_search(
         self, query: str, limit: int = 8, context: int = 2,
+        conversation_ids: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Search raw past conversations and return hits with surrounding context.
 
         This is the raw-history recall path ("what exactly did I say back then"),
         complementary to the summarized knowledge in facts/knowledge tables.
+        When ``conversation_ids`` is provided, only those conversations are
+        searched (used for project-scoped recall).
         """
         assert self._db is not None
         tokens = re.findall(r"[\w\u4e00-\u9fff]+", query or "")
@@ -767,6 +770,9 @@ class MemoryStore:
                 (like, limit),
             )
             hits = [dict(row) for row in await cursor.fetchall()]
+        if conversation_ids is not None:
+            allowed = {str(value) for value in conversation_ids}
+            hits = [hit for hit in hits if str(hit["conversation_id"]) in allowed]
         for hit in hits:
             hit["context"] = await self._session_context(
                 str(hit["conversation_id"]), str(hit["id"]), context,
