@@ -62,11 +62,12 @@ from atlas.capabilities.durable.dbos_backend import status as dbos_status
 from atlas.config import get_config
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
+from atlas.plugins import PluginRuntime
 from atlas.projects import ProjectStore
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.capability_bus import CapabilityBus
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
-from atlas.skills import SKILLS_DIR, SkillManager
+from atlas.skills import PROJECT_ROOT, SKILLS_DIR, SkillManager
 from atlas.skills.acquisition import (
     CatalogUnavailableError,
     SkillsShProvider,
@@ -110,6 +111,7 @@ model_mgr: ModelManager | None = None
 memory: MemoryStore | None = None
 projects: ProjectStore | None = None
 durable: DurableBackend | None = None
+plugin_runtime: PluginRuntime | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 local_execution: LocalExecutionRuntime | None = None
@@ -503,7 +505,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
     global capability_bus, cua_backend, browser_use, agent_backend_host
-    global projects, durable
+    global projects, durable, plugin_runtime
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -513,6 +515,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     durable = DurableBackend(get_config().db_path.parent / "dbos.sqlite")
     durable.set_dispatcher(_durable_dispatcher, asyncio.get_running_loop())
     durable.start()
+
     await runtime_mgr.init(get_config().db_path)
 
     mcp_client = MCPClient()
@@ -690,6 +693,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         computer_use=computer_use,
         agent_backend_host=agent_backend_host,
     )
+
+    plugin_runtime = PluginRuntime(
+        [PROJECT_ROOT / "plugins", get_config().db_path.parent / "plugins"],
+        get_config().db_path.parent / "plugins" / "state.json",
+    )
+    plugin_load_report = await plugin_runtime.load_all(
+        hook_bus=orchestrator.hooks,
+        mcp_client=mcp_client,
+        capabilities=capabilities,
+    )
+    if plugin_load_report.get("errors"):
+        log.warning("plugins.load_errors", errors=plugin_load_report["errors"])
 
     if cfg.scheduler_enabled:
         scheduler = AtlasScheduler(agent_callback=_scheduled_goal)
@@ -1630,6 +1645,43 @@ async def list_integrations(refresh: bool = Query(False)) -> dict[str, Any]:
                 "ready" if browser_use.smoke_verified else "degraded"
             )
     return result
+
+
+@app.get("/api/plugins")
+async def list_plugins() -> dict[str, Any]:
+    """List discovered local plugin bundles with their runtime state."""
+    if plugin_runtime is None:
+        return {"plugins": []}
+    return {"plugins": plugin_runtime.discover()}
+
+
+@app.post("/api/plugins/install-local")
+async def install_local_plugin(req: dict[str, Any]) -> dict[str, Any]:
+    """Install a plugin from a local directory into the user plugin folder."""
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="Plugin runtime unavailable")
+    source = str(req.get("path", ""))
+    if not source:
+        raise HTTPException(status_code=400, detail="path is required")
+    try:
+        result = plugin_runtime.install_local(source)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result
+
+
+@app.post("/api/plugins/{name}/enabled")
+async def set_plugin_enabled(name: str, req: dict[str, Any]) -> dict[str, Any]:
+    """Enable or disable a plugin and reapply every plugin to the runtime."""
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="Plugin runtime unavailable")
+    plugin_runtime.set_enabled(name, bool(req.get("enabled", True)))
+    report = await plugin_runtime.load_all(
+        hook_bus=orchestrator.hooks if orchestrator else None,
+        mcp_client=mcp_client,
+        capabilities=orchestrator.capabilities if orchestrator else None,
+    )
+    return {"name": name, "enabled": bool(req.get("enabled", True)), "report": report}
 
 
 @app.patch("/api/integrations/{capability_id}/enabled")

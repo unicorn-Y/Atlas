@@ -171,6 +171,11 @@ class AgentOrchestrator:
         self._capabilities = capability_registry or AgentCapabilityRegistry()
         self._graph = self._build_graph()
 
+    @property
+    def capabilities(self) -> AgentCapabilityRegistry:
+        """Public access to the capability registry (plugin/endpoint use)."""
+        return self._capabilities
+
     def discover_capabilities(self) -> list[dict[str, str]]:
         """Return registered capabilities without involving model execution."""
         return self._capabilities.discover()
