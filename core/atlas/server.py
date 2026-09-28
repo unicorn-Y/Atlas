@@ -562,6 +562,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         handler=lambda _inputs: dbos_status(), source="dbos-inc/dbos-transact-py",
     )
     capabilities.register(
+        "memory.session_search",
+        description="Search past conversation messages (raw history) with surrounding context.",
+        handler=lambda inputs: memory.session_search(
+            str(inputs.get("query", "")),
+            limit=int(inputs.get("limit", 8)),
+            context=int(inputs.get("context", 2)),
+        ),
+        source="atlas-memory",
+    )
+    capabilities.register(
         "agent.execute_code",
         description="Run a bounded Python workflow through the shared Atlas tool bridge.",
         handler=lambda inputs: CodeActRuntime(

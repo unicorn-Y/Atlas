@@ -291,14 +291,30 @@ class AgentOrchestrator:
 
     # -- nodes ---------------------------------------------------------------
 
-    async def _think_node(self, state: AgentState) -> dict[str, Any]:
-        """Call the LLM, possibly producing tool calls."""
-        litellm_model = self._model_mgr.current_litellm_model
+    def _model_facing_tools(self) -> list[dict[str, Any]]:
+        """Assemble the model-facing tool surface (single source for _think_node)."""
         tools = self._mcp.get_tools_for_llm() if self._mcp else []
         if self._local_execution:
             tools = [*tools, *self._local_execution.get_tools_for_llm()]
         if self._computer_use:
             tools = [*tools, *self._computer_use.get_tools_for_llm()]
+        if self._memory is not None:
+            tools = [*tools, {
+                "type": "function",
+                "function": {
+                    "name": "session_search",
+                    "description": (
+                        "Search the user's past Atlas conversations (raw history, not "
+                        "summarized memory). Returns matching messages with surrounding "
+                        "context, conversation title, and timestamps."
+                    ),
+                    "parameters": {"type": "object", "properties": {
+                        "query": {"type": "string"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+                        "context": {"type": "integer", "minimum": 0, "maximum": 6},
+                    }, "required": ["query"], "additionalProperties": False},
+                },
+            }]
         tools = [*tools, {
             "type": "function",
             "function": {
@@ -343,6 +359,12 @@ class AgentOrchestrator:
                     }, "required": ["goal"], "additionalProperties": False},
                 },
             })
+        return tools
+
+    async def _think_node(self, state: AgentState) -> dict[str, Any]:
+        """Call the LLM, possibly producing tool calls."""
+        litellm_model = self._model_mgr.current_litellm_model
+        tools = self._model_facing_tools()
 
         runtime = state["runtime"]
         goal = str(getattr(runtime, "goal", None) or state["messages"][-1].content)[:240]
@@ -671,6 +693,19 @@ class AgentOrchestrator:
                     )
                 elif fn_name.startswith("computer_") and self._computer_use:
                     result = await self._computer_use.call_tool(fn_name, fn_args)
+                elif fn_name == "session_search" and self._memory is not None:
+                    results = await self._memory.session_search(
+                        str(fn_args.get("query", "")),
+                        limit=int(fn_args.get("limit", 8)),
+                        context=int(fn_args.get("context", 2)),
+                    )
+                    result = {
+                        "data": {"results": results},
+                        "content": [{"type": "text", "text": json.dumps(
+                            {"results": results}, ensure_ascii=False,
+                        )}],
+                        "is_error": False,
+                    }
                 elif self._mcp:
                     result = await self._mcp.call_tool(fn_name, fn_args)
                 else:

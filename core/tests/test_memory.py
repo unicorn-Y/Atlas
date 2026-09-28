@@ -152,6 +152,38 @@ class TestSearch:
         results = await store.search("xyznonexistent123")
         assert len(results) == 0
 
+    async def test_session_search_returns_hits_with_context_and_title(
+        self, store: MemoryStore,
+    ) -> None:
+        conv_id = await store.create_conversation("Bugfix session")
+        await store.save_message(conv_id, "user", "the login endpoint returns 500")
+        await store.save_message(conv_id, "assistant", "fixed the token refresh order")
+        await store.save_message(conv_id, "user", "great, thanks")
+        other = await store.create_conversation("Other talk")
+        await store.save_message(other, "user", "completely unrelated chat about cookies")
+
+        hits = await store.session_search("login endpoint")
+        assert hits, "expected at least one hit"
+        top = hits[0]
+        assert top["conversation_title"] == "Bugfix session"
+        assert top["conversation_id"] == conv_id
+        assert any("login" in message["content"] for message in top["context"])
+        assert any(message["role"] == "assistant" for message in top["context"])
+
+    async def test_session_search_chinese_and_hostile_queries(self, store: MemoryStore) -> None:
+        conv_id = await store.create_conversation("中文会话")
+        await store.save_message(conv_id, "user", "目标寻址混合输入验证通过")
+
+        hits = await store.session_search("目标寻址")
+        assert hits and any("目标寻址" in hit["content"] for hit in hits)
+
+        garbage = await store.session_search("' AND 1=1 -- OR *(")
+        assert isinstance(garbage, list)
+
+    async def test_session_search_empty_query_returns_empty(self, store: MemoryStore) -> None:
+        assert await store.session_search("") == []
+        assert await store.session_search("   ") == []
+
 
 # ---------------------------------------------------------------------------
 # Facts

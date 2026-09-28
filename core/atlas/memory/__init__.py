@@ -727,6 +727,67 @@ class MemoryStore:
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
+    async def session_search(
+        self, query: str, limit: int = 8, context: int = 2,
+    ) -> list[dict[str, Any]]:
+        """Search raw past conversations and return hits with surrounding context.
+
+        This is the raw-history recall path ("what exactly did I say back then"),
+        complementary to the summarized knowledge in facts/knowledge tables.
+        """
+        assert self._db is not None
+        tokens = re.findall(r"[\w\u4e00-\u9fff]+", query or "")
+        if not tokens:
+            return []
+        match_query = " OR ".join(f'"{token}"' for token in tokens[:12])
+        hits: list[dict[str, Any]] = []
+        try:
+            cursor = await self._db.execute(
+                "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, "
+                "       c.title AS conversation_title, "
+                "       highlight(messages_fts, 0, '[', ']') AS snippet "
+                "FROM messages_fts "
+                "JOIN messages m ON messages_fts.rowid = m.rowid "
+                "JOIN conversations c ON c.id = m.conversation_id "
+                "WHERE messages_fts MATCH ? "
+                "ORDER BY rank LIMIT ?",
+                (match_query, limit),
+            )
+            hits = [dict(row) for row in await cursor.fetchall()]
+        except aiosqlite.OperationalError:
+            hits = []
+        if not hits:
+            like = f"%{query.strip()}%"
+            cursor = await self._db.execute(
+                "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, "
+                "       c.title AS conversation_title, "
+                "       substr(m.content, 1, 200) AS snippet "
+                "FROM messages m JOIN conversations c ON c.id = m.conversation_id "
+                "WHERE m.content LIKE ? ORDER BY m.created_at DESC LIMIT ?",
+                (like, limit),
+            )
+            hits = [dict(row) for row in await cursor.fetchall()]
+        for hit in hits:
+            hit["context"] = await self._session_context(
+                str(hit["conversation_id"]), str(hit["id"]), context,
+            )
+        return hits
+
+    async def _session_context(
+        self, conversation_id: str, message_id: str, window: int,
+    ) -> list[dict[str, Any]]:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT id, role, content, created_at FROM messages "
+            "WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC",
+            (conversation_id,),
+        )
+        messages = [dict(row) for row in await cursor.fetchall()]
+        index = next(
+            (i for i, message in enumerate(messages) if message["id"] == message_id), 0,
+        )
+        return messages[max(index - window, 0): index + window + 1]
+
     # ----- Facts -----
 
     async def set_fact(

@@ -79,6 +79,13 @@ def orchestrator(model_mgr, memory, mcp_client):
 # ---------------------------------------------------------------------------
 
 class TestGraphStructure:
+    def test_model_facing_tools_include_session_search(self, orchestrator) -> None:
+        names = {
+            tool["function"]["name"] for tool in orchestrator._model_facing_tools()
+        }
+        assert "session_search" in names
+        assert "execute_code" in names
+
     def test_graph_compiles(self, orchestrator) -> None:
         """Graph should compile without errors."""
         assert orchestrator._graph is not None
