@@ -86,3 +86,9 @@ desktop.ini
 *.swp
 *.swo
 .aider*
+/_tmp/
+/data/*.log
+/data/dbos.sqlite
+/data/pytest-tmp/
+/pelican-wing-circus.html
+/Atlas竞品对比报告_2026-09-28.docx

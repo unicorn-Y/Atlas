@@ -17,7 +17,7 @@ interface RecallHit {
   created_at: string;
 }
 
-function ProjectsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
+export function ProjectsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,7 +222,7 @@ interface Plugin {
   mcp_servers: string[];
 }
 
-function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
+export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -306,7 +306,7 @@ function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   </section>;
 }
 
-function NotificationsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
+export function NotificationsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [urls, setUrls] = useState('');
   const [status, setStatus] = useState<{ enabled?: boolean; targets?: number } | null>(null);
   const [busy, setBusy] = useState(false);

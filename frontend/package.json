@@ -24,10 +24,13 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "@atlas/backend-adapter": "file:../backend-adapter",
     "@agentclientprotocol/claude-agent-acp": "0.81.2",
     "@agentclientprotocol/codex-acp": "1.13.1",
     "@ast-grep/cli": "0.45.3",
+    "@atlas/backend-adapter": "file:../backend-adapter",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource/noto-serif-sc": "^5.3.0",
     "@mariozechner/pi-coding-agent": "0.73.1",
     "@playwright/mcp": "0.0.45",
     "chrome-devtools-mcp": "1.9.0",
@@ -57,17 +60,58 @@
     "appId": "com.atlas.desktop",
     "productName": "Atlas",
     "artifactName": "${productName}-${version}-Setup.${ext}",
-    "directories": { "output": "windows-release" },
+    "directories": {
+      "output": "windows-release"
+    },
     "electronDist": "../node_modules/electron/dist",
-    "files": ["dist/**", "dist-electron/**", "package.json"],
-    "extraResources": [
-      { "from": "../core/atlas", "to": "atlas/core/atlas", "filter": ["**/*", "!**/__pycache__", "!**/__pycache__/**", "!**/*.pyc"] },
-      { "from": "./backend-release/atlas_backend", "to": "atlas/backend" },
-      { "from": "./backend-release/runtime/node", "to": "atlas/runtime/node" },
-      { "from": "../skills", "to": "atlas/skills", "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"] },
-      { "from": "../config/atlas.example.toml", "to": "atlas/config/atlas.example.toml" }
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
     ],
-    "win": { "target": ["nsis"], "signAndEditExecutable": false },
-    "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true }
+    "extraResources": [
+      {
+        "from": "../core/atlas",
+        "to": "atlas/core/atlas",
+        "filter": [
+          "**/*",
+          "!**/__pycache__",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "./backend-release/atlas_backend",
+        "to": "atlas/backend"
+      },
+      {
+        "from": "./backend-release/runtime/node",
+        "to": "atlas/runtime/node"
+      },
+      {
+        "from": "../skills",
+        "to": "atlas/skills",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../config/atlas.example.toml",
+        "to": "atlas/config/atlas.example.toml"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
