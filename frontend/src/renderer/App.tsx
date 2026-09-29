@@ -349,9 +349,18 @@ export default function App() {
         <div className="stage">
           {view === 'home' && <div className="screen home"><div className="home-inner">
             <div className="hello"><Mark /><h1>{greeting()}{username !== 'User' ? `，${username}` : ''}</h1></div>
-            <p className="lede">写代码、查资料、安排事情，说一句就行。</p>
+            <p className="lede">对话、写代码、生成图像、安排日程 —— 说一句，剩下的交给 Atlas。</p>
             {composer(true)}
             {errorNote}
+            <div className="section-h" style={{ marginTop: 32 }}><h2>能做什么</h2></div>
+            <div className="tiles">
+              <button className="tile" onClick={() => go('create')}><span className="ico brass"><Wand2 size={18} /></span><div><b>生成图像</b><small>出图、海报、插画</small></div></button>
+              <button className="tile" onClick={() => go('code')}><span className="ico ether"><Code2 size={18} /></span><div><b>写代码 · 项目</b><small>建项目、改代码、查仓库</small></div></button>
+              <button className="tile" onClick={() => go('auto')}><span className="ico ok"><Repeat size={18} /></span><div><b>自动化</b><small>定时任务、后台执行</small></div></button>
+              <button className="tile" onClick={startVoice}><span className="ico brass"><AudioLines size={18} /></span><div><b>语音通话</b><small>像打电话一样对话</small></div></button>
+              <button className="tile" onClick={() => go('memory')}><span className="ico ether"><Brain size={18} /></span><div><b>记忆与资料</b><small>长期记住、随时调用</small></div></button>
+              <button className="tile" onClick={() => go('skills')}><span className="ico ok"><Puzzle size={18} /></span><div><b>技能发现</b><small>给 Atlas 装新本事</small></div></button>
+            </div>
             {store.conversations.length > 0 && <>
               <div className="section-h"><h2>接着做</h2><button onClick={() => setPaletteOpen(true)}>全部对话</button></div>
               <div className="resume glass">
@@ -408,7 +417,7 @@ export default function App() {
           </div>}
 
           {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
-          {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} />}
+          {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
           {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
           {view === 'memory' && <MemoryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} onPendingChange={setPendingCount} />}
           {view === 'skills' && <div className="screen"><SkillDiscoveryPage apiBaseUrl={store.apiBaseUrl} activeSkills={store.activeSkills} onApplySkill={(name) => store.activeSkills.includes(name) ? store.removeSkill(name) : store.applySkill(name)} /></div>}

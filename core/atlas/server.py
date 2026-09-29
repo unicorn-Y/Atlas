@@ -947,6 +947,54 @@ async def get_configuration() -> dict[str, Any]:
     }
 
 
+class ImageGenerateRequest(BaseModel):
+    prompt: str
+    model: str = "gpt-image-1"
+    size: str = "1024x1024"
+    n: int = 1
+
+
+@app.post("/api/images/generate")
+async def generate_image(req: ImageGenerateRequest) -> dict[str, Any]:
+    """Forward an image-generation request to the configured model gateway.
+
+    Keeps the gateway API key server-side; the renderer never sees it.
+    """
+    assert model_mgr is not None
+    prompt = req.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="提示词不能为空")
+    base = model_mgr.gateway_base_url.rstrip("/")
+    key = getattr(model_mgr, "_api_key", "") or get_config().gateway_api_key
+    if not key:
+        raise HTTPException(status_code=400, detail="尚未配置模型网关密钥")
+    payload = {"model": req.model, "prompt": prompt, "n": max(1, min(req.n, 4)), "size": req.size}
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            resp = await client.post(
+                f"{base}/images/generations",
+                headers={"Authorization": f"Bearer {key}"},
+                json=payload,
+            )
+    except Exception as exc:  # noqa: BLE001 — surface any transport error to the UI
+        raise HTTPException(status_code=502, detail=f"图像网关请求失败：{exc}")
+    if resp.status_code >= 400:
+        detail = resp.text
+        try:
+            detail = resp.json().get("error", {}).get("message", detail)
+        except Exception:  # noqa: BLE001
+            pass
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+    data = resp.json()
+    images: list[dict[str, str]] = []
+    for item in data.get("data", []):
+        if item.get("url"):
+            images.append({"url": item["url"]})
+        elif item.get("b64_json"):
+            images.append({"b64": item["b64_json"]})
+    return {"images": images, "model": req.model}
+
+
 @app.put("/api/settings/configuration")
 async def update_configuration(req: ProviderSettingsRequest) -> dict[str, Any]:
     assert model_mgr is not None
