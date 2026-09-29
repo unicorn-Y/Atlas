@@ -1,0 +1,231 @@
+@import "tailwindcss";
+@import "./legacy.css" layer(components);
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/*
+ * Atlas design tokens.
+ * Dark "夜航" is the default: deep night ink, brass instruments, a floating lit sheet.
+ * Light "白瓷" is its daylight twin: white porcelain sheet on a warm grey desk, near-monochrome.
+ * Brass (--brand) is reserved for Atlas itself: the mark, and anything that shows Atlas is working.
+ */
+:root, [data-theme=light] {
+  --bg: #EEEDE9;
+  --sheet-bg: #FFFFFF;
+  --sheet-solid: #FFFFFF;
+  --shadow-sheet: 0 0 0 1px rgba(20,20,20,.06), 0 2px 4px rgba(20,20,20,.03), 0 20px 50px -24px rgba(40,35,20,.2);
+  --raised-bg: #FFFFFF;
+  --shadow-raised: 0 0 0 1px rgba(20,20,20,.08), 0 2px 6px rgba(20,20,20,.04), 0 18px 40px -18px rgba(40,35,20,.22);
+  --card-bg: #F7F6F3;
+  --card-ring: 0 0 0 1px rgba(20,20,20,.02);
+  --overlay: #FFFFFF;
+  --shadow-pop: 0 0 0 1px rgba(20,20,20,.08), 0 16px 40px -10px rgba(20,20,20,.22);
+  --sunken: #F3F2EF;
+  --hover: rgba(20,20,22,.045);
+  --selected: rgba(20,20,22,.07);
+  --line: rgba(20,20,22,.08);
+  --line-strong: rgba(20,20,22,.15);
+  --fg: #17171B;
+  --fg-2: #55565B;
+  --fg-3: #8A8A86;
+  --heading: #111114;
+  --brand: #9E6F2B;
+  --brand-soft: rgba(158,111,43,.12);
+  --primary-bg: #111114;
+  --on-primary: #FFFFFF;
+  --ok: #2E8B68;
+  --ok-soft: rgba(46,139,104,.12);
+  --danger: #B0442B;
+  --danger-soft: rgba(176,68,43,.1);
+  --code-bg: #F4F3F0;
+  --orb-opacity: .13;
+  --orb-filter: grayscale(1) contrast(1.1);
+  --desk: var(--bg);
+  --sheet-blur: none;
+  --mark-1: #F0D08F; --mark-2: #C8964A; --mark-3: #8A5E22; --core-1: #F6DFA8; --core-2: #9C6B27;
+  --avatar-bg: linear-gradient(145deg, #E3C17F, #9E6E2A); --avatar-fg: #1A1206;
+  color-scheme: light;
+}
+
+/* 晨光: pastel aurora desk, translucent porcelain sheet, periwinkle accents. */
+[data-theme=aurora] {
+  --bg: #F3F2FA;
+  --desk: radial-gradient(55% 45% at 8% 0%, #E3DEFB 0%, transparent 70%), radial-gradient(45% 40% at 100% 6%, #FCE3D6 0%, transparent 70%), radial-gradient(60% 55% at 85% 100%, #D8E8FB 0%, transparent 72%), radial-gradient(45% 45% at 0% 100%, #F4E1F1 0%, transparent 70%), #F3F2FA;
+  --sheet-bg: rgba(255,255,255,.66);
+  --sheet-solid: #FAF9FE;
+  --sheet-blur: blur(30px) saturate(1.4);
+  --shadow-sheet: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(255,255,255,.75), 0 24px 60px -28px rgba(88,76,170,.28);
+  --raised-bg: #FFFFFF;
+  --shadow-raised: 0 0 0 1px rgba(88,76,170,.08), 0 2px 6px rgba(88,76,170,.05), 0 16px 36px -16px rgba(88,76,170,.28);
+  --card-bg: rgba(255,255,255,.74);
+  --card-ring: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(88,76,170,.06), 0 8px 22px -14px rgba(88,76,170,.3);
+  --overlay: #FFFFFF;
+  --shadow-pop: 0 0 0 1px rgba(88,76,170,.1), 0 18px 44px -12px rgba(88,76,170,.3);
+  --sunken: rgba(255,255,255,.62);
+  --hover: rgba(91,108,240,.07);
+  --selected: rgba(91,108,240,.12);
+  --line: rgba(60,56,110,.08);
+  --line-strong: rgba(60,56,110,.15);
+  --fg: #1C1D30;
+  --fg-2: #56597A;
+  --fg-3: #8B8DA8;
+  --heading: #15162B;
+  --brand: #5B6CF0;
+  --brand-soft: rgba(91,108,240,.13);
+  --primary-bg: linear-gradient(145deg, #7388FF, #5360E8);
+  --on-primary: #FFFFFF;
+  --ok: #2E9B7A;
+  --ok-soft: rgba(46,155,122,.12);
+  --danger: #D2534B;
+  --danger-soft: rgba(210,83,75,.1);
+  --code-bg: rgba(255,255,255,.7);
+  --orb-opacity: .4;
+  --orb-filter: none;
+  --mark-1: #D9DEFF; --mark-2: #8E9BFA; --mark-3: #5A5FD6; --core-1: #F1E6FF; --core-2: #7C82F0;
+  --avatar-bg: linear-gradient(145deg, #B9C3FF, #6C74E6); --avatar-fg: #FFFFFF;
+  color-scheme: light;
+}
+
+[data-theme=dark] {
+  --bg: #07090D;
+  --sheet-bg: radial-gradient(120% 90% at 85% -10%, #1B2331 0%, #0F151D 55%, #0B1017 100%);
+  --sheet-solid: #0E141C;
+  --shadow-sheet: inset 0 1px 0 rgba(255,255,255,.05), 0 0 0 1px rgba(255,255,255,.05), 0 30px 80px rgba(0,0,0,.6);
+  --raised-bg: linear-gradient(180deg, rgba(27,35,47,.96), rgba(19,26,36,.96));
+  --shadow-raised: inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px rgba(255,255,255,.07), 0 24px 60px -20px rgba(0,0,0,.7);
+  --card-bg: linear-gradient(180deg, rgba(255,255,255,.042), rgba(255,255,255,.018));
+  --card-ring: inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(255,255,255,.05);
+  --overlay: #18202B;
+  --shadow-pop: inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(255,255,255,.09), 0 24px 60px -12px rgba(0,0,0,.75);
+  --sunken: rgba(255,255,255,.04);
+  --hover: rgba(255,255,255,.05);
+  --selected: rgba(214,170,100,.12);
+  --line: rgba(255,255,255,.075);
+  --line-strong: rgba(255,255,255,.14);
+  --fg: #E8EBEF;
+  --fg-2: #A5AFBB;
+  --fg-3: #77818E;
+  --heading: #F4EDE0;
+  --brand: #D9AF69;
+  --brand-soft: rgba(217,175,105,.13);
+  --primary-bg: linear-gradient(145deg, #EDCB87, #B7843A);
+  --on-primary: #1A1206;
+  --ok: #6FC2A8;
+  --ok-soft: rgba(111,194,168,.13);
+  --danger: #E3866E;
+  --danger-soft: rgba(227,134,110,.13);
+  --code-bg: rgba(0,0,0,.3);
+  --orb-opacity: .5;
+  --orb-filter: none;
+  --avatar-bg: linear-gradient(145deg, #E3C17F, #9E6E2A); --avatar-fg: #1A1206;
+  --desk: var(--bg);
+  --sheet-blur: none;
+  --mark-1: #F0D08F; --mark-2: #C8964A; --mark-3: #8A5E22; --core-1: #F6DFA8; --core-2: #9C6B27;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-overlay: var(--overlay);
+  --color-sunken: var(--sunken);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-heading: var(--heading);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-on-primary: var(--on-primary);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-code: var(--code-bg);
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  --font-mono: "Cascadia Code", "Cascadia Mono", "Geist Mono Variable", Consolas, monospace;
+  --shadow-pop: var(--shadow-pop);
+  --shadow-raised: var(--shadow-raised);
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--desk);
+    color: var(--fg);
+    font: 14px/1.6 var(--font-sans);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection { background: var(--brand-soft); }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+  button { cursor: pointer; }
+  button:disabled { cursor: default; }
+  * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+}
+
+@layer components {
+  .sheet { background: var(--sheet-bg); box-shadow: var(--shadow-sheet); -webkit-backdrop-filter: var(--sheet-blur); backdrop-filter: var(--sheet-blur); }
+  .orb-bg { opacity: var(--orb-opacity); filter: var(--orb-filter); }
+  .raised { background: var(--raised-bg); box-shadow: var(--shadow-raised); }
+  .card-surface { background: var(--card-bg); box-shadow: var(--card-ring); }
+  .pop { background: var(--overlay); box-shadow: var(--shadow-pop); }
+  .primary-fill { background: var(--primary-bg); color: var(--on-primary); }
+  .drag { -webkit-app-region: drag; }
+  .no-drag { -webkit-app-region: no-drag; }
+
+  /* Atlas speaks in serif; everything else is the UI face. */
+  .prose-atlas { font: 15.5px/1.9 var(--font-serif); color: var(--fg); overflow-wrap: anywhere; }
+  .prose-atlas > :first-child { margin-top: 0; }
+  .prose-atlas > :last-child { margin-bottom: 0; }
+  .prose-atlas p { margin: 0 0 .8em; }
+  .prose-atlas h1, .prose-atlas h2, .prose-atlas h3, .prose-atlas h4 { font-family: var(--font-serif); color: var(--heading); font-weight: 600; line-height: 1.4; margin: 1.3em 0 .5em; }
+  .prose-atlas h1 { font-size: 1.35em; }
+  .prose-atlas h2 { font-size: 1.2em; }
+  .prose-atlas h3, .prose-atlas h4 { font-size: 1.05em; }
+  .prose-atlas ul, .prose-atlas ol { margin: 0 0 .8em; padding-left: 1.4em; }
+  .prose-atlas li { margin: .2em 0; }
+  .prose-atlas li::marker { color: var(--fg-3); }
+  .prose-atlas a { color: var(--brand); text-decoration: underline; text-decoration-color: var(--brand-soft); text-underline-offset: 3px; }
+  .prose-atlas strong { font-weight: 700; color: var(--heading); }
+  .prose-atlas blockquote { margin: 0 0 .8em; padding-left: 1em; border-left: 2px solid var(--line-strong); color: var(--fg-2); }
+  .prose-atlas hr { border: 0; border-top: 1px solid var(--line); margin: 1.4em 0; }
+  .prose-atlas :not(pre) > code { font: .86em var(--font-mono); background: var(--code-bg); padding: .12em .4em; border-radius: 5px; }
+  .prose-atlas pre { font: 12.8px/1.7 var(--font-mono); background: var(--code-bg); border-radius: 10px; padding: 12px 16px; margin: 0 0 1em; overflow-x: auto; box-shadow: inset 0 0 0 1px var(--line); }
+  .prose-atlas pre code { font: inherit; background: none; padding: 0; }
+  .prose-atlas table { border-collapse: collapse; font: 13px/1.6 var(--font-sans); margin: 0 0 1em; display: block; overflow-x: auto; }
+  .prose-atlas th, .prose-atlas td { border-bottom: 1px solid var(--line); padding: 7px 12px; text-align: left; }
+  .prose-atlas th { color: var(--fg-2); font-weight: 600; }
+
+  .hljs { background: transparent; }
+  .hljs-keyword, .hljs-built_in, .hljs-selector-tag { color: #8b5cb8; }
+  .hljs-string, .hljs-attr { color: #2e8b68; }
+  .hljs-number, .hljs-literal { color: #b0612b; }
+  .hljs-comment { color: var(--fg-3); font-style: italic; }
+  .hljs-title, .hljs-function { color: #2f6aa8; }
+  [data-theme=dark] .hljs-keyword, [data-theme=dark] .hljs-built_in, [data-theme=dark] .hljs-selector-tag { color: #c49bea; }
+  [data-theme=dark] .hljs-string, [data-theme=dark] .hljs-attr { color: #8fd3b6; }
+  [data-theme=dark] .hljs-number, [data-theme=dark] .hljs-literal { color: #e8b27a; }
+  [data-theme=dark] .hljs-title, [data-theme=dark] .hljs-function { color: #8fb8e8; }
+}
+
+/* The one orchestrated motion: the armillary turns while Atlas works. */
+@keyframes arm-turn { to { transform: rotate(360deg); } }
+.arm-working .arm-r1 { animation: arm-turn 9s linear infinite; }
+.arm-working .arm-r2 { animation: arm-turn 15s linear infinite reverse; }
+.arm-r1, .arm-r2 { transform-origin: 24px 24px; transform-box: view-box; }
+
+@keyframes pop-in { from { opacity: 0; transform: translateY(4px) scale(.985); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.anim-pop { animation: pop-in .16s cubic-bezier(.2,.7,.2,1); }
+.anim-fade { animation: fade-in .16s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

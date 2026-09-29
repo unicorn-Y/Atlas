@@ -1,19 +1,32 @@
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
-import 'highlight.js/styles/github-dark.css';
-import styles from '../App.module.css';
 import Mark from './Mark';
 
-interface ConversationMessageProps {
-  role: 'user' | 'assistant';
-  content: string;
-  username?: string;
-  status?: string;
-}
-
-export default function ConversationMessage({ role, content, username = 'User', status }: ConversationMessageProps) {
-  const avatar = Array.from(username.trim())[0]?.toLocaleUpperCase() ?? 'U';
-  if (role === 'user') return <div className={styles.userMessage} data-message-role="user"><div className={styles.userBubble}>{content}</div><div className={styles.userAvatar}>{avatar}</div></div>;
-  return <div className={styles.assistantMessage} data-message-role="assistant"><Mark className={styles.assistantAvatar} /><div className={styles.messageBody}><div className={styles.messageMeta}><strong>Atlas</strong><span>{status}</span></div><div className={styles.markdownContent}><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown></div></div></div>;
+/** One chat turn. The user speaks in the UI face inside a bubble; Atlas answers in serif, unboxed. */
+export default function ConversationMessage({ role, content, username, status, working = false, continued = false }: {
+  role: 'user' | 'assistant'; content: string; username: string; status?: string; working?: boolean;
+  /** Part of an Atlas turn that already showed its header; renders just the text, aligned under it. */
+  continued?: boolean;
+}) {
+  if (role === 'assistant' && continued) {
+    return <div className="my-3 pl-10" data-message-role="assistant">
+      <div className="prose-atlas"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown></div>
+    </div>;
+  }
+  if (role === 'user') {
+    return <div className="my-5 flex justify-end" data-message-role="user">
+      <div className="max-w-[78%] whitespace-pre-wrap rounded-[16px] rounded-br-[5px] bg-sunken px-4 py-2.5 text-[14.5px] leading-[1.7] text-fg shadow-[inset_0_0_0_1px_var(--line)]" title={username}>{content}</div>
+    </div>;
+  }
+  return <div className="my-5 grid grid-cols-[28px_minmax(0,1fr)] gap-3" data-message-role="assistant">
+    <Mark className="mt-[3px] size-[26px]" working={working} />
+    <div className="min-w-0">
+      <div className="mb-1.5 flex items-baseline gap-2.5">
+        <b className="font-serif text-[14px] font-semibold tracking-[.04em] text-heading">Atlas</b>
+        {status && <span className="text-[12px] text-fg-3">{status}</span>}
+      </div>
+      <div className="prose-atlas"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown></div>
+    </div>
+  </div>;
 }

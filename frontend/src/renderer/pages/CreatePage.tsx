@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AudioLines, Download, Film, ImageIcon, LoaderCircle, Phone, Sparkles, Wand2,
 } from 'lucide-react';
@@ -10,6 +10,8 @@ interface CreatePageProps {
   apiBaseUrl: string;
   connected: boolean;
   onToast: (text: string) => void;
+  /** A prompt handed over from the home composer's 图像 mode. */
+  initialPrompt?: string;
 }
 
 type Tab = 'image' | 'video' | 'voice';
@@ -26,8 +28,13 @@ const IMAGE_MODEL = 'gpt-image-1';
 
 const shotSrc = (shot: Shot) => shot.url ?? (shot.b64 ? `data:image/png;base64,${shot.b64}` : '');
 
-export default function CreatePage({ onDraft, onVoice, apiBaseUrl, connected, onToast }: CreatePageProps) {
+export default function CreatePage({ onDraft, onVoice, apiBaseUrl, connected, onToast, initialPrompt }: CreatePageProps) {
   const [tab, setTab] = useState<Tab>('image');
+  useEffect(() => {
+    if (!initialPrompt) return;
+    setTab('image');
+    setPrompt(initialPrompt);
+  }, [initialPrompt]);
 
   // Image studio state
   const [prompt, setPrompt] = useState('');
