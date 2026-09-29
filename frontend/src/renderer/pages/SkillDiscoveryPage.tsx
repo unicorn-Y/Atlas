@@ -345,10 +345,10 @@ export default function SkillDiscoveryPage({ apiBaseUrl, activeSkills, onApplySk
   };
 
   return <section className={styles.skillCenter} aria-label="技能发现">
-    <header className={styles.skillCenterHeader}><div><span>Skill Catalog</span><h1>技能发现</h1><p>本地搜索保持离线可用。远程技能需审查并明确批准后才会安装。</p></div></header>
-    <fieldset className={styles.skillGithubSource}><legend>导入本地 Skill package</legend><label>受控 ZIP package<input aria-label="导入 Skill package" type="file" accept=".zip,application/zip" disabled={packageBusy} onChange={(event) => void inspectPackage(event.target.files?.[0])} /></label><p>导入前校验清单、路径、符号链接、哈希与安全扫描；安装经过现有 lifecycle 审批。</p></fieldset>
-    <nav className={styles.skillCatalogTabs} aria-label="技能来源">{(['local', 'external', 'all'] as const).map((item) => <button type="button" key={item} aria-pressed={mode === item} onClick={() => { setMode(item); void search(undefined, item); }}>{item === 'local' ? 'Local' : item === 'external' ? 'External Catalog' : 'All'}</button>)}</nav>
-    {mode !== 'local' && <fieldset className={styles.skillGithubSource}><legend>直接检查公开 GitHub Skill</legend><label>Repository URL<input aria-label="公开 GitHub 仓库" value={githubSource} onChange={(event) => setGithubSource(event.target.value)} placeholder="https://github.com/owner/repo" /></label><label>Skill path<input aria-label="GitHub Skill 路径" value={githubPath} onChange={(event) => setGithubPath(event.target.value)} placeholder="skills/example-skill" /></label><button type="button" disabled={!githubSource} onClick={() => void inspectGithub()}>检查 GitHub 来源</button></fieldset>}
+    <header className={styles.skillCenterHeader}><div><h1>技能发现</h1><p>本地搜索离线也能用。在线技能要先经过安全审查、你明确批准后才会安装。</p></div></header>
+    <fieldset className={styles.skillGithubSource}><legend>导入本地技能包</legend><label className={styles.filePick}>{packageBusy ? '正在检查…' : '选择 ZIP 文件'}<input className="sr-only" aria-label="导入技能包" type="file" accept=".zip,application/zip" disabled={packageBusy} onChange={(event) => void inspectPackage(event.target.files?.[0])} /></label><p>导入前会检查清单、路径、链接和哈希，并做安全扫描；安装前还需要你批准。</p></fieldset>
+    <nav className={styles.skillCatalogTabs} aria-label="技能来源">{(['local', 'external', 'all'] as const).map((item) => <button type="button" key={item} aria-pressed={mode === item} onClick={() => { setMode(item); void search(undefined, item); }}>{item === 'local' ? '本地' : item === 'external' ? '在线目录' : '全部'}</button>)}</nav>
+    {mode !== 'local' && <fieldset className={styles.skillGithubSource}><legend>直接检查 GitHub 上的公开技能</legend><label>仓库地址<input aria-label="公开 GitHub 仓库" value={githubSource} onChange={(event) => setGithubSource(event.target.value)} placeholder="https://github.com/owner/repo" /></label><label>技能路径<input aria-label="GitHub Skill 路径" value={githubPath} onChange={(event) => setGithubPath(event.target.value)} placeholder="skills/example-skill" /></label><button type="button" disabled={!githubSource} onClick={() => void inspectGithub()}>检查这个技能</button></fieldset>}
     <form className={styles.skillSearchForm} onSubmit={(event) => void search(event)}>
       <label className={styles.skillSearchBox}><Search size={17} /><input aria-label="任务或技能搜索" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="描述你要完成的任务…" /><button disabled={loading}>{loading ? '搜索中…' : '搜索技能'}</button></label>
       <div className={styles.skillFilters}>
@@ -358,7 +358,7 @@ export default function SkillDiscoveryPage({ apiBaseUrl, activeSkills, onApplySk
       </div>
     </form>
     {error && <div className={styles.skillStateError} role="alert">{error}。你仍可继续正常聊天。</div>}
-    {mode !== 'local' && <div role="status">External catalog: {catalogStatus || '等待搜索'}</div>}
+    {mode !== 'local' && <div role="status" className={styles.skillStateEmpty}>在线目录：{catalogStatus || '等待搜索'}</div>}
     {!error && !loading && !results.length && <div className={styles.skillStateEmpty} role="status">没有匹配的本地技能。可调整关键词或筛选条件。</div>}
     <div className={styles.skillDiscoveryGrid}>
       <div className={styles.skillDiscoveryResults} aria-label="技能检索结果">

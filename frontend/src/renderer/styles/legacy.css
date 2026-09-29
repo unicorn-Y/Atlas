@@ -97,11 +97,11 @@ mark { background: var(--brand-soft); color: inherit; border-radius: 3px; paddin
 .fact:hover .btn.ghost, .fact .btn:focus-visible { opacity: 1; }
 
 .seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--sunken); box-shadow: inset 0 0 0 1px var(--line); gap: 2px; }
-.seg button { height: 28px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: var(--fg-2); white-space: nowrap; background: none; border: 0; }
+.seg button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: var(--fg-2); white-space: nowrap; background: none; border: 0; }
 .seg button:hover { color: var(--fg); }
 .seg button[aria-pressed=true] { background: var(--raised-bg); color: var(--fg); box-shadow: var(--shadow-raised); }
 .tabs { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--sunken); }
-.tabs button { height: 26px; padding: 0 10px; border-radius: 7px; font-size: 12.5px; color: var(--fg-2); background: none; border: 0; }
+.tabs button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 7px; font-size: 12.5px; color: var(--fg-2); background: none; border: 0; }
 .tabs button[aria-selected=true] { background: var(--raised-bg); color: var(--fg); box-shadow: var(--shadow-raised); }
 .kv { display: grid; gap: 10px; margin: 0 0 20px; }
 .kv div { display: flex; justify-content: space-between; gap: 14px; font-size: 13px; }

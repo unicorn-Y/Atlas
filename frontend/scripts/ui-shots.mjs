@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 const out = process.argv[2] ?? 'ui-shots';
 const views = process.argv.slice(3).length ? process.argv.slice(3) : ['home'];
-const themes = ['light', 'aurora', 'dark'];
+const themes = (process.env.THEMES ?? 'light,aurora,dark').split(',');
 const NAV = { code: '项目', create: '创作', auto: '自动化', memory: '记忆', skills: '技能' };
 mkdirSync(out, { recursive: true });
 
@@ -20,6 +20,8 @@ for (const theme of themes) {
     if (view === 'chat') {
       const recent = page.locator('[aria-label="历史任务"] button').first();
       if (await recent.count()) { await recent.click(); await page.waitForTimeout(1200); }
+    } else if (view === 'models') {
+      await page.keyboard.press('Control+,'); await page.waitForTimeout(700);
     } else if (view === 'settings') {
       await page.keyboard.press('Control+,'); await page.waitForTimeout(500);
       const appearance = page.getByRole('button', { name: '外观与语音' });
@@ -29,7 +31,7 @@ for (const theme of themes) {
       await page.getByRole('button', { name: NAV[view], exact: true }).first().click(); await page.waitForTimeout(900);
     }
     await page.screenshot({ path: join(out, `${view}-${theme}.png`) });
-    if (view === 'settings') { await page.keyboard.press('Escape'); await page.waitForTimeout(300); }
+    if (view === 'settings' || view === 'models') { await page.keyboard.press('Escape'); await page.waitForTimeout(300); }
   }
   await page.close();
 }

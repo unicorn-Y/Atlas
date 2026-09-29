@@ -12,12 +12,12 @@ describe('Skill discovery page', () => {
     expect(html).toContain('能力筛选');
     expect(html).toContain('工具筛选');
     expect(html).toContain('来源筛选');
-    expect(html).toContain('Local');
-    expect(html).toContain('External Catalog');
-    expect(html).toContain('All');
-    expect(html).toContain('本地搜索保持离线可用');
-    expect(html).toContain('aria-label="导入 Skill package"');
-    expect(html).toContain('lifecycle 审批');
+    expect(html).toContain('本地');
+    expect(html).toContain('在线目录');
+    expect(html).toContain('全部');
+    expect(html).toContain('本地搜索离线也能用');
+    expect(html).toContain('aria-label="导入技能包"');
+    expect(html).toContain('安装前还需要你批准');
   });
 
   it('does not offer the local activation path for remote records', () => {
