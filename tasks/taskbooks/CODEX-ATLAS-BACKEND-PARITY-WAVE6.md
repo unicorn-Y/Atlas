@@ -8,7 +8,7 @@ SOURCE: docs/PARITY.md
 
 ## Mission
 
-第五波已接进前端（`7f5f29a`）。第六波做五件事：**Worker 类型与可导入的子 Agent 定义**、**浏览器交接与复用你自己的浏览器**、**局域网网页版与手机配对**、**对话导出为网页**、**插件市场**，外加第五波遗留。
+第五波已接进前端（`7f5f29a`）。第六波做五件事：**子 Agent 体系（类型、多格式定义文件、验收、后台与引导、配方当 Worker）**、**浏览器交接与复用你自己的浏览器**、**局域网网页版与手机配对**、**对话导出为网页**、**插件市场**，外加第五波遗留。
 
 规则不变：
 
@@ -28,24 +28,49 @@ SOURCE: docs/PARITY.md
 2. **网页提取防 DNS 重绑定**：`_validate_url` 解析出的地址检查通过后，实际连接必须使用这些已检查过的 IP（自定义 httpx transport，或解析后按 IP 连接并保留 Host 头/SNI），不能让 httpx 重新解析。测试：第一次解析公网、第二次解析内网的 mock 下必须拒绝。
 3. **全量测试必须跑完**：你的终端会中断长命令。用后台进程运行全量（例：`Start-Process` 启动 pytest，输出重定向到系统临时目录的文件，轮询到结束再读结果），把最后的汇总行原样写进结果文件。
 
-## 1. Worker 类型与子 Agent 定义 — F192、F065
+## 1. 子 Agent 体系：类型、定义文件、验收、后台与引导 — F192、F193、F065
 
-借鉴 Claude Code（`.claude/agents/*.md` 子 Agent）和 OpenCode（`mode: subagent` 的 agent 定义）的做法：Worker 分类型，每种有自己的说明、提示词、工具白名单和模型；用户可以用 Markdown 文件定义新类型。
+**先读 `docs/research/2026-09-agent-harness-landscape.md` 第三节「编排」**。这是对 20 多个主流 Agent（Claude Code、Codex CLI、Gemini CLI、OpenCode、OpenHands、Copilot、Hermes、goose、Cursor、Amp、Factory、Kiro、Kimi Code 等，2026 年资料）的调研，本节的设计取自其中的共识和强项。
 
-- 定义格式：Markdown 文件，开头 YAML frontmatter，正文是该 Worker 的系统提示词。字段：`name`（必填，`[a-z0-9-]`）、`description`（必填，告诉协调者什么时候用它）、`tools`（可选，工具名列表或逗号分隔字符串；缺省为全部可用工具）、`model`（可选；缺省或 `inherit` 用父 run 的模型）、`permission_mode`（可选，只能比父 run 更严格）。未知字段忽略。
-- 读取位置（后者同名覆盖前者）：内置 → 数据目录 `agents/` → 工作目录 `.atlas/agents/`。**兼容读取** 工作目录的 `.claude/agents/*.md` 和 `.opencode/agent/*.md`、`.opencode/agents/*.md`（字段按上面映射；OpenCode 的 `tools` 是 `{name: bool}` 对象，true 的算允许；工具名映射不上的忽略并在列表接口里标出来）。工作目录里的定义属于「规则文件」，要走第三波的信任流程，未信任时不加载。
-- **同样兼容 Codex CLI 的角色定义**：`~/.codex/agents/*.toml`（用户级，放在数据目录旁一样读取）和工作目录的 `.codex/agents/*.toml`，每个文件一个角色。把其中的名称、说明、提示词（developer instructions）、模型、工具/沙箱相关字段映射到上面的字段；映射不上的字段忽略并写进 `warnings`。实现前先查 Codex CLI 当前文档确认字段名，结果文件里写明采用的映射。
-- 内置四种：
-  - `explore`：只读（文件读/列/搜、git 读、网页提取），快速调查代码或资料，返回结论和证据位置。
-  - `plan`：只读，给出实施方案（改哪些文件、步骤、风险），不动手。
-  - `general`：通用（当前默认 Worker 的能力）。
-  - `oracle`：只读的深度分析（参考 Amp 的 Oracle）：难以定位的 bug、架构取舍、审查方案。模型用设置里的「强模型」（新增配置 `agents.strong_model`，没配就用父 run 的模型），可以用更高的推理强度。
-- **协调规则**（写进委派工具的说明和主 Agent 的系统提示）：只有互不依赖、以阅读调查为主的任务才并行；会改同一批文件、或后一步依赖前一步结果的，串行做或自己做；任务很小（一两次工具调用就能完成）时不要委派。依据：并行不是免费的，每个子 Agent 都单独消耗模型调用，有依赖的任务拆开反而更差。
-- `delegate_task` / `delegate_parallel` 增加参数 `agent`（类型名，默认 `general`）；工具描述里列出可用类型的 `name: description`（最多 20 个），让模型挑。并行任务每项可以各自指定 `agent`。未知类型回退到 `general` 并在结果里注明。
-- Worker 的工具集 = 类型白名单 ∩ 父 run 允许的工具 − 委派工具。`permission_mode` 取两者中更严格的。
-- `subtask.started` 事件的 `data` 增加 `agent`。
-- `GET /api/agents/types?root=` → `{types: [{name, description, tools, model, source: "builtin"|"user"|"workspace"|"claude"|"opencode", path?, trusted, warnings: [...]}]}`，给前端展示。
-- 测试：frontmatter 解析（含 OpenCode 的对象式 tools、Claude 的逗号字符串）、Codex TOML 解析、覆盖顺序、未信任的工作目录定义不加载、explore / oracle 写文件被拒、oracle 使用 strong_model、未知类型回退。
+### 1.1 定义文件（主格式 + 导入）
+
+- **主格式**：Claude Code 风格 Markdown——YAML frontmatter + 正文作为该 Agent 的系统提示词。字段取 OpenHands 子 Agent 定义的超集：`name`（必填，`[a-z0-9-]`）、`description`（必填，告诉协调者什么时候用它）、`tools`（列表或逗号分隔；缺省为全部可用）、`model`（缺省或 `inherit` 用父 run 实际模型；`strong` 表示用 `agents.strong_model`）、`permission_mode`（只能比父 run 更严格）、`skills`（启动时激活的技能名）、`mcp`（只给这个 Agent 的 MCP 服务器名，必须是已配置且启用的）、`max_turns`。未知字段忽略并写进 `warnings`。
+- **读取位置**（后者同名覆盖前者）：内置 → 数据目录 `agents/` → 工作目录 `.atlas/agents/*.md`。
+- **导入其他家的格式**（同样读取，映射到主格式）：
+  - Claude Code：`.claude/agents/*.md`（`tools` 可能是逗号字符串）。
+  - OpenCode：`.opencode/agent/*.md`、`.opencode/agents/*.md`（`tools` 是 `{名字: bool}` 对象；`mode` 为 `primary` 的跳过）。
+  - Codex CLI：`~/.codex/agents/*.toml` 和工作目录 `.codex/agents/*.toml`（每个文件一个角色）。
+  - GitHub Copilot：`.github/agents/*.agent.md` 和 `~/.copilot/agents/*.agent.md`。
+  - 每种格式实现前**先查该产品当前的官方文档确认字段名**，结果文件里列出采用的映射表。工具名映射不上的忽略并记进 `warnings`。
+- 工作目录里的定义（包括导入的）属于规则文件，**走第三波的信任流程**，未信任时不加载。
+
+### 1.2 内置类型
+
+| 类型 | 做什么 | 工具 | 模型 |
+| --- | --- | --- | --- |
+| `explore` | 快速调查代码或资料，回结论和证据位置 | 只读：文件读/列/搜、git 读 | 父 run |
+| `researcher` | 网上调研（参考 OpenHands web-researcher、Amp Librarian），回带出处的结论 | 只读 + `web_extract` + 搜索类工具 | 父 run |
+| `plan` | 给实施方案（改哪些文件、步骤、风险、验证方法），不动手 | 只读 | 父 run |
+| `oracle` | 深度分析：难定位的 bug、架构取舍、审方案（参考 Amp Oracle） | 只读 | `strong`（新增配置 `agents.strong_model`，没配用父 run 的） |
+| `verifier` | 对照目标和成功标准验收别人的结果：跑测试、看 diff、查文件，回「通过 / 不通过 + 原因」（参考 Factory Missions 的验证者、Hermes 的 verifier） | 只读 + 运行命令（测试用；`ask_writes` 下照常要审批） | 父 run |
+| `general` | 通用，现在默认 Worker 的能力 | 全部（受父权限约束） | 父 run |
+
+Worker 的工具集 = 类型白名单 ∩ 父 run 允许的工具 − 委派工具；`permission_mode` 取两者中更严格的；委派工具始终不给（防递归）。
+
+### 1.3 委派工具
+
+- `delegate_task` / `delegate_parallel` 增加 `agent`（默认 `general`；并行时每项可以各自指定）；工具描述里列出可用类型的 `name: description`（最多 20 个）。未知类型回退 `general` 并在结果里注明。
+- **协调规则**写进委派工具说明和主 Agent 系统提示：只有互不依赖、以阅读调查为主的任务才并行；改同一批文件、或后一步依赖前一步的，串行或自己做；一两次工具调用能完成的不要委派。（依据见调研文档：多 Agent 不是免费并行。）
+- **并行组验收**：`delegate_parallel` 加可选 `verify: {criteria: string}`。全部完成后派一个 `verifier` 对照 `criteria` 检查每项结果；不通过的项带着 verifier 的意见**自动重派一次**（只一次），`subtask.group_completed` 的每项结果加 `verified: true|false` 和 `verifier_note`。
+- **后台委派 + 运行中引导**（参考 Cursor 后台子 Agent、Hermes 子 Agent 引导、goose 异步委派）：`delegate_task` 加 `background: true`，立即返回 `{subtask_id}`，主 Agent 继续干别的。新工具 `subtask_status {subtask_id}`（状态、最近进度、完成后的结果）和 `subtask_message {subtask_id, text}`（给运行中的子 Agent 补充指令，在它下一轮开始时作为用户消息插入）。WS 新增 `{type: "subtask.message", run_id, subtask_id, text}`，让用户在界面上也能给子任务发话；子任务收到时发 `subtask.steered {subtask_id, text}`。主 run 结束时仍在跑的后台子任务：等它们结束（上限 10 分钟），超时取消并在最终回复里说明。
+- **配方当 Worker**（参考 goose subrecipe）：`delegate_task` 可以传 `recipe: {id, params}` 代替 `goal`，按配方的提示词和参数执行；并行时每项也可以是配方。
+- `subtask.started` 的 `data` 增加 `agent`、`background`、`recipe_id`（有的话）。
+
+### 1.4 接口与测试
+
+- `GET /api/agents/types?root=` → `{types: [{name, description, tools, model, source: "builtin"|"user"|"workspace"|"claude"|"opencode"|"codex"|"copilot", path?, trusted, warnings: [...]}]}`。
+- 测试：各格式解析（Claude 逗号 tools、OpenCode 对象 tools 和 primary 跳过、Codex TOML、Copilot `.agent.md`）；覆盖顺序；未信任不加载；只读类型写文件被拒；oracle 用 strong_model；未知类型回退；并行验收不通过时重派一次且只一次；后台委派立即返回、`subtask_message` 在下一轮生效、主 run 结束时的等待与超时取消；配方作为 Worker。
+- **真机场景**（写进结果文件）：用本机真实模型各跑一次——① `explore` + `researcher` 并行调查一个小问题；② 带 `verify` 的并行组，其中一项故意给出做不到的要求，看验收与重派；③ 后台委派一个任务，中途用 `subtask_message` 改要求。
 
 ## 2. 浏览器交接与复用你自己的浏览器 — F139、F140
 
@@ -90,6 +115,6 @@ Agent 用浏览器时会遇到登录、验证码、支付确认这些只能人�
 
 - 全量测试**跑完并通过**（方法见第 0 节第 3 条），汇总行写进结果文件。
 - 新接口都有 OriginGuard 测试；第 3 节额外覆盖「第二监听只认配对 cookie」。
-- 第 1、2 节的真实模型最小场景记录（第 Mission 最后一条）。
+- 第 1 节三个真机场景 + 第 2 节一个真机场景的记录。
 - 结果文件：`tasks/results/CODEX-ATLAS-BACKEND-PARITY-WAVE6.result.md`：每节做了什么、偏差、已知限制、手动验证方法。
 - 提交到 `main`，每节一个提交，提交信息写清楚「为什么」。推送前先 `git pull --rebase`（我这边会同时推前端提交）。
