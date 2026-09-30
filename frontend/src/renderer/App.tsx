@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AudioLines, Bell, BookMarked, Brain, Copy, Keyboard, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
+  AudioLines, Bell, BookMarked, Brain, Copy, Keyboard, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
@@ -15,6 +15,7 @@ import TimelineNav from './components/TimelineNav';
 import ForkTree from './components/ForkTree';
 import RunSetupMenu from './components/RunSetupMenu';
 import TabStrip from './components/TabStrip';
+import OnboardingDialog from './components/OnboardingDialog';
 import ShortcutsPanel from './pages/ShortcutsPanel';
 import { loadBindings, matchShortcut } from './services/shortcuts';
 import type { PermissionMode } from '@atlas/backend-adapter';
@@ -99,6 +100,8 @@ export default function App() {
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
   const [branches, setBranches] = useState<string[]>([]);
   const [remoteOpen, setRemoteOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [bindings, setBindings] = useState(loadBindings);
   useEffect(() => {
@@ -245,8 +248,17 @@ export default function App() {
     setAttachments([]);
     setFiles([]);
     setEditing(null);
-    void store.createConversation();
-  }, [go, store]);
+    void store.createConversation().then(() => {
+      // New tasks start in the usual folder chosen during setup.
+      const id = useAtlasStore.getState().activeConversationId;
+      if (id && defaultWorkspace) store.setWorkspace(id, defaultWorkspace);
+    });
+  }, [go, store, defaultWorkspace]);
+  // First run: once the backend answers and no model key is saved, walk through setup (only once).
+  useEffect(() => {
+    if (store.connected && store.configLoaded && !store.apiKeyConfigured && pref('onboarded') !== 'true') setOnboardingOpen(true);
+  }, [store.connected, store.configLoaded, store.apiKeyConfigured]);
+  const closeOnboarding = () => { setOnboardingOpen(false); setPref('onboarded', 'true'); };
 
   const startVoice = () => {
     if (!getSpeechRecognition()) { setToast('这台设备不支持语音识别，暂时无法通话'); return; }
@@ -809,6 +821,8 @@ export default function App() {
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
           </button>)}
+        <button onClick={() => { setSheet(null); setOnboardingOpen(true); }} className="mt-3 flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
+          <Sparkles size={16} />开始向导</button>
       </nav>
       <div className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
         <button aria-label="关闭设置" onClick={() => setSheet(null)} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
@@ -855,6 +869,19 @@ export default function App() {
         const conversationId = useAtlasStore.getState().activeConversationId;
         if (conversationId) { store.setWorkspace(conversationId, workspace); setToast(`工作目录：${workspace}`); }
       })(); }} />
+    <OnboardingDialog open={onboardingOpen} onClose={closeOnboarding} username={username}
+      onUsername={(value) => { setPref('username', value); setUsername(value); }}
+      defaultWorkspace={defaultWorkspace} onDefaultWorkspace={(path) => { setPref('default-workspace', path); setDefaultWorkspace(path); }}
+      onTry={(text) => {
+        closeOnboarding(); go('chat');
+        // Opening a conversation restores its saved draft, so the example goes in as that draft.
+        void store.createConversation().then(() => {
+          const id = useAtlasStore.getState().activeConversationId;
+          if (!id) return;
+          if (defaultWorkspace) store.setWorkspace(id, defaultWorkspace);
+          writeDraft(id, text); setInput(text);
+        });
+      }} />
     <RecipesDialog open={recipesOpen} onClose={() => setRecipesOpen(false)} recipes={store.recipes}
       onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />
     {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}

@@ -21,6 +21,8 @@ interface AtlasState {
   apiBaseUrl: string;
   providerBaseUrl: string;
   apiKeyConfigured: boolean;
+  /** The backend's model configuration has been read at least once (apiKeyConfigured is meaningful). */
+  configLoaded: boolean;
   settingsBusy: boolean;
   connectionTest: { ok: boolean; message: string } | null;
   mode: 'mock' | 'backend';
@@ -165,7 +167,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
   });
 
   return {
-    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, settingsBusy: false, connectionTest: null,
+    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, busy: false, paused: false, error: null,
     model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
@@ -184,7 +186,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         const conversations = await migrateLegacyFlags(loaded);
         const preferredModel = storageGet('atlas.preference.model');
         const model = mode === 'backend' ? configuration.current : preferredModel || configuration.current;
-        set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
+        set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
         const first = conversations.find((item) => !item.archived);
         if (first) await get().openConversation(first);
         // Roles and recipes are extras; the app works without them if the backend predates them.
