@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from atlas.agent.enrichment import DelegationService
+from atlas.memory import MemoryStore
 
 
 class Hooks:
@@ -56,3 +57,18 @@ async def test_parallel_atlas_workers_continue_after_one_failure() -> None:
         "completed", "failed", "completed",
     ]
     assert len(calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_conversation_extra_roots_persist_and_list(tmp_path) -> None:
+    memory = MemoryStore(tmp_path / "atlas.sqlite3")
+    await memory.init()
+    try:
+        conversation_id = await memory.create_conversation("多目录")
+        roots = [str((tmp_path / "workspace-a").resolve()), "ssh://host/home/project"]
+        assert await memory.update_conversation(conversation_id, extra_roots=roots)
+        assert (await memory.get_conversation(conversation_id))["extra_roots"] == roots
+        listed = await memory.list_conversations()
+        assert next(row for row in listed if row["id"] == conversation_id)["extra_roots"] == roots
+    finally:
+        await memory.close()

@@ -873,6 +873,7 @@ class ConversationUpdateRequest(BaseModel):
     allowed_paths: list[str] | None = None
     executor: str | None = None
     sandbox: dict[str, Any] | None = None
+    extra_roots: list[str] | None = None
 
 
 class ConversationCreateRequest(BaseModel):
@@ -1171,6 +1172,25 @@ async def update_conversation(
                 raise ValueError("workspace must be absolute")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+    roots = values.get("extra_roots")
+    if roots is not None:
+        if len(roots) > 5:
+            raise HTTPException(status_code=400, detail="最多可添加 5 个附加目录。")
+        try:
+            normalized_roots = []
+            for root in roots:
+                if not isinstance(root, str):
+                    raise ValueError("附加目录无效。")
+                if root.startswith("ssh://"):
+                    ssh_workspaces.parse_workspace(root)
+                    normalized_roots.append(root)
+                elif Path(root).is_absolute():
+                    normalized_roots.append(str(Path(root).expanduser().resolve()))
+                else:
+                    raise ValueError("附加目录必须是绝对路径或 SSH 地址。")
+            values["extra_roots"] = normalized_roots
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if "sandbox" in values and values["sandbox"] is not None:
         sandbox = values["sandbox"]
         if sandbox.get("type") != "docker" or not isinstance(
@@ -1184,6 +1204,7 @@ async def update_conversation(
         permission_mode=values.get("permission_mode"),
         allowed_paths=values.get("allowed_paths"), executor=values.get("executor"),
         sandbox=values.get("sandbox"), sandbox_set="sandbox" in values,
+        extra_roots=values.get("extra_roots"),
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -2168,11 +2189,11 @@ async def list_checkpoints(
              ("id", "workspace", "created_at", "run_id", "files")} for item in items]
 
 
-def _run_changes(run_id: str) -> dict[str, Any]:
+def _run_changes(run_id: str, workspace: str | None = None) -> dict[str, Any]:
     store = getattr(orchestrator, "checkpoints", None) if orchestrator is not None else None
     if store is None:
         return {"run_id": run_id, "files": []}
-    manifests = [item for item in store.list_checkpoints(run_id=run_id)]
+    manifests = [item for item in store.list_checkpoints(run_id=run_id, workspace=workspace)]
     if not manifests:
         return {"run_id": run_id, "files": []}
     first = min(manifests, key=lambda item: item["created_at"])
@@ -2244,9 +2265,23 @@ def _sum_usage(calls: list[dict[str, Any]]) -> dict[str, Any]:
 @app.get("/api/runs/{run_id}/changes")
 async def get_run_changes(run_id: str) -> dict[str, Any]:
     run = runtime_mgr.runs.get(run_id)
-    if run and (run.workspace or "").startswith("ssh://"):
-        return await ssh_workspaces.changes(run.workspace, run_id)
-    return _run_changes(run_id)
+    if not run:
+        return _run_changes(run_id)
+    roots = [*([run.workspace] if run.workspace else []), *run.extra_roots]
+    combined = []
+    for index, root in enumerate(dict.fromkeys(roots)):
+        if root.startswith("ssh://"):
+            data = await ssh_workspaces.changes(root, run_id)
+        else:
+            data = _run_changes(run_id, workspace=root)
+        for item in data.get("files", []):
+            entry = {**item, "root": root}
+            if index > 0:
+                name = (PurePosixPath(root.split("?", 1)[0]).name
+                        if root.startswith("ssh://") else Path(root).name)
+                entry["path"] = f"{name or f'目录{index}'}/{item['path']}"
+            combined.append(entry)
+    return {"run_id": run_id, "files": combined}
 
 
 @app.get("/api/processes")
@@ -4835,7 +4870,8 @@ class RunState:
         "ephemeral", "ephemeral_source", "tool_output_dir", "subtasks",
         "read_only", "active_skills", "profile_id", "user_input",
         "permission_mode", "allowed_paths", "trust_future", "trust_event_id",
-        "executor", "sandbox",
+        "executor", "sandbox", "extra_roots",
+        "trust_roots",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -4878,6 +4914,8 @@ class RunState:
         self.trust_event_id: str | None = None
         self.executor = "atlas"
         self.sandbox: dict[str, Any] | None = None
+        self.extra_roots: list[str] = []
+        self.trust_roots: list[str] = []
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""
@@ -5021,8 +5059,9 @@ async def _handle_rules_trust(conn_id: str, data: dict[str, Any]) -> None:
         # One RunState has one outstanding trust request, so a stale event_id
         # after reconnect can safely fall back to run_id.
         trusted = data.get("trust") is True
-        if trusted and run.workspace:
-            _set_workspace_trusted(run.workspace, True)
+        if trusted:
+            for root in run.trust_roots or ([run.workspace] if run.workspace else []):
+                _set_workspace_trusted(root, True)
         run.trust_future.set_result(trusted)
         return
     await runtime_mgr.send(conn_id, {
@@ -5178,6 +5217,27 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             "category": "validation", "detail": "workspace must be an absolute path",
         }))
         return
+    extra_roots = data.get("extra_roots")
+    if extra_roots is not None:
+        try:
+            if not isinstance(extra_roots, list) or len(extra_roots) > 5:
+                raise ValueError
+            normalized_roots = []
+            for root in extra_roots:
+                if isinstance(root, str) and root.startswith("ssh://"):
+                    ssh_workspaces.parse_workspace(root)
+                    normalized_roots.append(root)
+                elif isinstance(root, str) and Path(root).is_absolute():
+                    normalized_roots.append(str(Path(root).expanduser().resolve()))
+                else:
+                    raise ValueError
+            extra_roots = normalized_roots
+        except ValueError:
+            invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+            await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+                "category": "validation", "detail": "附加目录必须是绝对路径或 SSH 地址，且最多 5 个。",
+            }))
+            return
     profile_id = data.get("profile_id")
     profile = _profile_store().get(str(profile_id)) if profile_id else None
     if profile_id and profile is None:
@@ -5287,17 +5347,24 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         conversation = await memory.get_conversation(conv_id)
     if not workspace and conversation:
         workspace = conversation.get("workspace")
+    run.extra_roots = list(extra_roots if extra_roots is not None
+                           else (conversation or {}).get("extra_roots") or [])
     if conversation:
         if "permission_mode" not in data:
             run.permission_mode = conversation.get("permission_mode", "full_access")
             run.read_only = run.permission_mode == "read_only" or profile_id in {"architect", "reviewer"}
         if "allowed_paths" not in data:
             run.allowed_paths = list(conversation.get("allowed_paths") or [])
+        if "extra_roots" not in data:
+            run.extra_roots = list(conversation.get("extra_roots") or [])
         run.executor = str(data.get("executor", conversation.get("executor") or "atlas"))
         run.sandbox = data.get("sandbox", conversation.get("sandbox"))
     else:
         run.executor = str(data.get("executor", "atlas"))
         run.sandbox = data.get("sandbox")
+    if run.allowed_paths:
+        local_roots = [root for root in run.extra_roots if not root.startswith("ssh://")]
+        run.allowed_paths = list(dict.fromkeys([*run.allowed_paths, *local_roots]))
     if run.sandbox is not None and (
         not isinstance(run.sandbox, dict) or run.sandbox.get("type") != "docker"
         or not isinstance(run.sandbox.get("network", False), bool)
@@ -5356,7 +5423,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                          or profile_id in {"architect", "reviewer"})
     if memory is not None and conversation:
         updates: dict[str, Any] = {}
-        for field in ("workspace", "permission_mode", "allowed_paths", "executor", "sandbox"):
+        for field in ("workspace", "permission_mode", "allowed_paths", "executor", "sandbox", "extra_roots"):
             if field in data:
                 updates[field] = data[field]
         if updates:
@@ -5527,17 +5594,34 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             run.ephemeral_source = temp_conversation
             run.read_only = True
             run.conversation_id = temp_conversation
-        rules = await workspace_rules(root=run.workspace)
-        run.workspace_rules = rules["files"]
-        if run.workspace_rules and not _workspace_trust().get(run.workspace):
+        rule_roots = list(dict.fromkeys([*([run.workspace] if run.workspace else []), *run.extra_roots]))
+        run.workspace_rules = []
+        untrusted_roots = []
+        for root in rule_roots:
+            rules = await workspace_rules(root=root)
+            root_key = rules.get("root", root)
+            root_files = [{**item, "root": root_key} for item in rules["files"]]
+            run.workspace_rules.extend(root_files)
+            if root_files and not _workspace_trust().get(root_key):
+                untrusted_roots.append(root_key)
+        if run.extra_roots:
+            roots_text = "\n".join([*([run.workspace] if run.workspace else []), *run.extra_roots])
+            active_skill_instructions = [*active_skill_instructions, {
+                "name": "附加工作目录",
+                "content": "当前主工作目录和附加目录如下；文件工具可以用绝对路径访问这些目录：\n" + roots_text,
+            }]
+        if run.workspace_rules and untrusted_roots:
+            run.trust_roots = untrusted_roots
             loop = asyncio.get_running_loop()
             run.trust_future = loop.create_future()
             next_event_id = f"{run.run_id}:{run.sequence + 1}"
             run.trust_event_id = next_event_id
             trust_env = run.next_envelope("rules.trust_required", {
-                "event_id": next_event_id, "root": run.workspace,
+                "event_id": next_event_id, "root": untrusted_roots[0],
+                "roots": untrusted_roots,
                 "files": [{"path": item["path"], "bytes": item["bytes"]}
-                          for item in run.workspace_rules],
+                          | {"root": item["root"]} for item in run.workspace_rules
+                          if item["root"] in untrusted_roots],
             })
             run.status = "waiting"
             await runtime_mgr.send(conn_id, trust_env)
