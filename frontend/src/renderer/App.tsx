@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AudioLines, Bell, BookMarked, Brain, Copy, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
+  AudioLines, Bell, BookMarked, Brain, Copy, Keyboard, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
@@ -14,6 +14,9 @@ import RemoteFolderDialog from './components/RemoteFolderDialog';
 import TimelineNav from './components/TimelineNav';
 import ForkTree from './components/ForkTree';
 import RunSetupMenu from './components/RunSetupMenu';
+import TabStrip from './components/TabStrip';
+import ShortcutsPanel from './pages/ShortcutsPanel';
+import { loadBindings, matchShortcut } from './services/shortcuts';
 import type { PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
@@ -40,7 +43,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'profiles' | 'hooks' | 'appearance' | 'plugins' | 'notifications';
+type SheetPane = 'models' | 'profiles' | 'hooks' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
@@ -96,6 +99,13 @@ export default function App() {
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
   const [branches, setBranches] = useState<string[]>([]);
   const [remoteOpen, setRemoteOpen] = useState(false);
+  const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
+  const [bindings, setBindings] = useState(loadBindings);
+  useEffect(() => {
+    const update = () => setBindings(loadBindings());
+    window.addEventListener('atlas:shortcuts', update);
+    return () => window.removeEventListener('atlas:shortcuts', update);
+  }, []);
   const [listening, setListening] = useState(false);
   const [voiceOutput, setVoiceOutput] = useState(() => pref('voice-output') === 'true');
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
@@ -372,17 +382,56 @@ export default function App() {
   const draft = (text: string) => { go('chat'); setInput(text); void store.createConversation(); };
   const suggest = (suggestion: Suggestion) => { setInput(suggestion.text); setHomeMode(suggestion.mode ?? 'chat'); };
 
+  // Every conversation opened in the chat view becomes a tab; tabs of deleted conversations drop out.
+  useEffect(() => {
+    const id = store.activeConversationId;
+    if (view !== 'chat' || !id) return;
+    setTabs((current) => current.includes(id) ? current : [...current, id].slice(-12));
+  }, [view, store.activeConversationId]);
+  useEffect(() => {
+    if (!store.conversations.length) return;
+    const known = new Set(store.conversations.map((item) => item.id));
+    setTabs((current) => { const next = current.filter((id) => known.has(id)); return next.length === current.length ? current : next; });
+  }, [store.conversations]);
+  useEffect(() => { setPref('tabs', JSON.stringify(tabs)); }, [tabs]);
+  const closeTab = (id: string) => {
+    const index = tabs.indexOf(id);
+    const next = tabs.filter((item) => item !== id);
+    setTabs(next);
+    if (id !== store.activeConversationId || view !== 'chat') return;
+    const neighbour = next[Math.min(index, next.length - 1)];
+    const conversation = neighbour ? store.conversations.find((item) => item.id === neighbour) : undefined;
+    if (conversation) openConversation(conversation); else go('home');
+  };
+  const cycleTab = (step: number) => {
+    if (tabs.length < 2) return;
+    const index = tabs.indexOf(store.activeConversationId);
+    const target = store.conversations.find((item) => item.id === tabs[(index + step + tabs.length) % tabs.length]);
+    if (target) openConversation(target);
+  };
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (voiceOpen) return;
-      const mod = event.ctrlKey || event.metaKey;
-      if (mod && event.key.toLowerCase() === 'k') { event.preventDefault(); setPaletteOpen((value) => !value); }
-      else if (mod && event.key.toLowerCase() === 'n') { event.preventDefault(); newTask(); }
-      else if (mod && event.key === ',') { event.preventDefault(); setSheet((value) => value ? null : 'models'); }
+      if (voiceOpen || (event.target as HTMLElement | null)?.closest?.('[data-shortcut-recorder]')) return;
+      const action = matchShortcut(event, bindings);
+      if (!action) return;
+      event.preventDefault();
+      switch (action) {
+        case 'palette': setPaletteOpen((value) => !value); break;
+        case 'newTask': newTask(); break;
+        case 'settings': setSheet((value) => value ? null : 'models'); break;
+        case 'nextTab': cycleTab(1); break;
+        case 'prevTab': cycleTab(-1); break;
+        case 'closeTab': if (view === 'chat' && store.activeConversationId) closeTab(store.activeConversationId); break;
+        case 'toggleSidebar': toggleMini(); break;
+        case 'toggleInspector': if (view === 'chat') toggleInspector(); break;
+        case 'focusComposer': document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus(); break;
+        case 'stopRun': if (store.busy) store.stopTask(); break;
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [newTask, voiceOpen]);
+  });
   useEffect(() => () => { recognitionRef.current?.stop(); window.speechSynthesis?.cancel(); }, []);
 
   const paletteItems: PaletteItem[] = [
@@ -639,6 +688,9 @@ export default function App() {
   const canRewrite = store.connected && !(activeRun && !runDone) && !loadingMessages;
 
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
+  const runningConversations = store.runs.filter((run) => !TERMINAL.includes(run.status)).map((run) => run.conversationId);
+  // One open conversation reads better as a plain title; tabs appear from the second one.
+  const showTabs = view === 'chat' && tabs.length > 1 && tabs.includes(store.activeConversationId);
   const connection = !store.connected
     ? <span className="inline-flex items-center gap-1.5 text-[12px] text-danger"><i className="size-1.5 rounded-full bg-danger" />后端没有连接</span>
     : null;
@@ -653,18 +705,21 @@ export default function App() {
         pendingMemories={pendingCount} username={username} subtitle={store.connected ? modelName : '后端没有连接'}
         theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
         pinned={store.pinned} archived={store.archived} unread={store.unread}
-        running={store.runs.filter((run) => !TERMINAL.includes(run.status)).map((run) => run.conversationId)}
+        running={runningConversations}
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
         onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} />
 
       <main className="sheet relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[14px]">
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
-          <div className="flex min-w-0 items-center gap-3">
-            {pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
+          <div className={cn('flex min-w-0 items-center gap-3', showTabs && 'flex-1')}>
+            {showTabs
+              ? <TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} />
+              : pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
             {view === 'chat' && <ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} />}
             {connection}
           </div>
-          <span className="flex-1" />
+          {/* With tabs the left group already fills the bar; its empty part still drags the window. */}
+          {!showTabs && <span className="flex-1" />}
           <div className="no-drag flex items-center gap-0.5">
             {view === 'chat' && <Tip label="朗读最近的回复"><button aria-label="朗读最近的回复" onClick={readLastReply} className="grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Volume2 size={16} /></button></Tip>}
             <Tip label={voiceOutput ? '自动朗读已开' : '自动朗读新回复'}>
@@ -749,7 +804,7 @@ export default function App() {
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
-        {([['models', '模型与服务', SlidersHorizontal], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
+        {([['models', '模型与服务', SlidersHorizontal], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
           <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
@@ -777,6 +832,7 @@ export default function App() {
         {sheet === 'plugins' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">插件</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力。</p><PluginsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
           <ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /></section>}
+        {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，只在这台电脑上生效。</p><ShortcutsPanel /></section>}
         {sheet === 'hooks' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Hooks</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在任务开始、用工具前后、完成或失败时运行你自己的命令。</p><HooksPanel /></section>}
         {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
       </div>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -129,6 +129,9 @@ ipcMain.handle('skill-center:token', (event) => {
 });
 
 app.whenReady().then(async () => {
+  // Atlas draws its own title bar; the default menu's hidden accelerators (Ctrl+W closes the
+  // window, Ctrl+R reloads) would fire over the app's own shortcuts.
+  Menu.setApplicationMenu(null);
   if (app.isPackaged) {
     process.env.ATLAS_ROOT ??= path.join(process.resourcesPath, 'atlas');
     process.env.ATLAS_DATA_DIR ??= app.getPath('userData');
