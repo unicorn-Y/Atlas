@@ -18,6 +18,10 @@ export interface Step {
   input?: string;
   result?: string;
   output: string;
+  /** Set for delegated sub-agents, which can be cancelled on their own. */
+  subtaskId?: string;
+  /** Where the backend saved a tool result too large for the model's context. */
+  fullOutputPath?: string;
 }
 
 export interface RunUsage { input_tokens?: number | null; output_tokens?: number | null; context_tokens?: number | null; context_limit?: number | null }
@@ -165,6 +169,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         step.state = execution?.state === 'cancelled' ? 'cancelled' : data.is_error ? 'failed' : 'done';
         step.endedAt = event.timestamp;
         step.result = text(data.result);
+        if (typeof data.full_output_path === 'string') step.fullOutputPath = data.full_output_path;
         if (execution) {
           const parts = [execution.stdout, execution.stderr].map(text).filter(Boolean);
           if (parts.length && !step.output) step.output = parts.join('\n');
@@ -194,6 +199,28 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         if (reply) { reply.content = body; reply.streaming = false; }
         else if (body.trim()) items.push({ kind: 'reply', id: event.id, content: body, streaming: false });
         reply = null; closeBlocks();
+        break;
+      }
+      case 'subtask.started': {
+        const id = String(data.subtask_id ?? event.id);
+        const step: Step = { id: event.id, verb: '子任务', target: String(data.goal ?? '').slice(0, 120), state: 'running', startedAt: event.timestamp, output: '', subtaskId: id,
+          input: [data.backend && `执行者：${String(data.backend)}`, data.goal && `目标：${String(data.goal)}`].filter(Boolean).join('\n') };
+        byExecution.set(`subtask:${id}`, step);
+        closeReply();
+        stepsBlock(event.id).steps.push(step);
+        break;
+      }
+      case 'subtask.progress': {
+        const step = byExecution.get(`subtask:${String(data.subtask_id ?? '')}`);
+        if (step) step.output += `${String(data.text ?? '')}\n`;
+        break;
+      }
+      case 'subtask.completed': {
+        const step = byExecution.get(`subtask:${String(data.subtask_id ?? '')}`);
+        if (!step) break;
+        step.state = data.status === 'failed' ? 'failed' : data.status === 'cancelled' ? 'cancelled' : 'done';
+        step.endedAt = event.timestamp;
+        step.result = text(data.summary);
         break;
       }
       case 'run.steered':

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { ArrowUp, ChevronDown, Code2, File as FileIcon, Film, ImagePlus, Image as ImageIcon, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
+import { ArrowUp, AtSign, ChevronDown, Code2, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
 import { cn } from '../ui/cn';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/Menu';
@@ -18,6 +18,16 @@ const INTENTS: Array<[RegExp, Intent]> = [
 export function guessIntent(text: string): Intent | null {
   if (text.trim().length < 2) return null;
   return INTENTS.find(([pattern]) => pattern.test(text))?.[1] ?? { label: '日常', icon: MessageCircle };
+}
+
+/** Something an @ or # mention can refer to. */
+export interface MentionItem { kind: 'file' | 'conversation'; id: string; label: string; hint?: string }
+
+/** The @query or #query being typed at the end of the draft, if any. */
+export function mentionAt(value: string): { trigger: '@' | '#'; query: string; start: number } | null {
+  const match = /(^|\s)([@#])([^\s@#]*)$/.exec(value);
+  if (!match) return null;
+  return { trigger: match[2] as '@' | '#', query: match[3], start: match.index + match[1].length };
 }
 
 /** Pastes longer than this (a log, a whole file) become an attachment. */
@@ -63,6 +73,12 @@ interface ComposerProps {
   /** Non-image attachments, shown as chips. */
   files?: Array<{ name: string; size: number }>;
   onRemoveFile?: (index: number) => void;
+  /** Looks up @ files / # conversations for the query being typed. */
+  findMentions?: (trigger: '@' | '#', query: string) => Promise<MentionItem[]>;
+  /** Picked mentions, shown as chips and sent as context. */
+  mentions?: MentionItem[];
+  onAddMention?: (item: MentionItem) => void;
+  onRemoveMention?: (item: MentionItem) => void;
   /** Called instead of inserting pasted text longer than LONG_PASTE characters. */
   onLongPaste?: (text: string) => void;
   /** Extra toolbar controls next to the attach button (working directory, plan mode). */
@@ -75,7 +91,7 @@ export default function Composer(props: ComposerProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const intent = guessIntent(props.value);
   const current = props.models.find((item) => item.id === props.model);
-  const canSend = Boolean(props.value.trim() || props.attachments.length || props.files?.length);
+  const canSend = Boolean(props.value.trim() || props.attachments.length || props.files?.length || props.mentions?.length);
   const hint = props.listening ? '正在听你说…' : intent?.note ?? props.status;
 
   useLayoutEffect(() => {
@@ -91,7 +107,18 @@ export default function Composer(props: ComposerProps) {
 
   const [cursor, setCursor] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const matches = matchCommands(props.value, props.commands ?? []);
+  const [found, setFound] = useState<MentionItem[]>([]);
+  const commandMatches = matchCommands(props.value, props.commands ?? []);
+  const mention = props.findMentions ? mentionAt(props.value) : null;
+  const mentionKey = mention ? `${mention.trigger}${mention.query}` : '';
+  useEffect(() => {
+    if (!mention || !props.findMentions) { setFound([]); return; }
+    let stale = false;
+    const timer = window.setTimeout(() => { void props.findMentions!(mention.trigger, mention.query).then((items) => { if (!stale) setFound(items.slice(0, 8)); }).catch(() => undefined); }, 120);
+    return () => { stale = true; window.clearTimeout(timer); };
+  }, [mentionKey]);
+  // Slash commands and mentions share one popup; a draft can only be in one of the two states.
+  const matches: Array<SlashCommand | MentionItem> = commandMatches.length ? commandMatches : mention ? found : [];
   useEffect(() => setCursor(0), [matches.length]);
 
   const runCommand = (command: SlashCommand) => {
@@ -99,17 +126,28 @@ export default function Composer(props: ComposerProps) {
     props.onChange('');
     command.run(argument);
   };
+  const choose = (item: SlashCommand | MentionItem) => {
+    if ('run' in item) { runCommand(item); return; }
+    if (mention) props.onChange(props.value.slice(0, mention.start));
+    props.onAddMention?.(item);
+    textRef.current?.focus();
+  };
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
-    if (matches.length) { runCommand(matches[Math.min(cursor, matches.length - 1)]); return; }
+    if (matches.length) { choose(matches[Math.min(cursor, matches.length - 1)]); return; }
     if (canSend) props.onSubmit();
   };
   const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (matches.length && !event.nativeEvent.isComposing) {
       if (event.key === 'ArrowDown') { event.preventDefault(); setCursor((value) => (value + 1) % matches.length); return; }
       if (event.key === 'ArrowUp') { event.preventDefault(); setCursor((value) => (value - 1 + matches.length) % matches.length); return; }
-      if (event.key === 'Tab') { event.preventDefault(); props.onChange(`${matches[cursor].label}${matches[cursor].takesArgument ? ' ' : ''}`); return; }
-      if (event.key === 'Escape') { event.preventDefault(); props.onChange(''); return; }
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        const item = matches[cursor];
+        if ('run' in item) props.onChange(`${item.label}${item.takesArgument ? ' ' : ''}`); else choose(item);
+        return;
+      }
+      if (event.key === 'Escape') { event.preventDefault(); props.onChange(mention ? props.value.slice(0, mention.start) : ''); return; }
     }
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); }
   };
@@ -122,12 +160,13 @@ export default function Composer(props: ComposerProps) {
     className={cn('raised relative transition-shadow focus-within:shadow-[var(--shadow-raised),0_0_0_4px_var(--brand-soft)]',
       hero ? 'rounded-[20px] px-5 pt-[18px] pb-3' : 'rounded-2xl px-4 pt-3 pb-2.5',
       dragging && 'shadow-[var(--shadow-raised),0_0_0_2px_var(--brand)]')}>
-    {matches.length > 0 && <div role="listbox" aria-label="命令" className="pop anim-pop absolute right-0 bottom-[calc(100%+8px)] left-0 z-30 max-h-[300px] overflow-auto rounded-xl p-1.5">
-      {matches.map((command, index) => <button key={command.id} type="button" role="option" aria-selected={index === cursor}
-        onMouseMove={() => setCursor(index)} onMouseDown={(event) => { event.preventDefault(); runCommand(command); }}
+    {matches.length > 0 && <div role="listbox" aria-label={mention && !commandMatches.length ? (mention.trigger === '@' ? '引用文件' : '引用对话') : '命令'} className="pop anim-pop absolute right-0 bottom-[calc(100%+8px)] left-0 z-30 max-h-[300px] overflow-auto rounded-xl p-1.5">
+      {matches.map((item, index) => <button key={item.id} type="button" role="option" aria-selected={index === cursor}
+        onMouseMove={() => setCursor(index)} onMouseDown={(event) => { event.preventDefault(); choose(item); }}
         className={cn('flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13.5px]', index === cursor && 'bg-selected')}>
-        <span className="shrink-0 font-mono text-[13px] text-fg">{command.label}</span>
-        {command.hint && <span className="min-w-0 truncate text-[12.5px] text-fg-3">{command.hint}</span>}
+        {'run' in item ? <span className="shrink-0 font-mono text-[13px] text-fg">{item.label}</span>
+          : <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-fg">{item.kind === 'file' ? <AtSign size={13} className="text-fg-3" /> : <Hash size={13} className="text-fg-3" />}<span className="max-w-[260px] truncate">{item.label}</span></span>}
+        {item.hint && <span className="min-w-0 truncate text-[12.5px] text-fg-3">{item.hint}</span>}
       </button>)}
     </div>}
     {dragging && <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[inherit] bg-brand-soft text-[13.5px] font-medium text-fg">松开添加附件</div>}
@@ -147,6 +186,12 @@ export default function Composer(props: ComposerProps) {
         <button type="button" aria-label="移除图片" onClick={() => props.onRemoveAttachment(index)}
           className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full bg-fg text-bg"><X size={12} /></button>
       </div>)}
+    </div>}
+    {props.mentions && props.mentions.length > 0 && <div className="mt-2.5 flex flex-wrap gap-2" aria-label="引用的上下文">
+      {props.mentions.map((item) => <span key={`${item.kind}:${item.id}`} className="inline-flex max-w-[260px] items-center gap-1 rounded-lg bg-brand-soft py-1 pr-1 pl-2 text-[12.5px] text-fg">
+        {item.kind === 'file' ? <AtSign size={12} className="shrink-0" /> : <Hash size={12} className="shrink-0" />}<span className="min-w-0 truncate" title={item.hint ?? item.label}>{item.label}</span>
+        <button type="button" aria-label={`移除引用 ${item.label}`} onClick={() => props.onRemoveMention?.(item)} className="grid size-5 place-items-center rounded-md hover:bg-hover"><X size={12} /></button>
+      </span>)}
     </div>}
     {props.files && props.files.length > 0 && <div className="mt-2.5 flex flex-wrap gap-2" aria-label="待发送文件">
       {props.files.map((file, index) => <span key={`${index}-${file.name}`} className="inline-flex max-w-[240px] items-center gap-1.5 rounded-lg bg-sunken py-1 pr-1 pl-2 text-[12.5px] text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">

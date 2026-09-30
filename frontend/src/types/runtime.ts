@@ -8,6 +8,7 @@ export type AgentEventType =
   | 'artifact.updated' | 'run.paused' | 'run.resumed'
   | 'run.plan.updated'
   | 'run.steered' | 'run.usage' | 'rules.loaded' | 'input.required' | 'run.plan.proposed'
+  | 'subtask.started' | 'subtask.progress' | 'subtask.completed'
   | 'run.completed' | 'run.failed' | 'run.cancelled';
 
 export interface AgentEvent {

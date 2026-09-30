@@ -24,6 +24,9 @@ data/schedules.toml
 data/user-settings.json
 data/user-settings.json.tmp
 data/checkpoints/
+data/profiles/
+data/recipes/
+data/tool-results/
 
 # Config with secrets
 config/atlas.toml

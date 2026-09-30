@@ -11,8 +11,10 @@ const GIT: Record<string, { label: string; tone: string }> = {
 };
 
 /** Browse the conversation's working directory and read files without leaving Atlas. */
-export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey }: {
-  workspace?: string | null; onChooseWorkspace: () => void; refreshKey: string;
+const PREVIEWABLE = /\.(html?|pdf|svg|png|jpe?g|gif|webp)$/i;
+
+export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, onPreview }: {
+  workspace?: string | null; onChooseWorkspace: () => void; refreshKey: string; onPreview: (url: string) => void;
 }) {
   const [dirs, setDirs] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -89,6 +91,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey }:
     {file && <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl card-surface">
       <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
         <File size={13} className="shrink-0 text-fg-3" /><code className="min-w-0 flex-1 truncate font-mono">{file.path}</code>
+        {PREVIEWABLE.test(file.path) && <button onClick={() => onPreview(backend.rawFileUrl(workspace, file.path))} className="shrink-0 text-fg-2 hover:text-fg">在浏览器预览</button>}
         {window.atlasDesktop?.openPath && <button title="用默认程序打开" aria-label="用默认程序打开" onClick={() => {
           const full = `${workspace.replace(/[\\/]+$/, '')}\\${file.path.replace(/\//g, '\\')}`;
           void window.atlasDesktop!.openPath(full).then((result) => { if (result !== 'opened' && result !== 'revealed') setError(`打不开：${result}`); });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { CheckCircle2, CircleAlert, CircleDashed, LoaderCircle, Play, Plus, RefreshCw, Target, X } from 'lucide-react';
+import { CheckCircle2, CircleAlert, CircleDashed, LoaderCircle, Pause, Pencil, Play, Plus, RefreshCw, Target, X } from 'lucide-react';
 import { api, relativeTime } from '../services/api';
 import { describeSchedule } from './AutomationPage';
 
@@ -22,12 +22,16 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   pending: { label: '等待下一轮', tone: 'var(--ink3)' },
   running: { label: '进行中', tone: 'var(--brand)' },
   awaiting_approval: { label: '等你确认', tone: 'var(--brand)' },
+  paused: { label: '已暂停', tone: 'var(--ink3)' },
   completed: { label: '已达成', tone: 'var(--ok)' },
   blocked: { label: '卡住了', tone: 'var(--danger)' },
   interrupted: { label: '被中断', tone: 'var(--danger)' },
 };
 const EVENT: Record<string, string> = {
   'goal.created': '创建目标',
+  'goal.replaced': '改了目标',
+  'goal.paused': '暂停',
+  'goal.resumed': '恢复',
   'goal.triggered': '开始一轮',
   'goal.evaluated': '检查通过',
   'goal.evaluation_failed': '检查未通过',
@@ -57,6 +61,7 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState('');
   const [form, setForm] = useState({ name: '', goal: '', freq: 'hours' as Freq, hours: '2', time: '09:00', weekday: 0 });
 
   const refresh = useCallback(async () => {
@@ -107,7 +112,15 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
     await refresh();
   };
 
+  const act = async (task: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    try { await task(); onToast(done); setError(''); }
+    catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(false); }
+    await refresh();
+  };
   const current = goals.find((goal) => goal.id === selected);
+  const paused = current?.goal_status === 'paused';
   const subtasks = current?.goal_progress?.subtasks ?? [];
   const done = new Set(current?.goal_progress?.completed_steps ?? []);
 
@@ -150,7 +163,12 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
         <h2>{current.name}</h2>
         <div className="sub">{STATUS[current.goal_status ?? '']?.label ?? '未开始'}，{describeSchedule(current)}推进一轮</div>
         <dl>
-          <div><dt>目标</dt><dd>{current.goal}</dd></div>
+          <div><dt>目标</dt><dd>{editing
+            ? <form onSubmit={(event) => { event.preventDefault(); const goal = editing.trim(); if (goal) void act(() => api(apiBaseUrl, `/api/goals/${encodeURIComponent(current.id)}`, { method: 'PUT', json: { goal } }), '目标已更新，会从头重新推进').then(() => setEditing('')); }}>
+              <textarea autoFocus value={editing} onChange={(event) => setEditing(event.target.value)} rows={3} style={{ width: '100%' }} />
+              <div className="btns"><button className="btn primary" disabled={busy || !editing.trim()}>保存</button><button type="button" className="btn ghost" onClick={() => setEditing('')}>取消</button></div>
+            </form>
+            : current.goal}</dd></div>
           {current.goal_progress?.last_evaluation?.reason && <div><dt>上次检查</dt><dd>{current.goal_progress.last_evaluation.reason}</dd></div>}
           {current.goal_progress?.blocked_reason && <div><dt>卡住原因</dt><dd>{current.goal_progress.blocked_reason}</dd></div>}
           <div><dt>下一轮</dt><dd>{current.next_run_at ? `${new Date(current.next_run_at).toLocaleString()}（${relativeTime(current.next_run_at)}）` : '未排期'}</dd></div>
@@ -178,7 +196,9 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
           </ul>
         </>}
         <div className="btns">
-          <button className="btn primary" disabled={busy} onClick={() => void runNow(current)}><Play size={14} />{current.goal_status === 'blocked' ? '重试' : '立即推进一轮'}</button>
+          <button className="btn primary" disabled={busy || paused} onClick={() => void runNow(current)}><Play size={14} />{current.goal_status === 'blocked' ? '重试' : '立即推进一轮'}</button>
+          <button className="btn ghost" disabled={busy} onClick={() => void act(() => api(apiBaseUrl, `/api/goals/${encodeURIComponent(current.id)}/${paused ? 'resume' : 'pause'}`, { method: 'POST' }), paused ? '已恢复' : '已暂停，不会再自动推进')}>{paused ? <Play size={14} /> : <Pause size={14} />}{paused ? '恢复' : '暂停'}</button>
+          {!editing && <button className="btn ghost" disabled={busy} onClick={() => setEditing(current.goal)}><Pencil size={14} />改目标</button>}
         </div>
       </aside> : <div />}
     </div>

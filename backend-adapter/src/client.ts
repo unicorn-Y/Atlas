@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ProcessInfo, ResumeRequest, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, ProcessInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -151,6 +151,47 @@ export class BackendAdapter {
   }
   async killProcess(id: string): Promise<void> {
     await this.request(`/api/processes/${encodeURIComponent(id)}/kill`, { method: 'POST' });
+  }
+  async duplicateConversation(id: string): Promise<ConversationSummary> {
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/duplicate`, { method: 'POST' });
+  }
+  async searchWorkspace(root: string, q: string, limit = 20): Promise<Array<{ path: string; name: string; type: string }>> {
+    return (await this.request<{ files: Array<{ path: string; name: string; type: string }> }>(`/api/workspace/search?${new URLSearchParams({ root, q, limit: String(limit) })}`)).files;
+  }
+  /** URL that streams a workspace file with its real content type (HTML is sandboxed by the backend). */
+  rawFileUrl(root: string, path: string): string {
+    return `${this.baseUrl}/api/workspace/raw?${new URLSearchParams({ root, path })}`;
+  }
+  async getBranches(root: string): Promise<{ current: string; branches: string[] }> {
+    return this.request(`/api/git/branches?${new URLSearchParams({ root })}`);
+  }
+  async getWorktree(conversationId: string): Promise<WorktreeInfo> {
+    return this.request(`/api/conversations/${encodeURIComponent(conversationId)}/worktree`);
+  }
+  async mergeWorktree(conversationId: string, strategy: 'merge' | 'squash', message?: string): Promise<unknown> {
+    return this.request(`/api/conversations/${encodeURIComponent(conversationId)}/worktree/merge`, { method: 'POST', body: JSON.stringify({ strategy, ...(message ? { message } : {}) }) });
+  }
+  async removeWorktree(conversationId: string, options: { force?: boolean; keepBranch?: boolean } = {}): Promise<void> {
+    const query = new URLSearchParams({ ...(options.force ? { force: 'true' } : {}), ...(options.keepBranch ? { keep_branch: 'true' } : {}) });
+    await this.request(`/api/conversations/${encodeURIComponent(conversationId)}/worktree${query.size ? `?${query}` : ''}`, { method: 'DELETE' });
+  }
+  async getProfiles(): Promise<AgentProfile[]> { return this.live ? (await this.request<{ profiles: AgentProfile[] }>('/api/profiles')).profiles : []; }
+  async getRecipes(): Promise<Recipe[]> { return this.live ? (await this.request<{ recipes: Recipe[] }>('/api/recipes')).recipes : []; }
+  async deleteRecipe(id: string): Promise<void> { await this.request(`/api/recipes/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+  async recipeFromRun(runId: string, name: string): Promise<Recipe> {
+    return this.request('/api/recipes/from-run', { method: 'POST', body: JSON.stringify({ run_id: runId, name }) });
+  }
+  async renderRecipe(id: string, params: Record<string, string>): Promise<{ prompt: string; active_skills?: string[]; mode?: 'act' | 'plan'; workspace?: string | null; profile_id?: string | null }> {
+    return this.request(`/api/recipes/${encodeURIComponent(id)}/render`, { method: 'POST', body: JSON.stringify({ params }) });
+  }
+  async cancelSubtask(runId: string, subtaskId: string): Promise<void> {
+    await this.request(`/api/runs/${encodeURIComponent(runId)}/subtasks/${encodeURIComponent(subtaskId)}/cancel`, { method: 'POST' });
+  }
+  async updateGoal(id: string, patch: Record<string, unknown>): Promise<unknown> {
+    return this.request(`/api/goals/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) });
+  }
+  async setGoalPaused(id: string, paused: boolean): Promise<unknown> {
+    return this.request(`/api/goals/${encodeURIComponent(id)}/${paused ? 'pause' : 'resume'}`, { method: 'POST' });
   }
   /** WebSocket URL for an interactive PowerShell in `cwd`. */
   terminalUrl(cwd: string): string {

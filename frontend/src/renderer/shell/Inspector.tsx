@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, FolderOpen, X } from 'lucide-react';
+import { FileText, FolderOpen, GitBranch, GitMerge, Trash2, X } from 'lucide-react';
+import type { WorktreeInfo } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import type { AgentCapabilityInfo, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
@@ -18,7 +19,7 @@ const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
 const WIDE: InspectorTab[] = ['changes', 'files', 'terminal', 'browser'];
 
-export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas }: {
+export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged }: {
   tab: InspectorTab;
   onTab: (tab: InspectorTab) => void;
   onClose: () => void;
@@ -41,6 +42,10 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
   onPick: (picked: PickedElement) => void;
   terminalCommand: { id: string; text: string } | null;
   onSendToAtlas: (text: string) => void;
+  onPreview: (url: string) => void;
+  conversationId: string;
+  worktree: { path: string; branch: string; base: string } | null;
+  onWorktreeChanged: () => void;
 }) {
   const [selected, setSelected] = useState('');
   const [raw, setRaw] = useState(false);
@@ -57,11 +62,13 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
     ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'],
   ];
   return <aside aria-label="任务面板" className={cn('anim-fade flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)] transition-[width] duration-200', WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]')}>
-    <div className="flex items-center gap-3.5 overflow-x-auto px-4 pt-3 shadow-[inset_0_-1px_0_var(--line)] [scrollbar-width:none]" role="tablist">
+    <div className="flex items-center gap-2 pr-2 pl-4 pt-3 shadow-[inset_0_-1px_0_var(--line)]">
+      <div className="flex min-w-0 flex-1 items-center gap-3.5 overflow-x-auto [scrollbar-width:none]" role="tablist">
       {tabs.map(([id, label]) =>
         <button key={id} role="tab" aria-selected={tab === id} onClick={() => onTab(id)}
           className={cn('shrink-0 pb-2.5 text-[13px] transition-colors', tab === id ? 'font-medium text-fg shadow-[inset_0_-2px_0_var(--brand)]' : 'text-fg-3 hover:text-fg')}>{label}</button>)}
-      <button aria-label="收起任务面板" onClick={onClose} className="-mt-2 ml-auto grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={15} /></button>
+      </div>
+      <button aria-label="收起任务面板" onClick={onClose} className="-mt-2 grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={15} /></button>
     </div>
 
     <div className="min-h-0 flex-1 overflow-auto p-5">
@@ -88,7 +95,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
       {tab === 'changes' && <ChangesPanel runId={run?.id} runStatus={run?.status} apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
 
-      {tab === 'files' && <FilesPanel workspace={workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} />}
+      {tab === 'files' && <FilesPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onPreview={onPreview} />}
 
       {terminalOpened && <div className={cn('h-full', tab !== 'terminal' && 'hidden')}>
         {workspace || !connected ? connected
@@ -103,14 +110,16 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
       </div>}
 
       {tab === 'context' && <ContextTab conversationTitle={conversationTitle} modelName={modelName} run={run} tools={tools} skills={skills} activeSkills={activeSkills}
-        capabilities={capabilities} workspace={workspace} onChooseWorkspace={onChooseWorkspace} connected={connected} />}
+        capabilities={capabilities} workspace={workspace} onChooseWorkspace={onChooseWorkspace} connected={connected}
+        conversationId={conversationId} worktree={worktree} onWorktreeChanged={onWorktreeChanged} onToast={onToast} />}
     </div>
   </aside>;
 }
 
-function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSkills, capabilities, workspace, onChooseWorkspace, connected }: {
+function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSkills, capabilities, workspace, onChooseWorkspace, connected, conversationId, worktree, onWorktreeChanged, onToast }: {
   conversationTitle?: string; modelName: string; run?: AgentRun; tools: ToolListResponse['tools']; skills: SkillInfo[]; activeSkills: string[];
   capabilities: AgentCapabilityInfo[]; workspace?: string | null; onChooseWorkspace: () => void; connected: boolean;
+  conversationId: string; worktree: { path: string; branch: string; base: string } | null; onWorktreeChanged: () => void; onToast: (text: string) => void;
 }) {
   const [rules, setRules] = useState<Array<{ path: string; bytes: number }> | null>(null);
   useEffect(() => {
@@ -123,10 +132,11 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
   const context = typeof latestUsage?.context_tokens === 'number' && typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0
     ? `${Math.round(latestUsage.context_tokens / latestUsage.context_limit * 100)}%（${latestUsage.context_tokens} / ${latestUsage.context_limit}）` : '—';
 
-  return <div className="grid gap-5 text-[13px]">
-    <dl className="m-0 grid gap-2.5">
+  // minmax(0,1fr): long unbroken paths must truncate, not widen the column past the panel.
+  return <div className="grid grid-cols-[minmax(0,1fr)] gap-5 text-[13px]">
+    <dl className="m-0 grid grid-cols-[minmax(0,1fr)] gap-2.5">
       {[['任务', conversationTitle ?? '未选择'], ['模型', modelName], ['状态', run ? RUN_LABEL[run.status] ?? run.status : '空闲'], ['上下文占用', context], ['可用工具', `${tools.length} 个`]].map(([label, value]) =>
-        <div key={label} className="flex justify-between gap-4"><dt className="text-fg-3">{label}</dt><dd className="m-0 min-w-0 truncate text-right text-fg">{value}</dd></div>)}
+        <div key={label} className="flex justify-between gap-4"><dt className="shrink-0 text-fg-3">{label}</dt><dd className="m-0 min-w-0 truncate text-right text-fg">{value}</dd></div>)}
     </dl>
     <section>
       <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">工作目录</h3>
@@ -137,6 +147,7 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
         {rules.length ? <>会读取的规则文件：{rules.map((file) => shortPath(file.path)).join('、')}</> : '这个目录里没有 AGENTS.md、CLAUDE.md 或 .atlas/rules.md。'}
       </p>}
     </section>
+    {worktree && <WorktreeSection conversationId={conversationId} worktree={worktree} onChanged={onWorktreeChanged} onToast={onToast} refreshKey={`${run?.id}:${run?.status}`} />}
     <section>
       <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">这次任务用到的技能</h3>
       <p className="m-0 text-fg-2">{activeSkills.join('、') || '没有指定，Atlas 会自己判断。'}</p>
@@ -152,4 +163,46 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
       <div className="flex flex-wrap gap-1.5">{capabilities.map((capability) => <span key={capability.name} title={capability.description} className="rounded-md bg-sunken px-2 py-0.5 text-[12px] text-fg-2">{capability.name}</span>)}</div>
     </section>}
   </div>;
+}
+
+/** A conversation working in its own git worktree: see how far it has drifted, merge it back or drop it. */
+function WorktreeSection({ conversationId, worktree, onChanged, onToast, refreshKey }: {
+  conversationId: string; worktree: { path: string; branch: string; base: string }; onChanged: () => void; onToast: (text: string) => void; refreshKey: string;
+}) {
+  const [info, setInfo] = useState<WorktreeInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [confirm, setConfirm] = useState<'' | 'remove' | 'force'>('');
+  useEffect(() => {
+    let stale = false;
+    backend.getWorktree(conversationId).then((result) => { if (!stale) setInfo(result); }).catch(() => { if (!stale) setInfo(null); });
+    return () => { stale = true; };
+  }, [conversationId, refreshKey]);
+  const act = async (task: () => Promise<unknown>, done: string) => {
+    setBusy(true); setError('');
+    try { await task(); onToast(done); onChanged(); }
+    catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(false); setConfirm(''); }
+  };
+  const changed = Array.isArray(info?.changed_files) ? info!.changed_files.length : info?.changed_files ?? 0;
+  return <section>
+    <h3 className="m-0 mb-2 flex items-center gap-1.5 text-[12.5px] font-semibold text-fg-2"><GitBranch size={13} />独立分支</h3>
+    <div className="rounded-xl bg-sunken px-3 py-2.5 text-[12.5px] text-fg-2">
+      <p className="m-0"><code className="font-mono text-fg">{worktree.branch}</code> 基于 <code className="font-mono">{worktree.base}</code></p>
+      {info && <p className="m-0 mt-1 text-fg-3">领先 {info.ahead} 个提交、落后 {info.behind} 个{info.dirty ? `，有 ${changed} 个未提交的改动` : ''}</p>}
+      <p className="m-0 mt-1 truncate text-[11.5px] text-fg-3" title={worktree.path}>{worktree.path}</p>
+    </div>
+    {error && <p role="alert" className="m-0 mt-2 rounded-lg bg-danger-soft px-3 py-2 text-[12px] text-danger">{error}</p>}
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      <button disabled={busy} onClick={() => void act(() => backend.mergeWorktree(conversationId, 'squash'), `已把 ${worktree.branch} 压成一个提交合并到 ${worktree.base}`)}
+        className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50"><GitMerge size={13} />压缩合并</button>
+      <button disabled={busy} onClick={() => void act(() => backend.mergeWorktree(conversationId, 'merge'), `已合并到 ${worktree.base}`)}
+        className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50"><GitMerge size={13} />普通合并</button>
+      <button disabled={busy} onClick={() => {
+        if (!confirm) { setConfirm(info?.dirty ? 'force' : 'remove'); return; }
+        void act(() => backend.removeWorktree(conversationId, { force: confirm === 'force' }), '已删除独立分支和它的目录');
+      }} className={cn('inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[12.5px] disabled:opacity-50', confirm ? 'bg-danger-soft text-danger' : 'text-fg-3 hover:bg-hover hover:text-danger')}>
+        <Trash2 size={13} />{confirm === 'force' ? '有未提交改动，确认丢弃并删除' : confirm ? '确认删除' : '删除'}</button>
+    </div>
+  </section>;
 }

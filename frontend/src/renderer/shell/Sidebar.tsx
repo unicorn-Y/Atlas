@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Archive, ArchiveRestore, BookOpen, ChevronRight, Code2, Download, Home, KanbanSquare, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
+import { Archive, ArchiveRestore, BookOpen, ChevronRight, Code2, CopyPlus, Download, Home, KanbanSquare, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
 import { nextTheme, themeInfo, type Theme } from './themes';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import Mark from '../components/Mark';
@@ -63,6 +63,7 @@ interface SidebarProps {
   onTogglePinned: (id: string) => void;
   onToggleArchived: (id: string) => void;
   onExport: (id: string) => void;
+  onDuplicate: (id: string) => void;
 }
 
 export default function Sidebar(props: SidebarProps) {
@@ -111,6 +112,7 @@ export default function Sidebar(props: SidebarProps) {
           <MenuItem onSelect={() => setEditing({ id: conversation.id, title: conversation.title })}><Pencil />改名</MenuItem>
           {!isArchived && <MenuItem onSelect={() => props.onTogglePinned(conversation.id)}>{isPinned ? <><PinOff />取消置顶</> : <><Pin />置顶</>}</MenuItem>}
           <MenuItem onSelect={() => props.onToggleArchived(conversation.id)}>{isArchived ? <><ArchiveRestore />移出归档</> : <><Archive />归档</>}</MenuItem>
+          <MenuItem onSelect={() => props.onDuplicate(conversation.id)}><CopyPlus />复制一份</MenuItem>
           <MenuItem onSelect={() => props.onExport(conversation.id)}><Download />导出为 JSON</MenuItem>
           <MenuSeparator />
           <MenuItem onSelect={(event) => {

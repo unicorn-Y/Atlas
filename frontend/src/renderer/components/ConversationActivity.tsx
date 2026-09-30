@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, X } from 'lucide-react';
+import { BookMarked, Check, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
@@ -32,7 +32,7 @@ export default function ConversationActivity({ events, store, username, setTab }
         status={item.streaming ? '正在回复' : undefined} working={item.streaming && busy} />;
       case 'steps': return <div key={item.id}>
         {firstInTurn && <TurnHeader working={last && busy} />}
-        <StepTrack steps={item.steps} live={last && busy} />
+        <StepTrack steps={item.steps} live={last && busy} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
       </div>;
       case 'artifact': return <div key={item.id} className="my-3 ml-10 flex items-center gap-3 rounded-xl card-surface px-3.5 py-2.5 text-[13px]">
         <FileText size={16} className="shrink-0 text-brand" />
@@ -55,6 +55,7 @@ export default function ConversationActivity({ events, store, username, setTab }
             · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
           </button>}
           <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
+          {events[0] && <SaveRecipe runId={events[0].runId} store={store} />}
         </div>;
       }
       case 'failed': return <div key={item.id} role="alert" className="my-4 ml-10 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
@@ -76,13 +77,13 @@ function TurnHeader({ working }: { working: boolean }) {
 }
 
 /** The "航迹": each step Atlas took, in plain words, strung along a brass meridian line. */
-function StepTrack({ steps, live }: { steps: Step[]; live: boolean }) {
+function StepTrack({ steps, live, onCancelSubtask }: { steps: Step[]; live: boolean; onCancelSubtask: (subtaskId: string) => void }) {
   return <ol className="relative my-3 ml-[13px] list-none border-l border-line-strong py-1 pl-[26px]" aria-label="Atlas 的步骤">
-    {steps.map((step) => <StepRow key={step.id} step={step} live={live} />)}
+    {steps.map((step) => <StepRow key={step.id} step={step} live={live} onCancelSubtask={onCancelSubtask} />)}
   </ol>;
 }
 
-function StepRow({ step, live }: { step: Step; live: boolean }) {
+function StepRow({ step, live, onCancelSubtask }: { step: Step; live: boolean; onCancelSubtask: (subtaskId: string) => void }) {
   const [open, setOpen] = useState(false);
   const running = step.state === 'running' && live;
   const detail = [step.input && `输入\n${step.input}`, step.result && `结果\n${step.result}`, step.output && `输出\n${step.output}`].filter(Boolean).join('\n\n');
@@ -102,7 +103,12 @@ function StepRow({ step, live }: { step: Step; live: boolean }) {
       </span>
       {detail && <ChevronRight size={13} className={cn('shrink-0 self-center text-fg-3 transition-transform', open && 'rotate-90')} />}
     </button>
+    {running && step.subtaskId && <button onClick={() => onCancelSubtask(step.subtaskId!)} className="ml-0 text-[12px] text-fg-3 hover:text-danger">停止这个子任务</button>}
     {open && <pre className="anim-fade mt-1.5 mb-1 max-h-72 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">{detail}</pre>}
+    {open && step.fullOutputPath && <p className="m-0 mb-1 text-[12px] text-fg-3">结果太长，只显示了开头和结尾。完整内容：
+      {window.atlasDesktop?.openPath
+        ? <button onClick={() => void window.atlasDesktop!.openPath(step.fullOutputPath!)} className="ml-1 font-mono text-fg-2 underline decoration-line-strong underline-offset-2 hover:text-fg">{step.fullOutputPath}</button>
+        : <code className="ml-1">{step.fullOutputPath}</code>}</p>}
   </li>;
 }
 
@@ -199,4 +205,19 @@ function Plan({ event, store }: { event: AgentEvent; store: Store }) {
         </> : <p className="mt-3 mb-0 text-[13px] text-fg-3">这个计划没有执行。</p>}
     </div>
   </div>;
+}
+
+/** Turn a run that worked into a recipe that can be re-run with new parameters. */
+function SaveRecipe({ runId, store }: { runId: string; store: Store }) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState('');
+  const [saved, setSaved] = useState(false);
+  if (saved) return <span className="ml-2 inline-flex items-center gap-1 text-ok"><Check size={13} />已存为配方，/recipe 可以复跑</span>;
+  if (!naming) return <button className="ml-2 inline-flex items-center gap-1 text-fg-2 hover:text-fg" onClick={() => setNaming(true)}><BookMarked size={13} />存为配方</button>;
+  return <form className="ml-2 inline-flex items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); if (name.trim()) void store.saveRecipe(runId, name).then((ok) => setSaved(ok)); }}>
+    <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="配方名称" aria-label="配方名称"
+      className="h-6 w-36 rounded-md bg-sunken px-2 text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
+    <button type="submit" disabled={!name.trim()} className="text-fg-2 hover:text-fg disabled:opacity-40">保存</button>
+    <button type="button" onClick={() => setNaming(false)} className="text-fg-3 hover:text-fg">取消</button>
+  </form>;
 }

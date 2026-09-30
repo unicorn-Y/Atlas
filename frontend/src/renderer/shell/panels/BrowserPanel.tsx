@@ -174,7 +174,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast 
     </form>
     {url
       ? <div className="relative flex min-h-0 flex-1">
-        <webview ref={(node) => { viewRef.current = node as WebviewElement | null; }} src={url} partition={PARTITION}
+        <webview ref={(node) => { viewRef.current = node as WebviewElement | null; }} src={url} partition={PARTITION} plugins="true"
           className="min-h-0 flex-1 overflow-hidden rounded-xl bg-white shadow-[inset_0_0_0_1px_var(--line)]" />
         {/* Floats over the page so starting a pick never shifts what the user is about to click. */}
         {picking && <p className="pop pointer-events-none absolute top-2 left-1/2 m-0 -translate-x-1/2 rounded-lg px-3 py-1.5 text-[12px] whitespace-nowrap text-fg">点一下页面上的元素，按 Esc 取消</p>}

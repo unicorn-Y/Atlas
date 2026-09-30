@@ -21,7 +21,7 @@ export function isRuntimeEvent(value: unknown): value is RuntimeEventEnvelope {
 }
 
 export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEvent | null {
-  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'run.completed', 'run.failed', 'run.cancelled']);
+  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.completed', 'run.completed', 'run.failed', 'run.cancelled']);
   if (!known.has(envelope.event)) return null;
   return { id: envelope.event_id, runId: envelope.run_id, sequence: envelope.sequence, type: envelope.event as AgentEvent['type'], timestamp: envelope.timestamp, data: envelope.data ?? {} };
 }

@@ -88,13 +88,13 @@
 | F011 | 多个目录 | ❌ | | Codex |
 | F012 | 项目 Sources | 🟡 | 项目有 current_goal 和历史 recall，无文件/指令来源 | Codex Projects |
 | F013 | 工作区分组 | ✅ | 项目 ↔ 会话 | |
-| F014 | 起始分支 | ❌ | | Codex |
-| F015 | Git worktree | ❌ | | Cline Kanban、Kilo |
+| F014 | 起始分支 | ✅ | 隔离分支菜单里选起始分支 | Codex |
+| F015 | Git worktree | ✅ | 输入框「隔离分支」：会话在独立 git worktree 里改，可压缩合并 / 合并 / 删除 | Cline Kanban、Kilo |
 | F016 | SSH | ❌ | | ZCode |
 | F017 | 容器/沙箱 | ❌ | FULL_ACCESS 本机执行 | OpenHands |
 | F018 | Cloud session | ➖ | | |
 | F019 | Local/Cloud 移交 | ➖ | | |
-| F020 | Profile | ❌ | | Hermes profile |
+| F020 | Profile | ✅ | 输入框「角色」：默认 / 架构师 / 审查员（后端可增删） | Hermes profile |
 | F021 | 执行环境标记 | ❌ | 目前只有本机，做了 F016/F017 再补 | |
 
 ### 03 会话与任务导航
@@ -129,15 +129,15 @@
 | F042 | 终端面板 | ✅ | 面板「终端」 | Hermes |
 | F043 | 产物面板 | 🟡 | Inspector 产物列表，不能预览内容 | Codex |
 | F044 | Kanban 指挥中心 | ✅ | 侧栏「看板」 | Cline Kanban |
-| F045 | Tasks/子任务面板 | 🟡 | Inspector 有步骤，无子 Agent/后台命令视图 | Claude Code |
+| F045 | Tasks/子任务面板 | ✅ | 子 Agent 进度显示在时间线，可单独停止 | Claude Code |
 
 ### 05 输入与上下文组合
 
 | 编号 | 功能 | 状态 | Atlas 现状 / 说明 | 参考 |
 | --- | --- | --- | --- | --- |
 | F046 | 自然语言任务 | ✅ | | |
-| F047 | @ 文件/目录 | ❌ | | Claude Code |
-| F048 | # 引用历史会话 | ❌ | | ZCode |
+| F047 | @ 文件/目录 | ✅ | 输入 @ 搜工作目录文件，内容作为上下文发送 | Claude Code |
+| F048 | # 引用历史会话 | ✅ | 输入 # 引用其他对话（最多 3 个，后端摘要） | ZCode |
 | F049 | 附件按钮 | ✅ | 任意文件：文本内联，其他存到附件目录交给 Agent | |
 | F050 | 拖放附件 | ✅ | 图片和文件都能拖进输入框 | Hermes |
 | F051 | 截图粘贴 | ✅ | 粘贴截图（原来就有，初版误标） | |
@@ -157,9 +157,9 @@
 | F060 | 技能快捷调用 | ✅ | 激活技能 | |
 | F061 | 命令中心 | ✅ | 命令面板 | |
 | F062 | 内联聊天快捷键 | ➖ | | |
-| F063 | 自定义 Prompt 模板 | ❌ | | Pi |
-| F064 | Recipes/Workflows | ❌ | | goose |
-| F065 | 自定义 Agent 选择 | ❌ | | Roo Modes |
+| F063 | 自定义 Prompt 模板 | ✅ | 由配方覆盖：带 {{参数}} 的提示词 | Pi |
+| F064 | Recipes/Workflows | ✅ | 完成行「存为配方」，/recipe 填参数复跑 | goose |
+| F065 | 自定义 Agent 选择 | ✅ | 同 F020 | Roo Modes |
 | F066 | 命令直通 | ✅ | 输入 !命令 直接在终端面板运行 | Aider |
 
 ### 07 运行中干预与消息队列
@@ -187,7 +187,7 @@
 | F080 | Specs | ❌ | | Kiro |
 | F081 | Quest | ➖ | | |
 | F082 | Goal | ✅ | 自动化页「持续目标」：新建、立即推进、状态 | ZCode |
-| F083 | Goal 编辑/替换 | ❌ | 后端没有编辑目标的接口 | ZCode |
+| F083 | Goal 编辑/替换 | ✅ | 目标可改、可暂停 / 恢复 | ZCode |
 | F084 | 迭代摘要 | ✅ | 目标详情显示当前计划和推进记录 | ZCode |
 | F085 | Missions | ➖ | | |
 | F086 | 后台长期运行 | 🟡 | Hub 任务 + DBOS durable | |
@@ -196,16 +196,16 @@
 
 | 编号 | 功能 | 状态 | Atlas 现状 / 说明 | 参考 |
 | --- | --- | --- | --- | --- |
-| F087 | 辅助聊天 side chat | ❌ | | ZCode |
+| F087 | 辅助聊天 side chat | ✅ | /btw 旁问：借用上下文、只读、不写入对话 | ZCode |
 | F088 | 从回复分叉 | ✅ | Atlas 回复上悬停「从这里分叉」，文件不复制 | Pi、ZCode |
-| F089 | Duplicate 会话 | ❌ | | |
-| F090 | 会话树 | ❌ | | Pi |
+| F089 | Duplicate 会话 | ✅ | 侧栏「复制一份」 | |
+| F090 | 会话树 | 🟡 | 后端记录了分叉关系，界面还没有树状视图 | Pi |
 | F091 | 编辑最后用户消息 | ✅ | 你的消息上悬停「修改后重新发送」，之后的对话被替换 | ZCode |
 | F092 | Checkpoint | ✅ | 面板「改动」下的快照列表，本次任务的排在前面 | OpenCode、Cline |
 | F093 | 对话+文件重置 | ❌ | | ZCode |
 | F094 | Undo/重新应用 | 🟡 | 能恢复，无 redo | ZCode |
 | F095 | Resume | ✅ | `resume` + `after_sequence` 断线续传 | |
-| F096 | 分支摘要 | ❌ | | Pi |
+| F096 | 分支摘要 | 🟡 | 后端支持分叉时生成摘要，界面还没开关 | Pi |
 | F097 | Restore checkpoint | ✅ | 一键还原，二次确认；修复了快照写读两个不同存储的 bug | |
 
 ### 10 过程展示与任务状态
@@ -277,8 +277,8 @@
 
 | 编号 | 功能 | 状态 | Atlas 现状 / 说明 | 参考 |
 | --- | --- | --- | --- | --- |
-| F143 | HTML/应用预览 | 🟡 | 网页和本地服务可以预览；本地 HTML/PDF 文件预览等后端原样读取接口（第二波 §10） | ZCode |
-| F144 | PDF 预览 | ❌ | | ZCode |
+| F143 | HTML/应用预览 | ✅ | 文件面板里 HTML / 图片「在浏览器预览」，HTML 被沙箱隔离 | ZCode |
+| F144 | PDF 预览 | ✅ | PDF 在浏览器面板里预览 | ZCode |
 | F145 | Mermaid 预览 | ✅ | 回复里的 mermaid 代码块渲染成图，可切回源码 | ZCode |
 | F146 | 文档/表格/幻灯片产物 | 🟡 | pdf 技能、图像生成；无 docx/xlsx/pptx | Cowork |
 | F147 | 代码与预览切换 | ❌ | | |
@@ -309,11 +309,11 @@
 | 编号 | 功能 | 状态 | Atlas 现状 / 说明 | 参考 |
 | --- | --- | --- | --- | --- |
 | F164 | 模型选择 | ✅ | | |
-| F165 | 推理档位 | ❌ | | ZCode |
+| F165 | 推理档位 | ✅ | 模型支持时输入框出现「推理档位」 | ZCode |
 | F166 | 本地模型 | ✅ | 设置里一键填 Ollama / LM Studio 地址 | |
 | F167 | 自动摘要/compaction | ✅ | `ContextMaintenance` 按消息数/字符数触发 | OpenCode |
 | F168 | 手动压缩 | ✅ | /compact 手动压缩 | Gemini CLI |
-| F169 | 大结果外置 | ❌ | 未核实，需查工具输出是否截断落盘 | Deep Agents |
+| F169 | 大结果外置 | ✅ | 超过 16 KB 的工具结果落盘，时间线里可打开完整内容 | Deep Agents |
 | F170 | 用户记忆 | ✅ | facts + 候选审批 | |
 | F171 | 项目记忆 | ✅ | 项目 recall | |
 | F172 | 记忆启停/查看 | ✅ | 记忆页；已超过标杆 | |
@@ -329,11 +329,11 @@
 | F177 | Plugins | 🟡 | 只支持本地安装 | Claude Code 插件市场 |
 | F178 | Hooks | 🟡 | 内部 `HookBus`，用户不能配置 | Kiro、Gemini CLI |
 | F179 | 自定义工具 | 🟡 | 走 MCP/插件，无轻量脚本工具 | Pi |
-| F180 | Agent 配置 | ❌ | | Roo Modes |
+| F180 | Agent 配置 | 🟡 | 可以选角色；新建和编辑角色的界面还没做（后端接口已有） | Roo Modes |
 | F181 | 扩展包 | 🟡 | skill bundles | Pi Packages |
 | F182 | 主题/键位 | 🟡 | 三套主题，无自定义快捷键 | |
 | F183 | Powers | ➖ | | |
-| F184 | Recipes | ❌ | 同 F064 | goose |
+| F184 | Recipes | ✅ | 同 F064 | goose |
 | F185 | Warp Drive | ➖ | | |
 
 ### 18 多 Agent 与并行任务
@@ -341,10 +341,10 @@
 | 编号 | 功能 | 状态 | Atlas 现状 / 说明 | 参考 |
 | --- | --- | --- | --- | --- |
 | F186 | 多会话并行 | ✅ | 多个会话可同时跑，侧栏显示运行中 | |
-| F187 | 子 Agent 委派 | 🟡 | `delegate_task`（委派给外部后端），无界面 | Claude Code |
-| F188 | 角色 Mode | ❌ | | Roo |
-| F189 | 上下文隔离 | 🟡 | 委派天然隔离 | |
-| F190 | 工作树隔离 | ❌ | | Cline Kanban |
+| F187 | 子 Agent 委派 | ✅ | 同 F045 | Claude Code |
+| F188 | 角色 Mode | ✅ | 同 F020 | Roo |
+| F189 | 上下文隔离 | ✅ | 子 Agent 独立上下文，进度单独显示 | |
+| F190 | 工作树隔离 | ✅ | 同 F015 | Cline Kanban |
 | F191 | 协调视图 | ✅ | 同 F044 | Cline Kanban |
 | F192 | Worker/协调者 | ❌ | | Factory Missions |
 | F193 | 并行结果汇总 | ❌ | | |
@@ -380,9 +380,9 @@
 
 | 状态 | 数量 |
 | --- | --- |
-| ✅ | 105 |
-| 🟡 | 32 |
-| ❌ | 51 |
+| ✅ | 126 |
+| 🟡 | 31 |
+| ❌ | 31 |
 | ➖ | 18 |
 | ⚖️ | 4 |
 

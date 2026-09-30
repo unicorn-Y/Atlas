@@ -1,14 +1,16 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { AgentCapabilityInfo, ConfigurationResponse, ConversationMessage, ConversationSummary, CustomModelRequest, ModelListResponse, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentCapabilityInfo, AgentProfile, ConfigurationResponse, ConversationMessage, ConversationSummary, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
 
 const desktopApiBaseUrl = typeof window === 'undefined' ? undefined : window.atlasDesktop?.apiBaseUrl;
 
-/** What the user sends: text, images (data URLs) and other files. */
-export interface Outgoing { content: string; attachments: string[]; files: RunFile[] }
+/** Extra context picked in the composer: @files from the workspace and #conversations. */
+export interface ContextRefs { files: string[]; conversations: string[] }
+/** What the user sends: text, images (data URLs), other files, and referenced context. */
+export interface Outgoing { content: string; attachments: string[]; files: RunFile[]; refs?: ContextRefs }
 export interface QueuedMessage extends Outgoing { id: string }
 /** How a message typed while a run is working is delivered: folded into the run now, or run afterwards. */
 export type FollowUpMode = 'steer' | 'queue';
@@ -56,6 +58,13 @@ interface AtlasState {
   pinned: string[];
   archived: string[];
   runPrompts: Record<string, Outgoing>;
+  profiles: AgentProfile[];
+  recipes: Recipe[];
+  /** Role for new runs; the backend applies its model, skills, tools and mode. */
+  profileId: string;
+  reasoningEffort: ReasoningEffort | '';
+  /** Conversations whose next run should start in their own git worktree. */
+  worktreeRequests: Record<string, { base_branch?: string }>;
   initialize: () => Promise<void>;
   openConversation: (conversation: ConversationSummary) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
@@ -65,7 +74,7 @@ interface AtlasState {
   saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
   addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
   testModelConnection: (model?: string) => Promise<void>;
-  sendMessage: (content: string, attachments?: string[], files?: RunFile[]) => Promise<void>;
+  sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs) => Promise<void>;
   createRun: (conversationId: string, title: string) => AgentRun;
   appendEvent: (event: AgentEvent) => void;
   getRun: (runId: string) => AgentRun | undefined;
@@ -96,6 +105,15 @@ interface AtlasState {
   editMessage: (messageId: string, content: string) => Promise<void>;
   forkFrom: (messageId: string) => Promise<void>;
   compactConversation: (id: string) => Promise<string | null>;
+  setProfile: (id: string) => void;
+  setReasoningEffort: (effort: ReasoningEffort | '') => void;
+  requestWorktree: (conversationId: string, baseBranch: string | null) => void;
+  refreshConversations: () => Promise<void>;
+  duplicateConversation: (id: string) => Promise<void>;
+  cancelSubtask: (runId: string, subtaskId: string) => void;
+  saveRecipe: (runId: string, name: string) => Promise<boolean>;
+  deleteRecipe: (id: string) => Promise<void>;
+  runRecipe: (id: string, params: Record<string, string>) => Promise<void>;
 }
 
 const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
@@ -110,6 +128,8 @@ const readList = (key: string): string[] => {
   } catch { return []; }
 };
 const ACTIVE_SKILLS = 'atlas.active-skills';
+const PROFILE = 'atlas.preference.profile';
+const REASONING = 'atlas.preference.reasoning';
 const FOLLOW_UP = 'atlas.preference.follow-up';
 // Pins and archives lived in localStorage before the backend stored them; migrated once on startup.
 const LEGACY_PINNED = 'atlas.conversations.pinned';
@@ -145,6 +165,9 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', answers: {},
     unread: [], pinned: [], archived: [], runPrompts: {},
+    profiles: [], recipes: [], profileId: storageGet(PROFILE) ?? 'default',
+    reasoningEffort: (['minimal', 'low', 'medium', 'high'].includes(storageGet(REASONING) ?? '') ? storageGet(REASONING) : '') as ReasoningEffort | '',
+    worktreeRequests: {},
 
     initialize: async () => {
       set({ conversationsLoading: true });
@@ -158,6 +181,9 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
         const first = conversations.find((item) => !item.archived);
         if (first) await get().openConversation(first);
+        // Roles and recipes are extras; the app works without them if the backend predates them.
+        const [profiles, recipes] = await Promise.all([backend.getProfiles().catch(() => []), backend.getRecipes().catch(() => [])]);
+        set((state) => ({ profiles, recipes, profileId: profiles.some((profile) => profile.id === state.profileId) ? state.profileId : 'default' }));
       } catch (error) {
         fail(error, '无法读取后端数据');
         set({ conversationsLoading: false });
@@ -304,6 +330,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         }
         dispatchQueue(run.conversationId);
         void reloadMessages(run.conversationId).catch((error) => fail(error, '无法读取对话历史'));
+        // The run may have created a worktree or remembered a directory for the conversation.
+        void get().refreshConversations();
       }
     },
 
@@ -319,18 +347,18 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       return { runs, artifacts: state.artifacts.filter((artifact) => artifact.runId !== runId), activeRunId, busy: runs.some((run) => !terminal.has(run.status)), paused: active?.status === 'paused' };
     }),
 
-    sendMessage: async (content, attachments = [], files = []) => {
+    sendMessage: async (content, attachments = [], files = [], refs) => {
       const message = content.trim() || (attachments.length || files.length ? '请查看附件。' : '');
       if (!message) return;
       if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().catch(() => undefined);
       if (!get().activeConversationId) await get().createConversation(message.slice(0, 40) || 'New conversation');
       const conversationId = get().activeConversationId;
       if (!conversationId) return;
-      const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files };
+      const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files, ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}) };
       const running = activeRunFor(conversationId);
       if (running) {
         // Attachments can't join a run in flight, so those always wait for the next run.
-        if (get().followUpMode === 'steer' && !attachments.length && !files.length && steer(running, item)) return;
+        if (get().followUpMode === 'steer' && !attachments.length && !files.length && !item.refs && steer(running, item)) return;
         set((state) => ({ queue: { ...state.queue, [conversationId]: [...(state.queue[conversationId] ?? []), item] } }));
         return;
       }
@@ -480,6 +508,56 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         await get().openConversation(fork);
       } catch (error) { set({ error: errorText(error, '没能分叉') }); }
     },
+    setProfile: (profileId) => { storageSet(PROFILE, profileId); set({ profileId }); },
+    setReasoningEffort: (reasoningEffort) => { storageSet(REASONING, reasoningEffort || null); set({ reasoningEffort }); },
+    requestWorktree: (conversationId, baseBranch) => set((state) => {
+      const { [conversationId]: _previous, ...rest } = state.worktreeRequests;
+      return { worktreeRequests: baseBranch === null ? rest : { ...rest, [conversationId]: baseBranch ? { base_branch: baseBranch } : {} } };
+    }),
+    refreshConversations: async () => {
+      try {
+        const loaded = await backend.getConversations();
+        set((state) => {
+          // Keep a directory chosen in the UI until the backend has remembered it from a run.
+          const conversations = loaded.map((item) => {
+            const local = state.conversations.find((entry) => entry.id === item.id);
+            return !item.workspace && local?.workspace ? { ...item, workspace: local.workspace } : item;
+          });
+          return { conversations, ...flags(conversations) };
+        });
+      } catch { /* keep the current list */ }
+    },
+    duplicateConversation: async (id) => {
+      try {
+        const copy = await backend.duplicateConversation(id);
+        const source = get().conversations.find((item) => item.id === id);
+        set((state) => ({ conversations: [{ ...copy, workspace: copy.workspace ?? source?.workspace }, ...state.conversations] }));
+        await get().openConversation(copy);
+      } catch (error) { set({ error: errorText(error, '没能复制对话') }); }
+    },
+    cancelSubtask: (runId, subtaskId) => { void backend.cancelSubtask(runId, subtaskId).catch((error) => set({ error: errorText(error, '没能停止子任务') })); },
+    saveRecipe: async (runId, name) => {
+      try {
+        const recipe = await backend.recipeFromRun(runId, name.trim());
+        set((state) => ({ recipes: [recipe, ...state.recipes.filter((item) => item.id !== recipe.id)] }));
+        return true;
+      } catch (error) { set({ error: errorText(error, '没能保存配方') }); return false; }
+    },
+    deleteRecipe: async (id) => {
+      try { await backend.deleteRecipe(id); set((state) => ({ recipes: state.recipes.filter((item) => item.id !== id) })); }
+      catch (error) { set({ error: errorText(error, '没能删除配方') }); }
+    },
+    runRecipe: async (id, params) => {
+      try {
+        const rendered = await backend.renderRecipe(id, params);
+        if (rendered.mode === 'plan') set({ nextRunMode: 'plan' });
+        if (rendered.profile_id) get().setProfile(rendered.profile_id);
+        for (const skill of rendered.active_skills ?? []) get().applySkill(skill);
+        const conversationId = get().activeConversationId;
+        if (rendered.workspace && conversationId) get().setWorkspace(conversationId, rendered.workspace);
+        await get().sendMessage(rendered.prompt);
+      } catch (error) { set({ error: errorText(error, '配方没能运行') }); }
+    },
     compactConversation: async (id) => {
       try {
         const result = await backend.compactConversation(id);
@@ -540,16 +618,25 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   }
   const mode = get().nextRunMode;
   const run = get().createRun(conversationId, conversation?.title ?? content.slice(0, 80));
-  set((state) => ({ runPrompts: { ...state.runPrompts, [run.id]: { content, attachments, files } }, nextRunMode: 'act' }));
+  set((current) => ({ runPrompts: { ...current.runPrompts, [run.id]: { content, attachments, files, refs: item.refs } }, nextRunMode: 'act' }));
   const handleEvent = (envelope: RuntimeEventEnvelope) => {
     if (!isRuntimeEvent(envelope)) return;
     const event = normalizeRuntimeEvent(envelope);
     if (event) get().appendEvent(event);
   };
   const workspace = typeof conversation?.workspace === 'string' && conversation.workspace ? conversation.workspace : undefined;
+  const state = get();
+  const worktree = state.worktreeRequests[conversationId];
+  const supportsEffort = Boolean(state.models.find((model) => model.id === state.model)?.supports_reasoning_effort);
+  if (worktree) useAtlasStore.getState().requestWorktree(conversationId, null);
   void backend.startRun({
-    type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: get().model, attachments, active_skills: get().activeSkills,
+    type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: state.model, attachments, active_skills: state.activeSkills,
     ...(files.length ? { files } : {}), ...(mode === 'plan' ? { mode } : {}), ...(workspace ? { workspace } : {}),
+    ...(state.profileId && state.profileId !== 'default' ? { profile_id: state.profileId } : {}),
+    ...(state.reasoningEffort && supportsEffort ? { reasoning_effort: state.reasoningEffort } : {}),
+    ...(worktree && !conversation?.worktree_path ? { worktree } : {}),
+    ...(item.refs?.files.length ? { context_files: item.refs.files } : {}),
+    ...(item.refs?.conversations.length ? { context_conversations: item.refs.conversations } : {}),
   }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
     .catch((error) => {
       set({ mode: backend.mode, connected: backend.mode === 'backend', error: errorText(error, '运行启动失败') });

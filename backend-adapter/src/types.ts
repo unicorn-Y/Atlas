@@ -41,6 +41,12 @@ export interface ConversationSummary {
   archived?: boolean;
   /** Working directory the conversation's last run used. */
   workspace?: string | null;
+  /** Set once the conversation runs in its own git worktree. */
+  worktree_path?: string | null;
+  worktree_branch?: string | null;
+  base_branch?: string | null;
+  parent_conversation_id?: string | null;
+  fork_message_id?: string | null;
   [key: string]: unknown;
 }
 
@@ -90,6 +96,52 @@ export interface RunStartRequest {
   workspace?: string;
   /** Non-image files: text is inlined, anything else is stored and its path passed to the Agent. */
   files?: RunFile[];
+  /** Run in the conversation's own git worktree, created from base_branch on first use. */
+  worktree?: { base_branch?: string };
+  profile_id?: string;
+  reasoning_effort?: ReasoningEffort;
+  /** Workspace-relative files whose content is added to the message (@ mentions). */
+  context_files?: string[];
+  /** Other conversations summarised into the message (# mentions), at most three. */
+  context_conversations?: string[];
+  /** Side question: uses the conversation as context but is not saved to it; read-only tools. */
+  ephemeral?: boolean;
+}
+
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+
+export interface AgentProfile {
+  id: string;
+  name: string;
+  description?: string;
+  instructions?: string;
+  model?: string | null;
+  reasoning_effort?: ReasoningEffort | null;
+  active_skills?: string[];
+  tools?: { allow: string[] | null; deny: string[] };
+  mode?: 'act' | 'plan';
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  description?: string;
+  prompt: string;
+  params: Array<{ name: string; label?: string; default?: string }>;
+  active_skills?: string[];
+  mode?: 'act' | 'plan';
+  workspace?: string | null;
+  profile_id?: string | null;
+}
+
+export interface WorktreeInfo {
+  path: string;
+  branch: string;
+  base_branch: string;
+  ahead: number;
+  behind: number;
+  dirty: boolean;
+  changed_files: string[] | number;
 }
 
 export interface RunFile {

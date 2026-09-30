@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AudioLines, Bell, Copy, Download, FolderOpen, GitBranch, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
+  AudioLines, Bell, BookMarked, Brain, Copy, Download, FolderOpen, GitBranch, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X,
 } from 'lucide-react';
-import { useAtlasStore } from './store/useAtlasStore';
+import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { RunFile } from '@atlas/backend-adapter';
 import ConversationActivity from './components/ConversationActivity';
 import ConversationMessage from './components/ConversationMessage';
-import Composer, { type ComposerMode, type SlashCommand } from './components/Composer';
+import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
+import RecipesDialog from './components/RecipesDialog';
+import SideChat from './components/SideChat';
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
 import Palette, { type PaletteItem } from './components/Palette';
 import VoiceOverlay, { getSpeechRecognition, type SpeechRecognitionLike } from './components/VoiceOverlay';
@@ -40,6 +43,7 @@ const HOME_MODES: ComposerMode[] = [
   { id: 'image', label: '图像', icon: ImageIcon },
   { id: 'voice', label: '语音通话', icon: AudioLines },
 ];
+const EFFORT_LABEL: Record<string, string> = { minimal: '最低', low: '低', medium: '中', high: '高' };
 const draftKey = (conversationId: string) => `atlas.draft.${conversationId || 'home'}`;
 const readDraft = (conversationId: string) => { try { return localStorage.getItem(draftKey(conversationId)) ?? ''; } catch { return ''; } };
 const writeDraft = (conversationId: string, text: string) => {
@@ -75,6 +79,10 @@ export default function App() {
   const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
   const [browserUrl, setBrowserUrl] = useState('');
   const [terminalCommand, setTerminalCommand] = useState<{ id: string; text: string } | null>(null);
+  const [mentions, setMentions] = useState<MentionItem[]>([]);
+  const [recipesOpen, setRecipesOpen] = useState(false);
+  const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
+  const [branches, setBranches] = useState<string[]>([]);
   const [listening, setListening] = useState(false);
   const [voiceOutput, setVoiceOutput] = useState(() => pref('voice-output') === 'true');
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
@@ -225,7 +233,7 @@ export default function App() {
   };
 
   const submit = async (fromHome: boolean) => {
-    if (!input.trim() && !attachments.length && !files.length) return;
+    if (!input.trim() && !attachments.length && !files.length && !mentions.length) return;
     const text = input;
     const images = attachments;
     const documents = files.map(({ name, mime, data_base64 }) => ({ name, mime, data_base64 }));
@@ -260,7 +268,9 @@ export default function App() {
       // Home always starts something new, unless the open conversation is still empty.
       if (store.activeConversationId && messages.length) await store.createConversation(text.trim().slice(0, 40) || 'New conversation');
     }
-    void store.sendMessage(text, images, documents);
+    const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: mentions.filter((item) => item.kind === 'conversation').map((item) => item.id).slice(0, 3) };
+    setMentions([]);
+    void store.sendMessage(text, images, documents, refs);
   };
   /** Images go to the model as pictures; every other file rides along as a document. */
   const addFiles = (picked: FileList | null) => {
@@ -367,6 +377,8 @@ export default function App() {
     ...THEMES.filter((item) => item.id !== theme).map((item) => ({ id: `theme-${item.id}`, group: '外观', label: `切换到${item.label}`, hint: item.hint, icon: item.id === 'dark' ? <Moon /> : <Sun />, run: () => chooseTheme(item.id) })),
     { id: 'settings', group: '操作', label: '设置', hint: 'Ctrl ,', icon: <Settings />, run: () => setSheet('models') },
     ...(activeConversation ? [{ id: 'export', group: '操作', label: '导出当前对话', icon: <Download />, run: () => void store.exportConversation(activeConversation.id) }] : []),
+    ...(activeConversation ? [{ id: 'side', group: '操作', label: '旁问', hint: '/btw', icon: <MessagesSquare />, run: () => setSide({ open: true }) }] : []),
+    ...store.recipes.map((recipe) => ({ id: `recipe-${recipe.id}`, group: '配方', label: recipe.name, icon: <BookMarked />, run: () => setRecipesOpen(true) })),
     ...NAV.map(({ view: target, label, icon: Icon }) => ({ id: `go-${target}`, group: '前往', label, icon: <Icon />, run: () => go(target) })),
     ...store.conversations.slice(0, 30).map((conversation) => ({ id: `c-${conversation.id}`, group: '任务', label: conversation.title, hint: relativeTime(conversation.updated_at), run: () => openConversation(conversation) })),
   ];
@@ -380,6 +392,8 @@ export default function App() {
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
+    { id: 'recipe', label: '/recipe', hint: '打开配方，带参数复跑保存过的任务', run: () => setRecipesOpen(true) },
+    ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
     ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩这个对话的上下文，省 token', run: () => void store.compactConversation(activeConversation.id).then((text) => { if (text) setToast(text); }) }] : []),
     { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
@@ -410,11 +424,30 @@ export default function App() {
   }, [store.apiBaseUrl, store.connected]);
   const workspaceName = typeof activeConversation?.workspace === 'string' && activeConversation.workspace
     ? activeConversation.workspace.split(/[\\/]/).filter(Boolean).pop() ?? activeConversation.workspace : '';
+  const findMentions = async (trigger: '@' | '#', query: string): Promise<MentionItem[]> => {
+    const taken = new Set(mentions.map((item) => `${item.kind}:${item.id}`));
+    if (trigger === '#') {
+      const q = query.toLowerCase();
+      return store.conversations.filter((item) => item.id !== store.activeConversationId && item.title.toLowerCase().includes(q) && !taken.has(`conversation:${item.id}`))
+        .slice(0, 8).map((item) => ({ kind: 'conversation' as const, id: item.id, label: item.title, hint: relativeTime(item.updated_at) }));
+    }
+    const root = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
+    // @ refers to files in the working directory; without one there is nothing to search.
+    if (!root || !query) return [];
+    const hits = await backend.searchWorkspace(root, query, 12);
+    return hits.filter((hit) => hit.type === 'file' && !taken.has(`file:${hit.path}`)).map((hit) => ({ kind: 'file' as const, id: hit.path, label: hit.name, hint: hit.path }));
+  };
+  const currentModel = store.models.find((model) => model.id === store.model);
+  const worktreeActive = Boolean(activeConversation?.worktree_path);
+  const worktreeRequested = Boolean(store.worktreeRequests[store.activeConversationId]);
+  const profileName = store.profiles.find((profile) => profile.id === store.profileId)?.name ?? '默认';
   const composerStatus = listening ? '正在听…' : store.connected ? '' : 'Atlas 后端没有连接';
   const composerBase = {
     value: input, onChange: setInput, attachments, onPickImages: addFiles, listening, onToggleMic: toggleSpeechInput,
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
     files, onRemoveFile: (index: number) => setFiles((items) => items.filter((_, position) => position !== index)),
+    findMentions, mentions, onAddMention: (item: MentionItem) => { if (item.id) setMentions((current) => [...current, item]); },
+    onRemoveMention: (item: MentionItem) => setMentions((current) => current.filter((entry) => !(entry.kind === item.kind && entry.id === item.id))),
     onLongPaste: (text: string) => { addDocuments([new File([text], `粘贴的文本-${new Date().toLocaleTimeString().replace(/:/g, '')}.txt`, { type: 'text/plain' })]); setToast(`粘贴内容有 ${text.length} 个字，已转成附件`); },
     tools: <>
       <Tip label={workspaceName ? `工作目录：${activeConversation?.workspace}（点击更换）` : '选择工作目录'}>
@@ -422,6 +455,50 @@ export default function App() {
           <FolderOpen size={15} className="shrink-0" />{workspaceName && <span className="truncate">{workspaceName}</span>}
         </button>
       </Tip>
+      {store.profiles.length > 0 && <Menu>
+        <Tip label={`角色：${profileName}`}><MenuTrigger asChild>
+          <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.profileId !== 'default' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+            <UserCog size={15} />{store.profileId !== 'default' && profileName}
+          </button>
+        </MenuTrigger></Tip>
+        <MenuContent side="top">
+          <MenuLabel>角色</MenuLabel>
+          {store.profiles.map((profile) => <MenuItem key={profile.id} checked={profile.id === store.profileId} hint={profile.mode === 'plan' ? '只读' : ''} onSelect={() => store.setProfile(profile.id)}>
+            <span className="min-w-0"><span className="block">{profile.name}</span>{profile.description && <small className="block truncate text-[11.5px] text-fg-3">{profile.description}</small>}</span>
+          </MenuItem>)}
+        </MenuContent>
+      </Menu>}
+      {Boolean(currentModel?.supports_reasoning_effort) && <Menu>
+        <Tip label={store.reasoningEffort ? `推理：${EFFORT_LABEL[store.reasoningEffort]}` : '推理档位：模型默认'}><MenuTrigger asChild>
+          <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.reasoningEffort ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+            <Brain size={15} />{store.reasoningEffort && EFFORT_LABEL[store.reasoningEffort]}
+          </button>
+        </MenuTrigger></Tip>
+        <MenuContent side="top">
+          <MenuLabel>推理档位</MenuLabel>
+          <MenuItem checked={!store.reasoningEffort} onSelect={() => store.setReasoningEffort('')}>模型默认</MenuItem>
+          {(['minimal', 'low', 'medium', 'high'] as const).map((effort) => <MenuItem key={effort} checked={store.reasoningEffort === effort} onSelect={() => store.setReasoningEffort(effort)}>{EFFORT_LABEL[effort]}</MenuItem>)}
+        </MenuContent>
+      </Menu>}
+      {workspaceName && <Menu onOpenChange={(opening) => { if (opening && !worktreeActive) void backend.getBranches(String(activeConversation?.workspace)).then((result) => setBranches(result.branches)).catch(() => setBranches([])); }}>
+        <Tip label={worktreeActive ? `在独立分支 ${activeConversation?.worktree_branch} 上工作` : worktreeRequested ? '下一条会在独立 worktree 里执行' : '隔离分支：在独立的 git worktree 里改，不动主目录'}><MenuTrigger asChild>
+          <button type="button" className={cn('inline-flex h-8 max-w-[150px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', worktreeActive || worktreeRequested ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+            <GitBranch size={15} className="shrink-0" />{(worktreeActive || worktreeRequested) && <span className="truncate">{worktreeActive ? String(activeConversation?.worktree_branch ?? '') : '隔离'}</span>}
+          </button>
+        </MenuTrigger></Tip>
+        <MenuContent side="top">
+          {worktreeActive ? <>
+            <MenuLabel>{`独立分支 ${activeConversation?.worktree_branch}，基于 ${activeConversation?.base_branch}`}</MenuLabel>
+            <MenuItem onSelect={() => showInspectorTab('context')}>查看、合并或删除…</MenuItem>
+          </> : <>
+            <MenuLabel>在独立 worktree 里执行，起始分支</MenuLabel>
+            {worktreeRequested && <MenuItem onSelect={() => store.requestWorktree(store.activeConversationId, null)}>取消隔离</MenuItem>}
+            <MenuItem onSelect={() => store.requestWorktree(store.activeConversationId, '')}>当前分支</MenuItem>
+            {branches.length > 0 && <MenuSeparator />}
+            {branches.map((branch) => <MenuItem key={branch} checked={store.worktreeRequests[store.activeConversationId]?.base_branch === branch} onSelect={() => store.requestWorktree(store.activeConversationId, branch)}>{branch}</MenuItem>)}
+          </>}
+        </MenuContent>
+      </Menu>}
       <Tip label={store.nextRunMode === 'plan' ? '下一条会先出计划，等你批准' : '先出计划：只读探索，批准后再动手'}>
         <button type="button" aria-pressed={store.nextRunMode === 'plan'} onClick={() => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan')}
           className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px]', store.nextRunMode === 'plan' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg')}>
@@ -529,7 +606,7 @@ export default function App() {
         pinned={store.pinned} archived={store.archived} unread={store.unread}
         running={store.runs.filter((run) => !TERMINAL.includes(run.status)).map((run) => run.conversationId)}
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
-        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id) => void store.exportConversation(id)} />
+        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id) => void store.exportConversation(id)} onDuplicate={(id) => void store.duplicateConversation(id)} />
 
       <main className="sheet relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[14px]">
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
@@ -597,6 +674,9 @@ export default function App() {
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
             workspace={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : null} onChooseWorkspace={() => void chooseWorkspace()}
             browserUrl={browserUrl} onBrowserUrl={setBrowserUrl} browserSuggestions={localUrls} onPick={pickElement}
+            onPreview={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }} conversationId={store.activeConversationId}
+            worktree={activeConversation?.worktree_path ? { path: String(activeConversation.worktree_path), branch: String(activeConversation.worktree_branch ?? ''), base: String(activeConversation.base_branch ?? '') } : null}
+            onWorktreeChanged={() => void store.refreshConversations()}
             terminalCommand={terminalCommand} onSendToAtlas={(text) => { setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}终端输出：\n\`\`\`\n${text.trimEnd()}\n\`\`\`\n\n`); setToast('已把终端输出放进输入框'); }} />}
         </div>}
 
@@ -654,6 +734,10 @@ export default function App() {
       runDone={runDone}
       modelName={modelName}
     />}
+
+    <RecipesDialog open={recipesOpen} onClose={() => setRecipesOpen(false)} recipes={store.recipes}
+      onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />
+    {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}
 
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
