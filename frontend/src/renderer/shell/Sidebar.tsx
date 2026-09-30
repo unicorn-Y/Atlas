@@ -62,7 +62,7 @@ interface SidebarProps {
   onDelete: (id: string) => void;
   onTogglePinned: (id: string) => void;
   onToggleArchived: (id: string) => void;
-  onExport: (id: string) => void;
+  onExport: (id: string, format: 'json' | 'md') => void;
   onDuplicate: (id: string) => void;
 }
 
@@ -113,7 +113,8 @@ export default function Sidebar(props: SidebarProps) {
           {!isArchived && <MenuItem onSelect={() => props.onTogglePinned(conversation.id)}>{isPinned ? <><PinOff />取消置顶</> : <><Pin />置顶</>}</MenuItem>}
           <MenuItem onSelect={() => props.onToggleArchived(conversation.id)}>{isArchived ? <><ArchiveRestore />移出归档</> : <><Archive />归档</>}</MenuItem>
           <MenuItem onSelect={() => props.onDuplicate(conversation.id)}><CopyPlus />复制一份</MenuItem>
-          <MenuItem onSelect={() => props.onExport(conversation.id)}><Download />导出为 JSON</MenuItem>
+          <MenuItem onSelect={() => props.onExport(conversation.id, 'md')}><Download />导出为 Markdown</MenuItem>
+          <MenuItem onSelect={() => props.onExport(conversation.id, 'json')}><Download />导出为 JSON</MenuItem>
           <MenuSeparator />
           <MenuItem onSelect={(event) => {
             if (confirmDelete === conversation.id) { props.onDelete(conversation.id); setConfirmDelete(''); return; }

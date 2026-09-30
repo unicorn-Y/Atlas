@@ -113,7 +113,7 @@
 | F031 | 时间线导航 | ❌ | | Hermes |
 | F032 | 恢复阅读位置 | ✅ | 切换对话回到上次的阅读位置 | Hermes |
 | F033 | JSON 导出 | ✅ | 侧栏菜单、命令面板、`/export` 导出 JSON | Hermes |
-| F034 | 分享线程 | ❌ | | OpenCode |
+| F034 | 分享线程 | ✅ | 侧栏「导出为 Markdown」，可以直接发给别人 | OpenCode |
 | F035 | 会话多 Tabs | ❌ | | |
 
 ### 04 布局与面板
@@ -127,7 +127,7 @@
 | F040 | 文件面板 | ✅ | 面板「文件」 | |
 | F041 | 浏览器面板 | ✅ | 面板「浏览器」，独立会话分区，拿不到后端 token | Hermes、ZCode |
 | F042 | 终端面板 | ✅ | 面板「终端」 | Hermes |
-| F043 | 产物面板 | 🟡 | Inspector 产物列表，不能预览内容 | Codex |
+| F043 | 产物面板 | ✅ | 产物可在浏览器面板预览或用默认程序打开 | Codex |
 | F044 | Kanban 指挥中心 | ✅ | 侧栏「看板」 | Cline Kanban |
 | F045 | Tasks/子任务面板 | ✅ | 子 Agent 进度显示在时间线，可单独停止 | Claude Code |
 
@@ -199,13 +199,13 @@
 | F087 | 辅助聊天 side chat | ✅ | /btw 旁问：借用上下文、只读、不写入对话 | ZCode |
 | F088 | 从回复分叉 | ✅ | Atlas 回复上悬停「从这里分叉」，文件不复制 | Pi、ZCode |
 | F089 | Duplicate 会话 | ✅ | 侧栏「复制一份」 | |
-| F090 | 会话树 | 🟡 | 后端记录了分叉关系，界面还没有树状视图 | Pi |
+| F090 | 会话树 | 🟡 | 标题栏显示「分叉自…」可跳回；还没有整棵树的视图 | Pi |
 | F091 | 编辑最后用户消息 | ✅ | 你的消息上悬停「修改后重新发送」，之后的对话被替换 | ZCode |
 | F092 | Checkpoint | ✅ | 面板「改动」下的快照列表，本次任务的排在前面 | OpenCode、Cline |
 | F093 | 对话+文件重置 | ❌ | | ZCode |
 | F094 | Undo/重新应用 | 🟡 | 能恢复，无 redo | ZCode |
 | F095 | Resume | ✅ | `resume` + `after_sequence` 断线续传 | |
-| F096 | 分支摘要 | 🟡 | 后端支持分叉时生成摘要，界面还没开关 | Pi |
+| F096 | 分支摘要 | ✅ | Atlas 回复上「分叉，并把前面的内容总结成一段」 | Pi |
 | F097 | Restore checkpoint | ✅ | 一键还原，二次确认；修复了快照写读两个不同存储的 bug | |
 
 ### 10 过程展示与任务状态
@@ -237,7 +237,7 @@
 | F115 | Diff 查看 | ✅ | 面板「改动」逐文件 diff | Claude Code |
 | F116 | 逐行评论 | ❌ | | Claude Code |
 | F117 | Accept/Reject | ⚖️ | 与 FULL_ACCESS 冲突，可做成事后撤销代替 | |
-| F118 | Agent 自检/Review | 🟡 | TrajectoryReviewer + code-review 技能 | |
+| F118 | Agent 自检/Review | ✅ | 改了文件的任务完成后「让审查员检查」 | |
 | F119 | Git commit | ✅ | Agent 用 git | |
 | F120 | 创建/跟踪 PR | 🟡 | github-pr-workflow 技能 | |
 | F121 | CI 自动修复 | ❌ | | |
@@ -265,8 +265,8 @@
 | F133 | 元素选择器 | ✅ | 点选元素：选择器、文字、HTML 片段放进输入框 | ZCode |
 | F134 | 截图/录制结果 | ✅ | 点选元素时自动附上元素截图 | |
 | F135 | DOM 定位上下文 | ✅ | 同 F133 | ZCode |
-| F136 | 区域框选批注 | 🟡 | 能点选单个元素并附截图；还不能框选区域 | Hermes |
-| F137 | 成批发送批注 | ❌ | | Hermes |
+| F136 | 区域框选批注 | ✅ | 浏览器面板「框选」一块区域，附截图和区域内文字 | Hermes |
+| F137 | 成批发送批注 | ✅ | 可以连续点选 / 框选几处，一起发送 | Hermes |
 | F138 | Agent 点击/填表 | ✅ | | |
 | F139 | 浏览器接管 | ❌ | | Manus |
 | F140 | 复用用户浏览器 | 🟡 | chrome-devtools MCP 已接，未做成用户可选项 | Manus Operator |
@@ -329,7 +329,7 @@
 | F177 | Plugins | 🟡 | 只支持本地安装 | Claude Code 插件市场 |
 | F178 | Hooks | 🟡 | 内部 `HookBus`，用户不能配置 | Kiro、Gemini CLI |
 | F179 | 自定义工具 | 🟡 | 走 MCP/插件，无轻量脚本工具 | Pi |
-| F180 | Agent 配置 | 🟡 | 可以选角色；新建和编辑角色的界面还没做（后端接口已有） | Roo Modes |
+| F180 | Agent 配置 | ✅ | 设置 → 角色：新建、编辑指令 / 模型 / 技能 / 工具 / 模式 | Roo Modes |
 | F181 | 扩展包 | 🟡 | skill bundles | Pi Packages |
 | F182 | 主题/键位 | 🟡 | 三套主题，无自定义快捷键 | |
 | F183 | Powers | ➖ | | |
@@ -371,7 +371,7 @@
 | F204 | 组织资料连接 | 🟡 | 通过 MCP | |
 | F205 | 编码平台连接 | 🟡 | github 技能 | |
 | F206 | 团队 Workspaces | ➖ | | |
-| F207 | 成果分享 | ❌ | | |
+| F207 | 成果分享 | 🟡 | 能导出 Markdown / JSON；没有在线分享链接 | |
 | F208 | 控制台/管理面板 | ✅ | 设置、集成、依赖检查、可观测性 | |
 | F209 | API/SDK 驱动 | ✅ | HTTP + WebSocket 协议（docs/api-protocol-v1.2.md） | |
 | F210 | Headless/CI | 🟡 | `cli.py` | |
@@ -380,9 +380,9 @@
 
 | 状态 | 数量 |
 | --- | --- |
-| ✅ | 126 |
-| 🟡 | 31 |
-| ❌ | 31 |
+| ✅ | 133 |
+| 🟡 | 27 |
+| ❌ | 28 |
 | ➖ | 18 |
 | ⚖️ | 4 |
 

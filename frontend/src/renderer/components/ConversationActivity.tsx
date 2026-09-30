@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, Check, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, X } from 'lucide-react';
+import { BookMarked, Check, SearchCheck, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
@@ -55,6 +55,8 @@ export default function ConversationActivity({ events, store, username, setTab }
             · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
           </button>}
           <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
+          {changed && store.profiles.some((profile) => profile.id === 'reviewer') && <button className="ml-2 inline-flex items-center gap-1 text-fg-2 hover:text-fg"
+            onClick={() => void store.sendMessage('请审查这次任务的改动：逐个文件指出 bug、风险和可以简化的地方，给出具体位置。只提意见，不要修改文件。', [], [], undefined, 'reviewer')}><SearchCheck size={13} />让审查员检查</button>}
           {events[0] && <SaveRecipe runId={events[0].runId} store={store} />}
         </div>;
       }

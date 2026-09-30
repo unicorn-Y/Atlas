@@ -79,6 +79,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
           <span className="min-w-0"><b className="block truncate text-[13.5px] font-medium text-fg">{artifact.name}</b><small className="block truncate text-[12px] text-fg-3">{artifact.path ?? artifact.type}</small></span>
         </button>)}
         {current?.summary && <p className="mt-2 rounded-xl bg-sunken p-3 text-[13px] leading-[1.7] text-fg-2">{current.summary}</p>}
+        {current?.path && <ArtifactActions path={current.path} root={worktree?.path ?? workspace ?? ''} onPreview={onPreview} />}
       </div> : <Empty title="还没有产物" body="Atlas 写出或改动的文件、生成的报告会出现在这里。" />)}
 
       {tab === 'activity' && (run ? <>
@@ -205,4 +206,19 @@ function WorktreeSection({ conversationId, worktree, onChanged, onToast, refresh
         <Trash2 size={13} />{confirm === 'force' ? '有未提交改动，确认丢弃并删除' : confirm ? '确认删除' : '删除'}</button>
     </div>
   </section>;
+}
+
+const PREVIEWABLE = /\.(html?|pdf|svg|png|jpe?g|gif|webp)$/i;
+
+/** Preview an artifact in the browser panel (when it lives in the working directory) or open it with its default app. */
+function ArtifactActions({ path, root, onPreview }: { path: string; root: string; onPreview: (url: string) => void }) {
+  const absolute = /^([a-zA-Z]:[\\/]|\\\\|\/)/.test(path);
+  const base = root.replace(/[\\/]+$/, '');
+  const inside = !absolute || (base && path.toLowerCase().startsWith(base.toLowerCase()));
+  const relative = absolute ? path.slice(base.length).replace(/^[\\/]+/, '') : path;
+  const full = absolute ? path : `${base}\\${path}`;
+  return <div className="flex gap-2">
+    {PREVIEWABLE.test(path) && base && inside && <button onClick={() => onPreview(backend.rawFileUrl(base, relative))} className="rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg">在浏览器预览</button>}
+    {window.atlasDesktop?.openPath && (absolute || base) && <button onClick={() => void window.atlasDesktop!.openPath(full)} className="rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg">用默认程序打开</button>}
+  </div>;
 }

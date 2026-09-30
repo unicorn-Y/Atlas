@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, Code2, Crosshair, ExternalLink, Globe, RotateCw, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, ExternalLink, Globe, RotateCw, X } from 'lucide-react';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
 
@@ -8,6 +8,8 @@ const PARTITION = 'persist:atlas-browser';
 
 /** What the user picked on a page, ready to hand to the Agent. */
 export interface PickedElement {
+  /** A single element, or a dragged rectangle and the text inside it. */
+  kind: 'element' | 'region';
   url: string;
   selector: string;
   tag: string;
@@ -83,6 +85,36 @@ async function cropElement(capture: string, rect: Rect, viewport: number): Promi
   return canvas.toDataURL('image/png');
 }
 
+// Runs inside the page: drag a rectangle, resolve with it and the visible text it covers; Escape cancels.
+const REGION = `new Promise((resolve) => {
+  const layer = document.createElement('div');
+  layer.style.cssText = 'position:fixed;inset:0;z-index:2147483647;cursor:crosshair;background:rgba(0,0,0,.04)';
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;border:2px dashed #c8963e;background:rgba(200,150,62,.12);pointer-events:none;display:none';
+  layer.appendChild(box); document.documentElement.appendChild(layer);
+  let start = null;
+  const rect = (e) => ({ x: Math.min(start.x, e.clientX), y: Math.min(start.y, e.clientY), width: Math.abs(e.clientX - start.x), height: Math.abs(e.clientY - start.y) });
+  const done = (value) => { layer.remove(); removeEventListener('keydown', key, true); resolve(value); };
+  const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); done(null); } };
+  layer.addEventListener('mousedown', (e) => { e.preventDefault(); start = { x: e.clientX, y: e.clientY }; box.style.display = 'block'; Object.assign(box.style, { left: start.x + 'px', top: start.y + 'px', width: '0', height: '0' }); });
+  layer.addEventListener('mousemove', (e) => { if (!start) return; const r = rect(e); Object.assign(box.style, { left: r.x + 'px', top: r.y + 'px', width: r.width + 'px', height: r.height + 'px' }); });
+  layer.addEventListener('mouseup', (e) => {
+    if (!start) return;
+    const r = rect(e);
+    if (r.width < 8 || r.height < 8) { start = null; box.style.display = 'none'; return; }
+    layer.remove();
+    const texts = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node && texts.join(' ').length < 600; node = walker.nextNode()) {
+      const text = node.textContent.trim(); if (!text) continue;
+      const range = document.createRange(); range.selectNodeContents(node); const b = range.getBoundingClientRect();
+      if (b.right > r.x && b.left < r.x + r.width && b.bottom > r.y && b.top < r.y + r.height) texts.push(text);
+    }
+    done({ rect: r, text: texts.join(' ').slice(0, 600), viewport: innerWidth });
+  });
+  addEventListener('keydown', key, true);
+})`;
+
 const normalize = (value: string) => {
   const text = value.trim();
   if (!text) return '';
@@ -108,7 +140,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast 
   const [address, setAddress] = useState(url);
   const [loading, setLoading] = useState(false);
   const [nav, setNav] = useState({ back: false, forward: false });
-  const [picking, setPicking] = useState(false);
+  const [picking, setPicking] = useState<'' | 'element' | 'region'>('');
   const desktop = typeof window !== 'undefined' && Boolean(window.atlasDesktop);
 
   useEffect(() => setAddress(url), [url]);
@@ -143,19 +175,19 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast 
     if (viewRef.current && url) void viewRef.current.loadURL(next).catch(() => undefined);
     onUrl(next);
   };
-  const pick = async () => {
+  const pick = async (kind: 'element' | 'region') => {
     const view = viewRef.current;
     if (!view || picking) return;
-    setPicking(true);
+    setPicking(kind);
     try {
-      const result = await view.executeJavaScript<{ selector: string; tag: string; text: string; html: string; rect: Rect; viewport: number } | null>(PICKER);
+      const result = await view.executeJavaScript<{ selector?: string; tag?: string; text: string; html?: string; rect: Rect; viewport: number } | null>(kind === 'element' ? PICKER : REGION);
       if (!result) return;
       let screenshot: string | undefined;
       try { screenshot = await cropElement((await view.capturePage()).toDataURL(), result.rect, result.viewport); } catch { screenshot = undefined; }
-      onPick({ url: view.getURL(), selector: result.selector, tag: result.tag, text: result.text, html: result.html, screenshot });
+      onPick({ kind, url: view.getURL(), selector: result.selector ?? '', tag: result.tag ?? '', text: result.text, html: result.html ?? '', screenshot });
     } catch {
-      onToast('这个页面不允许点选元素');
-    } finally { setPicking(false); }
+      onToast(kind === 'element' ? '这个页面不允许点选元素' : '这个页面不允许框选');
+    } finally { setPicking(''); }
   };
 
   if (!desktop) return <Empty title="在桌面版里使用" body="浏览器面板需要 Atlas 桌面应用，网页版里不可用。" icon={<Globe size={22} />} />;
@@ -168,8 +200,10 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast 
       <button type="button" aria-label={loading ? '停止加载' : '刷新'} disabled={!url} onClick={() => loading ? viewRef.current?.stop() : viewRef.current?.reload()} className={button}>{loading ? <X size={15} /> : <RotateCw size={14} />}</button>
       <input value={address} onChange={(event) => setAddress(event.target.value)} onFocus={(event) => event.target.select()} placeholder="输入网址、localhost:端口，或搜索" aria-label="地址"
         className="h-8 min-w-0 flex-1 rounded-[9px] bg-sunken px-3 text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
-      <button type="button" aria-label="点选页面元素发给 Atlas" title="点选页面元素发给 Atlas（Esc 取消）" disabled={!url || picking} onClick={() => void pick()}
-        className={cn(button, picking && '!bg-brand-soft !text-fg')}><Crosshair size={15} /></button>
+      <button type="button" aria-label="点选页面元素发给 Atlas" title="点选页面元素发给 Atlas（Esc 取消）" disabled={!url || Boolean(picking)} onClick={() => void pick('element')}
+        className={cn(button, picking === 'element' && '!bg-brand-soft !text-fg')}><Crosshair size={15} /></button>
+      <button type="button" aria-label="框选页面区域发给 Atlas" title="框选一块区域发给 Atlas，可以连续框选几处再发（Esc 取消）" disabled={!url || Boolean(picking)} onClick={() => void pick('region')}
+        className={cn(button, picking === 'region' && '!bg-brand-soft !text-fg')}><BoxSelect size={15} /></button>
       <button type="button" aria-label="开发者工具" disabled={!url} onClick={() => viewRef.current?.openDevTools()} className={button}><Code2 size={15} /></button>
     </form>
     {url
@@ -177,7 +211,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast 
         <webview ref={(node) => { viewRef.current = node as WebviewElement | null; }} src={url} partition={PARTITION} plugins="true"
           className="min-h-0 flex-1 overflow-hidden rounded-xl bg-white shadow-[inset_0_0_0_1px_var(--line)]" />
         {/* Floats over the page so starting a pick never shifts what the user is about to click. */}
-        {picking && <p className="pop pointer-events-none absolute top-2 left-1/2 m-0 -translate-x-1/2 rounded-lg px-3 py-1.5 text-[12px] whitespace-nowrap text-fg">点一下页面上的元素，按 Esc 取消</p>}
+        {picking && <p className="pop pointer-events-none absolute top-2 left-1/2 m-0 -translate-x-1/2 rounded-lg px-3 py-1.5 text-[12px] whitespace-nowrap text-fg">{picking === 'element' ? '点一下页面上的元素' : '按住鼠标拖出一块区域'}，按 Esc 取消</p>}
       </div>
       : <div className="min-h-0 flex-1 overflow-auto">
         <Empty title="打开一个页面" body="Agent 起了本地服务，或者你想对照某个网页，都可以在这里看，还能点选元素发给 Atlas。" icon={<Globe size={22} />} />

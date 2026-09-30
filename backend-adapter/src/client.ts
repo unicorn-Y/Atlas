@@ -127,8 +127,8 @@ export class BackendAdapter {
     await this.request(`/api/conversations/${encodeURIComponent(id)}/truncate`, { method: 'POST', body: JSON.stringify({ from_message_id: fromMessageId }) });
   }
   /** Copy the conversation up to and including this message into a new one. Files on disk are shared, not copied. */
-  async forkConversation(id: string, throughMessageId: string): Promise<ConversationSummary> {
-    return this.request(`/api/conversations/${encodeURIComponent(id)}/fork`, { method: 'POST', body: JSON.stringify({ through_message_id: throughMessageId }) });
+  async forkConversation(id: string, throughMessageId: string, summarize = false): Promise<ConversationSummary> {
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/fork`, { method: 'POST', body: JSON.stringify({ through_message_id: throughMessageId, ...(summarize ? { summarize: true } : {}) }) });
   }
   async compactConversation(id: string): Promise<{ before_tokens: number | null; after_tokens: number | null; summary: string }> {
     return this.request(`/api/conversations/${encodeURIComponent(id)}/compact`, { method: 'POST' });
@@ -176,6 +176,12 @@ export class BackendAdapter {
     await this.request(`/api/conversations/${encodeURIComponent(conversationId)}/worktree${query.size ? `?${query}` : ''}`, { method: 'DELETE' });
   }
   async getProfiles(): Promise<AgentProfile[]> { return this.live ? (await this.request<{ profiles: AgentProfile[] }>('/api/profiles')).profiles : []; }
+  async saveProfile(profile: Partial<AgentProfile> & { name: string }): Promise<AgentProfile> {
+    const { id, ...fields } = profile;
+    return id ? this.request(`/api/profiles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(fields) })
+      : this.request('/api/profiles', { method: 'POST', body: JSON.stringify(fields) });
+  }
+  async deleteProfile(id: string): Promise<void> { await this.request(`/api/profiles/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   async getRecipes(): Promise<Recipe[]> { return this.live ? (await this.request<{ recipes: Recipe[] }>('/api/recipes')).recipes : []; }
   async deleteRecipe(id: string): Promise<void> { await this.request(`/api/recipes/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   async recipeFromRun(runId: string, name: string): Promise<Recipe> {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AudioLines, Bell, BookMarked, Brain, Copy, Download, FolderOpen, GitBranch, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
+  AudioLines, Bell, BookMarked, Brain, Copy, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
@@ -21,6 +21,7 @@ import AutomationPage from './pages/AutomationPage';
 import CodePage from './pages/CodePage';
 import CreatePage from './pages/CreatePage';
 import BoardPage from './pages/BoardPage';
+import ProfilesPanel from './pages/ProfilesPanel';
 import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
 import Sidebar, { NAV, type View } from './shell/Sidebar';
 import HomeView, { type Suggestion } from './shell/HomeView';
@@ -33,7 +34,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'appearance' | 'plugins' | 'notifications';
+type SheetPane = 'models' | 'profiles' | 'appearance' | 'plugins' | 'notifications';
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
@@ -555,10 +556,12 @@ export default function App() {
     return found;
   }, [activeEvents]);
   const pickElement = (picked: PickedElement) => {
-    const block = [`页面元素（${picked.url}）`, `选择器：${picked.selector}`, picked.text && `文字：${picked.text}`, `HTML：\n${picked.html}`].filter(Boolean).join('\n');
+    const block = picked.kind === 'region'
+      ? [`页面区域（${picked.url}，见截图）`, picked.text && `区域里的文字：${picked.text}`].filter(Boolean).join('\n')
+      : [`页面元素（${picked.url}）`, `选择器：${picked.selector}`, picked.text && `文字：${picked.text}`, `HTML：\n${picked.html}`].filter(Boolean).join('\n');
     setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}${block}\n\n`);
     if (picked.screenshot) setAttachments((current) => current.length < 4 ? [...current, picked.screenshot!] : current);
-    setToast('已把元素放进输入框，写上你想怎么改');
+    setToast(picked.kind === 'region' ? '已把这块区域放进输入框，可以接着框选别处' : '已把元素放进输入框，写上你想怎么改');
   };
 
   const conversationQueue = store.queue[store.activeConversationId] ?? [];
@@ -589,6 +592,7 @@ export default function App() {
   // Rewriting history mid-run would race the run's own writes.
   const canRewrite = store.connected && !(activeRun && !runDone) && !loadingMessages;
 
+  const parentConversation = activeConversation?.parent_conversation_id ? store.conversations.find((item) => item.id === activeConversation.parent_conversation_id) : undefined;
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
   const connection = !store.connected
     ? <span className="inline-flex items-center gap-1.5 text-[12px] text-danger"><i className="size-1.5 rounded-full bg-danger" />后端没有连接</span>
@@ -606,12 +610,14 @@ export default function App() {
         pinned={store.pinned} archived={store.archived} unread={store.unread}
         running={store.runs.filter((run) => !TERMINAL.includes(run.status)).map((run) => run.conversationId)}
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
-        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id) => void store.exportConversation(id)} onDuplicate={(id) => void store.duplicateConversation(id)} />
+        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} />
 
       <main className="sheet relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[14px]">
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
           <div className="flex min-w-0 items-center gap-3">
             {pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
+            {view === 'chat' && parentConversation && <button onClick={() => openConversation(parentConversation)} title={`分叉自「${parentConversation.title}」`}
+              className="no-drag inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] text-fg-3 hover:bg-hover hover:text-fg"><GitBranch size={12} />分叉自 {parentConversation.title.slice(0, 16)}</button>}
             {connection}
           </div>
           <span className="flex-1" />
@@ -647,7 +653,10 @@ export default function App() {
                 {history.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username}
                   actions={canRewrite && message.id ? message.role === 'user'
                     ? <MessageAction label="修改后重新发送" onClick={() => { setEditing({ id: message.id, original: message.content }); setInput(message.content); }}><Pencil size={13} /></MessageAction>
-                    : <MessageAction label="从这里分叉出一个新对话" onClick={() => void store.forkFrom(message.id)}><GitBranch size={13} /></MessageAction> : undefined} />)}
+                    : <>
+                      <MessageAction label="从这里分叉出一个新对话" onClick={() => void store.forkFrom(message.id)}><GitBranch size={13} /></MessageAction>
+                      <MessageAction label="分叉，并把前面的内容总结成一段" onClick={() => void store.forkFrom(message.id, true)}><GitBranchPlus size={13} /></MessageAction>
+                    </> : undefined} />)}
                 {loadingMessages && <p className="py-6 text-center text-[13px] text-fg-3" role="status">正在载入这段对话…</p>}
                 {!messages.length && !activeEvents.length && !loadingMessages && <div className="pt-[16vh] text-center">
                   <Mark className="mx-auto mb-4 size-11" />
@@ -694,7 +703,7 @@ export default function App() {
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
-        {([['models', '模型与服务', SlidersHorizontal], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
+        {([['models', '模型与服务', SlidersHorizontal], ['profiles', '角色', UserCog], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
           <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
@@ -720,6 +729,8 @@ export default function App() {
           </div>
         </section>}
         {sheet === 'plugins' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">插件</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力。</p><PluginsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
+          <ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /></section>}
         {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
       </div>
     </Dialog>

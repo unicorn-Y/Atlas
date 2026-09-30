@@ -10,7 +10,7 @@ const desktopApiBaseUrl = typeof window === 'undefined' ? undefined : window.atl
 /** Extra context picked in the composer: @files from the workspace and #conversations. */
 export interface ContextRefs { files: string[]; conversations: string[] }
 /** What the user sends: text, images (data URLs), other files, and referenced context. */
-export interface Outgoing { content: string; attachments: string[]; files: RunFile[]; refs?: ContextRefs }
+export interface Outgoing { content: string; attachments: string[]; files: RunFile[]; refs?: ContextRefs; /** One-off role for this message only. */ profileId?: string }
 export interface QueuedMessage extends Outgoing { id: string }
 /** How a message typed while a run is working is delivered: folded into the run now, or run afterwards. */
 export type FollowUpMode = 'steer' | 'queue';
@@ -74,7 +74,7 @@ interface AtlasState {
   saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
   addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
   testModelConnection: (model?: string) => Promise<void>;
-  sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs) => Promise<void>;
+  sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs, profileId?: string) => Promise<void>;
   createRun: (conversationId: string, title: string) => AgentRun;
   appendEvent: (event: AgentEvent) => void;
   getRun: (runId: string) => AgentRun | undefined;
@@ -100,12 +100,13 @@ interface AtlasState {
   deleteConversation: (id: string) => Promise<void>;
   togglePinned: (id: string) => void;
   toggleArchived: (id: string) => void;
-  exportConversation: (id: string) => Promise<void>;
+  exportConversation: (id: string, format?: 'json' | 'md') => Promise<void>;
   setWorkspace: (conversationId: string, workspace: string | null) => void;
   editMessage: (messageId: string, content: string) => Promise<void>;
-  forkFrom: (messageId: string) => Promise<void>;
+  forkFrom: (messageId: string, summarize?: boolean) => Promise<void>;
   compactConversation: (id: string) => Promise<string | null>;
   setProfile: (id: string) => void;
+  reloadProfiles: () => Promise<void>;
   setReasoningEffort: (effort: ReasoningEffort | '') => void;
   requestWorktree: (conversationId: string, baseBranch: string | null) => void;
   refreshConversations: () => Promise<void>;
@@ -347,18 +348,18 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       return { runs, artifacts: state.artifacts.filter((artifact) => artifact.runId !== runId), activeRunId, busy: runs.some((run) => !terminal.has(run.status)), paused: active?.status === 'paused' };
     }),
 
-    sendMessage: async (content, attachments = [], files = [], refs) => {
+    sendMessage: async (content, attachments = [], files = [], refs, profileId) => {
       const message = content.trim() || (attachments.length || files.length ? '请查看附件。' : '');
       if (!message) return;
       if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().catch(() => undefined);
       if (!get().activeConversationId) await get().createConversation(message.slice(0, 40) || 'New conversation');
       const conversationId = get().activeConversationId;
       if (!conversationId) return;
-      const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files, ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}) };
+      const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files, ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}), ...(profileId ? { profileId } : {}) };
       const running = activeRunFor(conversationId);
       if (running) {
         // Attachments can't join a run in flight, so those always wait for the next run.
-        if (get().followUpMode === 'steer' && !attachments.length && !files.length && !item.refs && steer(running, item)) return;
+        if (get().followUpMode === 'steer' && !attachments.length && !files.length && !item.refs && !item.profileId && steer(running, item)) return;
         set((state) => ({ queue: { ...state.queue, [conversationId]: [...(state.queue[conversationId] ?? []), item] } }));
         return;
       }
@@ -474,11 +475,18 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       patchConversation(id, patch);
       void backend.updateConversation(id, patch).catch((error) => { patchConversation(id, undo); set({ error: errorText(error, '归档没有保存') }); });
     },
-    exportConversation: async (id) => {
+    exportConversation: async (id, format = 'json') => {
       const conversation = get().conversations.find((item) => item.id === id);
       try {
         const messages = await backend.getMessages(id);
         const safeTitle = (conversation?.title ?? id).replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 60);
+        if (format === 'md') {
+          const title = conversation?.title ?? '对话';
+          const body = messages.filter((message) => message.role === 'user' || message.role === 'assistant')
+            .map((message) => `## ${message.role === 'user' ? '我' : 'Atlas'}\n\n${message.content}`).join('\n\n');
+          download(`atlas-${safeTitle}.md`, `# ${title}\n\n> 从 Atlas 导出于 ${new Date().toLocaleString()}\n\n${body}\n`, 'text/markdown');
+          return;
+        }
         downloadJson(`atlas-${safeTitle}.json`, { exported_at: new Date().toISOString(), conversation: conversation ?? { id }, messages });
       } catch (error) { set({ error: errorText(error, '导出失败') }); }
     },
@@ -498,17 +506,21 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         await get().sendMessage(content);
       } catch (error) { set({ error: errorText(error, '没能修改这条消息') }); }
     },
-    forkFrom: async (messageId) => {
+    forkFrom: async (messageId, summarize = false) => {
       const source = get().activeConversationId;
       if (!source) return;
       try {
-        const fork = await backend.forkConversation(source, messageId);
+        const fork = await backend.forkConversation(source, messageId, summarize);
         const workspace = get().conversations.find((item) => item.id === source)?.workspace;
         set((state) => ({ conversations: [{ ...fork, workspace: fork.workspace ?? workspace }, ...state.conversations] }));
         await get().openConversation(fork);
       } catch (error) { set({ error: errorText(error, '没能分叉') }); }
     },
     setProfile: (profileId) => { storageSet(PROFILE, profileId); set({ profileId }); },
+    reloadProfiles: async () => {
+      const profiles = await backend.getProfiles().catch(() => get().profiles);
+      set((state) => ({ profiles, profileId: profiles.some((profile) => profile.id === state.profileId) ? state.profileId : 'default' }));
+    },
     setReasoningEffort: (reasoningEffort) => { storageSet(REASONING, reasoningEffort || null); set({ reasoningEffort }); },
     requestWorktree: (conversationId, baseBranch) => set((state) => {
       const { [conversationId]: _previous, ...rest } = state.worktreeRequests;
@@ -632,7 +644,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   void backend.startRun({
     type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: state.model, attachments, active_skills: state.activeSkills,
     ...(files.length ? { files } : {}), ...(mode === 'plan' ? { mode } : {}), ...(workspace ? { workspace } : {}),
-    ...(state.profileId && state.profileId !== 'default' ? { profile_id: state.profileId } : {}),
+    ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),
     ...(state.reasoningEffort && supportsEffort ? { reasoning_effort: state.reasoningEffort } : {}),
     ...(worktree && !conversation?.worktree_path ? { worktree } : {}),
     ...(item.refs?.files.length ? { context_files: item.refs.files } : {}),
@@ -659,7 +671,11 @@ function dispatchQueue(conversationId: string) {
 }
 
 function downloadJson(filename: string, value: unknown) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
+  download(filename, JSON.stringify(value, null, 2), 'application/json');
+}
+
+function download(filename: string, text: string, type: string) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
