@@ -7,6 +7,7 @@ import base64
 import json
 import os
 import posixpath
+import re
 import shlex
 import time
 from contextlib import suppress
@@ -87,11 +88,12 @@ class SSHWorkspaceManager:
             import asyncssh
         except ImportError as exc:
             raise RuntimeError("SSH support requires asyncssh") from exc
+        # Leave client_keys unset: asyncssh then uses the IdentityFile from ssh config or the
+        # default keys. Passing None would disable key authentication altogether.
         client = await asyncssh.connect(
             host,
             config=[self.config_path] if os.path.isfile(self.config_path) else None,
             password=None,
-            client_keys=None,
         )
         conn = _Connection(client, time.monotonic())
         self._pool[host] = conn
@@ -155,10 +157,17 @@ class SSHWorkspaceManager:
 
     @staticmethod
     def _powershell_quote(value: Any) -> str:
-        return "'" + str(value).replace("'", "''") + "'"
+        text = str(value)
+        # Workspace paths are kept POSIX-style for SFTP ("/D:/Atlas"); PowerShell needs "D:/Atlas".
+        if re.match(r"^/[A-Za-z]:([/\\]|$)", text):
+            text = text[1:]
+        return "'" + text.replace("'", "''") + "'"
 
     @classmethod
     def _powershell_command(cls, script: str) -> str:
+        # Silence progress records (they arrive as CLIXML on stderr) and hand back the exit code
+        # of the last native command, which PowerShell would otherwise report as 0.
+        script = f"$ProgressPreference = 'SilentlyContinue'; {script}; exit $LASTEXITCODE"
         encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
         return f"powershell -NoProfile -NonInteractive -EncodedCommand {encoded}"
 
@@ -212,7 +221,7 @@ class SSHWorkspaceManager:
                     await sftp.makedirs(path, exist_ok=True)
                     data = {"path": path, "is_dir": True}
                 elif action == "list":
-                    entries = await sftp.scandir(path)
+                    entries = await sftp.readdir(path)
                     data = {
                         "path": path,
                         "entries": [
@@ -244,7 +253,7 @@ class SSHWorkspaceManager:
 
                     async def remove_tree(target: str) -> None:
                         try:
-                            entries = await sftp.scandir(target)
+                            entries = await sftp.readdir(target)
                         except Exception:
                             await sftp.remove(target)
                             return
@@ -563,12 +572,18 @@ class SSHWorkspaceManager:
     async def remote_os(self, host: str) -> str:
         conn = await self._connect(host)
         if conn.os_name is None:
-            try:
-                result = await conn.client.run("$PSVersionTable.PSVersion.Major", check=True)
-                conn.os_name = "windows" if result.stdout.strip().isdigit() else "linux"
-            except Exception:
-                result = await conn.client.run("uname -s", check=True)
-                conn.os_name = result.stdout.strip().lower()
+            # Windows OpenSSH usually starts cmd.exe, where PowerShell variables print literally.
+            # %OS% expands to Windows_NT in cmd; PowerShell and POSIX shells leave it untouched.
+            result = await conn.client.run("echo %OS%", check=False)
+            if "windows_nt" in str(result.stdout).lower():
+                conn.os_name = "windows"
+            else:
+                probe = await conn.client.run("$PSVersionTable.PSVersion.Major", check=False)
+                if str(probe.stdout).strip().isdigit():
+                    conn.os_name = "windows"
+                else:
+                    result = await conn.client.run("uname -s", check=True)
+                    conn.os_name = str(result.stdout).strip().lower()
         return conn.os_name
 
     async def test(self, host: str) -> dict[str, Any]:
@@ -594,7 +609,7 @@ class SSHWorkspaceManager:
     async def list_dir(self, host: str, path: str) -> list[dict[str, Any]]:
         conn = await self._connect(host)
         async with conn.client.start_sftp_client() as sftp:
-            attrs = await sftp.scandir(path)
+            attrs = await sftp.readdir(path)
         return [
             {
                 "name": item.filename,

@@ -295,7 +295,8 @@ async def test_wave3_ssh_mock_file_write_read_and_command(tmp_path: Path, monkey
         def open(self, path, mode):
             return RemoteFile(path, mode)
 
-        async def scandir(self, path):
+        # Like asyncssh's SFTPClient.readdir: an awaitable list (scandir is an async iterator).
+        async def readdir(self, path):
             return [
                 types.SimpleNamespace(
                     filename=name,
@@ -377,7 +378,9 @@ async def test_wave3_ssh_windows_exec_uses_powershell_and_quotes_args(
     assert len(captured) == 1
     encoded = captured[0].rsplit(" ", 1)[1]
     script = base64.b64decode(encoded).decode("utf-16le")
-    assert "Set-Location -LiteralPath '/C:/Atlas'" in script
+    # SFTP keeps "/C:/Atlas"; PowerShell needs the drive path without the leading slash.
+    assert "Set-Location -LiteralPath 'C:/Atlas'" in script
+    assert script.rstrip().endswith("exit $LASTEXITCODE")
     assert "& 'C:\\Program Files\\tool.exe' 'two words'" in script
 
 
@@ -575,3 +578,25 @@ def test_wave3_permission_modes_and_conversation_column_present() -> None:
     context = AgentRunContext(permission_mode="ask_writes", allowed_paths=["D:/safe"])
     assert context.permission_mode == "ask_writes"
     assert context.allowed_paths == ["D:/safe"]
+
+
+@pytest.mark.asyncio
+async def test_wave3_ssh_detects_windows_when_default_shell_is_cmd(monkeypatch):
+    """Windows OpenSSH starts cmd.exe, where $PSVersionTable prints literally (seen on a real host)."""
+    import types
+
+    from atlas.ssh import SSHWorkspaceManager
+
+    class Client:
+        async def run(self, command, check=False):
+            outputs = {"echo %OS%": "Windows_NT\r\n", "$PSVersionTable.PSVersion.Major": "$PSVersionTable.PSVersion.Major\r\n"}
+            return types.SimpleNamespace(exit_status=0, stdout=outputs.get(command, ""), stderr="")
+
+    manager = SSHWorkspaceManager()
+    connection = types.SimpleNamespace(client=Client(), os_name=None, last_used=0.0)
+
+    async def connect(_host):
+        return connection
+
+    monkeypatch.setattr(manager, "_connect", connect)
+    assert await manager.remote_os("zhuji") == "windows"
