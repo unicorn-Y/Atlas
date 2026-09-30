@@ -578,7 +578,9 @@ class AgentOrchestrator:
         if (
             isinstance(last, AIMessage)
             and last.tool_calls
-            and state["tool_rounds"] < getattr(state["runtime"], "max_tool_rounds", MAX_TOOL_ROUNDS)
+            and state["tool_rounds"] < getattr(
+                state.get("runtime"), "max_tool_rounds", MAX_TOOL_ROUNDS,
+            )
         ):
             return "execute_tools"
         return "end"
@@ -2131,11 +2133,14 @@ class AgentOrchestrator:
                 yield {"type": "goal_evaluated", "evaluation": evaluation}
 
             try:
+                metadata = {"model": litellm_model}
+                if runtime.run_id is not None:
+                    metadata["run_id"] = runtime.run_id
                 msg_id = await self._memory.save_message(
                     conversation_id=conversation_id,
                     role="assistant",
                     content=full_response,
-                    metadata={"model": litellm_model, "run_id": runtime.run_id},
+                    metadata=metadata,
                 )
             except Exception as e:
                 yield {

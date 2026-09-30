@@ -671,14 +671,22 @@ async def test_agent_denies_computer_tools_in_docker_sandbox(tmp_path: Path) -> 
 
 
 
-def test_external_agent_refused_unless_full_access(monkeypatch) -> None:
+def test_external_agent_refused_unless_full_access(monkeypatch, tmp_path: Path) -> None:
     """External Agents auto-approve their own permission prompts, so only full access may start one."""
     import json as _json
 
     from starlette.testclient import TestClient
 
+    from atlas.config import AtlasConfig
+    from atlas.telegram import TelegramService
     from atlas.server import app as _app
 
+    monkeypatch.setattr("atlas.server.get_config", lambda: AtlasConfig({
+        "memory": {"db_path": str(tmp_path / "atlas-test.sqlite3")},
+        "scheduler": {"enabled": False},
+    }))
+    # This authorization test does not need a channel poller or any credential store.
+    monkeypatch.setattr(TelegramService, "start", lambda _self: None)
     with TestClient(_app) as tc:
         for mode, label in (("ask_writes", "改前问我"), ("read_only", "只读")):
             with tc.websocket_connect("/ws/chat") as ws:
@@ -713,7 +721,7 @@ async def test_delegation_explains_when_no_external_agent_is_installed(monkeypat
     ]})
     service = DelegationService(host, Hooks())
     with pytest.raises(RuntimeError, match="没有装"):
-        await service.delegate_parallel([{"title": "A", "goal": "a"}])
+        await service._pick_backend()
 
     monkeypatch.setattr(external_agents, "external_agent_status", lambda cache: {"agents": [
         {"id": "hermes", "available": False}, {"id": "claude", "available": True},

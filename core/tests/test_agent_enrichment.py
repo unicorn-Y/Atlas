@@ -306,7 +306,9 @@ async def test_delegation_uses_disposable_backend_and_returns_tool_evidence() ->
 
     host.start, host.send, host.events, host.close = start, send, events, close
     service = DelegationService(host, hooks, timeout=5)
-    result = await service.delegate_task("Investigate", tool_profile=["local_file"])
+    result = await service.delegate_task(
+        "Investigate", tool_profile=["local_file"], executor="fake",
+    )
     assert "README inspected" in result["result"]
     assert result["evidence"][0]["data"]["tool"] == "local_file"
     assert observed == ["start", "end"]

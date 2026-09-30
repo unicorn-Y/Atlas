@@ -431,10 +431,10 @@ def test_large_tool_result_is_externalized_with_bounded_preview(tmp_path: Path) 
     assert externalize_tool_output("small", tmp_path, "run-1", "call-2") == ("small", None)
 
 
-def test_worktree_placement_is_outside_workspace_and_protocol_is_16(tmp_path: Path) -> None:
+def test_worktree_placement_is_outside_workspace_and_protocol_is_17(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _git_repo(repo)
     record = WorktreeService(tmp_path).create(repo, "session-0001")
     assert Path(record["worktree_path"]).is_relative_to(repo.parent / ".atlas-worktrees" / repo.name)
     WorktreeService(tmp_path).remove(repo, Path(record["worktree_path"]), record["worktree_branch"])
-    assert asyncio.run(server.runtime_protocol()) == {"version": "1.6"}
+    assert asyncio.run(server.runtime_protocol()) == {"version": "1.7"}
