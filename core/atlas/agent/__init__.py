@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import json
 import os
+import tempfile
 import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -43,6 +44,12 @@ from atlas.agent.results import externalize_tool_output
 from atlas.config import get_config
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
+from atlas.office import (
+    create_document,
+    create_presentation,
+    create_spreadsheet,
+    read_office,
+)
 from atlas.ssh import ssh_workspaces
 from atlas.tools.computer_use import ComputerUseRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
@@ -570,6 +577,64 @@ class AgentOrchestrator:
                  "checkpoint_id": {"type": "string"},
              }, "required": ["checkpoint_id"], "additionalProperties": False}}},
         ])
+        tools.extend([
+            {"type": "function", "function": {
+                "name": "create_document",
+                "description": "Create a .docx file in the current workspace.",
+                "parameters": {"type": "object", "properties": {
+                    "path": {"type": "string"}, "title": {"type": "string"},
+                    "blocks": {"type": "array", "items": {
+                        "type": "object", "properties": {
+                            "type": {"type": "string", "enum": [
+                                "heading", "paragraph", "bullets", "table", "image",
+                            ]},
+                            "text": {"type": "string"}, "level": {"type": "integer"},
+                            "items": {"type": "array", "items": {"type": "string"}},
+                            "rows": {"type": "array", "items": {
+                                "type": "array", "items": {},
+                            }},
+                            "path": {"type": "string"}, "width": {"type": "number"},
+                        }, "required": ["type"], "additionalProperties": False,
+                    }},
+                }, "required": ["path", "blocks"], "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "create_spreadsheet",
+                "description": "Create an .xlsx workbook in the current workspace.",
+                "parameters": {"type": "object", "properties": {
+                    "path": {"type": "string"},
+                    "sheets": {"type": "array", "items": {
+                        "type": "object", "properties": {
+                            "name": {"type": "string"}, "rows": {"type": "array",
+                                "items": {"type": "array", "items": {}}},
+                            "header": {"type": "boolean"},
+                            "column_widths": {"type": "array", "items": {"type": "number"}},
+                        }, "required": ["name", "rows"], "additionalProperties": False,
+                    }},
+                }, "required": ["path", "sheets"], "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "create_presentation",
+                "description": "Create a .pptx presentation in the current workspace.",
+                "parameters": {"type": "object", "properties": {
+                    "path": {"type": "string"},
+                    "slides": {"type": "array", "items": {
+                        "type": "object", "properties": {
+                            "title": {"type": "string"},
+                            "bullets": {"type": "array", "items": {"type": "string"}},
+                            "notes": {"type": "string"}, "image": {"type": "string"},
+                        }, "required": ["title"], "additionalProperties": False,
+                    }},
+                }, "required": ["path", "slides"], "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "read_office",
+                "description": "Read text, tables, formulas, and slide headings from an Office file.",
+                "parameters": {"type": "object", "properties": {
+                    "path": {"type": "string"},
+                }, "required": ["path"], "additionalProperties": False},
+            }},
+        ])
         if self._delegation:
             tools.append({
                 "type": "function",
@@ -877,7 +942,9 @@ class AgentOrchestrator:
             read_only = getattr(ctx, "read_only", False)
             denied = ((allowed_tools is not None and fn_name not in allowed_tools)
                       or fn_name in denied_tools
-                      or (read_only and fn_name not in {"local_file", "coding.repo_map", "coding.ast_grep.run"})
+                      or (read_only and fn_name not in {
+                          "local_file", "read_office", "coding.repo_map", "coding.ast_grep.run",
+                      })
                       or (read_only and fn_name == "local_file" and fn_args.get("action") not in {"read", "list", "glob", "search", "stat"}))
             if denied:
                 detail = (
@@ -946,7 +1013,8 @@ class AgentOrchestrator:
 
             await self._emit_hook(ctx, "before_tool", name=fn_name, arguments=fn_args)
             is_write = (fn_name in {"local_edit", "local_shell", "local_exec", "execute_command",
-                                    "run_script", "computer_click", "computer_type", "computer_key",
+                                    "run_script", "create_document", "create_spreadsheet",
+                                    "create_presentation", "computer_click", "computer_type", "computer_key",
                                     "computer_scroll", "computer_drag", "computer_hotkey"}
                         or (fn_name == "local_file" and fn_args.get("action") in {
                             "write", "append", "mkdir", "copy", "move", "delete",
@@ -1118,6 +1186,83 @@ class AgentOrchestrator:
                     result = {"data": data,
                               "content": [{"type": "text", "text": data["summary"]}],
                               "is_error": False}
+                elif fn_name in {"create_document", "create_spreadsheet", "create_presentation"}:
+                    if not workspace:
+                        raise ValueError("先为当前对话选择工作目录，再创建 Office 文件。")
+                    if workspace.startswith("ssh://"):
+                        host, remote_root = ssh_workspaces.parse_workspace(workspace)
+                        remote_path = ssh_workspaces._remote_path(
+                            remote_root, str(fn_args["path"]),
+                        )
+                        await ssh_checkpoint_callback("create", {
+                            "paths": [str(fn_args["path"])],
+                        }) if ssh_checkpoint_callback else None
+                        with tempfile.TemporaryDirectory(prefix="atlas-office-") as temporary:
+                            spec = {**fn_args, "path": str(fn_args["path"])}
+                            created = {
+                                "create_document": create_document,
+                                "create_spreadsheet": create_spreadsheet,
+                                "create_presentation": create_presentation,
+                            }[fn_name](temporary, spec)
+                            await ssh_workspaces.write_bytes(
+                                host, remote_path, Path(created["path"]).read_bytes(),
+                            )
+                        artifact = {
+                            "path": remote_path,
+                            "kind": created["kind"],
+                            "bytes": created["bytes"],
+                        }
+                    else:
+                        artifact_path = self._checkpoint_path(
+                            str(fn_args["path"]), workspace, ctx.run_id, ctx.conversation_id,
+                        )
+                        await ctx.event_queue.put({
+                            "type": "checkpoint_created", "checkpoint": artifact_path,
+                            "tool": fn_name,
+                        })
+                        artifact = {
+                            "create_document": create_document,
+                            "create_spreadsheet": create_spreadsheet,
+                            "create_presentation": create_presentation,
+                        }[fn_name](workspace, fn_args)
+                    await ctx.event_queue.put({"type": "artifact_created", **artifact})
+                    result = {
+                        "data": artifact,
+                        "content": [{"type": "text", "text": json.dumps(
+                            artifact, ensure_ascii=False,
+                        )}],
+                        "is_error": False,
+                    }
+                elif fn_name == "read_office":
+                    if not workspace:
+                        raise ValueError("需要先为当前对话选择工作目录。")
+                    if workspace.startswith("ssh://"):
+                        host, remote_root = ssh_workspaces.parse_workspace(workspace)
+                        remote_path = ssh_workspaces._remote_path(
+                            remote_root, str(fn_args["path"]),
+                        )
+                        raw = await ssh_workspaces.read_bytes(host, remote_path)
+                        with tempfile.NamedTemporaryFile(
+                            suffix=Path(str(fn_args["path"])).suffix, delete=False,
+                        ) as temporary:
+                            temporary.write(raw)
+                            temp_path = temporary.name
+                        try:
+                            data = read_office(temp_path)
+                        finally:
+                            Path(temp_path).unlink(missing_ok=True)
+                    else:
+                        office_path = Path(str(fn_args["path"]))
+                        if not office_path.is_absolute():
+                            office_path = Path(workspace) / office_path
+                        data = read_office(str(office_path.resolve()))
+                    result = {
+                        "data": data,
+                        "content": [{"type": "text", "text": json.dumps(
+                            data, ensure_ascii=False,
+                        )}],
+                        "is_error": False,
+                    }
                 elif fn_name.startswith("local_") and self._local_execution:
                     if ctx.mode == "plan":
                         action = str(fn_args.get("action", ""))

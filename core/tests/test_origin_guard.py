@@ -153,6 +153,27 @@ async def test_previewed_workspace_html_is_sandboxed(tmp_path):
     assert from_page.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_office_preview_route_uses_origin_guard(tmp_path, monkeypatch):
+    from atlas.office import create_document
+    from atlas.server import app
+
+    create_document(str(tmp_path), {
+        "path": "preview.docx", "blocks": [{"type": "paragraph", "text": "safe"}],
+    })
+    monkeypatch.setenv("ATLAS_API_TOKEN", "test-atlas-api-token")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        denied = await client.get("/api/workspace/preview", params={
+            "root": str(tmp_path), "path": "preview.docx",
+        }, headers={"Origin": EVIL})
+        allowed = await client.get("/api/workspace/preview", params={
+            "root": str(tmp_path), "path": "preview.docx",
+        }, headers={"Origin": "null", "X-Atlas-Api-Token": "test-atlas-api-token"})
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    assert "content-security-policy" in allowed.headers
+
+
 def test_hub_control_api_refuses_web_pages():
     from atlas.runtime.hub import create_hub_app
 

@@ -6,11 +6,15 @@ import sys
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from atlas.memory import MemoryStore
 from atlas.agent.checkpoints import ShadowGitCheckpointStore
+from atlas.agent import AgentOrchestrator
+from atlas.office import create_document, create_presentation, create_spreadsheet, read_office, render_office
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.external_agents import external_agent_status, normalize_external_event
 from atlas.runtime.external_process import ExternalProcessAdapter
@@ -381,6 +385,129 @@ async def test_delegate_parallel_cancels_active_workers() -> None:
     result = await task
     assert child_events and child_events[0].is_set()
     assert result["results"][0]["status"] == "cancelled"
+
+
+def test_office_files_generate_read_and_preview_without_scripts(tmp_path: Path) -> None:
+    document = create_document(str(tmp_path), {
+        "path": "brief.docx", "title": "Brief", "blocks": [
+            {"type": "heading", "text": "Summary", "level": 1},
+            {"type": "paragraph", "text": "<safe & escaped>"},
+            {"type": "bullets", "items": ["one", "two"]},
+            {"type": "table", "rows": [["Name", "Count"], ["Tasks", 3]]},
+        ],
+    })
+    spreadsheet = create_spreadsheet(str(tmp_path), {
+        "path": "data.xlsx", "sheets": [{
+            "name": "Totals", "header": True,
+            "rows": [["Amount"], [2], [3], ["=SUM(A2:A3)"]],
+            "column_widths": [22],
+        }],
+    })
+    presentation = create_presentation(str(tmp_path), {
+        "path": "slides.pptx", "slides": [{
+            "title": "Overview", "bullets": ["first", "second"], "notes": "speaker note",
+        }],
+    })
+
+    assert document["kind"] == "document" and document["bytes"] > 0
+    assert spreadsheet["kind"] == "spreadsheet" and spreadsheet["bytes"] > 0
+    assert presentation["kind"] == "presentation" and presentation["bytes"] > 0
+    assert "Summary" in str(read_office(str(tmp_path / "brief.docx")))
+    assert "=SUM(A2:A3)" in str(read_office(str(tmp_path / "data.xlsx")))
+    assert "Overview" in str(read_office(str(tmp_path / "slides.pptx")))
+    for path in ("brief.docx", "data.xlsx", "slides.pptx"):
+        html = render_office((tmp_path / path).read_bytes(), "." + path.split(".")[-1])
+        assert "<script" not in html.casefold()
+        assert "&lt;safe &amp; escaped&gt;" in html if path == "brief.docx" else True
+
+
+@pytest.mark.asyncio
+async def test_workspace_preview_uses_sandbox_headers(tmp_path: Path) -> None:
+    from atlas import server
+
+    create_document(str(tmp_path), {
+        "path": "preview.docx", "blocks": [{"type": "paragraph", "text": "safe"}],
+    })
+    response = await server.workspace_preview(str(tmp_path), "preview.docx")
+    assert response.status_code == 200
+    assert response.headers["content-security-policy"] == (
+        "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"
+    )
+    assert b"<script" not in response.body.lower()
+
+
+@pytest.mark.asyncio
+async def test_office_tool_creates_checkpoint_and_artifact_event(tmp_path: Path) -> None:
+    store = ShadowGitCheckpointStore(tmp_path / "checkpoints")
+    agent = AgentOrchestrator(
+        MagicMock(), MagicMock(), checkpoint_store=store,
+    )
+    events = asyncio.Queue()
+    runtime = SimpleNamespace(
+        cancel_event=None, pause_event=None, approval_callback=None,
+        event_queue=events, workspace=str(tmp_path), permission_mode="full_access",
+        allowed_paths=[], run_id="office-run", conversation_id="conversation",
+    )
+    result = await agent._execute_tools_node({
+        "messages": [AIMessage(content="", tool_calls=[{
+            "name": "create_spreadsheet",
+            "args": {"path": "result.xlsx", "sheets": [
+                {"name": "Sheet1", "rows": [["value"], [1]]},
+            ]},
+            "id": "office-call",
+        }])],
+        "pending_events": [], "tool_rounds": 0, "runtime": runtime,
+    })
+    assert (tmp_path / "result.xlsx").is_file()
+    checkpoint_event = await events.get()
+    artifact_event = await events.get()
+    assert checkpoint_event["type"] == "checkpoint_created"
+    assert artifact_event == {
+        "type": "artifact_created", "path": str(tmp_path / "result.xlsx"),
+        "kind": "spreadsheet", "bytes": (tmp_path / "result.xlsx").stat().st_size,
+    }
+    assert result["messages"][0].tool_call_id == "office-call"
+
+
+@pytest.mark.asyncio
+async def test_workspace_history_orders_versions_and_snapshots_before_restore(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from atlas import server
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "note.txt"
+    target.write_text("first", encoding="utf-8")
+    store = ShadowGitCheckpointStore(tmp_path / "checkpoints")
+    first = store.create_checkpoint(workspace, ["note.txt"], run_id="first-run")
+    target.write_text("second", encoding="utf-8")
+    store.create_checkpoint(workspace, ["note.txt"], run_id="second-run")
+    monkeypatch.setattr(server, "orchestrator", SimpleNamespace(checkpoints=store))
+
+    history = await server.workspace_history(str(workspace), "note.txt")
+    assert [item["run_id"] for item in history["versions"]] == ["second-run", "first-run"]
+    old = await server.workspace_history_content(
+        str(workspace), "note.txt", f"checkpoint:{first['id']}",
+    )
+    assert old["content"] == "first"
+    class RestoreRequest:
+        async def json(self):
+            return {
+                "root": str(workspace), "path": "note.txt",
+                "version": f"checkpoint:{first['id']}",
+            }
+
+    restored = await server.restore_workspace_history(RestoreRequest())
+    assert restored["restored"] is True
+    assert target.read_text(encoding="utf-8") == "first"
+    assert any(item["id"] == restored["checkpoint_id"]
+               for item in store.list_checkpoints(workspace))
+    raw = await server.workspace_history_raw(
+        str(workspace), "note.txt", f"checkpoint:{first['id']}",
+    )
+    assert raw.body == b"first"
+    assert raw.headers["content-security-policy"].startswith("sandbox;")
 
 
 @pytest.mark.asyncio

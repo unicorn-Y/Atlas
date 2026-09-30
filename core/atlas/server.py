@@ -66,6 +66,7 @@ from atlas.capabilities.durable.dbos_backend import status as dbos_status
 from atlas.config import get_config
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
+from atlas.office import MAX_PREVIEW_BYTES, render_office
 from atlas.notifications import NotificationBus
 from atlas.origin_guard import DEV_ORIGINS, OriginGuard
 from atlas.plugins import PluginRuntime
@@ -1619,6 +1620,252 @@ async def workspace_raw(root: str, path: str) -> StreamingResponse:
             "sandbox allow-scripts allow-forms allow-popups allow-modals"
         )
     return StreamingResponse(target.open("rb"), media_type=content_type, headers=headers)
+
+
+_OFFICE_SANDBOX_HEADERS = {
+    "Content-Security-Policy": (
+        "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Content-Disposition": "inline",
+}
+
+
+@app.get("/api/workspace/preview")
+async def workspace_preview(root: str, path: str) -> Response:
+    suffix = Path(path).suffix.casefold()
+    if suffix not in {".docx", ".xlsx", ".pptx"}:
+        raise HTTPException(status_code=415, detail="Only Office documents can use this preview")
+    try:
+        if root.startswith("ssh://"):
+            host, remote_root = ssh_workspaces.parse_workspace(root)
+            relative = Path(path)
+            if relative.is_absolute() or ".." in relative.parts:
+                raise HTTPException(status_code=400, detail="path escapes workspace root")
+            remote_path = ssh_workspaces._remote_path(remote_root, path)
+            raw = await ssh_workspaces.read_bytes(host, remote_path)
+        else:
+            _base, target = _workspace_path(root, path)
+            if not target.is_file():
+                raise HTTPException(status_code=404, detail="Workspace file not found")
+            if target.stat().st_size > MAX_PREVIEW_BYTES:
+                raise HTTPException(status_code=413, detail="Office preview is limited to 10 MB")
+            raw = await asyncio.to_thread(target.read_bytes)
+        rendered = await asyncio.to_thread(render_office, raw, suffix)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail="Office file could not be read") from exc
+    return Response(rendered, media_type="text/html", headers=_OFFICE_SANDBOX_HEADERS)
+
+
+def _history_checkpoint_manifest(store: Any, checkpoint_id: str) -> tuple[dict[str, Any], Path]:
+    manifest_path = store.storage_dir / checkpoint_id / "manifest.json"
+    if not manifest_path.is_file():
+        raise HTTPException(status_code=404, detail="Workspace version not found")
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8")), manifest_path.parent
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="Workspace version not found") from exc
+
+
+async def _git_history(root: Path, relative: str) -> list[dict[str, Any]]:
+    try:
+        log_result = await asyncio.to_thread(
+            subprocess.run,
+            ["git", "-C", str(root), "log", "-20", "--format=%H%x09%cI", "--", relative],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if log_result.returncode:
+        return []
+    versions: list[dict[str, Any]] = []
+    for line in log_result.stdout.splitlines():
+        commit, _, created_at = line.partition("\t")
+        if not commit or not re.fullmatch(r"[0-9a-fA-F]{40,64}", commit):
+            continue
+        size = await asyncio.to_thread(
+            subprocess.run,
+            ["git", "-C", str(root), "cat-file", "-s", f"{commit}:{relative}"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        versions.append({
+            "id": f"git:{commit}", "run_id": None, "conversation_id": None,
+            "created_at": created_at,
+            "bytes": int(size.stdout) if size.returncode == 0 and size.stdout.strip().isdigit() else 0,
+            "source": "git",
+        })
+    return versions
+
+
+@app.get("/api/workspace/history")
+async def workspace_history(root: str, path: str) -> dict[str, Any]:
+    relative = Path(path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise HTTPException(status_code=400, detail="path escapes workspace root")
+    normalized = relative.as_posix()
+    versions: list[dict[str, Any]] = []
+    if root.startswith("ssh://"):
+        checkpoints = await ssh_workspaces.list_checkpoints(root)
+        _host, remote_root = ssh_workspaces.parse_workspace(root)
+        for item in checkpoints:
+            entry = next((file for file in item.get("files", [])
+                          if file.get("path") == normalized), None)
+            if entry is None:
+                continue
+            size = 0
+            if entry.get("exists"):
+                with suppress(Exception):
+                    raw = await ssh_workspaces.read_bytes(
+                        _host, str(PurePosixPath(remote_root) / ".atlas-checkpoints"
+                                   / item["id"] / "files" / normalized),
+                    )
+                    size = len(raw)
+            versions.append({
+                "id": f"checkpoint:{item['id']}", "run_id": item.get("run_id"),
+                "conversation_id": None, "created_at": item.get("created_at", ""),
+                "bytes": size, "source": "checkpoint",
+            })
+    else:
+        base, _ = _workspace_path(root, normalized)
+        if orchestrator is not None:
+            store = orchestrator.checkpoints
+            for item in store.list_checkpoints(str(base)):
+                manifest, snapshot = _history_checkpoint_manifest(store, item["id"])
+                entry = next((file for file in manifest.get("files", [])
+                              if file.get("path") == normalized and not file.get("directory")), None)
+                if entry is None:
+                    continue
+                saved = snapshot / "files" / normalized
+                versions.append({
+                    "id": f"checkpoint:{item['id']}",
+                    "run_id": manifest.get("run_id"),
+                    "conversation_id": manifest.get("conversation_id"),
+                    "created_at": manifest.get("created_at", ""),
+                    "bytes": saved.stat().st_size if entry.get("exists") and saved.is_file() else 0,
+                    "source": "checkpoint",
+                })
+        versions.extend(await _git_history(base, normalized))
+    versions.sort(key=lambda item: item["created_at"], reverse=True)
+    return {"versions": versions}
+
+
+async def _history_bytes(root: str, path: str, version: str) -> tuple[bytes, bool]:
+    if version.startswith("checkpoint:"):
+        checkpoint_id = version.removeprefix("checkpoint:")
+        if root.startswith("ssh://"):
+            host, remote_root = ssh_workspaces.parse_workspace(root)
+            checkpoints = await ssh_workspaces.list_checkpoints(root)
+            checkpoint = next((item for item in checkpoints if item["id"] == checkpoint_id), None)
+            if checkpoint is None:
+                raise HTTPException(status_code=404, detail="Workspace version not found")
+            entry = next((file for file in checkpoint.get("files", [])
+                          if file.get("path") == path), None)
+            if entry is None:
+                raise HTTPException(status_code=404, detail="File is absent from this version")
+            if not entry.get("exists"):
+                return b"", False
+            raw_path = str(PurePosixPath(remote_root) / ".atlas-checkpoints"
+                           / checkpoint_id / "files" / path)
+            return await ssh_workspaces.read_bytes(host, raw_path), True
+        base, _ = _workspace_path(root, path)
+        if orchestrator is None:
+            raise HTTPException(status_code=503, detail="Checkpoint service is unavailable")
+        manifest, snapshot = _history_checkpoint_manifest(
+            orchestrator.checkpoints, checkpoint_id,
+        )
+        entry = next((file for file in manifest.get("files", [])
+                      if file.get("path") == path and not file.get("directory")), None)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="File is absent from this version")
+        saved = snapshot / "files" / path
+        return (saved.read_bytes() if entry.get("exists") and saved.is_file() else b""), bool(entry.get("exists"))
+    if version.startswith("git:"):
+        if root.startswith("ssh://"):
+            raise HTTPException(status_code=404, detail="Git history is unavailable for SSH workspaces")
+        commit = version.removeprefix("git:")
+        if not re.fullmatch(r"[0-9a-fA-F]{40,64}", commit):
+            raise HTTPException(status_code=400, detail="invalid git version")
+        base, _ = _workspace_path(root, path)
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["git", "-C", str(base), "show", f"{commit}:{path}"],
+            capture_output=True, timeout=10, check=False,
+        )
+        if result.returncode:
+            return b"", False
+        return result.stdout, True
+    raise HTTPException(status_code=400, detail="invalid workspace version")
+
+
+def _content_description(raw: bytes, path: str, exists: bool = True) -> dict[str, Any]:
+    try:
+        text = raw[:512 * 1024].decode("utf-8")
+        binary = b"\x00" in raw[:512 * 1024]
+    except UnicodeDecodeError:
+        text, binary = "", True
+    return {
+        "path": path, "content": "" if binary or not exists else text,
+        "truncated": len(raw) > 512 * 1024,
+        "binary": binary or not exists,
+    }
+
+
+@app.get("/api/workspace/history/content")
+async def workspace_history_content(root: str, path: str, version: str) -> dict[str, Any]:
+    raw, exists = await _history_bytes(root, path, version)
+    return _content_description(raw, path, exists)
+
+
+@app.get("/api/workspace/history/raw")
+async def workspace_history_raw(root: str, path: str, version: str) -> Response:
+    raw, _exists = await _history_bytes(root, path, version)
+    media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
+    return Response(raw, media_type=media_type, headers=_OFFICE_SANDBOX_HEADERS)
+
+
+@app.post("/api/workspace/history/restore")
+async def restore_workspace_history(request: Request) -> dict[str, Any]:
+    payload = await request.json()
+    root, path, version = (
+        str(payload.get("root", "")), str(payload.get("path", "")),
+        str(payload.get("version", "")),
+    )
+    relative = Path(path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise HTTPException(status_code=400, detail="path escapes workspace root")
+    normalized = relative.as_posix()
+    raw, exists = await _history_bytes(root, normalized, version)
+    checkpoint_id = str(uuid.uuid4())
+    if root.startswith("ssh://"):
+        await ssh_workspaces.create_checkpoint(root, [normalized], checkpoint_id)
+        host, remote_root = ssh_workspaces.parse_workspace(root)
+        target = ssh_workspaces._remote_path(remote_root, normalized)
+        if exists:
+            await ssh_workspaces.write_bytes(host, target, raw)
+        else:
+            await ssh_workspaces.call_tool("local_file", {
+                "action": "delete", "path": normalized,
+            }, root, run_id=None)
+    else:
+        base, target = _workspace_path(root, normalized)
+        if orchestrator is None:
+            raise HTTPException(status_code=503, detail="Checkpoint service is unavailable")
+        checkpoint = orchestrator.checkpoints.create_checkpoint(
+            base, [normalized], run_id=checkpoint_id,
+        )
+        checkpoint_id = checkpoint["id"]
+        if exists:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        elif target.is_file():
+            target.unlink()
+        elif target.is_dir():
+            raise HTTPException(status_code=409, detail="Cannot restore a file over a directory")
+    return {"restored": True, "checkpoint_id": checkpoint_id}
 
 
 _SCRIPTABLE_TYPES = {"text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml"}
@@ -5819,6 +6066,13 @@ async def _execute_run(
                 chunk_content = event.get("content", "")
                 full_response += chunk_content
                 await emit("message.delta", {"content": chunk_content})
+
+            elif etype == "artifact_created":
+                await emit("artifact.created", {
+                    "path": event.get("path", ""),
+                    "kind": event.get("kind", "document"),
+                    "bytes": event.get("bytes", 0),
+                })
 
             elif etype in ("tool_call", "tool_result", "tool_output"):
                 mapped = _map_tool_runtime_event(event)
