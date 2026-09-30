@@ -37,7 +37,17 @@ export interface ConversationSummary {
   id: string;
   title: string;
   updated_at?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  /** Working directory the conversation's last run used. */
+  workspace?: string | null;
   [key: string]: unknown;
+}
+
+export interface ConversationUpdate {
+  title?: string;
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 export interface ConversationCreateRequest {
@@ -74,6 +84,53 @@ export interface RunStartRequest {
   model?: string;
   attachments?: string[];
   active_skills?: string[];
+  /** `plan` explores read-only and waits for run.plan.approve before acting. */
+  mode?: 'act' | 'plan';
+  /** Absolute working directory for local tools; remembered per conversation. */
+  workspace?: string;
+  /** Non-image files: text is inlined, anything else is stored and its path passed to the Agent. */
+  files?: RunFile[];
+}
+
+export interface RunFile {
+  name: string;
+  mime: string;
+  data_base64: string;
+}
+
+export interface RunChangeFile {
+  path: string;
+  workspace: string;
+  status: 'added' | 'modified' | 'deleted';
+  additions: number;
+  deletions: number;
+  diff: string;
+  truncated?: boolean;
+}
+
+export interface WorkspaceEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'dir';
+  size?: number | null;
+  git?: string | null;
+}
+
+export interface WorkspaceFile {
+  path: string;
+  content: string;
+  truncated: boolean;
+  binary: boolean;
+}
+
+export interface ProcessInfo {
+  id: string;
+  command: string;
+  cwd?: string;
+  status: 'running' | 'exited' | string;
+  exit_code?: number | null;
+  started_at?: string;
+  run_id?: string | null;
 }
 
 export interface SkillInfo {

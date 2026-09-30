@@ -23,6 +23,7 @@ data/*.db-journal
 data/schedules.toml
 data/user-settings.json
 data/user-settings.json.tmp
+data/checkpoints/
 
 # Config with secrets
 config/atlas.toml

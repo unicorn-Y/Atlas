@@ -53,6 +53,12 @@ ipcMain.on('window:maximize', () => {
   else windowRef.maximize();
 });
 ipcMain.on('window:close', () => windowRef?.close());
+ipcMain.handle('dialog:open-directory', async (event, defaultPath?: unknown) => {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const options = { title: '选择工作目录', properties: ['openDirectory' as const], defaultPath: typeof defaultPath === 'string' ? defaultPath : undefined };
+  const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+  return result.canceled ? null : result.filePaths[0] ?? null;
+});
 ipcMain.handle('skill-center:token', (event) => {
   if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {
     throw new Error('Skill Center authority is available only to the Atlas main window');

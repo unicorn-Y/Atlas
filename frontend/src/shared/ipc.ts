@@ -5,5 +5,7 @@ export interface AtlasDesktopApi {
   maximize(): void;
   close(): void;
   getSkillCenterToken(): Promise<string | undefined>;
+  /** Native folder picker; resolves to the chosen absolute path, or null when cancelled. */
+  selectDirectory(defaultPath?: string): Promise<string | null>;
   onMaximizeChange(callback: (maximized: boolean) => void): () => void;
 }

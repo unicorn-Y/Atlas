@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useAtlasStore } from './useAtlasStore';
+import { backend, useAtlasStore } from './useAtlasStore';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -161,5 +161,52 @@ describe('follow-up queue', () => {
     const state = useAtlasStore.getState();
     expect(state.queue['c-done'].map((item) => item.content)).toEqual(['second follow-up']);
     expect(state.runs.filter((run) => run.conversationId === 'c-done')).toHaveLength(2);
+  });
+});
+
+describe('steering a running run', () => {
+  const running = (id: string, conversationId: string) => ({ id, conversationId, title: 'Busy', status: 'running' as const, phase: 'execution' as const, startedAt: '', updatedAt: '', lastEventSequence: 1, events: [] });
+
+  it('sends follow-ups into the run and forgets them once the backend confirms', async () => {
+    const sent: string[] = [];
+    vi.spyOn(backend, 'steerRun').mockImplementation((_run, content) => { sent.push(content); });
+    useAtlasStore.setState({ activeConversationId: 'c-steer', conversations: [], runs: [running('r-steer', 'c-steer')], queue: {}, pendingSteers: {}, followUpMode: 'steer' });
+
+    await useAtlasStore.getState().sendMessage('focus on the failing test');
+
+    expect(sent).toEqual(['focus on the failing test']);
+    expect(useAtlasStore.getState().queue['c-steer'] ?? []).toEqual([]);
+    const [pending] = useAtlasStore.getState().pendingSteers['r-steer'];
+    useAtlasStore.getState().appendEvent({ id: 'e-steered', runId: 'r-steer', sequence: 2, type: 'run.steered', timestamp: new Date().toISOString(), data: { event_id: pending.id, content: pending.content } });
+    expect(useAtlasStore.getState().pendingSteers['r-steer']).toEqual([]);
+    vi.restoreAllMocks();
+  });
+
+  it('runs an unconfirmed steer next when the run ends before picking it up', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 } as Response));
+    await useAtlasStore.getState().initialize();
+    vi.spyOn(backend, 'steerRun').mockImplementation(() => undefined);
+    useAtlasStore.setState({ activeConversationId: 'c-late', activeRunId: 'r-late', conversations: [], runs: [running('r-late', 'c-late')], queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: 'steer', runPrompts: {} });
+    await useAtlasStore.getState().sendMessage('one more thing');
+
+    useAtlasStore.getState().appendEvent({ id: 'e-late', runId: 'r-late', sequence: 2, type: 'run.completed', timestamp: new Date().toISOString(), data: {} });
+
+    const state = useAtlasStore.getState();
+    const next = state.runs.filter((run) => run.conversationId === 'c-late');
+    expect(next).toHaveLength(2);
+    expect(state.runPrompts[next[1].id].content).toBe('one more thing');
+    vi.restoreAllMocks();
+  });
+
+  it('queues instead of steering when the user prefers it or attaches files', async () => {
+    const steerRun = vi.spyOn(backend, 'steerRun').mockImplementation(() => undefined);
+    useAtlasStore.setState({ activeConversationId: 'c-pref', conversations: [], runs: [running('r-pref', 'c-pref')], queue: {}, pendingSteers: {}, followUpMode: 'queue' });
+    await useAtlasStore.getState().sendMessage('later please');
+    useAtlasStore.setState({ followUpMode: 'steer' });
+    await useAtlasStore.getState().sendMessage('see file', [], [{ name: 'a.txt', mime: 'text/plain', data_base64: 'YQ==' }]);
+
+    expect(steerRun).not.toHaveBeenCalled();
+    expect(useAtlasStore.getState().queue['c-pref'].map((item) => item.content)).toEqual(['later please', 'see file']);
+    vi.restoreAllMocks();
   });
 });

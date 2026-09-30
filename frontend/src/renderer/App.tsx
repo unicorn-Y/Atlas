@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AudioLines, Bell, Copy, Download, Image as ImageIcon, MessageCircle, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
+  AudioLines, Bell, Copy, Download, FolderOpen, GitBranch, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X,
 } from 'lucide-react';
 import { useAtlasStore } from './store/useAtlasStore';
+import type { RunFile } from '@atlas/backend-adapter';
 import ConversationActivity from './components/ConversationActivity';
 import ConversationMessage from './components/ConversationMessage';
 import Composer, { type ComposerMode, type SlashCommand } from './components/Composer';
@@ -68,6 +69,8 @@ export default function App() {
   const [createPrompt, setCreatePrompt] = useState('');
   const [toast, setToast] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [files, setFiles] = useState<Array<RunFile & { size: number }>>([]);
+  const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
   const [listening, setListening] = useState(false);
   const [voiceOutput, setVoiceOutput] = useState(() => pref('voice-output') === 'true');
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
@@ -193,6 +196,8 @@ export default function App() {
     go('chat');
     setInput('');
     setAttachments([]);
+    setFiles([]);
+    setEditing(null);
     void store.createConversation();
   }, [go, store]);
 
@@ -204,9 +209,16 @@ export default function App() {
   };
 
   const submit = async (fromHome: boolean) => {
-    if (!input.trim() && !attachments.length) return;
+    if (!input.trim() && !attachments.length && !files.length) return;
     const text = input;
     const images = attachments;
+    const documents = files.map(({ name, mime, data_base64 }) => ({ name, mime, data_base64 }));
+    if (editing && !fromHome) {
+      setInput('');
+      setEditing(null);
+      void store.editMessage(editing.id, text);
+      return;
+    }
     recognitionRef.current?.stop();
     if (fromHome && homeMode === 'image') {
       setCreatePrompt(text.trim());
@@ -217,17 +229,40 @@ export default function App() {
     setInput('');
     writeDraft(store.activeConversationId, '');
     setAttachments([]);
+    setFiles([]);
     if (fromHome) {
       go('chat');
       // Home always starts something new, unless the open conversation is still empty.
       if (store.activeConversationId && messages.length) await store.createConversation(text.trim().slice(0, 40) || 'New conversation');
     }
-    void store.sendMessage(text, images);
+    void store.sendMessage(text, images, documents);
   };
-  const addImages = (files: FileList | null) => {
-    if (!files?.length) return;
-    const selected = Array.from(files).filter((file) => ['image/png', 'image/jpeg', 'image/webp'].includes(file.type)).slice(0, 4 - attachments.length);
-    if (!selected.length) { setToast('请选择 PNG、JPEG 或 WebP 图片，每条消息最多 4 张'); return; }
+  /** Images go to the model as pictures; every other file rides along as a document. */
+  const addFiles = (picked: FileList | null) => {
+    if (!picked?.length) return;
+    const all = Array.from(picked);
+    const imageTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    addDocuments(all.filter((file) => !imageTypes.includes(file.type)));
+    const images = all.filter((file) => imageTypes.includes(file.type));
+    if (images.length) addImages(images);
+  };
+  const addDocuments = (picked: File[]) => {
+    if (!picked.length) return;
+    const tooBig = picked.find((file) => file.size > 10 * 1024 * 1024);
+    if (tooBig) { setToast(`${tooBig.name} 超过 10 MB，发不了`); return; }
+    if (files.reduce((sum, file) => sum + file.size, 0) + picked.reduce((sum, file) => sum + file.size, 0) > 20 * 1024 * 1024) { setToast('一条消息的文件加起来不能超过 20 MB'); return; }
+    Promise.all(picked.map((file) => new Promise<RunFile & { size: number }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === 'string'
+        ? resolve({ name: file.name, mime: file.type || 'application/octet-stream', data_base64: reader.result.slice(reader.result.indexOf(',') + 1), size: file.size })
+        : reject(new Error('无法读取文件'));
+      reader.onerror = () => reject(new Error('无法读取文件'));
+      reader.readAsDataURL(file);
+    }))).then((read) => setFiles((current) => [...current, ...read])).catch(() => setToast('读取文件失败'));
+  };
+  const addImages = (picked: File[]) => {
+    const selected = picked.slice(0, 4 - attachments.length);
+    if (!selected.length) { setToast('每条消息最多 4 张图片'); return; }
     if (selected.some((file) => file.size > 4 * 1024 * 1024)) { setToast('单张图片不能超过 4 MiB'); return; }
     const queuedBytes = attachments.reduce((sum, image) => sum + Math.max(0, Math.floor((image.length - image.indexOf(',') - 1) * 3 / 4)), 0);
     if (queuedBytes + selected.reduce((sum, file) => sum + file.size, 0) > 8 * 1024 * 1024) { setToast('单条消息的图片总大小不能超过 8 MiB'); return; }
@@ -237,6 +272,16 @@ export default function App() {
       reader.onerror = () => reject(new Error('无法读取图片'));
       reader.readAsDataURL(file);
     }))).then((images) => setAttachments((current) => [...current, ...images].slice(0, 4))).catch(() => setToast('读取图片失败'));
+  };
+  const chooseWorkspace = async () => {
+    const current = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : undefined;
+    const picked = window.atlasDesktop?.selectDirectory
+      ? await window.atlasDesktop.selectDirectory(current)
+      : window.prompt('工作目录的完整路径', current ?? '')?.trim() || null;
+    if (!picked) return;
+    if (!store.activeConversationId) await store.createConversation();
+    const conversationId = useAtlasStore.getState().activeConversationId;
+    if (conversationId) { store.setWorkspace(conversationId, picked); setToast(`工作目录：${picked}`); }
   };
   const toggleSpeechInput = () => {
     if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; setListening(false); return; }
@@ -308,6 +353,9 @@ export default function App() {
       { id: 'rename', label: '/rename', hint: '把后面的文字设为对话名称', takesArgument: true, run: (title: string) => { if (title.trim()) void store.renameConversation(activeConversation.id, title); else setToast('在 /rename 后面写上新名称'); } },
     ] : []),
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
+    { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
+    { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
+    ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩这个对话的上下文，省 token', run: () => void store.compactConversation(activeConversation.id).then((text) => { if (text) setToast(text); }) }] : []),
     { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
     { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
     { id: 'memory', label: '/memory', hint: '打开记忆', run: () => go('memory') },
@@ -334,10 +382,26 @@ export default function App() {
       return [{ id: `m-${hit.id}`, group: '消息内容', label: excerpt || conversation.title, hint: conversation.title, run: () => openConversation(conversation) }];
     });
   }, [store.apiBaseUrl, store.connected]);
+  const workspaceName = typeof activeConversation?.workspace === 'string' && activeConversation.workspace
+    ? activeConversation.workspace.split(/[\\/]/).filter(Boolean).pop() ?? activeConversation.workspace : '';
   const composerStatus = listening ? '正在听…' : store.connected ? '' : 'Atlas 后端没有连接';
   const composerBase = {
-    value: input, onChange: setInput, attachments, onPickImages: addImages, listening, onToggleMic: toggleSpeechInput,
+    value: input, onChange: setInput, attachments, onPickImages: addFiles, listening, onToggleMic: toggleSpeechInput,
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
+    files, onRemoveFile: (index: number) => setFiles((items) => items.filter((_, position) => position !== index)),
+    tools: <>
+      <Tip label={workspaceName ? `工作目录：${activeConversation?.workspace}（点击更换）` : '选择工作目录'}>
+        <button type="button" onClick={() => void chooseWorkspace()} className={cn('inline-flex h-8 max-w-[160px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', workspaceName ? 'text-fg-2' : 'text-fg-3')}>
+          <FolderOpen size={15} className="shrink-0" />{workspaceName && <span className="truncate">{workspaceName}</span>}
+        </button>
+      </Tip>
+      <Tip label={store.nextRunMode === 'plan' ? '下一条会先出计划，等你批准' : '先出计划：只读探索，批准后再动手'}>
+        <button type="button" aria-pressed={store.nextRunMode === 'plan'} onClick={() => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan')}
+          className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px]', store.nextRunMode === 'plan' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg')}>
+          <ListChecks size={15} />{store.nextRunMode === 'plan' && '先出计划'}
+        </button>
+      </Tip>
+    </>,
     models: store.models, model: store.model, onSelectModel: (id: string) => void store.selectModel(id), onManageModels: () => setSheet('models'),
     status: composerStatus, autoFocus: true, commands: slashCommands,
   };
@@ -346,6 +410,14 @@ export default function App() {
     <button aria-label="关闭错误提示" onClick={store.dismissError} className="grid size-6 place-items-center rounded-md hover:bg-hover"><X size={14} /></button>
   </div>;
 
+  const latestUsage = [...activeEvents].reverse().find((event) => event.type === 'run.usage')?.data;
+  const contextUse = typeof latestUsage?.context_tokens === 'number' && typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0
+    ? Math.round(latestUsage.context_tokens / latestUsage.context_limit * 100) : null;
+  const editBanner = editing && <div className="mb-2.5 flex items-center gap-2.5 pb-2.5 text-[12.5px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
+    <Pencil size={13} />修改后重新发送，这条之后的对话会被替换
+    <span className="flex-1" />
+    <Button size="sm" variant="ghost" onClick={() => { setEditing(null); setInput(''); }}>取消</Button>
+  </div>;
   const runHeader = activeRun && !runDone && <div className="mb-2.5 flex items-center gap-2.5 text-[12.5px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)] pb-2.5">
     <Mark className="size-[18px]" working={working} />
     <span className={working ? 'text-fg' : undefined}>{store.paused ? '已暂停' : RUN_LABEL[activeRun.status] ?? '正在处理'}</span>
@@ -353,7 +425,13 @@ export default function App() {
       <span className="h-[3px] w-24 overflow-hidden rounded-full bg-line"><i className="block h-full rounded-full bg-brand transition-[width] duration-500" style={{ width: `${completedPlanSteps / planSteps.length * 100}%` }} /></span>
       <span className="tabular-nums">{completedPlanSteps} / {planSteps.length}</span>
     </span>}
+    {contextUse !== null && <Tip label="这次对话占用的上下文窗口，快满时可以用 /compact 压缩"><span className={cn('tabular-nums', contextUse >= 80 ? 'text-danger' : 'text-fg-3')}>上下文 {contextUse}%</span></Tip>}
     <span className="flex-1" />
+    <div role="radiogroup" aria-label="运行中发的消息" className="flex gap-0.5 rounded-[8px] bg-sunken p-[2px] shadow-[inset_0_0_0_1px_var(--line)]">
+      {([['steer', '插话', '马上交给正在做的任务'], ['queue', '排队', '等这次做完再发']] as const).map(([id, label, hint]) =>
+        <Tip key={id} label={hint}><button role="radio" aria-checked={store.followUpMode === id} onClick={() => store.setFollowUpMode(id)}
+          className={cn('h-6 rounded-[6px] px-2 text-[12px]', store.followUpMode === id ? 'raised text-fg' : 'text-fg-3 hover:text-fg')}>{label}</button></Tip>)}
+    </div>
     {store.busy && <>
       <Button size="sm" variant="ghost" onClick={() => store.togglePaused()}>{store.paused ? <Play /> : <Pause />}{store.paused ? '继续' : '暂停'}</Button>
       <Button size="sm" variant="ghost" onClick={() => store.stopTask()}><Square />停止</Button>
@@ -370,8 +448,10 @@ export default function App() {
     {conversationQueue.map((item, index) => <div key={item.id} className="flex items-center gap-2.5 rounded-xl bg-sunken px-3 py-2 text-[13px]">
       <span className="shrink-0 text-[12px] text-fg-3 tabular-nums">{index === 0 ? '下一条' : `第 ${index + 1} 条`}</span>
       <span className="min-w-0 flex-1 truncate text-fg">{item.content}</span>
-      {item.attachments.length > 0 && <span className="shrink-0 text-[12px] text-fg-3">{item.attachments.length} 张图</span>}
-      <Tip label="取回来修改"><button aria-label="编辑这条待发消息" onClick={() => { const taken = store.takeQueued(store.activeConversationId, item.id); if (taken) { setInput(taken.content); setAttachments(taken.attachments); } }}
+      {item.attachments.length + item.files.length > 0 && <span className="shrink-0 text-[12px] text-fg-3">{item.attachments.length + item.files.length} 个附件</span>}
+      {activeRun && !runDone && !item.attachments.length && !item.files.length && <Tip label="现在就交给正在做的任务"><button aria-label="把这条插话进当前任务" onClick={() => store.steerQueued(store.activeConversationId, item.id)}
+        className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><MessageSquarePlus size={13} /></button></Tip>}
+      <Tip label="取回来修改"><button aria-label="编辑这条待发消息" onClick={() => { const taken = store.takeQueued(store.activeConversationId, item.id); if (taken) { setInput(taken.content); setAttachments(taken.attachments); setFiles(taken.files.map((file) => ({ ...file, size: Math.floor(file.data_base64.length * 3 / 4) }))); } }}
         className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><Pencil size={13} /></button></Tip>
       <Tip label="停下当前这一步，马上发这条"><button aria-label="立即发送这条消息" onClick={() => store.sendQueuedNow(store.activeConversationId, item.id)}
         className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><Send size={13} /></button></Tip>
@@ -382,6 +462,9 @@ export default function App() {
   const retryNote = activeRun?.status === 'failed' && store.runPrompts[activeRun.id] && !working && <div className="mt-3 flex items-center gap-3 text-[13px] text-fg-2">
     这次没有完成。<Button size="sm" variant="secondary" onClick={() => store.retryRun(activeRun.id)}><RotateCcw />重试</Button>
   </div>;
+
+  // Rewriting history mid-run would race the run's own writes.
+  const canRewrite = store.connected && !(activeRun && !runDone) && !loadingMessages;
 
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
   const connection = !store.connected
@@ -437,7 +520,10 @@ export default function App() {
           <div className="flex min-w-0 flex-1 flex-col">
             <div ref={threadRef} aria-label="任务活动" className="min-h-0 flex-1 overflow-auto px-8 pt-2">
               <div className="mx-auto w-[min(720px,100%)] pb-8">
-                {history.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username} />)}
+                {history.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username}
+                  actions={canRewrite && message.id ? message.role === 'user'
+                    ? <MessageAction label="修改后重新发送" onClick={() => { setEditing({ id: message.id, original: message.content }); setInput(message.content); }}><Pencil size={13} /></MessageAction>
+                    : <MessageAction label="从这里分叉出一个新对话" onClick={() => void store.forkFrom(message.id)}><GitBranch size={13} /></MessageAction> : undefined} />)}
                 {loadingMessages && <p className="py-6 text-center text-[13px] text-fg-3" role="status">正在载入这段对话…</p>}
                 {!messages.length && !activeEvents.length && !loadingMessages && <div className="pt-[16vh] text-center">
                   <Mark className="mx-auto mb-4 size-11" />
@@ -455,13 +541,14 @@ export default function App() {
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(720px,100%)]">
                 {queueStrip}
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，输入 / 看命令…'} header={runHeader || undefined} />
+                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，输入 / 看命令…'} header={editBanner || runHeader || undefined} />
               </div>
             </div>
           </div>
           {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => toggleInspector(false)} run={activeRun} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
-            apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
+            apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
+            workspace={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : null} onChooseWorkspace={() => void chooseWorkspace()} />}
         </div>}
 
         {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
@@ -519,4 +606,8 @@ export default function App() {
 
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
+}
+
+function MessageAction({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return <Tip label={label}><button aria-label={label} onClick={onClick} className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg">{children}</button></Tip>;
 }

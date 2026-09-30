@@ -1,14 +1,13 @@
-import { useMemo, useState } from 'react';
-import { Check, ChevronRight, FileText, ShieldAlert, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Check, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
-import { buildTimeline, describeTool, duration, type Step } from './timeline';
-
-type InspectorTab = 'context' | 'artifacts' | 'activity';
+import { buildTimeline, describeTool, duration, tokenCount, type Step } from './timeline';
+import type { InspectorTab } from '../shell/Inspector';
 
 interface ConversationActivityProps {
   events: AgentEvent[];
@@ -28,7 +27,7 @@ export default function ConversationActivity({ events, store, username, setTab }
     const firstInTurn = item.kind !== 'user' && !headed;
     if (item.kind !== 'user') headed = true;
     switch (item.kind) {
-      case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} />;
+      case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} />;
       case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn}
         status={item.streaming ? '正在回复' : undefined} working={item.streaming && busy} />;
       case 'steps': return <div key={item.id}>
@@ -41,10 +40,23 @@ export default function ConversationActivity({ events, store, username, setTab }
         <Button size="sm" variant="ghost" onClick={() => setTab('artifacts')}>查看</Button>
       </div>;
       case 'approval': return <Approval key={item.id} event={item.event} store={store} />;
-      case 'done': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
-        <Check size={14} className="text-ok" />完成{item.startedAt ? `，用时 ${duration(item.startedAt, item.endedAt)}` : ''}
-        <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
+      case 'question': return <Question key={item.id} event={item.event} store={store} />;
+      case 'plan': return <Plan key={item.id} event={item.event} store={store} />;
+      case 'cancelled': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
+        <Square size={12} />你停止了这次任务
       </div>;
+      case 'done': {
+        const tokens = tokenCount(item.usage);
+        const changed = item.changes && item.changes.files > 0 ? item.changes : null;
+        return <div key={item.id} className="my-4 ml-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-3">
+          <Check size={14} className="text-ok" />完成{item.startedAt ? `，用时 ${duration(item.startedAt, item.endedAt)}` : ''}
+          {tokens && <span className="tabular-nums">· {tokens} tokens</span>}
+          {changed && <button className="text-fg-2 hover:text-fg" onClick={() => setTab('changes')}>
+            · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
+          </button>}
+          <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
+        </div>;
+      }
       case 'failed': return <div key={item.id} role="alert" className="my-4 ml-10 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
         没能完成：{item.detail}
       </div>;
@@ -74,6 +86,9 @@ function StepRow({ step, live }: { step: Step; live: boolean }) {
   const [open, setOpen] = useState(false);
   const running = step.state === 'running' && live;
   const detail = [step.input && `输入\n${step.input}`, step.result && `结果\n${step.result}`, step.output && `输出\n${step.output}`].filter(Boolean).join('\n\n');
+  const hasDetail = Boolean(detail);
+  // A failure you have to click to see is a failure hidden: show its evidence straight away.
+  useEffect(() => { if (step.state === 'failed' && hasDetail) setOpen(true); }, [step.state, hasDetail]);
   return <li className="relative py-[5px]">
     <span className={cn('absolute -left-[31px] top-[11px] size-[9px] rounded-full ring-4 ring-[var(--sheet-solid)]',
       running ? 'bg-brand shadow-[0_0_0_4px_var(--brand-soft)]' : step.state === 'failed' ? 'bg-danger' : step.state === 'cancelled' ? 'bg-fg-3' : 'bg-ok')} />
@@ -114,6 +129,74 @@ function Approval({ event, store }: { event: AgentEvent; store: ReturnType<typeo
           </div>}
         {details && args !== undefined && <pre className="anim-fade mt-3 mb-0 max-h-60 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap text-fg-2">{typeof args === 'string' ? args : JSON.stringify(args, null, 2)}</pre>}
       </div>
+    </div>
+  </div>;
+}
+
+type Store = ReturnType<typeof useAtlasStore.getState>;
+
+/** The Agent stopped to ask something; the run waits until this is answered or stopped. */
+function Question({ event, store }: { event: AgentEvent; store: Store }) {
+  const [text, setText] = useState('');
+  const eventId = String(event.data.event_id ?? '');
+  const question = String(event.data.question ?? '');
+  const options = Array.isArray(event.data.options) ? event.data.options.map(String) : [];
+  const answer = store.answers[eventId];
+  const open = answer === undefined && store.getRun(event.runId)?.status === 'waiting';
+  const send = (value: string) => { if (value.trim()) store.answerInput(event.runId, eventId, value.trim()); };
+  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
+    <div className="flex gap-3.5 border-l-[3px] border-brand px-4 py-3.5">
+      <MessageCircleQuestion size={18} className="mt-0.5 shrink-0 text-brand" />
+      <div className="min-w-0 flex-1">
+        <p className="m-0 text-[14px] font-semibold whitespace-pre-wrap text-heading">{question}</p>
+        {answer !== undefined
+          ? <p className="mt-2 mb-0 flex items-center gap-1.5 text-[13px] text-fg-2"><Check size={14} className="text-ok" />你的回答：{answer}</p>
+          : open ? <>
+            {options.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{options.map((option) => <Button key={option} onClick={() => send(option)}>{option}</Button>)}</div>}
+            <form className="mt-3 flex gap-2" onSubmit={(formEvent) => { formEvent.preventDefault(); send(text); }}>
+              <input value={text} onChange={(changeEvent) => setText(changeEvent.target.value)} placeholder={options.length ? '或者直接写你的回答' : '写下你的回答'} aria-label="回答 Atlas 的问题"
+                className="min-w-0 flex-1 rounded-[9px] bg-sunken px-3 text-[13.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
+              <Button type="submit" variant="primary" disabled={!text.trim()}>回答</Button>
+            </form>
+          </> : <p className="mt-2 mb-0 text-[13px] text-fg-3">任务已经结束，这个问题不再需要回答。</p>}
+      </div>
+    </div>
+  </div>;
+}
+
+interface PlanStep { id?: string; title?: string; verification?: string }
+
+/** Plan mode stops after exploring; nothing changes until the plan is approved. */
+function Plan({ event, store }: { event: AgentEvent; store: Store }) {
+  const [adding, setAdding] = useState(false);
+  const [edits, setEdits] = useState('');
+  const eventId = String(event.data.event_id ?? '');
+  const plan = (event.data.plan && typeof event.data.plan === 'object' ? event.data.plan : {}) as { goal?: string; subtasks?: PlanStep[]; steps?: string };
+  const steps = Array.isArray(plan.subtasks) ? plan.subtasks : [];
+  const decided = store.answers[eventId];
+  const open = decided === undefined && store.getRun(event.runId)?.status === 'waiting';
+  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
+    <div className="border-l-[3px] border-brand px-4 py-3.5">
+      <p className="m-0 flex items-center gap-2 text-[14px] font-semibold text-heading"><ListChecks size={17} className="text-brand" />计划：{plan.goal ?? '待确认'}</p>
+      {steps.length > 0
+        ? <ol className="mt-3 mb-0 grid list-none gap-2 p-0 text-[13.5px]">
+          {steps.map((step, index) => <li key={step.id ?? index} className="flex gap-2.5">
+            <CircleDashed size={15} className="mt-[3px] shrink-0 text-fg-3" />
+            <span className="min-w-0"><span className="text-fg">{step.title ?? step.id}</span>{step.verification && <small className="block text-[12px] text-fg-3">怎么验证：{step.verification}</small>}</span>
+          </li>)}
+        </ol>
+        : plan.steps && <div className="mt-2 text-[13.5px] whitespace-pre-wrap text-fg-2">{plan.steps}</div>}
+      {decided !== undefined
+        ? <p className="mt-3 mb-0 flex items-center gap-1.5 text-[13px] text-fg-2"><Check size={14} className="text-ok" />{decided === 'approved' ? '已批准，按计划执行' : `已批准，并补充：${decided}`}</p>
+        : open ? <>
+          {adding && <textarea autoFocus value={edits} onChange={(changeEvent) => setEdits(changeEvent.target.value)} rows={2} placeholder="执行时还要注意什么" aria-label="补充说明"
+            className="mt-3 block w-full resize-none rounded-[9px] bg-sunken p-2.5 text-[13.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="primary" onClick={() => store.approvePlan(event.runId, eventId, adding ? edits : '')}>{adding && edits.trim() ? '补充后执行' : '按计划执行'}</Button>
+            {!adding && <Button onClick={() => setAdding(true)}>补充说明</Button>}
+            <Button variant="ghost" onClick={() => store.stopTask()}>不执行</Button>
+          </div>
+        </> : <p className="mt-3 mb-0 text-[13px] text-fg-3">这个计划没有执行。</p>}
     </div>
   </div>;
 }

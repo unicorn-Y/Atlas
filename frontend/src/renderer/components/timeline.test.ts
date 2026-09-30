@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../../types/runtime';
-import { buildTimeline, describeTool, duration, shortPath } from './timeline';
+import { buildTimeline, describeTool, duration, shortPath, tokenCount } from './timeline';
 
 let seq = 0;
 const ev = (type: AgentEvent['type'], data: Record<string, unknown>, second = seq): AgentEvent =>
@@ -60,5 +60,30 @@ describe('helpers', () => {
     expect(shortPath('/home/u/project/src/app.ts')).toBe('…/src/app.ts');
     expect(duration('2026-09-29T10:00:00Z', '2026-09-29T10:00:00.4Z')).toBe('不到 1 秒');
     expect(duration('2026-09-29T10:00:00Z', '2026-09-29T10:01:12Z')).toBe('1 分 12 秒');
+  });
+});
+
+describe('protocol 1.3 events', () => {
+  const at = (sequence: number) => new Date(Date.UTC(2026, 8, 30, 0, 0, sequence)).toISOString();
+  const event = (type: string, data: Record<string, unknown>, sequence: number) => ({ id: `e${sequence}`, runId: 'r', sequence, type, timestamp: at(sequence), data }) as AgentEvent;
+
+  it('shows rules after the request, steers as the user, and a plan card instead of its streamed text', () => {
+    const items = buildTimeline([
+      event('rules.loaded', { files: [{ path: 'C:\repo\AGENTS.md', bytes: 10 }] }, 1),
+      event('run.started', { content: '加一行' }, 2),
+      event('message.delta', { content: '计划如下……' }, 3),
+      event('run.plan.proposed', { event_id: 'plan:r', plan: { goal: '加一行', subtasks: [] } }, 4),
+      event('message.delta', { content: '已执行。' }, 5),
+      event('run.steered', { content: '顺便看看 notes', event_id: 's1' }, 6),
+      event('message.completed', { content: '已执行。' }, 7),
+      event('run.completed', { usage: { input_tokens: 1200, output_tokens: 300 }, changes: { files: 1, additions: 1, deletions: 0 } }, 8),
+    ]);
+    expect(items.map((item) => item.kind)).toEqual(['user', 'steps', 'plan', 'reply', 'user', 'done']);
+    expect(items[1]).toMatchObject({ steps: [{ verb: '读取项目规则' }] });
+    expect(items[3]).toMatchObject({ content: '已执行。' });
+    expect(items[4]).toMatchObject({ steered: true, content: '顺便看看 notes' });
+    const done = items[5] as Extract<typeof items[number], { kind: 'done' }>;
+    expect(tokenCount(done.usage)).toBe('1.5k');
+    expect(done.changes).toEqual({ files: 1, additions: 1, deletions: 0 });
   });
 });

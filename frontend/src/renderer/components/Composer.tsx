@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { ArrowUp, ChevronDown, Code2, Film, ImagePlus, Image as ImageIcon, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
+import { ArrowUp, ChevronDown, Code2, File as FileIcon, Film, ImagePlus, Image as ImageIcon, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
 import { cn } from '../ui/cn';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/Menu';
@@ -57,6 +57,11 @@ interface ComposerProps {
   /** Content shown above the text area, e.g. the live run status. */
   header?: ReactNode;
   commands?: SlashCommand[];
+  /** Non-image attachments, shown as chips. */
+  files?: Array<{ name: string; size: number }>;
+  onRemoveFile?: (index: number) => void;
+  /** Extra toolbar controls next to the attach button (working directory, plan mode). */
+  tools?: ReactNode;
 }
 
 export default function Composer(props: ComposerProps) {
@@ -65,7 +70,7 @@ export default function Composer(props: ComposerProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const intent = guessIntent(props.value);
   const current = props.models.find((item) => item.id === props.model);
-  const canSend = Boolean(props.value.trim() || props.attachments.length);
+  const canSend = Boolean(props.value.trim() || props.attachments.length || props.files?.length);
   const hint = props.listening ? '正在听你说…' : intent?.note ?? props.status;
 
   useLayoutEffect(() => {
@@ -120,7 +125,7 @@ export default function Composer(props: ComposerProps) {
         {command.hint && <span className="min-w-0 truncate text-[12.5px] text-fg-3">{command.hint}</span>}
       </button>)}
     </div>}
-    {dragging && <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[inherit] bg-brand-soft text-[13.5px] font-medium text-fg">松开添加图片</div>}
+    {dragging && <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[inherit] bg-brand-soft text-[13.5px] font-medium text-fg">松开添加附件</div>}
     {props.header}
     <textarea ref={textRef} value={props.value} rows={1} placeholder={props.placeholder} aria-label="消息内容"
       onChange={(event) => props.onChange(event.target.value)} onKeyDown={onKey}
@@ -134,15 +139,23 @@ export default function Composer(props: ComposerProps) {
           className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full bg-fg text-bg"><X size={12} /></button>
       </div>)}
     </div>}
-    <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => { props.onPickImages(event.target.files); event.currentTarget.value = ''; }} />
+    {props.files && props.files.length > 0 && <div className="mt-2.5 flex flex-wrap gap-2" aria-label="待发送文件">
+      {props.files.map((file, index) => <span key={`${index}-${file.name}`} className="inline-flex max-w-[240px] items-center gap-1.5 rounded-lg bg-sunken py-1 pr-1 pl-2 text-[12.5px] text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">
+        <FileIcon size={13} className="shrink-0 text-fg-3" /><span className="min-w-0 truncate">{file.name}</span>
+        <span className="shrink-0 text-[11px] text-fg-3">{file.size >= 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`}</span>
+        <button type="button" aria-label={`移除 ${file.name}`} onClick={() => props.onRemoveFile?.(index)} className="grid size-5 place-items-center rounded-md hover:bg-hover"><X size={12} /></button>
+      </span>)}
+    </div>}
+    <input ref={fileRef} hidden type="file" multiple onChange={(event) => { props.onPickImages(event.target.files); event.currentTarget.value = ''; }} />
 
     <div className={cn('flex items-center gap-1.5', hero ? 'mt-3' : 'mt-2')}>
-      <Tip label="添加图片，也可以直接粘贴">
-        <button type="button" aria-label="添加图片" onClick={() => fileRef.current?.click()}
+      <Tip label="添加图片或文件，也可以直接粘贴、拖进来">
+        <button type="button" aria-label="添加附件" onClick={() => fileRef.current?.click()}
           className="grid size-8 place-items-center rounded-[9px] text-fg-3 hover:bg-hover hover:text-fg">
           {props.attachments.length ? <ImagePlus size={18} /> : <Paperclip size={18} />}
         </button>
       </Tip>
+      {props.tools}
 
       {props.modes && <div role="radiogroup" aria-label="任务类型" className="flex gap-0.5 rounded-[10px] bg-sunken p-[3px] shadow-[inset_0_0_0_1px_var(--line)]">
         {props.modes.options.map(({ id, label, icon: Icon }) => {

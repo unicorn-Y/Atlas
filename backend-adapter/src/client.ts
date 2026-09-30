@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ResumeRequest, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse } from './types';
+import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, ProcessInfo, ResumeRequest, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -117,7 +117,44 @@ export class BackendAdapter {
   }
   async getMessages(id: string): Promise<ConversationMessage[]> { return this.live ? this.request(`/api/conversations/${encodeURIComponent(id)}/messages`) : []; }
   async renameConversation(id: string, title: string): Promise<void> {
-    if (this.live) await this.request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ title }) });
+    await this.updateConversation(id, { title });
+  }
+  async updateConversation(id: string, patch: ConversationUpdate): Promise<void> {
+    if (this.live) await this.request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) });
+  }
+  /** Delete this message and everything after it, so an edited version can be sent in its place. */
+  async truncateConversation(id: string, fromMessageId: string): Promise<void> {
+    await this.request(`/api/conversations/${encodeURIComponent(id)}/truncate`, { method: 'POST', body: JSON.stringify({ from_message_id: fromMessageId }) });
+  }
+  /** Copy the conversation up to and including this message into a new one. Files on disk are shared, not copied. */
+  async forkConversation(id: string, throughMessageId: string): Promise<ConversationSummary> {
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/fork`, { method: 'POST', body: JSON.stringify({ through_message_id: throughMessageId }) });
+  }
+  async compactConversation(id: string): Promise<{ before_tokens: number | null; after_tokens: number | null; summary: string }> {
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/compact`, { method: 'POST' });
+  }
+  async getRunChanges(runId: string): Promise<RunChangeFile[]> {
+    return (await this.request<{ files: RunChangeFile[] }>(`/api/runs/${encodeURIComponent(runId)}/changes`)).files;
+  }
+  async getWorkspaceTree(root: string, path = ''): Promise<WorkspaceEntry[]> {
+    return (await this.request<{ entries: WorkspaceEntry[] }>(`/api/workspace/tree?${new URLSearchParams({ root, path })}`)).entries;
+  }
+  async getWorkspaceFile(root: string, path: string): Promise<WorkspaceFile> {
+    return this.request(`/api/workspace/file?${new URLSearchParams({ root, path })}`);
+  }
+  async getWorkspaceRules(root: string): Promise<Array<{ path: string; bytes: number }>> {
+    return (await this.request<{ files: Array<{ path: string; bytes: number }> }>(`/api/workspace/rules?${new URLSearchParams({ root })}`)).files;
+  }
+  async getProcesses(): Promise<ProcessInfo[]> { return this.live ? this.request('/api/processes') : []; }
+  async getProcessOutput(id: string, after = 0): Promise<{ output: string; next: number; status: string }> {
+    return this.request(`/api/processes/${encodeURIComponent(id)}/output?after=${after}`);
+  }
+  async killProcess(id: string): Promise<void> {
+    await this.request(`/api/processes/${encodeURIComponent(id)}/kill`, { method: 'POST' });
+  }
+  /** WebSocket URL for an interactive PowerShell in `cwd`. */
+  terminalUrl(cwd: string): string {
+    return `${this.baseUrl.replace(/^http/, 'ws')}/ws/terminal?${new URLSearchParams({ cwd })}`;
   }
   async deleteConversation(id: string): Promise<void> {
     if (this.live) await this.request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -287,6 +324,26 @@ export class BackendAdapter {
     const socket = this.runSockets.get(runId);
     if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error('Agent Runtime socket is not connected');
     socket.send(JSON.stringify(response));
+  }
+
+  /** Send a client message on the socket of a live run (protocol 1.3 steer, input and plan replies). */
+  private sendOnRun(runId: string, message: Record<string, unknown>): void {
+    const socket = this.runSockets.get(runId);
+    if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error('Agent Runtime socket is not connected');
+    socket.send(JSON.stringify(message));
+  }
+
+  /** Add an instruction to a running run; it reaches the model before its next turn. */
+  steerRun(runId: string, content: string, eventId: string): void {
+    this.sendOnRun(runId, { type: 'run.steer', run_id: runId, content, event_id: eventId });
+  }
+
+  respondToInput(runId: string, eventId: string, text: string): void {
+    this.sendOnRun(runId, { type: 'input.response', event_id: eventId, text });
+  }
+
+  approvePlan(runId: string, eventId: string, edits = ''): void {
+    this.sendOnRun(runId, { type: 'run.plan.approve', run_id: runId, event_id: eventId, edits });
   }
 
   cancelRun(runId: string): void {

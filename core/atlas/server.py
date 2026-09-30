@@ -735,6 +735,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         web_runtime=WebRuntime(),
         skill_manager=skill_mgr,
         projects=projects,
+        # One store: the Agent's automatic snapshots must be the ones restore and diff read.
+        checkpoint_store=checkpoints,
     )
 
     plugin_runtime = PluginRuntime(

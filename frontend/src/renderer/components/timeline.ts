@@ -20,13 +20,19 @@ export interface Step {
   output: string;
 }
 
+export interface RunUsage { input_tokens?: number | null; output_tokens?: number | null; context_tokens?: number | null; context_limit?: number | null }
+export interface RunChanges { files: number; additions: number; deletions: number }
+
 export type TimelineItem =
-  | { kind: 'user'; id: string; content: string }
+  | { kind: 'user'; id: string; content: string; steered?: boolean }
   | { kind: 'reply'; id: string; content: string; streaming: boolean }
   | { kind: 'steps'; id: string; steps: Step[] }
   | { kind: 'approval'; id: string; event: AgentEvent }
+  | { kind: 'question'; id: string; event: AgentEvent }
+  | { kind: 'plan'; id: string; event: AgentEvent }
+  | { kind: 'cancelled'; id: string }
   | { kind: 'artifact'; id: string; name: string; summary: string }
-  | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string }
+  | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
   | { kind: 'failed'; id: string; detail: string };
 
 const TARGET_KEYS = ['path', 'file_path', 'filepath', 'file', 'command', 'cmd', 'query', 'pattern', 'url', 'q', 'target', 'name'];
@@ -116,6 +122,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
   let track: { kind: 'steps'; id: string; steps: Step[] } | null = null;
   let reply: { kind: 'reply'; id: string; content: string; streaming: boolean } | null = null;
   let runStartedAt: string | undefined;
+  let earlyRules: Step | null = null;
   // Text Atlas streamed before a tool call. The final message.completed repeats it, so it is trimmed off there.
   let spoken = '';
   const closeReply = () => { if (reply) { reply.streaming = false; spoken += reply.content; reply = null; } };
@@ -133,6 +140,8 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         runStartedAt = event.timestamp;
         if (typeof data.content === 'string' && data.content) items.push({ kind: 'user', id: event.id, content: data.content });
         closeBlocks(); reply = null; spoken = '';
+        // The backend reports loaded rules just before the run starts; show them after the request.
+        if (earlyRules) { stepsBlock(earlyRules.id).steps.push(earlyRules); earlyRules = null; }
         break;
       case 'tool.started': {
         const key = String(data.tool_call_id || data.call_id || event.id);
@@ -187,8 +196,42 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         reply = null; closeBlocks();
         break;
       }
+      case 'run.steered':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'user', id: event.id, content: String(data.content ?? ''), steered: true });
+        break;
+      case 'rules.loaded': {
+        const files = Array.isArray(data.files) ? data.files as Array<{ path?: string }> : [];
+        if (!files.length) break;
+        const step: Step = {
+          id: event.id, verb: '读取项目规则', target: files.map((file) => shortPath(String(file.path ?? ''))).join('、'),
+          state: 'done', startedAt: event.timestamp, endedAt: event.timestamp, output: '',
+        };
+        if (runStartedAt) stepsBlock(event.id).steps.push(step); else earlyRules = step;
+        break;
+      }
+      case 'input.required':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'question', id: event.id, event });
+        break;
+      case 'run.plan.proposed':
+        // The plan's text was streamed as the reply; the card below replaces it.
+        if (reply) { items.splice(items.indexOf(reply), 1); reply = null; }
+        // Execution after approval is a fresh turn whose final message repeats only its own text.
+        spoken = '';
+        closeBlocks();
+        items.push({ kind: 'plan', id: event.id, event });
+        break;
       case 'run.completed':
-        items.push({ kind: 'done', id: event.id, result: text(data.result), startedAt: runStartedAt, endedAt: event.timestamp });
+        items.push({
+          kind: 'done', id: event.id, result: text(data.result), startedAt: runStartedAt, endedAt: event.timestamp,
+          usage: data.usage && typeof data.usage === 'object' ? data.usage as RunUsage : undefined,
+          changes: data.changes && typeof data.changes === 'object' ? data.changes as RunChanges : undefined,
+        });
+        break;
+      case 'run.cancelled':
+        closeReply();
+        items.push({ kind: 'cancelled', id: event.id });
         break;
       case 'run.failed':
         items.push({ kind: 'failed', id: event.id, detail: text(data.detail ?? data.code) || '未知错误' });
@@ -198,6 +241,13 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
     }
   }
   return items;
+}
+
+/** "1.2k" style token counts; null when the provider did not report usage. */
+export function tokenCount(usage?: RunUsage): string | null {
+  const total = (usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0);
+  if (!usage || (usage.input_tokens == null && usage.output_tokens == null) || !total) return null;
+  return total >= 1000 ? `${(total / 1000).toFixed(total >= 10_000 ? 0 : 1)}k` : String(total);
 }
 
 export function duration(from?: string, to?: string): string {
