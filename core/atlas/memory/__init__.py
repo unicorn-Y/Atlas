@@ -137,7 +137,9 @@ class MemoryStore:
                 permission_mode TEXT NOT NULL DEFAULT 'full_access',
                 allowed_paths TEXT NOT NULL DEFAULT '[]',
                 executor TEXT NOT NULL DEFAULT 'atlas',
-                sandbox TEXT NOT NULL DEFAULT 'null'
+                sandbox TEXT NOT NULL DEFAULT 'null',
+                extra_roots TEXT NOT NULL DEFAULT '[]',
+                source TEXT NOT NULL DEFAULT 'desktop'
             );
 
             -- Messages
@@ -656,7 +658,8 @@ class MemoryStore:
                                   ("allowed_paths", "TEXT NOT NULL DEFAULT '[]'"),
                                   ("executor", "TEXT NOT NULL DEFAULT 'atlas'"),
                                   ("sandbox", "TEXT NOT NULL DEFAULT 'null'"),
-                                  ("extra_roots", "TEXT NOT NULL DEFAULT '[]'")):
+                                  ("extra_roots", "TEXT NOT NULL DEFAULT '[]'"),
+                                  ("source", "TEXT NOT NULL DEFAULT 'desktop'")):
             if name not in conversation_columns:
                 await self._db.execute(
                     f"ALTER TABLE conversations ADD COLUMN {name} {declaration}"
@@ -707,7 +710,7 @@ class MemoryStore:
         cursor = await self._db.execute(
             "SELECT id, title, created_at, updated_at, pinned, archived, workspace, "
             "worktree_path, worktree_branch, base_branch, parent_conversation_id, fork_message_id, "
-            "permission_mode, allowed_paths, executor, sandbox, extra_roots "
+            "permission_mode, allowed_paths, executor, sandbox, extra_roots, source "
             "FROM conversations ORDER BY pinned DESC, updated_at DESC LIMIT ?",
             (limit,),
         )
@@ -716,7 +719,8 @@ class MemoryStore:
                  "archived": bool(r["archived"]),
                  "allowed_paths": json.loads(r["allowed_paths"] or "[]"),
                  "sandbox": json.loads(r["sandbox"] or "null"),
-                 "extra_roots": json.loads(r["extra_roots"] or "[]")} for r in rows]
+                 "extra_roots": json.loads(r["extra_roots"] or "[]"),
+                 "source": r["source"]} for r in rows]
 
     async def get_conversation_messages(
         self, conversation_id: str, limit: int = 100
@@ -3813,7 +3817,7 @@ class MemoryStore:
         cursor = await self._db.execute(
             "SELECT id, title, created_at, updated_at, metadata, pinned, archived, workspace, "
             "worktree_path, worktree_branch, base_branch, parent_conversation_id, fork_message_id, "
-            "permission_mode, allowed_paths, executor, sandbox, extra_roots "
+            "permission_mode, allowed_paths, executor, sandbox, extra_roots, source "
             "FROM conversations WHERE id = ?",
             (conversation_id,),
         )
@@ -3836,6 +3840,7 @@ class MemoryStore:
         executor: str | None = None, sandbox: dict[str, Any] | None = None,
         sandbox_set: bool = False,
         extra_roots: list[str] | None = None,
+        source: str | None = None,
     ) -> bool:
         """Update optional conversation fields. Returns True if found."""
         assert self._db is not None
@@ -3850,6 +3855,7 @@ class MemoryStore:
         fields["executor"] = executor
         fields["sandbox"] = json.dumps(sandbox) if sandbox_set else None
         fields["extra_roots"] = None if extra_roots is None else json.dumps(extra_roots)
+        fields["source"] = source
         if not any(value is not None for value in fields.values()):
             cursor = await self._db.execute(
                 "SELECT 1 FROM conversations WHERE id=?", (conversation_id,)

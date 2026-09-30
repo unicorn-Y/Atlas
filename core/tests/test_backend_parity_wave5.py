@@ -11,6 +11,7 @@ from atlas.projects import ProjectStore
 from atlas.tools.web_extract import extract_web
 from atlas.tools.custom_tools import CustomToolStore
 from atlas.agent.checkpoints import ShadowGitCheckpointStore
+from atlas.telegram import TelegramService, TOKEN_KEY
 
 
 class Hooks:
@@ -65,6 +66,67 @@ async def test_parallel_atlas_workers_continue_after_one_failure() -> None:
 
 
 @pytest.mark.asyncio
+async def test_atlas_subtask_inherits_read_only_and_cannot_redelegate(monkeypatch):
+    from atlas.agent import AgentOrchestrator
+
+    orchestrator = object.__new__(AgentOrchestrator)
+    calls = []
+
+    class FakeMemory:
+        async def create_conversation(self, _title): return "child-conversation"
+        async def delete_conversation(self, _conversation_id): return None
+
+    async def fake_run(*_args, **kwargs):
+        calls.append(kwargs)
+        yield {"type": "chunk", "content": "已完成。"}
+
+    monkeypatch.setattr(orchestrator, "_memory", FakeMemory(), raising=False)
+    monkeypatch.setattr(orchestrator, "run", fake_run)
+    approval = []
+
+    async def parent_approval(event_id, tool_name, arguments):
+        approval.append((event_id, tool_name, arguments))
+        return "allow"
+
+    progress = []
+    result = await orchestrator._run_atlas_subtask(
+        goal="只读检查", context=None, cwd="C:/repo", subtask_id="subtask-a",
+        atlas_options={"permission_mode": "read_only", "allowed_paths": ["C:/repo"],
+                       "approval_callback": parent_approval},
+        on_progress=lambda text: progress.append(text),
+    )
+    assert result["result"] == "已完成。"
+    assert "delegate_task" in calls[0]["tool_deny"]
+    assert "delegate_parallel" in calls[0]["tool_deny"]
+    assert calls[0]["permission_mode"] == "read_only"
+    assert calls[0]["allowed_paths"] == ["C:/repo"]
+    assert progress == ["已完成。"]
+    assert await calls[0]["approval_callback"]("approval:x", "write_file", {"path": "x"}) == "allow"
+    assert approval[0][2]["subtask_id"] == "subtask-a"
+
+
+@pytest.mark.asyncio
+async def test_atlas_delegation_cancellation_reaches_worker() -> None:
+    service = DelegationService(host=None, hooks=Hooks())
+    parent_cancel = asyncio.Event()
+    started = asyncio.Event()
+
+    async def runner(**kwargs):
+        started.set()
+        await kwargs["atlas_options"]["cancel_event"].wait()
+        return {"status": "cancelled", "result": "已取消", "evidence": []}
+
+    service.atlas_runner = runner
+    task = asyncio.create_task(service.delegate_task(
+        "长任务", atlas_options={"cancel_event": parent_cancel},
+    ))
+    await started.wait()
+    parent_cancel.set()
+    result = await task
+    assert result["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
 async def test_conversation_extra_roots_persist_and_list(tmp_path) -> None:
     memory = MemoryStore(tmp_path / "atlas.sqlite3")
     await memory.init()
@@ -73,8 +135,12 @@ async def test_conversation_extra_roots_persist_and_list(tmp_path) -> None:
         roots = [str((tmp_path / "workspace-a").resolve()), "ssh://host/home/project"]
         assert await memory.update_conversation(conversation_id, extra_roots=roots)
         assert (await memory.get_conversation(conversation_id))["extra_roots"] == roots
+        assert await memory.update_conversation(conversation_id, source="telegram")
+        assert (await memory.get_conversation(conversation_id))["source"] == "telegram"
         listed = await memory.list_conversations()
-        assert next(row for row in listed if row["id"] == conversation_id)["extra_roots"] == roots
+        listed_row = next(row for row in listed if row["id"] == conversation_id)
+        assert listed_row["extra_roots"] == roots
+        assert listed_row["source"] == "telegram"
     finally:
         await memory.close()
 
@@ -125,6 +191,45 @@ async def test_web_extract_strips_chrome_and_rejects_private_addresses(monkeypat
     assert "noise" not in result["text"]
     with pytest.raises(ValueError, match="内网"):
         await extract_web("http://10.0.0.1/private")
+
+
+@pytest.mark.asyncio
+async def test_web_extract_caps_text_redirect_checks_and_reports_missing_captions(monkeypatch):
+    import socket
+    import httpx
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80)),
+    ])
+
+    class RedirectClient:
+        def __init__(self, **_kwargs):
+            self.client = httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda _request: httpx.Response(302, headers={"location": "http://127.0.0.1/private"})
+            ))
+        async def __aenter__(self): return self.client
+        async def __aexit__(self, *_args): await self.client.aclose()
+
+    with pytest.raises(ValueError, match="内网"):
+        await extract_web("https://example.com/redirect", client_factory=RedirectClient)
+
+    class LongClient:
+        def __init__(self, **_kwargs):
+            body = "<title>Long</title><article>" + ("正文内容" * 20_000) + "</article>"
+            self.client = httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, text=body)
+            ))
+        async def __aenter__(self): return self.client
+        async def __aexit__(self, *_args): await self.client.aclose()
+
+    clipped = await extract_web("https://example.com/long", client_factory=LongClient)
+    assert len(clipped["text"]) == 60_000
+    assert clipped["truncated"] is True
+    async def no_captions(_url): return "", "这个视频没有可读取的字幕。"
+    monkeypatch.setattr("atlas.tools.web_extract._video_captions", no_captions)
+    missing = await extract_web("https://www.youtube.com/watch?v=caption-missing")
+    assert missing["kind"] == "video"
+    assert "没有可读取的字幕" in missing["text"]
 
 
 @pytest.mark.asyncio
@@ -208,3 +313,92 @@ async def test_custom_tools_create_execute_disable_validate_and_timeout(tmp_path
     timed_out = await store.execute("slow-run", {})
     assert timed_out["is_error"] is True
     assert "超时" in timed_out["error"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_auth_task_completion_and_token_secrecy(tmp_path):
+    import httpx
+
+    credentials = {}
+    requests = []
+
+    def client_factory(**kwargs):
+        async def respond(request):
+            requests.append(request)
+            return httpx.Response(200, json={"ok": True, "result": {"username": "atlas_bot"}})
+        return httpx.AsyncClient(transport=httpx.MockTransport(respond), **kwargs)
+
+    submitted = []
+
+    async def submit(text, user_id, _service):
+        submitted.append((text, user_id))
+        return {"summary": "任务完成\n\n改动文件数：2"}
+
+    service = TelegramService(
+        tmp_path / "telegram.json", credentials=DictCredentials(credentials),
+        submit_task=submit, client_factory=client_factory,
+    )
+    settings = service.update_settings({
+        "enabled": True, "allowed_user_ids": [42], "default_workspace": str(tmp_path),
+        "bot_token": "secret-token",
+    })
+    assert settings["bot_token_set"] is True
+    assert "secret-token" not in json.dumps(settings)
+    assert "secret-token" not in (tmp_path / "telegram.json").read_text(encoding="utf-8")
+    assert await service.test_token() == {"username": "atlas_bot"}
+    assert "secret-token" in str(requests[0].url)
+
+    await service.process_update({"update_id": 1, "message": {
+        "from": {"id": 99}, "text": "不允许运行",
+    }})
+    await service.process_update({"update_id": 2, "message": {
+        "from": {"id": 42}, "text": "整理项目报告",
+    }})
+    await asyncio.sleep(0.02)
+    assert submitted == [("整理项目报告", 42)]
+    sent = [request for request in requests if "/sendMessage" in str(request.url)]
+    assert sent
+    assert "任务完成" in sent[-1].content.decode("utf-8")
+    assert "secret-token" not in repr(sent[-1].headers)
+
+
+@pytest.mark.asyncio
+async def test_telegram_approval_callback_is_bound_to_user_and_expires(tmp_path):
+    credentials = DictCredentials({TOKEN_KEY: "secret"})
+    sent = []
+
+    class MockResponse:
+        def raise_for_status(self): pass
+        def json(self): return {"ok": True, "result": {}}
+
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *_args): return None
+        async def post(self, _url, **kwargs):
+            sent.append(kwargs["json"])
+            return MockResponse()
+
+    service = TelegramService(
+        tmp_path / "telegram.json", credentials=credentials,
+        client_factory=lambda **_kwargs: MockClient(),
+    )
+    service.update_settings({"allowed_user_ids": [42]})
+    future = await service.request_approval(42, "run-1", "approval-1", "写文件")
+    keyboard = sent[0]["reply_markup"]["inline_keyboard"][0]
+    callback_id = keyboard[0]["callback_data"]
+    assert len(callback_id) <= 10
+    await service.process_update({"callback_query": {
+        "id": "cb-1", "from": {"id": 99}, "data": callback_id,
+    }})
+    assert not future.done()
+    await service.process_update({"callback_query": {
+        "id": "cb-2", "from": {"id": 42}, "data": callback_id,
+    }})
+    assert future.result() == "allow"
+
+
+class DictCredentials:
+    def __init__(self, values): self.values = values
+    def get(self, key): return self.values.get(key)
+    def set(self, key, value): self.values[key] = value
+    def delete(self, key): self.values.pop(key, None)

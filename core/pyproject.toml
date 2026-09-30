@@ -43,6 +43,7 @@ dependencies = [
     "pypdf>=5.0",
     "trafilatura>=2.0",
     "youtube-transcript-api>=1.2",
+    "keyring>=25.0",
 ]
 
 [project.optional-dependencies]

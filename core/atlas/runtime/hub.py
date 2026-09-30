@@ -17,6 +17,7 @@ Run directly with ``python -m atlas.runtime.hub`` or via ``atlas hub start``.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -128,6 +129,7 @@ async def hub_main() -> None:
     from atlas.scheduler import AtlasScheduler
     from atlas.notifications import NotificationBus
     from atlas.tools.local_execution import LocalExecutionRuntime
+    from atlas.telegram import TelegramService
 
     cfg = get_config()
     memory = MemoryStore()
@@ -165,6 +167,92 @@ async def hub_main() -> None:
     )
     await scheduler.start()
 
+    telegram_active: dict[int, tuple[str, str, asyncio.Event]] = {}
+
+    def hub_owns_lease() -> bool:
+        try:
+            lease = json.loads(scheduler._lease_path.read_text(encoding="utf-8"))
+            return lease.get("token") == scheduler._lease_token
+        except (OSError, ValueError, TypeError):
+            return False
+
+    async def telegram_task(text: str, user_id: int, channel: Any) -> dict[str, str]:
+        config = channel.settings()
+        title = text.strip()[:30] or "手机任务"
+        conversation_id = await memory.create_conversation(title)
+        await memory.update_conversation(
+            conversation_id, workspace=config["default_workspace"] or None,
+            permission_mode="ask_writes", source="telegram",
+        )
+        run_id = uuid.uuid4().hex
+        cancel_event = asyncio.Event()
+        telegram_active[user_id] = (conversation_id, title, cancel_event)
+
+        async def approve(event_id: str, tool_name: str, _arguments: dict[str, Any]) -> str:
+            future = await channel.request_approval(
+                user_id, run_id, event_id, f"需要确认执行 {tool_name}。",
+            )
+            cancel_waiter = asyncio.create_task(cancel_event.wait())
+            try:
+                done, _ = await asyncio.wait(
+                    {future, cancel_waiter}, timeout=600,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                return future.result() if future in done else "deny"
+            finally:
+                cancel_waiter.cancel()
+                await asyncio.gather(cancel_waiter, return_exceptions=True)
+
+        await memory.save_message(
+            conversation_id, "user", text, {"run_id": run_id, "source": "telegram"},
+        )
+        response: list[str] = []
+        failed = None
+        try:
+            async for event in orchestrator.run(
+                text, conversation_id=conversation_id, run_id=run_id,
+                workspace=config["default_workspace"] or None,
+                permission_mode="ask_writes", cancel_event=cancel_event,
+                approval_callback=approve,
+            ):
+                if event.get("type") == "chunk":
+                    response.append(str(event.get("content", "")))
+                elif event.get("type") == "error":
+                    failed = str(event.get("detail", "任务执行失败。"))
+                    break
+            if failed:
+                raise RuntimeError(failed)
+            changed = {file["path"] for item in orchestrator.checkpoints.list_checkpoints(run_id=run_id)
+                       for file in item.get("files", [])}
+            answer = "".join(response)[:1500]
+            return {"conversation_id": conversation_id, "run_id": run_id,
+                    "summary": f"{answer}\n\n改动文件数：{len(changed)}"}
+        finally:
+            telegram_active.pop(user_id, None)
+
+    async def telegram_command(command: str, user_id: int) -> str:
+        name = command.split(maxsplit=1)[0].split("@", 1)[0].casefold()
+        if name == "/status":
+            active = telegram_active.get(user_id)
+            return f"正在运行：{active[1]}" if active else "目前没有运行中的任务。"
+        if name == "/stop":
+            active = telegram_active.get(user_id)
+            if not active:
+                return "目前没有可停止的任务。"
+            active[2].set()
+            return f"已请求停止：{active[1]}"
+        conversations = [item for item in await memory.list_conversations(limit=100)
+                         if item.get("source") == "telegram"]
+        if name == "/list":
+            return "\n".join(item["title"] for item in conversations[:5]) or "还没有手机任务。"
+        return "可用命令：/list、/stop、/status"
+
+    telegram_service = TelegramService(
+        cfg.db_path.parent / "telegram.json", owns_lease=hub_owns_lease,
+        submit_task=telegram_task, command_handler=telegram_command,
+    )
+    telegram_service.start()
+
     durable = DurableBackend(cfg.db_path.parent / "dbos.sqlite")
     durable.set_dispatcher(
         lambda payload: agent_callback(
@@ -189,6 +277,7 @@ async def hub_main() -> None:
         await asyncio.sleep(0.5)
     await serve_task
 
+    await telegram_service.stop()
     await scheduler.stop()
     durable.stop()
     await local.shutdown()

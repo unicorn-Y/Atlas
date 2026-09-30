@@ -115,6 +115,7 @@ from atlas.tools.mcp_client import MCPClient
 from atlas.tools.node_runtime import get_node_runtime_status
 from atlas.tools.web import WebRuntime
 from atlas.tools.web_extract import extract_web
+from atlas.telegram import TelegramService
 from atlas.task_artifacts import TomlRecordStore, WorktreeService, seed_profiles
 
 log = structlog.get_logger()
@@ -140,6 +141,7 @@ browser_use: BrowserUseAdapter | None = None
 agent_backend_host: AgentBackendHost | None = None
 web_runtime: WebRuntime | None = None
 custom_tools: CustomToolStore | None = None
+telegram_service: TelegramService | None = None
 skill_mgr: SkillManager | None = None
 skill_registry: SkillRegistry | None = None
 skill_catalog_provider = SkillsShProvider()
@@ -160,6 +162,78 @@ def _profile_store() -> TomlRecordStore:
     store = _task_store("profiles")
     seed_profiles(store)
     return store
+
+
+def _owns_scheduler_lease() -> bool:
+    if scheduler is None:
+        return False
+    try:
+        lease = json.loads(scheduler._lease_path.read_text(encoding="utf-8"))
+        return lease.get("token") == scheduler._lease_token
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+async def _telegram_submit_task(text: str, user_id: int, service: TelegramService) -> dict[str, str]:
+    if memory is None:
+        raise RuntimeError("Atlas 资料服务尚未就绪。")
+    settings = service.settings()
+    title = (text.strip()[:30] or "手机任务").strip()
+    conversation_id = await memory.create_conversation(title)
+    await memory.update_conversation(
+        conversation_id, workspace=settings["default_workspace"] or None,
+        permission_mode="ask_writes", source="telegram",
+    )
+    run_id = uuid.uuid4().hex
+    await _handle_run_start("telegram", {
+        "run_id": run_id, "conversation_id": conversation_id, "content": text,
+        "workspace": settings["default_workspace"] or None,
+        "permission_mode": "ask_writes", "telegram_user_id": user_id,
+    })
+    run = runtime_mgr.runs.get(run_id)
+    if run is None or run.task is None:
+        raise RuntimeError("任务没有成功启动。")
+    await run.task
+    messages = await memory.get_conversation_messages(conversation_id, limit=1000)
+    answer = next((item["content"] for item in reversed(messages)
+                   if item["role"] == "assistant"), "")
+    summary = str(answer)[:1500]
+    if run.status == "failed":
+        failed = next((env.get("data", {}).get("detail", "") for env in reversed(run.events)
+                       if env.get("event") == "run.failed"), "任务执行失败。")
+        raise RuntimeError(str(failed))
+    if run.status == "cancelled":
+        raise RuntimeError("任务已停止。")
+    changes = _run_change_summary(run_id)
+    return {"conversation_id": conversation_id, "run_id": run_id,
+            "summary": f"{summary}\n\n改动文件数：{changes['files']}"}
+
+
+async def _telegram_command(command: str, user_id: int) -> str:
+    del user_id
+    if memory is None:
+        return "Atlas 资料服务尚未就绪。"
+    name = command.split(maxsplit=1)[0].split("@", 1)[0].casefold()
+    conversations = [item for item in await memory.list_conversations(limit=100)
+                     if item.get("source") == "telegram"]
+    runs = {run.conversation_id: run for run in runtime_mgr.runs.values()
+            if run.status in {"running", "waiting", "paused"}}
+    if name == "/list":
+        if not conversations:
+            return "还没有手机任务。"
+        return "\n".join(
+            f"{item['title']} · {(runs.get(item['id']).status if item['id'] in runs else '已结束')}"
+            for item in conversations[:5]
+        )
+    current = next((item for item in conversations if item["id"] in runs), None)
+    if name == "/status":
+        return f"正在运行：{current['title']}" if current else "目前没有运行中的任务。"
+    if name == "/stop":
+        if current is None:
+            return "目前没有可停止的任务。"
+        runs[current["id"]].cancel_event.set()
+        return f"已请求停止：{current['title']}"
+    return "可用命令：/list、/stop、/status"
 
 
 def _worktrees() -> WorktreeService:
@@ -551,7 +625,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
     global capability_bus, cua_backend, browser_use, agent_backend_host
-    global projects, durable, plugin_runtime, notifications, web_runtime, custom_tools
+    global projects, durable, plugin_runtime, notifications, web_runtime, custom_tools, telegram_service
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -770,6 +844,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # One store: the Agent's automatic snapshots must be the ones restore and diff read.
         checkpoint_store=checkpoints,
         custom_tools=custom_tools,
+        web_extractor=extract_web,
     )
 
     plugin_runtime = PluginRuntime(
@@ -790,9 +865,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         scheduler = AtlasScheduler(agent_callback=_scheduled_goal)
         await scheduler.start()
 
+    telegram_service = TelegramService(
+        cfg.db_path.parent / "telegram.json",
+        owns_lease=_owns_scheduler_lease,
+        submit_task=_telegram_submit_task,
+        command_handler=_telegram_command,
+    )
+    telegram_service.start()
+
     yield  # app is running
 
     # Shutdown
+    if telegram_service:
+        await telegram_service.stop()
     if scheduler:
         await scheduler.stop()
     if mcp_client:
@@ -1609,6 +1694,22 @@ async def put_project_source_instructions(project_id: str, req: dict[str, Any]) 
 
 async def _extract_project_url(url: str) -> dict[str, Any]:
     return await extract_web(url)
+
+
+@app.post("/api/web/extract")
+async def extract_web_endpoint(req: dict[str, Any]) -> dict[str, Any]:
+    url = req.get("url")
+    if not isinstance(url, str) or not url.strip():
+        raise HTTPException(status_code=400, detail="请提供网页或视频地址。")
+    allow_local = req.get("allow_local", False)
+    if not isinstance(allow_local, bool):
+        raise HTTPException(status_code=400, detail="本机页面选项无效。")
+    try:
+        return await extract_web(url, allow_local=allow_local)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="暂时无法读取这个网页。") from exc
 
 
 @app.post("/api/projects/{project_id}/sources", status_code=201)
@@ -3214,6 +3315,42 @@ async def list_integrations(refresh: bool = Query(False)) -> dict[str, Any]:
 async def notification_status() -> dict[str, Any]:
     assert notifications is not None
     return notifications.status()
+
+
+@app.get("/api/channels/telegram")
+async def get_telegram_channel() -> dict[str, Any]:
+    if telegram_service is None:
+        raise HTTPException(status_code=503, detail="Telegram 通道尚未就绪。")
+    return telegram_service.settings()
+
+
+@app.put("/api/channels/telegram")
+async def put_telegram_channel(req: dict[str, Any]) -> dict[str, Any]:
+    if telegram_service is None:
+        raise HTTPException(status_code=503, detail="Telegram 通道尚未就绪。")
+    workspace = req.get("default_workspace")
+    if workspace:
+        try:
+            if workspace.startswith("ssh://"):
+                ssh_workspaces.parse_workspace(workspace)
+            elif not Path(workspace).is_absolute():
+                raise ValueError("工作目录必须是绝对路径或 SSH 地址。")
+        except (AttributeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return telegram_service.update_settings(req)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/channels/telegram/test")
+async def test_telegram_channel() -> dict[str, str]:
+    if telegram_service is None:
+        raise HTTPException(status_code=503, detail="Telegram 通道尚未就绪。")
+    try:
+        return await telegram_service.test_token()
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/hub/status")
@@ -5185,6 +5322,7 @@ class RunState:
         "executor", "sandbox", "extra_roots",
         "trust_roots",
         "project_id",
+        "telegram_user_id",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -5230,6 +5368,7 @@ class RunState:
         self.extra_roots: list[str] = []
         self.trust_roots: list[str] = []
         self.project_id: str | None = None
+        self.telegram_user_id: int | None = None
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""
@@ -5635,6 +5774,8 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     )
     assert model_mgr is not None
     run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+    if isinstance(data.get("telegram_user_id"), int):
+        run.telegram_user_id = data["telegram_user_id"]
     if effective_mode not in {"act", "plan"}:
         run.status = "failed"
         await runtime_mgr.send(conn_id, run.next_envelope("run.failed", {
@@ -6393,6 +6534,26 @@ async def _execute_run(
                 approval_payload["subtask_id"] = tool_args["subtask_id"]
             await emit("approval.required", approval_payload)
             run.status = "waiting"
+            if run.telegram_user_id is not None and telegram_service is not None:
+                approval_future = await telegram_service.request_approval(
+                    run.telegram_user_id, run.run_id, approval_event_id,
+                    f"需要确认执行 {tool_name}。",
+                )
+                cancel_waiter = asyncio.create_task(run.cancel_event.wait())
+                try:
+                    done, _ = await asyncio.wait(
+                        {approval_future, cancel_waiter}, timeout=600,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if approval_future in done:
+                        choice = approval_future.result()
+                    else:
+                        choice = "deny"
+                finally:
+                    cancel_waiter.cancel()
+                    await asyncio.gather(cancel_waiter, return_exceptions=True)
+                run.status = "running"
+                return choice
             # Create a future for this approval
             loop = asyncio.get_running_loop()
             fut: asyncio.Future[str] = loop.create_future()

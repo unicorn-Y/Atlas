@@ -133,6 +133,68 @@ async def test_external_agent_status_endpoint_uses_origin_guard(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_wave5_new_routes_reject_untrusted_web_origins():
+    from atlas.server import app
+
+    cases = [
+        ("PUT", "/api/conversations/conv-1", {}),
+        ("POST", "/api/projects/project-1/sources", {"kind": "note", "text": "x"}),
+        ("GET", "/api/projects/project-1/sources/search?q=x", None),
+        ("POST", "/api/conversations/conv-1/rewind", {"message_id": "message-1"}),
+        ("GET", "/api/conversations/conv-1/rewinds", None),
+        ("GET", "/api/custom-tools", None),
+        ("POST", "/api/custom-tools", {}),
+        ("POST", "/api/web/extract", {"url": "https://example.com"}),
+        ("GET", "/api/channels/telegram", None),
+        ("PUT", "/api/channels/telegram", {"enabled": False}),
+        ("POST", "/api/channels/telegram/test", None),
+    ]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for method, path, body in cases:
+            response = await client.request(
+                method, path, json=body, headers={"Origin": EVIL},
+            )
+            assert response.status_code == 403, (method, path, response.status_code)
+
+
+@pytest.mark.asyncio
+async def test_new_web_extract_route_requires_trusted_origin_or_token(monkeypatch, tmp_path):
+    from atlas import server
+    from atlas.server import app
+    from atlas.telegram import TelegramService
+
+    monkeypatch.setenv("ATLAS_API_TOKEN", "wave5-test-token")
+
+    async def fake_extract(url, **_kwargs):
+        return {"url": url, "title": "本地模拟", "kind": "page", "text": "ok",
+                "length": 2, "truncated": False}
+
+    monkeypatch.setattr(server, "extract_web", fake_extract)
+    credentials = {"atlas.telegram.bot_token": "never-return-this-token"}
+    class Credentials:
+        def get(self, key): return credentials.get(key)
+    monkeypatch.setattr(server, "telegram_service", TelegramService(
+        tmp_path / "telegram.json", credentials=Credentials(),
+    ))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        denied = await client.post("/api/web/extract", json={"url": "https://example.com"},
+                                   headers={"Origin": EVIL})
+        token_access = await client.post(
+            "/api/web/extract", json={"url": "https://example.com"},
+            headers={"Origin": "null", "X-Atlas-Api-Token": "wave5-test-token"},
+        )
+        settings = await client.get("/api/channels/telegram", headers={
+            "Origin": "null", "X-Atlas-Api-Token": "wave5-test-token",
+        })
+    assert denied.status_code == 403
+    assert token_access.status_code == 200
+    assert token_access.json()["text"] == "ok"
+    assert settings.status_code == 200
+    assert "never-return-this-token" not in settings.text
+    assert settings.json()["bot_token_set"] is True
+
+
+@pytest.mark.asyncio
 async def test_previewed_workspace_html_is_sandboxed(tmp_path):
     """Raw HTML from a workspace gets an opaque origin, so its scripts can't call the API."""
     from atlas.server import app
