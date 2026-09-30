@@ -48,6 +48,11 @@ export interface ConversationSummary {
   parent_conversation_id?: string | null;
   permission_mode?: PermissionMode | null;
   fork_message_id?: string | null;
+  /** Extra absolute directories the Agent may touch besides the workspace. */
+  allowed_paths?: string[] | null;
+  /** `atlas` or an external Agent id (codex, claude…). */
+  executor?: string | null;
+  sandbox?: SandboxSettings | null;
   [key: string]: unknown;
 }
 
@@ -55,6 +60,23 @@ export interface ConversationUpdate {
   title?: string;
   pinned?: boolean;
   archived?: boolean;
+  workspace?: string;
+  permission_mode?: PermissionMode;
+  allowed_paths?: string[];
+  executor?: string;
+  /** `null` turns the sandbox off. */
+  sandbox?: SandboxSettings | null;
+}
+
+export interface SandboxSettings { type: 'docker'; image?: string; network?: boolean }
+export interface ExternalAgentInfo { id: string; name: string; available: boolean; version: string | null; detail: string }
+export interface SandboxStatus { docker: { available: boolean; version: string | null; detail: string } }
+export interface WorkspaceVersion {
+  id: string; run_id: string | null; conversation_id: string | null; created_at: string; bytes: number; source: 'checkpoint' | 'git';
+}
+export interface CheckItem { file?: string; line?: number; col?: number; severity: 'error' | 'warning' | 'info'; code?: string; message: string; test?: string }
+export interface CheckResults {
+  kind: string; tool: string; passed: number; failed: number; skipped: number; duration_ms?: number; items: CheckItem[];
 }
 
 export interface ConversationCreateRequest {
@@ -109,6 +131,9 @@ export interface RunStartRequest {
   ephemeral?: boolean;
   /** FULL_ACCESS is the default; stricter modes ask before writes or refuse them. */
   permission_mode?: PermissionMode;
+  allowed_paths?: string[];
+  executor?: string;
+  sandbox?: SandboxSettings | null;
 }
 
 export type PermissionMode = 'full_access' | 'ask_writes' | 'read_only';

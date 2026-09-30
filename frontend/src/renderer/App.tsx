@@ -13,6 +13,7 @@ import SideChat from './components/SideChat';
 import RemoteFolderDialog from './components/RemoteFolderDialog';
 import TimelineNav from './components/TimelineNav';
 import ForkTree from './components/ForkTree';
+import RunSetupMenu from './components/RunSetupMenu';
 import type { PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
@@ -486,11 +487,21 @@ export default function App() {
         </MenuTrigger></Tip>
         <MenuContent side="top">
           <MenuLabel>这个对话的权限</MenuLabel>
-          {(['full_access', 'ask_writes', 'read_only'] as const).map((mode) => <MenuItem key={mode} checked={permission === mode} onSelect={() => store.setPermissionMode(activeConversation.id, mode)}>
+          {(['full_access', 'ask_writes', 'read_only'] as const).map((mode) => <MenuItem key={mode} checked={permission === mode} onSelect={() => {
+            // External Agents only run with full access; a stricter mode hands the work back to Atlas.
+            const executor = activeConversation.executor && activeConversation.executor !== 'atlas' && mode !== 'full_access' ? { executor: 'atlas' } : {};
+            store.setConversationSettings(activeConversation.id, { permission_mode: mode, ...executor });
+            if ('executor' in executor) setToast('外部 Agent 只能在「完全访问」下用，已换回 Atlas');
+          }}>
             <span className="min-w-0"><span className="block">{PERMISSION[mode].label}</span><small className="block text-[11.5px] text-fg-3">{PERMISSION[mode].hint}</small></span>
           </MenuItem>)}
         </MenuContent>
       </Menu>}
+      {activeConversation && <RunSetupMenu conversation={activeConversation} workspace={workspacePath}
+        onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)}
+        onPickFolder={async () => window.atlasDesktop?.selectDirectory
+          ? window.atlasDesktop.selectDirectory(workspacePath || undefined)
+          : window.prompt('允许访问的目录（完整路径）', '')?.trim() || null} />}
       {store.profiles.length > 0 && <Menu>
         <Tip label={`角色：${profileName}`}><MenuTrigger asChild>
           <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.profileId !== 'default' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>

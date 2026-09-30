@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, X } from 'lucide-react';
+import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
-import { buildTimeline, describeTool, duration, tokenCount, type Step } from './timeline';
+import { buildTimeline, describeTool, duration, tokenCount, type Step, type TimelineItem } from './timeline';
 import type { InspectorTab } from '../shell/Inspector';
 
 interface ConversationActivityProps {
@@ -43,6 +43,8 @@ export default function ConversationActivity({ events, store, username, setTab }
       case 'question': return <Question key={item.id} event={item.event} store={store} />;
       case 'plan': return <Plan key={item.id} event={item.event} store={store} />;
       case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
+      case 'group': return <WorkerGroup key={item.id} item={item} />;
+      case 'checks': return <Checks key={item.id} item={item} />;
       case 'cancelled': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
         <Square size={12} />你停止了这次任务
       </div>;
@@ -223,6 +225,57 @@ function SaveRecipe({ runId, store }: { runId: string; store: Store }) {
     <button type="submit" disabled={!name.trim()} className="text-fg-2 hover:text-fg disabled:opacity-40">保存</button>
     <button type="button" onClick={() => setNaming(false)} className="text-fg-3 hover:text-fg">取消</button>
   </form>;
+}
+
+/** Several workers ran side by side; one line each, then the coordinator's summary. */
+function WorkerGroup({ item }: { item: Extract<TimelineItem, { kind: 'group' }> }) {
+  const ok = item.results.filter((result) => result.status === 'completed' || result.status === 'done').length;
+  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface px-4 py-3.5 text-[13px]">
+    <p className="m-0 flex items-center gap-2 font-semibold text-heading"><Users size={15} className="text-brand" />{item.results.length} 个 Worker 并行完成
+      <span className="font-normal text-fg-3">{ok} 个成功{item.results.length - ok ? `，${item.results.length - ok} 个没完成` : ''}</span></p>
+    <ul className="m-0 mt-2 grid list-none gap-1 p-0">
+      {item.results.map((result) => {
+        const good = result.status === 'completed' || result.status === 'done';
+        return <li key={result.index} className="flex items-start gap-2" title={result.summary}>
+          {good ? <Check size={14} className="mt-0.5 shrink-0 text-ok" /> : <X size={14} className="mt-0.5 shrink-0 text-danger" />}
+          <span className="min-w-0 flex-1 text-fg-2">{result.title || `Worker ${result.index + 1}`}</span>
+          {result.changed_files.length > 0 && <span className="shrink-0 text-[12px] text-fg-3" title={result.changed_files.join('\n')}>改了 {result.changed_files.length} 个文件</span>}
+        </li>;
+      })}
+    </ul>
+    {item.summary && <p className="m-0 mt-2.5 whitespace-pre-wrap border-t border-line pt-2.5 leading-[1.7] text-fg-2">{item.summary}</p>}
+  </div>;
+}
+
+const CHECK_KIND: Record<string, string> = { lint: '代码检查', typecheck: '类型检查', test: '测试', all: '全部检查' };
+
+/** Structured lint / type / test results: counts up top, the problems listed with their location. */
+function Checks({ item }: { item: Extract<TimelineItem, { kind: 'checks' }> }) {
+  const [open, setOpen] = useState(item.results.failed > 0);
+  const { results } = item;
+  const failed = results.failed > 0 || results.items.some((entry) => entry.severity === 'error');
+  const shown = open ? results.items.slice(0, 50) : [];
+  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface text-[13px]">
+    <button onClick={() => setOpen((value) => !value)} disabled={!results.items.length} className="flex w-full items-center gap-2 px-4 py-3 text-left">
+      {failed ? <X size={15} className="shrink-0 text-danger" /> : <Check size={15} className="shrink-0 text-ok" />}
+      <b className="font-semibold text-heading">{CHECK_KIND[results.kind] ?? '检查'}</b>
+      <span className="text-fg-3">{results.tool}</span>
+      <span className="ml-auto flex items-center gap-2 tabular-nums text-[12.5px]">
+        <span className="text-ok">通过 {results.passed}</span>
+        {results.failed > 0 && <span className="text-danger">失败 {results.failed}</span>}
+        {results.skipped > 0 && <span className="text-fg-3">跳过 {results.skipped}</span>}
+        {results.items.length > 0 && <ChevronRight size={14} className={cn('text-fg-3 transition-transform', open && 'rotate-90')} />}
+      </span>
+    </button>
+    {shown.length > 0 && <ul className="m-0 grid max-h-[320px] list-none gap-1 overflow-auto border-t border-line px-4 py-2.5 font-mono text-[12px]">
+      {shown.map((entry, index) => <li key={index} className="flex gap-2">
+        <span className={cn('shrink-0', entry.severity === 'error' ? 'text-danger' : entry.severity === 'warning' ? 'text-brand' : 'text-fg-3')}>{entry.severity === 'error' ? '错误' : entry.severity === 'warning' ? '警告' : '提示'}</span>
+        {entry.file && <span className="shrink-0 text-fg-2">{entry.file}{entry.line ? `:${entry.line}` : ''}</span>}
+        <span className="min-w-0 text-fg-3">{entry.test ? `${entry.test}：` : ''}{entry.message}</span>
+      </li>)}
+      {results.items.length > shown.length && <li className="text-fg-3">还有 {results.items.length - shown.length} 条…</li>}
+    </ul>}
+  </div>;
 }
 
 const relativeTo = (root: string, path: string) => {

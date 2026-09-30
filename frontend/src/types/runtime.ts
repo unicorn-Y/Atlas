@@ -8,7 +8,8 @@ export type AgentEventType =
   | 'artifact.updated' | 'run.paused' | 'run.resumed'
   | 'run.plan.updated'
   | 'run.steered' | 'run.usage' | 'rules.loaded' | 'input.required' | 'run.plan.proposed'
-  | 'subtask.started' | 'subtask.progress' | 'subtask.completed'
+  | 'subtask.started' | 'subtask.progress' | 'subtask.output' | 'subtask.completed' | 'subtask.group_completed'
+  | 'check.results'
   | 'rules.trust_required' | 'hook.ran'
   | 'run.completed' | 'run.failed' | 'run.cancelled';
 

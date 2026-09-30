@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { AgentCapabilityInfo, AgentProfile, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentCapabilityInfo, AgentProfile, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -87,6 +87,8 @@ interface AtlasState {
   trustRules: (runId: string, eventId: string, trust: boolean) => void;
   /** Per-conversation permission mode for the next runs; the backend remembers the last one used. */
   setPermissionMode: (conversationId: string, mode: PermissionMode) => void;
+  /** Workspace, permission, executor, sandbox, extra directories: applied now and saved on the conversation. */
+  setConversationSettings: (conversationId: string, patch: Omit<ConversationUpdate, 'title' | 'pinned' | 'archived'>) => void;
   togglePaused: () => void;
   stopTask: () => void;
   stopRun: (runId: string) => void;
@@ -383,7 +385,11 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         set((state) => ({ answers: { ...state.answers, [eventId]: trust ? 'trusted' : 'declined' } }));
       } catch (error) { set({ error: errorText(error, '没能回复') }); }
     },
-    setPermissionMode: (conversationId, mode) => patchConversation(conversationId, { permission_mode: mode }),
+    setPermissionMode: (conversationId, mode) => get().setConversationSettings(conversationId, { permission_mode: mode }),
+    setConversationSettings: (conversationId, patch) => {
+      patchConversation(conversationId, patch);
+      void backend.updateConversation(conversationId, patch).catch((error) => set({ error: errorText(error, '对话设置没能保存') }));
+    },
     approvePlan: (runId, eventId, edits = '') => {
       try {
         backend.approvePlan(runId, eventId, edits.trim());
@@ -501,7 +507,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       } catch (error) { set({ error: errorText(error, '导出失败') }); }
     },
     // The backend remembers the directory once a run uses it; until then it rides along with run.start.
-    setWorkspace: (conversationId, workspace) => patchConversation(conversationId, { workspace }),
+    setWorkspace: (conversationId, workspace) => {
+      if (workspace) get().setConversationSettings(conversationId, { workspace });
+      else patchConversation(conversationId, { workspace });
+    },
 
     editMessage: async (messageId, content) => {
       const conversationId = get().activeConversationId;
@@ -657,7 +666,11 @@ async function startRun(conversationId: string, item: QueuedMessage) {
     ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),
     ...(state.reasoningEffort && supportsEffort ? { reasoning_effort: state.reasoningEffort } : {}),
     ...(worktree && !conversation?.worktree_path ? { worktree } : {}),
-    ...(conversation?.permission_mode && conversation.permission_mode !== 'full_access' ? { permission_mode: conversation.permission_mode } : {}),
+    // Always explicit: the backend falls back to the conversation's saved settings when a field is missing.
+    permission_mode: conversation?.permission_mode ?? 'full_access',
+    executor: conversation?.executor || 'atlas',
+    sandbox: conversation?.sandbox ?? null,
+    allowed_paths: conversation?.allowed_paths ?? [],
     ...(item.refs?.files.length ? { context_files: item.refs.files } : {}),
     ...(item.refs?.conversations.length ? { context_conversations: item.refs.conversations } : {}),
   }, handleEvent, () => get().getRun(run.id)?.status === 'paused')

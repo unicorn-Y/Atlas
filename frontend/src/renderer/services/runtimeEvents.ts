@@ -20,10 +20,22 @@ export function isRuntimeEvent(value: unknown): value is RuntimeEventEnvelope {
     && Number.isInteger(event.sequence) && typeof event.timestamp === 'string' && typeof event.event === 'string';
 }
 
+const DOCUMENT_KIND: Record<string, string> = { document: '生成了 Word 文档', spreadsheet: '生成了 Excel 表格', presentation: '生成了 PPT 演示文稿' };
+
 export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEvent | null {
-  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.completed', 'rules.trust_required', 'hook.ran', 'run.completed', 'run.failed', 'run.cancelled']);
+  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.completed', 'run.failed', 'run.cancelled']);
+  const base = { id: envelope.event_id, runId: envelope.run_id, sequence: envelope.sequence, timestamp: envelope.timestamp };
+  // Office files and other generated documents: shown like any other artifact.
+  if (envelope.event === 'artifact.created') {
+    const data = envelope.data ?? {};
+    const path = String(data.path ?? '');
+    return { ...base, type: 'artifact.updated', data: {
+      ...data, artifact_id: `created:${path || envelope.event_id}`, artifact_type: 'file',
+      name: path.split(/[\\/]/).pop() || '文件', summary: DOCUMENT_KIND[String(data.kind)] ?? '生成了文件',
+    } };
+  }
   if (!known.has(envelope.event)) return null;
-  return { id: envelope.event_id, runId: envelope.run_id, sequence: envelope.sequence, type: envelope.event as AgentEvent['type'], timestamp: envelope.timestamp, data: envelope.data ?? {} };
+  return { ...base, type: envelope.event as AgentEvent['type'], data: envelope.data ?? {} };
 }
 
 export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {

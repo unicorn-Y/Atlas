@@ -77,7 +77,7 @@
 | F005 | 独立桌面入口 | ✅ | Electron | |
 | F006 | Web/CLI 入口 | 🟡 | 有 `cli.py`，无 Web | Hermes 桌面/TUI 共享状态 |
 | F007 | 远程配对/连接 | ❌ | | Codex Remote |
-| F008 | ACP 外部 Agent | 🟡 | `agents/backends`（claude/codex/hermes/pi/zcode），界面无入口 | Zed、OpenHands |
+| F008 | ACP 外部 Agent | 🟡 | 输入框「运行方式」可把对话交给 Codex / Claude Code 等（只列已安装的）；Claude Code 走 ACP 时还卡在认证，见第四波审阅 | Zed、OpenHands |
 | F009 | 统一命令/Agent 输入 | ❌ | | Warp |
 
 ### 02 项目、工作区与执行环境
@@ -91,7 +91,7 @@
 | F014 | 起始分支 | ✅ | 隔离分支菜单里选起始分支 | Codex |
 | F015 | Git worktree | ✅ | 输入框「隔离分支」：会话在独立 git worktree 里改，可压缩合并 / 合并 / 删除 | Cline Kanban、Kilo |
 | F016 | SSH | ✅ | 工作目录菜单 →「另一台电脑上的目录（SSH）」，读 ~/.ssh/config，可测试连接；Windows/Linux 远端都能跑命令和读写文件 | ZCode |
-| F017 | 容器/沙箱 | ❌ | FULL_ACCESS 本机执行 | OpenHands |
+| F017 | 容器/沙箱 | 🟡 | 「运行方式」→ Docker 容器（工作目录挂载、默认不联网）；只用假 docker 测过，还没在真机跑 | OpenHands |
 | F018 | Cloud session | ➖ | | |
 | F019 | Local/Cloud 移交 | ➖ | | |
 | F020 | Profile | ✅ | 输入框「角色」：默认 / 架构师 / 审查员（后端可增删） | Hermes profile |
@@ -252,8 +252,8 @@
 | F125 | 手动终端 | ✅ | 面板「终端」：工作目录里的 PowerShell（xterm.js） | Hermes |
 | F126 | 终端隐藏 | ✅ | 切到其他标签只隐藏，终端不断开 | Hermes |
 | F127 | 终端关闭 | ✅ | 终端「关闭」结束 PowerShell，「打开」重新开 | Hermes |
-| F128 | 诊断/linter 修复 | ❌ | | |
-| F129 | 测试与运行结果 | 🟡 | 只有文字输出 | |
+| F128 | 诊断/linter 修复 | ✅ | `run_checks` 识别 ruff/mypy/eslint/tsc，结果以卡片列出文件和行号 | |
+| F129 | 测试与运行结果 | ✅ | pytest/vitest/jest 结果变成「通过 N · 失败 M」卡片，失败断言可展开 | |
 
 ### 13 浏览器、网页与电脑交互
 
@@ -280,12 +280,12 @@
 | F143 | HTML/应用预览 | ✅ | 文件面板里 HTML / 图片「在浏览器预览」，HTML 被沙箱隔离 | ZCode |
 | F144 | PDF 预览 | ✅ | PDF 在浏览器面板里预览 | ZCode |
 | F145 | Mermaid 预览 | ✅ | 回复里的 mermaid 代码块渲染成图，可切回源码 | ZCode |
-| F146 | 文档/表格/幻灯片产物 | 🟡 | pdf 技能、图像生成；无 docx/xlsx/pptx | Cowork |
+| F146 | 文档/表格/幻灯片产物 | ✅ | Atlas 能生成和读取 Word / Excel / PPT，文件面板直接预览 | Cowork |
 | F147 | 代码与预览切换 | ✅ | 文件面板里 Markdown、图片、HTML、PDF 可在预览和源码间切换 | |
 | F148 | 可视化修改 | ➖ | 网页构建器场景 | |
 | F149 | Preview toolbar | ❌ | | |
 | F150 | 设计系统选择 | ➖ | | |
-| F151 | 产物版本历史 | ❌ | | |
+| F151 | 产物版本历史 | ✅ | 文件面板「历史版本」：Atlas 改动前的快照 + git 提交，可查看、可恢复（恢复前自动再存一份） | |
 | F152 | 发布/部署 | ➖ | | |
 | F153 | 网页/视频一键摘要 | ❌ | | Comet |
 
@@ -299,10 +299,10 @@
 | F157 | 完全访问/YOLO | ✅ | 默认 | |
 | F158 | 自动批准审查 | ⚖️ | | Claude Code Auto |
 | F159 | deny/ask/allow | ✅ | 完全访问 / 改前问我 / 只读 三档，按对话切换 | OpenCode |
-| F160 | 工作目录限制 | 🟡 | 后端支持 `allowed_paths`，界面还没有入口 | OpenCode |
+| F160 | 工作目录限制 | ✅ | 「运行方式」→ 只限工作目录，可再加允许的目录；文件工具受限，要完全隔离用容器 | OpenCode |
 | F161 | 项目信任确认 | ✅ | 目录里第一次遇到 AGENTS.md/CLAUDE.md 时弹卡片问是否信任，信任后记住 | Pi |
 | F162 | 敏感动作确认 | ⚖️ | 「改前问我」模式覆盖；默认完全访问不弹 | |
-| F163 | Sandbox 边界 | ❌ | | |
+| F163 | Sandbox 边界 | 🟡 | 同 F017 | |
 
 ### 16 模型、上下文与记忆
 
@@ -346,8 +346,8 @@
 | F189 | 上下文隔离 | ✅ | 子 Agent 独立上下文，进度单独显示 | |
 | F190 | 工作树隔离 | ✅ | 同 F015 | Cline Kanban |
 | F191 | 协调视图 | ✅ | 同 F044 | Cline Kanban |
-| F192 | Worker/协调者 | ❌ | | Factory Missions |
-| F193 | 并行结果汇总 | ❌ | | |
+| F192 | Worker/协调者 | 🟡 | `delegate_parallel` 最多 8 个 Worker 并行，git 仓库里各用独立 worktree；目前 Worker 必须是已安装的外部 Agent，Atlas 自己当 Worker 在下一波 | Factory Missions |
+| F193 | 并行结果汇总 | 🟡 | 汇总卡片列出每个 Worker 的结果和改动文件，同上依赖外部 Agent | |
 
 ### 19 自动化、跨设备与常驻工作
 
@@ -380,9 +380,9 @@
 
 | 状态 | 数量 |
 | --- | --- |
-| ✅ | 148 |
-| 🟡 | 19 |
-| ❌ | 21 |
+| ✅ | 153 |
+| 🟡 | 20 |
+| ❌ | 15 |
 | ➖ | 18 |
 | ⚖️ | 4 |
 

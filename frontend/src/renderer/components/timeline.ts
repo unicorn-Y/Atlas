@@ -1,3 +1,4 @@
+import type { CheckResults } from '@atlas/backend-adapter';
 import type { AgentEvent } from '../../types/runtime';
 
 /**
@@ -35,6 +36,8 @@ export type TimelineItem =
   | { kind: 'question'; id: string; event: AgentEvent }
   | { kind: 'plan'; id: string; event: AgentEvent }
   | { kind: 'trust'; id: string; event: AgentEvent }
+  | { kind: 'group'; id: string; summary: string; results: Array<{ index: number; title: string; status: string; summary: string; changed_files: string[] }> }
+  | { kind: 'checks'; id: string; results: CheckResults }
   | { kind: 'cancelled'; id: string }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
@@ -43,6 +46,15 @@ export type TimelineItem =
 const TARGET_KEYS = ['path', 'file_path', 'filepath', 'file', 'command', 'cmd', 'query', 'pattern', 'url', 'q', 'target', 'name'];
 
 const VERBS: Array<[RegExp, string]> = [
+  // Exact tool names first: generic patterns below would misread them ("spreadsheet" contains "read").
+  [/^create_document$/, '生成 Word 文档'],
+  [/^create_spreadsheet$/, '生成 Excel 表格'],
+  [/^create_presentation$/, '生成演示文稿'],
+  [/^read_office$/, '读取文档'],
+  [/^run_checks$/, '运行检查'],
+  [/^delegate_parallel$/, '分派并行任务'],
+  [/^delegate_task$/, '分派子任务'],
+  [/^external:/, '外部 Agent'],
   [/screenshot|screen_?shot|capture/, '截取屏幕'],
   [/click|type_text|keyboard|mouse|computer|pywinauto|cua/, '操作电脑'],
   [/list_?dir|ls\b|glob|tree/, '查看目录'],
@@ -109,7 +121,12 @@ export function describeTool(name: string, args: unknown): { verb: string; targe
       return { verb: PROCESS_ACTIONS[action ?? ''] ?? '管理进程', target: str(a.command) ?? str(a.executable) };
     case 'local_git':
       return { verb: GIT_ACTIONS[action ?? ''] ?? 'Git 操作', target: str(a.repo) && shortPath(str(a.repo)!) };
+    case 'run_checks':
+      return { verb: '运行检查', target: ({ lint: '代码检查', typecheck: '类型检查', test: '测试', all: '全部' } as Record<string, string>)[action ?? str(a.kind) ?? ''] ?? str(a.kind) };
+    case 'delegate_parallel':
+      return { verb: '分派并行任务', target: Array.isArray(a.tasks) ? `${a.tasks.length} 个` : undefined };
     default: {
+      if (name.startsWith('external:')) return { verb: '外部 Agent', target: [name.slice(9), pickTarget(args)].filter(Boolean).join(' · ').slice(0, 120) };
       const key = name.toLowerCase();
       const verb = VERBS.find(([pattern]) => pattern.test(key))?.[1];
       const target = pickTarget(args);
@@ -209,14 +226,16 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       }
       case 'subtask.started': {
         const id = String(data.subtask_id ?? event.id);
-        const step: Step = { id: event.id, verb: '子任务', target: String(data.goal ?? '').slice(0, 120), state: 'running', startedAt: event.timestamp, output: '', subtaskId: id,
+        const worker = typeof data.index === 'number' ? `并行 Worker ${data.index + 1}` : '';
+        const step: Step = { id: event.id, verb: worker || '子任务', target: String(data.title || data.goal || '').slice(0, 120), state: 'running', startedAt: event.timestamp, output: '', subtaskId: id,
           input: [data.backend && `执行者：${String(data.backend)}`, data.goal && `目标：${String(data.goal)}`].filter(Boolean).join('\n') };
         byExecution.set(`subtask:${id}`, step);
         closeReply();
         stepsBlock(event.id).steps.push(step);
         break;
       }
-      case 'subtask.progress': {
+      case 'subtask.progress':
+      case 'subtask.output': {
         const step = byExecution.get(`subtask:${String(data.subtask_id ?? '')}`);
         if (step) step.output += `${String(data.text ?? '')}\n`;
         break;
@@ -227,6 +246,24 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         step.state = data.status === 'failed' ? 'failed' : data.status === 'cancelled' ? 'cancelled' : 'done';
         step.endedAt = event.timestamp;
         step.result = text(data.summary);
+        break;
+      }
+      case 'subtask.group_completed': {
+        const results = Array.isArray(data.results) ? data.results as Array<Record<string, unknown>> : [];
+        closeReply(); closeBlocks();
+        items.push({ kind: 'group', id: event.id, summary: String(data.summary ?? ''), results: results.map((item, index) => ({
+          index: typeof item.index === 'number' ? item.index : index, title: String(item.title ?? ''), status: String(item.status ?? ''),
+          summary: String(item.summary ?? ''), changed_files: Array.isArray(item.changed_files) ? item.changed_files.map(String) : [],
+        })) });
+        break;
+      }
+      case 'check.results': {
+        closeReply(); closeBlocks();
+        items.push({ kind: 'checks', id: event.id, results: {
+          kind: String(data.kind ?? ''), tool: String(data.tool ?? ''), passed: Number(data.passed ?? 0), failed: Number(data.failed ?? 0),
+          skipped: Number(data.skipped ?? 0), duration_ms: typeof data.duration_ms === 'number' ? data.duration_ms : undefined,
+          items: Array.isArray(data.items) ? data.items as CheckResults['items'] : [],
+        } });
         break;
       }
       case 'rules.trust_required':

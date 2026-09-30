@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ExternalAgentInfo, Fact, SandboxStatus, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -215,6 +215,25 @@ export class BackendAdapter {
   async getCheckLog(root: string, checkName: string): Promise<string> {
     const result = await this.request<{ log?: string; text?: string } | string>(`/api/git/pr/checks/${encodeURIComponent(checkName)}/log?${new URLSearchParams({ root })}`);
     return typeof result === 'string' ? result : result.log ?? result.text ?? '';
+  }
+  async getExternalAgents(): Promise<ExternalAgentInfo[]> {
+    return this.live ? (await this.request<{ agents: ExternalAgentInfo[] }>('/api/agents/external')).agents : [];
+  }
+  async getSandboxStatus(): Promise<SandboxStatus> {
+    return this.live ? this.request('/api/sandbox/status') : { docker: { available: false, version: null, detail: '' } };
+  }
+  /** Static HTML rendering of a .docx / .xlsx / .pptx, served sandboxed with no scripts. */
+  officePreviewUrl(root: string, path: string): string {
+    return `${this.baseUrl}/api/workspace/preview?${new URLSearchParams({ root, path })}`;
+  }
+  async getFileHistory(root: string, path: string): Promise<WorkspaceVersion[]> {
+    return (await this.request<{ versions: WorkspaceVersion[] }>(`/api/workspace/history?${new URLSearchParams({ root, path })}`)).versions;
+  }
+  async getVersionContent(root: string, path: string, version: string): Promise<WorkspaceFile> {
+    return this.request(`/api/workspace/history/content?${new URLSearchParams({ root, path, version })}`);
+  }
+  async restoreVersion(root: string, path: string, version: string): Promise<{ restored: boolean; checkpoint_id: string }> {
+    return this.request('/api/workspace/history/restore', { method: 'POST', body: JSON.stringify({ root, path, version }) });
   }
   async getHooks(): Promise<HookConfig[]> { return this.live ? (await this.request<{ hooks: HookConfig[] }>('/api/hooks')).hooks : []; }
   async saveHook(hook: HookConfig, isNew: boolean): Promise<HookConfig> {
