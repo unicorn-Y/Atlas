@@ -11,6 +11,8 @@ import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from
 import RecipesDialog from './components/RecipesDialog';
 import SideChat from './components/SideChat';
 import RemoteFolderDialog from './components/RemoteFolderDialog';
+import TimelineNav from './components/TimelineNav';
+import ForkTree from './components/ForkTree';
 import type { PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
@@ -625,7 +627,6 @@ export default function App() {
   // Rewriting history mid-run would race the run's own writes.
   const canRewrite = store.connected && !(activeRun && !runDone) && !loadingMessages;
 
-  const parentConversation = activeConversation?.parent_conversation_id ? store.conversations.find((item) => item.id === activeConversation.parent_conversation_id) : undefined;
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
   const connection = !store.connected
     ? <span className="inline-flex items-center gap-1.5 text-[12px] text-danger"><i className="size-1.5 rounded-full bg-danger" />后端没有连接</span>
@@ -649,8 +650,7 @@ export default function App() {
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
           <div className="flex min-w-0 items-center gap-3">
             {pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
-            {view === 'chat' && parentConversation && <button onClick={() => openConversation(parentConversation)} title={`分叉自「${parentConversation.title}」`}
-              className="no-drag inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] text-fg-3 hover:bg-hover hover:text-fg"><GitBranch size={12} />分叉自 {parentConversation.title.slice(0, 16)}</button>}
+            {view === 'chat' && <ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} />}
             {connection}
           </div>
           <span className="flex-1" />
@@ -679,7 +679,8 @@ export default function App() {
             modes={{ value: homeMode, options: HOME_MODES, onChange: (id) => { if (id === 'voice') startVoice(); else setHomeMode(id); } }} />} />}
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="relative flex min-w-0 flex-1 flex-col">
+            <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId} />
             <div ref={threadRef} aria-label="任务活动" className="min-h-0 flex-1 overflow-auto px-8 pt-2"
               onScroll={(event) => { if (restoredRef.current === store.activeConversationId) scrollPositions.current.set(store.activeConversationId, event.currentTarget.scrollTop); }}>
               <div className="mx-auto w-[min(720px,100%)] pb-8">

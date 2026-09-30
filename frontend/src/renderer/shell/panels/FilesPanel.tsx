@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, ExternalLink, File, Folder, FolderOpen, LoaderCircle, RefreshCw } from 'lucide-react';
+import { ChevronRight, Code2, Eye, ExternalLink, File, Folder, FolderOpen, LoaderCircle, RefreshCw } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { WorkspaceEntry, WorkspaceFile } from '@atlas/backend-adapter';
 import { backend } from '../../store/useAtlasStore';
 import { Button } from '../../ui/Button';
@@ -12,6 +14,10 @@ const GIT: Record<string, { label: string; tone: string }> = {
 
 /** Browse the conversation's working directory and read files without leaving Atlas. */
 const PREVIEWABLE = /\.(html?|pdf|svg|png|jpe?g|gif|webp)$/i;
+const IMAGE = /\.(png|jpe?g|gif|webp|svg)$/i;
+const MARKDOWN = /\.(md|markdown)$/i;
+const FRAME = /\.(html?|pdf)$/i;
+const canPreview = (path: string) => MARKDOWN.test(path) || IMAGE.test(path) || FRAME.test(path);
 
 export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, onPreview }: {
   workspace?: string | null; onChooseWorkspace: () => void; refreshKey: string; onPreview: (url: string) => void;
@@ -22,6 +28,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   const [selected, setSelected] = useState('');
   const [file, setFile] = useState<WorkspaceFile | null>(null);
   const [error, setError] = useState('');
+  const [mode, setMode] = useState<'preview' | 'code'>('preview');
 
   const load = useCallback(async (path: string) => {
     if (!workspace) return;
@@ -42,6 +49,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     expanded.forEach((path) => void load(path));
   }, [workspace, refreshKey, load]);
   useEffect(() => { setExpanded([]); setSelected(''); setFile(null); }, [workspace]);
+  useEffect(() => setMode('preview'), [selected]);
 
   useEffect(() => {
     if (!workspace || !selected) { setFile(null); return; }
@@ -91,6 +99,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     {file && <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl card-surface">
       <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
         <File size={13} className="shrink-0 text-fg-3" /><code className="min-w-0 flex-1 truncate font-mono">{file.path}</code>
+        {canPreview(file.path) && <div className="flex shrink-0 rounded-md bg-sunken p-0.5" role="group" aria-label="显示方式">
+          {(['preview', 'code'] as const).map((value) => <button key={value} onClick={() => setMode(value)} aria-pressed={mode === value} title={value === 'preview' ? '预览' : '源码'}
+            className={cn('grid h-5 w-6 place-items-center rounded', mode === value ? 'bg-overlay text-fg shadow-sm' : 'text-fg-3 hover:text-fg')}>{value === 'preview' ? <Eye size={12} /> : <Code2 size={12} />}</button>)}
+        </div>}
         {PREVIEWABLE.test(file.path) && <button onClick={() => onPreview(backend.rawFileUrl(workspace, file.path))} className="shrink-0 text-fg-2 hover:text-fg">在浏览器预览</button>}
         {window.atlasDesktop?.openPath && !workspace.startsWith('ssh://') && <button title="用默认程序打开" aria-label="用默认程序打开" onClick={() => {
           const full = `${workspace.replace(/[\\/]+$/, '')}\\${file.path.replace(/\//g, '\\')}`;
@@ -98,7 +110,14 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         }} className="grid size-6 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><ExternalLink size={13} /></button>}
         <button onClick={() => setSelected('')} className="shrink-0 text-fg-3 hover:text-fg">关闭</button>
       </div>
-      {file.binary ? <p className="m-0 p-4 text-[13px] text-fg-3">这是二进制文件，不能直接预览。</p>
+      {canPreview(file.path) && mode === 'preview'
+        ? MARKDOWN.test(file.path)
+          ? <div className="prose-atlas min-h-0 flex-1 overflow-auto px-4 py-3 text-[13.5px]"><ReactMarkdown remarkPlugins={[remarkGfm]}>{file.content}</ReactMarkdown></div>
+          : IMAGE.test(file.path)
+            ? <div className="grid min-h-0 flex-1 place-items-center overflow-auto bg-code p-3"><img src={backend.rawFileUrl(workspace, file.path)} alt={file.path} className="max-h-full max-w-full object-contain" /></div>
+            // The raw endpoint already serves scriptable files sandboxed; the frame gets no same-origin access either way.
+            : <iframe title={`预览 ${file.path}`} src={backend.rawFileUrl(workspace, file.path)} sandbox="allow-scripts" className="min-h-0 w-full flex-1 border-0 bg-white" />
+        : file.binary ? <p className="m-0 p-4 text-[13px] text-fg-3">这是二进制文件，不能直接预览。</p>
         : <pre className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono text-[11.5px] leading-[1.6] text-fg-2">{file.content}{file.truncated && '\n\n…文件太大，只显示了前 512 KB。'}</pre>}
     </div>}
   </div>;

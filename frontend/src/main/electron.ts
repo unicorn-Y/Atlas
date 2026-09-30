@@ -41,6 +41,10 @@ function attachBackendToken() {
   const port = process.env.ATLAS_PORT ?? '8765';
   const urls = ['127.0.0.1', 'localhost'].flatMap((host) => [`http://${host}:${port}/*`, `ws://${host}:${port}/*`]);
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls }, (details, callback) => {
+    // Only Atlas's own page gets the token. Frames inside it (file previews) show workspace content,
+    // which is untrusted: anything they load or fetch goes out without it.
+    const fromSubframe = details.resourceType === 'subFrame' || Boolean(details.frame?.parent);
+    if (fromSubframe) { callback({ requestHeaders: details.requestHeaders }); return; }
     callback({ requestHeaders: { ...details.requestHeaders, 'X-Atlas-Api-Token': process.env.ATLAS_API_TOKEN ?? '' } });
   });
 }
