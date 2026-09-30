@@ -190,23 +190,28 @@ async def extract_web(url: str, *, allow_local: bool = False,
                 await asyncio.wait_for(
                     asyncio.to_thread(_validate_url, current, allow_local), timeout=3.0,
                 )
-                response = await client.get(current, headers={"User-Agent": "Atlas/1.0"})
-                if response.status_code not in {301, 302, 303, 307, 308}:
-                    break
+                # Streamed: client.get() would buffer the whole body before the size cap applies.
+                response = await client.send(
+                    client.build_request("GET", current, headers={"User-Agent": "Atlas/1.0"}), stream=True,
+                )
                 location = response.headers.get("location")
-                if not location:
+                if response.status_code not in {301, 302, 303, 307, 308} or not location:
                     break
+                await response.aclose()
                 current = urljoin(current, location)
             else:
                 raise ValueError("网页跳转次数过多。")
             if response is None:
                 raise ValueError("网页没有返回内容。")
-            response.raise_for_status()
             body = bytearray()
-            async for chunk in response.aiter_bytes():
-                body.extend(chunk)
-                if len(body) > MAX_RESPONSE_BYTES:
-                    raise ValueError("网页内容超过 10 MB，已停止读取。")
+            try:
+                response.raise_for_status()
+                async for chunk in response.aiter_bytes():
+                    body.extend(chunk)
+                    if len(body) > MAX_RESPONSE_BYTES:
+                        raise ValueError("网页内容超过 10 MB，已停止读取。")
+            finally:
+                await response.aclose()
             html = bytes(body).decode(response.encoding or "utf-8", errors="replace")
             title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
             title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else current
@@ -214,6 +219,9 @@ async def extract_web(url: str, *, allow_local: bool = False,
                 import trafilatura
                 text = trafilatura.extract(html, include_comments=False, include_tables=True) or ""
             except ImportError:
+                text = ""
+            # trafilatura finds nothing on short or unusual pages; fall back to plain text extraction.
+            if not text.strip():
                 parser = _TextParser()
                 parser.feed(html)
                 text = re.sub(r"[ \t]+", " ", "".join(parser.parts))

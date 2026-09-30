@@ -457,9 +457,8 @@ class AgentOrchestrator:
             messages=[{
                 "role": "user",
                 "content": (
-                    "Summarize these parallel worker results for the coordinator in a concise "
-                    "actionable paragraph. Mention failures and patch file names. Do not apply "
-                    "or merge patches.\n" + json.dumps([{
+                    "用中文把下面这些并行 Worker 的结果汇总成一段简洁、可操作的话给协调者："
+                    "说明哪些失败了、各自改了哪些文件。不要应用或合并补丁。\n" + json.dumps([{
                         key: item.get(key) for key in (
                             "index", "title", "status", "summary", "changed_files",
                         )
@@ -817,7 +816,7 @@ class AgentOrchestrator:
             tools = [item for item in tools if item["function"]["name"] in allowed]
         if denied_tools:
             tools = [item for item in tools if item["function"]["name"] not in denied_tools]
-        if self._projects is None or not getattr(runtime, "project_id", None):
+        if getattr(self, "_projects", None) is None or not getattr(runtime, "project_id", None):
             tools = [item for item in tools
                      if item["function"]["name"] != "project_sources_search"]
         if runtime.steer_queue is not None:

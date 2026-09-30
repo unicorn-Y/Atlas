@@ -5897,11 +5897,18 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             workspace = project_row["workspace_path"] if project_row else None
         except Exception:
             workspace = None
+    # Project instructions are extra context: if the project store can't answer, run without them
+    # rather than failing the run.
+    project = None
     if projects is not None:
-        project = await projects.find_by_conversation(conv_id)
+        try:
+            project = await projects.find_by_conversation(conv_id)
+            source_data = await projects.get_sources(project.project_id) if project is not None else None
+        except Exception as exc:
+            log.warning("run.project_context_unavailable", error=str(exc))
+            project, source_data = None, None
         if project is not None:
             run.project_id = project.project_id
-            source_data = await projects.get_sources(project.project_id)
             instructions = (source_data or {}).get("instructions", "")
             if instructions:
                 active_skill_instructions = [*active_skill_instructions, {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import json
 import secrets
 import time
@@ -14,6 +15,8 @@ import httpx
 
 NOTIFY_EVENTS = {"completed", "failed", "approval"}
 TOKEN_KEY = "atlas.telegram.bot_token"
+# The Bot API puts the token in the request URL; keep httpx from logging request lines.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class KeyringCredentialStore:
