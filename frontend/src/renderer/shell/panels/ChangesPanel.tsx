@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ChevronRight, FileDiff, History, LoaderCircle, RotateCcw } from 'lucide-react';
+import { ChevronRight, FileDiff, History, LoaderCircle, MessageSquarePlus, RotateCcw, Send, X } from 'lucide-react';
 import type { RunChangeFile } from '@atlas/backend-adapter';
 import { backend } from '../../store/useAtlasStore';
 import { api, relativeTime } from '../../services/api';
 import { shortPath } from '../../components/timeline';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
+
+/** A note on one line of the diff, sent to Atlas together with the others. */
+interface LineComment { id: string; path: string; line: number | null; side: 'new' | 'old'; code: string; text: string }
 
 interface Checkpoint { id: string; workspace: string; created_at: string; run_id?: string | null; files: Array<{ path: string; directory?: boolean }> }
 
@@ -16,9 +19,18 @@ const STATUS: Record<RunChangeFile['status'], { label: string; tone: string }> =
 };
 
 /** What this run changed on disk, and the snapshots that can put it back. */
-export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, onToast }: {
-  runId?: string; runStatus?: string; apiBaseUrl: string; connected: boolean; onToast: (text: string) => void;
+export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, onToast, onAsk }: {
+  runId?: string; runStatus?: string; apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onAsk?: (text: string) => void;
 }) {
+  const [comments, setComments] = useState<LineComment[]>([]);
+  useEffect(() => setComments([]), [runId]);
+  const send = () => {
+    if (!onAsk || !comments.length) return;
+    const body = comments.map((comment, index) => `${index + 1}. \`${comment.path}${comment.line ? `:${comment.line}` : ''}\`${comment.side === 'old' ? '（删掉的那行）' : ''}\n   代码：\`${comment.code.trim().slice(0, 200)}\`\n   意见：${comment.text}`).join('\n');
+    onAsk(`我看了这次的改动，有 ${comments.length} 处要调整：\n\n${body}\n\n按这些意见修改，改完说明每一处怎么处理的。`);
+    setComments([]);
+    onToast('评论已发给 Atlas');
+  };
   const [files, setFiles] = useState<RunChangeFile[] | null>(null);
   const [open, setOpen] = useState<string[]>([]);
   const [error, setError] = useState('');
@@ -52,22 +64,82 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
               <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg" title={file.path}>{shortPath(file.path)}</code>
               <span className="shrink-0 text-[11.5px] tabular-nums"><span className="text-ok">+{file.additions}</span> <span className="text-danger">−{file.deletions}</span></span>
             </button>
-            {expanded && <DiffView diff={file.diff} truncated={file.truncated} />}
+            {expanded && <DiffView diff={file.diff} truncated={file.truncated} path={file.path} comments={onAsk ? comments.filter((comment) => comment.path === file.path) : undefined}
+              onAdd={(comment) => setComments((current) => [...current, { ...comment, id: `${Date.now()}-${current.length}` }])}
+              onRemove={(id) => setComments((current) => current.filter((comment) => comment.id !== id))} />}
           </div>;
         })}</div>
         : <Empty title={runId ? '这次没有改文件' : '还没有开始'} body={runId ? 'Atlas 这次只读了东西、运行了命令，或者直接回答了。' : '发出一个任务后，改过的文件会列在这里。'} />}
+      {comments.length > 0 && <div className="sticky bottom-0 mt-2 flex items-center gap-2 rounded-xl bg-brand-soft px-3 py-2 text-[12.5px] text-fg">
+        <MessageSquarePlus size={14} className="shrink-0 text-brand" /><span className="flex-1">{comments.length} 条评论</span>
+        <button onClick={() => setComments([])} className="text-fg-3 hover:text-fg">清空</button>
+        <button onClick={send} className="primary-fill inline-flex h-7 items-center gap-1 rounded-lg px-2.5"><Send size={12} />发给 Atlas 修改</button>
+      </div>}
     </section>
     <Checkpoints apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} runId={runId} refreshKey={`${runId}:${runStatus}`} />
   </div>;
 }
 
-function DiffView({ diff, truncated }: { diff: string; truncated?: boolean }) {
-  const lines = diff.split('\n').filter((line) => !line.startsWith('---') && !line.startsWith('+++'));
-  return <pre className="m-0 max-h-80 overflow-auto bg-code py-2 font-mono text-[11.5px] leading-[1.6] shadow-[inset_0_1px_0_var(--line)]">
-    {lines.map((line, index) => <div key={index} className={cn('px-3 whitespace-pre',
-      line.startsWith('+') ? 'bg-ok-soft text-fg' : line.startsWith('-') ? 'bg-danger-soft text-fg' : line.startsWith('@@') ? 'text-fg-3' : 'text-fg-2')}>{line || ' '}</div>)}
+type DiffLine = { text: string; kind: 'add' | 'del' | 'ctx' | 'hunk'; oldNo: number | null; newNo: number | null };
+
+/** Unified diff lines with their old/new line numbers, read from the @@ hunk headers. */
+function numberLines(diff: string): DiffLine[] {
+  let oldNo = 0, newNo = 0;
+  const raw = diff.replace(/\n$/, '').split('\n');
+  return raw.filter((line) => !line.startsWith('---') && !line.startsWith('+++')).map((text) => {
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(text);
+    if (hunk) { oldNo = Number(hunk[1]); newNo = Number(hunk[2]); return { text, kind: 'hunk', oldNo: null, newNo: null }; }
+    // "\ No newline at end of file" describes the line above; it is not a line of the file.
+    if (text.startsWith('\\')) return { text, kind: 'hunk', oldNo: null, newNo: null };
+    if (text.startsWith('+')) return { text, kind: 'add', oldNo: null, newNo: newNo++ };
+    if (text.startsWith('-')) return { text, kind: 'del', oldNo: oldNo++, newNo: null };
+    return { text, kind: 'ctx', oldNo: oldNo++, newNo: newNo++ };
+  });
+}
+
+function DiffView({ diff, truncated, path, comments, onAdd, onRemove }: {
+  diff: string; truncated?: boolean; path: string; comments?: LineComment[];
+  onAdd: (comment: Omit<LineComment, 'id'>) => void; onRemove: (id: string) => void;
+}) {
+  const lines = numberLines(diff);
+  const [draft, setDraft] = useState<{ index: number; text: string } | null>(null);
+  const commentable = Boolean(comments);
+  const save = () => {
+    if (!draft?.text.trim()) { setDraft(null); return; }
+    const line = lines[draft.index];
+    onAdd({ path, line: line.newNo ?? line.oldNo, side: line.kind === 'del' ? 'old' : 'new', code: line.text.slice(1), text: draft.text.trim() });
+    setDraft(null);
+  };
+  return <div className="max-h-96 overflow-auto bg-code py-2 font-mono text-[11.5px] leading-[1.6] shadow-[inset_0_1px_0_var(--line)]">
+    {lines.map((line, index) => {
+      const number = line.newNo ?? line.oldNo;
+      const notes = comments?.filter((comment) => comment.line === number && comment.side === (line.kind === 'del' ? 'old' : 'new') && line.kind !== 'hunk') ?? [];
+      return <div key={index}>
+        <div className={cn('group flex', line.kind === 'add' ? 'bg-ok-soft text-fg' : line.kind === 'del' ? 'bg-danger-soft text-fg' : line.kind === 'hunk' ? 'text-fg-3' : 'text-fg-2')}>
+          <span className="w-9 shrink-0 pr-1.5 text-right text-fg-3 select-none tabular-nums">{line.kind === 'hunk' ? '' : number}</span>
+          {commentable && line.kind !== 'hunk'
+            ? <button aria-label={`评论第 ${number} 行`} onClick={() => setDraft({ index, text: '' })}
+              className="grid w-4 shrink-0 place-items-center text-brand opacity-0 group-hover:opacity-100 focus:opacity-100"><MessageSquarePlus size={11} /></button>
+            : <span className="w-4 shrink-0" />}
+          <span className="min-w-0 flex-1 pr-3 whitespace-pre">{line.text || ' '}</span>
+        </div>
+        {notes.map((note) => <div key={note.id} className="mx-3 my-1 flex items-start gap-2 rounded-lg bg-overlay px-2.5 py-1.5 font-sans text-[12px] text-fg shadow-[inset_0_0_0_1px_var(--line)]">
+          <span className="min-w-0 flex-1 whitespace-pre-wrap">{note.text}</span>
+          <button aria-label="删除这条评论" onClick={() => onRemove(note.id)} className="shrink-0 text-fg-3 hover:text-fg"><X size={12} /></button>
+        </div>)}
+        {draft?.index === index && <div className="mx-3 my-1 grid gap-1.5 font-sans">
+          <textarea autoFocus value={draft.text} onChange={(event) => setDraft({ index, text: event.target.value })} rows={2} placeholder="这一行要怎么改？" aria-label="评论内容"
+            onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); save(); } if (event.key === 'Escape') setDraft(null); }}
+            className="rounded-lg bg-overlay px-2.5 py-1.5 text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--brand)]" />
+          <div className="flex justify-end gap-2 text-[12px]">
+            <button onClick={() => setDraft(null)} className="text-fg-3 hover:text-fg">取消</button>
+            <button onClick={save} disabled={!draft.text.trim()} className="primary-fill h-6 rounded-md px-2 disabled:opacity-50">添加评论</button>
+          </div>
+        </div>}
+      </div>;
+    })}
     {truncated && <div className="px-3 pt-1 text-fg-3">改动太大，只显示了前一部分。</div>}
-  </pre>;
+  </div>;
 }
 
 /** Shadow snapshots Atlas takes before changing files; restoring one puts those files back. */
