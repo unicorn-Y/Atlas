@@ -14,6 +14,7 @@ from atlas.agent.checkpoints import ShadowGitCheckpointStore
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.external_agents import external_agent_status, normalize_external_event
 from atlas.runtime.external_process import ExternalProcessAdapter
+from atlas.agent.enrichment import DelegationService
 from atlas.ssh import SSHWorkspaceManager
 from atlas.agent import _ssh_paths_allowed
 from atlas.task_artifacts import DEFAULT_PROFILES, TomlRecordStore, seed_profiles
@@ -254,6 +255,132 @@ while True:
         await task
     assert host.sessions == {}
     assert "reply.delta" in emitted
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_limits_workers_continues_failure_and_summarizes_once() -> None:
+    class Hooks:
+        async def emit(self, *_args, **_kwargs):
+            return None
+
+    class Service(DelegationService):
+        def __init__(self):
+            super().__init__(object(), Hooks())
+            self.active = 0
+            self.max_active = 0
+
+        async def delegate_task(self, goal, context=None, tool_profile=None, **kwargs):
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            await asyncio.sleep(0.02)
+            self.active -= 1
+            if goal == "fail":
+                raise RuntimeError("worker failed")
+            return {"status": "completed", "result": goal, "changed_files": [goal + ".py"]}
+
+    service = Service()
+    summary_calls: list[list[dict]] = []
+
+    async def summarize(results):
+        summary_calls.append(results)
+        return "combined summary"
+
+    result = await service.delegate_parallel(
+        [
+            {"title": "A", "goal": "alpha"},
+            {"title": "B", "goal": "fail"},
+            {"title": "C", "goal": "gamma"},
+        ],
+        max_concurrency=2,
+        summarize=summarize,
+    )
+    assert service.max_active == 2
+    assert [item["status"] for item in result["results"]] == [
+        "completed", "failed", "completed",
+    ]
+    assert result["results"][0]["changed_files"] == ["alpha.py"]
+    assert result["summary"] == "combined summary"
+    assert len(summary_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_returns_isolated_worktree_patches(tmp_path: Path) -> None:
+    class Hooks:
+        async def emit(self, *_args, **_kwargs):
+            return None
+
+    class Service(DelegationService):
+        async def delegate_task(
+            self, goal, context=None, tool_profile=None, *, cwd=None,
+            on_started=None, on_completed=None, event_metadata=None, **_kwargs,
+        ):
+            await on_started(goal, goal, "fake", event_metadata)
+            Path(cwd, f"{goal}.txt").write_text(goal, encoding="utf-8")
+            await on_completed(goal, "completed", goal, 1, event_metadata)
+            return {"status": "completed", "result": goal}
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "seed.txt").write_text("seed", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "seed.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "--quiet", "-m", "seed"], check=True)
+
+    service = Service(object(), Hooks())
+    result = await service.delegate_parallel([
+        {"title": "one", "goal": "one"},
+        {"title": "two", "goal": "two"},
+    ], cwd=str(repo), summarize=lambda _results: "patches ready")
+
+    assert result["summary"] == "patches ready"
+    assert all(item["status"] == "completed" for item in result["results"])
+    assert all(f"{item['title']}.txt" in item["changed_files"] for item in result["results"])
+    assert all(item["title"] in item["patch"] for item in result["results"])
+    assert not (repo / "one.txt").exists()
+    assert not (repo / "two.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_cancels_active_workers() -> None:
+    class Hooks:
+        async def emit(self, *_args, **_kwargs):
+            return None
+
+    child_events: list[asyncio.Event] = []
+
+    class Service(DelegationService):
+        async def delegate_task(
+            self, goal, context=None, tool_profile=None, *, on_started=None,
+            event_metadata=None, **_kwargs,
+        ):
+            child = await on_started(goal, goal, "fake", event_metadata)
+            child_events.append(child)
+            await child.wait()
+            raise asyncio.CancelledError
+
+    service = Service(object(), Hooks())
+    parent = asyncio.Event()
+
+    async def on_started(*_args):
+        child = asyncio.Event()
+        child_events.append(child)
+        return child
+
+    task = asyncio.create_task(service.delegate_parallel(
+        [{"title": "one", "goal": "work"}], cancel_event=parent,
+        summarize=lambda _results: "cancelled",
+        on_started=on_started,
+    ))
+    for _ in range(50):
+        if child_events:
+            break
+        await asyncio.sleep(0.01)
+    parent.set()
+    result = await task
+    assert child_events and child_events[0].is_set()
+    assert result["results"][0]["status"] == "cancelled"
 
 
 @pytest.mark.asyncio

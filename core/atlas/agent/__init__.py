@@ -129,6 +129,7 @@ class AgentRunContext:
     subtask_started: Callable[..., Any] | None = None
     subtask_progress: Callable[..., Any] | None = None
     subtask_completed: Callable[..., Any] | None = None
+    subtask_group_completed: Callable[..., Any] | None = None
 
 
 _EVENT_STREAM_DONE = object()
@@ -340,6 +341,29 @@ class AgentOrchestrator:
         if self._delegation is None:
             raise RuntimeError("No AgentBackendHost is configured for delegation")
         return await self._delegation.delegate_task(goal, context, tool_profile)
+
+    async def _summarize_parallel_results(self, results: list[dict[str, Any]]) -> str:
+        models = self._model_mgr.list_models()
+        selected = next(
+            (item for item in models if item["id"] == self._model_mgr.current_model), {},
+        )
+        response = await acompletion(
+            model=str(selected.get("litellm_model", self._model_mgr.current_model)),
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Summarize these parallel worker results for the coordinator in a concise "
+                    "actionable paragraph. Mention failures and patch file names. Do not apply "
+                    "or merge patches.\n" + json.dumps([{
+                        key: item.get(key) for key in (
+                            "index", "title", "status", "summary", "changed_files",
+                        )
+                    } for item in results], ensure_ascii=False)
+                ),
+            }],
+            max_tokens=600,
+        )
+        return str(response.choices[0].message.content or "").strip()
 
     async def execute_code(
         self, code: str, *, run_id: str | None = None,
@@ -558,6 +582,26 @@ class AgentOrchestrator:
                         "goal": {"type": "string"}, "context": {"type": "string"},
                         "tool_profile": {"type": "array", "items": {"type": "string"}},
                     }, "required": ["goal"], "additionalProperties": False},
+                },
+            })
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "delegate_parallel",
+                    "description": (
+                        "Delegate up to eight independent tasks to parallel workers. Each worker "
+                        "returns findings and, when isolated, a patch for coordinator review."
+                    ),
+                    "parameters": {"type": "object", "properties": {
+                        "tasks": {"type": "array", "minItems": 1, "maxItems": 8,
+                                  "items": {"type": "object", "properties": {
+                                      "title": {"type": "string"},
+                                      "goal": {"type": "string"},
+                                      "context": {"type": ["string", "null"]},
+                                  }, "required": ["title", "goal"],
+                                      "additionalProperties": False}},
+                        "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 4},
+                    }, "required": ["tasks"], "additionalProperties": False},
                 },
             })
         tools.append({
@@ -1051,11 +1095,29 @@ class AgentOrchestrator:
                         on_started=getattr(ctx, "subtask_started", None),
                         on_progress=getattr(ctx, "subtask_progress", None),
                         on_completed=getattr(ctx, "subtask_completed", None),
+                        cwd=workspace,
                     )}
                     result["content"] = [{"type": "text", "text": json.dumps(
                         result["data"], ensure_ascii=False,
                     )}]
                     result["is_error"] = False
+                elif fn_name == "delegate_parallel":
+                    if self._delegation is None:
+                        raise RuntimeError("No AgentBackendHost is configured for delegation")
+                    data = await self._delegation.delegate_parallel(
+                        list(fn_args["tasks"]),
+                        max_concurrency=int(fn_args.get("max_concurrency", 3)),
+                        cwd=workspace,
+                        cancel_event=ctx.cancel_event,
+                        summarize=self._summarize_parallel_results,
+                        on_started=getattr(ctx, "subtask_started", None),
+                        on_progress=getattr(ctx, "subtask_progress", None),
+                        on_completed=getattr(ctx, "subtask_completed", None),
+                        on_group_completed=getattr(ctx, "subtask_group_completed", None),
+                    )
+                    result = {"data": data,
+                              "content": [{"type": "text", "text": data["summary"]}],
+                              "is_error": False}
                 elif fn_name.startswith("local_") and self._local_execution:
                     if ctx.mode == "plan":
                         action = str(fn_args.get("action", ""))
@@ -1297,6 +1359,7 @@ class AgentOrchestrator:
         subtask_started: Callable[..., Any] | None = None,
         subtask_progress: Callable[..., Any] | None = None,
         subtask_completed: Callable[..., Any] | None = None,
+        subtask_group_completed: Callable[..., Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -1337,6 +1400,7 @@ class AgentOrchestrator:
             reasoning_effort=reasoning_effort,
             subtask_started=subtask_started, subtask_progress=subtask_progress,
             subtask_completed=subtask_completed,
+            subtask_group_completed=subtask_group_completed,
         )
 
         # Resolve model

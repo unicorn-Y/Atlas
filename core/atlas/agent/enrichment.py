@@ -8,6 +8,7 @@ import json
 import os
 import secrets
 import sys
+import subprocess
 from collections import defaultdict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -17,6 +18,21 @@ from typing import Any
 import structlog
 
 log = structlog.get_logger()
+
+
+def _workspace_fingerprint(root: str) -> dict[str, str]:
+    base = Path(root).resolve()
+    excluded = {".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache"}
+    result: dict[str, str] = {}
+    for path in base.rglob("*"):
+        if not path.is_file() or any(part in excluded for part in path.relative_to(base).parts):
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        result[path.relative_to(base).as_posix()] = f"{stat.st_size}:{stat.st_mtime_ns}"
+    return result
 
 HOOK_POINTS = (
     "before_model", "after_model", "before_tool", "after_tool", "before_compact",
@@ -335,6 +351,7 @@ class DelegationService:
         on_started: Callable[..., Any] | None = None,
         on_progress: Callable[..., Any] | None = None,
         on_completed: Callable[..., Any] | None = None,
+        event_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not goal.strip():
             raise ValueError("goal must be non-empty")
@@ -357,7 +374,10 @@ class DelegationService:
         )
         try:
             if on_started:
-                cancel = on_started(subtask_id, goal, name)
+                cancel = (
+                    on_started(subtask_id, goal, name, event_metadata)
+                    if event_metadata is not None else on_started(subtask_id, goal, name)
+                )
                 if hasattr(cancel, "__await__"):
                     cancel = await cancel
                 if isinstance(cancel, asyncio.Event):
@@ -389,7 +409,10 @@ class DelegationService:
                     now = asyncio.get_running_loop().time()
                     if text and on_progress and now - last_progress >= 0.5:
                         last_progress = now
-                        progress = on_progress(subtask_id, text)
+                        progress = (
+                            on_progress(subtask_id, text, event_metadata)
+                            if event_metadata is not None else on_progress(subtask_id, text)
+                        )
                         if hasattr(progress, "__await__"):
                             await progress
                     next_event = asyncio.create_task(iterator.__anext__())
@@ -424,10 +447,254 @@ class DelegationService:
                 session_id=session.id if session is not None else None,
             )
             if on_completed:
-                completed = on_completed(subtask_id, status, completion_summary,
-                                         int((asyncio.get_running_loop().time() - started_at) * 1000))
+                duration_ms = int((asyncio.get_running_loop().time() - started_at) * 1000)
+                completed = (
+                    on_completed(
+                        subtask_id, status, completion_summary, duration_ms, event_metadata,
+                    )
+                    if event_metadata is not None else on_completed(
+                        subtask_id, status, completion_summary, duration_ms,
+                    )
+                )
                 if hasattr(completed, "__await__"):
                     await completed
+
+    async def delegate_parallel(
+        self,
+        tasks: list[dict[str, Any]],
+        *,
+        max_concurrency: int = 3,
+        cwd: str | None = None,
+        cancel_event: asyncio.Event | None = None,
+        summarize: Callable[[list[dict[str, Any]]], Any] | None = None,
+        on_started: Callable[..., Any] | None = None,
+        on_progress: Callable[..., Any] | None = None,
+        on_completed: Callable[..., Any] | None = None,
+        on_group_completed: Callable[..., Any] | None = None,
+    ) -> dict[str, Any]:
+        if not isinstance(tasks, list) or not 1 <= len(tasks) <= 8:
+            raise ValueError("delegate_parallel accepts one to eight tasks")
+        if not isinstance(max_concurrency, int) or not 1 <= max_concurrency <= 4:
+            raise ValueError("max_concurrency must be between 1 and 4")
+        if any(not isinstance(item, dict) or not str(item.get("goal", "")).strip()
+               or not str(item.get("title", "")).strip() for item in tasks):
+            raise ValueError("each parallel task requires a title and goal")
+
+        group_id = secrets.token_hex(8)
+        semaphore = asyncio.Semaphore(max_concurrency)
+        worktree_lock = asyncio.Lock()
+        worker_cancels: dict[int, asyncio.Event] = {}
+        is_git = False
+        git_root: Path | None = None
+        base_commit: str | None = None
+        if cwd:
+            probe = await asyncio.to_thread(
+                subprocess.run,
+                ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, check=False,
+            )
+            if probe.returncode == 0:
+                git_root = Path(probe.stdout.strip()).resolve()
+                is_git = True
+                head = await asyncio.to_thread(
+                    subprocess.run,
+                    ["git", "-C", str(git_root), "rev-parse", "HEAD"],
+                    capture_output=True, text=True, check=False,
+                )
+                if head.returncode == 0:
+                    base_commit = head.stdout.strip()
+
+        async def call(callback: Callable[..., Any] | None, *args: Any) -> Any:
+            if callback is None:
+                return None
+            value = callback(*args)
+            return await value if hasattr(value, "__await__") else value
+
+        async def run_one(index: int, item: dict[str, Any]) -> dict[str, Any]:
+            title = str(item["title"])
+            goal = str(item["goal"])
+            metadata = {"group_id": group_id, "index": index, "title": title}
+            async with semaphore:
+                async def setup_failed(summary: str) -> dict[str, Any]:
+                    subtask_id = f"{group_id}-{index}"
+                    backend = "hermes" if "hermes" in getattr(self.host, "backends", {}) else "unknown"
+                    await call(on_started, subtask_id, goal, backend, metadata)
+                    await call(
+                        on_completed, subtask_id, "failed", summary, 0, metadata,
+                    )
+                    return {
+                        "index": index, "title": title, "status": "failed",
+                        "summary": summary, "changed_files": [], "patch": "",
+                    }
+
+                if cancel_event and cancel_event.is_set():
+                    return {
+                        "index": index, "title": title, "status": "cancelled",
+                        "summary": "Worker cancelled before start.", "changed_files": [],
+                        "patch": "",
+                    }
+                worker_cwd = cwd
+                worktree: Path | None = None
+                shared_before: dict[str, str] | None = None
+                if is_git and git_root is not None and cwd:
+                    worktree = git_root.parent / ".atlas-worktrees" / git_root.name / "parallel" / f"{group_id}-{index}"
+                    try:
+                        relative_cwd = Path(cwd).resolve().relative_to(git_root)
+                    except ValueError:
+                        return await setup_failed(
+                            "Worker directory is outside the Git repository.",
+                        )
+                    worktree.parent.mkdir(parents=True, exist_ok=True)
+                    async with worktree_lock:
+                        add = await asyncio.to_thread(
+                            subprocess.run,
+                            ["git", "-C", str(git_root), "worktree", "add", "--detach",
+                             str(worktree), base_commit or "HEAD"],
+                            capture_output=True, text=True, check=False,
+                        )
+                    if add.returncode:
+                        return await setup_failed(
+                            add.stderr.strip() or "Could not create worker worktree.",
+                        )
+                    worker_cwd = str(worktree / relative_cwd)
+                elif cwd:
+                    shared_before = await asyncio.to_thread(_workspace_fingerprint, cwd)
+
+                async def started(subtask_id: str, child_goal: str, backend: str, _meta: Any) -> Any:
+                    child_cancel = await call(on_started, subtask_id, child_goal, backend, metadata)
+                    if isinstance(child_cancel, asyncio.Event):
+                        worker_cancels[index] = child_cancel
+                        if cancel_event and cancel_event.is_set():
+                            child_cancel.set()
+                    return child_cancel
+
+                async def progress(subtask_id: str, text: str, _meta: Any) -> Any:
+                    return await call(on_progress, subtask_id, text, metadata)
+
+                async def completed(
+                    subtask_id: str, status: str, summary: str, duration_ms: int, _meta: Any,
+                ) -> Any:
+                    return await call(
+                        on_completed, subtask_id, status, summary, duration_ms, metadata,
+                    )
+
+                worker_context = str(item.get("context") or "")
+                if not is_git:
+                    worker_context += (
+                        "\nShared non-git workspace: only edit files explicitly assigned in "
+                        "this task's context; if ownership is unclear, return findings without edits."
+                    )
+                elif worktree is not None:
+                    worker_context += (
+                        "\nThis worker has an isolated git worktree. Do not merge or commit "
+                        "your changes; return your patch for coordinator review."
+                    )
+                try:
+                    result = await self.delegate_task(
+                        goal, worker_context or None, backend=None, cwd=worker_cwd,
+                        on_started=started, on_progress=progress, on_completed=completed,
+                        event_metadata=metadata,
+                    )
+                    status = str(result.get("status", "completed"))
+                    summary = str(result.get("result", ""))[:1000]
+                except asyncio.CancelledError:
+                    status, summary, result = "cancelled", "Worker cancelled.", {}
+                except Exception as exc:
+                    status, summary, result = "failed", str(exc)[:1000], {}
+
+                changed_files: list[str] = []
+                patch_text = ""
+                if worktree is not None:
+                    try:
+                        await asyncio.to_thread(
+                            subprocess.run,
+                            ["git", "-C", str(worktree), "add", "-N", "--all"],
+                            capture_output=True, text=True, check=False,
+                        )
+                        status_result = await asyncio.to_thread(
+                            subprocess.run,
+                            ["git", "-C", str(worktree), "status", "--porcelain"],
+                            capture_output=True, text=True, check=False,
+                        )
+                        changed_files = [
+                            line[3:].strip().replace("\\", "/")
+                            for line in status_result.stdout.splitlines() if len(line) > 3
+                        ]
+                        committed = await asyncio.to_thread(
+                            subprocess.run,
+                            ["git", "-C", str(worktree), "diff", "--name-only",
+                             base_commit or "HEAD"],
+                            capture_output=True, text=True, check=False,
+                        )
+                        changed_files = sorted(set(changed_files) | {
+                            line.strip().replace("\\", "/")
+                            for line in committed.stdout.splitlines() if line.strip()
+                        })
+                        diff = await asyncio.to_thread(
+                            subprocess.run,
+                            ["git", "-C", str(worktree), "diff", "--binary",
+                             base_commit or "HEAD"],
+                            capture_output=True, text=True, check=False,
+                        )
+                        patch_text = diff.stdout
+                    finally:
+                        async with worktree_lock:
+                            await asyncio.to_thread(
+                                subprocess.run,
+                                ["git", "-C", str(git_root), "worktree", "remove",
+                                 "--force", str(worktree)],
+                                capture_output=True, text=True, check=False,
+                            )
+                else:
+                    if shared_before is not None and cwd:
+                        shared_after = await asyncio.to_thread(_workspace_fingerprint, cwd)
+                        changed_files = sorted(
+                            path for path in shared_before.keys() | shared_after.keys()
+                            if shared_before.get(path) != shared_after.get(path)
+                        )
+                    else:
+                        changed_files = list(result.get("changed_files", []))
+                return {
+                    "index": index, "title": title, "status": status,
+                    "summary": summary, "changed_files": changed_files, "patch": patch_text,
+                }
+
+        worker_tasks = [
+            asyncio.create_task(run_one(index, item))
+            for index, item in enumerate(tasks)
+        ]
+        aggregate = asyncio.gather(*worker_tasks)
+        cancel_waiter = asyncio.create_task(cancel_event.wait()) if cancel_event else None
+        try:
+            if cancel_waiter:
+                done, _ = await asyncio.wait(
+                    {asyncio.ensure_future(aggregate), cancel_waiter},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if cancel_waiter in done and cancel_event and cancel_event.is_set():
+                    for child_cancel in worker_cancels.values():
+                        child_cancel.set()
+                results = await aggregate
+            else:
+                results = await aggregate
+        finally:
+            if cancel_waiter:
+                cancel_waiter.cancel()
+                await asyncio.gather(cancel_waiter, return_exceptions=True)
+
+        if summarize:
+            summary = await call(summarize, results)
+        else:
+            summary = "; ".join(
+                f"{item['title']}: {item['summary']}" for item in results
+            )
+        payload = {
+            "group_id": group_id,
+            "results": results,
+            "summary": str(summary),
+        }
+        await call(on_group_completed, payload)
+        return payload
 
 
 class MemoryReflectionBridge:

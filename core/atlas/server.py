@@ -5710,20 +5710,29 @@ async def _execute_run(
 
         async def subtask_started(
             subtask_id: str, goal: str, backend: str,
+            group_data: dict[str, Any] | None = None,
         ) -> asyncio.Event:
             cancel_event = asyncio.Event()
-            run.subtasks[subtask_id] = {"status": "running", "cancel_event": cancel_event}
+            run.subtasks[subtask_id] = {
+                "status": "running", "cancel_event": cancel_event, **(group_data or {}),
+            }
             await emit("subtask.started", {
                 "subtask_id": subtask_id, "goal": goal, "backend": backend,
-                "parent_run_id": run.run_id,
+                "parent_run_id": run.run_id, **(group_data or {}),
             })
             return cancel_event
 
-        async def subtask_progress(subtask_id: str, text: str) -> None:
-            await emit("subtask.progress", {"subtask_id": subtask_id, "text": text})
+        async def subtask_progress(
+            subtask_id: str, text: str, group_data: dict[str, Any] | None = None,
+        ) -> None:
+            event = "subtask.output" if group_data else "subtask.progress"
+            await emit(event, {
+                "subtask_id": subtask_id, "text": text, **(group_data or {}),
+            })
 
         async def subtask_completed(
             subtask_id: str, status: str, summary: str, duration_ms: int,
+            group_data: dict[str, Any] | None = None,
         ) -> None:
             entry = run.subtasks.get(subtask_id)
             if entry:
@@ -5731,7 +5740,11 @@ async def _execute_run(
             await emit("subtask.completed", {
                 "subtask_id": subtask_id, "status": status,
                 "summary": summary, "duration_ms": duration_ms,
+                **(group_data or {}),
             })
+
+        async def subtask_group_completed(payload: dict[str, Any]) -> None:
+            await emit("subtask.group_completed", payload)
 
         async def user_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
             return await _hook_store().execute(event_name, {
@@ -5790,6 +5803,7 @@ async def _execute_run(
             subtask_started=subtask_started,
             subtask_progress=subtask_progress,
             subtask_completed=subtask_completed,
+            subtask_group_completed=subtask_group_completed,
             force_plan=(mode == "plan"),
         ):
             if await check_pause_cancel():
