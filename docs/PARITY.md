@@ -90,12 +90,12 @@
 | F013 | 工作区分组 | ✅ | 项目 ↔ 会话 | |
 | F014 | 起始分支 | ✅ | 隔离分支菜单里选起始分支 | Codex |
 | F015 | Git worktree | ✅ | 输入框「隔离分支」：会话在独立 git worktree 里改，可压缩合并 / 合并 / 删除 | Cline Kanban、Kilo |
-| F016 | SSH | ❌ | | ZCode |
+| F016 | SSH | ✅ | 工作目录菜单 →「另一台电脑上的目录（SSH）」，读 ~/.ssh/config，可测试连接；Windows/Linux 远端都能跑命令和读写文件 | ZCode |
 | F017 | 容器/沙箱 | ❌ | FULL_ACCESS 本机执行 | OpenHands |
 | F018 | Cloud session | ➖ | | |
 | F019 | Local/Cloud 移交 | ➖ | | |
 | F020 | Profile | ✅ | 输入框「角色」：默认 / 架构师 / 审查员（后端可增删） | Hermes profile |
-| F021 | 执行环境标记 | ❌ | 目前只有本机，做了 F016/F017 再补 | |
+| F021 | 执行环境标记 | ✅ | 输入框目录显示 `主机名:目录`，远程时换服务器图标；终端、打开文件等本机功能自动隐藏 | |
 
 ### 03 会话与任务导航
 
@@ -190,7 +190,7 @@
 | F083 | Goal 编辑/替换 | ✅ | 目标可改、可暂停 / 恢复 | ZCode |
 | F084 | 迭代摘要 | ✅ | 目标详情显示当前计划和推进记录 | ZCode |
 | F085 | Missions | ➖ | | |
-| F086 | 后台长期运行 | 🟡 | Hub 任务 + DBOS durable | |
+| F086 | 后台长期运行 | ✅ | 自动化页「后台常驻」开关（/api/hub），关掉窗口定时任务和目标照常跑 | |
 
 ### 09 分叉、辅助聊天与恢复
 
@@ -239,8 +239,8 @@
 | F117 | Accept/Reject | ⚖️ | 与 FULL_ACCESS 冲突，可做成事后撤销代替 | |
 | F118 | Agent 自检/Review | ✅ | 改了文件的任务完成后「让审查员检查」 | |
 | F119 | Git commit | ✅ | Agent 用 git | |
-| F120 | 创建/跟踪 PR | 🟡 | github-pr-workflow 技能 | |
-| F121 | CI 自动修复 | ❌ | | |
+| F120 | 创建/跟踪 PR | ✅ | 右栏「上下文」显示当前分支的 PR 和检查状态，可直接推送并创建（需 gh 登录） | |
+| F121 | CI 自动修复 | ✅ | 失败的检查旁「让 Atlas 修」：拉日志末尾交给 Atlas | |
 
 ### 12 终端、进程与诊断
 
@@ -293,15 +293,15 @@
 
 | 编号 | 功能 | 状态 | Atlas 现状 / 说明 | 参考 |
 | --- | --- | --- | --- | --- |
-| F154 | 工具前批准 | ⚖️ | 审批卡片已有，但按决定不做逐工具弹窗 | |
-| F155 | 只读模式 | 🟡 | 配置里有 `deny`，界面不能切换 | OpenCode |
+| F154 | 工具前批准 | ⚖️ | 默认仍不逐工具弹窗；想要时把对话切到「改前问我」 | |
+| F155 | 只读模式 | ✅ | 输入框权限菜单 →「只读」，按对话生效 | OpenCode |
 | F156 | 自动接受文件修改 | ➖ | FULL_ACCESS 已涵盖 | |
 | F157 | 完全访问/YOLO | ✅ | 默认 | |
 | F158 | 自动批准审查 | ⚖️ | | Claude Code Auto |
-| F159 | deny/ask/allow | 🟡 | 只有 full_access / deny 两档 | OpenCode |
-| F160 | 工作目录限制 | ❌ | | OpenCode |
-| F161 | 项目信任确认 | ❌ | 做 F173 规则文件时一起做 | Pi |
-| F162 | 敏感动作确认 | ⚖️ | | |
+| F159 | deny/ask/allow | ✅ | 完全访问 / 改前问我 / 只读 三档，按对话切换 | OpenCode |
+| F160 | 工作目录限制 | 🟡 | 后端支持 `allowed_paths`，界面还没有入口 | OpenCode |
+| F161 | 项目信任确认 | ✅ | 目录里第一次遇到 AGENTS.md/CLAUDE.md 时弹卡片问是否信任，信任后记住 | Pi |
+| F162 | 敏感动作确认 | ⚖️ | 「改前问我」模式覆盖；默认完全访问不弹 | |
 | F163 | Sandbox 边界 | ❌ | | |
 
 ### 16 模型、上下文与记忆
@@ -327,7 +327,7 @@
 | F175 | Skills | ✅ | 注册、发现、目录联邦、生命周期、信任、回滚；已超过标杆 | |
 | F176 | MCP servers | ✅ | 增删、重启 | |
 | F177 | Plugins | 🟡 | 只支持本地安装 | Claude Code 插件市场 |
-| F178 | Hooks | 🟡 | 内部 `HookBus`，用户不能配置 | Kiro、Gemini CLI |
+| F178 | Hooks | ✅ | 设置 → Hooks：任务开始/完成/失败、用工具前后运行自己的命令，工具前退出码 2 可拦下；可试跑 | Kiro、Gemini CLI |
 | F179 | 自定义工具 | 🟡 | 走 MCP/插件，无轻量脚本工具 | Pi |
 | F180 | Agent 配置 | ✅ | 设置 → 角色：新建、编辑指令 / 模型 / 技能 / 工具 / 模式 | Roo Modes |
 | F181 | 扩展包 | 🟡 | skill bundles | Pi Packages |
@@ -354,9 +354,9 @@
 | 编号 | 功能 | 状态 | Atlas 现状 / 说明 | 参考 |
 | --- | --- | --- | --- | --- |
 | F194 | 一次性/周期调度 | ✅ | 自动化页（Hub 任务）；另有 `/api/schedules` 未接前端 | Hermes Cron |
-| F195 | Cron 管理 | 🟡 | 两套调度（Hub / scheduler）并存，建议合并 | Hermes |
-| F196 | 自动化触发 | 🟡 | scheduler 有 TriggerType，界面只有时间触发 | |
-| F197 | 关闭前台仍继续 | 🟡 | 后端独立进程 + DBOS，但随 Electron 退出 | OpenClaw |
+| F195 | Cron 管理 | ✅ | 两套调度已合并到 /api/schedules；自动化页可暂停/恢复、看最近运行 | Hermes |
+| F196 | 自动化触发 | ✅ | 除定时外，可在任务完成/失败、文件变化（目录 + glob）时触发 | |
+| F197 | 关闭前台仍继续 | ✅ | 同 F086，后台常驻 Hub 独立于窗口 | OpenClaw |
 | F198 | 手机控制电脑任务 | ❌ | | Codex Remote |
 | F199 | 远程布置任务 | ❌ | | Cowork Dispatch |
 | F200 | 消息平台渠道 | 🟡 | telegram-integration 技能 | OpenClaw、Hermes |

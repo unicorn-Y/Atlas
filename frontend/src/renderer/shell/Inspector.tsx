@@ -12,6 +12,7 @@ import ChangesPanel from './panels/ChangesPanel';
 import FilesPanel from './panels/FilesPanel';
 import TerminalPanel from './panels/TerminalPanel';
 import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
+import PullRequestSection from './panels/PullRequestSection';
 
 export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'terminal' | 'browser' | 'context';
 
@@ -19,7 +20,7 @@ const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
 const WIDE: InspectorTab[] = ['changes', 'files', 'terminal', 'browser'];
 
-export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged }: {
+export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged, onAsk }: {
   tab: InspectorTab;
   onTab: (tab: InspectorTab) => void;
   onClose: () => void;
@@ -46,6 +47,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
   conversationId: string;
   worktree: { path: string; branch: string; base: string } | null;
   onWorktreeChanged: () => void;
+  onAsk: (text: string) => void;
 }) {
   const [selected, setSelected] = useState('');
   const [raw, setRaw] = useState(false);
@@ -100,7 +102,9 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
       {terminalOpened && <div className={cn('h-full', tab !== 'terminal' && 'hidden')}>
         {workspace || !connected ? connected
-          ? <TerminalPanel cwd={workspace!} active={tab === 'terminal'} command={terminalCommand} onSendToAtlas={onSendToAtlas} />
+          ? workspace!.startsWith('ssh://')
+            ? <Empty title="远程目录暂时不能开终端" body="终端面板只能打开这台电脑上的 PowerShell。远程目录里的命令可以直接让 Atlas 去运行。" />
+            : <TerminalPanel cwd={workspace!} active={tab === 'terminal'} command={terminalCommand} onSendToAtlas={onSendToAtlas} />
           : <Empty title="后端没有连接" body="连上 Atlas 后端后才能打开终端。" />
           : <Empty title="先选工作目录" body="终端会在这个会话的工作目录里打开。" icon={<FolderOpen size={22} />}
             action={<button onClick={onChooseWorkspace} className="primary-fill inline-flex h-8 items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-medium"><FolderOpen size={15} />选择文件夹</button>} />}
@@ -112,15 +116,16 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
       {tab === 'context' && <ContextTab conversationTitle={conversationTitle} modelName={modelName} run={run} tools={tools} skills={skills} activeSkills={activeSkills}
         capabilities={capabilities} workspace={workspace} onChooseWorkspace={onChooseWorkspace} connected={connected}
-        conversationId={conversationId} worktree={worktree} onWorktreeChanged={onWorktreeChanged} onToast={onToast} />}
+        conversationId={conversationId} worktree={worktree} onWorktreeChanged={onWorktreeChanged} onToast={onToast} onPreview={onPreview} onAsk={onAsk} />}
     </div>
   </aside>;
 }
 
-function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSkills, capabilities, workspace, onChooseWorkspace, connected, conversationId, worktree, onWorktreeChanged, onToast }: {
+function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSkills, capabilities, workspace, onChooseWorkspace, connected, conversationId, worktree, onWorktreeChanged, onToast, onPreview, onAsk }: {
   conversationTitle?: string; modelName: string; run?: AgentRun; tools: ToolListResponse['tools']; skills: SkillInfo[]; activeSkills: string[];
   capabilities: AgentCapabilityInfo[]; workspace?: string | null; onChooseWorkspace: () => void; connected: boolean;
   conversationId: string; worktree: { path: string; branch: string; base: string } | null; onWorktreeChanged: () => void; onToast: (text: string) => void;
+  onPreview: (url: string) => void; onAsk: (text: string) => void;
 }) {
   const [rules, setRules] = useState<Array<{ path: string; bytes: number }> | null>(null);
   useEffect(() => {
@@ -148,6 +153,8 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
         {rules.length ? <>会读取的规则文件：{rules.map((file) => shortPath(file.path)).join('、')}</> : '这个目录里没有 AGENTS.md、CLAUDE.md 或 .atlas/rules.md。'}
       </p>}
     </section>
+    {connected && (worktree?.path ?? workspace) && !String(worktree?.path ?? workspace).startsWith('ssh://') && <PullRequestSection root={String(worktree?.path ?? workspace)}
+      refreshKey={`${run?.id}:${run?.status}`} onOpenUrl={onPreview} onAsk={onAsk} />}
     {worktree && <WorktreeSection conversationId={conversationId} worktree={worktree} onChanged={onWorktreeChanged} onToast={onToast} refreshKey={`${run?.id}:${run?.status}`} />}
     <section>
       <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">这次任务用到的技能</h3>

@@ -21,7 +21,7 @@ export function isRuntimeEvent(value: unknown): value is RuntimeEventEnvelope {
 }
 
 export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEvent | null {
-  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.completed', 'run.completed', 'run.failed', 'run.cancelled']);
+  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.completed', 'rules.trust_required', 'hook.ran', 'run.completed', 'run.failed', 'run.cancelled']);
   if (!known.has(envelope.event)) return null;
   return { id: envelope.event_id, runId: envelope.run_id, sequence: envelope.sequence, type: envelope.event as AgentEvent['type'], timestamp: envelope.timestamp, data: envelope.data ?? {} };
 }
@@ -36,7 +36,7 @@ export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {
   if (event.type === 'run.paused') status = 'paused';
   if (event.type === 'run.resumed') status = 'running';
   if (event.type === 'run.cancelled') status = 'cancelled';
-  if (event.type === 'approval.required' || event.type === 'input.required' || event.type === 'run.plan.proposed') status = 'waiting';
+  if (event.type === 'approval.required' || event.type === 'input.required' || event.type === 'run.plan.proposed' || event.type === 'rules.trust_required') status = 'waiting';
   // The answer to a question or plan arrives as ordinary progress, not as its own event.
   if ((event.type === 'message.delta' || event.type === 'tool.started') && status === 'waiting') status = 'running';
   if (event.type === 'run.completed') { status = 'completed'; phase = 'final'; }

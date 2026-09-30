@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, ProcessInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, Fact, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -199,6 +199,32 @@ export class BackendAdapter {
   async setGoalPaused(id: string, paused: boolean): Promise<unknown> {
     return this.request(`/api/goals/${encodeURIComponent(id)}/${paused ? 'pause' : 'resume'}`, { method: 'POST' });
   }
+  async getSshHosts(): Promise<Array<{ alias: string; hostname?: string; user?: string }>> {
+    return this.live ? (await this.request<{ hosts: Array<{ alias: string; hostname?: string; user?: string }> }>('/api/ssh/hosts')).hosts : [];
+  }
+  async testSsh(host: string): Promise<{ ok: boolean; os: string | null; detail: string }> {
+    return this.request('/api/ssh/test', { method: 'POST', body: JSON.stringify({ host }) });
+  }
+  async getPullRequest(root: string): Promise<PullRequestInfo | null> {
+    return (await this.request<{ pr: PullRequestInfo | null }>(`/api/git/pr?${new URLSearchParams({ root })}`)).pr;
+  }
+  async createPullRequest(root: string, title: string, body: string, draft = false): Promise<PullRequestInfo> {
+    const result = await this.request<{ pr?: PullRequestInfo } & Partial<PullRequestInfo>>('/api/git/pr', { method: 'POST', body: JSON.stringify({ root, title, body, draft }) });
+    return (result.pr ?? result) as PullRequestInfo;
+  }
+  async getCheckLog(root: string, checkName: string): Promise<string> {
+    const result = await this.request<{ log?: string; text?: string } | string>(`/api/git/pr/checks/${encodeURIComponent(checkName)}/log?${new URLSearchParams({ root })}`);
+    return typeof result === 'string' ? result : result.log ?? result.text ?? '';
+  }
+  async getHooks(): Promise<HookConfig[]> { return this.live ? (await this.request<{ hooks: HookConfig[] }>('/api/hooks')).hooks : []; }
+  async saveHook(hook: HookConfig, isNew: boolean): Promise<HookConfig> {
+    return isNew ? this.request('/api/hooks', { method: 'POST', body: JSON.stringify(hook) })
+      : this.request(`/api/hooks/${encodeURIComponent(hook.id)}`, { method: 'PUT', body: JSON.stringify(hook) });
+  }
+  async deleteHook(id: string): Promise<void> { await this.request(`/api/hooks/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+  async testHook(id: string): Promise<{ exit_code?: number; output?: string; duration_ms?: number }> {
+    return this.request(`/api/hooks/${encodeURIComponent(id)}/test`, { method: 'POST' });
+  }
   /** WebSocket URL for an interactive PowerShell in `cwd`. */
   terminalUrl(cwd: string): string {
     return `${this.baseUrl.replace(/^http/, 'ws')}/ws/terminal?${new URLSearchParams({ cwd })}`;
@@ -387,6 +413,11 @@ export class BackendAdapter {
 
   respondToInput(runId: string, eventId: string, text: string): void {
     this.sendOnRun(runId, { type: 'input.response', event_id: eventId, text });
+  }
+
+  /** Answer rules.trust_required: whether this directory's AGENTS.md etc. may be loaded. */
+  trustRules(runId: string, eventId: string, trust: boolean): void {
+    this.sendOnRun(runId, { type: 'rules.trust', run_id: runId, event_id: eventId, trust });
   }
 
   approvePlan(runId: string, eventId: string, edits = ''): void {

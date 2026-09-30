@@ -34,6 +34,7 @@ export type TimelineItem =
   | { kind: 'approval'; id: string; event: AgentEvent }
   | { kind: 'question'; id: string; event: AgentEvent }
   | { kind: 'plan'; id: string; event: AgentEvent }
+  | { kind: 'trust'; id: string; event: AgentEvent }
   | { kind: 'cancelled'; id: string }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
@@ -142,7 +143,12 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
     switch (event.type) {
       case 'run.started':
         runStartedAt = event.timestamp;
-        if (typeof data.content === 'string' && data.content) items.push({ kind: 'user', id: event.id, content: data.content });
+        if (typeof data.content === 'string' && data.content) {
+          // The trust question is asked before the run starts; once the request shows up, put it back under it.
+          const early = items.length && items[items.length - 1].kind === 'trust' ? items.pop() : undefined;
+          items.push({ kind: 'user', id: event.id, content: data.content });
+          if (early) items.push(early);
+        }
         closeBlocks(); reply = null; spoken = '';
         // The backend reports loaded rules just before the run starts; show them after the request.
         if (earlyRules) { stepsBlock(earlyRules.id).steps.push(earlyRules); earlyRules = null; }
@@ -221,6 +227,19 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         step.state = data.status === 'failed' ? 'failed' : data.status === 'cancelled' ? 'cancelled' : 'done';
         step.endedAt = event.timestamp;
         step.result = text(data.summary);
+        break;
+      }
+      case 'rules.trust_required':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'trust', id: event.id, event });
+        break;
+      case 'hook.ran': {
+        const failed = typeof data.exit_code === 'number' && data.exit_code !== 0;
+        stepsBlock(event.id).steps.push({
+          id: event.id, verb: data.exit_code === 2 ? 'Hook 拦下了这一步' : '运行 Hook', target: `${String(data.hook_id ?? '')} · ${String(data.event ?? '')}`,
+          state: failed ? 'failed' : 'done', startedAt: event.timestamp, endedAt: event.timestamp,
+          result: `退出码 ${String(data.exit_code ?? '?')}，用时 ${String(data.duration_ms ?? '?')} ms`, output: String(data.output ?? ''),
+        });
         break;
       }
       case 'run.steered':

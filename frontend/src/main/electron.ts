@@ -68,6 +68,20 @@ function createWindow() {
   windowRef.on('maximize', () => windowRef?.webContents.send('window:maximize-change', true));
   windowRef.on('unmaximize', () => windowRef?.webContents.send('window:maximize-change', false));
   const devUrl = process.env.VITE_DEV_SERVER_URL;
+  // The app window carries the preload API and its requests get the backend token, so it must
+  // never become a window onto someone else's page: links open in the system browser instead,
+  // and navigation away from the app is refused.
+  const appUrl = devUrl ? new URL(devUrl).origin : pathToFileURL(path.join(here, '../../dist/index.html')).href;
+  const isAppUrl = (target: string) => devUrl ? target.startsWith(appUrl) : target.split('#')[0] === appUrl;
+  windowRef.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  windowRef.webContents.on('will-navigate', (event, url) => {
+    if (isAppUrl(url)) return;
+    event.preventDefault();
+    if (/^https?:/i.test(url)) void shell.openExternal(url);
+  });
   if (devUrl) void windowRef.loadURL(devUrl);
   else void windowRef.loadFile(path.join(here, '../../dist/index.html'));
   windowRef.on('closed', () => { windowRef = null; });

@@ -9,6 +9,7 @@ export type AgentEventType =
   | 'run.plan.updated'
   | 'run.steered' | 'run.usage' | 'rules.loaded' | 'input.required' | 'run.plan.proposed'
   | 'subtask.started' | 'subtask.progress' | 'subtask.completed'
+  | 'rules.trust_required' | 'hook.ran'
   | 'run.completed' | 'run.failed' | 'run.cancelled';
 
 export interface AgentEvent {

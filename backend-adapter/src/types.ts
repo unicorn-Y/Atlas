@@ -46,6 +46,7 @@ export interface ConversationSummary {
   worktree_branch?: string | null;
   base_branch?: string | null;
   parent_conversation_id?: string | null;
+  permission_mode?: PermissionMode | null;
   fork_message_id?: string | null;
   [key: string]: unknown;
 }
@@ -106,6 +107,17 @@ export interface RunStartRequest {
   context_conversations?: string[];
   /** Side question: uses the conversation as context but is not saved to it; read-only tools. */
   ephemeral?: boolean;
+  /** FULL_ACCESS is the default; stricter modes ask before writes or refuse them. */
+  permission_mode?: PermissionMode;
+}
+
+export type PermissionMode = 'full_access' | 'ask_writes' | 'read_only';
+
+export interface HookConfig { id: string; event: string; command: string; timeout_s: number; enabled: boolean }
+
+export interface PullRequestInfo {
+  number: number; title: string; url: string; state: string; draft: boolean; base: string; head: string;
+  checks: Array<{ name: string; status: string; conclusion: string | null; url?: string | null }>;
 }
 
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';

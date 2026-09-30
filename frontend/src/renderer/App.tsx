@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AudioLines, Bell, BookMarked, Brain, Copy, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
+  AudioLines, Bell, BookMarked, Brain, Copy, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
@@ -10,6 +10,8 @@ import ConversationMessage from './components/ConversationMessage';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import RecipesDialog from './components/RecipesDialog';
 import SideChat from './components/SideChat';
+import RemoteFolderDialog from './components/RemoteFolderDialog';
+import type { PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
 import Palette, { type PaletteItem } from './components/Palette';
@@ -22,6 +24,7 @@ import CodePage from './pages/CodePage';
 import CreatePage from './pages/CreatePage';
 import BoardPage from './pages/BoardPage';
 import ProfilesPanel from './pages/ProfilesPanel';
+import HooksPanel from './pages/HooksPanel';
 import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
 import Sidebar, { NAV, type View } from './shell/Sidebar';
 import HomeView, { type Suggestion } from './shell/HomeView';
@@ -34,7 +37,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'profiles' | 'appearance' | 'plugins' | 'notifications';
+type SheetPane = 'models' | 'profiles' | 'hooks' | 'appearance' | 'plugins' | 'notifications';
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
@@ -44,6 +47,11 @@ const HOME_MODES: ComposerMode[] = [
   { id: 'image', label: '图像', icon: ImageIcon },
   { id: 'voice', label: '语音通话', icon: AudioLines },
 ];
+const PERMISSION: Record<PermissionMode, { label: string; hint: string }> = {
+  full_access: { label: '完全访问', hint: 'Atlas 直接读写文件、运行命令（默认）' },
+  ask_writes: { label: '改前问我', hint: '改文件、运行命令前先问你' },
+  read_only: { label: '只读', hint: '只能查看，不能改任何东西' },
+};
 const EFFORT_LABEL: Record<string, string> = { minimal: '最低', low: '低', medium: '中', high: '高' };
 const draftKey = (conversationId: string) => `atlas.draft.${conversationId || 'home'}`;
 const readDraft = (conversationId: string) => { try { return localStorage.getItem(draftKey(conversationId)) ?? ''; } catch { return ''; } };
@@ -84,6 +92,7 @@ export default function App() {
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
   const [branches, setBranches] = useState<string[]>([]);
+  const [remoteOpen, setRemoteOpen] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceOutput, setVoiceOutput] = useState(() => pref('voice-output') === 'true');
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
@@ -241,6 +250,7 @@ export default function App() {
     // `!command` runs straight in the terminal panel instead of going to the Agent.
     if (!fromHome && text.trim().startsWith('!') && text.trim().length > 1) {
       if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('先选工作目录，终端会在那里打开'); return; }
+      if (activeConversation.workspace.startsWith('ssh://')) { setToast('远程目录没有终端面板，把命令直接交给 Atlas 去运行'); return; }
       setTerminalCommand({ id: crypto.randomUUID(), text: text.trim().slice(1).trim() });
       setInput('');
       writeDraft(store.activeConversationId, '');
@@ -423,8 +433,11 @@ export default function App() {
       return [{ id: `m-${hit.id}`, group: '消息内容', label: excerpt || conversation.title, hint: conversation.title, run: () => openConversation(conversation) }];
     });
   }, [store.apiBaseUrl, store.connected]);
-  const workspaceName = typeof activeConversation?.workspace === 'string' && activeConversation.workspace
-    ? activeConversation.workspace.split(/[\\/]/).filter(Boolean).pop() ?? activeConversation.workspace : '';
+  const workspacePath = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
+  const remoteHost = /^ssh:\/\/([^/]+)\//.exec(workspacePath)?.[1] ?? '';
+  const workspaceName = workspacePath
+    ? `${remoteHost ? `${remoteHost}:` : ''}${workspacePath.split(/[\\/]/).filter(Boolean).pop() ?? workspacePath}` : '';
+  const permission: PermissionMode = (activeConversation?.permission_mode as PermissionMode | undefined) ?? 'full_access';
   const findMentions = async (trigger: '@' | '#', query: string): Promise<MentionItem[]> => {
     const taken = new Set(mentions.map((item) => `${item.kind}:${item.id}`));
     if (trigger === '#') {
@@ -451,11 +464,31 @@ export default function App() {
     onRemoveMention: (item: MentionItem) => setMentions((current) => current.filter((entry) => !(entry.kind === item.kind && entry.id === item.id))),
     onLongPaste: (text: string) => { addDocuments([new File([text], `粘贴的文本-${new Date().toLocaleTimeString().replace(/:/g, '')}.txt`, { type: 'text/plain' })]); setToast(`粘贴内容有 ${text.length} 个字，已转成附件`); },
     tools: <>
-      <Tip label={workspaceName ? `工作目录：${activeConversation?.workspace}（点击更换）` : '选择工作目录'}>
-        <button type="button" onClick={() => void chooseWorkspace()} className={cn('inline-flex h-8 max-w-[160px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', workspaceName ? 'text-fg-2' : 'text-fg-3')}>
-          <FolderOpen size={15} className="shrink-0" />{workspaceName && <span className="truncate">{workspaceName}</span>}
-        </button>
-      </Tip>
+      <Menu>
+        <Tip label={workspaceName ? `工作目录：${workspacePath}` : '选择工作目录'}><MenuTrigger asChild>
+          <button type="button" className={cn('inline-flex h-8 max-w-[170px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', workspaceName ? 'text-fg-2' : 'text-fg-3')}>
+            {remoteHost ? <Server size={15} className="shrink-0 text-brand" /> : <FolderOpen size={15} className="shrink-0" />}{workspaceName && <span className="truncate">{workspaceName}</span>}
+          </button>
+        </MenuTrigger></Tip>
+        <MenuContent side="top">
+          {workspacePath && <MenuLabel>{workspacePath}</MenuLabel>}
+          <MenuItem onSelect={() => void chooseWorkspace()}><Laptop />这台电脑上的文件夹…</MenuItem>
+          <MenuItem onSelect={() => setRemoteOpen(true)}><Server />另一台电脑上的目录（SSH）…</MenuItem>
+        </MenuContent>
+      </Menu>
+      {activeConversation && <Menu>
+        <Tip label={PERMISSION[permission].hint}><MenuTrigger asChild>
+          <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', permission === 'full_access' ? 'text-fg-3 hover:text-fg' : 'bg-brand-soft text-fg')}>
+            {permission === 'read_only' ? <Lock size={15} /> : permission === 'ask_writes' ? <ShieldAsk size={15} /> : <ShieldCheck size={15} />}{permission !== 'full_access' && PERMISSION[permission].label}
+          </button>
+        </MenuTrigger></Tip>
+        <MenuContent side="top">
+          <MenuLabel>这个对话的权限</MenuLabel>
+          {(['full_access', 'ask_writes', 'read_only'] as const).map((mode) => <MenuItem key={mode} checked={permission === mode} onSelect={() => store.setPermissionMode(activeConversation.id, mode)}>
+            <span className="min-w-0"><span className="block">{PERMISSION[mode].label}</span><small className="block text-[11.5px] text-fg-3">{PERMISSION[mode].hint}</small></span>
+          </MenuItem>)}
+        </MenuContent>
+      </Menu>}
       {store.profiles.length > 0 && <Menu>
         <Tip label={`角色：${profileName}`}><MenuTrigger asChild>
           <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.profileId !== 'default' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
@@ -481,7 +514,7 @@ export default function App() {
           {(['minimal', 'low', 'medium', 'high'] as const).map((effort) => <MenuItem key={effort} checked={store.reasoningEffort === effort} onSelect={() => store.setReasoningEffort(effort)}>{EFFORT_LABEL[effort]}</MenuItem>)}
         </MenuContent>
       </Menu>}
-      {workspaceName && <Menu onOpenChange={(opening) => { if (opening && !worktreeActive) void backend.getBranches(String(activeConversation?.workspace)).then((result) => setBranches(result.branches)).catch(() => setBranches([])); }}>
+      {workspaceName && !remoteHost && <Menu onOpenChange={(opening) => { if (opening && !worktreeActive) void backend.getBranches(String(activeConversation?.workspace)).then((result) => setBranches(result.branches)).catch(() => setBranches([])); }}>
         <Tip label={worktreeActive ? `在独立分支 ${activeConversation?.worktree_branch} 上工作` : worktreeRequested ? '下一条会在独立 worktree 里执行' : '隔离分支：在独立的 git worktree 里改，不动主目录'}><MenuTrigger asChild>
           <button type="button" className={cn('inline-flex h-8 max-w-[150px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', worktreeActive || worktreeRequested ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
             <GitBranch size={15} className="shrink-0" />{(worktreeActive || worktreeRequested) && <span className="truncate">{worktreeActive ? String(activeConversation?.worktree_branch ?? '') : '隔离'}</span>}
@@ -686,6 +719,7 @@ export default function App() {
             onPreview={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }} conversationId={store.activeConversationId}
             worktree={activeConversation?.worktree_path ? { path: String(activeConversation.worktree_path), branch: String(activeConversation.worktree_branch ?? ''), base: String(activeConversation.base_branch ?? '') } : null}
             onWorktreeChanged={() => void store.refreshConversations()}
+            onAsk={(text) => void store.sendMessage(text)}
             terminalCommand={terminalCommand} onSendToAtlas={(text) => { setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}终端输出：\n\`\`\`\n${text.trimEnd()}\n\`\`\`\n\n`); setToast('已把终端输出放进输入框'); }} />}
         </div>}
 
@@ -703,7 +737,7 @@ export default function App() {
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
-        {([['models', '模型与服务', SlidersHorizontal], ['profiles', '角色', UserCog], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
+        {([['models', '模型与服务', SlidersHorizontal], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
           <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
@@ -731,6 +765,7 @@ export default function App() {
         {sheet === 'plugins' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">插件</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力。</p><PluginsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
           <ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /></section>}
+        {sheet === 'hooks' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Hooks</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在任务开始、用工具前后、完成或失败时运行你自己的命令。</p><HooksPanel /></section>}
         {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
       </div>
     </Dialog>
@@ -746,6 +781,12 @@ export default function App() {
       modelName={modelName}
     />}
 
+    <RemoteFolderDialog open={remoteOpen} onClose={() => setRemoteOpen(false)} current={workspacePath}
+      onChoose={(workspace) => { void (async () => {
+        if (!store.activeConversationId) await store.createConversation();
+        const conversationId = useAtlasStore.getState().activeConversationId;
+        if (conversationId) { store.setWorkspace(conversationId, workspace); setToast(`工作目录：${workspace}`); }
+      })(); }} />
     <RecipesDialog open={recipesOpen} onClose={() => setRecipesOpen(false)} recipes={store.recipes}
       onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />
     {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}

@@ -92,7 +92,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
       <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
         <File size={13} className="shrink-0 text-fg-3" /><code className="min-w-0 flex-1 truncate font-mono">{file.path}</code>
         {PREVIEWABLE.test(file.path) && <button onClick={() => onPreview(backend.rawFileUrl(workspace, file.path))} className="shrink-0 text-fg-2 hover:text-fg">在浏览器预览</button>}
-        {window.atlasDesktop?.openPath && <button title="用默认程序打开" aria-label="用默认程序打开" onClick={() => {
+        {window.atlasDesktop?.openPath && !workspace.startsWith('ssh://') && <button title="用默认程序打开" aria-label="用默认程序打开" onClick={() => {
           const full = `${workspace.replace(/[\\/]+$/, '')}\\${file.path.replace(/\//g, '\\')}`;
           void window.atlasDesktop!.openPath(full).then((result) => { if (result !== 'opened' && result !== 'revealed') setError(`打不开：${result}`); });
         }} className="grid size-6 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><ExternalLink size={13} /></button>}

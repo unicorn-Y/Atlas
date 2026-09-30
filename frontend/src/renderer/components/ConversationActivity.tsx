@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, Check, SearchCheck, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, X } from 'lucide-react';
+import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
@@ -42,6 +42,7 @@ export default function ConversationActivity({ events, store, username, setTab }
       case 'approval': return <Approval key={item.id} event={item.event} store={store} />;
       case 'question': return <Question key={item.id} event={item.event} store={store} />;
       case 'plan': return <Plan key={item.id} event={item.event} store={store} />;
+      case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
       case 'cancelled': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
         <Square size={12} />你停止了这次任务
       </div>;
@@ -222,4 +223,34 @@ function SaveRecipe({ runId, store }: { runId: string; store: Store }) {
     <button type="submit" disabled={!name.trim()} className="text-fg-2 hover:text-fg disabled:opacity-40">保存</button>
     <button type="button" onClick={() => setNaming(false)} className="text-fg-3 hover:text-fg">取消</button>
   </form>;
+}
+
+const relativeTo = (root: string, path: string) => {
+  const base = root.replace(/[\\/]+$/, '');
+  return base && path.toLowerCase().startsWith(base.toLowerCase()) ? path.slice(base.length).replace(/^[\\/]+/, '') || path : path;
+};
+
+/** First run in a directory: its AGENTS.md / CLAUDE.md only reach the Agent once you trust the directory. */
+function Trust({ event, store }: { event: AgentEvent; store: Store }) {
+  const eventId = String(event.data.event_id ?? '');
+  const files = Array.isArray(event.data.files) ? event.data.files as Array<{ path?: string; bytes?: number }> : [];
+  const answer = store.answers[eventId];
+  const open = answer === undefined && store.getRun(event.runId)?.status === 'waiting';
+  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
+    <div className="flex gap-3.5 border-l-[3px] border-brand px-4 py-3.5">
+      <FileCheck2 size={18} className="mt-0.5 shrink-0 text-brand" />
+      <div className="min-w-0 flex-1">
+        <p className="m-0 text-[14px] font-semibold text-heading">要不要信任这个目录的规则文件？</p>
+        <p className="mt-1 mb-0 text-[13px] text-fg-2">信任后，下面这些文件会作为指令交给 Atlas。规则文件可以让 Atlas 做任何事，只信任你了解的项目。</p>
+        <p className="mt-1.5 mb-0 truncate font-mono text-[12px] text-fg-3" title={String(event.data.root ?? '')}>{String(event.data.root ?? '')}</p>
+        <ul className="mt-1 mb-0 list-none p-0 font-mono text-[12px] text-fg-2">{files.map((file) => <li key={file.path} title={file.path}>{relativeTo(String(event.data.root ?? ''), file.path ?? '')}{file.bytes ? `（${Math.max(1, Math.round(file.bytes / 1024))} KB）` : ''}</li>)}</ul>
+        {answer !== undefined
+          ? <p className="mt-2.5 mb-0 flex items-center gap-1.5 text-[13px] text-fg-2">{answer === 'trusted' ? <><Check size={14} className="text-ok" />已信任，以后不再询问</> : <><X size={14} className="text-fg-3" />这次不加载规则文件</>}</p>
+          : open ? <div className="mt-3 flex gap-2">
+            <Button variant="primary" onClick={() => store.trustRules(event.runId, eventId, true)}>信任并加载</Button>
+            <Button onClick={() => store.trustRules(event.runId, eventId, false)}>不加载，继续</Button>
+          </div> : <p className="mt-2 mb-0 text-[13px] text-fg-3">任务已经结束。</p>}
+      </div>
+    </div>
+  </div>;
 }

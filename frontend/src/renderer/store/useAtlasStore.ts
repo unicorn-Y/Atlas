@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { AgentCapabilityInfo, AgentProfile, ConfigurationResponse, ConversationMessage, ConversationSummary, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentCapabilityInfo, AgentProfile, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -84,6 +84,9 @@ interface AtlasState {
   reject: (eventId: string) => void;
   answerInput: (runId: string, eventId: string, text: string) => void;
   approvePlan: (runId: string, eventId: string, edits?: string) => void;
+  trustRules: (runId: string, eventId: string, trust: boolean) => void;
+  /** Per-conversation permission mode for the next runs; the backend remembers the last one used. */
+  setPermissionMode: (conversationId: string, mode: PermissionMode) => void;
   togglePaused: () => void;
   stopTask: () => void;
   stopRun: (runId: string) => void;
@@ -310,8 +313,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const run = get().getRun(event.runId);
       if (!run) return;
       const title = get().conversations.find((item) => item.id === run.conversationId)?.title ?? run.title;
-      if (event.type === 'approval.required' || event.type === 'input.required' || event.type === 'run.plan.proposed') {
-        const heading = event.type === 'input.required' ? 'Atlas 有个问题要问你' : event.type === 'run.plan.proposed' ? 'Atlas 的计划等你确认' : 'Atlas 需要你确认';
+      if (event.type === 'approval.required' || event.type === 'input.required' || event.type === 'run.plan.proposed' || event.type === 'rules.trust_required') {
+        const heading = event.type === 'input.required' ? 'Atlas 有个问题要问你' : event.type === 'run.plan.proposed' ? 'Atlas 的计划等你确认' : event.type === 'rules.trust_required' ? '要不要信任这个目录的规则文件？' : 'Atlas 需要你确认';
         notifyDesktop(heading, title, () => get().setActiveRun(run.id));
       }
       if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') {
@@ -374,6 +377,13 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         set((state) => ({ answers: { ...state.answers, [eventId]: text } }));
       } catch (error) { set({ error: errorText(error, '回答没有送达') }); }
     },
+    trustRules: (runId, eventId, trust) => {
+      try {
+        backend.trustRules(runId, eventId, trust);
+        set((state) => ({ answers: { ...state.answers, [eventId]: trust ? 'trusted' : 'declined' } }));
+      } catch (error) { set({ error: errorText(error, '没能回复') }); }
+    },
+    setPermissionMode: (conversationId, mode) => patchConversation(conversationId, { permission_mode: mode }),
     approvePlan: (runId, eventId, edits = '') => {
       try {
         backend.approvePlan(runId, eventId, edits.trim());
@@ -647,6 +657,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
     ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),
     ...(state.reasoningEffort && supportsEffort ? { reasoning_effort: state.reasoningEffort } : {}),
     ...(worktree && !conversation?.worktree_path ? { worktree } : {}),
+    ...(conversation?.permission_mode && conversation.permission_mode !== 'full_access' ? { permission_mode: conversation.permission_mode } : {}),
     ...(item.refs?.files.length ? { context_files: item.refs.files } : {}),
     ...(item.refs?.conversations.length ? { context_conversations: item.refs.conversations } : {}),
   }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
