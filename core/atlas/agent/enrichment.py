@@ -345,6 +345,7 @@ class DelegationService:
     def __init__(self, host: Any, hooks: HookBus, *, timeout: float = 90.0) -> None:
         self.host, self.hooks, self.timeout = host, hooks, timeout
         self._status_cache: dict[str, Any] = {}
+        self.atlas_runner: Callable[..., Any] | None = None
 
     async def _pick_backend(self) -> str:
         """First installed external Agent, Hermes preferred; a clear error when none is installed."""
@@ -376,10 +377,67 @@ class DelegationService:
         on_progress: Callable[..., Any] | None = None,
         on_completed: Callable[..., Any] | None = None,
         event_metadata: dict[str, Any] | None = None,
+        executor: str = "atlas",
+        atlas_options: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not goal.strip():
             raise ValueError("goal must be non-empty")
-        name = backend or await self._pick_backend()
+        name = backend or executor
+        if name == "atlas":
+            if self.atlas_runner is None:
+                raise RuntimeError("Atlas 子任务执行器尚未就绪。")
+            subtask_id = secrets.token_hex(8)
+            await self.hooks.emit("subagent_start", goal=goal, backend="atlas")
+            started_at = asyncio.get_running_loop().time()
+            status, summary = "failed", "子任务没有返回结果。"
+            cancel_event = asyncio.Event()
+            parent_cancel = (atlas_options or {}).get("cancel_event")
+            parent_cancel_task = None
+            try:
+                start_args = (subtask_id, goal, "atlas")
+                registered_cancel = await _call_callback(
+                    on_started, *(start_args + ((event_metadata,) if event_metadata is not None else ())),
+                )
+                if isinstance(registered_cancel, asyncio.Event):
+                    cancel_event = registered_cancel
+                if parent_cancel is not None:
+                    parent_cancel_task = asyncio.create_task(
+                        _relay_cancel(parent_cancel, cancel_event),
+                    )
+                result = await self.atlas_runner(
+                    goal=goal, context=context, cwd=cwd, subtask_id=subtask_id,
+                    atlas_options={**(atlas_options or {}), "cancel_event": cancel_event},
+                    on_progress=lambda text: _call_callback(
+                        on_progress, subtask_id, _human_subtask_text(text),
+                        *((event_metadata,) if event_metadata is not None else ()),
+                    ),
+                )
+                status = str(result.get("status", "completed"))
+                summary = str(result.get("result", ""))[:1000] or "子任务已完成。"
+                return {"backend": "atlas", "session_id": None,
+                        "subtask_id": subtask_id, "status": status,
+                        "result": result.get("result", ""),
+                        "evidence": result.get("evidence", [])}
+            except asyncio.CancelledError:
+                status, summary = "cancelled", "子任务已取消。"
+                raise
+            except Exception as exc:
+                summary = str(exc)[:1000] or summary
+                raise
+            finally:
+                if parent_cancel_task:
+                    parent_cancel_task.cancel()
+                    await asyncio.gather(parent_cancel_task, return_exceptions=True)
+                await self.hooks.emit("subagent_end", goal=goal, backend="atlas")
+                completed_args = (
+                    subtask_id, status, summary,
+                    int((asyncio.get_running_loop().time() - started_at) * 1000),
+                )
+                await _call_callback(
+                    on_completed, *(completed_args + (
+                        (event_metadata,) if event_metadata is not None else ()
+                    )),
+                )
         await self.hooks.emit("subagent_start", goal=goal, backend=name)
         session = None
         subtask_id = secrets.token_hex(8)
@@ -493,6 +551,8 @@ class DelegationService:
         on_progress: Callable[..., Any] | None = None,
         on_completed: Callable[..., Any] | None = None,
         on_group_completed: Callable[..., Any] | None = None,
+        executor: str = "atlas",
+        atlas_options: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not isinstance(tasks, list) or not 1 <= len(tasks) <= 8:
             raise ValueError("delegate_parallel accepts one to eight tasks")
@@ -503,7 +563,7 @@ class DelegationService:
             raise ValueError("each parallel task requires a title and goal")
 
         # Pick the worker Agent once: with none installed, fail the whole group up front.
-        worker_backend = await self._pick_backend() if getattr(self.host, "backends", None) else None
+        worker_backend = executor
         group_id = secrets.token_hex(8)
         semaphore = asyncio.Semaphore(max_concurrency)
         worktree_lock = asyncio.Lock()
@@ -615,9 +675,10 @@ class DelegationService:
                     )
                 try:
                     result = await self.delegate_task(
-                        goal, worker_context or None, backend=worker_backend, cwd=worker_cwd,
+                        goal, worker_context or None,
+                        backend=str(item.get("executor", worker_backend)), cwd=worker_cwd,
                         on_started=started, on_progress=progress, on_completed=completed,
-                        event_metadata=metadata,
+                        event_metadata=metadata, atlas_options=atlas_options,
                     )
                     status = str(result.get("status", "completed"))
                     summary = str(result.get("result", ""))[:1000]
@@ -719,6 +780,23 @@ class DelegationService:
         }
         await call(on_group_completed, payload)
         return payload
+
+
+async def _call_callback(callback: Callable[..., Any] | None, *args: Any) -> Any:
+    if callback is None:
+        return None
+    value = callback(*args)
+    return await value if hasattr(value, "__await__") else value
+
+
+async def _relay_cancel(parent: asyncio.Event, child: asyncio.Event) -> None:
+    await parent.wait()
+    child.set()
+
+
+def _human_subtask_text(value: Any) -> str:
+    text = str(value or "").strip().replace("\n", " ")
+    return text[:240] or "正在处理子任务"
 
 
 class MemoryReflectionBridge:

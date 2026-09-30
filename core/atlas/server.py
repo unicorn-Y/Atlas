@@ -4803,7 +4803,7 @@ async def run_goal_now(goal_id: str) -> dict[str, str]:
 @app.get("/api/runtime/protocol")
 async def runtime_protocol() -> dict[str, str]:
     """Advertise Runtime Event Protocol version."""
-    return {"version": "1.6"}
+    return {"version": "1.7"}
 
 
 @app.post("/api/runs/{run_id}/subtasks/{subtask_id}/cancel")
@@ -5972,12 +5972,16 @@ async def _execute_run(
             approval_event_id: str, tool_name: str, tool_args: dict[str, Any]
         ) -> str:
             """Emit approval.required and wait for client response."""
-            await emit("approval.required", {
+            approval_payload = {
                 "approval_id": approval_event_id,
                 "description": f"Agent 请求执行工具 {tool_name}，需要你的确认。",
-                "input": tool_args,
+                "input": {key: value for key, value in tool_args.items()
+                          if key != "subtask_id"},
                 "tool": tool_name,
-            })
+            }
+            if tool_args.get("subtask_id"):
+                approval_payload["subtask_id"] = tool_args["subtask_id"]
+            await emit("approval.required", approval_payload)
             run.status = "waiting"
             # Create a future for this approval
             loop = asyncio.get_running_loop()

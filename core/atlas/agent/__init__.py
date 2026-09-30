@@ -135,6 +135,7 @@ class AgentRunContext:
     ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None
     sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None
     sandbox_enabled: bool = False
+    max_tool_rounds: int = MAX_TOOL_ROUNDS
     reasoning_effort: str | None = None
     subtask_started: Callable[..., Any] | None = None
     subtask_progress: Callable[..., Any] | None = None
@@ -223,6 +224,8 @@ class AgentOrchestrator:
         self._delegation = (
             DelegationService(agent_backend_host, self.hooks) if agent_backend_host else None
         )
+        if self._delegation is not None:
+            self._delegation.atlas_runner = self._run_atlas_subtask
         self._codeact = CodeActRuntime(
             AtlasToolBridge(local_execution, computer_use, mcp_client, self.checkpoints)
         )
@@ -351,6 +354,80 @@ class AgentOrchestrator:
         if self._delegation is None:
             raise RuntimeError("No AgentBackendHost is configured for delegation")
         return await self._delegation.delegate_task(goal, context, tool_profile)
+
+    async def _run_atlas_subtask(
+        self, *, goal: str, context: str | None, cwd: str | None, subtask_id: str,
+        atlas_options: dict[str, Any], on_progress: Callable[[str], Any],
+    ) -> dict[str, Any]:
+        """Run a bounded child loop through this orchestrator with the parent's policy."""
+        conversation_id = await self._memory.create_conversation("Atlas 子任务")
+        options = dict(atlas_options)
+        cancel_event = options.get("cancel_event") or asyncio.Event()
+        usage: list[dict[str, Any]] = []
+        outputs: list[str] = []
+        worker_prompt = (
+            "你是 Atlas 的子任务 Worker。只完成给定目标，不能再委派任务。"
+            "完成后给出简短结论和证据。\n\n"
+            f"目标：{goal}\n补充信息：{context or '无'}"
+        )
+        status = "completed"
+        parent_approval = options.get("approval_callback")
+
+        async def approval_callback(
+            event_id: str, tool_name: str, arguments: dict[str, Any],
+        ) -> str:
+            if parent_approval is None:
+                return "deny"
+            response = parent_approval(event_id, tool_name, {
+                **arguments, "subtask_id": subtask_id,
+            })
+            return await response if hasattr(response, "__await__") else response
+
+        try:
+            async for event in self.run(
+                worker_prompt, conversation_id=conversation_id,
+                model=options.get("model"), cancel_event=cancel_event,
+                approval_callback=approval_callback,
+                workspace=cwd, mode="act", tool_allow=options.get("tool_allow"),
+                tool_deny=list(options.get("tool_deny") or []) + [
+                    "delegate_task", "delegate_parallel",
+                ], permission_mode=options.get("permission_mode", "full_access"),
+                allowed_paths=options.get("allowed_paths") or [],
+                user_hook_callback=options.get("user_hook_callback"),
+                ssh_tool_callback=options.get("ssh_tool_callback"),
+                ssh_checkpoint_callback=options.get("ssh_checkpoint_callback"),
+                sandbox_tool_callback=options.get("sandbox_tool_callback"),
+                sandbox_enabled=bool(options.get("sandbox_enabled")),
+                run_id=subtask_id, max_tool_rounds=12,
+            ):
+                kind = event.get("type")
+                if kind == "chunk":
+                    text = str(event.get("content", ""))
+                    outputs.append(text)
+                    result = on_progress(text)
+                    if hasattr(result, "__await__"):
+                        await result
+                elif kind == "tool_call":
+                    name = str(event.get("name", "操作"))
+                    args = event.get("arguments", {})
+                    path = args.get("path") if isinstance(args, dict) else None
+                    label = f"处理操作：{name}" + (f"（{Path(path).name}）" if path else "")
+                    result = on_progress(label)
+                    if hasattr(result, "__await__"):
+                        await result
+                elif kind == "run_usage":
+                    usage.append(dict(event.get("usage") or {}))
+                elif kind == "error":
+                    status = "failed"
+                    raise RuntimeError(str(event.get("detail") or "子任务执行失败。"))
+                elif kind == "cancelled":
+                    status = "cancelled"
+                    break
+            if cancel_event.is_set():
+                status = "cancelled"
+            return {"status": status, "result": "".join(outputs), "evidence": usage}
+        finally:
+            await self._memory.delete_conversation(conversation_id)
 
     async def _summarize_parallel_results(self, results: list[dict[str, Any]]) -> str:
         models = self._model_mgr.list_models()
@@ -483,7 +560,7 @@ class AgentOrchestrator:
         if (
             isinstance(last, AIMessage)
             and last.tool_calls
-            and state["tool_rounds"] < MAX_TOOL_ROUNDS
+            and state["tool_rounds"] < getattr(state["runtime"], "max_tool_rounds", MAX_TOOL_ROUNDS)
         ):
             return "execute_tools"
         return "end"
@@ -659,6 +736,7 @@ class AgentOrchestrator:
                     "parameters": {"type": "object", "properties": {
                         "goal": {"type": "string"}, "context": {"type": "string"},
                         "tool_profile": {"type": "array", "items": {"type": "string"}},
+                        "executor": {"type": "string"},
                     }, "required": ["goal"], "additionalProperties": False},
                 },
             })
@@ -679,6 +757,7 @@ class AgentOrchestrator:
                                   }, "required": ["title", "goal"],
                                       "additionalProperties": False}},
                         "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 4},
+                        "executor": {"type": "string"},
                     }, "required": ["tasks"], "additionalProperties": False},
                 },
             })
@@ -941,6 +1020,30 @@ class AgentOrchestrator:
         ssh_tool_callback = getattr(ctx, "ssh_tool_callback", None)
         ssh_checkpoint_callback = getattr(ctx, "ssh_checkpoint_callback", None)
 
+        async def child_approval(
+            approval_id: str, child_tool: str, child_args: dict[str, Any],
+        ) -> str:
+            if not ctx.approval_callback:
+                return "deny"
+            approval_id = f"{approval_id}:{uuid.uuid4().hex[:8]}"
+            choice = ctx.approval_callback(approval_id, child_tool, child_args)
+            return await choice if hasattr(choice, "__await__") else choice
+
+        atlas_options = {
+            "model": self._model_mgr.current_model,
+            "permission_mode": permission_mode,
+            "allowed_paths": allowed_paths,
+            "tool_allow": getattr(ctx, "tool_allow", None),
+            "tool_deny": getattr(ctx, "tool_deny", []),
+            "cancel_event": ctx.cancel_event,
+            "approval_callback": child_approval,
+            "user_hook_callback": user_hook_callback,
+            "ssh_tool_callback": ssh_tool_callback,
+            "ssh_checkpoint_callback": ssh_checkpoint_callback,
+            "sandbox_tool_callback": getattr(ctx, "sandbox_tool_callback", None),
+            "sandbox_enabled": getattr(ctx, "sandbox_enabled", False),
+        }
+
         for tc in last.tool_calls:
             fn_name = tc["name"]
             fn_args = tc["args"]
@@ -1176,11 +1279,16 @@ class AgentOrchestrator:
                         raise RuntimeError("No AgentBackendHost is configured for delegation")
                     result = {"data": await self._delegation.delegate_task(
                         str(fn_args["goal"]), fn_args.get("context"), fn_args.get("tool_profile"),
+                        executor=str(fn_args.get("executor", "atlas")),
+                        atlas_options=atlas_options,
                         on_started=getattr(ctx, "subtask_started", None),
                         on_progress=getattr(ctx, "subtask_progress", None),
                         on_completed=getattr(ctx, "subtask_completed", None),
                         cwd=workspace,
                     )}
+                    for usage_entry in result["data"].get("evidence", []):
+                        if isinstance(usage_entry, dict) and usage_entry.get("input_tokens") is not None:
+                            await ctx.event_queue.put({"type": "run_usage", "usage": usage_entry})
                     result["content"] = [{"type": "text", "text": json.dumps(
                         result["data"], ensure_ascii=False,
                     )}]
@@ -1198,6 +1306,8 @@ class AgentOrchestrator:
                         on_progress=getattr(ctx, "subtask_progress", None),
                         on_completed=getattr(ctx, "subtask_completed", None),
                         on_group_completed=getattr(ctx, "subtask_group_completed", None),
+                        executor=str(fn_args.get("executor", "atlas")),
+                        atlas_options=atlas_options,
                     )
                     result = {"data": data,
                               "content": [{"type": "text", "text": data["summary"]}],
@@ -1560,6 +1670,7 @@ class AgentOrchestrator:
         ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None,
         sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None,
         sandbox_enabled: bool = False,
+        max_tool_rounds: int = MAX_TOOL_ROUNDS,
         reasoning_effort: str | None = None,
         subtask_started: Callable[..., Any] | None = None,
         subtask_progress: Callable[..., Any] | None = None,
@@ -1604,6 +1715,7 @@ class AgentOrchestrator:
             ssh_checkpoint_callback=ssh_checkpoint_callback,
             sandbox_tool_callback=sandbox_tool_callback,
             sandbox_enabled=sandbox_enabled,
+            max_tool_rounds=max_tool_rounds,
             reasoning_effort=reasoning_effort,
             subtask_started=subtask_started, subtask_progress=subtask_progress,
             subtask_completed=subtask_completed,
