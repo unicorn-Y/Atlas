@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import re
 import socket
 from html.parser import HTMLParser
@@ -78,15 +79,102 @@ async def _video_captions(url: str) -> tuple[str, str]:
     return "", "这个视频没有可读取的字幕。"
 
 
+async def _bilibili_captions(
+    url: str, *, client_factory=httpx.AsyncClient,
+) -> tuple[str, str]:
+    try:
+        async with client_factory(
+            timeout=httpx.Timeout(20.0), follow_redirects=False,
+        ) as client:
+            async def fetch_bounded(target: str) -> tuple[str, bytes]:
+                current = target
+                response = None
+                for _ in range(6):
+                    await asyncio.wait_for(
+                        asyncio.to_thread(_validate_url, current, False), timeout=3.0,
+                    )
+                    response = await client.get(
+                        current, headers={"User-Agent": "Mozilla/5.0 Atlas/1.0"},
+                    )
+                    if response.status_code not in {301, 302, 303, 307, 308}:
+                        break
+                    location = response.headers.get("location")
+                    if not location:
+                        break
+                    current = urljoin(current, location)
+                else:
+                    raise ValueError("网页跳转次数过多。")
+                if response is None:
+                    raise ValueError("网页没有返回内容。")
+                response.raise_for_status()
+                data = bytearray()
+                async for chunk in response.aiter_bytes():
+                    data.extend(chunk)
+                    if len(data) > MAX_RESPONSE_BYTES:
+                        raise ValueError("视频字幕内容超过 10 MB。")
+                return current, bytes(data)
+
+            _page_url, page = await fetch_bounded(url)
+            html = page.decode("utf-8", errors="replace")
+            marker = re.search(r"window\.__INITIAL_STATE__\s*=", html)
+            state: dict[str, object] = {}
+            if marker:
+                try:
+                    parsed, _end = json.JSONDecoder().raw_decode(html[marker.end():].lstrip())
+                    if isinstance(parsed, dict):
+                        state = parsed
+                except json.JSONDecodeError:
+                    pass
+            video = state.get("videoData")
+            video = video if isinstance(video, dict) else {}
+            subtitle = video.get("subtitle")
+            subtitle = subtitle if isinstance(subtitle, dict) else {}
+            entries = subtitle.get("list")
+            entries = entries if isinstance(entries, list) else []
+            if not entries and video.get("cid") and video.get("bvid"):
+                query = f"bvid={video['bvid']}&cid={int(video['cid'])}"
+                _api_url, payload = await fetch_bounded(
+                    f"https://api.bilibili.com/x/player/v2?{query}",
+                )
+                api = json.loads(payload.decode("utf-8", errors="replace"))
+                api_data = api.get("data") if isinstance(api, dict) else {}
+                api_subtitle = api_data.get("subtitle") if isinstance(api_data, dict) else {}
+                entries = api_subtitle.get("subtitles", []) if isinstance(api_subtitle, dict) else []
+            if not entries:
+                return "", "这个视频没有可读取的字幕。"
+            entry = next((item for item in entries if isinstance(item, dict)
+                          and str(item.get("lan", "")).casefold().startswith("zh")), entries[0])
+            if not isinstance(entry, dict) or not entry.get("subtitle_url"):
+                return "", "这个视频没有可读取的字幕。"
+            caption_url = urljoin("https:", str(entry["subtitle_url"]))
+            _caption_url, payload = await fetch_bounded(caption_url)
+            caption = json.loads(payload.decode("utf-8", errors="replace"))
+            body = caption.get("body", []) if isinstance(caption, dict) else []
+            text = "\n".join(
+                str(item.get("content", "")) for item in body if isinstance(item, dict)
+            )
+            return (text, "") if text else ("", "这个视频没有可读取的字幕。")
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        return "", "这个视频没有可读取的字幕。"
+
+
 async def extract_web(url: str, *, allow_local: bool = False,
                       client_factory=httpx.AsyncClient) -> dict[str, object]:
     checked = await asyncio.wait_for(
         asyncio.to_thread(_validate_url, url, allow_local), timeout=3.0,
     )
     host = (urlparse(checked).hostname or "").casefold()
+    is_bilibili = host == "bilibili.com" or host.endswith(".bilibili.com")
     if (host == "youtube.com" or host.endswith(".youtube.com") or host == "youtu.be"
-            or host == "bilibili.com" or host.endswith(".bilibili.com")):
-        text, note = await _video_captions(checked)
+            or is_bilibili):
+        if is_bilibili:
+            text, note = await asyncio.wait_for(
+                _bilibili_captions(checked, client_factory=client_factory), timeout=20.0,
+            )
+        else:
+            text, note = await _video_captions(checked)
         if note:
             text = note
         clipped = text[:MAX_TEXT_LENGTH]

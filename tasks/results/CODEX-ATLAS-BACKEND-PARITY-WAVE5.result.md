@@ -38,7 +38,7 @@ Implemented all seven feature areas in backend scope. `frontend/`, `backend-adap
 ### 6. Web and video extraction
 
 - Added `POST /api/web/extract` and the `web_extract` Agent tool. Page extraction checks every redirect, rejects non-public addresses, caps responses at 10 MB and text at 60,000 characters, and has a 20-second fetch deadline.
-- YouTube caption lookup uses the declared `youtube-transcript-api` dependency. HTML article extraction prefers `trafilatura` and has a standard-library fallback.
+- YouTube caption lookup uses the declared `youtube-transcript-api` dependency. Bilibili subtitles are read from page metadata or the player subtitle API; every page, API, and caption URL is checked for redirects and non-public addresses. HTML article extraction prefers `trafilatura` and has a standard-library fallback.
 
 ### 7. Telegram task channel
 
@@ -48,14 +48,13 @@ Implemented all seven feature areas in backend scope. `frontend/`, `backend-adap
 
 ## Deviations and known limits
 
-- Bilibili is recognized as a video URL and returns the taskbook's Chinese no-caption message, but Bilibili caption retrieval is not implemented. YouTube captions are implemented. This is an incomplete part of section 6.
 - The required full command (`python -m pytest -q --ignore=tests/test_computer_use.py ...`) did not complete in this environment. It was interrupted by `KeyboardInterrupt` after 60 passed and 1 skipped while moving into the next test module. Runs with longer test batches were also interrupted by the command runner. The child-process Hub smoke test did not finish within the available run window. No full-suite pass is claimed.
 - Existing assertions that encoded protocol 1.6 were updated to 1.7. An existing backend-selection test now tests explicit external selection because Atlas is the new default. The WebSocket authorization test now uses a temporary database and an empty test config rather than the machine's MCP/configuration state.
 - Real Telegram setup and Bilibili/YouTube caption availability were not manually verified. No live network was used.
 
 ## Verification evidence
 
-- Wave5 focused regressions: 13 passed.
+- Wave5 focused regressions: 14 passed, including mocked Bilibili subtitle extraction.
 - Wave5 OriginGuard regressions: 14 passed, including foreign-origin rejection across the new route groups and token-authorized access.
 - Wave2 regressions: 22 passed.
 - Wave3 regressions: 25 tests printed as passing across focused batches, including protocol 1.7 assertions. The first batch exceeded the terminal's command window after its pass summary, so it did not return a clean process exit.
@@ -68,5 +67,5 @@ Implemented all seven feature areas in backend scope. `frontend/`, `backend-adap
 1. Start Atlas, configure the Telegram bot token, allowed numeric user IDs, and an absolute local workspace through `PUT /api/channels/telegram`; confirm the response contains only `bot_token_set`, then call `/api/channels/telegram/test` and check the returned bot username.
 2. From an allowed Telegram account, send a plain-text task and confirm the conversation appears in Atlas with `source: "telegram"`. Try `/list`, `/status`, and `/stop`. Trigger a write and verify the approval buttons allow and deny it; use an unauthorized account and confirm no task is started.
 3. Configure Atlas Hub and desktop against the same data directory, enable the Telegram channel, and confirm only the process holding the scheduler lease handles updates.
-4. Call `POST /api/web/extract` with a public article URL and a YouTube video with available captions; verify extracted text and truncation metadata. A Bilibili URL currently returns the no-caption message even when subtitles exist.
+4. Call `POST /api/web/extract` with a public article URL and YouTube/Bilibili videos with available captions; verify extracted text and truncation metadata.
 5. Exercise section 2 with two temporary roots, section 3 with a note plus an indexed file, section 4 by rewinding and redoing a two-run conversation, and section 5 with a harmless JSON echo script. Keep all sample files in temporary workspaces.

@@ -233,6 +233,35 @@ async def test_web_extract_caps_text_redirect_checks_and_reports_missing_caption
 
 
 @pytest.mark.asyncio
+async def test_bilibili_captions_are_fetched_through_ssrf_checked_requests(monkeypatch):
+    import socket
+    import httpx
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+    ])
+
+    def client_factory(**kwargs):
+        def respond(request):
+            if request.url.host == "www.bilibili.com":
+                return httpx.Response(200, text=(
+                    'window.__INITIAL_STATE__={"videoData":{"bvid":"BV-test","cid":4,'
+                    '"subtitle":{"list":[{"lan":"zh-CN",'
+                    '"subtitle_url":"//captions.bilibili.com/caption.json"}]}}};'
+                ))
+            return httpx.Response(200, json={"body": [
+                {"content": "第一句字幕"}, {"content": "第二句字幕"},
+            ]})
+        return httpx.AsyncClient(transport=httpx.MockTransport(respond), **kwargs)
+
+    result = await extract_web(
+        "https://www.bilibili.com/video/BV-test", client_factory=client_factory,
+    )
+    assert result["kind"] == "video"
+    assert result["text"] == "第一句字幕\n第二句字幕"
+
+
+@pytest.mark.asyncio
 async def test_rewind_restores_messages_and_files_then_redo_restores_both(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from atlas import server
