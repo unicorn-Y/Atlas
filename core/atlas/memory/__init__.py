@@ -134,7 +134,10 @@ class MemoryStore:
                 base_branch TEXT,
                 parent_conversation_id TEXT,
                 fork_message_id TEXT,
-                permission_mode TEXT NOT NULL DEFAULT 'full_access'
+                permission_mode TEXT NOT NULL DEFAULT 'full_access',
+                allowed_paths TEXT NOT NULL DEFAULT '[]',
+                executor TEXT NOT NULL DEFAULT 'atlas',
+                sandbox TEXT NOT NULL DEFAULT 'null'
             );
 
             -- Messages
@@ -637,7 +640,10 @@ class MemoryStore:
                                   ("workspace", "TEXT"), ("worktree_path", "TEXT"),
                                   ("worktree_branch", "TEXT"), ("base_branch", "TEXT"),
                                   ("parent_conversation_id", "TEXT"), ("fork_message_id", "TEXT"),
-                                  ("permission_mode", "TEXT NOT NULL DEFAULT 'full_access'")):
+                                  ("permission_mode", "TEXT NOT NULL DEFAULT 'full_access'"),
+                                  ("allowed_paths", "TEXT NOT NULL DEFAULT '[]'"),
+                                  ("executor", "TEXT NOT NULL DEFAULT 'atlas'"),
+                                  ("sandbox", "TEXT NOT NULL DEFAULT 'null'")):
             if name not in conversation_columns:
                 await self._db.execute(
                     f"ALTER TABLE conversations ADD COLUMN {name} {declaration}"
@@ -688,13 +694,15 @@ class MemoryStore:
         cursor = await self._db.execute(
             "SELECT id, title, created_at, updated_at, pinned, archived, workspace, "
             "worktree_path, worktree_branch, base_branch, parent_conversation_id, fork_message_id, "
-            "permission_mode "
+            "permission_mode, allowed_paths, executor, sandbox "
             "FROM conversations ORDER BY pinned DESC, updated_at DESC LIMIT ?",
             (limit,),
         )
         rows = await cursor.fetchall()
         return [{**dict(r), "pinned": bool(r["pinned"]),
-                 "archived": bool(r["archived"])} for r in rows]
+                 "archived": bool(r["archived"]),
+                 "allowed_paths": json.loads(r["allowed_paths"] or "[]"),
+                 "sandbox": json.loads(r["sandbox"] or "null")} for r in rows]
 
     async def get_conversation_messages(
         self, conversation_id: str, limit: int = 100
@@ -3791,12 +3799,17 @@ class MemoryStore:
         cursor = await self._db.execute(
             "SELECT id, title, created_at, updated_at, metadata, pinned, archived, workspace, "
             "worktree_path, worktree_branch, base_branch, parent_conversation_id, fork_message_id, "
-            "permission_mode "
+            "permission_mode, allowed_paths, executor, sandbox "
             "FROM conversations WHERE id = ?",
             (conversation_id,),
         )
         row = await cursor.fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        result = dict(row)
+        result["allowed_paths"] = json.loads(result.get("allowed_paths") or "[]")
+        result["sandbox"] = json.loads(result.get("sandbox") or "null")
+        return result
 
     async def update_conversation(
         self, conversation_id: str, *, title: str | None = None,
@@ -3804,7 +3817,9 @@ class MemoryStore:
         workspace: str | None = None, worktree_path: str | None = None,
         worktree_branch: str | None = None, base_branch: str | None = None,
         parent_conversation_id: str | None = None, fork_message_id: str | None = None,
-        permission_mode: str | None = None,
+        permission_mode: str | None = None, allowed_paths: list[str] | None = None,
+        executor: str | None = None, sandbox: dict[str, Any] | None = None,
+        sandbox_set: bool = False,
     ) -> bool:
         """Update optional conversation fields. Returns True if found."""
         assert self._db is not None
@@ -3815,6 +3830,9 @@ class MemoryStore:
                   "parent_conversation_id": parent_conversation_id,
                   "fork_message_id": fork_message_id}
         fields["permission_mode"] = permission_mode
+        fields["allowed_paths"] = None if allowed_paths is None else json.dumps(allowed_paths)
+        fields["executor"] = executor
+        fields["sandbox"] = json.dumps(sandbox) if sandbox_set else None
         if not any(value is not None for value in fields.values()):
             cursor = await self._db.execute(
                 "SELECT 1 FROM conversations WHERE id=?", (conversation_id,)

@@ -862,6 +862,11 @@ class ConversationUpdateRequest(BaseModel):
     title: str | None = None
     pinned: bool | None = None
     archived: bool | None = None
+    workspace: str | None = None
+    permission_mode: str | None = None
+    allowed_paths: list[str] | None = None
+    executor: str | None = None
+    sandbox: dict[str, Any] | None = None
 
 
 class ConversationCreateRequest(BaseModel):
@@ -1134,10 +1139,40 @@ async def update_conversation(
     conversation_id: str,
     req: ConversationUpdateRequest,
 ) -> dict[str, str]:
-    """Update a conversation's title."""
+    """Persist conversation title and runtime preferences."""
     assert memory is not None
+    values = req.model_dump(exclude_unset=True)
+    if values.get("permission_mode") not in {
+        None, "full_access", "ask_writes", "read_only",
+    }:
+        raise HTTPException(status_code=400, detail="invalid permission_mode")
+    paths = values.get("allowed_paths")
+    if paths is not None and any(
+        not isinstance(path, str) or not Path(path).is_absolute() for path in paths
+    ):
+        raise HTTPException(status_code=400, detail="allowed_paths must contain absolute paths")
+    workspace = values.get("workspace")
+    if workspace:
+        try:
+            if workspace.startswith("ssh://"):
+                ssh_workspaces.parse_workspace(workspace)
+            elif not Path(workspace).is_absolute():
+                raise ValueError("workspace must be absolute")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if "sandbox" in values and values["sandbox"] is not None:
+        sandbox = values["sandbox"]
+        if sandbox.get("type") != "docker" or not isinstance(
+            sandbox.get("network", False), bool
+        ):
+            raise HTTPException(status_code=400, detail="invalid sandbox settings")
     ok = await memory.update_conversation(
-        conversation_id, title=req.title, pinned=req.pinned, archived=req.archived,
+        conversation_id,
+        title=values.get("title"), pinned=values.get("pinned"),
+        archived=values.get("archived"), workspace=values.get("workspace"),
+        permission_mode=values.get("permission_mode"),
+        allowed_paths=values.get("allowed_paths"), executor=values.get("executor"),
+        sandbox=values.get("sandbox"), sandbox_set="sandbox" in values,
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -4493,7 +4528,7 @@ async def run_goal_now(goal_id: str) -> dict[str, str]:
 @app.get("/api/runtime/protocol")
 async def runtime_protocol() -> dict[str, str]:
     """Advertise Runtime Event Protocol version."""
-    return {"version": "1.5"}
+    return {"version": "1.6"}
 
 
 @app.post("/api/runs/{run_id}/subtasks/{subtask_id}/cancel")
@@ -4524,7 +4559,8 @@ class RunState:
         "tool_allow", "tool_deny", "reasoning_effort", "reasoning_effort_applied",
         "ephemeral", "ephemeral_source", "tool_output_dir", "subtasks",
         "read_only", "active_skills", "profile_id", "user_input",
-        "permission_mode", "allowed_paths", "trust_future",
+        "permission_mode", "allowed_paths", "trust_future", "trust_event_id",
+        "executor", "sandbox",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -4564,6 +4600,9 @@ class RunState:
         self.permission_mode = "full_access"
         self.allowed_paths: list[str] = []
         self.trust_future: asyncio.Future[bool] | None = None
+        self.trust_event_id: str | None = None
+        self.executor = "atlas"
+        self.sandbox: dict[str, Any] | None = None
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""
@@ -4700,6 +4739,23 @@ class RuntimeManager:
 runtime_mgr = RuntimeManager()
 
 
+async def _handle_rules_trust(conn_id: str, data: dict[str, Any]) -> None:
+    run_id = str(data.get("run_id", ""))
+    run = runtime_mgr.runs.get(run_id)
+    if run and run.trust_future and not run.trust_future.done() and run.trust_event_id:
+        # One RunState has one outstanding trust request, so a stale event_id
+        # after reconnect can safely fall back to run_id.
+        trusted = data.get("trust") is True
+        if trusted and run.workspace:
+            _set_workspace_trusted(run.workspace, True)
+        run.trust_future.set_result(trusted)
+        return
+    await runtime_mgr.send(conn_id, {
+        "type": "error", "run_id": run_id,
+        "detail": "没有可匹配的待处理规则信任请求。",
+    })
+
+
 @app.websocket("/ws/chat")
 async def ws_chat(ws: WebSocket) -> None:
     """Runtime Event Protocol 1.2 WebSocket endpoint.
@@ -4738,14 +4794,7 @@ async def ws_chat(ws: WebSocket) -> None:
                 await _handle_resume(conn_id, data)
 
             elif msg_type == "rules.trust":
-                run = runtime_mgr.runs.get(str(data.get("run_id", "")))
-                if run and run.trust_future and not run.trust_future.done():
-                    event_id = f"{run.run_id}:{run.sequence}"
-                    if data.get("event_id") == event_id:
-                        trusted = data.get("trust") is True
-                        if trusted and run.workspace:
-                            _set_workspace_trusted(run.workspace, True)
-                        run.trust_future.set_result(trusted)
+                await _handle_rules_trust(conn_id, data)
 
             elif msg_type == "run.cancel":
                 run_id = data.get("run_id", "")
@@ -4963,12 +5012,30 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         conversation = await memory.get_conversation(conv_id)
     if not workspace and conversation:
         workspace = conversation.get("workspace")
+    if conversation:
+        if "permission_mode" not in data:
+            run.permission_mode = conversation.get("permission_mode", "full_access")
+            run.read_only = run.permission_mode == "read_only" or profile_id in {"architect", "reviewer"}
+        if "allowed_paths" not in data:
+            run.allowed_paths = list(conversation.get("allowed_paths") or [])
+        run.executor = str(data.get("executor", conversation.get("executor") or "atlas"))
+        run.sandbox = data.get("sandbox", conversation.get("sandbox"))
+    else:
+        run.executor = str(data.get("executor", "atlas"))
+        run.sandbox = data.get("sandbox")
     if permission_mode == "full_access" and conversation and "permission_mode" not in data:
         run.permission_mode = conversation.get("permission_mode", "full_access")
         run.read_only = (run.permission_mode == "read_only"
                          or profile_id in {"architect", "reviewer"})
-    if memory is not None and conversation and "permission_mode" in data:
-        await memory.update_conversation(conv_id, permission_mode=run.permission_mode)
+    if memory is not None and conversation:
+        updates: dict[str, Any] = {}
+        for field in ("workspace", "permission_mode", "allowed_paths", "executor", "sandbox"):
+            if field in data:
+                updates[field] = data[field]
+        if updates:
+            await memory.update_conversation(
+                conv_id, **updates, sandbox_set="sandbox" in updates,
+            )
     if not workspace and projects is not None:
         try:
             db = projects._require_db()
@@ -5131,6 +5198,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             loop = asyncio.get_running_loop()
             run.trust_future = loop.create_future()
             next_event_id = f"{run.run_id}:{run.sequence + 1}"
+            run.trust_event_id = next_event_id
             trust_env = run.next_envelope("rules.trust_required", {
                 "event_id": next_event_id, "root": run.workspace,
                 "files": [{"path": item["path"], "bytes": item["bytes"]}
@@ -5325,7 +5393,11 @@ async def _execute_run(
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
         if event == "run.started":
-            data = {**data, "environment": "ssh" if (workspace or "").startswith("ssh://") else "local"}
+            data = {
+                **data,
+                "environment": "ssh" if (workspace or "").startswith("ssh://") else "local",
+                "executor": run.executor,
+            }
             if (workspace or "").startswith("ssh://"):
                 with suppress(Exception):
                     data["host"] = ssh_workspaces.parse_workspace(workspace)[0]

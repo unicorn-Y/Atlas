@@ -93,16 +93,35 @@ class TomlRecordStore:
 
 
 DEFAULT_PROFILES = [
-    {"id": "default", "name": "Default", "description": "Atlas default behavior", "instructions": "", "active_skills": [], "tools": {"allow": None, "deny": []}, "mode": "act"},
-    {"id": "architect", "name": "Architect", "description": "Read-only planning and design", "instructions": "Design a solution and explain tradeoffs. Do not modify files.", "active_skills": [], "tools": {"allow": ["local_file", "coding.repo_map", "coding.ast_grep.run"], "deny": []}, "mode": "plan"},
-    {"id": "reviewer", "name": "Reviewer", "description": "Read-only code review", "instructions": "Review code for correctness, regressions, and security issues. Do not modify files.", "active_skills": [], "tools": {"allow": ["local_file", "coding.repo_map", "coding.ast_grep.run"], "deny": []}, "mode": "act"},
+    {"id": "default", "name": "默认", "description": "Atlas 默认行为", "instructions": "", "active_skills": [], "tools": {"allow": None, "deny": []}, "mode": "act"},
+    {"id": "architect", "name": "架构师", "description": "只读规划与设计", "instructions": "设计方案并说明取舍，不要修改文件。", "active_skills": [], "tools": {"allow": ["local_file", "coding.repo_map", "coding.ast_grep.run"], "deny": []}, "mode": "plan"},
+    {"id": "reviewer", "name": "审查员", "description": "只读代码审查", "instructions": "检查代码的正确性、回归风险和安全问题，不要修改文件。", "active_skills": [], "tools": {"allow": ["local_file", "coding.repo_map", "coding.ast_grep.run"], "deny": []}, "mode": "act"},
 ]
 
 
 def seed_profiles(store: TomlRecordStore) -> None:
+    legacy_text = {
+        "default": {
+            "name": "Default", "description": "Atlas default behavior",
+            "instructions": "",
+        },
+        "architect": {
+            "name": "Architect", "description": "Read-only planning and design",
+            "instructions": "Design a solution and explain tradeoffs. Do not modify files.",
+        },
+        "reviewer": {
+            "name": "Reviewer", "description": "Read-only code review",
+            "instructions": "Review code for correctness, regressions, and security issues. Do not modify files.",
+        },
+    }
     for profile in DEFAULT_PROFILES:
-        if store.get(profile["id"]) is None:
+        existing = store.get(profile["id"])
+        if existing is None:
             store.put(profile)
+        elif all(existing.get(key) == value for key, value in legacy_text[profile["id"]].items()):
+            store.put({**existing, **{
+                key: profile[key] for key in ("name", "description", "instructions")
+            }})
 
 
 class WorktreeService:

@@ -43,10 +43,31 @@ from atlas.agent.results import externalize_tool_output
 from atlas.config import get_config
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
+from atlas.ssh import ssh_workspaces
 from atlas.tools.computer_use import ComputerUseRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 from atlas.tools.web import WEB_TOOLS as _WEB_TOOLS
+
+
+def _ssh_paths_allowed(workspace: str, allowed_paths: list[str], candidates: list[str]) -> bool:
+    """Check remote paths after normalizing them against their SSH workspace root."""
+    try:
+        _host, remote_root = ssh_workspaces.parse_workspace(workspace)
+        permitted_roots = [
+            ssh_workspaces._remote_path(remote_root, item)
+            for item in [*allowed_paths, remote_root]
+        ]
+        for candidate in candidates:
+            resolved = ssh_workspaces._remote_path(remote_root, candidate)
+            if not any(
+                resolved == root or resolved.startswith(root.rstrip("/") + "/")
+                for root in permitted_roots
+            ):
+                return False
+        return True
+    except (ValueError, TypeError):
+        return False
 
 log = structlog.get_logger()
 
@@ -815,7 +836,11 @@ class AgentOrchestrator:
                       or (read_only and fn_name not in {"local_file", "coding.repo_map", "coding.ast_grep.run"})
                       or (read_only and fn_name == "local_file" and fn_args.get("action") not in {"read", "list", "glob", "search", "stat"}))
             if denied:
-                detail = f"Tool '{fn_name}' is not allowed by the active profile."
+                detail = (
+                    "当前对话是只读模式，不能执行这项操作。需要修改的话，请把对话权限切到『完全访问』或『改前问我』。"
+                    if permission_mode == "read_only" or read_only
+                    else "当前角色不支持这项操作。请切换到允许此操作的角色，或联系管理员调整角色设置。"
+                )
                 events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
                                "content": [{"type": "text", "text": detail}], "is_error": True,
                                "error_category": "policy"})
@@ -824,7 +849,21 @@ class AgentOrchestrator:
                     await ctx.event_queue.put(events[-1])
                 continue
 
-            if allowed_paths and not (workspace or "").startswith("ssh://"):
+            if allowed_paths and (workspace or "").startswith("ssh://"):
+                candidates = [value for key, value in fn_args.items()
+                              if key in {"path", "destination", "cwd", "workspace", "root", "repo"}
+                              and isinstance(value, str)]
+                denied = not _ssh_paths_allowed(workspace, allowed_paths, candidates)
+                if denied:
+                    detail = "这条路径超出了当前允许访问的目录范围。请改用允许目录内的路径，或调整对话的目录访问设置。"
+                    events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
+                                   "content": [{"type": "text", "text": detail}],
+                                   "is_error": True, "error_category": "policy"})
+                    tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+                    if ctx.event_queue is not None:
+                        await ctx.event_queue.put(events[-1])
+                    continue
+            elif allowed_paths:
                 candidates = [value for key, value in fn_args.items()
                               if key in {"path", "destination", "cwd", "workspace", "root"}
                               and isinstance(value, str)]
@@ -844,7 +883,7 @@ class AgentOrchestrator:
                         denied = True
                         break
                 if denied:
-                    detail = "Tool path is outside allowed_paths and workspace."
+                    detail = "这条路径超出了当前允许访问的目录范围。请改用允许目录内的路径，或调整对话的目录访问设置。"
                     events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
                                    "content": [{"type": "text", "text": detail}],
                                    "is_error": True, "error_category": "policy"})
@@ -877,7 +916,7 @@ class AgentOrchestrator:
             if permission_mode == "ask_writes" and is_write and ctx.approval_callback:
                 choice = await ctx.approval_callback(f"approval:{tc_id}", fn_name, fn_args)
                 if choice != "allow":
-                    detail = f"Tool '{fn_name}' denied by user."
+                    detail = "操作未获允许，因此已取消。需要执行的话，请在确认卡片中允许这次操作，或调整对话权限。"
                     result = {"content": [{"type": "text", "text": detail}], "is_error": True}
                     events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
                                    "content": result["content"], "is_error": True})
