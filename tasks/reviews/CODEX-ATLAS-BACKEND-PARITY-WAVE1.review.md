@@ -1,6 +1,6 @@
 # CODEX-ATLAS-BACKEND-PARITY-WAVE1 Review
 
-REVIEW_RESULT: REWORK（一项安全阻塞，其余接受）
+REVIEW_RESULT: ACCEPTED（安全阻塞已由审阅方直接修复，见文末）
 REVIEWED_HEAD: `f2655a1`
 BASE_HEAD: `02fb0f0`
 
@@ -40,3 +40,14 @@ BASE_HEAD: `02fb0f0`
 ## 前端接线
 
 安全修复合入后，前端会接这一波的接口（steer、置顶/归档持久化、diff、终端、文件树、用量、规则、文件附件、Plan 模式、ask_user、编辑重发/分叉、每会话目录）。这部分不需要后端再改。
+
+## 审阅方修复（2026-09-30）
+
+用户决定由审阅方直接修复，不再退回 Codex：
+
+- 新增 `core/atlas/origin_guard.py`：`OriginGuard` ASGI 中间件覆盖全部 HTTP 与 WebSocket 路由（含以后新增的）。放行：无 `Origin`、Vite 开发/预览来源、`server.allowed_origins`、或携带正确的 `X-Atlas-Api-Token`。`Origin: null` 必须带 token。WebSocket 在 accept 前以 1008 关闭，HTTP 返回 403。CORS 从 `*` 改为白名单。
+- `ATLAS_API_TOKEN`：Electron 主进程每次启动随机生成，随环境变量传给它拉起的后端，并通过 `session.webRequest.onBeforeSendHeaders` 附加到发往后端的 HTTP/WebSocket 请求上；渲染进程拿不到这个值。
+- 已知限制：打包版如果复用一个手动启动、没有 token 的后端，`null` 来源会被拒；开发模式（5173）不受影响。
+- 前端适配层原来要求协议版本严格等于 `1.2`，本波升到 `1.3` 后前端无法发起任何 run。已改为按主/次版本比较，≥1.2 即可，并补测试。
+- `test_checkpoint_diff_and_invalid_run_filter` 改用临时 checkpoint 目录。
+- 验证：`core/tests/test_origin_guard.py` 6 passed；打包模式（`file://`）实测 HTTP、CORS 预检、`/ws/chat` 均正常并完成一次真实对话；外部 Origin 与伪造 `null` 连 `/ws/terminal`、`/ws/chat`、`/api/workspace/file` 全部被拒。

@@ -1578,12 +1578,16 @@ class TestBackendParityWave1:
         assert (row["title"], row["pinned"], row["archived"]) == ("Kept title", True, True)
         assert (await client.put("/api/conversations/missing", json={"pinned": True})).status_code == 404
 
-    async def test_checkpoint_diff_and_invalid_run_filter(self, client: AsyncClient, tmp_path: Path) -> None:
+    async def test_checkpoint_diff_and_invalid_run_filter(
+        self, client: AsyncClient, tmp_path: Path, monkeypatch,
+    ) -> None:
         workspace = tmp_path / "diff-workspace"
         workspace.mkdir()
         file = workspace / "note.txt"
         file.write_text("before\n", encoding="utf-8")
         store = server.orchestrator.checkpoints
+        # Keep test snapshots out of the user's real %LOCALAPPDATA%\Atlas\checkpoints.
+        monkeypatch.setattr(store, "storage_dir", (tmp_path / "checkpoints").resolve())
         baseline = store.create_checkpoint(
             workspace, ["note.txt"], run_id="diff-run", conversation_id="diff-conv",
         )

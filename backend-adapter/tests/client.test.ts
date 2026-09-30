@@ -145,6 +145,30 @@ describe('BackendAdapter availability and recovery', () => {
     expect(MockWebSocket.instances).toHaveLength(2);
   });
 
+  it('starts runs on any runtime protocol from 1.2 up and refuses older ones', async () => {
+    const connect = async (version: string) => {
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/api/health')
+        ? { ok: true } as Response
+        : { ok: true, json: async () => ({ version }) } as Response));
+      vi.stubGlobal('WebSocket', MockWebSocket);
+      vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+      const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+      await adapter.initialize();
+      return adapter.startRun({ type: 'run.start', run_id: `run-${version}`, content: 'hello', conversation_id: 'conv-1' }, () => undefined);
+    };
+
+    for (const version of ['1.3', '1.10', '2.0']) {
+      MockWebSocket.instances = [];
+      const running = connect(version);
+      await flushAsync();
+      expect(MockWebSocket.instances, `protocol ${version}`).toHaveLength(1);
+      MockWebSocket.instances[0].open();
+      MockWebSocket.instances[0].receive({ ...runtimeEvent(1, 'run.completed'), run_id: `run-${version}` });
+      await running;
+    }
+    await expect(connect('1.1')).rejects.toThrow('Runtime 1.2 is required');
+  });
+
   it('rejects a second start for a run that is already connecting', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

@@ -31,6 +31,8 @@ from atlas.skills.lifecycle import (
 )
 from atlas.skills.registry import SkillRegistry
 
+from .conftest import API_TOKEN
+
 NAME = "sample-skill"
 SOURCE = "owner/repo/sample-skill"
 SKILL_CENTER_TOKEN = "test-skill-center-authority"
@@ -39,7 +41,9 @@ SKILL_CENTER_TOKEN = "test-skill-center-authority"
 def _skill_center_headers(*, trusted_origin: bool = True) -> dict[str, str]:
     headers = {"X-Atlas-Skill-Center-Token": SKILL_CENTER_TOKEN}
     if trusted_origin:
+        # The packaged renderer: file:// origin, plus the token Electron attaches.
         headers["Origin"] = "null"
+        headers["X-Atlas-Api-Token"] = API_TOKEN
     return headers
 
 

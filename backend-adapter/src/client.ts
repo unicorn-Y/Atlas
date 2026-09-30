@@ -13,7 +13,8 @@ export class BackendAdapter {
   private mockControls = new Map<string, (event: string, data?: Record<string, unknown>) => void>();
   private runSockets = new Map<string, WebSocket>();
   private approvalResolvers = new Map<string, { runId: string; resolve: (choice: 'allow' | 'deny') => void }>();
-  private runtimeProtocol: 'v1' | '1.1' | '1.2' | null = null;
+  /** Agent Runtime protocol version as [major, minor]; [1, 0] for backends that predate the endpoint. */
+  private runtimeProtocol: [number, number] | null = null;
   availabilityError: string | null = null;
 
   constructor(options: BackendAdapterOptions) {
@@ -65,17 +66,24 @@ export class BackendAdapter {
     return response.json() as Promise<T>;
   }
 
+  private hasEventProtocol(): boolean {
+    const [major, minor] = this.runtimeProtocol ?? [0, 0];
+    return major > 1 || (major === 1 && minor >= 2);
+  }
+
   private async supportsRuntimeProtocol(): Promise<boolean> {
     if (this.runtimeProtocol === null) {
       try {
         const response = await fetch(`${this.baseUrl}/api/runtime/protocol`);
         const body = response.ok ? await response.json() as { version?: string } : {};
-        this.runtimeProtocol = body.version === '1.2' ? '1.2' : body.version === '1.1' ? '1.1' : 'v1';
+        // Minor versions only add messages, so any version from 1.2 up speaks the event protocol.
+        const [major, minor] = (body.version ?? '').split('.').map((part) => Number.parseInt(part, 10));
+        this.runtimeProtocol = Number.isInteger(major) ? [major, Number.isInteger(minor) ? minor : 0] : [1, 0];
       } catch {
-        this.runtimeProtocol = 'v1';
+        this.runtimeProtocol = [1, 0];
       }
     }
-    return this.runtimeProtocol === '1.2';
+    return this.hasEventProtocol();
   }
 
   async getModels(): Promise<ModelListResponse> { return this.live ? this.request('/api/models') : mockModels; }
@@ -300,7 +308,7 @@ export class BackendAdapter {
       this.mockControls.get(runId)?.(type === 'run.pause' ? 'run.paused' : 'run.resumed');
       return;
     }
-    if (this.runtimeProtocol !== '1.2') throw new Error('This backend does not support Agent Run controls');
+    if (!this.hasEventProtocol()) throw new Error('This backend does not support Agent Run controls');
     const socket = this.runSockets.get(runId);
     if (socket?.readyState !== WebSocket.OPEN) throw new Error('Agent Runtime socket is not connected');
     socket.send(JSON.stringify({ type, run_id: runId }));

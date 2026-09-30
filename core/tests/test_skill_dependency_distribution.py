@@ -19,6 +19,8 @@ from atlas.skills.dependencies import dependency_preflight, parse_dependencies
 from atlas.skills.distribution import PACKAGE_MANIFEST, inspect_skill_package
 from atlas.skills.registry import SkillRegistry
 
+from .conftest import API_TOKEN
+
 SKILL_TEXT = (
     "---\nname: packaged-sample\nversion: 1.0.0\ndescription: Package sample\n"
     "dependencies:\n  python_packages:\n    - name: requests\n      version: '>=2.0'\n"
@@ -49,7 +51,10 @@ def _bundle(*, skill: str = SKILL_TEXT, name: str = "packaged-sample",
 
 
 def _headers() -> dict[str, str]:
-    return {"X-Atlas-Skill-Center-Token": "p15e-test-token", "Origin": "null"}
+    return {
+        "X-Atlas-Skill-Center-Token": "p15e-test-token", "Origin": "null",
+        "X-Atlas-Api-Token": API_TOKEN,
+    }
 
 
 def test_dependency_contract_parses_all_kinds_and_constraints():

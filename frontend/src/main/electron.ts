@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -8,6 +8,17 @@ import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 let windowRef: BrowserWindow | null = null;
 process.env.ATLAS_SKILL_CENTER_TOKEN ??= randomBytes(32).toString('base64url');
+// Proves to the backend that a request comes from this app rather than some web page.
+// Only the main process ever sees it: it is attached below, outside the renderer.
+process.env.ATLAS_API_TOKEN ??= randomBytes(32).toString('base64url');
+
+function attachBackendToken() {
+  const port = process.env.ATLAS_PORT ?? '8765';
+  const urls = ['127.0.0.1', 'localhost'].flatMap((host) => [`http://${host}:${port}/*`, `ws://${host}:${port}/*`]);
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls }, (details, callback) => {
+    callback({ requestHeaders: { ...details.requestHeaders, 'X-Atlas-Api-Token': process.env.ATLAS_API_TOKEN ?? '' } });
+  });
+}
 
 function createWindow() {
   windowRef = new BrowserWindow({
@@ -85,6 +96,7 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+  attachBackendToken();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

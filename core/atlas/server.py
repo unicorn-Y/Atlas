@@ -63,6 +63,7 @@ from atlas.config import get_config
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
 from atlas.notifications import NotificationBus
+from atlas.origin_guard import DEV_ORIGINS, OriginGuard
 from atlas.plugins import PluginRuntime
 from atlas.projects import ProjectStore
 from atlas.runtime import hub_control
@@ -787,13 +788,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
 
+def _configured_origins() -> list[str]:
+    value = get_config().get("server.allowed_origins", [])
+    return [str(item) for item in value] if isinstance(value, list) else []
+
+
+# "null" is the packaged renderer (file://). CORS only decides who may read responses;
+# OriginGuard, added last and therefore outermost, decides who may send requests at all.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[*sorted(DEV_ORIGINS), "null", *_configured_origins()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(OriginGuard, extra_origins=_configured_origins)
 
 
 # ---------------------------------------------------------------------------
