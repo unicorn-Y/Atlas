@@ -77,6 +77,7 @@ interface AtlasState {
   approvePlan: (runId: string, eventId: string, edits?: string) => void;
   togglePaused: () => void;
   stopTask: () => void;
+  stopRun: (runId: string) => void;
   dismissError: () => void;
   setFollowUpMode: (mode: FollowUpMode) => void;
   setNextRunMode: (mode: 'act' | 'plan') => void;
@@ -358,8 +359,9 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       try { backend.controlRun(run.id, run.status === 'paused' ? 'run.resume' : 'run.pause'); }
       catch (error) { set({ error: errorText(error, '运行控制请求失败') }); }
     },
-    stopTask: () => {
-      const run = get().activeRunId ? get().getRun(get().activeRunId!) : undefined;
+    stopTask: () => { if (get().activeRunId) get().stopRun(get().activeRunId!); },
+    stopRun: (runId) => {
+      const run = get().getRun(runId);
       if (!run) return;
       if (get().queue[run.conversationId]?.length || get().pendingSteers[run.id]?.length) {
         set((state) => ({ queuePaused: { ...state.queuePaused, [run.conversationId]: true } }));

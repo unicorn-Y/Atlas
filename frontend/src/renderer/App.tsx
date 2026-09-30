@@ -17,10 +17,12 @@ import MemoryPage from './pages/MemoryPage';
 import AutomationPage from './pages/AutomationPage';
 import CodePage from './pages/CodePage';
 import CreatePage from './pages/CreatePage';
+import BoardPage from './pages/BoardPage';
 import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
 import Sidebar, { NAV, type View } from './shell/Sidebar';
 import HomeView, { type Suggestion } from './shell/HomeView';
 import Inspector, { type InspectorTab } from './shell/Inspector';
+import type { PickedElement } from './shell/panels/BrowserPanel';
 import { THEMES, isTheme, nextTheme, themeInfo, type Theme } from './shell/themes';
 import { api, relativeTime } from './services/api';
 import { Button } from './ui/Button';
@@ -71,6 +73,8 @@ export default function App() {
   const [attachments, setAttachments] = useState<string[]>([]);
   const [files, setFiles] = useState<Array<RunFile & { size: number }>>([]);
   const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
+  const [browserUrl, setBrowserUrl] = useState('');
+  const [terminalCommand, setTerminalCommand] = useState<{ id: string; text: string } | null>(null);
   const [listening, setListening] = useState(false);
   const [voiceOutput, setVoiceOutput] = useState(() => pref('voice-output') === 'true');
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
@@ -175,6 +179,18 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  // Each conversation reopens where it was left; new ones start at the latest message.
+  const scrollPositions = useRef(new Map<string, number>());
+  const restoredRef = useRef('');
+  useEffect(() => {
+    const element = threadRef.current;
+    if (!element || view !== 'chat' || loadingMessages || restoredRef.current === store.activeConversationId) return;
+    restoredRef.current = store.activeConversationId;
+    const saved = scrollPositions.current.get(store.activeConversationId);
+    element.scrollTop = saved ?? element.scrollHeight;
+  }, [store.activeConversationId, loadingMessages, view]);
+  useEffect(() => { if (view !== 'chat') restoredRef.current = ''; }, [view]);
+
   // Keep the thread pinned to the bottom while new content streams in, unless the user scrolled up.
   useEffect(() => {
     const element = threadRef.current;
@@ -213,6 +229,15 @@ export default function App() {
     const text = input;
     const images = attachments;
     const documents = files.map(({ name, mime, data_base64 }) => ({ name, mime, data_base64 }));
+    // `!command` runs straight in the terminal panel instead of going to the Agent.
+    if (!fromHome && text.trim().startsWith('!') && text.trim().length > 1) {
+      if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('先选工作目录，终端会在那里打开'); return; }
+      setTerminalCommand({ id: crypto.randomUUID(), text: text.trim().slice(1).trim() });
+      setInput('');
+      writeDraft(store.activeConversationId, '');
+      showInspectorTab('terminal');
+      return;
+    }
     if (editing && !fromHome) {
       setInput('');
       setEditing(null);
@@ -355,6 +380,7 @@ export default function App() {
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
+    { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
     ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩这个对话的上下文，省 token', run: () => void store.compactConversation(activeConversation.id).then((text) => { if (text) setToast(text); }) }] : []),
     { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
     { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
@@ -389,6 +415,7 @@ export default function App() {
     value: input, onChange: setInput, attachments, onPickImages: addFiles, listening, onToggleMic: toggleSpeechInput,
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
     files, onRemoveFile: (index: number) => setFiles((items) => items.filter((_, position) => position !== index)),
+    onLongPaste: (text: string) => { addDocuments([new File([text], `粘贴的文本-${new Date().toLocaleTimeString().replace(/:/g, '')}.txt`, { type: 'text/plain' })]); setToast(`粘贴内容有 ${text.length} 个字，已转成附件`); },
     tools: <>
       <Tip label={workspaceName ? `工作目录：${activeConversation?.workspace}（点击更换）` : '选择工作目录'}>
         <button type="button" onClick={() => void chooseWorkspace()} className={cn('inline-flex h-8 max-w-[160px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', workspaceName ? 'text-fg-2' : 'text-fg-3')}>
@@ -437,6 +464,25 @@ export default function App() {
       <Button size="sm" variant="ghost" onClick={() => store.stopTask()}><Square />停止</Button>
     </>}
   </div>;
+
+  const localUrls = useMemo(() => {
+    const found: string[] = [];
+    for (const event of [...activeEvents].reverse()) {
+      const text = [event.data.text, event.data.content, event.data.result, event.data.execution && JSON.stringify(event.data.execution)].filter((value) => typeof value === 'string').join(' ');
+      for (const match of text.matchAll(/https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/[^\s'"`<>)\]]*)?/g)) {
+        const url = match[0].replace(/[.,;:，。]+$/, '');
+        if (!found.includes(url)) found.push(url);
+      }
+      if (found.length >= 5) break;
+    }
+    return found;
+  }, [activeEvents]);
+  const pickElement = (picked: PickedElement) => {
+    const block = [`页面元素（${picked.url}）`, `选择器：${picked.selector}`, picked.text && `文字：${picked.text}`, `HTML：\n${picked.html}`].filter(Boolean).join('\n');
+    setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}${block}\n\n`);
+    if (picked.screenshot) setAttachments((current) => current.length < 4 ? [...current, picked.screenshot!] : current);
+    setToast('已把元素放进输入框，写上你想怎么改');
+  };
 
   const conversationQueue = store.queue[store.activeConversationId] ?? [];
   const queuePaused = Boolean(store.queuePaused[store.activeConversationId]);
@@ -518,7 +564,8 @@ export default function App() {
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
-            <div ref={threadRef} aria-label="任务活动" className="min-h-0 flex-1 overflow-auto px-8 pt-2">
+            <div ref={threadRef} aria-label="任务活动" className="min-h-0 flex-1 overflow-auto px-8 pt-2"
+              onScroll={(event) => { if (restoredRef.current === store.activeConversationId) scrollPositions.current.set(store.activeConversationId, event.currentTarget.scrollTop); }}>
               <div className="mx-auto w-[min(720px,100%)] pb-8">
                 {history.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username}
                   actions={canRewrite && message.id ? message.role === 'user'
@@ -541,16 +588,20 @@ export default function App() {
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(720px,100%)]">
                 {queueStrip}
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，输入 / 看命令…'} header={editBanner || runHeader || undefined} />
+                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={editBanner || runHeader || undefined} />
               </div>
             </div>
           </div>
           {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => toggleInspector(false)} run={activeRun} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
-            workspace={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : null} onChooseWorkspace={() => void chooseWorkspace()} />}
+            workspace={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : null} onChooseWorkspace={() => void chooseWorkspace()}
+            browserUrl={browserUrl} onBrowserUrl={setBrowserUrl} browserSuggestions={localUrls} onPick={pickElement}
+            terminalCommand={terminalCommand} onSendToAtlas={(text) => { setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}终端输出：\n\`\`\`\n${text.trimEnd()}\n\`\`\`\n\n`); setToast('已把终端输出放进输入框'); }} />}
         </div>}
 
+        {view === 'board' && <BoardPage conversations={store.conversations} runs={store.runs} queue={store.queue} unread={store.unread} archived={store.archived}
+          onOpen={openConversation} onStop={store.stopRun} onArchive={store.toggleArchived} />}
         {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} initialPrompt={createPrompt} />}
         {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}

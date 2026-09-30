@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { ChevronRight, CircleStop, RotateCcw } from 'lucide-react';
+import { ChevronRight, CircleStop, MessageSquarePlus, Power, RotateCcw } from 'lucide-react';
 import type { ProcessInfo } from '@atlas/backend-adapter';
 import { backend } from '../../store/useAtlasStore';
 import { relativeTime } from '../../services/api';
@@ -14,8 +14,17 @@ const cssVar = (name: string) => getComputedStyle(document.documentElement).getP
  * A PowerShell in the conversation's working directory, next to the processes Atlas started.
  * It stays mounted while other tabs are shown, so switching away hides it without ending the shell.
  */
-export default function TerminalPanel({ cwd, active }: { cwd: string; active: boolean }) {
+export default function TerminalPanel({ cwd, active, command, onSendToAtlas }: {
+  cwd: string; active: boolean;
+  /** A command typed as `!cmd` in the composer; runs once the shell is ready. */
+  command?: { id: string; text: string } | null;
+  onSendToAtlas: (text: string) => void;
+}) {
   const [session, setSession] = useState(0);
+  const [closed, setClosed] = useState(false);
+  const [selection, setSelection] = useState('');
+  const termRef = useRef<Terminal | null>(null);
+  const ranRef = useRef('');
   const [status, setStatus] = useState<'connecting' | 'open' | 'closed'>('connecting');
   const [notice, setNotice] = useState('');
   const hostRef = useRef<HTMLDivElement>(null);
@@ -25,7 +34,7 @@ export default function TerminalPanel({ cwd, active }: { cwd: string; active: bo
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host || closed) return;
     const term = new Terminal({
       fontFamily: '"Cascadia Mono", Consolas, "Microsoft YaHei Mono", monospace', fontSize: 12.5, cursorBlink: true, scrollback: 5000,
       // PowerShell's colours assume a dark background, so the terminal stays dark in every theme.
@@ -37,6 +46,8 @@ export default function TerminalPanel({ cwd, active }: { cwd: string; active: bo
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
+    termRef.current = term;
+    const selected = term.onSelectionChange(() => setSelection(term.getSelection()));
     setStatus('connecting');
     setNotice('');
     const socket = new WebSocket(backend.terminalUrl(cwd));
@@ -57,8 +68,19 @@ export default function TerminalPanel({ cwd, active }: { cwd: string; active: bo
     const observer = new ResizeObserver(safeFit);
     observer.observe(host);
     fitRef.current = safeFit;
-    return () => { disposed = true; observer.disconnect(); input.dispose(); resize.dispose(); socket.close(); term.dispose(); fitRef.current = null; };
-  }, [cwd, session]);
+    return () => { disposed = true; observer.disconnect(); input.dispose(); resize.dispose(); selected.dispose(); socket.close(); term.dispose(); fitRef.current = null; termRef.current = null; setSelection(''); };
+  }, [cwd, session, closed]);
+
+  // Run a `!command` from the composer once, when the shell is connected.
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!command || ranRef.current === command.id || status !== 'open' || socket?.readyState !== WebSocket.OPEN) return;
+    ranRef.current = command.id;
+    socket.send(JSON.stringify({ type: 'input', data: `${command.text}\r` }));
+    termRef.current?.focus();
+  }, [command, status]);
+  // A new `!command` reopens a closed terminal; closing it again afterwards must stick.
+  useEffect(() => { if (command && command.id !== ranRef.current) setClosed(false); }, [command]);
 
   useEffect(() => { if (active) fitRef.current?.(); }, [active]);
 
@@ -66,10 +88,14 @@ export default function TerminalPanel({ cwd, active }: { cwd: string; active: bo
     <div className="flex items-center gap-2 text-[12px] text-fg-3">
       <span className={cn('size-1.5 rounded-full', status === 'open' ? 'bg-ok' : status === 'connecting' ? 'bg-brand' : 'bg-fg-3')} />
       <span className="min-w-0 flex-1 truncate" title={cwd}>PowerShell · {cwd}</span>
-      <button onClick={() => setSession((value) => value + 1)} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-hover hover:text-fg"><RotateCcw size={12} />{status === 'closed' ? '重新打开' : '重开'}</button>
+      {selection.trim() && <button onClick={() => { onSendToAtlas(selection); termRef.current?.clearSelection(); }} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-fg-2 hover:bg-hover hover:text-fg"><MessageSquarePlus size={12} />发给 Atlas</button>}
+      {!closed && <button onClick={() => setSession((value) => value + 1)} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-hover hover:text-fg"><RotateCcw size={12} />{status === 'closed' ? '重新打开' : '重开'}</button>}
+      <button onClick={() => { setClosed((value) => !value); setStatus('closed'); }} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-hover hover:text-fg"><Power size={12} />{closed ? '打开' : '关闭'}</button>
     </div>
     {notice && <p role="status" className="m-0 rounded-lg bg-sunken px-3 py-2 text-[12.5px] text-fg-2">{notice}</p>}
-    <div ref={hostRef} className="min-h-[220px] flex-1 overflow-hidden rounded-xl bg-[#1c1c1e] p-2" aria-label="终端" />
+    {closed
+      ? <p className="m-0 min-h-[220px] flex-1 rounded-xl bg-sunken p-4 text-[13px] text-fg-3">终端已关闭，PowerShell 进程已结束。点「打开」重新开一个。</p>
+      : <div ref={hostRef} className="min-h-[220px] flex-1 overflow-hidden rounded-xl bg-[#1c1c1e] p-2" aria-label="终端" />}
     <Processes active={active} />
   </div>;
 }

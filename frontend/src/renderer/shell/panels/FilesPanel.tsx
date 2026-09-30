@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, File, Folder, FolderOpen, LoaderCircle, RefreshCw } from 'lucide-react';
+import { ChevronRight, ExternalLink, File, Folder, FolderOpen, LoaderCircle, RefreshCw } from 'lucide-react';
 import type { WorkspaceEntry, WorkspaceFile } from '@atlas/backend-adapter';
 import { backend } from '../../store/useAtlasStore';
 import { Button } from '../../ui/Button';
@@ -89,6 +89,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey }:
     {file && <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl card-surface">
       <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
         <File size={13} className="shrink-0 text-fg-3" /><code className="min-w-0 flex-1 truncate font-mono">{file.path}</code>
+        {window.atlasDesktop?.openPath && <button title="用默认程序打开" aria-label="用默认程序打开" onClick={() => {
+          const full = `${workspace.replace(/[\\/]+$/, '')}\\${file.path.replace(/\//g, '\\')}`;
+          void window.atlasDesktop!.openPath(full).then((result) => { if (result !== 'opened' && result !== 'revealed') setError(`打不开：${result}`); });
+        }} className="grid size-6 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><ExternalLink size={13} /></button>}
         <button onClick={() => setSelected('')} className="shrink-0 text-fg-3 hover:text-fg">关闭</button>
       </div>
       {file.binary ? <p className="m-0 p-4 text-[13px] text-fg-3">这是二进制文件，不能直接预览。</p>

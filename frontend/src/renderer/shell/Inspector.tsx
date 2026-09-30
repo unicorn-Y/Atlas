@@ -10,14 +10,15 @@ import { Empty } from './panels/Empty';
 import ChangesPanel from './panels/ChangesPanel';
 import FilesPanel from './panels/FilesPanel';
 import TerminalPanel from './panels/TerminalPanel';
+import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
 
-export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'terminal' | 'context';
+export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'terminal' | 'browser' | 'context';
 
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
-const WIDE: InspectorTab[] = ['changes', 'files', 'terminal'];
+const WIDE: InspectorTab[] = ['changes', 'files', 'terminal', 'browser'];
 
-export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace }: {
+export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas }: {
   tab: InspectorTab;
   onTab: (tab: InspectorTab) => void;
   onClose: () => void;
@@ -34,22 +35,29 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
   onToast: (text: string) => void;
   workspace?: string | null;
   onChooseWorkspace: () => void;
+  browserUrl: string;
+  onBrowserUrl: (url: string) => void;
+  browserSuggestions: string[];
+  onPick: (picked: PickedElement) => void;
+  terminalCommand: { id: string; text: string } | null;
+  onSendToAtlas: (text: string) => void;
 }) {
   const [selected, setSelected] = useState('');
   const [raw, setRaw] = useState(false);
   // The terminal mounts on first visit and then stays, so hiding the tab doesn't end the shell.
   const [terminalOpened, setTerminalOpened] = useState(false);
-  useEffect(() => { if (tab === 'terminal') setTerminalOpened(true); }, [tab]);
+  const [browserOpened, setBrowserOpened] = useState(false);
+  useEffect(() => { if (tab === 'terminal') setTerminalOpened(true); if (tab === 'browser') setBrowserOpened(true); }, [tab]);
   const events: AgentEvent[] = run?.events ?? [];
   const steps = useMemo(() => buildTimeline(events).flatMap((item) => item.kind === 'steps' ? item.steps : []), [events]);
   const current = artifacts.find((item) => item.id === selected);
   const refreshKey = `${run?.id}:${run?.status}`;
 
   const tabs: Array<[InspectorTab, string]> = [
-    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['terminal', '终端'], ['context', '上下文'],
+    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'],
   ];
   return <aside aria-label="任务面板" className={cn('anim-fade flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)] transition-[width] duration-200', WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]')}>
-    <div className="flex items-center gap-4 px-5 pt-3 shadow-[inset_0_-1px_0_var(--line)]" role="tablist">
+    <div className="flex items-center gap-3.5 overflow-x-auto px-4 pt-3 shadow-[inset_0_-1px_0_var(--line)] [scrollbar-width:none]" role="tablist">
       {tabs.map(([id, label]) =>
         <button key={id} role="tab" aria-selected={tab === id} onClick={() => onTab(id)}
           className={cn('shrink-0 pb-2.5 text-[13px] transition-colors', tab === id ? 'font-medium text-fg shadow-[inset_0_-2px_0_var(--brand)]' : 'text-fg-3 hover:text-fg')}>{label}</button>)}
@@ -84,10 +92,14 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
       {terminalOpened && <div className={cn('h-full', tab !== 'terminal' && 'hidden')}>
         {workspace || !connected ? connected
-          ? <TerminalPanel cwd={workspace!} active={tab === 'terminal'} />
+          ? <TerminalPanel cwd={workspace!} active={tab === 'terminal'} command={terminalCommand} onSendToAtlas={onSendToAtlas} />
           : <Empty title="后端没有连接" body="连上 Atlas 后端后才能打开终端。" />
           : <Empty title="先选工作目录" body="终端会在这个会话的工作目录里打开。" icon={<FolderOpen size={22} />}
             action={<button onClick={onChooseWorkspace} className="primary-fill inline-flex h-8 items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-medium"><FolderOpen size={15} />选择文件夹</button>} />}
+      </div>}
+
+      {browserOpened && <div className={cn('h-full', tab !== 'browser' && 'hidden')}>
+        <BrowserPanel url={browserUrl} onUrl={onBrowserUrl} suggestions={browserSuggestions} onPick={onPick} onToast={onToast} />
       </div>}
 
       {tab === 'context' && <ContextTab conversationTitle={conversationTitle} modelName={modelName} run={run} tools={tools} skills={skills} activeSkills={activeSkills}

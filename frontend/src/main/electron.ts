@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -11,6 +11,31 @@ process.env.ATLAS_SKILL_CENTER_TOKEN ??= randomBytes(32).toString('base64url');
 // Proves to the backend that a request comes from this app rather than some web page.
 // Only the main process ever sees it: it is attached below, outside the renderer.
 process.env.ATLAS_API_TOKEN ??= randomBytes(32).toString('base64url');
+
+/** Session for pages shown in the browser panel. Separate from the app's, so they never get the backend token. */
+export const BROWSER_PARTITION = 'persist:atlas-browser';
+
+/** Pages in the browser panel are ordinary web content: no preload, no Node, their own session, web URLs only. */
+function lockDownWebviews() {
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-attach-webview', (event, preferences, params) => {
+      delete preferences.preload;
+      preferences.nodeIntegration = false;
+      preferences.nodeIntegrationInSubFrames = false;
+      preferences.contextIsolation = true;
+      preferences.sandbox = true;
+      params.partition = BROWSER_PARTITION;
+      if (params.src && !/^(https?:|file:|about:blank)/i.test(params.src)) event.preventDefault();
+    });
+    if (contents.getType() === 'webview') {
+      // Links that would open a new window stay in the panel instead.
+      contents.setWindowOpenHandler(({ url }) => {
+        if (/^https?:/i.test(url)) void contents.loadURL(url);
+        return { action: 'deny' };
+      });
+    }
+  });
+}
 
 function attachBackendToken() {
   const port = process.env.ATLAS_PORT ?? '8765';
@@ -35,6 +60,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // The browser panel renders pages in <webview>; see lockDownWebviews for what they may do.
+      webviewTag: true,
     },
   });
 
@@ -58,6 +85,15 @@ ipcMain.handle('dialog:open-directory', async (event, defaultPath?: unknown) => 
   const options = { title: '选择工作目录', properties: ['openDirectory' as const], defaultPath: typeof defaultPath === 'string' ? defaultPath : undefined };
   const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
   return result.canceled ? null : result.filePaths[0] ?? null;
+});
+// Anything Windows would execute on double-click. Opening these from the renderer would let a
+// compromised page run programs, so they are shown in Explorer instead.
+const RUNNABLE = /\.(exe|com|bat|cmd|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|msi|msp|scr|lnk|url|hta|cpl|jar|reg|appref-ms)$/i;
+ipcMain.handle('shell:open-path', async (event, target?: unknown) => {
+  if (event.sender !== windowRef?.webContents || typeof target !== 'string' || !path.isAbsolute(target)) return 'invalid path';
+  if (RUNNABLE.test(target)) { shell.showItemInFolder(target); return 'revealed'; }
+  const error = await shell.openPath(target);
+  return error || 'opened';
 });
 ipcMain.handle('skill-center:token', (event) => {
   if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {
@@ -103,6 +139,7 @@ app.whenReady().then(async () => {
     return;
   }
   attachBackendToken();
+  lockDownWebviews();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

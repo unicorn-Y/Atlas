@@ -9,6 +9,7 @@ const desktopApi: AtlasDesktopApi = {
   close: () => ipcRenderer.send('window:close'),
   getSkillCenterToken: () => ipcRenderer.invoke('skill-center:token') as Promise<string | undefined>,
   selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:open-directory', defaultPath) as Promise<string | null>,
+  openPath: (target) => ipcRenderer.invoke('shell:open-path', target) as Promise<string>,
   onMaximizeChange: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);
     ipcRenderer.on('window:maximize-change', listener);

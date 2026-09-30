@@ -20,6 +20,9 @@ export function guessIntent(text: string): Intent | null {
   return INTENTS.find(([pattern]) => pattern.test(text))?.[1] ?? { label: '日常', icon: MessageCircle };
 }
 
+/** Pastes longer than this (a log, a whole file) become an attachment. */
+const LONG_PASTE = 4000;
+
 export interface ComposerMode { id: string; label: string; icon: LucideIcon }
 
 /** An entry in the `/` menu. `takesArgument` commands receive the text typed after the command name. */
@@ -60,6 +63,8 @@ interface ComposerProps {
   /** Non-image attachments, shown as chips. */
   files?: Array<{ name: string; size: number }>;
   onRemoveFile?: (index: number) => void;
+  /** Called instead of inserting pasted text longer than LONG_PASTE characters. */
+  onLongPaste?: (text: string) => void;
   /** Extra toolbar controls next to the attach button (working directory, plan mode). */
   tools?: ReactNode;
 }
@@ -129,7 +134,11 @@ export default function Composer(props: ComposerProps) {
     {props.header}
     <textarea ref={textRef} value={props.value} rows={1} placeholder={props.placeholder} aria-label="消息内容"
       onChange={(event) => props.onChange(event.target.value)} onKeyDown={onKey}
-      onPaste={(event) => { if (event.clipboardData.files.length) { event.preventDefault(); props.onPickImages(event.clipboardData.files); } }}
+      onPaste={(event) => {
+        if (event.clipboardData.files.length) { event.preventDefault(); props.onPickImages(event.clipboardData.files); return; }
+        const text = event.clipboardData.getData('text');
+        if (props.onLongPaste && text.length > LONG_PASTE) { event.preventDefault(); props.onLongPaste(text); }
+      }}
       className={cn('block w-full resize-none border-0 bg-transparent p-0 text-fg outline-none placeholder:text-fg-3',
         hero ? 'min-h-[60px] text-[16px] leading-[1.65]' : 'min-h-[26px] text-[15px] leading-[1.6]')} />
     {props.attachments.length > 0 && <div className="mt-2.5 flex flex-wrap gap-2" aria-label="待发送图片">

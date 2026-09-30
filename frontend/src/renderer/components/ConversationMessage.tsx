@@ -3,6 +3,15 @@ import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import Mark from './Mark';
+import MermaidBlock from './MermaidBlock';
+
+// ```mermaid blocks become diagrams; every other code block renders as usual.
+const MARKDOWN_COMPONENTS = {
+  code({ className, children, ...rest }: { className?: string; children?: ReactNode }) {
+    if (className?.includes('language-mermaid')) return <MermaidBlock source={String(children ?? '').trimEnd()} />;
+    return <code className={className} {...rest}>{children}</code>;
+  },
+};
 
 /** One chat turn. The user speaks in the UI face inside a bubble; Atlas answers in serif, unboxed. */
 export default function ConversationMessage({ role, content, username, status, working = false, continued = false, note, actions }: {
@@ -16,7 +25,7 @@ export default function ConversationMessage({ role, content, username, status, w
 }) {
   if (role === 'assistant' && continued) {
     return <div className="my-3 pl-10" data-message-role="assistant">
-      <div className="prose-atlas"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown></div>
+      <div className="prose-atlas"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={MARKDOWN_COMPONENTS}>{content}</ReactMarkdown></div>
     </div>;
   }
   if (role === 'user') {
@@ -33,7 +42,7 @@ export default function ConversationMessage({ role, content, username, status, w
         <b className="font-serif text-[14px] font-semibold tracking-[.04em] text-heading">Atlas</b>
         {status && <span className="text-[12px] text-fg-3">{status}</span>}
       </div>
-      <div className="prose-atlas"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown></div>
+      <div className="prose-atlas"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={MARKDOWN_COMPONENTS}>{content}</ReactMarkdown></div>
       {actions && <div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">{actions}</div>}
     </div>
   </div>;

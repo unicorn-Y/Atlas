@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Archive, ArchiveRestore, BookOpen, ChevronRight, Code2, Download, Home, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
+import { Archive, ArchiveRestore, BookOpen, ChevronRight, Code2, Download, Home, KanbanSquare, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
 import { nextTheme, themeInfo, type Theme } from './themes';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import Mark from '../components/Mark';
@@ -8,10 +8,11 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../ui/M
 import { Tip } from '../ui/Tooltip';
 import { cn } from '../ui/cn';
 
-export type View = 'home' | 'chat' | 'code' | 'create' | 'auto' | 'memory' | 'skills';
+export type View = 'home' | 'chat' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills';
 
 export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
   { view: 'home', label: '首页', icon: Home },
+  { view: 'board', label: '看板', icon: KanbanSquare },
   { view: 'code', label: '项目', icon: Code2 },
   { view: 'create', label: '创作', icon: Wand2 },
   { view: 'auto', label: '自动化', icon: Repeat },

@@ -56,6 +56,8 @@ export default function SettingsPage(props: SettingsPageProps) {
       <h2>API 提供商</h2>
       <form className={styles.settingsForm} onSubmit={saveProvider}>
         <label>OpenAI 兼容 API 地址<input type="url" required value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://api.example.com/v1" /></label>
+        <p style={{ margin: '-4px 0 0', fontSize: 12, color: 'var(--ink3)' }}>本机模型：<button type="button" className="linklike" onClick={() => setBaseUrl('http://127.0.0.1:11434/v1')} style={{ color: 'var(--brand)', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>Ollama</button>
+          {' · '}<button type="button" onClick={() => setBaseUrl('http://127.0.0.1:1234/v1')} style={{ color: 'var(--brand)', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>LM Studio</button>，本机模型不需要密钥，随便填一个即可。</p>
         <label>API 密钥<input type="password" autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={props.apiKeyConfigured ? '已保存密钥；留空以保持不变' : '输入 API 密钥'} /></label>
         <div className={styles.settingsFormFooter}><span className={styles.settingsStatus}><i className={props.connected ? styles.connectedDot : ''} />{props.connected ? 'Atlas 后端已连接' : 'Atlas 后端未连接'}</span><button className={styles.settingsAction} disabled={props.busy || !props.connected}>保存 API 配置</button></div>
       </form>
