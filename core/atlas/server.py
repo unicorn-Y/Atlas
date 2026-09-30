@@ -1482,8 +1482,17 @@ async def workspace_raw(root: str, path: str) -> StreamingResponse:
     if target.stat().st_size > 50 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="file exceeds 50 MB limit")
     content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-    return StreamingResponse(target.open("rb"), media_type=content_type,
-                             headers={"Content-Disposition": "inline"})
+    headers = {"Content-Disposition": "inline", "X-Content-Type-Options": "nosniff"}
+    if content_type in _SCRIPTABLE_TYPES:
+        # Workspace files are untrusted. Sandboxing gives the document an opaque origin, so its
+        # scripts still run for the preview but cannot read Atlas's API as same-origin.
+        headers["Content-Security-Policy"] = (
+            "sandbox allow-scripts allow-forms allow-popups allow-modals"
+        )
+    return StreamingResponse(target.open("rb"), media_type=content_type, headers=headers)
+
+
+_SCRIPTABLE_TYPES = {"text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml"}
 
 
 def _is_subsequence(needle: str, haystack: str) -> bool:

@@ -11,6 +11,11 @@ WebSocket request therefore has to prove it comes from Atlas itself:
   process attaches to its own requests. The packaged renderer loads from ``file://`` and
   sends ``Origin: null``; sandboxed iframes on any site send that too, so ``null`` alone
   is never enough.
+
+Browsers leave ``Origin`` off same-origin GETs, so a page served *by the backend itself*
+(say, a previewed workspace HTML file) would look like a local process. The backend never
+serves its own UI, so any browser request marked ``Sec-Fetch-Site: same-origin`` is refused
+unless it carries the token.
 """
 
 from __future__ import annotations
@@ -30,10 +35,15 @@ DEV_ORIGINS = frozenset({
 })
 
 
-def is_trusted(origin: str | None, token: str | None, extra_origins: Iterable[str] = ()) -> bool:
+def is_trusted(
+    origin: str | None, token: str | None, extra_origins: Iterable[str] = (),
+    fetch_site: str | None = None,
+) -> bool:
     expected = os.environ.get("ATLAS_API_TOKEN", "")
     if expected and token and secrets.compare_digest(token, expected):
         return True
+    if fetch_site == "same-origin":
+        return False
     if origin is None:
         return True
     return origin in DEV_ORIGINS or origin in set(extra_origins)
@@ -56,7 +66,8 @@ class OriginGuard:
         is_preflight = (scope["type"] == "http" and scope["method"] == "OPTIONS"
                         and "access-control-request-method" in headers)
         origin, token = headers.get("origin"), headers.get(TOKEN_HEADER)
-        if is_preflight or is_trusted(origin, token, self.extra_origins()):
+        fetch_site = headers.get("sec-fetch-site")
+        if is_preflight or is_trusted(origin, token, self.extra_origins(), fetch_site):
             await self.app(scope, receive, send)
             return
         if scope["type"] == "websocket":

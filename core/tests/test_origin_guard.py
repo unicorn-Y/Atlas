@@ -50,6 +50,15 @@ def test_is_trusted_rules(token):
     assert is_trusted(EVIL, token)
 
 
+def test_same_origin_browser_requests_need_the_token(token):
+    """A page the backend served itself (a previewed file) must not read the API."""
+    assert not is_trusted(None, None, fetch_site="same-origin")
+    assert is_trusted(None, token, fetch_site="same-origin")
+    # The Vite dev page is same-site (different port), the packaged file:// page cross-site.
+    assert is_trusted(DEV, None, fetch_site="same-site")
+    assert is_trusted(None, None, fetch_site=None)
+
+
 def test_null_origin_is_rejected_when_no_token_is_configured(monkeypatch):
     monkeypatch.delenv("ATLAS_API_TOKEN", raising=False)
     assert not is_trusted("null", "")
@@ -102,3 +111,24 @@ async def test_atlas_backend_applies_the_guard_to_every_route():
             "Origin": DEV, "Access-Control-Request-Method": "POST",
         })
         assert allowed.headers.get("access-control-allow-origin") == DEV
+
+
+@pytest.mark.asyncio
+async def test_previewed_workspace_html_is_sandboxed(tmp_path):
+    """Raw HTML from a workspace gets an opaque origin, so its scripts can't call the API."""
+    from atlas.server import app
+
+    page = "<script>fetch('/api/conversations')</script>"
+    (tmp_path / "page.html").write_text(page, encoding="utf-8")
+    (tmp_path / "doc.pdf").write_bytes(b"%PDF-1.4")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        raw = {"root": str(tmp_path)}
+        html = await client.get("/api/workspace/raw", params={**raw, "path": "page.html"})
+        pdf = await client.get("/api/workspace/raw", params={**raw, "path": "doc.pdf"})
+        from_page = await client.get("/api/conversations",
+                                     headers={"Sec-Fetch-Site": "same-origin"})
+    assert html.status_code == 200
+    assert html.headers["content-security-policy"].startswith("sandbox")
+    assert html.headers["x-content-type-options"] == "nosniff"
+    assert "content-security-policy" not in pdf.headers
+    assert from_page.status_code == 403
