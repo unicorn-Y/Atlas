@@ -132,3 +132,12 @@ async def test_previewed_workspace_html_is_sandboxed(tmp_path):
     assert html.headers["x-content-type-options"] == "nosniff"
     assert "content-security-policy" not in pdf.headers
     assert from_page.status_code == 403
+
+
+def test_hub_control_api_refuses_web_pages():
+    from atlas.runtime.hub import create_hub_app
+
+    client = TestClient(create_hub_app())
+    assert client.get("/health").status_code == 200
+    assert client.post("/shutdown", headers={"Origin": EVIL}).status_code == 403
+    assert client.post("/tasks/any/run", headers={"Origin": "null"}).status_code == 403

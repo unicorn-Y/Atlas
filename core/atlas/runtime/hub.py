@@ -37,7 +37,12 @@ def create_hub_app(scheduler: Any = None) -> Any:
     """Build the Hub control app around a scheduler instance."""
     from fastapi import FastAPI, HTTPException
 
+    from atlas.origin_guard import OriginGuard
+
     app = FastAPI(title="Atlas Hub", version="0.1.0")
+    # Only the desktop backend (server-side, no Origin) and the CLI talk to the Hub; web pages
+    # must not be able to run tasks or shut it down with a bare cross-site POST.
+    app.add_middleware(OriginGuard)
     state: dict[str, Any] = {"scheduler": scheduler, "started_at": ""}
 
     @app.get("/health")
