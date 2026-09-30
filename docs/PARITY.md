@@ -37,32 +37,32 @@
 
 排序依据：日常使用频率 × 实现成本（后端已有的优先）。
 
-进度（2026-09-30）：第一轮前端完成 #1 的排队、#2、#3、#9、#11 的 `/` 菜单、#12；后端第一波（任务书）合入后，第二轮前端完成 #1 插话、#4、#5、#7、#8、#10、#13、#14 的面板部分、#17。
+进度（2026-09-30）：前三波后端 + 对应前端完成后，下表 20 项中 19 项已上线；#15 的「外部 Agent 执行」在第四波任务书（`tasks/taskbooks/CODEX-ATLAS-BACKEND-PARITY-WAVE4.md`）。
 
 | # | 编号 | 做什么 | 现状 | 参考实现 |
 | --- | --- | --- | --- | --- |
-| 1 | F068–F071 | 运行中 steer + 消息队列（可编辑/删除待发条目） | ❌ 现在是并发新 run | Hermes 队列；Pi steering；Codex App-server `turn/steer` |
-| 2 | F025/F028/F026/F027 | 会话改名、删除、置顶、归档 | 🟡 改名/删除后端已有 | Codex、ZCode |
-| 3 | F092/F094/F097 | Checkpoint 列表 + 一键撤销本轮改动 | 🟡 `ShadowGitCheckpointStore` 已有 | OpenCode snapshots/undo；Cline checkpoint |
-| 4 | F115/F103/F110 | 本轮改动 diff 面板 + 改动行数 | ❌ | Claude Code diff；ZCode 变更过滤 |
-| 5 | F042/F123/F124 | 终端面板：看 Agent 命令输出、后台进程、可手动敲命令 | 🟡 后端有进程生命周期 | Hermes（hide/close 语义）；Claude Code |
-| 6 | F041/F143/F130–F131 | 浏览器/预览面板（地址栏、刷新、打开本地服务） | ❌ | ZCode；Hermes Desktop；Claude Code |
-| 7 | F173/F174 | 读取项目规则文件（AGENTS.md / CLAUDE.md） | ❌ | OpenCode、Junie、Cursor；标准格式直接兼容 |
-| 8 | F047/F049/F050/F051 | @ 文件、任意文件附件、拖放、粘贴截图 | 🟡 只支持图片按钮 | Claude Code；Hermes |
-| 9 | F082–F084 | Goal 界面：设定/暂停/替换目标 + 按轮进度 | 🟡 `/api/goals` + trace 已有 | ZCode `/goal`；Codex Goal |
-| 10 | F077 | 只读 Plan 模式（先讨论再改） | ❌ 现在是自动规划 | Cline Plan/Act；Claude Code Plan |
-| 11 | F059/F063 | `/` 命令菜单 + 自定义 prompt 模板 | ❌ | Pi templates；Claude Code |
-| 12 | F104/F102 | 系统原生通知 + 未读标记 | 🟡 只有 apprise 外部推送 | Devin Desktop；ZCode |
-| 13 | F108/F168 | Token/上下文占用显示 + 手动压缩 | 🟡 自动压缩已有 | Aider、Crush；Gemini CLI `/compress` |
-| 14 | F045/F187 | 子任务/后台任务面板 | 🟡 `delegate_task` 已有 | Claude Code Tasks；Hermes |
-| 15 | F065/F008 | 在界面里选执行 Agent（Atlas 自己 / Claude / Codex / Hermes…） | 🟡 后端 backends 已有 | Zed ACP；OpenHands Agent Canvas |
-| 16 | F064/F184 | Recipes：把一次成功任务存成可参数化复跑的配方 | ❌ | goose Recipes/Subrecipes |
-| 17 | F088/F091 | 从回复分叉、编辑最后一条消息重发 | ❌ | ZCode；Pi 会话树 |
-| 18 | F087 | 辅助聊天（side chat，不打断主任务） | ❌ | ZCode `/side`；Claude Code |
-| 19 | F133/F136/F137 | 页面元素点选/框选批注，成批发给 Agent | ❌（依赖 #6） | Hermes Annotate；ZCode 元素选择 |
-| 20 | F154–F159 | 权限模式切换 | ⚖️ 现在默认 FULL_ACCESS 且不加逐工具审批 | OpenCode permissions；Claude Code 模式 |
+| 1 | F068–F071 | 运行中 steer + 消息队列（可编辑/删除待发条目） | ✅ | Hermes 队列；Pi steering；Codex App-server `turn/steer` |
+| 2 | F025/F028/F026/F027 | 会话改名、删除、置顶、归档 | ✅ | Codex、ZCode |
+| 3 | F092/F094/F097 | Checkpoint 列表 + 一键撤销本轮改动 | ✅ | OpenCode snapshots/undo；Cline checkpoint |
+| 4 | F115/F103/F110 | 本轮改动 diff 面板 + 改动行数 | ✅ | Claude Code diff；ZCode 变更过滤 |
+| 5 | F042/F123/F124 | 终端面板：看 Agent 命令输出、后台进程、可手动敲命令 | ✅ | Hermes（hide/close 语义）；Claude Code |
+| 6 | F041/F143/F130–F131 | 浏览器/预览面板（地址栏、刷新、打开本地服务） | ✅ | ZCode；Hermes Desktop；Claude Code |
+| 7 | F173/F174 | 读取项目规则文件（AGENTS.md / CLAUDE.md） | ✅ | OpenCode、Junie、Cursor；标准格式直接兼容 |
+| 8 | F047/F049/F050/F051 | @ 文件、任意文件附件、拖放、粘贴截图 | ✅ | Claude Code；Hermes |
+| 9 | F082–F084 | Goal 界面：设定/暂停/替换目标 + 按轮进度 | ✅ | ZCode `/goal`；Codex Goal |
+| 10 | F077 | 只读 Plan 模式（先讨论再改） | ✅ | Cline Plan/Act；Claude Code Plan |
+| 11 | F059/F063 | `/` 命令菜单 + 自定义 prompt 模板 | ✅ | Pi templates；Claude Code |
+| 12 | F104/F102 | 系统原生通知 + 未读标记 | ✅ | Devin Desktop；ZCode |
+| 13 | F108/F168 | Token/上下文占用显示 + 手动压缩 | ✅ | Aider、Crush；Gemini CLI `/compress` |
+| 14 | F045/F187 | 子任务/后台任务面板 | ✅ | Claude Code Tasks；Hermes |
+| 15 | F065/F008 | 在界面里选执行 Agent（Atlas 自己 / Claude / Codex / Hermes…） | 🟡 用 Atlas 自己的角色已可选；外部 Agent（Codex / Claude Code…）执行在第四波 | Zed ACP；OpenHands Agent Canvas |
+| 16 | F064/F184 | Recipes：把一次成功任务存成可参数化复跑的配方 | ✅ | goose Recipes/Subrecipes |
+| 17 | F088/F091 | 从回复分叉、编辑最后一条消息重发 | ✅ | ZCode；Pi 会话树 |
+| 18 | F087 | 辅助聊天（side chat，不打断主任务） | ✅ | ZCode `/side`；Claude Code |
+| 19 | F133/F136/F137 | 页面元素点选/框选批注，成批发给 Agent | ✅ | Hermes Annotate；ZCode 元素选择 |
+| 20 | F154–F159 | 权限模式切换 | ✅ 完全访问（默认）/ 改前问我 / 只读，按对话切换；不做逐工具弹窗 | OpenCode permissions；Claude Code 模式 |
 
-第 20 项和现有决定冲突（`tasks/CURRENT.md`：「FULL_ACCESS remains the default. Do not add per-tool approval prompts.」）。建议保留 FULL_ACCESS 为默认，只加一个可选的「计划/只读」和「改文件前确认」模式，不做逐工具弹窗。需要你决定。
+第 20 项已按「保留 FULL_ACCESS 默认、只加可选模式」的方案落地。
 
 ## 3. 全表 F001–F210
 
@@ -380,9 +380,9 @@
 
 | 状态 | 数量 |
 | --- | --- |
-| ✅ | 133 |
-| 🟡 | 27 |
-| ❌ | 28 |
+| ✅ | 145 |
+| 🟡 | 20 |
+| ❌ | 23 |
 | ➖ | 18 |
 | ⚖️ | 4 |
 
