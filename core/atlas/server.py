@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import fnmatch
 import hashlib
 import json
+import mimetypes
 import os
 import re
 import secrets
@@ -13,7 +15,7 @@ import subprocess
 import sys
 import uuid
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -104,6 +106,7 @@ from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 from atlas.tools.node_runtime import get_node_runtime_status
 from atlas.tools.web import WebRuntime
+from atlas.task_artifacts import TomlRecordStore, WorktreeService, seed_profiles
 
 log = structlog.get_logger()
 
@@ -133,6 +136,20 @@ SKILL_CENTER_TOKEN = os.environ.get("ATLAS_SKILL_CENTER_TOKEN")
 skill_acquisitions: dict[str, dict[str, Any]] = {}
 skill_dependency_plans: dict[str, dict[str, Any]] = {}
 scheduler: AtlasScheduler | None = None
+
+
+def _task_store(kind: str) -> TomlRecordStore:
+    return TomlRecordStore(get_config().db_path.parent, kind)
+
+
+def _profile_store() -> TomlRecordStore:
+    store = _task_store("profiles")
+    seed_profiles(store)
+    return store
+
+
+def _worktrees() -> WorktreeService:
+    return WorktreeService(get_config().db_path.parent)
 
 
 def _require_skill_center_authority(request: Request) -> None:
@@ -932,10 +949,24 @@ async def runtime_observability() -> dict[str, Any]:
 async def list_models() -> ModelListResponse:
     """Return available models and currently selected one."""
     assert model_mgr is not None
+    models = model_mgr.list_models()
+    for item in models:
+        item["supports_reasoning_effort"] = _model_supports_reasoning(item)
     return ModelListResponse(
-        models=model_mgr.list_models(),
+        models=models,
         current=model_mgr.current_model,
     )
+
+
+def _model_supports_reasoning(model: dict[str, Any]) -> bool:
+    try:
+        from litellm import get_supported_openai_params
+        model_name = model.get("litellm_model", model.get("id", ""))
+        provider = model.get("provider")
+        params = get_supported_openai_params(model=model_name, custom_llm_provider=provider)
+        return isinstance(params, list) and "reasoning_effort" in params
+    except Exception:
+        return False
 
 
 @app.post("/api/models/select")
@@ -1126,7 +1157,37 @@ async def fork_conversation(conversation_id: str, req: dict[str, Any]) -> dict[s
     result = await memory.fork_conversation(conversation_id, message_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Conversation or message not found")
+    await memory.update_conversation(
+        result["id"], parent_conversation_id=conversation_id, fork_message_id=message_id,
+    )
+    if req.get("summarize") is True:
+        source_messages = await memory.get_conversation_messages(conversation_id, limit=1000)
+        boundary = next((i for i, item in enumerate(source_messages) if item["id"] == message_id), -1)
+        before = source_messages[:boundary + 1]
+        compacted = await orchestrator.context_maintenance.compact({
+            "goal": result.get("title", "Conversation fork"),
+            "session_summary": "\n".join(f"{m['role']}: {m['content'][:1000]}" for m in before[-20:]),
+        }) if orchestrator else {"session_summary": "\n".join(m["content"][:300] for m in before[-10:])}
+        await memory.save_message_first(
+            result["id"], "system", compacted.get("session_summary", ""),
+            {"kind": "fork_summary", "source_conversation_id": conversation_id},
+        )
+        result = await memory.get_conversation(result["id"]) or result
     return result
+
+
+@app.post("/api/conversations/{conversation_id}/duplicate", status_code=201)
+async def duplicate_conversation(conversation_id: str) -> dict[str, Any]:
+    assert memory is not None
+    messages = await memory.get_conversation_messages(conversation_id, limit=100000)
+    if not messages:
+        raise HTTPException(status_code=404, detail="Conversation has no messages")
+    result = await memory.fork_conversation(conversation_id, messages[-1]["id"])
+    if result is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    await memory.update_conversation(result["id"], parent_conversation_id=conversation_id,
+                                     fork_message_id=messages[-1]["id"])
+    return await memory.get_conversation(result["id"]) or result
 
 
 @app.post("/api/conversations/{conversation_id}/compact")
@@ -1351,6 +1412,18 @@ def _workspace_path(root: str, relative: str = "") -> tuple[Path, Path]:
     return base, target
 
 
+def _context_file_block(root: str, relative: str, remaining_bytes: int) -> tuple[str, int]:
+    _, target = _workspace_path(root, relative)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="context file not found")
+    raw = target.read_bytes()
+    chunk = raw[:min(64 * 1024, max(0, remaining_bytes))]
+    block = f"\n\n[Context file: {relative}]\n{chunk.decode('utf-8', errors='replace')}"
+    if len(raw) > len(chunk):
+        block += "\n[Context file truncated.]"
+    return block, len(chunk)
+
+
 @app.get("/api/workspace/tree")
 async def workspace_tree(root: str, path: str = "") -> dict[str, Any]:
     base, directory = _workspace_path(root, path)
@@ -1399,6 +1472,151 @@ async def workspace_file(root: str, path: str) -> dict[str, Any]:
     return {"path": target.relative_to(base).as_posix(),
             "content": "" if binary else text,
             "truncated": len(raw) > 512 * 1024, "binary": binary}
+
+
+@app.get("/api/workspace/raw")
+async def workspace_raw(root: str, path: str) -> StreamingResponse:
+    base, target = _workspace_path(root, path)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="Workspace file not found")
+    if target.stat().st_size > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="file exceeds 50 MB limit")
+    content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    return StreamingResponse(target.open("rb"), media_type=content_type,
+                             headers={"Content-Disposition": "inline"})
+
+
+def _is_subsequence(needle: str, haystack: str) -> bool:
+    pos = 0
+    for char in haystack.casefold():
+        if pos < len(needle) and char == needle[pos]:
+            pos += 1
+    return pos == len(needle)
+
+
+@app.get("/api/workspace/search")
+async def workspace_search(root: str, q: str, limit: int = 50) -> dict[str, Any]:
+    if limit < 1 or limit > 200:
+        raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
+    base, _ = _workspace_path(root)
+    if not base.is_dir():
+        raise HTTPException(status_code=404, detail="Workspace directory not found")
+    needle = q.strip().casefold()
+    if not needle:
+        return {"files": []}
+    try:
+        listing = await asyncio.to_thread(
+            subprocess.run,
+            ["git", "-C", str(base), "ls-files", "--cached", "--others", "--exclude-standard"],
+            capture_output=True, text=True, timeout=15,
+        )
+        git_listing_ok = listing.returncode == 0
+        paths = listing.stdout.splitlines() if listing.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError):
+        git_listing_ok = False
+        paths = []
+    if not git_listing_ok:
+        paths = [p.relative_to(base).as_posix() for p in base.rglob("*") if p.is_file()]
+        patterns = []
+        for ignore_file in base.rglob(".gitignore"):
+            if any(part in _WORKSPACE_IGNORES for part in ignore_file.relative_to(base).parts[:-1]):
+                continue
+            try:
+                patterns.extend((ignore_file.parent, line.strip()) for line in ignore_file.read_text("utf-8").splitlines()
+                                if line.strip() and not line.lstrip().startswith("#"))
+            except OSError:
+                continue
+        filtered = []
+        for rel in paths:
+            ignored = False
+            rel_path = Path(rel)
+            for ignore_dir, pattern in patterns:
+                negated = pattern.startswith("!")
+                value = pattern[1:] if negated else pattern
+                target = (ignore_dir / value).relative_to(base).as_posix().lstrip("./")
+                candidate = rel_path.as_posix()
+                if (candidate == target or candidate.startswith(target.rstrip("/") + "/")
+                        or ("/" not in value and fnmatch.fnmatch(rel_path.name, value))):
+                    ignored = not negated
+            if not ignored:
+                filtered.append(rel)
+        paths = filtered
+    hits = []
+    for rel in paths:
+        parts = Path(rel).parts
+        if any(part in _WORKSPACE_IGNORES for part in parts):
+            continue
+        name = Path(rel).name
+        candidate = name.casefold()
+        if needle not in candidate and not _is_subsequence(needle, candidate):
+            continue
+        score = (0 if candidate.startswith(needle) else 1 if needle in candidate else 2,
+                 len(candidate) - len(needle), rel.casefold())
+        hits.append((score, {"path": Path(rel).as_posix(), "name": name, "type": "file"}))
+    hits.sort(key=lambda row: row[0])
+    return {"files": [item for _, item in hits[:limit]]}
+
+
+@app.get("/api/git/branches")
+async def git_branches(root: str) -> dict[str, Any]:
+    base, _ = _workspace_path(root)
+    if not (base / ".git").exists():
+        raise HTTPException(status_code=400, detail="workspace is not a git repository")
+    try:
+        current = _worktrees()._git(base, "branch", "--show-current")
+        branches = _worktrees()._git(base, "branch", "--list", "--format=%(refname:short)").splitlines()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"current": current, "branches": branches}
+
+
+@app.get("/api/conversations/{conversation_id}/worktree")
+async def conversation_worktree(conversation_id: str) -> dict[str, Any]:
+    assert memory is not None
+    conv = await memory.get_conversation(conversation_id)
+    if not conv or not conv.get("worktree_path"):
+        raise HTTPException(status_code=404, detail="Conversation worktree not found")
+    try:
+        return _worktrees().status(Path(conv["workspace"]), Path(conv["worktree_path"]),
+                                   conv["worktree_branch"], conv["base_branch"])
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/conversations/{conversation_id}/worktree/merge")
+async def merge_conversation_worktree(conversation_id: str, req: dict[str, Any]) -> dict[str, str]:
+    assert memory is not None
+    conv = await memory.get_conversation(conversation_id)
+    if not conv or not conv.get("worktree_path"):
+        raise HTTPException(status_code=404, detail="Conversation worktree not found")
+    try:
+        _worktrees().merge(Path(conv["workspace"]), Path(conv["worktree_path"]),
+                           conv["worktree_branch"], conv["base_branch"],
+                           str(req.get("strategy", "merge")), req.get("message"))
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail={"conflicts": str(exc).splitlines()}) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "merged"}
+
+
+@app.delete("/api/conversations/{conversation_id}/worktree")
+async def delete_conversation_worktree(conversation_id: str, keep_branch: bool = False, force: bool = False) -> dict[str, str]:
+    assert memory is not None
+    conv = await memory.get_conversation(conversation_id)
+    if not conv or not conv.get("worktree_path"):
+        raise HTTPException(status_code=404, detail="Conversation worktree not found")
+    try:
+        _worktrees().remove(Path(conv["workspace"]), Path(conv["worktree_path"]),
+                            conv["worktree_branch"], force=force, keep_branch=keep_branch)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await memory.update_conversation(conversation_id, worktree_path="", worktree_branch="", base_branch="")
+    return {"status": "removed"}
 
 
 @app.get("/api/workspace/rules")
@@ -3673,6 +3891,238 @@ async def get_goal(goal_id: str) -> dict[str, Any]:
     return task.to_dict()
 
 
+@app.put("/api/goals/{goal_id}")
+async def update_goal(goal_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    assert scheduler is not None
+    task = scheduler.get_task(goal_id)
+    if not task or not task.goal:
+        raise HTTPException(status_code=404, detail=f"Scheduled goal not found: {goal_id}")
+    allowed = {key: req[key] for key in ("name", "description", "trigger_args", "tags") if key in req}
+    if "trigger_type" in req:
+        try:
+            allowed["trigger_type"] = TriggerType(req["trigger_type"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="invalid trigger_type") from exc
+    if "goal" in req:
+        value = req["goal"]
+        if not isinstance(value, str) or not value.strip():
+            raise HTTPException(status_code=422, detail="goal must not be empty")
+        if value != task.goal:
+            task.goal = value
+            task.action = f"agent:{value}"
+            task.goal_status = "pending"
+            await scheduler.record_goal_event(goal_id, "goal.replaced", {"goal": value})
+    updated = await scheduler.update_task(goal_id, **allowed)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Scheduled goal not found: {goal_id}")
+    return updated.to_dict()
+
+
+@app.post("/api/goals/{goal_id}/pause")
+async def pause_goal(goal_id: str) -> dict[str, Any]:
+    assert scheduler is not None
+    task = scheduler.get_task(goal_id)
+    if not task or not task.goal:
+        raise HTTPException(status_code=404, detail="Scheduled goal not found")
+    task.goal_status = "paused"
+    await scheduler.update_task(goal_id, status=TaskStatus.PAUSED)
+    await scheduler.record_goal_event(goal_id, "goal.paused", {})
+    return task.to_dict()
+
+
+@app.post("/api/goals/{goal_id}/resume")
+async def resume_goal(goal_id: str) -> dict[str, Any]:
+    assert scheduler is not None
+    task = scheduler.get_task(goal_id)
+    if not task or not task.goal:
+        raise HTTPException(status_code=404, detail="Scheduled goal not found")
+    task.goal_status = "pending"
+    await scheduler.update_task(goal_id, status=TaskStatus.ACTIVE)
+    await scheduler.record_goal_event(goal_id, "goal.resumed", {})
+    return task.to_dict()
+
+
+def _validate_recipe(value: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"id", "name", "description", "prompt", "params", "active_skills", "mode",
+               "workspace", "profile_id", "created_at", "updated_at"}
+    if set(value) - allowed:
+        raise ValueError("recipe contains unsupported fields")
+    required = ("name", "description", "prompt")
+    if any(not isinstance(value.get(key), str) for key in required):
+        raise ValueError("name, description, and prompt must be strings")
+    if value.get("mode", "act") not in {"act", "plan"}:
+        raise ValueError("mode must be 'act' or 'plan'")
+    params = value.get("params", [])
+    if (not isinstance(params, list) or any(
+        not isinstance(item, dict) or set(item) - {"name", "label", "default"}
+        or not isinstance(item.get("name"), str)
+        or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", item["name"])
+        for item in params
+    )):
+        raise ValueError("params must be a list of named parameter objects")
+    names = [item["name"] for item in params]
+    if len(names) != len(set(names)):
+        raise ValueError("parameter names must be unique")
+    if not isinstance(value.get("active_skills", []), list):
+        raise ValueError("active_skills must be a list")
+    if any(not isinstance(item, str) for item in value.get("active_skills", [])):
+        raise ValueError("active_skills must contain strings")
+    for key in ("workspace", "profile_id"):
+        if value.get(key) is not None and not isinstance(value.get(key), str):
+            raise ValueError(f"{key} must be a string")
+    return {**value, "params": params, "active_skills": value.get("active_skills", []),
+            "mode": value.get("mode", "act")}
+
+
+@app.get("/api/recipes")
+async def list_recipes() -> dict[str, Any]:
+    return {"recipes": _task_store("recipes").list()}
+
+
+@app.post("/api/recipes", status_code=201)
+async def create_recipe(req: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return _task_store("recipes").put(_validate_recipe(req))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.put("/api/recipes/{recipe_id}")
+async def update_recipe(recipe_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    store = _task_store("recipes")
+    old = store.get(recipe_id)
+    if old is None:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    try:
+        return store.put(_validate_recipe({**old, **req, "id": recipe_id, "created_at": old["created_at"]}))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.delete("/api/recipes/{recipe_id}")
+async def delete_recipe(recipe_id: str) -> dict[str, str]:
+    if not _task_store("recipes").delete(recipe_id):
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return {"status": "deleted"}
+
+
+@app.post("/api/recipes/{recipe_id}/render")
+async def render_recipe(recipe_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    recipe = _task_store("recipes").get(recipe_id)
+    if recipe is None:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    supplied = req.get("params", {})
+    if not isinstance(supplied, dict):
+        raise HTTPException(status_code=422, detail="params must be an object")
+    missing = []
+    rendered = recipe["prompt"]
+    for param in recipe.get("params", []):
+        name = param["name"]
+        value = supplied.get(name, param.get("default"))
+        if value is None:
+            missing.append(name)
+        else:
+            rendered = rendered.replace("{{" + name + "}}", str(value))
+    if missing:
+        raise HTTPException(status_code=422, detail={"missing": missing})
+    return {key: recipe.get(key) for key in ("active_skills", "mode", "workspace", "profile_id")} | {"prompt": rendered}
+
+
+@app.post("/api/recipes/from-run", status_code=201)
+async def recipe_from_run(req: dict[str, Any]) -> dict[str, Any]:
+    assert memory is not None
+    run = runtime_mgr.runs.get(str(req.get("run_id", "")))
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    conv = await memory.get_conversation(run.conversation_id)
+    if conv is None:
+        raise HTTPException(status_code=404, detail="Run conversation not found")
+    messages = await memory.get_conversation_messages(conv["id"], limit=1000)
+    user_message = run.user_input or next((item["content"] for item in reversed(messages) if item["role"] == "user"), None)
+    if not user_message:
+        raise HTTPException(status_code=422, detail="Run has no user message")
+    try:
+        return _task_store("recipes").put(_validate_recipe({
+            "name": req.get("name", "Saved run"), "description": "Created from a conversation run",
+            "prompt": user_message, "params": [], "active_skills": run.active_skills,
+            "mode": run.mode, "workspace": run.workspace or conv.get("workspace"),
+            "profile_id": run.profile_id,
+        }))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/profiles")
+async def list_profiles() -> dict[str, Any]:
+    profiles = _profile_store().list()
+    for profile in profiles:
+        profile.setdefault("tools", {}).setdefault("allow", None)
+        profile["tools"].setdefault("deny", [])
+        profile.setdefault("model", None)
+        profile.setdefault("reasoning_effort", None)
+    return {"profiles": profiles}
+
+
+@app.post("/api/profiles", status_code=201)
+async def create_profile(req: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return _profile_store().put(_validate_profile(req))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _validate_profile(value: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"id", "name", "description", "model", "reasoning_effort", "instructions",
+               "active_skills", "tools", "mode", "created_at", "updated_at"}
+    if set(value) - allowed:
+        raise ValueError("profile contains unsupported fields")
+    if not isinstance(value.get("name"), str) or not value["name"].strip():
+        raise ValueError("name is required")
+    if value.get("mode", "act") not in {"act", "plan"}:
+        raise ValueError("mode must be 'act' or 'plan'")
+    if value.get("reasoning_effort") not in {None, "minimal", "low", "medium", "high"}:
+        raise ValueError("invalid reasoning_effort")
+    tools = value.get("tools", {"allow": None, "deny": []})
+    if not isinstance(tools, dict) or (tools.get("allow") is not None and not isinstance(tools.get("allow"), list)):
+        raise ValueError("tools.allow must be a list or null")
+    if not isinstance(tools.get("deny", []), list):
+        raise ValueError("tools.deny must be a list")
+    tools = {"allow": tools.get("allow"), "deny": tools.get("deny", [])}
+    if any(not isinstance(item, str) for item in (tools["allow"] or []) + tools["deny"]):
+        raise ValueError("tool names must be strings")
+    if not isinstance(value.get("active_skills", []), list):
+        raise ValueError("active_skills must be a list")
+    if any(not isinstance(item, str) for item in value.get("active_skills", [])):
+        raise ValueError("active_skills must contain strings")
+    if value.get("model") is not None and not isinstance(value.get("model"), str):
+        raise ValueError("model must be a string")
+    if not isinstance(value.get("description", ""), str) or not isinstance(value.get("instructions", ""), str):
+        raise ValueError("description and instructions must be strings")
+    return {**value, "description": value.get("description", ""), "instructions": value.get("instructions", ""),
+            "active_skills": value.get("active_skills", []), "tools": tools, "mode": value.get("mode", "act")}
+
+
+@app.put("/api/profiles/{profile_id}")
+async def update_profile(profile_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    store = _profile_store()
+    old = store.get(profile_id)
+    if old is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    try:
+        return store.put(_validate_profile({**old, **req, "id": profile_id, "created_at": old["created_at"]}))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.delete("/api/profiles/{profile_id}")
+async def delete_profile(profile_id: str) -> dict[str, str]:
+    if profile_id in {"default", "architect", "reviewer"}:
+        raise HTTPException(status_code=409, detail="Built-in profiles cannot be deleted")
+    if not _profile_store().delete(profile_id):
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"status": "deleted"}
+
+
 @app.get("/api/goals/{goal_id}/trace")
 async def get_goal_trace(
     goal_id: str, run_id: str | None = Query(default=None),
@@ -3707,7 +4157,19 @@ async def run_goal_now(goal_id: str) -> dict[str, str]:
 @app.get("/api/runtime/protocol")
 async def runtime_protocol() -> dict[str, str]:
     """Advertise Runtime Event Protocol version."""
-    return {"version": "1.3"}
+    return {"version": "1.4"}
+
+
+@app.post("/api/runs/{run_id}/subtasks/{subtask_id}/cancel")
+async def cancel_subtask(run_id: str, subtask_id: str) -> dict[str, str]:
+    run = runtime_mgr.runs.get(run_id)
+    subtask = run.subtasks.get(subtask_id) if run else None
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    if subtask.get("status") in {"completed", "failed", "cancelled"}:
+        raise HTTPException(status_code=409, detail="Subtask is already finished")
+    subtask["cancel_event"].set()
+    return {"status": "cancelling", "subtask_id": subtask_id}
 
 
 # ---------------------------------------------------------------------------
@@ -3723,6 +4185,9 @@ class RunState:
         "approval_futures", "task", "plan_state",
         "event_lock", "steer_queue", "input_futures", "mode", "workspace",
         "usage", "workspace_rules", "plan_future", "plan_edits",
+        "tool_allow", "tool_deny", "reasoning_effort", "reasoning_effort_applied",
+        "ephemeral", "ephemeral_source", "tool_output_dir", "subtasks",
+        "read_only", "active_skills", "profile_id", "user_input",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -3747,6 +4212,18 @@ class RunState:
         self.workspace_rules: list[dict[str, Any]] = []
         self.plan_future: asyncio.Future[dict[str, str]] | None = None
         self.plan_edits = ""
+        self.tool_allow: list[str] | None = None
+        self.tool_deny: list[str] = []
+        self.reasoning_effort: str | None = None
+        self.reasoning_effort_applied: bool | None = None
+        self.ephemeral = False
+        self.ephemeral_source: str | None = None
+        self.tool_output_dir: Path | None = None
+        self.subtasks: dict[str, dict[str, Any]] = {}
+        self.read_only = False
+        self.active_skills: list[str] = []
+        self.profile_id: str | None = None
+        self.user_input = ""
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""
@@ -4021,9 +4498,27 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             "category": "validation", "detail": "workspace must be an absolute path",
         }))
         return
+    profile_id = data.get("profile_id")
+    profile = _profile_store().get(str(profile_id)) if profile_id else None
+    if profile_id and profile is None:
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": f"profile not found: {profile_id}",
+        }))
+        return
+    effective_skills = data.get("active_skills", (profile or {}).get("active_skills", []))
+    effective_mode = data.get("mode", (profile or {}).get("mode", "act"))
+    model_id = data.get("model", (profile or {}).get("model"))
+    reasoning_effort = data.get("reasoning_effort", (profile or {}).get("reasoning_effort"))
+    if reasoning_effort not in {None, "minimal", "low", "medium", "high"}:
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "invalid reasoning_effort",
+        }))
+        return
     try:
         active_skill_instructions = await _resolve_active_skill_instructions(
-            data.get("active_skills", [])
+            effective_skills
         )
     except (TypeError, ValueError, PermissionError) as exc:
         invalid_run = RunState(
@@ -4071,17 +4566,25 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     conv_id = data.get("conversation_id") or (
         prior_run.conversation_id if prior_run else str(uuid.uuid4())
     )
-    model_id = data.get("model")
-
     assert model_mgr is not None
     run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-    if data.get("mode", "act") not in {"act", "plan"}:
+    if effective_mode not in {"act", "plan"}:
         run.status = "failed"
         await runtime_mgr.send(conn_id, run.next_envelope("run.failed", {
             "category": "validation", "detail": "mode must be 'act' or 'plan'",
         }))
         return
-    run.mode = data.get("mode", "act")
+    run.mode = effective_mode
+    run.reasoning_effort = reasoning_effort
+    run.active_skills = list(effective_skills) if isinstance(effective_skills, list) else []
+    run.profile_id = str(profile_id) if profile_id else None
+    if profile:
+        run.tool_allow = profile.get("tools", {}).get("allow")
+        run.tool_deny = profile.get("tools", {}).get("deny", [])
+        run.read_only = profile_id in {"architect", "reviewer"}
+        if profile.get("instructions"):
+            active_skill_instructions = [*active_skill_instructions,
+                {"name": f"profile:{profile_id}", "content": profile["instructions"]}]
     workspace = requested_workspace
     conversation = None
     if memory is not None and getattr(memory, "_db", None) is not None:
@@ -4108,9 +4611,110 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                 "category": "validation", "detail": "workspace directory does not exist",
             }))
             return
+        if conversation and conversation.get("worktree_path"):
+            workspace_path = Path(conversation["worktree_path"]).resolve()
+            if not workspace_path.is_dir():
+                invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    "category": "validation", "detail": "conversation worktree is missing",
+                }))
+                return
+        worktree_request = data.get("worktree")
+        if worktree_request is not None:
+            if not isinstance(worktree_request, dict):
+                invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    "category": "validation", "detail": "worktree must be an object",
+                }))
+                return
+            if not conversation or not conversation.get("worktree_path"):
+                try:
+                    worktree_data = _worktrees().create(
+                        workspace_path, conv_id, worktree_request.get("base_branch"),
+                        worktree_request.get("name"),
+                    )
+                    if memory is not None:
+                        await memory.update_conversation(
+                            conv_id, workspace=str(workspace_path), **worktree_data,
+                        )
+                    workspace_path = Path(worktree_data["worktree_path"])
+                except (OSError, ValueError) as exc:
+                    invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+                    await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                        "category": "validation", "detail": str(exc),
+                    }))
+                    return
         run.workspace = str(workspace_path)
-        if memory is not None and getattr(memory, "_db", None) is not None:
-            await memory.update_conversation(conv_id, workspace=run.workspace)
+        if memory is not None and getattr(memory, "_db", None) is not None and not (conversation and conversation.get("worktree_path")):
+            await memory.update_conversation(conv_id, workspace=str(Path(workspace).expanduser().resolve()))
+        context_files = data.get("context_files", [])
+        if not isinstance(context_files, list):
+            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                "category": "validation", "detail": "context_files must be a list",
+            }))
+            return
+        if context_files and not run.workspace:
+            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                "category": "validation", "detail": "context_files require a workspace",
+            }))
+            return
+        context_blocks: list[str] = []
+        total_context_bytes = 0
+        for relative in context_files:
+            try:
+                remaining = max(0, 256 * 1024 - total_context_bytes)
+                label, consumed = await asyncio.to_thread(
+                    _context_file_block, run.workspace, str(relative), remaining,
+                )
+                total_context_bytes += consumed
+                context_blocks.append(label)
+            except HTTPException as exc:
+                invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    "category": "validation", "detail": str(exc.detail),
+                }))
+                return
+        if context_blocks:
+            content += "".join(context_blocks)
+        context_conversations = data.get("context_conversations", [])
+        if not isinstance(context_conversations, list) or len(context_conversations) > 3:
+            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                "category": "validation", "detail": "context_conversations must contain at most three conversation ids",
+            }))
+            return
+        for other_id in context_conversations:
+            other = await memory.get_conversation(str(other_id)) if memory else None
+            if other is None:
+                invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    "category": "validation", "detail": f"context conversation not found: {other_id}",
+                }))
+                return
+            messages = (await memory.get_conversation_messages(str(other_id), limit=1000))[-20:]
+            compacted = await orchestrator.context_maintenance.compact({
+                "goal": other.get("title", "Referenced conversation"),
+                "session_summary": "\n".join(f"{m['role']}: {m['content'][:1000]}" for m in messages),
+            }) if orchestrator else {"session_summary": "\n".join(m["content"][:500] for m in messages)}
+            content += f"\n\n[Referenced conversation: {other.get('title', other_id)}]\n{compacted.get('session_summary', '')}"
+        run.user_input = content
+        if data.get("ephemeral") is True:
+            if memory is None:
+                invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    "category": "backend", "detail": "memory service unavailable",
+                }))
+                return
+            source_messages = await memory.get_conversation_messages(conv_id, limit=1000)
+            temp_conversation = await memory.create_conversation("Ephemeral side chat")
+            for message in source_messages:
+                await memory.save_message(temp_conversation, message["role"], message["content"], message.get("metadata"))
+            run.ephemeral = True
+            run.ephemeral_source = temp_conversation
+            run.read_only = True
+            run.conversation_id = temp_conversation
         rules = await workspace_rules(root=run.workspace)
         run.workspace_rules = rules["files"]
         if run.workspace not in _LOADED_RULE_WORKSPACES:
@@ -4228,6 +4832,8 @@ def _map_tool_runtime_event(
         }
         if event.get("data") is not None:
             data["execution"] = event["data"]
+            if isinstance(event["data"], dict) and event["data"].get("full_output_path"):
+                data["full_output_path"] = event["data"]["full_output_path"]
         if data["is_error"]:
             data["error_category"] = event.get("error_category", "tool")
         return "tool.completed", data
@@ -4420,6 +5026,31 @@ async def _execute_run(
             run.status = "running"
             return answer
 
+        async def subtask_started(
+            subtask_id: str, goal: str, backend: str,
+        ) -> asyncio.Event:
+            cancel_event = asyncio.Event()
+            run.subtasks[subtask_id] = {"status": "running", "cancel_event": cancel_event}
+            await emit("subtask.started", {
+                "subtask_id": subtask_id, "goal": goal, "backend": backend,
+                "parent_run_id": run.run_id,
+            })
+            return cancel_event
+
+        async def subtask_progress(subtask_id: str, text: str) -> None:
+            await emit("subtask.progress", {"subtask_id": subtask_id, "text": text})
+
+        async def subtask_completed(
+            subtask_id: str, status: str, summary: str, duration_ms: int,
+        ) -> None:
+            entry = run.subtasks.get(subtask_id)
+            if entry:
+                entry["status"] = status
+            await emit("subtask.completed", {
+                "subtask_id": subtask_id, "status": status,
+                "summary": summary, "duration_ms": duration_ms,
+            })
+
         async for event in orchestrator.run(
             message=content,
             conversation_id=run.conversation_id,
@@ -4438,6 +5069,15 @@ async def _execute_run(
             workspace=workspace,
             workspace_rules=workspace_rules,
             mode=mode,
+            tool_allow=run.tool_allow,
+            tool_deny=run.tool_deny,
+            read_only=run.read_only or run.ephemeral,
+            reasoning_effort=(run.reasoning_effort if _model_supports_reasoning(
+                {"litellm_model": model_id or run.model}
+            ) else None),
+            subtask_started=subtask_started,
+            subtask_progress=subtask_progress,
+            subtask_completed=subtask_completed,
             force_plan=(mode == "plan"),
         ):
             if await check_pause_cancel():
@@ -4480,6 +5120,11 @@ async def _execute_run(
 
             elif etype == "run_usage":
                 usage = event.get("usage", {})
+                if run.reasoning_effort and run.reasoning_effort_applied is None:
+                    run.reasoning_effort_applied = _model_supports_reasoning(
+                        {"litellm_model": model_id or run.model}
+                    )
+                    usage["reasoning_effort_applied"] = run.reasoning_effort_applied
                 run.usage.append(usage)
                 await emit("run.usage", usage)
 
@@ -4569,3 +5214,7 @@ async def _execute_run(
             "Review the runtime failure evidence and validate a proposed resolution before reuse.",
         )
         await emit("run.failed", {"category": "runtime", "detail": str(e)})
+    finally:
+        if run.ephemeral and run.ephemeral_source and memory is not None:
+            with suppress(Exception):
+                await memory.delete_conversation(run.ephemeral_source)

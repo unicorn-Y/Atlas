@@ -165,7 +165,20 @@ class AtlasToolBridge:
     async def call_tool(
         self, name: str, arguments: dict[str, Any], *,
         run_id: str | None = None, conversation_id: str | None = None,
+        tool_allow: list[str] | None = None, tool_deny: list[str] | None = None,
+        read_only: bool = False,
     ) -> dict[str, Any]:
+        if tool_allow is not None and name not in tool_allow:
+            raise PermissionError(f"Tool '{name}' is not allowed by the active profile")
+        if name in (tool_deny or []):
+            raise PermissionError(f"Tool '{name}' is denied by the active profile")
+        if read_only and (
+            name not in {"local_file", "coding.repo_map", "coding.ast_grep.run"}
+            or (name == "local_file" and arguments.get("action") not in {
+                "read", "list", "glob", "search", "stat",
+            })
+        ):
+            raise PermissionError(f"Tool '{name}' is not available in read-only mode")
         if name.startswith("local_") and self.local is not None:
             if (name == "local_edit" or (
                 name == "local_file" and arguments.get("action") in {
@@ -219,6 +232,8 @@ class CodeActRuntime:
     async def execute(
         self, code: str, *, run_id: str | None = None,
         conversation_id: str | None = None,
+        tool_allow: list[str] | None = None, tool_deny: list[str] | None = None,
+        read_only: bool = False,
     ) -> dict[str, Any]:
         if not isinstance(code, str) or not code.strip():
             raise ValueError("code must be non-empty text")
@@ -237,6 +252,7 @@ class CodeActRuntime:
                 result = await self.bridge.call_tool(
                     str(request["name"]), dict(request.get("arguments", {})),
                     run_id=run_id, conversation_id=conversation_id,
+                    tool_allow=tool_allow, tool_deny=tool_deny, read_only=read_only,
                 )
                 payload = json.dumps(result, ensure_ascii=False, default=str).encode("utf-8")
                 response_body = len(payload).to_bytes(4, "big") + payload
@@ -316,6 +332,9 @@ class DelegationService:
     async def delegate_task(
         self, goal: str, context: str | None = None, tool_profile: list[str] | None = None,
         *, backend: str | None = None, cwd: str | None = None,
+        on_started: Callable[..., Any] | None = None,
+        on_progress: Callable[..., Any] | None = None,
+        on_completed: Callable[..., Any] | None = None,
     ) -> dict[str, Any]:
         if not goal.strip():
             raise ValueError("goal must be non-empty")
@@ -324,6 +343,12 @@ class DelegationService:
         )
         await self.hooks.emit("subagent_start", goal=goal, backend=name)
         session = None
+        subtask_id = secrets.token_hex(8)
+        started_at = asyncio.get_running_loop().time()
+        cancel_event = asyncio.Event()
+        status = "failed"
+        completion_summary = "Subtask did not produce a result."
+        last_progress = 0.0
         prompt = (
             "Investigate this task in an independent session. Use the Atlas shared tool bridge "
             "when repository evidence is needed. Return concise findings and evidence.\n"
@@ -331,30 +356,78 @@ class DelegationService:
             f"Preferred tool profile: {json.dumps(tool_profile or [], ensure_ascii=False)}"
         )
         try:
+            if on_started:
+                cancel = on_started(subtask_id, goal, name)
+                if hasattr(cancel, "__await__"):
+                    cancel = await cancel
+                if isinstance(cancel, asyncio.Event):
+                    cancel_event = cancel
             session = await asyncio.wait_for(
                 self.host.start(name, cwd), timeout=min(self.timeout, 30),
             )
-            await asyncio.wait_for(
-                self.host.send(session.id, prompt), timeout=min(self.timeout, 30),
-            )
+            if not cancel_event.is_set():
+                await asyncio.wait_for(
+                    self.host.send(session.id, prompt), timeout=min(self.timeout, 30),
+                )
             events: list[dict[str, Any]] = []
             async def collect() -> None:
-                async for event in self.host.events(session.id):
-                    events.append({"type": event.type, "data": event.data})
+                nonlocal last_progress
+                iterator = self.host.events(session.id).__aiter__()
+                next_event = asyncio.create_task(iterator.__anext__())
+                while not cancel_event.is_set():
+                    done, _ = await asyncio.wait({next_event}, timeout=0.1)
+                    if not done:
+                        continue
+                    try:
+                        event = next_event.result()
+                    except StopAsyncIteration:
+                        return
+                    entry = {"type": event.type, "data": event.data}
+                    events.append(entry)
+                    text = next((str(event.data.get(key)) for key in ("text", "content", "message")
+                                 if isinstance(event.data, dict) and event.data.get(key)), "")
+                    now = asyncio.get_running_loop().time()
+                    if text and on_progress and now - last_progress >= 0.5:
+                        last_progress = now
+                        progress = on_progress(subtask_id, text)
+                        if hasattr(progress, "__await__"):
+                            await progress
+                    next_event = asyncio.create_task(iterator.__anext__())
+                if not next_event.done():
+                    next_event.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await next_event
             await asyncio.wait_for(collect(), timeout=self.timeout)
+            status = "cancelled" if cancel_event.is_set() else "completed"
             text = "\n".join(
                 str(e["data"].get(key, "")) for e in events
                 for key in ("text", "content", "message") if e["data"].get(key)
             )
-            return {"backend": name, "session_id": session.id, "result": text,
+            completion_summary = text[:1000] or (
+                "Subtask cancelled." if status == "cancelled" else "Subtask completed without text output."
+            )
+            return {"backend": name, "session_id": session.id, "subtask_id": subtask_id, "status": status, "result": text,
                     "evidence": events}
+        except asyncio.TimeoutError:
+            status = "failed"
+            raise
+        except Exception as exc:
+            completion_summary = str(exc)[:1000] or completion_summary
+            raise
         finally:
+            if cancel_event.is_set():
+                status = "cancelled"
             if session is not None:
                 await self.host.close(session.id)
             await self.hooks.emit(
                 "subagent_end", goal=goal, backend=name,
                 session_id=session.id if session is not None else None,
             )
+            if on_completed:
+                completed = on_completed(subtask_id, status, completion_summary,
+                                         int((asyncio.get_running_loop().time() - started_at) * 1000))
+                if hasattr(completed, "__await__"):
+                    await completed
 
 
 class MemoryReflectionBridge:

@@ -1,17 +1,16 @@
 # Atlas Current Task
 
-CURRENT: CODEX-ATLAS-BACKEND-PARITY-WAVE1
-STATUS: IMPLEMENTED; FULL SUITE HAS 1 ENVIRONMENT-DEPENDENT FAILURE
-RESULT: tasks/results/CODEX-ATLAS-BACKEND-PARITY-WAVE1.result.md
+CURRENT: CODEX-ATLAS-BACKEND-PARITY-WAVE2
+STATUS: DELIVERED; 572 PASSED, 5 SKIPPED
+RESULT: tasks/results/CODEX-ATLAS-BACKEND-PARITY-WAVE2.result.md
 
-PREVIOUS: CODEX-ATLAS-PRODUCT-GAPS-CLOSEOUT-WAVE1
-STATUS: DELIVERED, PENDING REVIEW
+PREVIOUS: CODEX-ATLAS-BACKEND-PARITY-WAVE1
+STATUS: ACCEPTED
 
-BASE_HEAD: 02fb0f032938c0a32a5c38f30ad51768f2123713
+BASE_HEAD: dc6ce0ffca763131ae376c3b1c3eb8044aa047fd
 
 DELIVERY:
-- Backend implementation and required pytest coverage are committed.
-- `core/tests` result: 551 passed, 5 skipped, 1 failed.
-- The sole failure is the existing provider hash locale fixture, which does not include this host's Node `zh-CN` locale.
-- All 14 newly added Wave 1 tests pass (the parity test class also runs one existing resume test).
-- Result artifact: tasks/results/CODEX-ATLAS-BACKEND-PARITY-WAVE1.result.md
+- All 12 taskbook sections implemented in backend code; frontend and backend-adapter were not changed.
+- Runtime Event Protocol is 1.4; OriginGuard was not changed or bypassed.
+- Required pytest suite passed: 572 passed, 5 skipped. `test_computer_use.py` was excluded as permitted because it controls the real mouse.
+- Result artifact: tasks/results/CODEX-ATLAS-BACKEND-PARITY-WAVE2.result.md

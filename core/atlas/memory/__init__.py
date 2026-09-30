@@ -128,7 +128,12 @@ class MemoryStore:
                 metadata TEXT DEFAULT '{}',
                 pinned INTEGER NOT NULL DEFAULT 0,
                 archived INTEGER NOT NULL DEFAULT 0,
-                workspace TEXT
+                workspace TEXT,
+                worktree_path TEXT,
+                worktree_branch TEXT,
+                base_branch TEXT,
+                parent_conversation_id TEXT,
+                fork_message_id TEXT
             );
 
             -- Messages
@@ -628,7 +633,9 @@ class MemoryStore:
         conversation_columns = {row["name"] for row in await cursor.fetchall()}
         for name, declaration in (("pinned", "INTEGER NOT NULL DEFAULT 0"),
                                   ("archived", "INTEGER NOT NULL DEFAULT 0"),
-                                  ("workspace", "TEXT")):
+                                  ("workspace", "TEXT"), ("worktree_path", "TEXT"),
+                                  ("worktree_branch", "TEXT"), ("base_branch", "TEXT"),
+                                  ("parent_conversation_id", "TEXT"), ("fork_message_id", "TEXT")):
             if name not in conversation_columns:
                 await self._db.execute(
                     f"ALTER TABLE conversations ADD COLUMN {name} {declaration}"
@@ -677,7 +684,8 @@ class MemoryStore:
     async def list_conversations(self, limit: int = 50) -> list[dict[str, Any]]:
         assert self._db is not None
         cursor = await self._db.execute(
-            "SELECT id, title, created_at, updated_at, pinned, archived, workspace "
+            "SELECT id, title, created_at, updated_at, pinned, archived, workspace, "
+            "worktree_path, worktree_branch, base_branch, parent_conversation_id, fork_message_id "
             "FROM conversations ORDER BY pinned DESC, updated_at DESC LIMIT ?",
             (limit,),
         )
@@ -743,6 +751,25 @@ class MemoryStore:
             (conversation_id,),
         )
 
+        await self._db.commit()
+        return msg_id
+
+    async def save_message_first(
+        self, conversation_id: str, role: str, content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        """Insert a message before the current transcript, used for fork summaries."""
+        assert self._db is not None
+        msg_id = str(uuid.uuid4())
+        await self._db.execute(
+            "INSERT INTO messages (id, conversation_id, role, content, metadata, created_at) "
+            "VALUES (?, ?, ?, ?, ?, '0001-01-01T00:00:00+00:00')",
+            (msg_id, conversation_id, role, content, json.dumps(metadata or {})),
+        )
+        await self._db.execute(
+            "UPDATE conversations SET updated_at=datetime('now') WHERE id=?",
+            (conversation_id,),
+        )
         await self._db.commit()
         return msg_id
 
@@ -3759,7 +3786,8 @@ class MemoryStore:
         """Return a single conversation by ID, or None."""
         assert self._db is not None
         cursor = await self._db.execute(
-            "SELECT id, title, created_at, updated_at, metadata, pinned, archived, workspace "
+            "SELECT id, title, created_at, updated_at, metadata, pinned, archived, workspace, "
+            "worktree_path, worktree_branch, base_branch, parent_conversation_id, fork_message_id "
             "FROM conversations WHERE id = ?",
             (conversation_id,),
         )
@@ -3769,13 +3797,18 @@ class MemoryStore:
     async def update_conversation(
         self, conversation_id: str, *, title: str | None = None,
         pinned: bool | None = None, archived: bool | None = None,
-        workspace: str | None = None,
+        workspace: str | None = None, worktree_path: str | None = None,
+        worktree_branch: str | None = None, base_branch: str | None = None,
+        parent_conversation_id: str | None = None, fork_message_id: str | None = None,
     ) -> bool:
         """Update optional conversation fields. Returns True if found."""
         assert self._db is not None
         fields = {"title": title, "pinned": None if pinned is None else int(pinned),
                   "archived": None if archived is None else int(archived),
-                  "workspace": workspace}
+                  "workspace": workspace, "worktree_path": worktree_path,
+                  "worktree_branch": worktree_branch, "base_branch": base_branch,
+                  "parent_conversation_id": parent_conversation_id,
+                  "fork_message_id": fork_message_id}
         if not any(value is not None for value in fields.values()):
             cursor = await self._db.execute(
                 "SELECT 1 FROM conversations WHERE id=?", (conversation_id,)

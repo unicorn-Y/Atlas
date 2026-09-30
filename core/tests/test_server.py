@@ -75,7 +75,7 @@ class TestRuntimeProtocol:
         resp = await client.get("/api/runtime/protocol")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["version"] == "1.3"
+        assert data["version"] == "1.4"
 
     async def test_run_metadata_survives_manager_restart(self, tmp_path) -> None:
         from atlas.server import RunState, RuntimeManager

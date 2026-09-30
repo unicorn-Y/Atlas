@@ -39,6 +39,7 @@ from atlas.agent.enrichment import (
     TrajectoryReviewer,
 )
 from atlas.agent.planning import TaskPlan, requires_plan
+from atlas.agent.results import externalize_tool_output
 from atlas.config import get_config
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
@@ -95,6 +96,13 @@ class AgentRunContext:
     input_callback: Callable[[str, str, list[str] | None], Any] | None = None
     workspace: str | None = None
     mode: str = "act"
+    tool_allow: list[str] | None = None
+    tool_deny: list[str] = field(default_factory=list)
+    read_only: bool = False
+    reasoning_effort: str | None = None
+    subtask_started: Callable[..., Any] | None = None
+    subtask_progress: Callable[..., Any] | None = None
+    subtask_completed: Callable[..., Any] | None = None
 
 
 _EVENT_STREAM_DONE = object()
@@ -310,9 +318,12 @@ class AgentOrchestrator:
     async def execute_code(
         self, code: str, *, run_id: str | None = None,
         conversation_id: str | None = None,
+        tool_allow: list[str] | None = None, tool_deny: list[str] | None = None,
+        read_only: bool = False,
     ) -> dict[str, Any]:
         return await self._codeact.execute(
             code, run_id=run_id, conversation_id=conversation_id,
+            tool_allow=tool_allow, tool_deny=tool_deny, read_only=read_only,
         )
 
     async def compact_context(self, context: dict[str, Any]) -> dict[str, Any]:
@@ -542,6 +553,12 @@ class AgentOrchestrator:
         tools = self._model_facing_tools()
 
         runtime = state["runtime"]
+        allowed = getattr(runtime, "tool_allow", None)
+        denied_tools = getattr(runtime, "tool_deny", [])
+        if allowed is not None:
+            tools = [item for item in tools if item["function"]["name"] in allowed]
+        if denied_tools:
+            tools = [item for item in tools if item["function"]["name"] not in denied_tools]
         if runtime.steer_queue is not None:
             while not runtime.steer_queue.empty():
                 steer = runtime.steer_queue.get_nowait()
@@ -636,6 +653,8 @@ class AgentOrchestrator:
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
+        if getattr(runtime, "reasoning_effort", None):
+            kwargs["reasoning_effort"] = runtime.reasoning_effort
 
         event_queue = getattr(runtime, "event_queue", None)
         events: list[dict[str, Any]] = []
@@ -773,6 +792,23 @@ class AgentOrchestrator:
             fn_args = tc["args"]
             tc_id = tc["id"]
 
+            allowed_tools = getattr(ctx, "tool_allow", None)
+            denied_tools = getattr(ctx, "tool_deny", [])
+            read_only = getattr(ctx, "read_only", False)
+            denied = ((allowed_tools is not None and fn_name not in allowed_tools)
+                      or fn_name in denied_tools
+                      or (read_only and fn_name not in {"local_file", "coding.repo_map", "coding.ast_grep.run"})
+                      or (read_only and fn_name == "local_file" and fn_args.get("action") not in {"read", "list", "glob", "search", "stat"}))
+            if denied:
+                detail = f"Tool '{fn_name}' is not allowed by the active profile."
+                events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
+                               "content": [{"type": "text", "text": detail}], "is_error": True,
+                               "error_category": "policy"})
+                tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+                if ctx.event_queue is not None:
+                    await ctx.event_queue.put(events[-1])
+                continue
+
             # Check cancellation between tool calls
             if ctx.cancel_event and ctx.cancel_event.is_set():
                 break
@@ -862,6 +898,9 @@ class AgentOrchestrator:
                     result = {"data": await self.execute_code(
                         str(fn_args.get("code", "")), run_id=ctx.run_id,
                         conversation_id=ctx.conversation_id,
+                        tool_allow=getattr(ctx, "tool_allow", None),
+                        tool_deny=getattr(ctx, "tool_deny", []),
+                        read_only=getattr(ctx, "read_only", False),
                     )}
                     result["content"] = [{"type": "text", "text": json.dumps(
                         result["data"], ensure_ascii=False,
@@ -876,8 +915,13 @@ class AgentOrchestrator:
                               "content": [{"type": "text", "text": str(answer)}],
                               "is_error": False}
                 elif fn_name == "delegate_task":
-                    result = {"data": await self.delegate_task(
+                    if self._delegation is None:
+                        raise RuntimeError("No AgentBackendHost is configured for delegation")
+                    result = {"data": await self._delegation.delegate_task(
                         str(fn_args["goal"]), fn_args.get("context"), fn_args.get("tool_profile"),
+                        on_started=getattr(ctx, "subtask_started", None),
+                        on_progress=getattr(ctx, "subtask_progress", None),
+                        on_completed=getattr(ctx, "subtask_completed", None),
                     )}
                     result["content"] = [{"type": "text", "text": json.dumps(
                         result["data"], ensure_ascii=False,
@@ -960,6 +1004,18 @@ class AgentOrchestrator:
 
             await self._emit_hook(ctx, "after_tool", name=fn_name, arguments=fn_args, result=result)
 
+            full_output = "\n".join(
+                str(block.get("text", block)) if isinstance(block, dict) else str(block)
+                for block in result.get("content", [])
+            )
+            full_output_path = None
+            if getattr(ctx, "run_id", None):
+                preview, full_output_path = externalize_tool_output(
+                    full_output, get_config().db_path.parent, ctx.run_id, tc_id,
+                )
+                if full_output_path:
+                    result["content"] = [{"type": "text", "text": preview}]
+
             # Keep user-facing runtime events bounded. The full process log
             # remains available through local_process.read using execution_id.
             event_content = []
@@ -975,6 +1031,10 @@ class AgentOrchestrator:
                     key: value for key, value in event_data.items()
                     if key not in {"content", "stdout", "stderr", "_image_data_url"}
                 }
+            if full_output_path:
+                if not isinstance(event_data, dict):
+                    event_data = {}
+                event_data["full_output_path"] = full_output_path
 
             events.append({
                 "type": "tool_result",
@@ -1084,6 +1144,13 @@ class AgentOrchestrator:
         workspace: str | None = None,
         workspace_rules: list[dict[str, Any]] | None = None,
         mode: str = "act",
+        tool_allow: list[str] | None = None,
+        tool_deny: list[str] | None = None,
+        read_only: bool = False,
+        reasoning_effort: str | None = None,
+        subtask_started: Callable[..., Any] | None = None,
+        subtask_progress: Callable[..., Any] | None = None,
+        subtask_completed: Callable[..., Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -1116,6 +1183,10 @@ class AgentOrchestrator:
             reminders=SystemReminders(self.reminder_policy),
             steer_queue=steer_queue, input_callback=input_callback,
             workspace=workspace, mode=mode,
+            tool_allow=tool_allow, tool_deny=tool_deny or [], read_only=read_only,
+            reasoning_effort=reasoning_effort,
+            subtask_started=subtask_started, subtask_progress=subtask_progress,
+            subtask_completed=subtask_completed,
         )
 
         # Resolve model

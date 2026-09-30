@@ -487,7 +487,7 @@ class AtlasScheduler:
             task = self._tasks.get(task_id)
             if (
                 task is None or not task.goal
-                or task.goal_status in {"running", "completed", "blocked", "awaiting_approval"}
+                or task.goal_status in {"running", "completed", "blocked", "awaiting_approval", "paused"}
             ):
                 return False
             await callback(task_id, message)
