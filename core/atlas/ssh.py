@@ -148,6 +148,15 @@ class SSHWorkspaceManager:
     @staticmethod
     def _remote_path(root: str, path: Any) -> str:
         value = str(path or ".")
+        # Models on Windows hosts send "D:\\Atlas\\core" or "D:/Atlas"; the workspace root is kept
+        # as "/D:/Atlas", so bring those into the same form before checking containment.
+        drive = re.match(r"^/?([A-Za-z]):([/\\\\]|$)", value)
+        if drive:
+            value = "/" + drive.group(1).upper() + ":/" + value[drive.end():]
+        value = value.replace("\\", "/")
+        root_drive = re.match(r"^/([A-Za-z]):(/|$)", root)
+        if root_drive:
+            root = "/" + root_drive.group(1).upper() + root[2:]
         normalized = posixpath.normpath(
             value if value.startswith("/") else posixpath.join(root, value)
         )
@@ -345,7 +354,7 @@ class SSHWorkspaceManager:
                     "push": ["push"],
                 }[action]
                 script = (
-                    f"Set-Location -LiteralPath {self._powershell_quote(cwd)}; "
+                    f"Set-Location -LiteralPath {self._powershell_quote(cwd)} -ErrorAction Stop; "
                     "& git " + " ".join(self._powershell_quote(arg) for arg in git_args)
                 )
                 command = self._powershell_command(script)
@@ -363,7 +372,7 @@ class SSHWorkspaceManager:
             else:
                 command = str(arguments.get("command", ""))
             if await self.remote_os(host) == "windows":
-                change_dir = f"Set-Location -LiteralPath {self._powershell_quote(cwd)}; "
+                change_dir = f"Set-Location -LiteralPath {self._powershell_quote(cwd)} -ErrorAction Stop; "
                 if name == "local_exec":
                     executable = self._powershell_quote(arguments.get("executable", ""))
                     args = " ".join(

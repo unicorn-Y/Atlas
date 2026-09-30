@@ -44,7 +44,9 @@ def hub_port() -> int:
 
 
 async def _request(method: str, path: str, port: int | None = None) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    # Loopback only: never route through a system proxy, and fail fast when nothing listens
+    # (Windows retries a refused connect for ~2 s, which stalled every status poll).
+    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=0.5), trust_env=False) as client:
         response = await client.request(method, f"http://127.0.0.1:{port or hub_port()}{path}")
         response.raise_for_status()
         return response.json()

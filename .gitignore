@@ -27,6 +27,10 @@ data/checkpoints/
 data/profiles/
 data/recipes/
 data/tool-results/
+data/hooks.toml
+data/scheduler.lock
+data/trusted-workspaces.json
+data/hub.json
 
 # Config with secrets
 config/atlas.toml

@@ -600,3 +600,16 @@ async def test_wave3_ssh_detects_windows_when_default_shell_is_cmd(monkeypatch):
 
     monkeypatch.setattr(manager, "_connect", connect)
     assert await manager.remote_os("zhuji") == "windows"
+
+
+def test_wave3_ssh_remote_path_accepts_windows_style_paths_and_refuses_escapes():
+    from atlas.ssh import SSHWorkspaceManager
+
+    remote = SSHWorkspaceManager._remote_path
+    assert remote("/D:/Atlas", r"D:\Atlas\core") == "/D:/Atlas/core"
+    assert remote("/D:/Atlas", "d:/Atlas") == "/D:/Atlas"
+    assert remote("/d:/Atlas", r"sub\dir") == "/D:/Atlas/sub/dir"
+    with pytest.raises(ValueError):
+        remote("/D:/Atlas", r"C:\Users\someone")
+    with pytest.raises(ValueError):
+        remote("/D:/Atlas", r"..\other")
