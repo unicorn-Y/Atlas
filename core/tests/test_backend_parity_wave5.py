@@ -9,6 +9,7 @@ from atlas.agent.enrichment import DelegationService
 from atlas.memory import MemoryStore
 from atlas.projects import ProjectStore
 from atlas.tools.web_extract import extract_web
+from atlas.tools.custom_tools import CustomToolStore
 from atlas.agent.checkpoints import ShadowGitCheckpointStore
 
 
@@ -176,3 +177,34 @@ async def test_rewind_restores_messages_and_files_then_redo_restores_both(tmp_pa
         assert (await server.list_conversation_rewinds(conversation_id))[0]["redone"] is True
     finally:
         await memory.close()
+
+
+@pytest.mark.asyncio
+async def test_custom_tools_create_execute_disable_validate_and_timeout(tmp_path):
+    store = CustomToolStore(tmp_path / "tools")
+    tool = store.create({
+        "id": "echo-json", "name": "回显", "description": "回传输入内容",
+        "command": [__import__("sys").executable, "echo.py"],
+        "input_schema": {"type": "object", "properties": {"value": {"type": "string"}},
+                         "required": ["value"], "additionalProperties": False},
+        "script_name": "echo.py",
+        "script": "import json,sys; print(json.dumps(json.load(sys.stdin)))",
+    })
+    result = await store.execute(tool["id"], {"value": "ok"})
+    assert result["result"] == {"value": "ok"}
+    store.update(tool["id"], {"enabled": False})
+    assert store.model_tools() == []
+    with pytest.raises(ValueError, match="停用"):
+        await store.execute(tool["id"], {"value": "ok"})
+    with pytest.raises(ValueError, match="编号"):
+        store.create({"id": "../bad"})
+
+    store.create({
+        "id": "slow-run", "name": "慢任务", "description": "超时检查",
+        "command": [__import__("sys").executable, "slow.py"], "timeout_s": 0.1,
+        "input_schema": {"type": "object"}, "script_name": "slow.py",
+        "script": "import time; time.sleep(5)",
+    })
+    timed_out = await store.execute("slow-run", {})
+    assert timed_out["is_error"] is True
+    assert "超时" in timed_out["error"]

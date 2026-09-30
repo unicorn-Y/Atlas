@@ -207,6 +207,7 @@ class AgentOrchestrator:
         trajectory_reviewer: TrajectoryReviewer | None = None,
         checkpoint_store: ShadowGitCheckpointStore | None = None,
         reminder_policy: ReminderPolicy | None = None,
+        custom_tools: Any | None = None,
     ) -> None:
         self._model_mgr = model_mgr
         self._memory = memory
@@ -216,6 +217,7 @@ class AgentOrchestrator:
         self._web = web_runtime
         self._skills = skill_manager
         self._projects = projects
+        self._custom_tools = custom_tools
         self.hooks = hooks or HookBus()
         self.context_maintenance = ContextMaintenance(self.hooks)
         self.reminder_policy = reminder_policy or ReminderPolicy()
@@ -571,6 +573,8 @@ class AgentOrchestrator:
     def _model_facing_tools(self) -> list[dict[str, Any]]:
         """Assemble the model-facing tool surface (single source for _think_node)."""
         tools = self._mcp.get_tools_for_llm() if self._mcp else []
+        if self._custom_tools is not None:
+            tools.extend(self._custom_tools.model_tools())
         if self._local_execution:
             tools = [*tools, *self._local_execution.get_tools_for_llm()]
         if self._computer_use:
@@ -1151,6 +1155,7 @@ class AgentOrchestrator:
                         or (fn_name == "local_file" and fn_args.get("action") in {
                             "write", "append", "mkdir", "copy", "move", "delete",
                         })
+                        or fn_name.startswith("custom_")
                         or (fn_name.startswith("local_process") and fn_args.get("action") in {
                             "start", "write_stdin", "terminate",
                         })
@@ -1412,6 +1417,13 @@ class AgentOrchestrator:
                     result = {"data": {"results": matches}, "is_error": False,
                               "content": [{"type": "text", "text": json.dumps(
                                   matches, ensure_ascii=False,
+                              )}]}
+                elif fn_name.startswith("custom_") and self._custom_tools is not None:
+                    tool_id = fn_name.removeprefix("custom_")
+                    data = await self._custom_tools.execute(tool_id, fn_args)
+                    result = {"data": data, "is_error": bool(data.get("is_error")),
+                              "content": [{"type": "text", "text": json.dumps(
+                                  data, ensure_ascii=False,
                               )}]}
                 elif fn_name == "run_checks":
                     if (workspace or "").startswith("ssh://"):

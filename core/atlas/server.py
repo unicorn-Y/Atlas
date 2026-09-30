@@ -109,6 +109,7 @@ from atlas.skills.lifecycle import (
 from atlas.skills.registry import SkillRegistry
 from atlas.ssh import ssh_workspaces
 from atlas.tools.computer_use import ComputerUseRuntime
+from atlas.tools.custom_tools import CustomToolStore
 from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 from atlas.tools.node_runtime import get_node_runtime_status
@@ -138,6 +139,7 @@ cua_backend: CuaBackend | None = None
 browser_use: BrowserUseAdapter | None = None
 agent_backend_host: AgentBackendHost | None = None
 web_runtime: WebRuntime | None = None
+custom_tools: CustomToolStore | None = None
 skill_mgr: SkillManager | None = None
 skill_registry: SkillRegistry | None = None
 skill_catalog_provider = SkillsShProvider()
@@ -549,7 +551,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
     global capability_bus, cua_backend, browser_use, agent_backend_host
-    global projects, durable, plugin_runtime, notifications, web_runtime
+    global projects, durable, plugin_runtime, notifications, web_runtime, custom_tools
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -574,6 +576,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     skill_mgr = SkillManager()
     await skill_mgr.scan_skills()
     cfg = get_config()
+    custom_tools = CustomToolStore(cfg.db_path.parent / "tools")
     skill_registry = SkillRegistry(cfg.db_path.parent / "skill-registry.db")
     _register_local_skills(skill_mgr, skill_registry)
     capabilities = AgentCapabilityRegistry()
@@ -766,6 +769,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         projects=projects,
         # One store: the Agent's automatic snapshots must be the ones restore and diff read.
         checkpoint_store=checkpoints,
+        custom_tools=custom_tools,
     )
 
     plugin_runtime = PluginRuntime(
@@ -3111,6 +3115,58 @@ async def list_tools() -> dict[str, Any]:
             for t in tools
         ],
     }
+
+
+@app.get("/api/custom-tools")
+async def list_custom_tools() -> dict[str, Any]:
+    assert custom_tools is not None
+    return {"tools": custom_tools.list_tools()}
+
+
+@app.post("/api/custom-tools", status_code=201)
+async def create_custom_tool(req: dict[str, Any]) -> dict[str, Any]:
+    assert custom_tools is not None
+    try:
+        return custom_tools.create(req)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/custom-tools/{tool_id}")
+async def update_custom_tool(tool_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    assert custom_tools is not None
+    try:
+        result = custom_tools.update(tool_id, req)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="找不到这个自定义工具。")
+    return result
+
+
+@app.delete("/api/custom-tools/{tool_id}")
+async def delete_custom_tool(tool_id: str) -> dict[str, str]:
+    assert custom_tools is not None
+    try:
+        deleted = custom_tools.delete(tool_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="找不到这个自定义工具。")
+    return {"status": "deleted", "id": tool_id}
+
+
+@app.post("/api/custom-tools/{tool_id}/test")
+async def test_custom_tool(tool_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    assert custom_tools is not None
+    try:
+        return await custom_tools.execute(
+            tool_id, req.get("arguments", req), allow_disabled=True,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="找不到这个自定义工具。") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/integrations")
