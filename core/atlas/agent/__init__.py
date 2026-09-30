@@ -39,9 +39,9 @@ from atlas.agent.enrichment import (
     SystemReminders,
     TrajectoryReviewer,
 )
+from atlas.agent.results import externalize_tool_output
 from atlas.agent.planning import TaskPlan, requires_plan
 from atlas.checks import parse_test_summary, run_checks
-from atlas.agent.results import externalize_tool_output
 from atlas.config import get_config
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
@@ -56,6 +56,19 @@ from atlas.tools.computer_use import ComputerUseRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 from atlas.tools.web import WEB_TOOLS as _WEB_TOOLS
+from atlas.tools.web_extract import extract_web
+
+_WEB_EXTRACT_TOOL = {"type": "function", "function": {
+    "name": "web_extract",
+    "description": "提取网页正文或视频字幕，供阅读和总结链接使用。",
+    "parameters": {"type": "object", "properties": {
+        "url": {"type": "string"},
+        "allow_local": {
+            "type": "boolean",
+            "description": "仅在用户明确要求读取本机 localhost 页面时为 true。",
+        },
+    }, "required": ["url"], "additionalProperties": False},
+}}
 
 
 def _ssh_paths_allowed(workspace: str, allowed_paths: list[str], candidates: list[str]) -> bool:
@@ -208,6 +221,7 @@ class AgentOrchestrator:
         checkpoint_store: ShadowGitCheckpointStore | None = None,
         reminder_policy: ReminderPolicy | None = None,
         custom_tools: Any | None = None,
+        web_extractor: Any | None = None,
     ) -> None:
         self._model_mgr = model_mgr
         self._memory = memory
@@ -218,6 +232,7 @@ class AgentOrchestrator:
         self._skills = skill_manager
         self._projects = projects
         self._custom_tools = custom_tools
+        self._web_extractor = web_extractor or extract_web
         self.hooks = hooks or HookBus()
         self.context_maintenance = ContextMaintenance(self.hooks)
         self.reminder_policy = reminder_policy or ReminderPolicy()
@@ -580,7 +595,7 @@ class AgentOrchestrator:
         if self._computer_use:
             tools = [*tools, *self._computer_use.get_tools_for_llm()]
         if self._web is not None:
-            tools = [*tools, *_WEB_TOOLS]
+            tools = [*tools, *_WEB_TOOLS, _WEB_EXTRACT_TOOL]
         if self._memory is not None:
             tools = [*tools, {
                 "type": "function",
@@ -814,7 +829,7 @@ class AgentOrchestrator:
         if runtime.mode == "plan":
             tools = [json.loads(json.dumps(item)) for item in tools
                      if item["function"]["name"] in {
-                "local_file", "web_fetch",
+                "local_file", "web_fetch", "web_extract",
             }]
             for item in tools:
                 if item["function"]["name"] == "local_file":
@@ -1526,6 +1541,15 @@ class AgentOrchestrator:
                         )}],
                         "is_error": False,
                     }
+                elif fn_name == "web_extract":
+                    data = await self._web_extractor(
+                        str(fn_args.get("url", "")),
+                        allow_local=bool(fn_args.get("allow_local", False)),
+                    )
+                    result = {"data": data,
+                              "content": [{"type": "text", "text": json.dumps(
+                                  data, ensure_ascii=False,
+                              )}], "is_error": False}
                 elif self._mcp:
                     if getattr(ctx, "sandbox_enabled", False):
                         raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")

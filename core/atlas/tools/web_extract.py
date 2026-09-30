@@ -40,14 +40,18 @@ def _validate_url(url: str, allow_local: bool) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError("只支持 http 或 https 网页地址。")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("网址不能包含登录凭据。")
     host = parsed.hostname.rstrip(".").casefold()
     local_exception = allow_local and host in {"localhost", "127.0.0.1"}
     try:
         addresses = [ipaddress.ip_address(host)]
     except ValueError:
         try:
-            records = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80),
-                                         type=socket.SOCK_STREAM)
+            records = socket.getaddrinfo(
+                host, parsed.port or (443 if parsed.scheme == "https" else 80),
+                type=socket.SOCK_STREAM,
+            )
         except OSError as exc:
             raise ValueError("无法解析这个网址。") from exc
         addresses = [ipaddress.ip_address(record[4][0]) for record in records]
@@ -58,7 +62,8 @@ def _validate_url(url: str, allow_local: bool) -> str:
 
 async def _video_captions(url: str) -> tuple[str, str]:
     parsed = urlparse(url)
-    if "youtube.com" in (parsed.hostname or "") or parsed.hostname == "youtu.be":
+    hostname = (parsed.hostname or "").casefold()
+    if hostname == "youtube.com" or hostname.endswith(".youtube.com") or hostname == "youtu.be":
         video_id = parsed.path.rsplit("/", 1)[-1] if parsed.hostname == "youtu.be" else dict(
             item.split("=", 1) for item in parsed.query.split("&") if "=" in item
         ).get("v", "")
@@ -75,9 +80,12 @@ async def _video_captions(url: str) -> tuple[str, str]:
 
 async def extract_web(url: str, *, allow_local: bool = False,
                       client_factory=httpx.AsyncClient) -> dict[str, object]:
-    checked = _validate_url(url, allow_local)
+    checked = await asyncio.wait_for(
+        asyncio.to_thread(_validate_url, url, allow_local), timeout=3.0,
+    )
     host = (urlparse(checked).hostname or "").casefold()
-    if host.endswith("youtube.com") or host == "youtu.be" or host.endswith("bilibili.com"):
+    if (host == "youtube.com" or host.endswith(".youtube.com") or host == "youtu.be"
+            or host == "bilibili.com" or host.endswith(".bilibili.com")):
         text, note = await _video_captions(checked)
         if note:
             text = note
@@ -85,40 +93,45 @@ async def extract_web(url: str, *, allow_local: bool = False,
         return {"url": checked, "title": "视频字幕", "kind": "video", "text": clipped,
                 "length": len(clipped), "truncated": len(text) > MAX_TEXT_LENGTH}
 
-    timeout = httpx.Timeout(20.0)
-    async with client_factory(timeout=timeout, follow_redirects=False) as client:
-        current = checked
-        response = None
-        for _ in range(6):
-            _validate_url(current, allow_local)
-            response = await client.get(current, headers={"User-Agent": "Atlas/1.0"})
-            if response.status_code not in {301, 302, 303, 307, 308}:
-                break
-            location = response.headers.get("location")
-            if not location:
-                break
-            current = urljoin(current, location)
-        else:
-            raise ValueError("网页跳转次数过多。")
-        if response is None:
-            raise ValueError("网页没有返回内容。")
-        response.raise_for_status()
-        body = bytearray()
-        async for chunk in response.aiter_bytes():
-            body.extend(chunk)
-            if len(body) > MAX_RESPONSE_BYTES:
-                raise ValueError("网页内容超过 10 MB，已停止读取。")
-        html = bytes(body).decode(response.encoding or "utf-8", errors="replace")
-        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
-        title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else current
-        try:
-            import trafilatura
-            text = trafilatura.extract(html, include_comments=False, include_tables=True) or ""
-        except ImportError:
-            parser = _TextParser()
-            parser.feed(html)
-            text = re.sub(r"[ \t]+", " ", "".join(parser.parts))
-            text = re.sub(r"\n\s*\n+", "\n", text).strip()
-        clipped = text[:MAX_TEXT_LENGTH]
-        return {"url": current, "title": title[:500], "kind": "page", "text": clipped,
-                "length": len(clipped), "truncated": len(text) > MAX_TEXT_LENGTH}
+    async def fetch_page() -> dict[str, object]:
+        timeout = httpx.Timeout(20.0)
+        async with client_factory(timeout=timeout, follow_redirects=False) as client:
+            current = checked
+            response = None
+            for _ in range(6):
+                await asyncio.wait_for(
+                    asyncio.to_thread(_validate_url, current, allow_local), timeout=3.0,
+                )
+                response = await client.get(current, headers={"User-Agent": "Atlas/1.0"})
+                if response.status_code not in {301, 302, 303, 307, 308}:
+                    break
+                location = response.headers.get("location")
+                if not location:
+                    break
+                current = urljoin(current, location)
+            else:
+                raise ValueError("网页跳转次数过多。")
+            if response is None:
+                raise ValueError("网页没有返回内容。")
+            response.raise_for_status()
+            body = bytearray()
+            async for chunk in response.aiter_bytes():
+                body.extend(chunk)
+                if len(body) > MAX_RESPONSE_BYTES:
+                    raise ValueError("网页内容超过 10 MB，已停止读取。")
+            html = bytes(body).decode(response.encoding or "utf-8", errors="replace")
+            title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+            title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else current
+            try:
+                import trafilatura
+                text = trafilatura.extract(html, include_comments=False, include_tables=True) or ""
+            except ImportError:
+                parser = _TextParser()
+                parser.feed(html)
+                text = re.sub(r"[ \t]+", " ", "".join(parser.parts))
+                text = re.sub(r"\n\s*\n+", "\n", text).strip()
+            clipped = text[:MAX_TEXT_LENGTH]
+            return {"url": current, "title": title[:500], "kind": "page", "text": clipped,
+                    "length": len(clipped), "truncated": len(text) > MAX_TEXT_LENGTH}
+
+    return await asyncio.wait_for(fetch_page(), timeout=20.0)
