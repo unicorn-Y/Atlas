@@ -99,6 +99,11 @@ class AgentRunContext:
     tool_allow: list[str] | None = None
     tool_deny: list[str] = field(default_factory=list)
     read_only: bool = False
+    permission_mode: str = "full_access"
+    allowed_paths: list[str] = field(default_factory=list)
+    user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None
+    ssh_tool_callback: Callable[[str, dict[str, Any]], Any] | None = None
+    ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None
     reasoning_effort: str | None = None
     subtask_started: Callable[..., Any] | None = None
     subtask_progress: Callable[..., Any] | None = None
@@ -786,11 +791,21 @@ class AgentOrchestrator:
         tool_messages: list[ToolMessage] = []
         screenshot_urls: list[str] = []
         ctx = state["runtime"]
+        workspace = getattr(ctx, "workspace", None)
+        allowed_paths = getattr(ctx, "allowed_paths", [])
+        permission_mode = getattr(ctx, "permission_mode", "full_access")
+        user_hook_callback = getattr(ctx, "user_hook_callback", None)
+        ssh_tool_callback = getattr(ctx, "ssh_tool_callback", None)
+        ssh_checkpoint_callback = getattr(ctx, "ssh_checkpoint_callback", None)
 
         for tc in last.tool_calls:
             fn_name = tc["name"]
             fn_args = tc["args"]
             tc_id = tc["id"]
+            if workspace and workspace.startswith("ssh://") and fn_name == "local_process":
+                fn_args.setdefault("cwd", str(Path.cwd()))
+            elif workspace and fn_name.startswith("local_"):
+                fn_args.setdefault("cwd", workspace)
 
             allowed_tools = getattr(ctx, "tool_allow", None)
             denied_tools = getattr(ctx, "tool_deny", [])
@@ -809,6 +824,35 @@ class AgentOrchestrator:
                     await ctx.event_queue.put(events[-1])
                 continue
 
+            if allowed_paths and not (workspace or "").startswith("ssh://"):
+                candidates = [value for key, value in fn_args.items()
+                              if key in {"path", "destination", "cwd", "workspace", "root"}
+                              and isinstance(value, str)]
+                for candidate in candidates:
+                    if candidate == workspace and candidate.startswith("ssh://"):
+                        continue
+                    candidate_path = Path(candidate).expanduser()
+                    if not candidate_path.is_absolute() and workspace:
+                        candidate_path = Path(workspace) / candidate_path
+                    resolved = candidate_path.resolve()
+                    permitted = any(
+                        resolved == Path(item).expanduser().resolve()
+                        or Path(item).expanduser().resolve() in resolved.parents
+                        for item in [*allowed_paths, *([workspace] if workspace else [])]
+                    )
+                    if not permitted:
+                        denied = True
+                        break
+                if denied:
+                    detail = "Tool path is outside allowed_paths and workspace."
+                    events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
+                                   "content": [{"type": "text", "text": detail}],
+                                   "is_error": True, "error_category": "policy"})
+                    tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+                    if ctx.event_queue is not None:
+                        await ctx.event_queue.put(events[-1])
+                    continue
+
             # Check cancellation between tool calls
             if ctx.cancel_event and ctx.cancel_event.is_set():
                 break
@@ -818,6 +862,42 @@ class AgentOrchestrator:
                 await ctx.pause_event.wait()
 
             await self._emit_hook(ctx, "before_tool", name=fn_name, arguments=fn_args)
+            is_write = (fn_name in {"local_edit", "local_shell", "local_exec", "execute_command",
+                                    "run_script", "computer_click", "computer_type", "computer_key",
+                                    "computer_scroll", "computer_drag", "computer_hotkey"}
+                        or (fn_name == "local_file" and fn_args.get("action") in {
+                            "write", "append", "mkdir", "copy", "move", "delete",
+                        })
+                        or (fn_name.startswith("local_process") and fn_args.get("action") in {
+                            "start", "write_stdin", "terminate",
+                        })
+                        or (fn_name == "local_git" and fn_args.get("action") in {
+                            "add", "commit", "pull", "fetch", "push",
+                        }))
+            if permission_mode == "ask_writes" and is_write and ctx.approval_callback:
+                choice = await ctx.approval_callback(f"approval:{tc_id}", fn_name, fn_args)
+                if choice != "allow":
+                    detail = f"Tool '{fn_name}' denied by user."
+                    result = {"content": [{"type": "text", "text": detail}], "is_error": True}
+                    events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
+                                   "content": result["content"], "is_error": True})
+                    tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+                    if ctx.event_queue is not None:
+                        await ctx.event_queue.put(events[-1])
+                    continue
+            if user_hook_callback:
+                outcome = await user_hook_callback("tool.before", {
+                    "tool_name": fn_name, "parameters": fn_args,
+                })
+                if outcome.get("blocked"):
+                    detail = str(outcome.get("reason", "Blocked by hook"))
+                    result = {"content": [{"type": "text", "text": detail}], "is_error": True}
+                    events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
+                                   "content": result["content"], "is_error": True})
+                    tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+                    if ctx.event_queue is not None:
+                        await ctx.event_queue.put(events[-1])
+                    continue
             if hasattr(ctx, "maintenance_context"):
                 refs = ctx.maintenance_context.setdefault("active_tool_refs", [])
                 reference = {"name": fn_name, "tool_call_id": tc_id}
@@ -825,7 +905,8 @@ class AgentOrchestrator:
                     refs.append(reference)
 
             # Approval gate for sensitive tools
-            if fn_name in self.APPROVAL_REQUIRED_TOOLS and ctx.approval_callback:
+            if (fn_name in self.APPROVAL_REQUIRED_TOOLS
+                    and permission_mode != "ask_writes" and ctx.approval_callback):
                 approval_event_id = f"approval:{tc_id}"
                 events.append({
                     "type": "approval_required",
@@ -877,20 +958,29 @@ class AgentOrchestrator:
 
             try:
                 if fn_name == "create_checkpoint":
-                    data = self.checkpoints.create_checkpoint(
-                        str(fn_args["workspace"]), list(fn_args["paths"]),
-                        run_id=ctx.run_id, conversation_id=ctx.conversation_id,
-                    )
+                    if ssh_checkpoint_callback and (workspace or "").startswith("ssh://"):
+                        data = await ssh_checkpoint_callback("create", fn_args)
+                    else:
+                        data = self.checkpoints.create_checkpoint(
+                            str(fn_args["workspace"]), list(fn_args["paths"]),
+                            run_id=ctx.run_id, conversation_id=ctx.conversation_id,
+                        )
                     result = {"data": data, "content": [{"type": "text", "text": json.dumps(
                         data, ensure_ascii=False,
                     )}], "is_error": False}
                 elif fn_name == "list_checkpoints":
-                    data = self.checkpoints.list_checkpoints(fn_args.get("workspace"))
+                    if ssh_checkpoint_callback and (workspace or "").startswith("ssh://"):
+                        data = await ssh_checkpoint_callback("list", fn_args)
+                    else:
+                        data = self.checkpoints.list_checkpoints(fn_args.get("workspace"))
                     result = {"data": data, "content": [{"type": "text", "text": json.dumps(
                         data, ensure_ascii=False,
                     )}], "is_error": False}
                 elif fn_name == "restore_checkpoint":
-                    data = self.checkpoints.restore_checkpoint(str(fn_args["checkpoint_id"]))
+                    if ssh_checkpoint_callback and (workspace or "").startswith("ssh://"):
+                        data = await ssh_checkpoint_callback("restore", fn_args)
+                    else:
+                        data = self.checkpoints.restore_checkpoint(str(fn_args["checkpoint_id"]))
                     result = {"data": data, "content": [{"type": "text", "text": json.dumps(
                         data, ensure_ascii=False,
                     )}], "is_error": False}
@@ -934,8 +1024,8 @@ class AgentOrchestrator:
                             "read", "list", "glob", "search", "stat",
                         }:
                             raise PermissionError("Plan mode only allows read-only tools")
-                    if ctx.workspace:
-                        fn_args.setdefault("cwd", ctx.workspace)
+                    if workspace:
+                        fn_args.setdefault("cwd", workspace)
                     if fn_name == "local_edit" or (
                         fn_name == "local_file" and fn_args.get("action") in {
                             "write", "append", "mkdir", "copy", "move", "delete",
@@ -962,10 +1052,14 @@ class AgentOrchestrator:
                                 "type": "checkpoint_error", "tool": fn_name,
                                 "detail": str(exc),
                             })
-                    result = await self._local_execution.call_tool(
-                        fn_name, fn_args, run_id=ctx.run_id,
-                        output_callback=report_process_output,
-                    )
+                    if (ssh_tool_callback and (workspace or "").startswith("ssh://")
+                            and fn_name in {"local_file", "local_edit", "local_git", "local_shell", "local_exec"}):
+                        result = await ssh_tool_callback(fn_name, fn_args)
+                    else:
+                        result = await self._local_execution.call_tool(
+                            fn_name, fn_args, run_id=ctx.run_id,
+                            output_callback=report_process_output,
+                        )
                 elif fn_name.startswith("computer_") and self._computer_use:
                     result = await self._computer_use.call_tool(fn_name, fn_args)
                 elif fn_name == "remember" and self._memory is not None:
@@ -1002,7 +1096,15 @@ class AgentOrchestrator:
                     "is_error": True,
                 }
 
+            if ((workspace or "").startswith("ssh://")
+                    and (fn_name == "local_process" or fn_name.startswith("computer_"))):
+                result.setdefault("content", []).append({"type": "text", "text": "在本机执行"})
+
             await self._emit_hook(ctx, "after_tool", name=fn_name, arguments=fn_args, result=result)
+            if user_hook_callback:
+                await user_hook_callback("tool.after", {
+                    "tool_name": fn_name, "parameters": fn_args, "result": result,
+                })
 
             full_output = "\n".join(
                 str(block.get("text", block)) if isinstance(block, dict) else str(block)
@@ -1147,6 +1249,11 @@ class AgentOrchestrator:
         tool_allow: list[str] | None = None,
         tool_deny: list[str] | None = None,
         read_only: bool = False,
+        permission_mode: str = "full_access",
+        allowed_paths: list[str] | None = None,
+        user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None,
+        ssh_tool_callback: Callable[[str, dict[str, Any]], Any] | None = None,
+        ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None,
         reasoning_effort: str | None = None,
         subtask_started: Callable[..., Any] | None = None,
         subtask_progress: Callable[..., Any] | None = None,
@@ -1184,6 +1291,10 @@ class AgentOrchestrator:
             steer_queue=steer_queue, input_callback=input_callback,
             workspace=workspace, mode=mode,
             tool_allow=tool_allow, tool_deny=tool_deny or [], read_only=read_only,
+            permission_mode=permission_mode, allowed_paths=allowed_paths or [],
+            user_hook_callback=user_hook_callback,
+            ssh_tool_callback=ssh_tool_callback,
+            ssh_checkpoint_callback=ssh_checkpoint_callback,
             reasoning_effort=reasoning_effort,
             subtask_started=subtask_started, subtask_progress=subtask_progress,
             subtask_completed=subtask_completed,

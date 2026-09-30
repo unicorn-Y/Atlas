@@ -75,7 +75,7 @@ class TestRuntimeProtocol:
         resp = await client.get("/api/runtime/protocol")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["version"] == "1.4"
+        assert data["version"] == "1.5"
 
     async def test_run_metadata_survives_manager_restart(self, tmp_path) -> None:
         from atlas.server import RunState, RuntimeManager
@@ -1738,6 +1738,7 @@ class TestBackendParityWave1:
         workspace = tmp_path / "run-workspace"
         workspace.mkdir()
         (workspace / "AGENTS.md").write_text("Use tests", encoding="utf-8")
+        server._set_workspace_trusted(str(workspace), True)
         conv_id = await server.memory.create_conversation("Workspace session")
         monkeypatch.setattr(server, "model_mgr", SimpleNamespace(current_model="test-model"))
         async def do_nothing(*args, **kwargs): return None
@@ -1757,6 +1758,16 @@ class TestBackendParityWave1:
             "content": "hello", "mode": "unknown",
         })
         assert any(call.args[1]["event"] == "run.failed" for call in send.await_args_list)
+        await server._handle_run_start("invalid-permission-conn", {
+            "run_id": "invalid-permission-test", "conversation_id": conv_id,
+            "content": "hello", "permission_mode": "unsafe",
+            "allowed_paths": ["relative/path"],
+        })
+        assert any(
+            call.args[1]["event"] == "run.failed"
+            and call.args[1]["data"]["category"] == "validation"
+            for call in send.await_args_list
+        )
 
     async def test_resume_of_missing_run_emits_terminal_failure(self, monkeypatch) -> None:
         from atlas import server

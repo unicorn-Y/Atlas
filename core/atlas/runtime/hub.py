@@ -1,9 +1,9 @@
 """Atlas Background Hub — detached host for long-lived agent work.
 
-The Hub is a separate localhost-only process that owns:
+The Hub is a separate localhost-only process that can own:
 
-- a scheduler over its own task store (``data/hub-schedules.toml``), so
-  scheduled agent tasks fire even when the Electron desktop app is closed;
+- the canonical scheduler store (``data/schedules.toml``), so scheduled agent
+  tasks survive when the Electron desktop app is closed;
 - the DBOS durable backend, so those tasks survive hub/desktop restarts;
 - a real local AgentOrchestrator (model + memory + local execution), which is
   what actually executes the scheduled agent messages.
@@ -143,10 +143,17 @@ async def hub_main() -> None:
 
     async def agent_callback(task_id: str, message: str) -> None:
         run_id = uuid.uuid4().hex[:8]
+        conversation_id = f"hub-{task_id}-{run_id}"
         print(f"[hub] task {task_id} run {run_id}: {message}", flush=True)
-        events = orchestrator.run(message, f"hub-{task_id}-{run_id}")
+        events = orchestrator.run(message, conversation_id)
+        failed = False
         async for _event in events:
-            pass
+            if isinstance(_event, dict) and _event.get("type") == "error":
+                failed = True
+        await scheduler.dispatch_event(
+            "run.failed" if failed else "run.completed",
+            {"run_id": run_id, "conversation_id": conversation_id, "task_id": task_id},
+        )
         await notifier.notify(
             f"Atlas Hub task {task_id} finished",
             f"Background task completed. Message: {message[:200]}",
@@ -154,7 +161,7 @@ async def hub_main() -> None:
 
     scheduler = AtlasScheduler(
         agent_callback=agent_callback,
-        schedules_path=cfg.db_path.parent / "hub-schedules.toml",
+        schedules_path=cfg.db_path.parent / "schedules.toml", role="hub",
     )
     await scheduler.start()
 
@@ -190,7 +197,7 @@ async def hub_main() -> None:
 
 
 def schedules_path() -> Path:
-    return get_config().db_path.parent / "hub-schedules.toml"
+    return get_config().db_path.parent / "schedules.toml"
 
 
 if __name__ == "__main__":

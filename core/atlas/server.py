@@ -11,6 +11,7 @@ import mimetypes
 import os
 import re
 import secrets
+import shlex
 import subprocess
 import sys
 import uuid
@@ -18,6 +19,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 
 import aiosqlite
@@ -69,6 +71,7 @@ from atlas.origin_guard import DEV_ORIGINS, OriginGuard
 from atlas.plugins import PluginRuntime
 from atlas.projects import ProjectStore
 from atlas.runtime import hub_control
+from atlas.runtime.hooks import HookStore
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.capability_bus import CapabilityBus
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
@@ -101,6 +104,7 @@ from atlas.skills.lifecycle import (
     update_skill as update_lifecycle_skill,
 )
 from atlas.skills.registry import SkillRegistry
+from atlas.ssh import ssh_workspaces
 from atlas.tools.computer_use import ComputerUseRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
@@ -790,6 +794,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if browser_use:
         for session_id in list(browser_use._sessions):
             await browser_use.close(session_id)
+    await ssh_workspaces.close()
     if agent_backend_host:
         await agent_backend_host.shutdown()
     if durable:
@@ -1159,7 +1164,11 @@ async def fork_conversation(conversation_id: str, req: dict[str, Any]) -> dict[s
         raise HTTPException(status_code=404, detail="Conversation or message not found")
     await memory.update_conversation(
         result["id"], parent_conversation_id=conversation_id, fork_message_id=message_id,
+        workspace=(await memory.get_conversation(conversation_id) or {}).get("workspace"),
     )
+    persisted = await memory.get_conversation(result["id"])
+    if persisted is not None:
+        result = {**persisted, **{key: result[key] for key in ("files_shared",) if key in result}}
     if req.get("summarize") is True:
         source_messages = await memory.get_conversation_messages(conversation_id, limit=1000)
         boundary = next((i for i, item in enumerate(source_messages) if item["id"] == message_id), -1)
@@ -1185,8 +1194,10 @@ async def duplicate_conversation(conversation_id: str) -> dict[str, Any]:
     result = await memory.fork_conversation(conversation_id, messages[-1]["id"])
     if result is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    source = await memory.get_conversation(conversation_id) or {}
     await memory.update_conversation(result["id"], parent_conversation_id=conversation_id,
-                                     fork_message_id=messages[-1]["id"])
+                                     fork_message_id=messages[-1]["id"],
+                                     workspace=source.get("workspace"))
     return await memory.get_conversation(result["id"]) or result
 
 
@@ -1325,9 +1336,45 @@ async def search_messages(
     return await memory.search(q, limit=limit)
 
 
-_WORKSPACE_IGNORES = {".git", "node_modules", ".venv", "__pycache__"}
+_WORKSPACE_IGNORES = {".git", "node_modules", ".venv", "__pycache__", ".atlas-checkpoints"}
 _RULE_FILES = ("AGENTS.md", "CLAUDE.md", ".atlas/rules.md")
 _LOADED_RULE_WORKSPACES: set[str] = set()
+
+
+def _workspace_trust_path() -> Path:
+    return get_config().db_path.parent / "trusted-workspaces.json"
+
+
+def _workspace_trust() -> dict[str, bool]:
+    try:
+        value = json.loads(_workspace_trust_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _set_workspace_trusted(root: str, trust: bool) -> None:
+    values = _workspace_trust()
+    if trust:
+        values[root] = True
+    else:
+        values.pop(root, None)
+    path = _workspace_trust_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(values, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+@app.get("/api/workspace/trust")
+async def get_workspace_trust(root: str) -> dict[str, Any]:
+    return {"root": root, "trusted": bool(_workspace_trust().get(root))}
+
+
+@app.delete("/api/workspace/trust")
+async def revoke_workspace_trust(root: str) -> dict[str, Any]:
+    _set_workspace_trusted(root, False)
+    return {"root": root, "trusted": False}
 
 
 def _validated_file_attachments(
@@ -1426,6 +1473,17 @@ def _context_file_block(root: str, relative: str, remaining_bytes: int) -> tuple
 
 @app.get("/api/workspace/tree")
 async def workspace_tree(root: str, path: str = "") -> dict[str, Any]:
+    if root.startswith("ssh://"):
+        host, base = ssh_workspaces.parse_workspace(root)
+        relative = Path(path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise HTTPException(status_code=400, detail="path escapes workspace root")
+        remote = str(PurePosixPath(base).joinpath(*relative.parts))
+        try:
+            entries = await ssh_workspaces.list_dir(host, remote)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return {"root": root, "path": path, "entries": entries}
     base, directory = _workspace_path(root, path)
     if not base.is_dir() or not directory.is_dir():
         raise HTTPException(status_code=404, detail="Workspace directory not found")
@@ -1459,6 +1517,23 @@ async def workspace_tree(root: str, path: str = "") -> dict[str, Any]:
 
 @app.get("/api/workspace/file")
 async def workspace_file(root: str, path: str) -> dict[str, Any]:
+    if root.startswith("ssh://"):
+        host, base = ssh_workspaces.parse_workspace(root)
+        relative = Path(path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise HTTPException(status_code=400, detail="path escapes workspace root")
+        try:
+            raw = await ssh_workspaces.read_bytes(host, str(PurePosixPath(base).joinpath(*relative.parts)))
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail="Workspace file not found") from exc
+        sample = raw[:512 * 1024]
+        try:
+            text = sample.decode("utf-8")
+            binary = b"\x00" in sample
+        except UnicodeDecodeError:
+            text, binary = "", True
+        return {"path": path, "content": "" if binary else text,
+                "truncated": len(raw) > 512 * 1024, "binary": binary}
     base, target = _workspace_path(root, path)
     if not target.is_file():
         raise HTTPException(status_code=404, detail="Workspace file not found")
@@ -1476,6 +1551,22 @@ async def workspace_file(root: str, path: str) -> dict[str, Any]:
 
 @app.get("/api/workspace/raw")
 async def workspace_raw(root: str, path: str) -> StreamingResponse:
+    if root.startswith("ssh://"):
+        host, base = ssh_workspaces.parse_workspace(root)
+        relative = Path(path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise HTTPException(status_code=400, detail="path escapes workspace root")
+        try:
+            raw = await ssh_workspaces.read_bytes(host, str(PurePosixPath(base).joinpath(*relative.parts)))
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail="Workspace file not found") from exc
+        if len(raw) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="file exceeds 50 MB limit")
+        content_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        headers = {"Content-Disposition": "inline", "X-Content-Type-Options": "nosniff"}
+        if content_type in _SCRIPTABLE_TYPES:
+            headers["Content-Security-Policy"] = "sandbox allow-scripts allow-forms allow-popups allow-modals"
+        return StreamingResponse(iter([raw]), media_type=content_type, headers=headers)
     base, target = _workspace_path(root, path)
     if not target.is_file():
         raise HTTPException(status_code=404, detail="Workspace file not found")
@@ -1513,6 +1604,16 @@ async def workspace_search(root: str, q: str, limit: int = 50) -> dict[str, Any]
     needle = q.strip().casefold()
     if not needle:
         return {"files": []}
+    if root.startswith("ssh://"):
+        host, base = ssh_workspaces.parse_workspace(root)
+        try:
+            command = f"cd {shlex.quote(base)} && rg --files -g {shlex.quote('*' + needle + '*')} | head -n {limit}"
+            output = await ssh_workspaces.run(host, command)
+            files = [{"path": item, "name": PurePosixPath(item).name, "type": "file"}
+                     for item in output.splitlines()]
+            return {"files": files}
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
     try:
         listing = await asyncio.to_thread(
             subprocess.run,
@@ -1579,6 +1680,108 @@ async def git_branches(root: str) -> dict[str, Any]:
     return {"current": current, "branches": branches}
 
 
+def _gh_json(root: Path, *args: str) -> dict[str, Any]:
+    try:
+        auth = subprocess.run(["gh", "auth", "status"], cwd=root, capture_output=True,
+                             text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HTTPException(status_code=503, detail="GitHub CLI (gh) is unavailable") from exc
+    if auth.returncode:
+        raise HTTPException(status_code=503, detail="GitHub CLI is not authenticated")
+    result = subprocess.run(["gh", *args], cwd=root, capture_output=True, text=True, timeout=30)
+    if result.returncode:
+        raise HTTPException(status_code=502, detail=result.stderr.strip() or "gh command failed")
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail="gh returned invalid JSON") from exc
+
+
+def _pr_shape(data: dict[str, Any]) -> dict[str, Any]:
+    checks = []
+    for item in data.get("statusCheckRollup", []):
+        checks.append({"name": item.get("name", ""),
+                       "status": item.get("status", ""),
+                       "conclusion": item.get("conclusion"),
+                       "url": item.get("detailsUrl", "")})
+    return {"number": data.get("number"), "title": data.get("title"),
+            "url": data.get("url"), "state": data.get("state"),
+            "draft": data.get("isDraft", False), "base": data.get("baseRefName"),
+            "head": data.get("headRefName"), "checks": checks}
+
+
+@app.get("/api/git/pr")
+async def get_git_pr(root: str) -> dict[str, Any]:
+    base, _ = _workspace_path(root)
+    try:
+        data = _gh_json(base, "pr", "view", "--json",
+                        "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup")
+    except HTTPException as exc:
+        if exc.status_code == 502 and "no pull requests found" in str(exc.detail).lower():
+            return {"pr": None}
+        raise
+    return {"pr": _pr_shape(data)}
+
+
+@app.post("/api/git/pr")
+async def create_git_pr(req: dict[str, Any]) -> dict[str, Any]:
+    base, _ = _workspace_path(str(req.get("root", "")))
+    title, body = req.get("title"), req.get("body")
+    if not isinstance(title, str) or not title.strip() or not isinstance(body, str):
+        raise HTTPException(status_code=422, detail="title and body are required")
+    try:
+        auth = subprocess.run(["gh", "auth", "status"], cwd=base, capture_output=True,
+                             text=True, timeout=15)
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="GitHub CLI (gh) is unavailable") from exc
+    if auth.returncode:
+        raise HTTPException(status_code=503, detail="GitHub CLI is not authenticated")
+    pushed = subprocess.run(["git", "push", "-u", "origin", "HEAD"], cwd=base,
+                            capture_output=True, text=True, timeout=120)
+    if pushed.returncode:
+        raise HTTPException(status_code=502, detail=pushed.stderr.strip())
+    command = ["gh", "pr", "create", "--title", title, "--body", body]
+    if req.get("base"):
+        command.extend(["--base", str(req["base"])])
+    if req.get("draft") is True:
+        command.append("--draft")
+    created = subprocess.run(command, cwd=base, capture_output=True, text=True, timeout=60)
+    if created.returncode:
+        raise HTTPException(status_code=502, detail=created.stderr.strip())
+    result = _gh_json(base, "pr", "view", "--json",
+                      "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup")
+    return {"pr": _pr_shape(result)}
+
+
+@app.get("/api/git/pr/checks/{check_name}/log")
+async def git_pr_check_log(check_name: str, root: str) -> dict[str, Any]:
+    base, _ = _workspace_path(root)
+    checks = _gh_json(base, "pr", "checks", "--json", "name,state,link")
+    match = next((item for item in checks if item.get("name") == check_name), None) \
+        if isinstance(checks, list) else None
+    if not match or str(match.get("state", "")).upper() not in {"FAILURE", "CANCELLED", "ERROR"}:
+        raise HTTPException(status_code=404, detail="failed check not found")
+    result = subprocess.run(["gh", "run", "view", str(match["link"]), "--log-failed"],
+                            cwd=base, capture_output=True, text=True, timeout=60)
+    if result.returncode:
+        raise HTTPException(status_code=502, detail=result.stderr.strip())
+    raw = result.stdout.encode("utf-8")[-65536:].decode("utf-8", errors="replace")
+    return {"name": check_name, "log": raw}
+
+
+@app.get("/api/ssh/hosts")
+async def ssh_hosts() -> dict[str, Any]:
+    return {"hosts": ssh_workspaces.hosts()}
+
+
+@app.post("/api/ssh/test")
+async def ssh_test(req: dict[str, Any]) -> dict[str, Any]:
+    host = str(req.get("host", "")).strip()
+    if not host or not any(item["alias"] == host for item in ssh_workspaces.hosts()):
+        raise HTTPException(status_code=400, detail="unknown SSH host alias")
+    return await ssh_workspaces.test(host)
+
+
 @app.get("/api/conversations/{conversation_id}/worktree")
 async def conversation_worktree(conversation_id: str) -> dict[str, Any]:
     assert memory is not None
@@ -1630,6 +1833,19 @@ async def delete_conversation_worktree(conversation_id: str, keep_branch: bool =
 
 @app.get("/api/workspace/rules")
 async def workspace_rules(root: str) -> dict[str, Any]:
+    if root.startswith("ssh://"):
+        host, base = ssh_workspaces.parse_workspace(root)
+        files = []
+        for name in _RULE_FILES:
+            path = str(PurePosixPath(base) / name)
+            try:
+                raw = await ssh_workspaces.read_bytes(host, path)
+            except Exception:
+                continue
+            files.append({"path": path, "bytes": len(raw),
+                          "content": raw[:65536].decode("utf-8", errors="replace"),
+                          "truncated": len(raw) > 65536})
+        return {"root": root, "files": files}
     base, _ = _workspace_path(root)
     candidates = [base / name for name in _RULE_FILES]
     user_rules = Path.home() / ".atlas" / "AGENTS.md"
@@ -1650,6 +1866,8 @@ async def list_checkpoints(
     run_id: str | None = None, workspace: str | None = None,
 ) -> list[dict[str, Any]]:
     assert orchestrator is not None
+    if workspace and workspace.startswith("ssh://"):
+        return await ssh_workspaces.list_checkpoints(workspace, run_id=run_id)
     items = orchestrator.checkpoints.list_checkpoints(workspace, run_id=run_id)
     return [{key: item[key] for key in
              ("id", "workspace", "created_at", "run_id", "files")} for item in items]
@@ -1720,6 +1938,9 @@ def _sum_usage(calls: list[dict[str, Any]]) -> dict[str, Any]:
 
 @app.get("/api/runs/{run_id}/changes")
 async def get_run_changes(run_id: str) -> dict[str, Any]:
+    run = runtime_mgr.runs.get(run_id)
+    if run and (run.workspace or "").startswith("ssh://"):
+        return await ssh_workspaces.changes(run.workspace, run_id)
     return _run_changes(run_id)
 
 
@@ -2362,23 +2583,48 @@ async def hub_stop() -> dict[str, Any]:
 
 
 @app.get("/api/hub/tasks")
-async def hub_tasks() -> dict[str, Any]:
-    return {"tasks": await hub_control.list_tasks()}
+async def hub_tasks(response: Response) -> dict[str, Any]:
+    response.headers["Deprecation"] = "true"
+    assert scheduler is not None
+    return {"tasks": [task.to_dict() for task in scheduler.list_tasks()]}
 
 
 @app.post("/api/hub/tasks")
-async def hub_create_task(req: dict[str, Any]) -> dict[str, Any]:
-    return await hub_control.create_task(req)
+async def hub_create_task(req: dict[str, Any], response: Response) -> dict[str, Any]:
+    response.headers["Deprecation"] = "true"
+    assert scheduler is not None
+    message = str(req.get("message", "")).strip()
+    if not message or not str(req.get("id", "")).strip():
+        raise HTTPException(status_code=400, detail="id and message are required")
+    try:
+        task = ScheduledTask.from_dict({
+            "id": str(req["id"]), "name": str(req.get("name", req["id"])),
+            "description": str(req.get("description", "")),
+            "trigger_type": str(req.get("trigger_type", "interval")),
+            "trigger_args": dict(req.get("trigger_args", {}) or {}),
+            "action": f"agent:{message}", "goal": str(req.get("goal", "")),
+        })
+        return (await scheduler.add_task(task)).to_dict()
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/hub/tasks/{task_id}/run")
-async def hub_run_task(task_id: str) -> dict[str, Any]:
-    return await hub_control.run_task(task_id)
+async def hub_run_task(task_id: str, response: Response) -> dict[str, Any]:
+    response.headers["Deprecation"] = "true"
+    assert scheduler is not None
+    if not await scheduler.run_now(task_id):
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"status": "triggered", "task_id": task_id}
 
 
 @app.delete("/api/hub/tasks/{task_id}")
-async def hub_delete_task(task_id: str) -> dict[str, Any]:
-    return await hub_control.delete_task(task_id)
+async def hub_delete_task(task_id: str, response: Response) -> dict[str, Any]:
+    response.headers["Deprecation"] = "true"
+    assert scheduler is not None
+    if not await scheduler.delete_task(task_id):
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"status": "ok", "task_id": task_id}
 
 
 @app.post("/api/notifications/test")
@@ -3768,6 +4014,69 @@ async def search_skills(query: str) -> dict[str, Any]:
 # Schedules
 # ---------------------------------------------------------------------------
 
+def _hook_store() -> HookStore:
+    return HookStore(get_config().db_path.parent / "hooks.toml")
+
+
+@app.get("/api/hooks")
+async def list_hooks() -> dict[str, Any]:
+    return {"hooks": _hook_store().list()}
+
+
+@app.post("/api/hooks", status_code=201)
+async def create_hook(req: dict[str, Any]) -> dict[str, Any]:
+    hooks = _hook_store().list()
+    hook = {"id": str(req.get("id", "")).strip(),
+            "event": str(req.get("event", "")),
+            "command": str(req.get("command", "")),
+            "timeout_s": int(req.get("timeout_s", 30)),
+            "enabled": bool(req.get("enabled", True))}
+    if not hook["id"] or hook["event"] not in HookStore.EVENTS or not hook["command"]:
+        raise HTTPException(status_code=422, detail="id, valid event, and command are required")
+    if not 1 <= hook["timeout_s"] <= 300 or any(item["id"] == hook["id"] for item in hooks):
+        raise HTTPException(status_code=409, detail="invalid timeout or duplicate hook id")
+    hooks.append(hook)
+    _hook_store().save(hooks)
+    return hook
+
+
+@app.put("/api/hooks/{hook_id}")
+async def update_hook(hook_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    store = _hook_store()
+    hooks = store.list()
+    for index, hook in enumerate(hooks):
+        if hook["id"] != hook_id:
+            continue
+        updated = {**hook, **req, "id": hook_id}
+        if updated.get("event") not in HookStore.EVENTS or not updated.get("command"):
+            raise HTTPException(status_code=422, detail="valid event and command are required")
+        updated["timeout_s"] = int(updated.get("timeout_s", 30))
+        if not 1 <= updated["timeout_s"] <= 300:
+            raise HTTPException(status_code=422, detail="timeout_s must be 1..300")
+        hooks[index] = updated
+        store.save(hooks)
+        return updated
+    raise HTTPException(status_code=404, detail="Hook not found")
+
+
+@app.delete("/api/hooks/{hook_id}")
+async def delete_hook(hook_id: str) -> dict[str, str]:
+    store = _hook_store()
+    hooks = store.list()
+    filtered = [item for item in hooks if item.get("id") != hook_id]
+    if len(filtered) == len(hooks):
+        raise HTTPException(status_code=404, detail="Hook not found")
+    store.save(filtered)
+    return {"status": "ok", "hook_id": hook_id}
+
+
+@app.post("/api/hooks/{hook_id}/test")
+async def test_hook(hook_id: str) -> dict[str, Any]:
+    try:
+        return await _hook_store().test(hook_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Hook not found") from exc
+
 @app.get("/api/schedules")
 async def list_schedules(
     status: str | None = Query(None),
@@ -3790,6 +4099,24 @@ async def get_schedule(task_id: str) -> dict[str, Any]:
     assert scheduler is not None
     task = scheduler.get_task(task_id)
     if not task:
+        raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
+    return task.to_dict()
+
+
+@app.post("/api/schedules/{task_id}/pause")
+async def pause_schedule(task_id: str) -> dict[str, Any]:
+    assert scheduler is not None
+    task = await scheduler.update_task(task_id, status=TaskStatus.PAUSED)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
+    return task.to_dict()
+
+
+@app.post("/api/schedules/{task_id}/resume")
+async def resume_schedule(task_id: str) -> dict[str, Any]:
+    assert scheduler is not None
+    task = await scheduler.update_task(task_id, status=TaskStatus.ACTIVE)
+    if task is None:
         raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
     return task.to_dict()
 
@@ -4052,9 +4379,9 @@ async def recipe_from_run(req: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="Run has no user message")
     try:
         return _task_store("recipes").put(_validate_recipe({
-            "name": req.get("name", "Saved run"), "description": "Created from a conversation run",
+            "name": req.get("name", "Saved run"), "description": "从一次任务生成",
             "prompt": user_message, "params": [], "active_skills": run.active_skills,
-            "mode": run.mode, "workspace": run.workspace or conv.get("workspace"),
+            "mode": run.mode, "workspace": conv.get("workspace") or run.workspace,
             "profile_id": run.profile_id,
         }))
     except ValueError as exc:
@@ -4166,7 +4493,7 @@ async def run_goal_now(goal_id: str) -> dict[str, str]:
 @app.get("/api/runtime/protocol")
 async def runtime_protocol() -> dict[str, str]:
     """Advertise Runtime Event Protocol version."""
-    return {"version": "1.4"}
+    return {"version": "1.5"}
 
 
 @app.post("/api/runs/{run_id}/subtasks/{subtask_id}/cancel")
@@ -4197,6 +4524,7 @@ class RunState:
         "tool_allow", "tool_deny", "reasoning_effort", "reasoning_effort_applied",
         "ephemeral", "ephemeral_source", "tool_output_dir", "subtasks",
         "read_only", "active_skills", "profile_id", "user_input",
+        "permission_mode", "allowed_paths", "trust_future",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -4233,6 +4561,9 @@ class RunState:
         self.active_skills: list[str] = []
         self.profile_id: str | None = None
         self.user_input = ""
+        self.permission_mode = "full_access"
+        self.allowed_paths: list[str] = []
+        self.trust_future: asyncio.Future[bool] | None = None
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""
@@ -4406,6 +4737,16 @@ async def ws_chat(ws: WebSocket) -> None:
             elif msg_type == "resume":
                 await _handle_resume(conn_id, data)
 
+            elif msg_type == "rules.trust":
+                run = runtime_mgr.runs.get(str(data.get("run_id", "")))
+                if run and run.trust_future and not run.trust_future.done():
+                    event_id = f"{run.run_id}:{run.sequence}"
+                    if data.get("event_id") == event_id:
+                        trusted = data.get("trust") is True
+                        if trusted and run.workspace:
+                            _set_workspace_trusted(run.workspace, True)
+                        run.trust_future.set_result(trusted)
+
             elif msg_type == "run.cancel":
                 run_id = data.get("run_id", "")
                 run = runtime_mgr.runs.get(run_id)
@@ -4499,9 +4840,15 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     if not isinstance(content, str):
         content = str(content)
     requested_workspace = data.get("workspace")
-    if requested_workspace is not None and (
-        not isinstance(requested_workspace, str) or not Path(requested_workspace).is_absolute()
-    ):
+    ssh_requested = isinstance(requested_workspace, str) and requested_workspace.startswith("ssh://")
+    try:
+        if ssh_requested:
+            ssh_workspaces.parse_workspace(requested_workspace)
+        elif requested_workspace is not None and (
+            not isinstance(requested_workspace, str) or not Path(requested_workspace).is_absolute()
+        ):
+            raise ValueError("workspace must be an absolute path")
+    except ValueError:
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
         await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
             "category": "validation", "detail": "workspace must be an absolute path",
@@ -4519,6 +4866,19 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     effective_mode = data.get("mode", (profile or {}).get("mode", "act"))
     model_id = data.get("model", (profile or {}).get("model"))
     reasoning_effort = data.get("reasoning_effort", (profile or {}).get("reasoning_effort"))
+    permission_mode = data.get("permission_mode")
+    allowed_paths = data.get("allowed_paths")
+    if allowed_paths is not None and (not isinstance(allowed_paths, list) or any(
+            not isinstance(item, str) or not Path(item).is_absolute() for item in allowed_paths)):
+        permission_mode = "invalid"
+    if permission_mode is None:
+        permission_mode = "full_access"
+    if permission_mode not in {"full_access", "ask_writes", "read_only"}:
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "invalid permission_mode or allowed_paths",
+        }))
+        return
     if reasoning_effort not in {None, "minimal", "low", "medium", "high"}:
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
         await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
@@ -4585,6 +4945,9 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         return
     run.mode = effective_mode
     run.reasoning_effort = reasoning_effort
+    run.permission_mode = permission_mode
+    run.allowed_paths = [str(Path(item).expanduser().resolve()) for item in allowed_paths or []]
+    run.read_only = permission_mode == "read_only" or profile_id in {"architect", "reviewer"}
     run.active_skills = list(effective_skills) if isinstance(effective_skills, list) else []
     run.profile_id = str(profile_id) if profile_id else None
     if profile:
@@ -4600,6 +4963,12 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         conversation = await memory.get_conversation(conv_id)
     if not workspace and conversation:
         workspace = conversation.get("workspace")
+    if permission_mode == "full_access" and conversation and "permission_mode" not in data:
+        run.permission_mode = conversation.get("permission_mode", "full_access")
+        run.read_only = (run.permission_mode == "read_only"
+                         or profile_id in {"architect", "reviewer"})
+    if memory is not None and conversation and "permission_mode" in data:
+        await memory.update_conversation(conv_id, permission_mode=run.permission_mode)
     if not workspace and projects is not None:
         try:
             db = projects._require_db()
@@ -4612,7 +4981,25 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             workspace = project_row["workspace_path"] if project_row else None
         except Exception:
             workspace = None
-    if workspace:
+    if workspace and str(workspace).startswith("ssh://"):
+        try:
+            host, remote_root = ssh_workspaces.parse_workspace(str(workspace))
+        except ValueError as exc:
+            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                "category": "validation", "detail": str(exc),
+            }))
+            return
+        if data.get("worktree") is not None:
+            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                "category": "validation", "detail": "SSH worktrees are not supported",
+            }))
+            return
+        run.workspace = str(workspace)
+        if memory is not None:
+            await memory.update_conversation(conv_id, workspace=run.workspace)
+    elif workspace:
         workspace_path = Path(workspace).expanduser().resolve()
         if not workspace_path.is_dir():
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
@@ -4674,9 +5061,23 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         for relative in context_files:
             try:
                 remaining = max(0, 256 * 1024 - total_context_bytes)
-                label, consumed = await asyncio.to_thread(
-                    _context_file_block, run.workspace, str(relative), remaining,
-                )
+                if run.workspace and run.workspace.startswith("ssh://"):
+                    host, remote_root = ssh_workspaces.parse_workspace(run.workspace)
+                    rel = Path(str(relative))
+                    if rel.is_absolute() or ".." in rel.parts:
+                        raise HTTPException(status_code=400, detail="context path escapes workspace")
+                    raw = await ssh_workspaces.read_bytes(
+                        host, str(PurePosixPath(remote_root).joinpath(*rel.parts)),
+                    )
+                    chunk = raw[:min(64 * 1024, remaining)]
+                    label = f"\n\n[Context file: {relative}]\n{chunk.decode('utf-8', errors='replace')}"
+                    if len(raw) > len(chunk):
+                        label += "\n[Context file truncated.]"
+                    consumed = len(chunk)
+                else:
+                    label, consumed = await asyncio.to_thread(
+                        _context_file_block, run.workspace, str(relative), remaining,
+                    )
                 total_context_bytes += consumed
                 context_blocks.append(label)
             except HTTPException as exc:
@@ -4726,8 +5127,18 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             run.conversation_id = temp_conversation
         rules = await workspace_rules(root=run.workspace)
         run.workspace_rules = rules["files"]
-        if run.workspace not in _LOADED_RULE_WORKSPACES:
-            _LOADED_RULE_WORKSPACES.add(run.workspace)
+        if run.workspace_rules and not _workspace_trust().get(run.workspace):
+            loop = asyncio.get_running_loop()
+            run.trust_future = loop.create_future()
+            next_event_id = f"{run.run_id}:{run.sequence + 1}"
+            trust_env = run.next_envelope("rules.trust_required", {
+                "event_id": next_event_id, "root": run.workspace,
+                "files": [{"path": item["path"], "bytes": item["bytes"]}
+                          for item in run.workspace_rules],
+            })
+            run.status = "waiting"
+            await runtime_mgr.send(conn_id, trust_env)
+        else:
             await runtime_mgr.send(conn_id, run.next_envelope("rules.loaded", {
                 "files": [{"path": item["path"], "bytes": item["bytes"]}
                           for item in run.workspace_rules],
@@ -4737,8 +5148,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     await runtime_mgr.persist_run(run)
 
     # Start the run in background so we can keep receiving messages
-    run.task = asyncio.create_task(
-        _execute_run(
+    execute = _execute_run(
             conn_id, run, content, model_id,
             plan_state=recovered_plan,
             image_attachments=image_attachments,
@@ -4747,7 +5157,19 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             workspace_rules=run.workspace_rules,
             mode=run.mode,
         )
+    run.task = asyncio.create_task(
+        _execute_after_rule_trust(run, execute) if run.trust_future else execute
     )
+
+
+async def _execute_after_rule_trust(run: RunState, execution: Any) -> None:
+    if run.trust_future is None or not await run.trust_future:
+        run.status = "cancelled"
+        await runtime_mgr.send_run(run, run.next_envelope("run.cancelled", {}), "")
+        return
+    run.trust_future = None
+    run.status = "running"
+    await execution
 
 
 async def _resolve_active_skill_instructions(
@@ -4902,8 +5324,24 @@ async def _execute_run(
     had_tool_failure = False
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
+        if event == "run.started":
+            data = {**data, "environment": "ssh" if (workspace or "").startswith("ssh://") else "local"}
+            if (workspace or "").startswith("ssh://"):
+                with suppress(Exception):
+                    data["host"] = ssh_workspaces.parse_workspace(workspace)[0]
         env = run.next_envelope(event, data)
         await runtime_mgr.send_run(run, env, fallback_conn_id=conn_id)
+        if event in {"run.started", "run.completed", "run.failed"}:
+            hooks = _hook_store()
+            asyncio.create_task(hooks.execute(event, {
+                "run_id": run.run_id, "conversation_id": run.conversation_id,
+                "tool_name": "", "parameters": {}, "result": data,
+            }, cwd=workspace, emit=emit))
+        if event in {"run.completed", "run.failed"} and scheduler is not None:
+            asyncio.create_task(scheduler.dispatch_event(event, {
+                "run_id": run.run_id, "conversation_id": run.conversation_id,
+                "workspace": workspace or "",
+            }))
 
     async def record_reflection(
         category: str, component: str, summary: str, resolution_hint: str,
@@ -5060,6 +5498,31 @@ async def _execute_run(
                 "summary": summary, "duration_ms": duration_ms,
             })
 
+        async def user_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+            return await _hook_store().execute(event_name, {
+                "run_id": run.run_id, "conversation_id": run.conversation_id,
+                **payload,
+            }, cwd=workspace, emit=emit)
+
+        async def ssh_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+            if not workspace or not workspace.startswith("ssh://"):
+                raise RuntimeError("SSH workspace is unavailable")
+            return await ssh_workspaces.call_tool(name, arguments, workspace, run_id=run.run_id)
+
+        async def ssh_checkpoint(action: str, arguments: dict[str, Any]) -> Any:
+            if not workspace or not workspace.startswith("ssh://"):
+                raise RuntimeError("SSH workspace is unavailable")
+            if action == "create":
+                return await ssh_workspaces.create_checkpoint(
+                    workspace, list(arguments.get("paths", [])), run.run_id,
+                )
+            if action == "list":
+                target = str(arguments.get("workspace") or workspace)
+                return await ssh_workspaces.list_checkpoints(target)
+            return await ssh_workspaces.restore_checkpoint(
+                workspace, str(arguments.get("checkpoint_id", "")),
+            )
+
         async for event in orchestrator.run(
             message=content,
             conversation_id=run.conversation_id,
@@ -5081,6 +5544,11 @@ async def _execute_run(
             tool_allow=run.tool_allow,
             tool_deny=run.tool_deny,
             read_only=run.read_only or run.ephemeral,
+            permission_mode=run.permission_mode,
+            allowed_paths=run.allowed_paths,
+            user_hook_callback=user_hook,
+            ssh_tool_callback=ssh_tool,
+            ssh_checkpoint_callback=ssh_checkpoint,
             reasoning_effort=(run.reasoning_effort if _model_supports_reasoning(
                 {"litellm_model": model_id or run.model}
             ) else None),

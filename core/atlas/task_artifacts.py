@@ -121,7 +121,8 @@ class WorktreeService:
         if not (workspace / ".git").exists():
             raise ValueError("workspace is not a git repository")
         short_id = conversation_id.replace("-", "")[:8]
-        branch = f"atlas/{short_id}"
+        suffix = re.sub(r"[^a-z0-9-]", "-", str(name or "").lower())[:24].strip("-")
+        branch = f"atlas/{short_id}-{suffix}" if suffix else f"atlas/{short_id}"
         repo_name = workspace.name
         path = workspace.parent / ".atlas-worktrees" / repo_name / short_id
         base = base_branch or self._git(workspace, "branch", "--show-current")
