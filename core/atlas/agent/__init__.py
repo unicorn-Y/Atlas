@@ -40,6 +40,7 @@ from atlas.agent.enrichment import (
     TrajectoryReviewer,
 )
 from atlas.agent.planning import TaskPlan, requires_plan
+from atlas.checks import parse_test_summary, run_checks
 from atlas.agent.results import externalize_tool_output
 from atlas.config import get_config
 from atlas.memory import MemoryStore
@@ -577,6 +578,16 @@ class AgentOrchestrator:
                  "checkpoint_id": {"type": "string"},
              }, "required": ["checkpoint_id"], "additionalProperties": False}}},
         ])
+        tools.append({
+            "type": "function", "function": {
+                "name": "run_checks",
+                "description": "Run project lint, typecheck, tests, or all available checks and return structured diagnostics.",
+                "parameters": {"type": "object", "properties": {
+                    "kind": {"type": "string", "enum": ["lint", "typecheck", "test", "all"]},
+                    "paths": {"type": "array", "items": {"type": "string"}},
+                }, "required": ["kind"], "additionalProperties": False},
+            },
+        })
         tools.extend([
             {"type": "function", "function": {
                 "name": "create_document",
@@ -1263,6 +1274,25 @@ class AgentOrchestrator:
                         )}],
                         "is_error": False,
                     }
+                elif fn_name == "run_checks":
+                    if (workspace or "").startswith("ssh://"):
+                        raise ValueError("run_checks 暂不支持 SSH 工作目录，请在本机工作目录运行检查。")
+                    results = await run_checks(
+                        workspace or str(Path.cwd()), str(fn_args.get("kind", "all")),
+                        fn_args.get("paths"),
+                    )
+                    for check_result in results:
+                        await ctx.event_queue.put({"type": "check.results", "data": {
+                            **check_result, "run_id": ctx.run_id,
+                        }})
+                    summary = "\n".join(
+                        f"{item['tool']}: {item['passed']} passed, {item['failed']} failed, "
+                        f"{item['skipped']} skipped" +
+                        (f" — {item['note']}" if item.get("note") else "")
+                        for item in results
+                    )
+                    result = {"data": {"results": results},
+                              "content": [{"type": "text", "text": summary}], "is_error": False}
                 elif fn_name.startswith("local_") and self._local_execution:
                     if ctx.mode == "plan":
                         action = str(fn_args.get("action", ""))
@@ -1356,6 +1386,13 @@ class AgentOrchestrator:
                 str(block.get("text", block)) if isinstance(block, dict) else str(block)
                 for block in result.get("content", [])
             )
+            if fn_name in {"local_shell", "local_exec"}:
+                counts = parse_test_summary(full_output)
+                if counts is not None:
+                    await ctx.event_queue.put({"type": "check.results", "data": {
+                        "kind": "test", "tool": fn_name, **counts,
+                        "duration_ms": 0, "items": [], "run_id": ctx.run_id,
+                    }})
             full_output_path = None
             if getattr(ctx, "run_id", None):
                 preview, full_output_path = externalize_tool_output(

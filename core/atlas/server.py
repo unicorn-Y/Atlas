@@ -6074,6 +6074,9 @@ async def _execute_run(
                     "bytes": event.get("bytes", 0),
                 })
 
+            elif etype == "check.results":
+                await emit("check.results", event.get("data", {}))
+
             elif etype in ("tool_call", "tool_result", "tool_output"):
                 mapped = _map_tool_runtime_event(event)
                 if mapped is not None:
