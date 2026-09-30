@@ -76,8 +76,8 @@ async def test_atlas_subtask_inherits_read_only_and_cannot_redelegate(monkeypatc
         async def create_conversation(self, _title): return "child-conversation"
         async def delete_conversation(self, _conversation_id): return None
 
-    async def fake_run(*_args, **kwargs):
-        calls.append(kwargs)
+    async def fake_run(*args, **kwargs):
+        calls.append({**kwargs, "_prompt": args[0] if args else kwargs.get("message", "")})
         yield {"type": "chunk", "content": "已完成。"}
 
     monkeypatch.setattr(orchestrator, "_memory", FakeMemory(), raising=False)
@@ -100,6 +100,9 @@ async def test_atlas_subtask_inherits_read_only_and_cannot_redelegate(monkeypatc
     assert "delegate_parallel" in calls[0]["tool_deny"]
     assert calls[0]["permission_mode"] == "read_only"
     assert calls[0]["allowed_paths"] == ["C:/repo"]
+    # Worker mode: no user memory/skills/planning, and the prompt forbids asking the user.
+    assert calls[0]["worker"] is True
+    assert "不要向用户提问" in _args_prompt(calls)
     assert progress == ["已完成。"]
     assert await calls[0]["approval_callback"]("approval:x", "write_file", {"path": "x"}) == "allow"
     assert approval[0][2]["subtask_id"] == "subtask-a"
@@ -450,3 +453,27 @@ class DictCredentials:
     def get(self, key): return self.values.get(key)
     def set(self, key, value): self.values[key] = value
     def delete(self, key): self.values.pop(key, None)
+
+
+
+def _args_prompt(calls):
+    return str(calls[0]["_prompt"])
+
+
+@pytest.mark.asyncio
+async def test_unknown_executor_name_runs_on_atlas() -> None:
+    """Models sometimes pass executor "default"; that must not be treated as an external Agent."""
+    from types import SimpleNamespace
+
+    from atlas.agent.enrichment import DelegationService, HookBus
+
+    service = DelegationService(SimpleNamespace(backends={}), HookBus())
+    seen = []
+
+    async def runner(**kwargs):
+        seen.append(kwargs["goal"])
+        return {"status": "completed", "result": "ok"}
+
+    service.atlas_runner = runner
+    result = await service.delegate_task("数行数", backend="default")
+    assert result["backend"] == "atlas" and seen == ["数行数"]

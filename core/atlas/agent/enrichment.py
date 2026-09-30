@@ -383,6 +383,10 @@ class DelegationService:
         if not goal.strip():
             raise ValueError("goal must be non-empty")
         name = backend or executor
+        # Models sometimes fill the executor with "default", "auto" or a made-up name; anything that
+        # isn't a configured external Agent runs on Atlas itself.
+        if name not in (getattr(self.host, "backends", None) or {}):
+            name = "atlas"
         if name == "atlas":
             if self.atlas_runner is None:
                 raise RuntimeError("Atlas 子任务执行器尚未就绪。")

@@ -384,7 +384,9 @@ class AgentOrchestrator:
         usage: list[dict[str, Any]] = []
         outputs: list[str] = []
         worker_prompt = (
-            "你是 Atlas 的子任务 Worker。只完成给定目标，不能再委派任务。"
+            "你是 Atlas 的子任务 Worker，在后台运行，没有人能回答你的问题。"
+            "只完成给定目标，不能再委派任务，也不要向用户提问或等待确认；"
+            "信息不够时按最合理的假设直接做完，并在结论里写明做了哪些假设。"
             "完成后给出简短结论和证据。\n\n"
             f"目标：{goal}\n补充信息：{context or '无'}"
         )
@@ -416,7 +418,7 @@ class AgentOrchestrator:
                 ssh_checkpoint_callback=options.get("ssh_checkpoint_callback"),
                 sandbox_tool_callback=options.get("sandbox_tool_callback"),
                 sandbox_enabled=bool(options.get("sandbox_enabled")),
-                run_id=subtask_id, max_tool_rounds=12,
+                run_id=subtask_id, max_tool_rounds=12, worker=True,
             ):
                 kind = event.get("type")
                 if kind == "chunk":
@@ -443,7 +445,10 @@ class AgentOrchestrator:
                     break
             if cancel_event.is_set():
                 status = "cancelled"
-            return {"status": status, "result": "".join(outputs), "evidence": usage}
+            elif status == "completed" and not "".join(outputs).strip():
+                # A worker that says nothing did not finish its task, whatever the loop reported.
+                status = "failed"
+            return {"status": status, "result": "".join(outputs) or "子任务没有给出结果。", "evidence": usage}
         finally:
             await self._memory.delete_conversation(conversation_id)
 
@@ -1738,8 +1743,13 @@ class AgentOrchestrator:
         subtask_progress: Callable[..., Any] | None = None,
         subtask_completed: Callable[..., Any] | None = None,
         subtask_group_completed: Callable[..., Any] | None = None,
+        worker: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
+
+        ``worker`` runs a delegated subtask: only the task, workspace and rules — no user memory,
+        reflections, goal knowledge, skill index or planning, and nothing is learned from it.
+        Without this, workers followed the user's past interests instead of their goal.
 
         Args:
             message: The user's input text.
@@ -1805,7 +1815,7 @@ class AgentOrchestrator:
         )
 
         try:
-            consolidated_goal_knowledge = (
+            consolidated_goal_knowledge = [] if worker else (
                 await self._memory.retrieve_approved_goal_knowledge(message, limit=3)
             )
         except Exception as exc:
@@ -1842,7 +1852,7 @@ class AgentOrchestrator:
                     }
                     return
             yield {"type": "plan_updated", "plan": plan_value, "resumed": True}
-        elif force_plan or requires_plan(message):
+        elif not worker and (force_plan or requires_plan(message)):
             try:
                 planning_insights = await self._memory.apply_knowledge_consolidated_insights(
                     message, purpose="planning", conversation_id=conversation_id,
@@ -1885,21 +1895,26 @@ class AgentOrchestrator:
         # Build initial messages from conversation history
         cfg = get_config()
         try:
-            await self._memory.extract_memories(conversation_id, message)
-            history = await self._memory.get_conversation_messages(
-                conversation_id, limit=cfg.max_context_messages
-            )
-            context = await self._memory.get_agent_context_with_trace(message)
-            consolidated_insights = (
-                await self._memory.apply_knowledge_consolidated_insights(
-                    message, purpose="execution", conversation_id=conversation_id,
-                    source_run_id=source_run_id, limit=3,
+            if worker:
+                history = []
+                context = {"memories": [], "knowledge_trace": {"decisions": [], "query_terms": []}}
+                consolidated_insights, reflections, goal_experiences = [], [], []
+            else:
+                await self._memory.extract_memories(conversation_id, message)
+                history = await self._memory.get_conversation_messages(
+                    conversation_id, limit=cfg.max_context_messages
                 )
-            )
-            reflections = await self._memory.retrieve_agent_reflections(message, limit=3)
-            goal_experiences = await self._memory.retrieve_approved_goal_experiences(
-                message, limit=3,
-            )
+                context = await self._memory.get_agent_context_with_trace(message)
+                consolidated_insights = (
+                    await self._memory.apply_knowledge_consolidated_insights(
+                        message, purpose="execution", conversation_id=conversation_id,
+                        source_run_id=source_run_id, limit=3,
+                    )
+                )
+                reflections = await self._memory.retrieve_agent_reflections(message, limit=3)
+                goal_experiences = await self._memory.retrieve_approved_goal_experiences(
+                    message, limit=3,
+                )
             for knowledge in consolidated_goal_knowledge:
                 usage = self._memory.record_goal_knowledge_usage
                 if source_run_id is None:
@@ -1952,7 +1967,7 @@ class AgentOrchestrator:
                 "Apply its instructions to this run.\n\n"
                 + skill["content"]
             )))
-        if self._skills is not None:
+        if self._skills is not None and not worker:
             try:
                 skill_index = [
                     {"name": item.name, "description": item.description[:80]}
@@ -1966,7 +1981,7 @@ class AgentOrchestrator:
                     "when one matches this task):\n"
                     + json.dumps(skill_index, ensure_ascii=False)
                 )))
-        if self._projects is not None:
+        if self._projects is not None and not worker:
             try:
                 project_context = await self._project_context_block(
                     conversation_id, message,
@@ -2045,6 +2060,10 @@ class AgentOrchestrator:
                 initial_messages.append(HumanMessage(content=msg["content"]))
             elif msg["role"] == "assistant":
                 initial_messages.append(AIMessage(content=msg["content"]))
+        # Normal runs read the request back from the saved conversation; a worker's goal is never
+        # saved, so it has to be handed over directly or the model sees no task at all.
+        if worker:
+            initial_messages.append(HumanMessage(content=message))
 
         # Image bytes are transient run input. Keep the durable conversation
         # text small while passing supported data URLs to vision-capable models.
@@ -2150,7 +2169,8 @@ class AgentOrchestrator:
                 return
             memory_candidates: list[dict[str, Any]] | None = None
             try:
-                memory_candidates = await self._memory.extract_conversation_candidates(
+                # Worker transcripts are internal; nothing in them should become user memory.
+                memory_candidates = None if worker else await self._memory.extract_conversation_candidates(
                     conversation_id,
                 )
             except Exception as exc:
@@ -2160,7 +2180,7 @@ class AgentOrchestrator:
                     error=str(exc),
                 )
             try:
-                reflection = await self._reflection.reflect(
+                reflection = None if worker else await self._reflection.reflect(
                     conversation_id=conversation_id,
                     goal=message,
                     task_result=full_response,
@@ -2171,7 +2191,8 @@ class AgentOrchestrator:
                     ],
                     memory_candidates=memory_candidates,
                 )
-                yield {"type": "memory_reflection", "reflection": reflection}
+                if reflection is not None:
+                    yield {"type": "memory_reflection", "reflection": reflection}
             except Exception as exc:
                 log.warning(
                     "memory.reflection_failed", conversation_id=conversation_id,
