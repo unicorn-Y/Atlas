@@ -2099,7 +2099,7 @@ class AgentOrchestrator:
                     conversation_id=conversation_id,
                     role="assistant",
                     content=full_response,
-                    metadata={"model": litellm_model},
+                    metadata={"model": litellm_model, "run_id": runtime.run_id},
                 )
             except Exception as e:
                 yield {

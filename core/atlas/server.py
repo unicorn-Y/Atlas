@@ -1224,6 +1224,195 @@ async def truncate_conversation(conversation_id: str, req: dict[str, Any]) -> di
     return {"status": "ok", "conversation_id": conversation_id}
 
 
+def _conversation_has_active_run(conversation_id: str) -> bool:
+    return any(run.conversation_id == conversation_id and run.status in {
+        "running", "waiting", "paused",
+    } for run in runtime_mgr.runs.values())
+
+
+async def _snapshot_rewind_files(
+    run_ids: list[str], roots: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    snapshots: dict[tuple[str, str], dict[str, Any]] = {}
+    checkpoints: list[tuple[str, str, str, str]] = []
+    store = getattr(orchestrator, "checkpoints", None) if orchestrator else None
+    for run_id in run_ids:
+        if store is not None:
+            for item in store.list_checkpoints(run_id=run_id):
+                manifest_path = store.storage_dir / item["id"] / "manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                root = str(Path(manifest["workspace"]).resolve())
+                checkpoints.append((manifest.get("created_at", ""), "local", root, item["id"]))
+                for entry in manifest.get("files", []):
+                    if entry.get("directory"):
+                        continue
+                    key = (root, str(entry["path"]))
+                    target = (Path(root) / entry["path"]).resolve()
+                    if Path(root) not in target.parents:
+                        continue
+                    exists = target.is_file()
+                    data = await asyncio.to_thread(target.read_bytes) if exists else b""
+                    snapshots[key] = {"root": root, "path": str(entry["path"]),
+                                      "exists": exists,
+                                      "data": base64.b64encode(data).decode("ascii")}
+        for root in roots:
+            if not root.startswith("ssh://"):
+                continue
+            with suppress(Exception):
+                host, remote_root = ssh_workspaces.parse_workspace(root)
+                for item in await ssh_workspaces.list_checkpoints(root, run_id=run_id):
+                    checkpoints.append((str(item.get("created_at", "")), "ssh", root, item["id"]))
+                    for entry in item.get("files", []):
+                        if entry.get("directory"):
+                            continue
+                        relative = str(entry["path"])
+                        target = str(PurePosixPath(remote_root) / relative)
+                        exists = bool(entry.get("exists"))
+                        data = await ssh_workspaces.read_bytes(host, target) if exists else b""
+                        snapshots[(root, relative)] = {
+                            "root": root, "path": relative, "exists": exists,
+                            "data": base64.b64encode(data).decode("ascii"),
+                        }
+    checkpoints.sort(key=lambda item: item[0], reverse=True)
+    return list(snapshots.values()), [
+        {"kind": kind, "root": root, "checkpoint_id": checkpoint_id}
+        for _created, kind, root, checkpoint_id in checkpoints
+    ]
+
+
+async def _restore_rewind_files(files: list[dict[str, Any]]) -> None:
+    for item in files:
+        root, relative = item["root"], item["path"]
+        data = base64.b64decode(item.get("data", ""), validate=True)
+        if root.startswith("ssh://"):
+            host, remote_root = ssh_workspaces.parse_workspace(root)
+            target = str(PurePosixPath(remote_root) / relative)
+            if item["exists"]:
+                await ssh_workspaces.write_bytes(host, target, data)
+            else:
+                await ssh_workspaces.call_tool(
+                    "local_file", {"action": "delete", "path": target}, root,
+                )
+        else:
+            base = Path(root).resolve()
+            target = (base / relative).resolve()
+            if target != base and base not in target.parents:
+                raise ValueError("回退文件超出了工作目录。")
+            if item["exists"]:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                await asyncio.to_thread(target.write_bytes, data)
+            elif target.is_file():
+                await asyncio.to_thread(target.unlink)
+
+
+async def _restore_run_checkpoints(
+    checkpoints: list[dict[str, str]],
+) -> tuple[list[str], list[dict[str, str]]]:
+    restored: list[str] = []
+    skipped: list[dict[str, str]] = []
+    for item in checkpoints:
+        try:
+            if item["kind"] == "ssh":
+                data = await ssh_workspaces.restore_checkpoint(item["root"], item["checkpoint_id"])
+            else:
+                data = await asyncio.to_thread(
+                    orchestrator.checkpoints.restore_checkpoint, item["checkpoint_id"],
+                )
+            restored.extend(str(path) for path in data.get("restored", []))
+        except Exception as exc:
+            skipped.append({"path": item["root"], "reason": str(exc)[:500]})
+    return restored, skipped
+
+
+@app.post("/api/conversations/{conversation_id}/rewind")
+async def rewind_conversation(conversation_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    assert memory is not None
+    if _conversation_has_active_run(conversation_id):
+        raise HTTPException(status_code=409, detail="这段对话仍在运行，请等它结束后再回退。")
+    message_id = req.get("message_id")
+    if not isinstance(message_id, str) or not message_id:
+        raise HTTPException(status_code=400, detail="请选择要回退到的消息。")
+    if not isinstance(req.get("files"), bool):
+        raise HTTPException(status_code=400, detail="请指定是否同时恢复文件。")
+    messages = await memory.get_messages_with_rowid(conversation_id)
+    boundary = next((index for index, item in enumerate(messages) if item["id"] == message_id), None)
+    if boundary is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话或指定消息。")
+    removed = messages[boundary:]
+    run_ids = []
+    for item in removed:
+        with suppress(TypeError, ValueError):
+            run_id = json.loads(item.get("metadata") or "{}").get("run_id")
+            if run_id and run_id not in run_ids:
+                run_ids.append(str(run_id))
+    conversation = await memory.get_conversation(conversation_id) or {}
+    roots = [*([conversation["workspace"]] if conversation.get("workspace") else []),
+             *conversation.get("extra_roots", [])]
+    file_snapshot, checkpoints = ([], [])
+    if req["files"]:
+        file_snapshot, checkpoints = await _snapshot_rewind_files(run_ids, roots)
+    rewind_id = uuid.uuid4().hex
+    snapshot = {"messages": messages, "files": file_snapshot,
+                "checkpoints": checkpoints, "files_requested": req["files"]}
+    await memory.save_rewind({
+        "rewind_id": rewind_id, "conversation_id": conversation_id,
+        "removed_messages": len(removed), "restored_files": 0, "snapshot": snapshot,
+    })
+    restored_files: list[str] = []
+    skipped: list[dict[str, str]] = []
+    try:
+        if req["files"]:
+            restored_files, skipped = await _restore_run_checkpoints(checkpoints)
+        removed_row = await memory.remove_messages_from(conversation_id, message_id)
+        if removed_row is None:
+            if req["files"]:
+                await _restore_rewind_files(file_snapshot)
+            raise HTTPException(status_code=404, detail="找不到指定消息。")
+    except HTTPException:
+        raise
+    except Exception:
+        if req["files"]:
+            await _restore_rewind_files(file_snapshot)
+        raise
+    db = memory._db
+    if db is not None:
+        await db.execute(
+            "UPDATE conversation_rewinds SET restored_files=? WHERE rewind_id=?",
+            (len(restored_files), rewind_id),
+        )
+        await db.commit()
+    return {"rewind_id": rewind_id, "removed_messages": len(removed),
+            "restored_files": sorted(set(restored_files)), "skipped": skipped}
+
+
+@app.post("/api/conversations/{conversation_id}/rewind/{rewind_id}/redo")
+async def redo_conversation_rewind(conversation_id: str, rewind_id: str) -> dict[str, Any]:
+    assert memory is not None
+    if _conversation_has_active_run(conversation_id):
+        raise HTTPException(status_code=409, detail="这段对话仍在运行，请等它结束后再重做。")
+    if not re.fullmatch(r"[0-9a-f]{32}", rewind_id):
+        raise HTTPException(status_code=404, detail="找不到这条回退记录。")
+    record = await memory.get_rewind(conversation_id, rewind_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="找不到这条回退记录。")
+    if record["redone"]:
+        raise HTTPException(status_code=409, detail="这次回退已经重做过了。")
+    snapshot = record["snapshot"]
+    if snapshot.get("files_requested"):
+        await _restore_rewind_files(snapshot.get("files", []))
+    await memory.replace_messages(conversation_id, snapshot.get("messages", []))
+    await memory.mark_rewind_redone(conversation_id, rewind_id)
+    return {"status": "redone", "rewind_id": rewind_id}
+
+
+@app.get("/api/conversations/{conversation_id}/rewinds")
+async def list_conversation_rewinds(conversation_id: str) -> list[dict[str, Any]]:
+    assert memory is not None
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话。")
+    return await memory.list_rewinds(conversation_id)
+
+
 @app.post("/api/conversations/{conversation_id}/fork", status_code=201)
 async def fork_conversation(conversation_id: str, req: dict[str, Any]) -> dict[str, Any]:
     assert memory is not None
@@ -6071,10 +6260,12 @@ async def _execute_run(
                 if content.strip():
                     await memory.save_message(
                         conversation_id=run.conversation_id, role="user", content=content,
+                        metadata={"run_id": run.run_id},
                     )
             else:
                 await memory.save_message(
                     conversation_id=run.conversation_id, role="user", content=content,
+                    metadata={"run_id": run.run_id},
                 )
         except Exception as e:
             run.status = "failed"
@@ -6107,7 +6298,7 @@ async def _execute_run(
                 with suppress(Exception):
                     await memory.save_message(
                         conversation_id=run.conversation_id, role="assistant", content=response,
-                        metadata={"executor": run.executor},
+                        metadata={"executor": run.executor, "run_id": run.run_id},
                     )
                 await emit("message.completed", {"content": response})
             run.status = "completed"

@@ -154,6 +154,18 @@ class MemoryStore:
             CREATE INDEX IF NOT EXISTS idx_messages_conv
                 ON messages(conversation_id, created_at);
 
+            CREATE TABLE IF NOT EXISTS conversation_rewinds (
+                rewind_id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                removed_messages INTEGER NOT NULL DEFAULT 0,
+                restored_files INTEGER NOT NULL DEFAULT 0,
+                redone INTEGER NOT NULL DEFAULT 0,
+                snapshot TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_conversation_rewinds
+                ON conversation_rewinds(conversation_id, created_at DESC);
+
             -- Full-text search on messages
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
                 content, content=messages, content_rowid=rowid
@@ -3915,6 +3927,90 @@ class MemoryStore:
         )
         await self._db.commit()
         return cursor.rowcount > 0
+
+    async def get_messages_with_rowid(self, conversation_id: str) -> list[dict[str, Any]]:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT rowid AS row_id,id,conversation_id,role,content,metadata,created_at "
+            "FROM messages WHERE conversation_id=? ORDER BY rowid", (conversation_id,),
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def remove_messages_from(self, conversation_id: str, message_id: str) -> int | None:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT rowid FROM messages WHERE conversation_id=? AND id=?",
+            (conversation_id, message_id),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        first_row = int(row["rowid"])
+        await self._db.execute(
+            "DELETE FROM messages WHERE conversation_id=? AND rowid>=?",
+            (conversation_id, first_row),
+        )
+        await self._db.commit()
+        return first_row
+
+    async def replace_messages(self, conversation_id: str, messages: list[dict[str, Any]]) -> None:
+        assert self._db is not None
+        await self._db.execute("BEGIN IMMEDIATE")
+        await self._db.execute("DELETE FROM messages WHERE conversation_id=?", (conversation_id,))
+        await self._db.executemany(
+            "INSERT INTO messages(rowid,id,conversation_id,role,content,metadata,created_at) "
+            "VALUES(?,?,?,?,?,?,?)",
+            [(item["row_id"], item["id"], conversation_id, item["role"], item["content"],
+              item.get("metadata", "{}"), item["created_at"]) for item in messages],
+        )
+        await self._db.commit()
+
+    async def save_rewind(self, record: dict[str, Any]) -> None:
+        assert self._db is not None
+        await self._db.execute(
+            "INSERT INTO conversation_rewinds(rewind_id,conversation_id,removed_messages,"
+            "restored_files,snapshot) VALUES(?,?,?,?,?)",
+            (record["rewind_id"], record["conversation_id"], record["removed_messages"],
+             record["restored_files"], json.dumps(record["snapshot"], ensure_ascii=False)),
+        )
+        await self._db.execute(
+            "DELETE FROM conversation_rewinds WHERE conversation_id=? AND rewind_id NOT IN "
+            "(SELECT rewind_id FROM conversation_rewinds WHERE conversation_id=? "
+            "ORDER BY created_at DESC,rowid DESC LIMIT 5)",
+            (record["conversation_id"], record["conversation_id"]),
+        )
+        await self._db.commit()
+
+    async def list_rewinds(self, conversation_id: str) -> list[dict[str, Any]]:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT rewind_id,created_at,removed_messages,restored_files,redone "
+            "FROM conversation_rewinds WHERE conversation_id=? "
+            "ORDER BY created_at DESC,rowid DESC LIMIT 5", (conversation_id,),
+        )
+        return [{**dict(row), "redone": bool(row["redone"])} for row in await cursor.fetchall()]
+
+    async def get_rewind(self, conversation_id: str, rewind_id: str) -> dict[str, Any] | None:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT * FROM conversation_rewinds WHERE conversation_id=? AND rewind_id=?",
+            (conversation_id, rewind_id),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        record = dict(row)
+        record["snapshot"] = json.loads(record["snapshot"])
+        record["redone"] = bool(record["redone"])
+        return record
+
+    async def mark_rewind_redone(self, conversation_id: str, rewind_id: str) -> None:
+        assert self._db is not None
+        await self._db.execute(
+            "UPDATE conversation_rewinds SET redone=1 WHERE conversation_id=? AND rewind_id=?",
+            (conversation_id, rewind_id),
+        )
+        await self._db.commit()
 
     async def delete_fact(self, key: str) -> bool:
         """Delete a fact by key. Returns True if found."""

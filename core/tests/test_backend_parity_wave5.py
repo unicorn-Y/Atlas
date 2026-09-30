@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -8,6 +9,7 @@ from atlas.agent.enrichment import DelegationService
 from atlas.memory import MemoryStore
 from atlas.projects import ProjectStore
 from atlas.tools.web_extract import extract_web
+from atlas.agent.checkpoints import ShadowGitCheckpointStore
 
 
 class Hooks:
@@ -122,3 +124,55 @@ async def test_web_extract_strips_chrome_and_rejects_private_addresses(monkeypat
     assert "noise" not in result["text"]
     with pytest.raises(ValueError, match="内网"):
         await extract_web("http://10.0.0.1/private")
+
+
+@pytest.mark.asyncio
+async def test_rewind_restores_messages_and_files_then_redo_restores_both(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from atlas import server
+
+    memory = MemoryStore(tmp_path / "memory.sqlite3")
+    await memory.init()
+    checkpoint_store = ShadowGitCheckpointStore(tmp_path / "checkpoints")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "result.txt"
+    target.write_text("before", encoding="utf-8")
+    conversation_id = await memory.create_conversation("rewind")
+    first = await memory.save_message(conversation_id, "user", "first", {"run_id": "run-1"})
+    await memory.save_message(conversation_id, "assistant", "first done", {"run_id": "run-1"})
+    checkpoint_one = checkpoint_store.create_checkpoint(workspace, ["result.txt"], run_id="run-1")
+    checkpoint_one["created_at"] = "2025-01-01T00:00:00Z"
+    (checkpoint_store.storage_dir / checkpoint_one["id"] / "manifest.json").write_text(
+        json.dumps(checkpoint_one), encoding="utf-8",
+    )
+    target.write_text("round one", encoding="utf-8")
+    await memory.save_message(conversation_id, "user", "second", {"run_id": "run-2"})
+    await memory.save_message(conversation_id, "assistant", "second done", {"run_id": "run-2"})
+    checkpoint_two = checkpoint_store.create_checkpoint(workspace, ["result.txt"], run_id="run-2")
+    checkpoint_two["created_at"] = "2025-01-02T00:00:00Z"
+    (checkpoint_store.storage_dir / checkpoint_two["id"] / "manifest.json").write_text(
+        json.dumps(checkpoint_two), encoding="utf-8",
+    )
+    target.write_text("round two", encoding="utf-8")
+
+    monkeypatch.setattr(server, "memory", memory)
+    monkeypatch.setattr(server, "orchestrator", SimpleNamespace(checkpoints=checkpoint_store))
+    monkeypatch.setattr(server.runtime_mgr, "runs", {})
+    try:
+        result = await server.rewind_conversation(
+            conversation_id, {"message_id": first, "files": True},
+        )
+        assert result["removed_messages"] == 4
+        assert target.read_text(encoding="utf-8") == "before"
+        assert await memory.get_conversation_messages(conversation_id) == []
+
+        await server.redo_conversation_rewind(conversation_id, result["rewind_id"])
+        assert target.read_text(encoding="utf-8") == "round two"
+        messages = await memory.get_conversation_messages(conversation_id)
+        assert [item["content"] for item in messages] == [
+            "first", "first done", "second", "second done",
+        ]
+        assert (await server.list_conversation_rewinds(conversation_id))[0]["redone"] is True
+    finally:
+        await memory.close()
