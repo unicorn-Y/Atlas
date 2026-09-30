@@ -206,7 +206,7 @@ for item in [
     assert response == "hello world"
     assert changed == ["external.txt"]
     assert [name for name, _ in events] == [
-        "reply.delta", "tool.started", "tool.completed", "reply.delta",
+        "message.delta", "tool.started", "tool.completed", "message.delta",
     ]
     snapshots = store.list_checkpoints(str(workspace), run_id=run.run_id)
     assert len(snapshots) == 2
@@ -258,7 +258,7 @@ while True:
     with pytest.raises(asyncio.CancelledError):
         await task
     assert host.sessions == {}
-    assert "reply.delta" in emitted
+    assert "message.delta" in emitted
 
 
 @pytest.mark.asyncio
@@ -669,3 +669,53 @@ async def test_agent_denies_computer_tools_in_docker_sandbox(tmp_path: Path) -> 
     assert "Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。" in result["messages"][0].content
     assert result["pending_events"][-1]["is_error"] is True
 
+
+
+def test_external_agent_refused_unless_full_access(monkeypatch) -> None:
+    """External Agents auto-approve their own permission prompts, so only full access may start one."""
+    import json as _json
+
+    from starlette.testclient import TestClient
+
+    from atlas.server import app as _app
+
+    with TestClient(_app) as tc:
+        for mode, label in (("ask_writes", "改前问我"), ("read_only", "只读")):
+            with tc.websocket_connect("/ws/chat") as ws:
+                ws.send_text(_json.dumps({
+                    "type": "run.start", "run_id": f"external-{mode}", "content": "hi",
+                    "conversation_id": f"external-{mode}-conv", "executor": "codex",
+                    "permission_mode": mode,
+                }))
+                failed = None
+                for _ in range(50):
+                    event = _json.loads(ws.receive_text())
+                    if event.get("event") == "run.failed":
+                        failed = event["data"]
+                        break
+                assert failed is not None
+                assert failed["category"] == "permission"
+                assert label in failed["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delegation_explains_when_no_external_agent_is_installed(monkeypatch) -> None:
+    """Workers used to be sent to Hermes blindly and died with 'file not found'."""
+    from atlas.runtime import external_agents
+
+    class Hooks:
+        async def emit(self, *_args, **_kwargs):
+            return None
+
+    host = SimpleNamespace(backends={"hermes": object(), "claude": object()})
+    monkeypatch.setattr(external_agents, "external_agent_status", lambda cache: {"agents": [
+        {"id": "hermes", "available": False}, {"id": "claude", "available": False},
+    ]})
+    service = DelegationService(host, Hooks())
+    with pytest.raises(RuntimeError, match="没有装"):
+        await service.delegate_parallel([{"title": "A", "goal": "a"}])
+
+    monkeypatch.setattr(external_agents, "external_agent_status", lambda cache: {"agents": [
+        {"id": "hermes", "available": False}, {"id": "claude", "available": True},
+    ]})
+    assert await DelegationService(host, Hooks())._pick_backend() == "claude"

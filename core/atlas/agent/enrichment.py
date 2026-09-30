@@ -344,6 +344,30 @@ class DelegationService:
 
     def __init__(self, host: Any, hooks: HookBus, *, timeout: float = 90.0) -> None:
         self.host, self.hooks, self.timeout = host, hooks, timeout
+        self._status_cache: dict[str, Any] = {}
+
+    async def _pick_backend(self) -> str:
+        """First installed external Agent, Hermes preferred; a clear error when none is installed."""
+        names = list(getattr(self.host, "backends", {}) or {})
+        if not names:
+            raise RuntimeError("没有配置可用的子 Agent。")
+        try:
+            from atlas.runtime.external_agents import AGENT_COMMANDS, external_agent_status
+
+            status = await asyncio.to_thread(external_agent_status, self._status_cache)
+            available = {item["id"] for item in status["agents"] if item["available"]}
+            known = set(AGENT_COMMANDS)
+        except Exception:
+            return "hermes" if "hermes" in names else names[0]
+        ordered = sorted(names, key=lambda name: (name != "hermes", names.index(name)))
+        for name in ordered:
+            # Adapters that aren't CLI-backed (tests, custom hosts) are taken as available.
+            if name in available or name not in known:
+                return name
+        raise RuntimeError(
+            "子任务需要一个外部 Agent 来执行，但这台电脑上没有装 Hermes、Claude Code、Codex 等命令行程序。"
+            "请安装其中一个，或者直接让 Atlas 自己按顺序完成这些事。"
+        )
 
     async def delegate_task(
         self, goal: str, context: str | None = None, tool_profile: list[str] | None = None,
@@ -355,9 +379,7 @@ class DelegationService:
     ) -> dict[str, Any]:
         if not goal.strip():
             raise ValueError("goal must be non-empty")
-        name = backend or (
-            "hermes" if "hermes" in self.host.backends else next(iter(self.host.backends))
-        )
+        name = backend or await self._pick_backend()
         await self.hooks.emit("subagent_start", goal=goal, backend=name)
         session = None
         subtask_id = secrets.token_hex(8)
@@ -480,6 +502,8 @@ class DelegationService:
                or not str(item.get("title", "")).strip() for item in tasks):
             raise ValueError("each parallel task requires a title and goal")
 
+        # Pick the worker Agent once: with none installed, fail the whole group up front.
+        worker_backend = await self._pick_backend() if getattr(self.host, "backends", None) else None
         group_id = secrets.token_hex(8)
         semaphore = asyncio.Semaphore(max_concurrency)
         worktree_lock = asyncio.Lock()
@@ -517,7 +541,7 @@ class DelegationService:
             async with semaphore:
                 async def setup_failed(summary: str) -> dict[str, Any]:
                     subtask_id = f"{group_id}-{index}"
-                    backend = "hermes" if "hermes" in getattr(self.host, "backends", {}) else "unknown"
+                    backend = "hermes" if "hermes" in (getattr(self.host, "backends", {}) or {}) else "unknown"
                     await call(on_started, subtask_id, goal, backend, metadata)
                     await call(
                         on_completed, subtask_id, "failed", summary, 0, metadata,
@@ -591,7 +615,7 @@ class DelegationService:
                     )
                 try:
                     result = await self.delegate_task(
-                        goal, worker_context or None, backend=None, cwd=worker_cwd,
+                        goal, worker_context or None, backend=worker_backend, cwd=worker_cwd,
                         on_started=started, on_progress=progress, on_completed=completed,
                         event_metadata=metadata,
                     )

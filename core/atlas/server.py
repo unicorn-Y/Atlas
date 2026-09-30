@@ -1669,6 +1669,9 @@ async def workspace_preview(root: str, path: str) -> Response:
 
 
 def _history_checkpoint_manifest(store: Any, checkpoint_id: str) -> tuple[dict[str, Any], Path]:
+    # The id comes from the query string and becomes a directory name; checkpoint ids are uuid4 hex.
+    if not re.fullmatch(r"[0-9a-fA-F-]{32,36}", checkpoint_id):
+        raise HTTPException(status_code=400, detail="invalid workspace version")
     manifest_path = store.storage_dir / checkpoint_id / "manifest.json"
     if not manifest_path.is_file():
         raise HTTPException(status_code=404, detail="Workspace version not found")
@@ -5318,11 +5321,15 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         }))
         return
     if run.executor != "atlas":
-        if run.permission_mode == "read_only" or run.read_only:
+        # External Agents get every permission request auto-approved (runtime/backends.py), so
+        # Atlas can't honour "ask before changes" for them either; only full access may start one.
+        if run.permission_mode in {"read_only", "ask_writes"} or run.read_only:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            mode = "只读" if run.permission_mode == "read_only" or run.read_only else "改前问我"
             await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "permission",
-                "detail": "当前对话是只读模式，不能启动外部 Agent。请切到『完全访问』或『改前问我』后重试。",
+                "detail": f"当前对话是「{mode}」模式，外部 Agent 的操作不经过 Atlas 确认，所以不能启动。"
+                          "请把对话权限切到「完全访问」后重试。",
             }))
             return
         if workspace and str(workspace).startswith("ssh://"):
@@ -5652,6 +5659,8 @@ async def _execute_external_agent(
             for name, payload in normalized:
                 if name == "reply.delta":
                     response.append(str(payload.get("content", "")))
+                    # Same stream event Atlas's own replies use, so clients render it unchanged.
+                    name = "message.delta"
                 if name == "run.failed":
                     raise RuntimeError(str(payload.get("detail", "外部 Agent 执行失败。")))
                 await emit(name, payload)
@@ -5932,7 +5941,12 @@ async def _execute_run(
                 })
                 return
             if response:
-                await emit("reply.completed", {"content": response})
+                with suppress(Exception):
+                    await memory.save_message(
+                        conversation_id=run.conversation_id, role="assistant", content=response,
+                        metadata={"executor": run.executor},
+                    )
+                await emit("message.completed", {"content": response})
             run.status = "completed"
             await emit("run.completed", {
                 "result": "completed", "model": run.model,

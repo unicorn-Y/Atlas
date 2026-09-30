@@ -1027,7 +1027,10 @@ class AgentOrchestrator:
             await self._emit_hook(ctx, "before_tool", name=fn_name, arguments=fn_args)
             is_write = (fn_name in {"local_edit", "local_shell", "local_exec", "execute_command",
                                     "run_script", "create_document", "create_spreadsheet",
-                                    "create_presentation", "computer_click", "computer_type", "computer_key",
+                                    "create_presentation",
+                                    # These run project scripts or hand work to sub-agents that can change files.
+                                    "run_checks", "execute_code", "delegate_task", "delegate_parallel",
+                                    "computer_click", "computer_type", "computer_key",
                                     "computer_scroll", "computer_drag", "computer_hotkey"}
                         or (fn_name == "local_file" and fn_args.get("action") in {
                             "write", "append", "mkdir", "copy", "move", "delete",
