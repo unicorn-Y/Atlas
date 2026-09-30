@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import sys
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from atlas.memory import MemoryStore
+from atlas.agent.checkpoints import ShadowGitCheckpointStore
+from atlas.runtime.backend_host import AgentBackendHost
+from atlas.runtime.external_agents import external_agent_status, normalize_external_event
+from atlas.runtime.external_process import ExternalProcessAdapter
 from atlas.ssh import SSHWorkspaceManager
 from atlas.agent import _ssh_paths_allowed
 from atlas.task_artifacts import DEFAULT_PROFILES, TomlRecordStore, seed_profiles
-from atlas.server import RunState, _handle_rules_trust
+from atlas.server import RunState, _execute_external_agent, _handle_rules_trust
 
 
 def test_builtin_profile_names_and_descriptions_are_chinese() -> None:
@@ -97,6 +105,155 @@ async def test_rules_trust_falls_back_to_run_id_and_errors_when_unmatched(monkey
         "run_id": "missing-run", "event_id": "stale-event", "trust": True,
     })
     assert sent[-1]["type"] == "error"
+
+
+def test_external_agent_status_uses_version_command_and_cache(monkeypatch) -> None:
+    from atlas.runtime import external_agents
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(external_agents.shutil, "which", lambda _name: sys.executable)
+
+    def run(argv, **_kwargs):
+        calls.append(argv)
+        from types import SimpleNamespace
+        return SimpleNamespace(returncode=0, stdout="fake-cli 1.2.3", stderr="")
+
+    monkeypatch.setattr(external_agents.subprocess, "run", run)
+    cache: dict = {}
+    result = external_agent_status(cache, now=10)
+    assert len(result["agents"]) == 5
+    assert all(agent["available"] and agent["version"] == "fake-cli 1.2.3"
+               for agent in result["agents"])
+    assert len(calls) == 5
+    assert external_agent_status(cache, now=30) == result
+    assert len(calls) == 5
+    external_agent_status(cache, now=71)
+    assert len(calls) == 10
+
+
+def test_external_agent_json_events_normalize_to_atlas_events() -> None:
+    pending: dict = {}
+    message = normalize_external_event("update", {
+        "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": "Hello"},
+        },
+    }, pending)
+    started = normalize_external_event("update", {
+        "update": {
+            "sessionUpdate": "tool_call", "toolCallId": "tc-1",
+            "title": "run_command", "rawInput": {"command": "pytest"},
+        },
+    }, pending)
+    completed = normalize_external_event("update", {
+        "update": {
+            "sessionUpdate": "tool_call_update", "toolCallId": "tc-1",
+            "status": "completed", "content": "2 passed",
+        },
+    }, pending)
+
+    assert message == [("reply.delta", {"content": "Hello"})]
+    assert started[0][0] == "tool.started"
+    assert started[0][1]["name"] == "external:run_command"
+    assert completed[0][0] == "tool.completed"
+    assert completed[0][1]["result"] == "2 passed"
+
+
+@pytest.mark.asyncio
+async def test_external_agent_fake_json_cli_emits_events_and_checkpoints(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from atlas import server
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(workspace)], check=True)
+    fake = tmp_path / "fake_agent.py"
+    fake.write_text(
+        """import json, pathlib
+pathlib.Path('external.txt').write_text('made by fake agent')
+for item in [
+ {'type':'agent_message_chunk','content':{'type':'text','text':'hello '}},
+ {'type':'tool_call','toolCallId':'tool-1','title':'run_command','rawInput':{'command':'echo ok'}},
+ {'type':'tool_call_update','toolCallId':'tool-1','status':'completed','content':'ok'},
+ {'type':'agent_message_chunk','content':{'type':'text','text':'world'}},
+ {'type':'agent_end'}]:
+ print(json.dumps(item), flush=True)
+""",
+        encoding="utf-8",
+    )
+    backend = ExternalProcessAdapter(
+        "codex", sys.executable, [str(fake)], protocol="pi-rpc",
+    )
+    monkeypatch.setattr(server, "agent_backend_host", AgentBackendHost({"codex": backend}))
+    store = ShadowGitCheckpointStore(tmp_path / "checkpoints")
+    monkeypatch.setattr(server, "orchestrator", SimpleNamespace(checkpoints=store))
+    run = RunState("external-test-run", "conversation", "model")
+    run.executor = "codex"
+    events: list[tuple[str, dict]] = []
+
+    async def emit(name: str, data: dict) -> None:
+        events.append((name, data))
+
+    response, changed = await _execute_external_agent(
+        run, "original prompt", str(workspace), emit,
+    )
+    assert response == "hello world"
+    assert changed == ["external.txt"]
+    assert [name for name, _ in events] == [
+        "reply.delta", "tool.started", "tool.completed", "reply.delta",
+    ]
+    snapshots = store.list_checkpoints(str(workspace), run_id=run.run_id)
+    assert len(snapshots) == 2
+    assert server._run_changes(run.run_id)["files"][0]["path"] == "external.txt"
+
+
+@pytest.mark.asyncio
+async def test_external_agent_cancel_closes_fake_cli_process(tmp_path: Path, monkeypatch) -> None:
+    from atlas import server
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    fake = tmp_path / "fake_waiting_agent.py"
+    fake.write_text(
+        """import json, sys, time
+line = sys.stdin.readline()
+print(json.dumps({'type':'agent_message_chunk','content':{'type':'text','text':'working'}}), flush=True)
+while True:
+ line = sys.stdin.readline()
+ if not line:
+  time.sleep(.02)
+  continue
+ if json.loads(line).get('type') in {'abort', 'exit'}:
+  break
+""",
+        encoding="utf-8",
+    )
+    backend = ExternalProcessAdapter(
+        "codex", sys.executable, [str(fake)], protocol="pi-rpc",
+    )
+    host = AgentBackendHost({"codex": backend})
+    monkeypatch.setattr(server, "agent_backend_host", host)
+    monkeypatch.setattr(server, "orchestrator", None)
+    run = RunState("external-cancel-run", "conversation", "model")
+    run.executor = "codex"
+    emitted: list[str] = []
+
+    async def emit(name: str, _data: dict) -> None:
+        emitted.append(name)
+
+    task = asyncio.create_task(
+        _execute_external_agent(run, "original prompt", str(workspace), emit),
+    )
+    for _ in range(50):
+        if emitted:
+            break
+        await asyncio.sleep(0.02)
+    run.cancel_event.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert host.sessions == {}
+    assert "reply.delta" in emitted
 
 
 @pytest.mark.asyncio

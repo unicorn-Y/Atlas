@@ -114,6 +114,25 @@ async def test_atlas_backend_applies_the_guard_to_every_route():
 
 
 @pytest.mark.asyncio
+async def test_external_agent_status_endpoint_uses_origin_guard(monkeypatch):
+    from atlas import server
+    from atlas.server import app
+
+    monkeypatch.setattr(server, "external_agent_status", lambda _cache: {"agents": []})
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        allowed = await client.get("/api/agents/external", headers={"Origin": DEV})
+        refused = await client.get(
+            "/api/agents/external", headers={"Sec-Fetch-Site": "same-origin"},
+        )
+        token_access = await client.get("/api/agents/external", headers={
+            "Origin": "null", "X-Atlas-Api-Token": "test-atlas-api-token",
+        })
+    assert allowed.status_code == 200
+    assert refused.status_code == 403
+    assert token_access.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_previewed_workspace_html_is_sandboxed(tmp_path):
     """Raw HTML from a workspace gets an opaque origin, so its scripts can't call the API."""
     from atlas.server import app

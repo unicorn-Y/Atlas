@@ -74,6 +74,7 @@ from atlas.runtime import hub_control
 from atlas.runtime.hooks import HookStore
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.capability_bus import CapabilityBus
+from atlas.runtime.external_agents import external_agent_status, normalize_external_event
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
 from atlas.skills import PROJECT_ROOT, SKILLS_DIR, SkillManager
 from atlas.skills.acquisition import (
@@ -140,6 +141,8 @@ SKILL_CENTER_TOKEN = os.environ.get("ATLAS_SKILL_CENTER_TOKEN")
 skill_acquisitions: dict[str, dict[str, Any]] = {}
 skill_dependency_plans: dict[str, dict[str, Any]] = {}
 scheduler: AtlasScheduler | None = None
+external_agent_status_cache: dict[str, Any] = {}
+external_conversation_sessions: dict[tuple[str, str], str] = {}
 
 
 def _task_store(kind: str) -> TomlRecordStore:
@@ -1916,14 +1919,24 @@ def _run_changes(run_id: str) -> dict[str, Any]:
     if not manifests:
         return {"run_id": run_id, "files": []}
     first = min(manifests, key=lambda item: item["created_at"])
+    last = max(manifests, key=lambda item: item["created_at"])
     root = Path(first["workspace"]).resolve()
     manifest_path = store.storage_dir / first["id"] / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    last_manifest = json.loads(
+        (store.storage_dir / last["id"] / "manifest.json").read_text(encoding="utf-8")
+    )
+    before_entries = {
+        entry["path"]: entry for entry in manifest.get("files", [])
+        if not entry.get("directory")
+    }
+    after_entries = {
+        entry["path"]: entry for entry in last_manifest.get("files", [])
+        if not entry.get("directory")
+    }
     results = []
-    for entry in manifest.get("files", []):
-        if entry.get("directory"):
-            continue
-        relative = entry["path"]
+    for relative in sorted(before_entries.keys() | after_entries.keys()):
+        entry = before_entries.get(relative, {"exists": False})
         current = (root / relative).resolve()
         if root not in current.parents:
             continue
@@ -2992,6 +3005,11 @@ async def invoke_agent_capability(
 async def list_agent_backends() -> dict[str, Any]:
     """List external Agent adapters without starting their processes."""
     return {"backends": agent_backend_host.names() if agent_backend_host else []}
+
+
+@app.get("/api/agents/external")
+async def list_external_agents() -> dict[str, Any]:
+    return external_agent_status(external_agent_status_cache)
 
 
 @app.post("/api/agent/backends/{name}/sessions")
@@ -5023,6 +5041,38 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     else:
         run.executor = str(data.get("executor", "atlas"))
         run.sandbox = data.get("sandbox")
+    if run.executor not in {"atlas", "codex", "claude", "hermes", "pi", "zcode"}:
+        invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation", "detail": "所选执行 Agent 不受支持。",
+        }))
+        return
+    if run.executor != "atlas":
+        if run.permission_mode == "read_only" or run.read_only:
+            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                "category": "permission",
+                "detail": "当前对话是只读模式，不能启动外部 Agent。请切到『完全访问』或『改前问我』后重试。",
+            }))
+            return
+        if workspace and str(workspace).startswith("ssh://"):
+            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                "category": "validation",
+                "detail": "外部 Agent 目前不能在 SSH 工作目录中运行，请选择本机工作目录。",
+            }))
+            return
+        available = {
+            item["id"]: item for item in
+            external_agent_status(external_agent_status_cache)["agents"]
+        }.get(run.executor)
+        if not available or not available["available"]:
+            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                "category": "external_agent",
+                "detail": (available or {}).get("detail", "所选外部 Agent 当前不可用，请先安装对应命令行程序。"),
+            }))
+            return
     if permission_mode == "full_access" and conversation and "permission_mode" not in data:
         run.permission_mode = conversation.get("permission_mode", "full_access")
         run.read_only = (run.permission_mode == "read_only"
@@ -5284,6 +5334,90 @@ async def _resolve_active_skill_instructions(
     return result
 
 
+async def _execute_external_agent(
+    run: RunState,
+    content: str,
+    workspace: str | None,
+    emit: Any,
+) -> tuple[str, list[str]]:
+    """Run the selected external Agent and translate its events into Atlas events."""
+    if agent_backend_host is None:
+        raise RuntimeError("外部 Agent 服务当前不可用。")
+    if not workspace:
+        raise RuntimeError("运行外部 Agent 前，请先为当前对话选择工作目录。")
+    if workspace.startswith("ssh://"):
+        raise RuntimeError("外部 Agent 目前不能在 SSH 工作目录中运行。")
+
+    store = getattr(orchestrator, "checkpoints", None) if orchestrator else None
+    if store is not None:
+        store.create_checkpoint(
+            workspace, ["."], run_id=run.run_id,
+            conversation_id=run.conversation_id,
+        )
+
+    key = (run.conversation_id, run.executor)
+    session_id = external_conversation_sessions.get(key)
+    if session_id not in agent_backend_host.sessions:
+        session = await agent_backend_host.start(run.executor, workspace)
+        session_id = session.id
+        external_conversation_sessions[key] = session_id
+    await agent_backend_host.send(session_id, content)
+
+    response: list[str] = []
+    tools: dict[str, dict[str, Any]] = {}
+
+    async def consume() -> None:
+        async for event in agent_backend_host.events(session_id):
+            if event.type in {"done", "agent_end"}:
+                continue
+            normalized = normalize_external_event(event.type, event.data, tools)
+            for name, payload in normalized:
+                if name == "reply.delta":
+                    response.append(str(payload.get("content", "")))
+                if name == "run.failed":
+                    raise RuntimeError(str(payload.get("detail", "外部 Agent 执行失败。")))
+                await emit(name, payload)
+
+    stream_task = asyncio.create_task(consume())
+    cancel_task = asyncio.create_task(run.cancel_event.wait())
+    try:
+        done, _pending = await asyncio.wait(
+            {stream_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED,
+        )
+        if cancel_task in done and run.cancel_event.is_set():
+            with suppress(Exception):
+                await agent_backend_host.cancel(session_id)
+            with suppress(Exception):
+                await agent_backend_host.close(session_id)
+            external_conversation_sessions.pop(key, None)
+            stream_task.cancel()
+            await asyncio.gather(stream_task, return_exceptions=True)
+            raise asyncio.CancelledError
+        await stream_task
+    finally:
+        cancel_task.cancel()
+        await asyncio.gather(cancel_task, return_exceptions=True)
+
+    if store is not None:
+        store.create_checkpoint(
+            workspace, ["."], run_id=run.run_id,
+            conversation_id=run.conversation_id,
+        )
+    changed: list[str] = []
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run, ["git", "-C", workspace, "status", "--porcelain"],
+            capture_output=True, text=True, timeout=10,
+        )
+        changed = [
+            line[3:].strip().replace("\\", "/")
+            for line in result.stdout.splitlines() if len(line) > 3
+        ]
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "".join(response), changed
+
+
 async def _handle_resume(conn_id: str, data: dict[str, Any]) -> None:
     """Replay events after a given sequence number."""
     run_id = data.get("run_id", "")
@@ -5489,6 +5623,35 @@ async def _execute_run(
             await emit("run.failed", {
                 "category": "backend",
                 "detail": f"Unable to save user message: {e}",
+            })
+            return
+
+        if run.executor != "atlas":
+            if await check_pause_cancel():
+                run.status = "cancelled"
+                await emit("run.cancelled", {})
+                return
+            await emit("run.status", {"status": "running"})
+            await emit("run.phase", {"phase": "execution"})
+            try:
+                response, _changed_files = await _execute_external_agent(
+                    run, content, workspace, emit,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                run.status = "failed"
+                await emit("run.failed", {
+                    "category": "external_agent", "detail": str(exc),
+                })
+                return
+            if response:
+                await emit("reply.completed", {"content": response})
+            run.status = "completed"
+            await emit("run.completed", {
+                "result": "completed", "model": run.model,
+                "usage": _sum_usage(run.usage),
+                "changes": _run_change_summary(run.run_id),
             })
             return
 
