@@ -77,6 +77,7 @@ from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.capability_bus import CapabilityBus
 from atlas.runtime.external_agents import external_agent_status, normalize_external_event
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
+from atlas.sandbox import DockerSandboxManager
 from atlas.skills import PROJECT_ROOT, SKILLS_DIR, SkillManager
 from atlas.skills.acquisition import (
     CatalogUnavailableError,
@@ -129,6 +130,7 @@ notifications: NotificationBus | None = None
 orchestrator: AgentOrchestrator | None = None
 mcp_client: MCPClient | None = None
 local_execution: LocalExecutionRuntime | None = None
+sandbox_manager = DockerSandboxManager()
 computer_use: ComputerUseRuntime | None = None
 capability_bus: CapabilityBus | None = None
 cua_backend: CuaBackend | None = None
@@ -932,6 +934,11 @@ class AgentPromptRequest(BaseModel):
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "version": "0.1.0"}
+
+
+@app.get("/api/sandbox/status")
+async def sandbox_status() -> dict[str, Any]:
+    return {"docker": await sandbox_manager.status()}
 
 
 @app.get("/api/runtime/observability")
@@ -5288,6 +5295,22 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     else:
         run.executor = str(data.get("executor", "atlas"))
         run.sandbox = data.get("sandbox")
+    if run.sandbox is not None and (
+        not isinstance(run.sandbox, dict) or run.sandbox.get("type") != "docker"
+        or not isinstance(run.sandbox.get("network", False), bool)
+        or (run.sandbox.get("image") is not None and not isinstance(run.sandbox.get("image"), str))
+    ):
+        invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation", "detail": "Docker 沙箱配置无效。",
+        }))
+        return
+    if run.sandbox and run.executor != "atlas":
+        invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation", "detail": "Docker 沙箱目前只支持 Atlas Agent 执行。",
+        }))
+        return
     if run.executor not in {"atlas", "codex", "claude", "hermes", "pi", "zcode"}:
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
         await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
@@ -5345,6 +5368,12 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             workspace = project_row["workspace_path"] if project_row else None
         except Exception:
             workspace = None
+    if run.sandbox and (not workspace or str(workspace).startswith("ssh://")):
+        invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation", "detail": "Docker 沙箱需要本机工作目录，不能与 ssh:// 同时使用。",
+        }))
+        return
     if workspace and str(workspace).startswith("ssh://"):
         try:
             host, remote_root = ssh_workspaces.parse_workspace(str(workspace))
@@ -5405,6 +5434,8 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                     }))
                     return
         run.workspace = str(workspace_path)
+        if run.sandbox:
+            run.allowed_paths = [str(workspace_path.resolve())]
         if memory is not None and getattr(memory, "_db", None) is not None and not (conversation and conversation.get("worktree_path")):
             await memory.update_conversation(conv_id, workspace=str(Path(workspace).expanduser().resolve()))
         context_files = data.get("context_files", [])
@@ -5776,9 +5807,12 @@ async def _execute_run(
         if event == "run.started":
             data = {
                 **data,
-                "environment": "ssh" if (workspace or "").startswith("ssh://") else "local",
+                "environment": "docker" if run.sandbox else
+                    "ssh" if (workspace or "").startswith("ssh://") else "local",
                 "executor": run.executor,
             }
+            if run.sandbox:
+                data["image"] = run.sandbox.get("image") or "python:3.12-slim"
             if (workspace or "").startswith("ssh://"):
                 with suppress(Exception):
                     data["host"] = ssh_workspaces.parse_workspace(workspace)[0]
@@ -5848,6 +5882,11 @@ async def _execute_run(
         })
 
     try:
+        if run.sandbox:
+            docker_status = await sandbox_manager.status()
+            if not docker_status["available"]:
+                raise RuntimeError(docker_status["detail"])
+            await sandbox_manager.start(run.run_id, workspace or "", run.sandbox)
         # Emit run.started
         if not continuation:
             await emit("run.started", {
@@ -6018,6 +6057,9 @@ async def _execute_run(
                 workspace, str(arguments.get("checkpoint_id", "")),
             )
 
+        async def sandbox_tool(run_id: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+            return await sandbox_manager.call_tool(run_id, name, arguments)
+
         async for event in orchestrator.run(
             message=content,
             conversation_id=run.conversation_id,
@@ -6044,6 +6086,8 @@ async def _execute_run(
             user_hook_callback=user_hook,
             ssh_tool_callback=ssh_tool,
             ssh_checkpoint_callback=ssh_checkpoint,
+            sandbox_tool_callback=sandbox_tool if run.sandbox else None,
+            sandbox_enabled=bool(run.sandbox),
             reasoning_effort=(run.reasoning_effort if _model_supports_reasoning(
                 {"litellm_model": model_id or run.model}
             ) else None),
@@ -6198,6 +6242,9 @@ async def _execute_run(
         )
         await emit("run.failed", {"category": "runtime", "detail": str(e)})
     finally:
+        if run.sandbox:
+            with suppress(Exception):
+                await sandbox_manager.stop(run.run_id)
         if run.ephemeral and run.ephemeral_source and memory is not None:
             with suppress(Exception):
                 await memory.delete_conversation(run.ephemeral_source)

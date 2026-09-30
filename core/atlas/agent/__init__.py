@@ -133,6 +133,8 @@ class AgentRunContext:
     user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None
     ssh_tool_callback: Callable[[str, dict[str, Any]], Any] | None = None
     ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None
+    sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None
+    sandbox_enabled: bool = False
     reasoning_effort: str | None = None
     subtask_started: Callable[..., Any] | None = None
     subtask_progress: Callable[..., Any] | None = None
@@ -1293,6 +1295,16 @@ class AgentOrchestrator:
                     )
                     result = {"data": {"results": results},
                               "content": [{"type": "text", "text": summary}], "is_error": False}
+                elif getattr(ctx, "sandbox_enabled", False) and (
+                    fn_name.startswith("computer_") or fn_name in {"web_search", "web_fetch"}
+                ):
+                    raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")
+                elif (getattr(ctx, "sandbox_tool_callback", None) and fn_name in {
+                    "local_shell", "local_exec", "local_git",
+                }):
+                    result = await ctx.sandbox_tool_callback(ctx.run_id or "", fn_name, fn_args)
+                elif getattr(ctx, "sandbox_enabled", False) and fn_name == "local_process":
+                    raise PermissionError("Docker 沙箱模式下不支持后台本机进程工具。")
                 elif fn_name.startswith("local_") and self._local_execution:
                     if ctx.mode == "plan":
                         action = str(fn_args.get("action", ""))
@@ -1337,6 +1349,8 @@ class AgentOrchestrator:
                             output_callback=report_process_output,
                         )
                 elif fn_name.startswith("computer_") and self._computer_use:
+                    if getattr(ctx, "sandbox_enabled", False):
+                        raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")
                     result = await self._computer_use.call_tool(fn_name, fn_args)
                 elif fn_name == "remember" and self._memory is not None:
                     result = await self._remember_result(
@@ -1347,6 +1361,8 @@ class AgentOrchestrator:
                 elif fn_name == "use_skill" and self._skills is not None:
                     result = await self._use_skill_result(str(fn_args.get("name", "")))
                 elif fn_name in {"web_search", "web_fetch"} and self._web is not None:
+                    if getattr(ctx, "sandbox_enabled", False):
+                        raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")
                     result = await self._web.call_tool(fn_name, fn_args)
                 elif fn_name == "session_search" and self._memory is not None:
                     results = await self._memory.session_search(
@@ -1362,6 +1378,8 @@ class AgentOrchestrator:
                         "is_error": False,
                     }
                 elif self._mcp:
+                    if getattr(ctx, "sandbox_enabled", False):
+                        raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")
                     result = await self._mcp.call_tool(fn_name, fn_args)
                 else:
                     raise RuntimeError("No executor is available for this tool")
@@ -1537,6 +1555,8 @@ class AgentOrchestrator:
         user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None,
         ssh_tool_callback: Callable[[str, dict[str, Any]], Any] | None = None,
         ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None,
+        sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None,
+        sandbox_enabled: bool = False,
         reasoning_effort: str | None = None,
         subtask_started: Callable[..., Any] | None = None,
         subtask_progress: Callable[..., Any] | None = None,
@@ -1579,6 +1599,8 @@ class AgentOrchestrator:
             user_hook_callback=user_hook_callback,
             ssh_tool_callback=ssh_tool_callback,
             ssh_checkpoint_callback=ssh_checkpoint_callback,
+            sandbox_tool_callback=sandbox_tool_callback,
+            sandbox_enabled=sandbox_enabled,
             reasoning_effort=reasoning_effort,
             subtask_started=subtask_started, subtask_progress=subtask_progress,
             subtask_completed=subtask_completed,

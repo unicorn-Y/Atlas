@@ -557,3 +557,115 @@ async def test_real_ssh_workspace_when_configured(monkeypatch) -> None:
         manager._remote_path(remote_root, "../outside")
     await manager.call_tool("local_file", {"action": "delete", "path": leaf}, workspace)
 
+
+@pytest.mark.asyncio
+async def test_docker_sandbox_mounts_workspace_disables_network_and_cleans_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+    from atlas.sandbox import DockerSandboxManager
+    import atlas.sandbox as sandbox_module
+
+    manager = DockerSandboxManager()
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        calls.append(command)
+        if command[1] == "run":
+            return SimpleNamespace(returncode=0, stdout="container-123\n", stderr="")
+        if command[1] == "exec":
+            return SimpleNamespace(returncode=0, stdout="/workspace/sub/file.py", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox_module.shutil, "which", lambda _name: "docker-mock")
+    monkeypatch.setattr(sandbox_module.subprocess, "run", fake_run)
+    await manager.start("run-1", str(tmp_path), {"type": "docker"})
+    start_args = calls[0]
+    assert "-v" in start_args and f"{tmp_path.resolve()}:/workspace" in start_args
+    assert start_args[start_args.index("--network") + 1] == "none"
+    result = await manager.call_tool("run-1", "local_exec", {
+        "executable": "python", "args": ["-V"], "cwd": str(tmp_path / "sub"),
+    })
+    assert "-w" in calls[1] and calls[1][calls[1].index("-w") + 1] == "/workspace/sub"
+    assert result["data"]["stdout"] == f"{tmp_path.resolve()}/sub/file.py"
+    await manager.stop("run-1")
+    assert calls[2][1:3] == ["rm", "-f"]
+    assert "run-1" not in manager._containers
+
+
+@pytest.mark.asyncio
+async def test_docker_sandbox_cleanup_runs_after_failure_or_cancellation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+    from atlas.sandbox import DockerSandboxManager
+    import atlas.sandbox as sandbox_module
+
+    manager = DockerSandboxManager()
+    removed: list[str] = []
+    fail_start = False
+
+    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        if command[1] == "run":
+            return SimpleNamespace(returncode=1 if fail_start else 0,
+                                   stdout="" if fail_start else "container-123", stderr="start failed")
+        if command[1] == "exec":
+            return SimpleNamespace(returncode=1, stdout="", stderr="command failed")
+        removed.append(command[-1])
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox_module.shutil, "which", lambda _name: "docker-mock")
+    monkeypatch.setattr(sandbox_module.subprocess, "run", fake_run)
+    await manager.start("failed", str(tmp_path), {"type": "docker"})
+    try:
+        await manager.call_tool("failed", "local_shell", {
+            "shell": "cmd", "command": "exit 1", "cwd": str(tmp_path),
+        })
+    finally:
+        await manager.stop("failed")
+    await manager.start("cancelled", str(tmp_path), {"type": "docker"})
+    try:
+        raise asyncio.CancelledError
+    except asyncio.CancelledError:
+        await manager.stop("cancelled")
+    assert removed == ["container-123", "container-123"]
+
+
+@pytest.mark.asyncio
+async def test_docker_sandbox_rejects_paths_outside_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+    from atlas.sandbox import DockerSandboxManager
+    import atlas.sandbox as sandbox_module
+
+    manager = DockerSandboxManager()
+    monkeypatch.setattr(sandbox_module.shutil, "which", lambda _name: "docker-mock")
+    monkeypatch.setattr(sandbox_module.subprocess, "run", lambda *_args, **_kwargs: SimpleNamespace(
+        returncode=0, stdout="container-123", stderr="",
+    ))
+    await manager.start("run", str(tmp_path), {"type": "docker"})
+    with pytest.raises(PermissionError, match="工作目录内"):
+        await manager.call_tool("run", "local_shell", {
+            "shell": "cmd", "command": "echo unsafe", "cwd": str(tmp_path.parent),
+        })
+
+
+@pytest.mark.asyncio
+async def test_agent_denies_computer_tools_in_docker_sandbox(tmp_path: Path) -> None:
+    from unittest.mock import AsyncMock
+
+    agent = AgentOrchestrator(MagicMock(), MagicMock())
+    runtime = SimpleNamespace(
+        cancel_event=None, pause_event=None, approval_callback=None,
+        event_queue=asyncio.Queue(), workspace=str(tmp_path), permission_mode="full_access",
+        allowed_paths=[str(tmp_path)], run_id="sandbox-run", conversation_id="conversation",
+        sandbox_enabled=True, sandbox_tool_callback=AsyncMock(), mode="act",
+    )
+    result = await agent._execute_tools_node({
+        "messages": [AIMessage(content="", tool_calls=[{
+            "name": "computer_click", "args": {"x": 10, "y": 20}, "id": "blocked-call",
+        }])],
+        "pending_events": [], "tool_rounds": 0, "runtime": runtime,
+    })
+    assert "Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。" in result["messages"][0].content
+    assert result["pending_events"][-1]["is_error"] is True
+

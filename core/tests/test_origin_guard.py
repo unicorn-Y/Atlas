@@ -174,6 +174,26 @@ async def test_office_preview_route_uses_origin_guard(tmp_path, monkeypatch):
     assert "content-security-policy" in allowed.headers
 
 
+@pytest.mark.asyncio
+async def test_sandbox_status_route_uses_origin_guard(monkeypatch):
+    from atlas import server
+    from atlas.server import app
+
+    monkeypatch.setattr(server.sandbox_manager, "status", lambda: _sandbox_status())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        denied = await client.get("/api/sandbox/status", headers={"Origin": EVIL})
+        allowed = await client.get("/api/sandbox/status", headers={
+            "Origin": "null", "X-Atlas-Api-Token": "test-atlas-api-token",
+        })
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    assert "docker" in allowed.json()
+
+
+async def _sandbox_status():
+    return {"available": False, "version": None, "detail": "测试环境"}
+
+
 def test_hub_control_api_refuses_web_pages():
     from atlas.runtime.hub import create_hub_app
 
