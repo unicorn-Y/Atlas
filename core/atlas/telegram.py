@@ -18,15 +18,24 @@ TOKEN_KEY = "atlas.telegram.bot_token"
 
 class KeyringCredentialStore:
     def get(self, key: str) -> str | None:
-        import keyring
+        try:
+            import keyring
+        except ImportError:
+            return None
         return keyring.get_password("Atlas", key)
 
     def set(self, key: str, value: str) -> None:
-        import keyring
+        try:
+            import keyring
+        except ImportError:
+            raise RuntimeError("系统凭据库不可用，请安装 Atlas 的完整依赖后重试。") from None
         keyring.set_password("Atlas", key, value)
 
     def delete(self, key: str) -> None:
-        import keyring
+        try:
+            import keyring
+        except ImportError:
+            return
         try:
             keyring.delete_password("Atlas", key)
         except keyring.errors.PasswordDeleteError:

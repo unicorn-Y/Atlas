@@ -397,6 +397,25 @@ async def test_telegram_approval_callback_is_bound_to_user_and_expires(tmp_path)
     assert future.result() == "allow"
 
 
+def test_keyring_store_degrades_without_echoing_or_persisting_secret(monkeypatch):
+    import builtins
+
+    from atlas.telegram import KeyringCredentialStore
+
+    original_import = builtins.__import__
+
+    def without_keyring(name, *args, **kwargs):
+        if name == "keyring":
+            raise ImportError("not installed")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_keyring)
+    store = KeyringCredentialStore()
+    assert store.get(TOKEN_KEY) is None
+    with pytest.raises(RuntimeError, match="系统凭据库"):
+        store.set(TOKEN_KEY, "secret")
+
+
 class DictCredentials:
     def __init__(self, values): self.values = values
     def get(self, key): return self.values.get(key)
