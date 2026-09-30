@@ -10,15 +10,16 @@ import { cn } from '../ui/cn';
 import { Empty } from './panels/Empty';
 import ChangesPanel from './panels/ChangesPanel';
 import FilesPanel from './panels/FilesPanel';
+import SpecsPanel from './panels/SpecsPanel';
 import TerminalPanel from './panels/TerminalPanel';
 import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
 import PullRequestSection from './panels/PullRequestSection';
 
-export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'terminal' | 'browser' | 'context';
+export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context';
 
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
-const WIDE: InspectorTab[] = ['changes', 'files', 'terminal', 'browser'];
+const WIDE: InspectorTab[] = ['changes', 'files', 'specs', 'terminal', 'browser'];
 const WIDTH_KEY = 'atlas.preference.inspector-width';
 const readWidth = () => { try { const value = Number(localStorage.getItem(WIDTH_KEY)); return value >= 300 ? value : null; } catch { return null; } };
 
@@ -96,7 +97,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
   const resize = useResizableWidth();
   const tabs: Array<[InspectorTab, string]> = [
-    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'],
+    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'],
   ];
   return <aside aria-label="任务面板" style={resize.width ? { width: resize.width } : undefined}
     className={cn('anim-fade relative flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)]', !resize.dragging && 'transition-[width] duration-200', !resize.width && (WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]'))}>
@@ -139,6 +140,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
       {tab === 'changes' && <ChangesPanel runId={run?.id} runStatus={run?.status} apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} onAsk={onAsk} />}
 
+      {tab === 'specs' && <SpecsPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onAsk={onAsk} />}
       {tab === 'files' && <FilesPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onPreview={onPreview} />}
 
       {terminalOpened && <div className={cn('h-full', tab !== 'terminal' && 'hidden')}>
