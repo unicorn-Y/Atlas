@@ -35,7 +35,10 @@ class ShadowGitCheckpointStore:
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local"))
         self.storage_dir = (storage_dir or base / "Atlas" / "checkpoints").resolve()
 
-    def create_checkpoint(self, workspace: str | Path, paths: list[str]) -> dict[str, Any]:
+    def create_checkpoint(
+        self, workspace: str | Path, paths: list[str], *,
+        run_id: str | None = None, conversation_id: str | None = None,
+    ) -> dict[str, Any]:
         root = Path(workspace).resolve()
         if not root.is_dir():
             raise ValueError("workspace must be an existing directory")
@@ -71,6 +74,7 @@ class ShadowGitCheckpointStore:
         manifest = {
             "id": checkpoint_id, "workspace": str(root),
             "created_at": datetime.now(UTC).isoformat(), "files": files,
+            "run_id": run_id, "conversation_id": conversation_id,
             "scopes": [{
                 "path": Path(relative).as_posix(), "directory": (root / relative).is_dir(),
             } for relative in paths],
@@ -109,7 +113,9 @@ class ShadowGitCheckpointStore:
         )
         return manifest
 
-    def list_checkpoints(self, workspace: str | Path | None = None) -> list[dict[str, Any]]:
+    def list_checkpoints(
+        self, workspace: str | Path | None = None, run_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         root = Path(workspace).resolve() if workspace is not None else None
         items = []
         if not self.storage_dir.is_dir():
@@ -119,9 +125,16 @@ class ShadowGitCheckpointStore:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
-            if root is None or Path(manifest["workspace"]).resolve() == root:
+            if ((root is None or Path(manifest["workspace"]).resolve() == root)
+                    and (run_id is None or manifest.get("run_id") == run_id)):
                 items.append({"id": manifest["id"], "workspace": manifest["workspace"],
                               "created_at": manifest["created_at"],
+                              "run_id": manifest.get("run_id"),
+                              "conversation_id": manifest.get("conversation_id"),
+                              "files": [{"path": item["path"],
+                                         "exists": bool(item.get("exists")),
+                                         "directory": bool(item.get("directory", False))}
+                                        for item in manifest["files"]],
                               "file_count": sum(not i.get("directory") for i in manifest["files"])})
         return items
 

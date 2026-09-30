@@ -91,6 +91,10 @@ class AgentRunContext:
     reminders: SystemReminders = field(default_factory=SystemReminders)
     maintenance_snapshot: dict[str, Any] | None = None
     maintenance_context: dict[str, Any] = field(default_factory=dict)
+    steer_queue: asyncio.Queue[dict[str, str]] | None = None
+    input_callback: Callable[[str, str, list[str] | None], Any] | None = None
+    workspace: str | None = None
+    mode: str = "act"
 
 
 _EVENT_STREAM_DONE = object()
@@ -303,13 +307,21 @@ class AgentOrchestrator:
             raise RuntimeError("No AgentBackendHost is configured for delegation")
         return await self._delegation.delegate_task(goal, context, tool_profile)
 
-    async def execute_code(self, code: str) -> dict[str, Any]:
-        return await self._codeact.execute(code)
+    async def execute_code(
+        self, code: str, *, run_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._codeact.execute(
+            code, run_id=run_id, conversation_id=conversation_id,
+        )
 
     async def compact_context(self, context: dict[str, Any]) -> dict[str, Any]:
         return await self.context_maintenance.compact(context)
 
-    def _checkpoint_path(self, raw_path: str, cwd: str | None = None) -> dict[str, Any]:
+    def _checkpoint_path(
+        self, raw_path: str, cwd: str | None = None,
+        run_id: str | None = None, conversation_id: str | None = None,
+    ) -> dict[str, Any]:
         path = Path(os.path.expandvars(os.path.expanduser(raw_path)))
         if not path.is_absolute():
             path = Path(cwd or Path.cwd()) / path
@@ -320,7 +332,9 @@ class AgentOrchestrator:
         if not root.is_dir():
             raise ValueError("no existing workspace directory for checkpoint")
         relative = path.relative_to(root).as_posix()
-        return self.checkpoints.create_checkpoint(root, [relative])
+        return self.checkpoints.create_checkpoint(
+            root, [relative], run_id=run_id, conversation_id=conversation_id,
+        )
 
     async def reflect_completed_task(
         self, *, conversation_id: str, goal: str, task_result: str,
@@ -509,6 +523,17 @@ class AgentOrchestrator:
                     }, "required": ["goal"], "additionalProperties": False},
                 },
             })
+        tools.append({
+            "type": "function", "function": {
+                "name": "ask_user",
+                "description": "Ask the user a question and wait for their reply.",
+                "parameters": {"type": "object", "properties": {
+                    "question": {"type": "string"},
+                    "options": {"type": ["array", "null"],
+                                "items": {"type": "string"}},
+                }, "required": ["question"], "additionalProperties": False},
+            },
+        })
         return tools
 
     async def _think_node(self, state: AgentState) -> dict[str, Any]:
@@ -517,6 +542,24 @@ class AgentOrchestrator:
         tools = self._model_facing_tools()
 
         runtime = state["runtime"]
+        if runtime.steer_queue is not None:
+            while not runtime.steer_queue.empty():
+                steer = runtime.steer_queue.get_nowait()
+                state["messages"].append(HumanMessage(content=steer["content"]))
+                await runtime.event_queue.put({
+                    "type": "run_steered", "content": steer["content"],
+                    "event_id": steer["event_id"],
+                })
+        if runtime.mode == "plan":
+            tools = [json.loads(json.dumps(item)) for item in tools
+                     if item["function"]["name"] in {
+                "local_file", "web_fetch",
+            }]
+            for item in tools:
+                if item["function"]["name"] == "local_file":
+                    item["function"]["parameters"]["properties"]["action"]["enum"] = [
+                        "read", "list", "glob", "search", "stat",
+                    ]
         goal = str(getattr(runtime, "goal", None) or state["messages"][-1].content)[:240]
         cfg = get_config()
         if getattr(runtime, "maintenance_snapshot", None) is None:
@@ -598,6 +641,7 @@ class AgentOrchestrator:
         events: list[dict[str, Any]] = []
         full_text = ""
         tool_fragments: dict[int, dict[str, str]] = {}
+        usage = None
 
         def get_value(value: Any, key: str, default: Any = None) -> Any:
             if isinstance(value, dict):
@@ -611,7 +655,13 @@ class AgentOrchestrator:
             )
             response = await acompletion(**kwargs, stream=True)
             async for chunk in response:
-                delta = chunk.choices[0].delta
+                chunk_usage = get_value(chunk, "usage")
+                if chunk_usage is not None:
+                    usage = chunk_usage
+                choices = get_value(chunk, "choices", []) or []
+                if not choices:
+                    continue
+                delta = get_value(choices[0], "delta")
                 content = get_value(delta, "content")
                 if content:
                     full_text += content
@@ -632,8 +682,15 @@ class AgentOrchestrator:
                     if function is not None:
                         aggregate["name"] += get_value(function, "name", "") or ""
                         aggregate["arguments"] += get_value(function, "arguments", "") or ""
-                if get_value(chunk.choices[0], "finish_reason") is not None:
-                    break
+                # Continue consuming the stream so providers that send a final
+                # usage-only chunk are observed after finish_reason.
+            if event_queue is not None:
+                await event_queue.put({"type": "run_usage", "usage": {
+                    "input_tokens": get_value(usage, "prompt_tokens"),
+                    "output_tokens": get_value(usage, "completion_tokens"),
+                    "context_tokens": get_value(usage, "total_tokens"),
+                    "context_limit": None, "model": litellm_model,
+                }})
         except Exception as exc:
             await self._emit_hook(runtime, "after_model", model=litellm_model, error=str(exc))
             has_image = any(
@@ -786,6 +843,7 @@ class AgentOrchestrator:
                 if fn_name == "create_checkpoint":
                     data = self.checkpoints.create_checkpoint(
                         str(fn_args["workspace"]), list(fn_args["paths"]),
+                        run_id=ctx.run_id, conversation_id=ctx.conversation_id,
                     )
                     result = {"data": data, "content": [{"type": "text", "text": json.dumps(
                         data, ensure_ascii=False,
@@ -801,11 +859,22 @@ class AgentOrchestrator:
                         data, ensure_ascii=False,
                     )}], "is_error": False}
                 elif fn_name == "execute_code":
-                    result = {"data": await self.execute_code(str(fn_args.get("code", "")))}
+                    result = {"data": await self.execute_code(
+                        str(fn_args.get("code", "")), run_id=ctx.run_id,
+                        conversation_id=ctx.conversation_id,
+                    )}
                     result["content"] = [{"type": "text", "text": json.dumps(
                         result["data"], ensure_ascii=False,
                     )}]
                     result["is_error"] = result["data"].get("exit_code") != 0
+                elif fn_name == "ask_user" and ctx.input_callback:
+                    answer = await ctx.input_callback(
+                        tc_id, str(fn_args.get("question", "")),
+                        fn_args.get("options"),
+                    )
+                    result = {"data": {"answer": answer},
+                              "content": [{"type": "text", "text": str(answer)}],
+                              "is_error": False}
                 elif fn_name == "delegate_task":
                     result = {"data": await self.delegate_task(
                         str(fn_args["goal"]), fn_args.get("context"), fn_args.get("tool_profile"),
@@ -815,6 +884,14 @@ class AgentOrchestrator:
                     )}]
                     result["is_error"] = False
                 elif fn_name.startswith("local_") and self._local_execution:
+                    if ctx.mode == "plan":
+                        action = str(fn_args.get("action", ""))
+                        if fn_name != "local_file" or action not in {
+                            "read", "list", "glob", "search", "stat",
+                        }:
+                            raise PermissionError("Plan mode only allows read-only tools")
+                    if ctx.workspace:
+                        fn_args.setdefault("cwd", ctx.workspace)
                     if fn_name == "local_edit" or (
                         fn_name == "local_file" and fn_args.get("action") in {
                             "write", "append", "mkdir", "copy", "move", "delete",
@@ -823,12 +900,14 @@ class AgentOrchestrator:
                         try:
                             checkpoint = self._checkpoint_path(
                                 str(fn_args["path"]), fn_args.get("cwd"),
+                                ctx.run_id, ctx.conversation_id,
                             )
                             if fn_args.get("destination") and fn_args["action"] in {
                                 "copy", "move",
                             }:
                                 self._checkpoint_path(
                                     str(fn_args["destination"]), fn_args.get("cwd"),
+                                    ctx.run_id, ctx.conversation_id,
                                 )
                             await ctx.event_queue.put({
                                 "type": "checkpoint_created", "checkpoint": checkpoint,
@@ -1000,6 +1079,11 @@ class AgentOrchestrator:
         image_attachments: list[str] | None = None,
         active_skill_instructions: list[dict[str, str]] | None = None,
         run_id: str | None = None,
+        steer_queue: asyncio.Queue[dict[str, str]] | None = None,
+        input_callback: Callable[[str, str, list[str] | None], Any] | None = None,
+        workspace: str | None = None,
+        workspace_rules: list[dict[str, Any]] | None = None,
+        mode: str = "act",
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -1030,6 +1114,8 @@ class AgentOrchestrator:
             goal=message,
             conversation_id=conversation_id,
             reminders=SystemReminders(self.reminder_policy),
+            steer_queue=steer_queue, input_callback=input_callback,
+            workspace=workspace, mode=mode,
         )
 
         # Resolve model
@@ -1182,6 +1268,17 @@ class AgentOrchestrator:
             return
 
         initial_messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
+        if mode == "plan":
+            initial_messages.append(SystemMessage(content=(
+                "You are in read-only Plan mode. Inspect as needed, then return a concrete "
+                "implementation plan. Do not modify files or execute commands."
+            )))
+        for rule in workspace_rules or []:
+            initial_messages.append(SystemMessage(content=(
+                f"Workspace instructions from {rule['path']} ({rule['bytes']} bytes):\n"
+                f"{rule['content']}"
+                + ("\n[truncated at 64 KB]" if rule.get("truncated") else "")
+            )))
         for skill in active_skill_instructions or []:
             initial_messages.append(SystemMessage(content=(
                 f"Activated Atlas Skill: {skill['name']}@{skill['version']}. "

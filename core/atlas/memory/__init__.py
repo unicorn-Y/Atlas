@@ -125,7 +125,10 @@ class MemoryStore:
                 title TEXT NOT NULL DEFAULT 'New Conversation',
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-                metadata TEXT DEFAULT '{}'
+                metadata TEXT DEFAULT '{}',
+                pinned INTEGER NOT NULL DEFAULT 0,
+                archived INTEGER NOT NULL DEFAULT 0,
+                workspace TEXT
             );
 
             -- Messages
@@ -144,9 +147,7 @@ class MemoryStore:
 
             -- Full-text search on messages
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-                content,
-                content=messages,
-                content_rowid=rowid
+                content, content=messages, content_rowid=rowid
             );
 
             -- Triggers to keep FTS in sync
@@ -623,6 +624,42 @@ class MemoryStore:
             await self._db.execute(
                 "ALTER TABLE memory_self_steering_reports ADD COLUMN reviewed_at TEXT"
             )
+        cursor = await self._db.execute("PRAGMA table_info(conversations)")
+        conversation_columns = {row["name"] for row in await cursor.fetchall()}
+        for name, declaration in (("pinned", "INTEGER NOT NULL DEFAULT 0"),
+                                  ("archived", "INTEGER NOT NULL DEFAULT 0"),
+                                  ("workspace", "TEXT")):
+            if name not in conversation_columns:
+                await self._db.execute(
+                    f"ALTER TABLE conversations ADD COLUMN {name} {declaration}"
+                )
+        cursor = await self._db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='messages_fts'"
+        )
+        fts_sql = (await cursor.fetchone())["sql"] or ""
+        if "trigram" not in fts_sql.casefold():
+            await self._db.executescript("""
+                DROP TRIGGER IF EXISTS messages_ai;
+                DROP TRIGGER IF EXISTS messages_ad;
+                DROP TRIGGER IF EXISTS messages_au;
+                DROP TABLE IF EXISTS messages_fts;
+                CREATE VIRTUAL TABLE messages_fts USING fts5(
+                    content, content=messages, content_rowid=rowid, tokenize='trigram'
+                );
+                INSERT INTO messages_fts(messages_fts) VALUES ('rebuild');
+                CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
+                    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+                END;
+                CREATE TRIGGER messages_ad AFTER DELETE ON messages BEGIN
+                    INSERT INTO messages_fts(messages_fts, rowid, content)
+                    VALUES ('delete', old.rowid, old.content);
+                END;
+                CREATE TRIGGER messages_au AFTER UPDATE ON messages BEGIN
+                    INSERT INTO messages_fts(messages_fts, rowid, content)
+                    VALUES ('delete', old.rowid, old.content);
+                    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+                END;
+            """)
         await self._db.commit()
 
     # ----- Conversations -----
@@ -640,12 +677,13 @@ class MemoryStore:
     async def list_conversations(self, limit: int = 50) -> list[dict[str, Any]]:
         assert self._db is not None
         cursor = await self._db.execute(
-            "SELECT id, title, created_at, updated_at FROM conversations "
-            "ORDER BY updated_at DESC LIMIT ?",
+            "SELECT id, title, created_at, updated_at, pinned, archived, workspace "
+            "FROM conversations ORDER BY pinned DESC, updated_at DESC LIMIT ?",
             (limit,),
         )
         rows = await cursor.fetchall()
-        return [dict(r) for r in rows]
+        return [{**dict(r), "pinned": bool(r["pinned"]),
+                 "archived": bool(r["archived"])} for r in rows]
 
     async def get_conversation_messages(
         self, conversation_id: str, limit: int = 100
@@ -715,15 +753,26 @@ class MemoryStore:
     ) -> list[dict[str, Any]]:
         """Full-text search across all messages."""
         assert self._db is not None
-        cursor = await self._db.execute(
-            "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, "
-            "       highlight(messages_fts, 0, '<b>', '</b>') AS snippet "
-            "FROM messages_fts "
-            "JOIN messages m ON messages_fts.rowid = m.rowid "
-            "WHERE messages_fts MATCH ? "
-            "ORDER BY rank LIMIT ?",
-            (query, limit),
-        )
+        normalized = query.strip()
+        if not normalized:
+            return []
+        if len(normalized) < 3:
+            cursor = await self._db.execute(
+                "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, "
+                "c.title, substr(m.content, 1, 200) AS snippet "
+                "FROM messages m JOIN conversations c ON c.id=m.conversation_id "
+                "WHERE m.content LIKE ? ORDER BY m.created_at DESC LIMIT ?",
+                (f"%{normalized}%", limit),
+            )
+        else:
+            cursor = await self._db.execute(
+                "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, "
+                "c.title, highlight(messages_fts, 0, '<b>', '</b>') AS snippet "
+                "FROM messages_fts JOIN messages m ON messages_fts.rowid = m.rowid "
+                "JOIN conversations c ON c.id=m.conversation_id "
+                "WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?",
+                (f'"{normalized.replace(chr(34), chr(34) * 2)}"', limit),
+            )
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
@@ -3710,25 +3759,85 @@ class MemoryStore:
         """Return a single conversation by ID, or None."""
         assert self._db is not None
         cursor = await self._db.execute(
-            "SELECT id, title, created_at, updated_at, metadata "
+            "SELECT id, title, created_at, updated_at, metadata, pinned, archived, workspace "
             "FROM conversations WHERE id = ?",
             (conversation_id,),
         )
         row = await cursor.fetchone()
         return dict(row) if row else None
 
-    async def update_conversation_title(
-        self, conversation_id: str, title: str
+    async def update_conversation(
+        self, conversation_id: str, *, title: str | None = None,
+        pinned: bool | None = None, archived: bool | None = None,
+        workspace: str | None = None,
     ) -> bool:
-        """Update a conversation's title. Returns True if found."""
+        """Update optional conversation fields. Returns True if found."""
         assert self._db is not None
+        fields = {"title": title, "pinned": None if pinned is None else int(pinned),
+                  "archived": None if archived is None else int(archived),
+                  "workspace": workspace}
+        if not any(value is not None for value in fields.values()):
+            cursor = await self._db.execute(
+                "SELECT 1 FROM conversations WHERE id=?", (conversation_id,)
+            )
+            return await cursor.fetchone() is not None
+        updates = ", ".join(f"{key}=?" for key, value in fields.items()
+                             if value is not None)
+        values = [value for value in fields.values() if value is not None]
         cursor = await self._db.execute(
-            "UPDATE conversations SET title = ?, updated_at = datetime('now') "
-            "WHERE id = ?",
-            (title, conversation_id),
+            f"UPDATE conversations SET {updates}, updated_at=datetime('now') WHERE id=?",
+            (*values, conversation_id),
         )
         await self._db.commit()
         return cursor.rowcount > 0
+
+    async def update_conversation_title(self, conversation_id: str, title: str) -> bool:
+        return await self.update_conversation(conversation_id, title=title)
+
+    async def truncate_conversation(self, conversation_id: str, message_id: str) -> bool:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT rowid FROM messages WHERE conversation_id=? AND id=?",
+            (conversation_id, message_id),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return False
+        await self._db.execute(
+            "DELETE FROM messages WHERE conversation_id=? AND rowid>=?",
+            (conversation_id, row["rowid"]),
+        )
+        await self._db.execute(
+            "UPDATE conversations SET updated_at=datetime('now') WHERE id=?",
+            (conversation_id,),
+        )
+        await self._db.commit()
+        return True
+
+    async def fork_conversation(
+        self, conversation_id: str, through_message_id: str,
+    ) -> dict[str, Any] | None:
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT rowid FROM messages WHERE conversation_id=? AND id=?",
+            (conversation_id, through_message_id),
+        )
+        boundary = await cursor.fetchone()
+        source = await self.get_conversation(conversation_id)
+        if not boundary or not source:
+            return None
+        fork_id = await self.create_conversation(f"{source['title']} (fork)")
+        rows = await self._db.execute_fetchall(
+            "SELECT role, content, metadata FROM messages WHERE conversation_id=? AND rowid<=? "
+            "ORDER BY rowid", (conversation_id, boundary["rowid"]),
+        )
+        for row in rows:
+            try:
+                metadata = json.loads(row["metadata"] or "{}")
+            except (TypeError, json.JSONDecodeError):
+                metadata = {}
+            await self.save_message(fork_id, row["role"], row["content"], metadata)
+        return {**(await self.get_conversation(fork_id) or {}), "files_shared": True}
 
     async def delete_conversation(self, conversation_id: str) -> bool:
         """Delete a conversation and all its messages. Returns True if found."""

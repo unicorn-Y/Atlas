@@ -162,14 +162,17 @@ class AtlasToolBridge:
         self.local, self.computer, self.mcp = local, computer, mcp
         self.checkpoints = checkpoints
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any], *,
+        run_id: str | None = None, conversation_id: str | None = None,
+    ) -> dict[str, Any]:
         if name.startswith("local_") and self.local is not None:
             if (name == "local_edit" or (
                 name == "local_file" and arguments.get("action") in {
                     "write", "append", "mkdir", "copy", "move", "delete",
                 }
             )) and self.checkpoints is not None:
-                self._checkpoint_file_targets(arguments)
+                self._checkpoint_file_targets(arguments, run_id, conversation_id)
             return await self.local.call_tool(name, arguments)
         if name.startswith("computer_") and self.computer is not None:
             return await self.computer.call_tool(name, arguments)
@@ -177,7 +180,10 @@ class AtlasToolBridge:
             return await self.mcp.call_tool(name, arguments)
         raise RuntimeError(f"No Atlas tool runtime for {name}")
 
-    def _checkpoint_file_targets(self, arguments: dict[str, Any]) -> None:
+    def _checkpoint_file_targets(
+        self, arguments: dict[str, Any], run_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> None:
         cwd = Path(arguments.get("cwd") or Path.cwd())
         targets = [arguments.get("path")]
         if arguments.get("destination") and arguments.get("action") in {"copy", "move"}:
@@ -195,7 +201,10 @@ class AtlasToolBridge:
             if root.is_dir():
                 relative = target.relative_to(root).as_posix()
                 try:
-                    self.checkpoints.create_checkpoint(root, [relative])
+                    self.checkpoints.create_checkpoint(
+                        root, [relative], run_id=run_id,
+                        conversation_id=conversation_id,
+                    )
                 except Exception as exc:
                     log.warning("agent.checkpoint.failed", path=str(target), error=str(exc))
 
@@ -207,7 +216,10 @@ class CodeActRuntime:
         self.bridge = bridge
         self.timeout = max(0.1, min(timeout, 120.0))
 
-    async def execute(self, code: str) -> dict[str, Any]:
+    async def execute(
+        self, code: str, *, run_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> dict[str, Any]:
         if not isinstance(code, str) or not code.strip():
             raise ValueError("code must be non-empty text")
         token = secrets.token_urlsafe(24)
@@ -224,6 +236,7 @@ class CodeActRuntime:
                     raise PermissionError("invalid bridge token")
                 result = await self.bridge.call_tool(
                     str(request["name"]), dict(request.get("arguments", {})),
+                    run_id=run_id, conversation_id=conversation_id,
                 )
                 payload = json.dumps(result, ensure_ascii=False, default=str).encode("utf-8")
                 response_body = len(payload).to_bytes(4, "big") + payload

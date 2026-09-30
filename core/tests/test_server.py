@@ -75,7 +75,7 @@ class TestRuntimeProtocol:
         resp = await client.get("/api/runtime/protocol")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["version"] == "1.2"
+        assert data["version"] == "1.3"
 
     async def test_run_metadata_survives_manager_restart(self, tmp_path) -> None:
         from atlas.server import RunState, RuntimeManager
@@ -1467,6 +1467,292 @@ class TestWebSocketProtocol:
                 await asyncio.gather(task.task, return_exceptions=True)
             server.runtime_mgr.conn_runs.pop("first-connection", None)
             server.runtime_mgr.conn_runs.pop("second-connection", None)
+
+
+class TestBackendParityWave1:
+    async def test_steer_queues_for_next_model_turn_and_rejects_finished_run(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from langchain_core.messages import HumanMessage
+        from atlas.agent import AgentOrchestrator, AgentRunContext
+
+        run = server.RunState("steer-run", "conv", "model")
+        assert server._queue_run_steer(run, "change direction", "event-1") is None
+        model_requests = []
+        class Stream:
+            def __aiter__(self):
+                async def chunks():
+                    yield SimpleNamespace(
+                        choices=[SimpleNamespace(
+                            delta=SimpleNamespace(content="ok", tool_calls=[]),
+                            finish_reason="stop",
+                        )], usage=None,
+                    )
+                return chunks()
+        async def completion(**kwargs):
+            model_requests.append(kwargs)
+            return Stream()
+        from atlas import agent as agent_module
+        original = agent_module.acompletion
+        agent_module.acompletion = completion
+        try:
+            agent = object.__new__(AgentOrchestrator)
+            agent._model_mgr = SimpleNamespace(current_litellm_model="test-model")
+            agent._model_facing_tools = lambda: []
+            agent._to_litellm_messages = lambda messages: [
+                {"role": "user", "content": item.content} for item in messages
+            ]
+            agent.context_maintenance = SimpleNamespace(should_compact=lambda *a, **k: False)
+            agent._emit_hook = AsyncMock()
+            context = AgentRunContext(
+                goal="original", steer_queue=run.steer_queue,
+                maintenance_snapshot=None, maintenance_context={},
+            )
+            await agent._think_node({
+                "messages": [HumanMessage(content="original")], "pending_events": [],
+                "tool_rounds": 1, "runtime": context,
+            })
+        finally:
+            agent_module.acompletion = original
+        assert model_requests[0]["messages"][-1]["content"] == "change direction"
+        assert (await context.event_queue.get())["type"] == "run_steered"
+        run.status = "completed"
+        assert server._queue_run_steer(run, "too late", "event-2") == "run_not_active"
+
+    async def test_ask_user_event_waits_for_a_response(self, monkeypatch) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        class Socket:
+            def __init__(self) -> None:
+                self.events = []
+            async def send_json(self, event): self.events.append(event)
+
+        async def ask_then_finish(**kwargs):
+            answer = await kwargs["input_callback"]("ask-call", "Choose a path", ["A", "B"])
+            assert answer == "A"
+            yield {"type": "done"}
+
+        socket = Socket()
+        run = server.RunState("ask-user-run", "ask-user-conv", "model")
+        memory_mock = SimpleNamespace(
+            save_message=AsyncMock(), record_agent_reflection=AsyncMock(),
+            mark_agent_reflections_recovered=AsyncMock(),
+        )
+        monkeypatch.setattr(server, "memory", memory_mock)
+        monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=ask_then_finish))
+        monkeypatch.setitem(server.runtime_mgr.connections, "ask-user-conn", socket)
+        monkeypatch.setitem(server.runtime_mgr.runs, run.run_id, run)
+        task = asyncio.create_task(server._execute_run(
+            "ask-user-conn", run, "question", None,
+        ))
+        try:
+            for _ in range(50):
+                required = next((item for item in socket.events
+                                 if item["event"] == "input.required"), None)
+                if required:
+                    break
+                await asyncio.sleep(0.02)
+            assert required is not None
+            assert required["data"]["options"] == ["A", "B"]
+            run.input_futures[required["data"]["event_id"]].set_result("A")
+            await task
+            assert run.status == "completed"
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            server.runtime_mgr.connections.pop("ask-user-conn", None)
+            server.runtime_mgr.runs.pop(run.run_id, None)
+
+    async def test_conversation_pin_archive_and_optional_title(self, client: AsyncClient) -> None:
+        created = await client.post("/api/conversations", json={"title": "Kept title"})
+        conversation_id = created.json()["id"]
+        updated = await client.put(f"/api/conversations/{conversation_id}", json={
+            "pinned": True, "archived": True,
+        })
+        assert updated.status_code == 200
+        row = next(item for item in (await client.get("/api/conversations")).json()
+                   if item["id"] == conversation_id)
+        assert (row["title"], row["pinned"], row["archived"]) == ("Kept title", True, True)
+        assert (await client.put("/api/conversations/missing", json={"pinned": True})).status_code == 404
+
+    async def test_checkpoint_diff_and_invalid_run_filter(self, client: AsyncClient, tmp_path: Path) -> None:
+        workspace = tmp_path / "diff-workspace"
+        workspace.mkdir()
+        file = workspace / "note.txt"
+        file.write_text("before\n", encoding="utf-8")
+        store = server.orchestrator.checkpoints
+        baseline = store.create_checkpoint(
+            workspace, ["note.txt"], run_id="diff-run", conversation_id="diff-conv",
+        )
+        file.write_text("after\n", encoding="utf-8")
+        listed = await client.get("/api/checkpoints", params={"run_id": "diff-run"})
+        assert listed.status_code == 200
+        assert listed.json()[0]["run_id"] == "diff-run"
+        changes = (await client.get("/api/runs/diff-run/changes")).json()
+        assert changes["files"][0]["status"] == "modified"
+        assert "+after" in changes["files"][0]["diff"]
+        assert (await client.get("/api/checkpoints", params={"workspace": "<invalid>"})).status_code == 200
+
+    async def test_process_endpoints_read_output_kill_and_404(self, client: AsyncClient, tmp_path: Path) -> None:
+        import sys
+        runtime = server.local_execution
+        started = await runtime.call_tool("local_exec", {
+            "executable": sys.executable,
+            "args": ["-c", "import time; print('process-output', flush=True); time.sleep(30)"],
+            "cwd": str(tmp_path), "detached": True,
+        }, run_id="process-test")
+        process_id = started["data"]["execution_id"]
+        assert any(item["id"] == process_id for item in (await client.get("/api/processes")).json())
+        await asyncio.sleep(0.2)
+        output = await client.get(f"/api/processes/{process_id}/output")
+        assert "process-output" in output.json()["output"]
+        assert (await client.post(f"/api/processes/{process_id}/kill")).status_code == 200
+        assert (await client.get("/api/processes/unknown/output")).status_code == 404
+
+    async def test_terminal_returns_explicit_missing_dependency_error(self, tmp_path: Path, monkeypatch) -> None:
+        import builtins
+
+        class Socket:
+            def __init__(self) -> None:
+                self.events = []
+                self.closed = None
+            async def accept(self): pass
+            async def send_json(self, value): self.events.append(value)
+            async def close(self, code): self.closed = code
+
+        socket = Socket()
+        original_import = builtins.__import__
+        def no_winpty(name, *args, **kwargs):
+            if name == "winpty":
+                raise ImportError("missing test dependency")
+            return original_import(name, *args, **kwargs)
+        monkeypatch.setattr(builtins, "__import__", no_winpty)
+        await server.ws_terminal(socket, cwd=str(tmp_path))
+        assert socket.events == [{"type": "error", "error": "pywinpty is not installed"}]
+        assert socket.closed == 1011
+
+    async def test_workspace_tree_file_and_path_escape(self, client: AsyncClient, tmp_path: Path) -> None:
+        root = tmp_path / "workspace"
+        root.mkdir()
+        (root / "hello.txt").write_text("hello", encoding="utf-8")
+        (root / ".git").mkdir()
+        tree = await client.get("/api/workspace/tree", params={"root": str(root)})
+        assert [entry["name"] for entry in tree.json()["entries"]] == ["hello.txt"]
+        file = await client.get("/api/workspace/file", params={"root": str(root), "path": "hello.txt"})
+        assert file.json()["content"] == "hello"
+        escaped = await client.get("/api/workspace/file", params={
+            "root": str(root), "path": "../outside.txt",
+        })
+        assert escaped.status_code == 400
+
+    async def test_usage_sum_manual_compact_and_missing_conversation(self, client: AsyncClient) -> None:
+        total = server._sum_usage([
+            {"input_tokens": 2, "output_tokens": 3, "context_tokens": 5,
+             "context_limit": None, "model": "m"},
+            {"input_tokens": 4, "output_tokens": 1, "context_tokens": 5,
+             "context_limit": None, "model": "m"},
+        ])
+        assert total["input_tokens"] == 6 and total["output_tokens"] == 4
+        created = await client.post("/api/conversations", json={})
+        conv_id = created.json()["id"]
+        await server.memory.save_message(conv_id, "user", "A compactable conversation")
+        compacted = await client.post(f"/api/conversations/{conv_id}/compact")
+        assert compacted.status_code == 200 and compacted.json()["before_tokens"] > 0
+        assert (await client.post("/api/conversations/missing/compact")).status_code == 404
+
+    async def test_workspace_rules_list_present_and_missing_roots(self, client: AsyncClient, tmp_path: Path) -> None:
+        root = tmp_path / "rules-root"
+        root.mkdir()
+        (root / "AGENTS.md").write_text("Keep changes small", encoding="utf-8")
+        result = (await client.get("/api/workspace/rules", params={"root": str(root)})).json()
+        assert any(item["content"] == "Keep changes small" for item in result["files"])
+        assert (await client.get("/api/workspace/rules", params={"root": str(root / "missing")})).status_code == 200
+
+    async def test_file_attachment_inline_and_invalid_base64(self, tmp_path: Path) -> None:
+        content, paths = server._validated_file_attachments([{
+            "name": "notes.md", "mime": "text/markdown",
+            "data_base64": "SGVsbG8=",
+        }], "attach-run", "question")
+        assert "Hello" in content and paths == []
+        with pytest.raises(ValueError, match="invalid base64"):
+            server._validated_file_attachments([{
+                "name": "bad.txt", "mime": "text/plain", "data_base64": "%%%",
+            }], "attach-run", "question")
+
+    async def test_plan_tool_allowlist_and_validation(self) -> None:
+        tools = [
+            {"type": "function", "function": {"name": "local_file", "parameters": {
+                "properties": {"action": {"enum": ["read", "write", "delete"]}},
+            }}},
+            {"type": "function", "function": {"name": "local_shell", "parameters": {}}},
+            {"type": "function", "function": {"name": "web_fetch", "parameters": {}}},
+        ]
+        allowed = server._plan_mode_tools(tools)
+        assert [item["function"]["name"] for item in allowed] == ["local_file", "web_fetch"]
+        assert allowed[0]["function"]["parameters"]["properties"]["action"]["enum"] == [
+            "read", "list", "glob", "search", "stat",
+        ]
+        assert len(tools) == 3
+
+    async def test_fork_truncate_and_missing_message(self, client: AsyncClient) -> None:
+        conv_id = (await client.post("/api/conversations", json={"title": "Branch"})).json()["id"]
+        first = await server.memory.save_message(conv_id, "user", "first")
+        second = await server.memory.save_message(conv_id, "assistant", "second")
+        fork = await client.post(f"/api/conversations/{conv_id}/fork", json={
+            "through_message_id": first,
+        })
+        assert fork.status_code == 201 and fork.json()["files_shared"] is True
+        forked_messages = await client.get(f"/api/conversations/{fork.json()['id']}/messages")
+        assert [item["content"] for item in forked_messages.json()] == ["first"]
+        truncated = await client.post(f"/api/conversations/{conv_id}/truncate", json={
+            "from_message_id": second,
+        })
+        assert truncated.status_code == 200
+        assert (await client.get(f"/api/conversations/{conv_id}/messages")).json()[0]["content"] == "first"
+        assert (await client.post(f"/api/conversations/{conv_id}/fork", json={
+            "through_message_id": "absent",
+        })).status_code == 404
+
+    async def test_chinese_trigram_and_short_like_search(self, client: AsyncClient) -> None:
+        conv_id = (await client.post("/api/conversations", json={"title": "中文会话"})).json()["id"]
+        await server.memory.save_message(conv_id, "user", "请记住工作区规则注入")
+        long_query = await client.get("/api/search", params={"q": "工作区规则"})
+        short_query = await client.get("/api/search", params={"q": "规则"})
+        assert long_query.status_code == short_query.status_code == 200
+        assert long_query.json()[0]["title"] == "中文会话"
+        assert short_query.json()
+
+    async def test_run_workspace_saved_and_invalid_mode_rejected(
+        self, client: AsyncClient, tmp_path: Path, monkeypatch,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        workspace = tmp_path / "run-workspace"
+        workspace.mkdir()
+        (workspace / "AGENTS.md").write_text("Use tests", encoding="utf-8")
+        conv_id = await server.memory.create_conversation("Workspace session")
+        monkeypatch.setattr(server, "model_mgr", SimpleNamespace(current_model="test-model"))
+        async def do_nothing(*args, **kwargs): return None
+        monkeypatch.setattr(server, "_execute_run", do_nothing)
+        run_id = "workspace-run-test"
+        await server._handle_run_start("workspace-test-conn", {
+            "run_id": run_id, "conversation_id": conv_id, "content": "hello",
+            "workspace": str(workspace), "mode": "act",
+        })
+        assert (await server.memory.get_conversation(conv_id))["workspace"] == str(workspace)
+        await asyncio.sleep(0)
+        assert (await server.memory.get_conversation(conv_id))["workspace"] == str(workspace)
+        send = AsyncMock()
+        monkeypatch.setattr(server.runtime_mgr, "send", send)
+        await server._handle_run_start("invalid-mode-conn", {
+            "run_id": "invalid-mode-test", "conversation_id": conv_id,
+            "content": "hello", "mode": "unknown",
+        })
+        assert any(call.args[1]["event"] == "run.failed" for call in send.await_args_list)
 
     async def test_resume_of_missing_run_emits_terminal_failure(self, monkeypatch) -> None:
         from atlas import server

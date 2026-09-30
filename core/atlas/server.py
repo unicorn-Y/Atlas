@@ -826,7 +826,9 @@ class ConnectionTestRequest(BaseModel):
 
 
 class ConversationUpdateRequest(BaseModel):
-    title: str
+    title: str | None = None
+    pinned: bool | None = None
+    archived: bool | None = None
 
 
 class ConversationCreateRequest(BaseModel):
@@ -1087,10 +1089,53 @@ async def update_conversation(
 ) -> dict[str, str]:
     """Update a conversation's title."""
     assert memory is not None
-    ok = await memory.update_conversation_title(conversation_id, req.title)
+    ok = await memory.update_conversation(
+        conversation_id, title=req.title, pinned=req.pinned, archived=req.archived,
+    )
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"status": "ok", "conversation_id": conversation_id}
+
+
+@app.post("/api/conversations/{conversation_id}/truncate")
+async def truncate_conversation(conversation_id: str, req: dict[str, Any]) -> dict[str, str]:
+    assert memory is not None
+    message_id = str(req.get("from_message_id", ""))
+    if not message_id:
+        raise HTTPException(status_code=400, detail="from_message_id is required")
+    if not await memory.truncate_conversation(conversation_id, message_id):
+        raise HTTPException(status_code=404, detail="Conversation or message not found")
+    return {"status": "ok", "conversation_id": conversation_id}
+
+
+@app.post("/api/conversations/{conversation_id}/fork", status_code=201)
+async def fork_conversation(conversation_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    assert memory is not None
+    message_id = str(req.get("through_message_id", ""))
+    result = await memory.fork_conversation(conversation_id, message_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Conversation or message not found")
+    return result
+
+
+@app.post("/api/conversations/{conversation_id}/compact")
+async def compact_conversation(conversation_id: str) -> dict[str, Any]:
+    assert memory is not None and orchestrator is not None
+    conv = await memory.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    messages = await memory.get_conversation_messages(conversation_id, limit=1000)
+    before = sum(max(1, len(item["content"]) // 4) for item in messages)
+    context = {
+        "goal": conv["title"],
+        "session_summary": "\n".join(
+            f"{item['role']}: {item['content'][:1000]}" for item in messages[-20:]
+        ),
+    }
+    snapshot = await orchestrator.context_maintenance.compact(context)
+    summary = str(snapshot.get("session_summary", ""))
+    return {"before_tokens": before, "after_tokens": max(1, len(summary) // 4),
+            "summary": summary}
 
 
 @app.delete("/api/conversations/{conversation_id}")
@@ -1206,6 +1251,321 @@ async def search_messages(
     """Full-text search across all messages."""
     assert memory is not None
     return await memory.search(q, limit=limit)
+
+
+_WORKSPACE_IGNORES = {".git", "node_modules", ".venv", "__pycache__"}
+_RULE_FILES = ("AGENTS.md", "CLAUDE.md", ".atlas/rules.md")
+_LOADED_RULE_WORKSPACES: set[str] = set()
+
+
+def _validated_file_attachments(
+    value: Any, run_id: str, content: str,
+) -> tuple[str, list[str]]:
+    if value is None:
+        return content, []
+    if not isinstance(value, list):
+        raise ValueError("files must be an array")
+    total = 0
+    inlined: list[str] = []
+    stored: list[str] = []
+    allowed_text = {".txt", ".md", ".csv", ".json", ".py", ".js", ".ts",
+                    ".tsx", ".jsx", ".html", ".css", ".yaml", ".yml", ".toml",
+                    ".xml", ".sql", ".sh", ".ps1", ".go", ".rs", ".java", ".c",
+                    ".h", ".cpp", ".hpp", ".rb", ".php", ".swift", ".kt"}
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("each file attachment must be an object")
+        name = Path(str(item.get("name", "attachment"))).name
+        data = item.get("data_base64")
+        if not isinstance(data, str) or len(data) > 14 * 1024 * 1024:
+            raise ValueError("file attachment data_base64 is invalid or exceeds 10 MB")
+        try:
+            raw = base64.b64decode(data, validate=True)
+        except ValueError as exc:
+            raise ValueError("file attachment has invalid base64 data") from exc
+        if len(raw) > 10 * 1024 * 1024:
+            raise ValueError("single file attachment exceeds 10 MB")
+        total += len(raw)
+        if total > 20 * 1024 * 1024:
+            raise ValueError("file attachments exceed 20 MB total")
+        mime = str(item.get("mime", "application/octet-stream")).lower()
+        if mime.startswith("text/") or mime in {"application/json", "text/markdown"} \
+                or Path(name).suffix.lower() in allowed_text:
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ValueError(f"text attachment is not valid UTF-8: {name}") from None
+            inlined.append(f"--- Attached file: {name} ---\n{text}")
+        else:
+            directory = Path.home() / ".atlas" / "attachments" / run_id
+            directory.mkdir(parents=True, exist_ok=True)
+            path = directory / name
+            path.write_bytes(raw)
+            stored.append(str(path.resolve()))
+    if inlined:
+        content += "\n\n" + "\n\n".join(inlined)
+    return content, stored
+
+
+def _plan_mode_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected = [json.loads(json.dumps(item)) for item in tools
+                if item.get("function", {}).get("name") in {"local_file", "web_fetch"}]
+    for item in selected:
+        if item["function"]["name"] == "local_file":
+            item["function"]["parameters"]["properties"]["action"]["enum"] = [
+                "read", "list", "glob", "search", "stat",
+            ]
+    return selected
+
+
+def _queue_run_steer(
+    run: "RunState", content: Any, event_id: Any,
+) -> str | None:
+    if run.status in {"completed", "failed", "cancelled"}:
+        return "run_not_active"
+    if not isinstance(content, str) or not content.strip():
+        return "invalid_content"
+    run.steer_queue.put_nowait({"content": content, "event_id": str(event_id or uuid.uuid4())})
+    return None
+
+
+def _workspace_path(root: str, relative: str = "") -> tuple[Path, Path]:
+    root_path = Path(root).expanduser()
+    if not root_path.is_absolute():
+        raise HTTPException(status_code=400, detail="root must be an absolute path")
+    base = root_path.resolve()
+    target = (base / relative).resolve()
+    if target != base and base not in target.parents:
+        raise HTTPException(status_code=400, detail="path escapes workspace root")
+    return base, target
+
+
+@app.get("/api/workspace/tree")
+async def workspace_tree(root: str, path: str = "") -> dict[str, Any]:
+    base, directory = _workspace_path(root, path)
+    if not base.is_dir() or not directory.is_dir():
+        raise HTTPException(status_code=404, detail="Workspace directory not found")
+    git_status: dict[str, str] = {}
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run, ["git", "-C", str(base), "status", "--porcelain"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in result.stdout.splitlines():
+            if len(line) > 3:
+                code = line[:2].strip()
+                git_status[line[3:].strip().replace("\\", "/")] = (
+                    "?" if code == "??" else "A" if "A" in code else
+                    "D" if "D" in code else "M"
+                )
+    except (OSError, subprocess.SubprocessError):
+        pass
+    entries = []
+    for item in sorted(directory.iterdir(), key=lambda entry: (not entry.is_dir(), entry.name.casefold())):
+        if item.name in _WORKSPACE_IGNORES:
+            continue
+        rel = item.relative_to(base).as_posix()
+        entries.append({"name": item.name, "path": rel,
+                        "type": "dir" if item.is_dir() else "file",
+                        "size": None if item.is_dir() else item.stat().st_size,
+                        "git": git_status.get(rel)})
+    return {"root": str(base), "path": Path(path).as_posix() if path else "",
+            "entries": entries}
+
+
+@app.get("/api/workspace/file")
+async def workspace_file(root: str, path: str) -> dict[str, Any]:
+    base, target = _workspace_path(root, path)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="Workspace file not found")
+    raw = await asyncio.to_thread(target.read_bytes)
+    sample = raw[: min(len(raw), 512 * 1024)]
+    try:
+        text = sample.decode("utf-8")
+        binary = b"\x00" in sample
+    except UnicodeDecodeError:
+        text, binary = "", True
+    return {"path": target.relative_to(base).as_posix(),
+            "content": "" if binary else text,
+            "truncated": len(raw) > 512 * 1024, "binary": binary}
+
+
+@app.get("/api/workspace/rules")
+async def workspace_rules(root: str) -> dict[str, Any]:
+    base, _ = _workspace_path(root)
+    candidates = [base / name for name in _RULE_FILES]
+    user_rules = Path.home() / ".atlas" / "AGENTS.md"
+    candidates.append(user_rules)
+    files = []
+    for item in candidates:
+        if not item.is_file():
+            continue
+        raw = await asyncio.to_thread(item.read_bytes)
+        files.append({"path": str(item.resolve()), "bytes": len(raw),
+                      "content": raw[:65536].decode("utf-8", errors="replace"),
+                      "truncated": len(raw) > 65536})
+    return {"root": str(base), "files": files}
+
+
+@app.get("/api/checkpoints")
+async def list_checkpoints(
+    run_id: str | None = None, workspace: str | None = None,
+) -> list[dict[str, Any]]:
+    assert orchestrator is not None
+    items = orchestrator.checkpoints.list_checkpoints(workspace, run_id=run_id)
+    return [{key: item[key] for key in
+             ("id", "workspace", "created_at", "run_id", "files")} for item in items]
+
+
+def _run_changes(run_id: str) -> dict[str, Any]:
+    store = getattr(orchestrator, "checkpoints", None) if orchestrator is not None else None
+    if store is None:
+        return {"run_id": run_id, "files": []}
+    manifests = [item for item in store.list_checkpoints(run_id=run_id)]
+    if not manifests:
+        return {"run_id": run_id, "files": []}
+    first = min(manifests, key=lambda item: item["created_at"])
+    root = Path(first["workspace"]).resolve()
+    manifest_path = store.storage_dir / first["id"] / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    results = []
+    for entry in manifest.get("files", []):
+        if entry.get("directory"):
+            continue
+        relative = entry["path"]
+        current = (root / relative).resolve()
+        if root not in current.parents:
+            continue
+        baseline = store.storage_dir / first["id"] / "files" / relative
+        before = baseline.read_text(encoding="utf-8", errors="replace") if entry.get("exists") and baseline.is_file() else ""
+        after = current.read_text(encoding="utf-8", errors="replace") if current.is_file() else ""
+        if bool(entry.get("exists")) == current.is_file() and before == after:
+            continue
+        status = "added" if not entry.get("exists") else "deleted" if not current.exists() else "modified"
+        diff = list(__import__("difflib").unified_diff(
+            before.splitlines(keepends=True), after.splitlines(keepends=True),
+            fromfile=f"a/{relative}", tofile=f"b/{relative}",
+        ))
+        diff_text = "".join(diff)
+        truncated = len(diff_text.encode("utf-8")) > 200 * 1024
+        if truncated:
+            diff_text = diff_text.encode("utf-8")[:200 * 1024].decode("utf-8", errors="ignore")
+        additions = sum(1 for line in diff if line.startswith("+") and not line.startswith("+++"))
+        deletions = sum(1 for line in diff if line.startswith("-") and not line.startswith("---"))
+        item = {"path": relative, "workspace": str(root), "status": status,
+                "additions": additions, "deletions": deletions, "diff": diff_text}
+        if truncated:
+            item["truncated"] = True
+        results.append(item)
+    return {"run_id": run_id, "files": results}
+
+
+def _run_change_summary(run_id: str) -> dict[str, int]:
+    files = _run_changes(run_id)["files"]
+    return {"files": len(files), "additions": sum(item["additions"] for item in files),
+            "deletions": sum(item["deletions"] for item in files)}
+
+
+def _sum_usage(calls: list[dict[str, Any]]) -> dict[str, Any]:
+    keys = ("input_tokens", "output_tokens", "context_tokens")
+    totals = {}
+    for key in keys:
+        values = [item.get(key) for item in calls]
+        totals[key] = sum(values) if values and all(isinstance(value, int) for value in values) else None
+    totals["context_limit"] = next(
+        (item.get("context_limit") for item in reversed(calls)
+         if item.get("context_limit") is not None), None,
+    )
+    totals["model"] = next((item.get("model") for item in reversed(calls)), None)
+    return totals
+
+
+@app.get("/api/runs/{run_id}/changes")
+async def get_run_changes(run_id: str) -> dict[str, Any]:
+    return _run_changes(run_id)
+
+
+@app.get("/api/processes")
+async def list_agent_processes() -> list[dict[str, Any]]:
+    runtime = local_execution
+    if runtime is None:
+        return []
+    return [{"id": item.execution_id, "command": item.command, "cwd": item.cwd,
+             "status": "running" if item.state == "running" else "exited",
+             "exit_code": item.exit_code, "started_at": item.started_at,
+             "run_id": item.owner_run_id}
+            for item in runtime._processes.values()]
+
+
+@app.get("/api/processes/{process_id}/output")
+async def get_agent_process_output(process_id: str, after: int = Query(0, ge=0)) -> dict[str, Any]:
+    runtime = local_execution
+    record = runtime._processes.get(process_id) if runtime else None
+    if record is None:
+        raise HTTPException(status_code=404, detail="Process not found")
+    stdout_size = record.stdout_path.stat().st_size
+    stream_path = record.stdout_path if after < stdout_size else record.stderr_path
+    stream_offset = after if after < stdout_size else after - stdout_size
+    with stream_path.open("rb") as output_file:
+        output_file.seek(stream_offset)
+        chunk = output_file.read(65536)
+    return {"output": chunk.decode("utf-8", errors="replace"), "next": after + len(chunk),
+            "status": "running" if record.state == "running" else "exited"}
+
+
+@app.post("/api/processes/{process_id}/kill")
+async def kill_agent_process(process_id: str) -> dict[str, Any]:
+    runtime = local_execution
+    record = runtime._processes.get(process_id) if runtime else None
+    if record is None:
+        raise HTTPException(status_code=404, detail="Process not found")
+    await runtime._cancel_process(record)
+    return {"id": process_id, "status": "exited", "exit_code": record.exit_code}
+
+
+@app.websocket("/ws/terminal")
+async def ws_terminal(ws: WebSocket, cwd: str = Query(...)) -> None:
+    await ws.accept()
+    try:
+        from winpty import PtyProcess
+    except ImportError:
+        await ws.send_json({"type": "error", "error": "pywinpty is not installed"})
+        await ws.close(code=1011)
+        return
+    directory = Path(cwd).expanduser().resolve()
+    if not directory.is_dir():
+        await ws.send_json({"type": "error", "error": "cwd must be an existing directory"})
+        await ws.close(code=1008)
+        return
+    try:
+        pty = PtyProcess.spawn(["powershell.exe", "-NoLogo", "-NoProfile"], cwd=str(directory))
+    except Exception as exc:
+        await ws.send_json({"type": "error", "error": str(exc)})
+        await ws.close(code=1011)
+        return
+    async def read_output() -> None:
+        while pty.isalive():
+            try:
+                chunk = await asyncio.to_thread(pty.read, 4096)
+                if chunk:
+                    await ws.send_json({"type": "output", "data": chunk})
+            except Exception:
+                break
+        await ws.send_json({"type": "exit", "code": pty.exitstatus})
+    reader = asyncio.create_task(read_output())
+    try:
+        while True:
+            item = await ws.receive_json()
+            if item.get("type") == "input":
+                pty.write(str(item.get("data", "")))
+            elif item.get("type") == "resize":
+                pty.setwinsize(int(item.get("rows", 24)), int(item.get("cols", 80)))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if pty.isalive():
+            pty.terminate(force=True)
+        reader.cancel()
 
 
 # ---------------------------------------------------------------------------
@@ -3336,7 +3696,7 @@ async def run_goal_now(goal_id: str) -> dict[str, str]:
 @app.get("/api/runtime/protocol")
 async def runtime_protocol() -> dict[str, str]:
     """Advertise Runtime Event Protocol version."""
-    return {"version": "1.2"}
+    return {"version": "1.3"}
 
 
 # ---------------------------------------------------------------------------
@@ -3350,7 +3710,8 @@ class RunState:
         "run_id", "conversation_id", "model", "sequence",
         "status", "events", "cancel_event", "pause_event",
         "approval_futures", "task", "plan_state",
-        "event_lock",
+        "event_lock", "steer_queue", "input_futures", "mode", "workspace",
+        "usage", "workspace_rules", "plan_future", "plan_edits",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -3367,6 +3728,14 @@ class RunState:
         self.task: asyncio.Task[None] | None = None
         self.plan_state: dict[str, Any] | None = None
         self.event_lock = asyncio.Lock()
+        self.steer_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
+        self.input_futures: dict[str, asyncio.Future[str]] = {}
+        self.mode = "act"
+        self.workspace: str | None = None
+        self.usage: list[dict[str, Any]] = []
+        self.workspace_rules: list[dict[str, Any]] = []
+        self.plan_future: asyncio.Future[dict[str, str]] | None = None
+        self.plan_edits = ""
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""
@@ -3546,6 +3915,39 @@ async def ws_chat(ws: WebSocket) -> None:
                 if run and run.status not in ("completed", "failed", "cancelled"):
                     run.cancel_event.set()
 
+            elif msg_type == "run.steer":
+                run_id = str(data.get("run_id", ""))
+                run = runtime_mgr.runs.get(run_id)
+                if not run:
+                    rejected = RunState(run_id, "", "")
+                    await runtime_mgr.send(conn_id, rejected.next_envelope(
+                        "run.steer.rejected", {"reason": "run_not_active"},
+                    ))
+                else:
+                    reason = _queue_run_steer(run, data.get("content"), data.get("event_id"))
+                    if reason:
+                        rejected = RunState(run_id, "", "")
+                        await runtime_mgr.send(conn_id, rejected.next_envelope(
+                            "run.steer.rejected", {"reason": reason},
+                        ))
+
+            elif msg_type == "input.response":
+                event_id = str(data.get("event_id", ""))
+                for run in runtime_mgr.runs.values():
+                    future = run.input_futures.pop(event_id, None)
+                    if future and not future.done():
+                        future.set_result(str(data.get("text", "")))
+                        break
+
+            elif msg_type == "run.plan.approve":
+                run = runtime_mgr.runs.get(str(data.get("run_id", "")))
+                if (run and run.status == "waiting" and run.plan_future
+                        and not run.plan_future.done()
+                        and data.get("event_id") == f"plan:{run.run_id}"):
+                    run.plan_future.set_result({
+                        "action": "approve", "edits": str(data.get("edits", "")),
+                    })
+
             elif msg_type == "run.pause":
                 run_id = data.get("run_id", "")
                 run = runtime_mgr.runs.get(run_id)
@@ -3597,6 +3999,17 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         return
 
     content = data.get("content", "")
+    if not isinstance(content, str):
+        content = str(content)
+    requested_workspace = data.get("workspace")
+    if requested_workspace is not None and (
+        not isinstance(requested_workspace, str) or not Path(requested_workspace).is_absolute()
+    ):
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "workspace must be an absolute path",
+        }))
+        return
     try:
         active_skill_instructions = await _resolve_active_skill_instructions(
             data.get("active_skills", [])
@@ -3623,6 +4036,18 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             "category": "validation", "detail": str(exc),
         }))
         return
+    try:
+        content, file_paths = _validated_file_attachments(
+            data.get("files"), run_id, content,
+        )
+        if file_paths:
+            content += "\n\nAttached files stored at:\n" + "\n".join(file_paths)
+    except ValueError as exc:
+        invalid_run = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation", "detail": str(exc),
+        }))
+        return
     resume_from = data.get("resume_from")
     recovered_plan = None
     prior_run = runtime_mgr.runs.get(resume_from) if isinstance(resume_from, str) else None
@@ -3639,6 +4064,50 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
 
     assert model_mgr is not None
     run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+    if data.get("mode", "act") not in {"act", "plan"}:
+        run.status = "failed"
+        await runtime_mgr.send(conn_id, run.next_envelope("run.failed", {
+            "category": "validation", "detail": "mode must be 'act' or 'plan'",
+        }))
+        return
+    run.mode = data.get("mode", "act")
+    workspace = requested_workspace
+    conversation = None
+    if memory is not None and getattr(memory, "_db", None) is not None:
+        conversation = await memory.get_conversation(conv_id)
+    if not workspace and conversation:
+        workspace = conversation.get("workspace")
+    if not workspace and projects is not None:
+        try:
+            db = projects._require_db()
+            cursor = await db.execute(
+                "SELECT p.workspace_path FROM projects p JOIN project_conversations pc "
+                "ON p.project_id=pc.project_id WHERE pc.conversation_id=? ORDER BY p.updated_at DESC LIMIT 1",
+                (conv_id,),
+            )
+            project_row = await cursor.fetchone()
+            workspace = project_row["workspace_path"] if project_row else None
+        except Exception:
+            workspace = None
+    if workspace:
+        workspace_path = Path(workspace).expanduser().resolve()
+        if not workspace_path.is_dir():
+            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                "category": "validation", "detail": "workspace directory does not exist",
+            }))
+            return
+        run.workspace = str(workspace_path)
+        if memory is not None and getattr(memory, "_db", None) is not None:
+            await memory.update_conversation(conv_id, workspace=run.workspace)
+        rules = await workspace_rules(root=run.workspace)
+        run.workspace_rules = rules["files"]
+        if run.workspace not in _LOADED_RULE_WORKSPACES:
+            _LOADED_RULE_WORKSPACES.add(run.workspace)
+            await runtime_mgr.send(conn_id, run.next_envelope("rules.loaded", {
+                "files": [{"path": item["path"], "bytes": item["bytes"]}
+                          for item in run.workspace_rules],
+            }))
     runtime_mgr.runs[run_id] = run
     runtime_mgr.conn_runs[conn_id] = run_id
     await runtime_mgr.persist_run(run)
@@ -3650,6 +4119,9 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             plan_state=recovered_plan,
             image_attachments=image_attachments,
             active_skill_instructions=active_skill_instructions,
+            workspace=run.workspace,
+            workspace_rules=run.workspace_rules,
+            mode=run.mode,
         )
     )
 
@@ -3793,6 +4265,10 @@ async def _execute_run(
     plan_state: dict[str, Any] | None = None,
     image_attachments: list[str] | None = None,
     active_skill_instructions: list[dict[str, str]] | None = None,
+    workspace: str | None = None,
+    workspace_rules: list[dict[str, Any]] | None = None,
+    mode: str = "act",
+    continuation: bool = False,
 ) -> None:
     """Execute agent run, emitting Runtime Event envelopes."""
     assert orchestrator is not None
@@ -3856,19 +4332,22 @@ async def _execute_run(
 
     try:
         # Emit run.started
-        await emit("run.started", {
-            "status": "running",
-            "phase": "planning",
-            "content": content,
-        })
+        if not continuation:
+            await emit("run.started", {
+                "status": "running", "phase": "planning", "content": content,
+            })
 
         # Save user message
         try:
-            await memory.save_message(
-                conversation_id=run.conversation_id,
-                role="user",
-                content=content,
-            )
+            if continuation:
+                if content.strip():
+                    await memory.save_message(
+                        conversation_id=run.conversation_id, role="user", content=content,
+                    )
+            else:
+                await memory.save_message(
+                    conversation_id=run.conversation_id, role="user", content=content,
+                )
         except Exception as e:
             run.status = "failed"
             await emit("run.failed", {
@@ -3909,6 +4388,27 @@ async def _execute_run(
             run.status = "running"
             return choice
 
+        async def input_callback(
+            call_id: str, question: str, options: list[str] | None,
+        ) -> str:
+            event_id = f"input:{run.run_id}:{call_id}"
+            loop = asyncio.get_running_loop()
+            future: asyncio.Future[str] = loop.create_future()
+            run.input_futures[event_id] = future
+            run.status = "waiting"
+            await emit("input.required", {
+                "event_id": event_id, "question": question,
+                "options": options if isinstance(options, list) else None,
+            })
+            while not future.done():
+                if run.cancel_event.is_set():
+                    run.input_futures.pop(event_id, None)
+                    raise asyncio.CancelledError
+                await asyncio.sleep(0.1)
+            answer = future.result()
+            run.status = "running"
+            return answer
+
         async for event in orchestrator.run(
             message=content,
             conversation_id=run.conversation_id,
@@ -3922,6 +4422,12 @@ async def _execute_run(
             image_attachments=image_attachments,
             active_skill_instructions=active_skill_instructions,
             run_id=run.run_id,
+            steer_queue=run.steer_queue,
+            input_callback=input_callback,
+            workspace=workspace,
+            workspace_rules=workspace_rules,
+            mode=mode,
+            force_plan=(mode == "plan"),
         ):
             if await check_pause_cancel():
                 run.status = "cancelled"
@@ -3955,6 +4461,17 @@ async def _execute_run(
                         "Review the tool error and validate a corrected request before retrying.",
                     )
 
+            elif etype == "run_steered":
+                await emit("run.steered", {
+                    "content": event.get("content", ""),
+                    "event_id": event.get("event_id", ""),
+                })
+
+            elif etype == "run_usage":
+                usage = event.get("usage", {})
+                run.usage.append(usage)
+                await emit("run.usage", usage)
+
             elif etype == "approval_required":
                 # Already emitted by the approval_callback above;
                 # no need to re-emit here.
@@ -3965,6 +4482,41 @@ async def _execute_run(
                 pass
 
             elif etype == "done":
+                if mode == "plan":
+                    run.status = "waiting"
+                    loop = asyncio.get_running_loop()
+                    run.plan_future = loop.create_future()
+                    plan_event_id = f"plan:{run.run_id}"
+                    await emit("run.plan.proposed", {
+                        "plan": run.plan_state or {
+                            "goal": content, "steps": full_response,
+                        },
+                        "event_id": plan_event_id,
+                    })
+                    await runtime_mgr.persist_run(run)
+                    while not run.plan_future.done():
+                        if run.cancel_event.is_set():
+                            run.status = "cancelled"
+                            await emit("run.cancelled", {})
+                            return
+                        await asyncio.sleep(0.1)
+                    approval = run.plan_future.result()
+                    run.plan_future = None
+                    if approval.get("action") != "approve":
+                        run.status = "cancelled"
+                        await emit("run.cancelled", {})
+                        return
+                    run.status = "running"
+                    edits = approval.get("edits", "").strip()
+                    await _execute_run(
+                        conn_id, run, ("Approved plan. " + edits) if edits else "",
+                        model_id, plan_state=run.plan_state,
+                        image_attachments=image_attachments,
+                        active_skill_instructions=active_skill_instructions,
+                        workspace=workspace, workspace_rules=workspace_rules,
+                        mode="act", continuation=True,
+                    )
+                    return
                 if full_response:
                     await emit("message.completed", {"content": full_response})
                 await emit("run.phase", {"phase": "final"})
@@ -3992,6 +4544,8 @@ async def _execute_run(
         await emit("run.completed", {
             "result": "completed",
             "model": run.model,
+            "usage": _sum_usage(run.usage),
+            "changes": _run_change_summary(run.run_id),
         })
 
     except asyncio.CancelledError:

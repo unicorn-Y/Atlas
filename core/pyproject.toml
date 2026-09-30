@@ -42,6 +42,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "ruff>=0.7.0",
 ]
+terminal = ["pywinpty>=2.0.13; platform_system == 'Windows'"]
 release = ["pyinstaller>=6.11"]
 
 [project.scripts]
