@@ -111,3 +111,55 @@ describe('settings configuration', () => {
     expect(fetchMock.mock.calls[6][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ gateway_base_url: configuration.gateway_base_url, api_key: 'secret' }) });
   });
 });
+
+describe('follow-up queue', () => {
+  const running = (id: string, conversationId: string) => ({ id, conversationId, title: 'Busy', status: 'running' as const, phase: 'execution' as const, startedAt: '', updatedAt: '', lastEventSequence: 1, events: [] });
+
+  it('queues messages sent while the conversation is running instead of starting a parallel run', async () => {
+    useAtlasStore.setState({ activeConversationId: 'c-queue', conversations: [], runs: [running('r-busy', 'c-queue')], queue: {}, queuePaused: {} });
+
+    await useAtlasStore.getState().sendMessage('and also check the tests');
+
+    const state = useAtlasStore.getState();
+    expect(state.runs).toHaveLength(1);
+    expect(state.queue['c-queue'].map((item) => item.content)).toEqual(['and also check the tests']);
+
+    const [item] = state.queue['c-queue'];
+    expect(useAtlasStore.getState().takeQueued('c-queue', item.id)?.content).toBe('and also check the tests');
+    expect(useAtlasStore.getState().queue['c-queue']).toEqual([]);
+  });
+
+  it('pauses the queue when the user stops the run, and resumes on request', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 } as Response));
+    await useAtlasStore.getState().initialize();
+    useAtlasStore.setState({ activeConversationId: 'c-stop', activeRunId: 'r-stop', conversations: [], runs: [running('r-stop', 'c-stop')], queue: {}, queuePaused: {}, runPrompts: {} });
+    await useAtlasStore.getState().sendMessage('next step');
+
+    useAtlasStore.getState().stopTask();
+    expect(useAtlasStore.getState().queuePaused['c-stop']).toBe(true);
+
+    useAtlasStore.getState().appendEvent({ id: 'e-cancel', runId: 'r-stop', sequence: 2, type: 'run.cancelled', timestamp: new Date().toISOString(), data: {} });
+    expect(useAtlasStore.getState().runs).toHaveLength(1);
+    expect(useAtlasStore.getState().queue['c-stop']).toHaveLength(1);
+
+    useAtlasStore.getState().resumeQueue('c-stop');
+    const state = useAtlasStore.getState();
+    expect(state.queue['c-stop']).toEqual([]);
+    expect(state.runs).toHaveLength(2);
+    expect(state.runPrompts[state.runs[1].id].content).toBe('next step');
+  });
+
+  it('sends the next queued message as soon as the running one finishes', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 } as Response));
+    await useAtlasStore.getState().initialize();
+    useAtlasStore.setState({ activeConversationId: 'c-done', activeRunId: 'r-done', conversations: [], runs: [running('r-done', 'c-done')], queue: {}, queuePaused: {}, unread: [] });
+    await useAtlasStore.getState().sendMessage('first follow-up');
+    await useAtlasStore.getState().sendMessage('second follow-up');
+
+    useAtlasStore.getState().appendEvent({ id: 'e-done', runId: 'r-done', sequence: 2, type: 'run.completed', timestamp: new Date().toISOString(), data: {} });
+
+    const state = useAtlasStore.getState();
+    expect(state.queue['c-done'].map((item) => item.content)).toEqual(['second follow-up']);
+    expect(state.runs.filter((run) => run.conversationId === 'c-done')).toHaveLength(2);
+  });
+});

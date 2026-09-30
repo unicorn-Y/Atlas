@@ -1,0 +1,186 @@
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { CheckCircle2, CircleAlert, CircleDashed, LoaderCircle, Play, Plus, RefreshCw, Target, X } from 'lucide-react';
+import { api, relativeTime } from '../services/api';
+import { describeSchedule } from './AutomationPage';
+
+interface GoalSubtask { id?: string; title?: string; status?: string }
+interface Goal {
+  id: string;
+  name: string;
+  goal: string;
+  trigger_type: string;
+  trigger_args: Record<string, unknown>;
+  goal_status?: string;
+  goal_progress?: { subtasks?: GoalSubtask[]; completed_steps?: string[]; replan_count?: number; blocked_reason?: string; last_evaluation?: { reason?: string } };
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  run_count?: number;
+}
+interface GoalEvent { event_id: string; sequence: number; event: string; timestamp: string; data?: Record<string, unknown> }
+
+const STATUS: Record<string, { label: string; tone: string }> = {
+  pending: { label: '等待下一轮', tone: 'var(--ink3)' },
+  running: { label: '进行中', tone: 'var(--brand)' },
+  awaiting_approval: { label: '等你确认', tone: 'var(--brand)' },
+  completed: { label: '已达成', tone: 'var(--ok)' },
+  blocked: { label: '卡住了', tone: 'var(--danger)' },
+  interrupted: { label: '被中断', tone: 'var(--danger)' },
+};
+const EVENT: Record<string, string> = {
+  'goal.created': '创建目标',
+  'goal.triggered': '开始一轮',
+  'goal.evaluated': '检查通过',
+  'goal.evaluation_failed': '检查未通过',
+  'goal.replanned': '重新规划',
+  'goal.verified': '目标达成',
+  'goal.failed': '执行失败',
+  'goal.interrupted': '被中断',
+  'goal.retry_requested': '要求重试',
+  'goal.continuation_pending': '等待继续',
+  'goal.outcome_persist_failed': '结果保存失败',
+};
+const CRON_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
+type Freq = 'hours' | 'daily' | 'weekly';
+
+const eventDetail = (event: GoalEvent) => {
+  const data = event.data ?? {};
+  const text = data.reason ?? data.detail ?? (typeof data.replan_count === 'number' ? `第 ${data.replan_count} 次重新规划` : '');
+  return typeof text === 'string' ? text : '';
+};
+
+/** Goals keep running round after round until the agent verifies them, unlike one-shot scheduled tasks. */
+export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void }) {
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [selected, setSelected] = useState('');
+  const [trace, setTrace] = useState<GoalEvent[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ name: '', goal: '', freq: 'hours' as Freq, hours: '2', time: '09:00', weekday: 0 });
+
+  const refresh = useCallback(async () => {
+    if (!connected) return;
+    setBusy(true);
+    try {
+      const body = await api<{ goals: Goal[] }>(apiBaseUrl, '/api/goals');
+      setGoals(body.goals);
+      setSelected((current) => current && body.goals.some((goal) => goal.id === current) ? current : body.goals[0]?.id ?? '');
+      setError('');
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(false); }
+  }, [apiBaseUrl, connected]);
+  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!selected || !connected) { setTrace([]); return; }
+    let stale = false;
+    api<{ events: GoalEvent[] }>(apiBaseUrl, `/api/goals/${encodeURIComponent(selected)}/trace`)
+      .then((body) => { if (!stale) setTrace(body.events.slice().reverse()); })
+      .catch(() => { if (!stale) setTrace([]); });
+    return () => { stale = true; };
+  }, [apiBaseUrl, connected, selected, goals]);
+
+  const create = async (event: FormEvent) => {
+    event.preventDefault();
+    const [hour, minute] = form.time.split(':').map((part) => Number(part) || 0);
+    const trigger = form.freq === 'hours'
+      ? { trigger_type: 'interval', trigger_args: { hours: Math.max(1, Number(form.hours) || 1) } }
+      : { trigger_type: 'cron', trigger_args: form.freq === 'weekly' ? { day_of_week: CRON_DAYS[form.weekday], hour, minute } : { hour, minute } };
+    const id = `goal-${Date.now().toString(36)}`;
+    setBusy(true);
+    try {
+      await api(apiBaseUrl, '/api/goals', { method: 'POST', json: { id, name: form.name.trim() || form.goal.trim().slice(0, 24), goal: form.goal.trim(), ...trigger } });
+      setCreating(false);
+      setSelected(id);
+      setForm({ ...form, name: '', goal: '' });
+      onToast('已创建目标');
+      setError('');
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(false); }
+    await refresh();
+  };
+  const runNow = async (goal: Goal) => {
+    setBusy(true);
+    try { await api(apiBaseUrl, `/api/goals/${encodeURIComponent(goal.id)}/run`, { method: 'POST' }); onToast('已开始新一轮'); setError(''); }
+    catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(false); }
+    await refresh();
+  };
+
+  const current = goals.find((goal) => goal.id === selected);
+  const subtasks = current?.goal_progress?.subtasks ?? [];
+  const done = new Set(current?.goal_progress?.completed_steps ?? []);
+
+  return <>
+    <div className="btns" style={{ justifyContent: 'flex-end', marginBottom: 12 }}>
+      <button className="btn ghost" onClick={() => void refresh()} disabled={busy || !connected} aria-label="刷新目标">{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}</button>
+      <button className="btn primary" disabled={!connected || busy} onClick={() => setCreating(true)}><Plus size={15} />新建目标</button>
+    </div>
+    {error && <div className="error-note" role="alert"><span>{error}</span><button className="iconbtn" aria-label="关闭错误提示" onClick={() => setError('')}><X size={15} /></button></div>}
+
+    {creating && <form className="card glass form" onSubmit={(event) => void create(event)}>
+      <h2>新建持续目标</h2>
+      <label>要达成的结果<textarea required autoFocus value={form.goal} onChange={(event) => setForm({ ...form, goal: event.target.value })} placeholder="写清楚怎样算完成，例如：让 Atlas 仓库的前端测试全部通过，并且 npm run build 成功" /></label>
+      <div className="two">
+        <label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="留空则用目标开头" /></label>
+        <label>多久推进一轮<select value={form.freq} onChange={(event) => setForm({ ...form, freq: event.target.value as Freq })}><option value="hours">每隔几小时</option><option value="daily">每天</option><option value="weekly">每周</option></select></label>
+      </div>
+      <div className="two">
+        {form.freq === 'hours'
+          ? <label>间隔（小时）<input type="number" min={1} max={168} value={form.hours} onChange={(event) => setForm({ ...form, hours: event.target.value })} /></label>
+          : <label>时间<input type="time" required value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} /></label>}
+        {form.freq === 'weekly' && <label>星期<select value={form.weekday} onChange={(event) => setForm({ ...form, weekday: Number(event.target.value) })}>{WEEKDAYS.map((day, index) => <option key={day} value={index}>星期{day}</option>)}</select></label>}
+      </div>
+      <div className="foot"><button type="button" className="btn ghost" onClick={() => setCreating(false)}>取消</button><button className="btn primary" disabled={busy || !form.goal.trim()}>创建目标</button></div>
+    </form>}
+
+    <div className="split">
+      <div className="list glass" role="listbox" aria-label="持续目标">
+        {goals.map((goal) => {
+          const status = STATUS[goal.goal_status ?? ''] ?? { label: goal.goal_status ?? '未开始', tone: 'var(--ink3)' };
+          return <button className="row" role="option" key={goal.id} aria-selected={goal.id === selected} onClick={() => setSelected(goal.id)}>
+            <span className="ico ether"><Target size={17} /></span>
+            <span style={{ minWidth: 0 }}><p>{goal.name}</p><small>{goal.goal}</small></span>
+            <span className="when"><b style={{ color: status.tone }}>{status.label}</b>已推进 {goal.run_count ?? 0} 轮</span>
+          </button>;
+        })}
+        {!goals.length && <div className="empty"><Target size={22} /><b>还没有持续目标</b>目标会一轮轮推进，直到 Atlas 检查确认完成。比如「让测试全部通过」。</div>}
+      </div>
+      {current ? <aside className="detail glass" aria-label="目标详情">
+        <h2>{current.name}</h2>
+        <div className="sub">{STATUS[current.goal_status ?? '']?.label ?? '未开始'}，{describeSchedule(current)}推进一轮</div>
+        <dl>
+          <div><dt>目标</dt><dd>{current.goal}</dd></div>
+          {current.goal_progress?.last_evaluation?.reason && <div><dt>上次检查</dt><dd>{current.goal_progress.last_evaluation.reason}</dd></div>}
+          {current.goal_progress?.blocked_reason && <div><dt>卡住原因</dt><dd>{current.goal_progress.blocked_reason}</dd></div>}
+          <div><dt>下一轮</dt><dd>{current.next_run_at ? `${new Date(current.next_run_at).toLocaleString()}（${relativeTime(current.next_run_at)}）` : '未排期'}</dd></div>
+        </dl>
+        {subtasks.length > 0 && <>
+          <h3 style={{ fontSize: 13, margin: '14px 0 6px' }}>当前计划</h3>
+          <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6, fontSize: 13 }}>
+            {subtasks.map((step, index) => {
+              const finished = (step.id && done.has(step.id)) || step.status === 'completed';
+              return <li key={step.id ?? index} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                {finished ? <CheckCircle2 size={15} color="var(--ok)" /> : step.status === 'failed' ? <CircleAlert size={15} color="var(--danger)" /> : <CircleDashed size={15} color="var(--ink3)" />}
+                <span>{step.title ?? step.id}</span>
+              </li>;
+            })}
+          </ol>
+        </>}
+        {trace.length > 0 && <>
+          <h3 style={{ fontSize: 13, margin: '14px 0 6px' }}>推进记录</h3>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6, fontSize: 12.5, maxHeight: 220, overflow: 'auto' }}>
+            {trace.slice(0, 40).map((event) => <li key={event.event_id}>
+              <b style={{ fontWeight: 500 }}>{EVENT[event.event] ?? event.event}</b>
+              <span style={{ color: 'var(--ink3)' }}> · {relativeTime(event.timestamp)}</span>
+              {eventDetail(event) && <div style={{ color: 'var(--ink3)' }}>{eventDetail(event)}</div>}
+            </li>)}
+          </ul>
+        </>}
+        <div className="btns">
+          <button className="btn primary" disabled={busy} onClick={() => void runNow(current)}><Play size={14} />{current.goal_status === 'blocked' ? '重试' : '立即推进一轮'}</button>
+        </div>
+      </aside> : <div />}
+    </div>
+  </>;
+}

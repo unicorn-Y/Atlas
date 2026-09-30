@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { CalendarClock, LoaderCircle, Play, Plus, Power, RefreshCw, Repeat, Timer, X } from 'lucide-react';
 import { api, relativeTime } from '../services/api';
+import GoalsPanel from './GoalsPanel';
 
 interface HubTask {
   id: string;
@@ -47,6 +48,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   const [selected, setSelected] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [tab, setTab] = useState<'tasks' | 'goals'>('tasks');
   const [creating, setCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [form, setForm] = useState({ name: '', message: '', freq: 'daily' as Freq, hours: '4', time: '09:00', weekday: 0 });
@@ -99,12 +101,20 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   return <div className="screen page"><div className="page-inner">
     <header className="page-head">
       <div><h1>自动化</h1><p>让 Atlas 按时替你做事。关掉窗口后任务照常运行，前提是后台服务开着。</p></div>
-      <div className="btns">
+      {tab === 'tasks' && <div className="btns">
         <button className="btn ghost" onClick={() => void refresh()} disabled={busy || !connected} aria-label="刷新自动化">{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}</button>
         {running && <button className="btn" disabled={busy} onClick={() => void act(() => api(apiBaseUrl, '/api/hub/stop', { method: 'POST' }), '后台服务已停止')}><Power size={15} />停止后台服务</button>}
         <button className="btn primary" disabled={!running || busy} onClick={() => setCreating(true)}><Plus size={15} />新建任务</button>
-      </div>
+      </div>}
     </header>
+
+    <div role="tablist" aria-label="自动化类型" className="mb-4 flex gap-5 shadow-[inset_0_-1px_0_var(--line)]">
+      {([['tasks', '定时任务'], ['goals', '持续目标']] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+        className={tab === id ? 'pb-2.5 text-[13.5px] font-medium text-fg shadow-[inset_0_-2px_0_var(--brand)]' : 'pb-2.5 text-[13.5px] text-fg-3 hover:text-fg'}>{label}</button>)}
+    </div>
+
+    {tab === 'goals' && <GoalsPanel apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
+    {tab === 'tasks' && <>
 
     {!connected && <div className="error-note">Atlas 后端未连接。</div>}
     {error && <div className="error-note" role="alert"><span>{error}</span><button className="iconbtn" aria-label="关闭错误提示" onClick={() => setError('')}><X size={15} /></button></div>}
@@ -155,5 +165,6 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
         </div>
       </aside> : <div />}
     </div>}
+    </>}
   </div></div>;
 }

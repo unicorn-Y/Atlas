@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowUp, ChevronDown, Code2, Film, ImagePlus, Image as ImageIcon, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
 import { cn } from '../ui/cn';
@@ -22,6 +22,19 @@ export function guessIntent(text: string): Intent | null {
 
 export interface ComposerMode { id: string; label: string; icon: LucideIcon }
 
+/** An entry in the `/` menu. `takesArgument` commands receive the text typed after the command name. */
+export interface SlashCommand { id: string; label: string; hint?: string; takesArgument?: boolean; run: (argument: string) => void }
+
+/** Commands matching a `/query` draft; only while the draft is a single command word (plus an argument for argument commands). */
+export function matchCommands(value: string, commands: SlashCommand[]): SlashCommand[] {
+  const match = /^\/(\S*)(\s[\s\S]*)?$/.exec(value);
+  if (!match) return [];
+  const [, word, rest] = match;
+  if (rest !== undefined) return commands.filter((command) => command.takesArgument && command.label === `/${word}`);
+  const query = word.toLowerCase();
+  return commands.filter((command) => command.label.slice(1).toLowerCase().includes(query)).slice(0, 8);
+}
+
 interface ComposerProps {
   value: string;
   onChange: (value: string) => void;
@@ -43,6 +56,7 @@ interface ComposerProps {
   modes?: { value: string; options: ComposerMode[]; onChange: (id: string) => void };
   /** Content shown above the text area, e.g. the live run status. */
   header?: ReactNode;
+  commands?: SlashCommand[];
 }
 
 export default function Composer(props: ComposerProps) {
@@ -65,14 +79,48 @@ export default function Composer(props: ComposerProps) {
   }, [props.value, hero]);
   useEffect(() => { if (props.autoFocus) textRef.current?.focus(); }, [props.autoFocus]);
 
-  const submit = (event?: FormEvent) => { event?.preventDefault(); if (canSend) props.onSubmit(); };
+  const [cursor, setCursor] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const matches = matchCommands(props.value, props.commands ?? []);
+  useEffect(() => setCursor(0), [matches.length]);
+
+  const runCommand = (command: SlashCommand) => {
+    const argument = props.value.replace(/^\/\S*\s?/, '');
+    props.onChange('');
+    command.run(argument);
+  };
+  const submit = (event?: FormEvent) => {
+    event?.preventDefault();
+    if (matches.length) { runCommand(matches[Math.min(cursor, matches.length - 1)]); return; }
+    if (canSend) props.onSubmit();
+  };
   const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (matches.length && !event.nativeEvent.isComposing) {
+      if (event.key === 'ArrowDown') { event.preventDefault(); setCursor((value) => (value + 1) % matches.length); return; }
+      if (event.key === 'ArrowUp') { event.preventDefault(); setCursor((value) => (value - 1 + matches.length) % matches.length); return; }
+      if (event.key === 'Tab') { event.preventDefault(); props.onChange(`${matches[cursor].label}${matches[cursor].takesArgument ? ' ' : ''}`); return; }
+      if (event.key === 'Escape') { event.preventDefault(); props.onChange(''); return; }
+    }
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); }
   };
+  const hasFiles = (event: DragEvent<HTMLFormElement>) => Array.from(event.dataTransfer.types).includes('Files');
 
   return <form onSubmit={submit}
+    onDragOver={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(true); }}
+    onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
+    onDrop={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(false); props.onPickImages(event.dataTransfer.files); }}
     className={cn('raised relative transition-shadow focus-within:shadow-[var(--shadow-raised),0_0_0_4px_var(--brand-soft)]',
-      hero ? 'rounded-[20px] px-5 pt-[18px] pb-3' : 'rounded-2xl px-4 pt-3 pb-2.5')}>
+      hero ? 'rounded-[20px] px-5 pt-[18px] pb-3' : 'rounded-2xl px-4 pt-3 pb-2.5',
+      dragging && 'shadow-[var(--shadow-raised),0_0_0_2px_var(--brand)]')}>
+    {matches.length > 0 && <div role="listbox" aria-label="命令" className="pop anim-pop absolute right-0 bottom-[calc(100%+8px)] left-0 z-30 max-h-[300px] overflow-auto rounded-xl p-1.5">
+      {matches.map((command, index) => <button key={command.id} type="button" role="option" aria-selected={index === cursor}
+        onMouseMove={() => setCursor(index)} onMouseDown={(event) => { event.preventDefault(); runCommand(command); }}
+        className={cn('flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13.5px]', index === cursor && 'bg-selected')}>
+        <span className="shrink-0 font-mono text-[13px] text-fg">{command.label}</span>
+        {command.hint && <span className="min-w-0 truncate text-[12.5px] text-fg-3">{command.hint}</span>}
+      </button>)}
+    </div>}
+    {dragging && <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[inherit] bg-brand-soft text-[13.5px] font-medium text-fg">松开添加图片</div>}
     {props.header}
     <textarea ref={textRef} value={props.value} rows={1} placeholder={props.placeholder} aria-label="消息内容"
       onChange={(event) => props.onChange(event.target.value)} onKeyDown={onKey}

@@ -18,7 +18,7 @@ export function MenuLabel({ children }: { children: ReactNode }) {
   return <M.Label className="px-2.5 pt-1.5 pb-1 text-[12px] text-fg-3">{children}</M.Label>;
 }
 
-export function MenuItem({ children, onSelect, checked, hint }: { children: ReactNode; onSelect?: () => void; checked?: boolean; hint?: ReactNode }) {
+export function MenuItem({ children, onSelect, checked, hint }: { children: ReactNode; onSelect?: (event: Event) => void; checked?: boolean; hint?: ReactNode }) {
   return <M.Item onSelect={onSelect}
     className="flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] text-fg outline-none data-[highlighted]:bg-hover [&_svg]:size-4 [&_svg]:text-fg-2">
     {children}

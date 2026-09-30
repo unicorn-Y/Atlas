@@ -13,15 +13,28 @@ export interface PaletteItem {
   run: () => void;
 }
 
-export default function Palette({ items, open, onClose }: { items: PaletteItem[]; open: boolean; onClose: () => void }) {
+export default function Palette({ items, open, onClose, search }: {
+  items: PaletteItem[]; open: boolean; onClose: () => void;
+  /** Extra results fetched for the query, e.g. full-text hits inside conversations. */
+  search?: (query: string) => Promise<PaletteItem[]>;
+}) {
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
+  const [found, setFound] = useState<PaletteItem[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matched = q ? items.filter((item) => `${item.label} ${item.hint ?? ''}`.toLowerCase().includes(q)) : items;
-    return matched.slice(0, 40);
-  }, [items, query]);
+    return [...matched.slice(0, 40), ...found];
+  }, [items, query, found]);
+  useEffect(() => {
+    const q = query.trim();
+    setFound([]);
+    if (!search || q.length < 2) return;
+    let stale = false;
+    const timer = window.setTimeout(() => { void search(q).then((hits) => { if (!stale) setFound(hits); }).catch(() => undefined); }, 250);
+    return () => { stale = true; window.clearTimeout(timer); };
+  }, [query, search]);
   useEffect(() => setCursor(0), [query]);
   useEffect(() => { if (!open) setQuery(''); }, [open]);
   useEffect(() => {

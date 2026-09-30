@@ -1,8 +1,10 @@
-import { BookOpen, Code2, Home, Moon, PanelLeft, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Wand2, type LucideIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Archive, ArchiveRestore, BookOpen, ChevronRight, Code2, Download, Home, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
 import { nextTheme, themeInfo, type Theme } from './themes';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import Mark from '../components/Mark';
 import { Kbd } from '../ui/Kbd';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../ui/Menu';
 import { Tip } from '../ui/Tooltip';
 import { cn } from '../ui/cn';
 
@@ -51,11 +53,74 @@ interface SidebarProps {
   theme: Theme;
   onToggleTheme: () => void;
   onSettings: () => void;
+  pinned: string[];
+  archived: string[];
+  unread: string[];
+  running: string[];
+  onRename: (id: string, title: string) => void;
+  onDelete: (id: string) => void;
+  onTogglePinned: (id: string) => void;
+  onToggleArchived: (id: string) => void;
+  onExport: (id: string) => void;
 }
 
 export default function Sidebar(props: SidebarProps) {
   const { mini } = props;
-  const groups = groupByDay(props.conversations);
+  const [showArchived, setShowArchived] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState('');
+  const byId = new Map(props.conversations.map((item) => [item.id, item]));
+  const pinnedItems = props.pinned.map((id) => byId.get(id)).filter((item): item is ConversationSummary => Boolean(item) && !props.archived.includes(item!.id));
+  const archivedItems = props.conversations.filter((item) => props.archived.includes(item.id));
+  const groups = groupByDay(props.conversations.filter((item) => !props.pinned.includes(item.id) && !props.archived.includes(item.id)));
+  const commitRename = () => {
+    if (editing && editing.title.trim() && editing.title.trim() !== byId.get(editing.id)?.title) props.onRename(editing.id, editing.title);
+    setEditing(null);
+  };
+
+  const row = (conversation: ConversationSummary) => {
+    const current = conversation.id === props.activeConversationId && props.view === 'chat';
+    const isPinned = props.pinned.includes(conversation.id);
+    const isArchived = props.archived.includes(conversation.id);
+    if (editing?.id === conversation.id) {
+      return <input key={conversation.id} autoFocus aria-label="对话名称" value={editing.title}
+        onChange={(event) => setEditing({ id: conversation.id, title: event.target.value })}
+        onBlur={commitRename}
+        onKeyDown={(event) => { if (event.key === 'Enter') commitRename(); else if (event.key === 'Escape') setEditing(null); }}
+        className="block w-full rounded-lg bg-sunken px-2.5 py-1.5 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--brand)]" />;
+    }
+    return <div key={conversation.id} className={cn('group relative flex items-center rounded-lg transition-colors', current ? 'bg-selected' : 'hover:bg-hover')}>
+      <button title={conversation.title} aria-current={current ? 'page' : undefined}
+        disabled={props.loadingConversationId === conversation.id} onClick={() => props.onOpenConversation(conversation)}
+        onDoubleClick={() => setEditing({ id: conversation.id, title: conversation.title })}
+        className={cn('flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-7 pl-2.5 text-left text-[13px] disabled:opacity-60', current ? 'text-fg' : 'text-fg-2 group-hover:text-fg')}>
+        {props.running.includes(conversation.id)
+          ? <i className="size-1.5 shrink-0 animate-pulse rounded-full bg-brand" aria-label="正在运行" />
+          : props.unread.includes(conversation.id) ? <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" /> : null}
+        <span className="truncate">{conversation.title}</span>
+      </button>
+      <Menu onOpenChange={(open) => { if (!open) setConfirmDelete(''); }}>
+        <MenuTrigger asChild>
+          <button aria-label={`${conversation.title} 的更多操作`}
+            className="absolute right-1 grid size-6 place-items-center rounded-md text-fg-3 opacity-0 hover:bg-hover hover:text-fg group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">
+            <MoreHorizontal size={15} />
+          </button>
+        </MenuTrigger>
+        <MenuContent align="start" className="min-w-[180px]">
+          <MenuItem onSelect={() => setEditing({ id: conversation.id, title: conversation.title })}><Pencil />改名</MenuItem>
+          {!isArchived && <MenuItem onSelect={() => props.onTogglePinned(conversation.id)}>{isPinned ? <><PinOff />取消置顶</> : <><Pin />置顶</>}</MenuItem>}
+          <MenuItem onSelect={() => props.onToggleArchived(conversation.id)}>{isArchived ? <><ArchiveRestore />移出归档</> : <><Archive />归档</>}</MenuItem>
+          <MenuItem onSelect={() => props.onExport(conversation.id)}><Download />导出为 JSON</MenuItem>
+          <MenuSeparator />
+          <MenuItem onSelect={(event) => {
+            if (confirmDelete === conversation.id) { props.onDelete(conversation.id); setConfirmDelete(''); return; }
+            event.preventDefault();
+            setConfirmDelete(conversation.id);
+          }}><span className="flex items-center gap-2.5 text-danger [&_svg]:!text-danger"><Trash2 />{confirmDelete === conversation.id ? '再点一次确认删除' : '删除'}</span></MenuItem>
+        </MenuContent>
+      </Menu>
+    </div>;
+  };
   return <aside aria-label="侧边栏" className={cn('flex min-h-0 flex-col pt-3 pb-3 transition-[width] duration-300', mini ? 'w-[64px] items-center px-2' : 'w-[236px] px-3')}>
     <div className={cn('drag flex items-center gap-2.5 pb-4', mini ? 'flex-col px-0' : 'px-1.5')}>
       <Mark className="size-7" />
@@ -98,18 +163,21 @@ export default function Sidebar(props: SidebarProps) {
     </nav>
 
     {!mini && <div className="mt-5 min-h-0 flex-1 overflow-auto pr-0.5" aria-label="历史任务">
+      {pinnedItems.length > 0 && <section className="mb-3">
+        <h3 className="m-0 px-2.5 pb-1 text-[12px] font-normal text-fg-3">置顶</h3>
+        {pinnedItems.map(row)}
+      </section>}
       {groups.map((group) => <section key={group.label} className="mb-3">
         <h3 className="m-0 px-2.5 pb-1 text-[12px] font-normal text-fg-3">{group.label}</h3>
-        {group.items.map((conversation) => {
-          const current = conversation.id === props.activeConversationId && props.view === 'chat';
-          return <button key={conversation.id} title={conversation.title} aria-current={current ? 'page' : undefined}
-            disabled={props.loadingConversationId === conversation.id} onClick={() => props.onOpenConversation(conversation)}
-            className={cn('block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors disabled:opacity-60',
-              current ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
-            {conversation.title}
-          </button>;
-        })}
+        {group.items.map(row)}
       </section>)}
+      {archivedItems.length > 0 && <section className="mb-3">
+        <button onClick={() => setShowArchived((value) => !value)} aria-expanded={showArchived}
+          className="flex w-full items-center gap-1 px-2.5 pb-1 text-left text-[12px] text-fg-3 hover:text-fg">
+          <ChevronRight size={13} className={cn('transition-transform', showArchived && 'rotate-90')} />已归档 {archivedItems.length}
+        </button>
+        {showArchived && archivedItems.map(row)}
+      </section>}
       {!props.conversations.length && <p className="px-2.5 text-[12.5px] text-fg-3">{props.conversationsLoading ? '正在加载…' : '还没有任务。点「新任务」开始。'}</p>}
     </div>}
     {mini && <div className="flex-1" />}

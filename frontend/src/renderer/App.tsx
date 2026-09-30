@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AudioLines, Bell, Copy, Image as ImageIcon, MessageCircle, Minus, Moon, PanelRight, Pause, Play, Plus, Puzzle, Settings,
+  AudioLines, Bell, Copy, Download, Image as ImageIcon, MessageCircle, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X,
 } from 'lucide-react';
 import { useAtlasStore } from './store/useAtlasStore';
 import ConversationActivity from './components/ConversationActivity';
 import ConversationMessage from './components/ConversationMessage';
-import Composer, { type ComposerMode } from './components/Composer';
+import Composer, { type ComposerMode, type SlashCommand } from './components/Composer';
 import Mark, { MarkDefs } from './components/Mark';
 import Palette, { type PaletteItem } from './components/Palette';
 import VoiceOverlay, { getSpeechRecognition, type SpeechRecognitionLike } from './components/VoiceOverlay';
@@ -37,6 +37,11 @@ const HOME_MODES: ComposerMode[] = [
   { id: 'image', label: '图像', icon: ImageIcon },
   { id: 'voice', label: '语音通话', icon: AudioLines },
 ];
+const draftKey = (conversationId: string) => `atlas.draft.${conversationId || 'home'}`;
+const readDraft = (conversationId: string) => { try { return localStorage.getItem(draftKey(conversationId)) ?? ''; } catch { return ''; } };
+const writeDraft = (conversationId: string, text: string) => {
+  try { if (text) localStorage.setItem(draftKey(conversationId), text); else localStorage.removeItem(draftKey(conversationId)); } catch { /* storage unavailable */ }
+};
 const pref = (key: string) => { try { return localStorage.getItem(`atlas.preference.${key}`); } catch { return null; } };
 const setPref = (key: string, value: string) => { try { localStorage.setItem(`atlas.preference.${key}`, value); } catch { /* storage unavailable */ } };
 
@@ -100,6 +105,18 @@ export default function App() {
   }, [activeEvents]);
 
   const go = useCallback((next: View) => setView(next), []);
+
+  // Unsent text survives switching conversations and restarting the app.
+  const draftOwnerRef = useRef(store.activeConversationId);
+  useEffect(() => {
+    if (draftOwnerRef.current === store.activeConversationId) return;
+    draftOwnerRef.current = store.activeConversationId;
+    setInput(readDraft(store.activeConversationId));
+  }, [store.activeConversationId]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => writeDraft(draftOwnerRef.current, input), 300);
+    return () => window.clearTimeout(timer);
+  }, [input]);
   const notify = useCallback((text: string) => setToast(text), []);
 
   useEffect(() => { void store.initialize(); }, []);
@@ -198,6 +215,7 @@ export default function App() {
       return;
     }
     setInput('');
+    writeDraft(store.activeConversationId, '');
     setAttachments([]);
     if (fromHome) {
       go('chat');
@@ -278,16 +296,50 @@ export default function App() {
     { id: 'voice', group: '操作', label: '开始语音通话', icon: <AudioLines />, run: startVoice },
     ...THEMES.filter((item) => item.id !== theme).map((item) => ({ id: `theme-${item.id}`, group: '外观', label: `切换到${item.label}`, hint: item.hint, icon: item.id === 'dark' ? <Moon /> : <Sun />, run: () => chooseTheme(item.id) })),
     { id: 'settings', group: '操作', label: '设置', hint: 'Ctrl ,', icon: <Settings />, run: () => setSheet('models') },
+    ...(activeConversation ? [{ id: 'export', group: '操作', label: '导出当前对话', icon: <Download />, run: () => void store.exportConversation(activeConversation.id) }] : []),
     ...NAV.map(({ view: target, label, icon: Icon }) => ({ id: `go-${target}`, group: '前往', label, icon: <Icon />, run: () => go(target) })),
     ...store.conversations.slice(0, 30).map((conversation) => ({ id: `c-${conversation.id}`, group: '任务', label: conversation.title, hint: relativeTime(conversation.updated_at), run: () => openConversation(conversation) })),
   ];
 
+  const slashCommands: SlashCommand[] = [
+    { id: 'new', label: '/new', hint: '新任务', run: newTask },
+    ...(activeConversation ? [
+      { id: 'export', label: '/export', hint: '导出当前对话为 JSON', run: () => void store.exportConversation(activeConversation.id) },
+      { id: 'rename', label: '/rename', hint: '把后面的文字设为对话名称', takesArgument: true, run: (title: string) => { if (title.trim()) void store.renameConversation(activeConversation.id, title); else setToast('在 /rename 后面写上新名称'); } },
+    ] : []),
+    ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
+    { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
+    { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
+    { id: 'memory', label: '/memory', hint: '打开记忆', run: () => go('memory') },
+    ...store.skills.map((skill) => ({
+      id: `skill-${skill.name}`, label: `/${skill.name}`,
+      hint: store.activeSkills.includes(skill.name) ? '技能已启用，选中后停用' : skill.description || '启用这个技能',
+      run: () => {
+        if (store.activeSkills.includes(skill.name)) { store.removeSkill(skill.name); setToast(`已停用技能 ${skill.name}`); }
+        else { store.applySkill(skill.name); setToast(`下一次任务会用上 ${skill.name}`); }
+      },
+    })),
+  ];
+  const conversationsRef = useRef(store.conversations);
+  conversationsRef.current = store.conversations;
+  const searchMessages = useCallback(async (query: string): Promise<PaletteItem[]> => {
+    if (!store.connected) return [];
+    // Quote the text so FTS treats it as a phrase instead of query syntax.
+    const hits = await api<Array<{ id: number | string; conversation_id: string; content: string }>>(store.apiBaseUrl, `/api/search?limit=12&q=${encodeURIComponent(`"${query.replace(/"/g, '""')}"`)}`);
+    return hits.flatMap((hit) => {
+      const conversation = conversationsRef.current.find((item) => item.id === hit.conversation_id);
+      if (!conversation) return [];
+      const at = hit.content.toLowerCase().indexOf(query.toLowerCase());
+      const excerpt = hit.content.slice(Math.max(0, at - 16), Math.max(0, at - 16) + 60).replace(/\s+/g, ' ');
+      return [{ id: `m-${hit.id}`, group: '消息内容', label: excerpt || conversation.title, hint: conversation.title, run: () => openConversation(conversation) }];
+    });
+  }, [store.apiBaseUrl, store.connected]);
   const composerStatus = listening ? '正在听…' : store.connected ? '' : 'Atlas 后端没有连接';
   const composerBase = {
     value: input, onChange: setInput, attachments, onPickImages: addImages, listening, onToggleMic: toggleSpeechInput,
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
     models: store.models, model: store.model, onSelectModel: (id: string) => void store.selectModel(id), onManageModels: () => setSheet('models'),
-    status: composerStatus, autoFocus: true,
+    status: composerStatus, autoFocus: true, commands: slashCommands,
   };
   const errorNote = store.error && <div role="alert" className="anim-fade mt-3 flex items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-[13px] text-danger">
     <span>{store.error}</span>
@@ -308,6 +360,29 @@ export default function App() {
     </>}
   </div>;
 
+  const conversationQueue = store.queue[store.activeConversationId] ?? [];
+  const queuePaused = Boolean(store.queuePaused[store.activeConversationId]);
+  const queueStrip = conversationQueue.length > 0 && <div className="mb-2 grid gap-1.5" aria-label="待发送的消息">
+    {queuePaused && <div className="flex items-center gap-2 rounded-xl bg-sunken px-3 py-2 text-[12.5px] text-fg-2">
+      <Pause size={13} />任务已停止，后面的 {conversationQueue.length} 条先不发。<span className="flex-1" />
+      <Button size="sm" variant="ghost" onClick={() => store.resumeQueue(store.activeConversationId)}><Play />继续发送</Button>
+    </div>}
+    {conversationQueue.map((item, index) => <div key={item.id} className="flex items-center gap-2.5 rounded-xl bg-sunken px-3 py-2 text-[13px]">
+      <span className="shrink-0 text-[12px] text-fg-3 tabular-nums">{index === 0 ? '下一条' : `第 ${index + 1} 条`}</span>
+      <span className="min-w-0 flex-1 truncate text-fg">{item.content}</span>
+      {item.attachments.length > 0 && <span className="shrink-0 text-[12px] text-fg-3">{item.attachments.length} 张图</span>}
+      <Tip label="取回来修改"><button aria-label="编辑这条待发消息" onClick={() => { const taken = store.takeQueued(store.activeConversationId, item.id); if (taken) { setInput(taken.content); setAttachments(taken.attachments); } }}
+        className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><Pencil size={13} /></button></Tip>
+      <Tip label="停下当前这一步，马上发这条"><button aria-label="立即发送这条消息" onClick={() => store.sendQueuedNow(store.activeConversationId, item.id)}
+        className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><Send size={13} /></button></Tip>
+      <Tip label="不发了"><button aria-label="删除这条待发消息" onClick={() => store.removeQueued(store.activeConversationId, item.id)}
+        className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><X size={13} /></button></Tip>
+    </div>)}
+  </div>;
+  const retryNote = activeRun?.status === 'failed' && store.runPrompts[activeRun.id] && !working && <div className="mt-3 flex items-center gap-3 text-[13px] text-fg-2">
+    这次没有完成。<Button size="sm" variant="secondary" onClick={() => store.retryRun(activeRun.id)}><RotateCcw />重试</Button>
+  </div>;
+
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
   const connection = !store.connected
     ? <span className="inline-flex items-center gap-1.5 text-[12px] text-danger"><i className="size-1.5 rounded-full bg-danger" />后端没有连接</span>
@@ -321,7 +396,11 @@ export default function App() {
         activeConversationId={store.activeConversationId} loadingConversationId={store.loadingMessagesConversationId}
         onOpenConversation={openConversation} onNewTask={newTask} creating={store.creatingConversation} onSearch={() => setPaletteOpen(true)}
         pendingMemories={pendingCount} username={username} subtitle={store.connected ? modelName : '后端没有连接'}
-        theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')} />
+        theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
+        pinned={store.pinned} archived={store.archived} unread={store.unread}
+        running={store.runs.filter((run) => !TERMINAL.includes(run.status)).map((run) => run.conversationId)}
+        onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
+        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id) => void store.exportConversation(id)} />
 
       <main className="sheet relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[14px]">
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
@@ -369,17 +448,20 @@ export default function App() {
                 {working && !activeEvents.some((event) => event.type === 'message.delta' || event.type === 'tool.started') && <div className="my-5 flex items-center gap-3 text-[13px] text-fg-3" aria-label="Atlas 正在思考">
                   <Mark className="size-[26px]" working />正在想…
                 </div>}
+                {retryNote}
                 {errorNote}
               </div>
             </div>
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(720px,100%)]">
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '补充说明，或者换个方向…' : '接着说要做什么…'} header={runHeader || undefined} />
+                {queueStrip}
+                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，输入 / 看命令…'} header={runHeader || undefined} />
               </div>
             </div>
           </div>
           {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => toggleInspector(false)} run={activeRun} artifacts={activeArtifacts}
-            conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities} />}
+            conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
+            apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         </div>}
 
         {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
@@ -424,7 +506,7 @@ export default function App() {
       </div>
     </Dialog>
 
-    <Palette items={paletteItems} open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+    <Palette items={paletteItems} open={paletteOpen} onClose={() => setPaletteOpen(false)} search={searchMessages} />
 
     {voiceOpen && <VoiceOverlay
       onClose={(toChat) => { setVoiceOpen(false); if (toChat) go('chat'); }}

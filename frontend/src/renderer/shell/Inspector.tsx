@@ -1,16 +1,19 @@
-import { useMemo, useState } from 'react';
-import { FileText, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { FileText, History, LoaderCircle, RotateCcw, X } from 'lucide-react';
+import { api, relativeTime } from '../services/api';
 import type { AgentEvent, AgentRun } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import type { AgentCapabilityInfo, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import { buildTimeline, duration } from '../components/timeline';
 import { cn } from '../ui/cn';
 
-export type InspectorTab = 'artifacts' | 'activity' | 'context';
+export type InspectorTab = 'artifacts' | 'activity' | 'checkpoints' | 'context';
+
+interface Checkpoint { id: string; workspace: string; created_at: string; file_count: number }
 
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
 
-export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities }: {
+export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast }: {
   tab: InspectorTab;
   onTab: (tab: InspectorTab) => void;
   onClose: () => void;
@@ -22,6 +25,9 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
   skills: SkillInfo[];
   activeSkills: string[];
   capabilities: AgentCapabilityInfo[];
+  apiBaseUrl: string;
+  connected: boolean;
+  onToast: (text: string) => void;
 }) {
   const [selected, setSelected] = useState('');
   const [raw, setRaw] = useState(false);
@@ -31,7 +37,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
   return <aside aria-label="任务面板" className="anim-fade flex w-[340px] shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)]">
     <div className="flex items-center gap-5 px-5 pt-3 shadow-[inset_0_-1px_0_var(--line)]" role="tablist">
-      {([['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['context', '上下文']] as Array<[InspectorTab, string]>).map(([id, label]) =>
+      {([['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['checkpoints', '恢复'], ['context', '上下文']] as Array<[InspectorTab, string]>).map(([id, label]) =>
         <button key={id} role="tab" aria-selected={tab === id} onClick={() => onTab(id)}
           className={cn('pb-2.5 text-[13px] transition-colors', tab === id ? 'font-medium text-fg shadow-[inset_0_-2px_0_var(--brand)]' : 'text-fg-3 hover:text-fg')}>{label}</button>)}
       <button aria-label="收起任务面板" onClick={onClose} className="-mt-2 ml-auto grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={15} /></button>
@@ -59,6 +65,8 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
         {raw && <ul className="mt-2 grid list-none gap-1 p-0 font-mono text-[11.5px] text-fg-3">{events.map((event) => <li key={event.id} className="truncate">{new Date(event.timestamp).toLocaleTimeString()} {event.type} {String(event.data.name ?? event.data.phase ?? event.data.status ?? '')}</li>)}</ul>}
       </> : <Empty title="还没有开始" body="发出一个任务后，Atlas 做的每一步都会记在这里。" />)}
 
+      {tab === 'checkpoints' && <Checkpoints apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} refreshKey={`${run?.id}:${run?.status}`} />}
+
       {tab === 'context' && <div className="grid gap-5 text-[13px]">
         <dl className="m-0 grid gap-2.5">
           {[['任务', conversationTitle ?? '未选择'], ['模型', modelName], ['状态', run ? RUN_LABEL[run.status] ?? run.status : '空闲'], ['可用工具', `${tools.length} 个`]].map(([label, value]) =>
@@ -81,6 +89,54 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
       </div>}
     </div>
   </aside>;
+}
+
+/** Shadow snapshots Atlas takes before changing files; restoring one puts those files back. */
+function Checkpoints({ apiBaseUrl, connected, onToast, refreshKey }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; refreshKey: string }) {
+  const [items, setItems] = useState<Checkpoint[] | null>(null);
+  const [confirm, setConfirm] = useState('');
+  const [restoring, setRestoring] = useState('');
+  const [error, setError] = useState('');
+  const invoke = <T,>(name: string, inputs: Record<string, unknown> = {}) =>
+    api<{ result: T }>(apiBaseUrl, `/api/agent/capabilities/${name}/invoke`, { method: 'POST', json: inputs }).then((body) => body.result);
+  useEffect(() => {
+    if (!connected) return;
+    let stale = false;
+    invoke<Checkpoint[]>('workspace.checkpoint.list')
+      .then((result) => { if (!stale) { setItems([...result].sort((a, b) => b.created_at.localeCompare(a.created_at))); setError(''); } })
+      .catch((exc) => { if (!stale) { setItems([]); setError(exc instanceof Error ? exc.message : String(exc)); } });
+    return () => { stale = true; };
+  }, [apiBaseUrl, connected, refreshKey]);
+
+  const restore = async (checkpoint: Checkpoint) => {
+    if (confirm !== checkpoint.id) { setConfirm(checkpoint.id); return; }
+    setConfirm('');
+    setRestoring(checkpoint.id);
+    try {
+      const result = await invoke<{ restored?: unknown[] }>('workspace.checkpoint.restore', { checkpoint_id: checkpoint.id });
+      onToast(`已恢复 ${Array.isArray(result.restored) ? result.restored.length : checkpoint.file_count} 个文件`);
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setRestoring(''); }
+  };
+
+  if (!connected) return <Empty title="后端没有连接" body="连上 Atlas 后端后才能查看快照。" />;
+  if (items === null) return <p className="py-8 text-center text-[13px] text-fg-3">正在读取快照…</p>;
+  return <div className="grid gap-2">
+    <p className="m-0 mb-1 text-[12.5px] leading-[1.6] text-fg-3">Atlas 改文件之前会先存一份快照。恢复只还原这些文件，不会撤销命令、网络请求或数据库改动。</p>
+    {error && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">{error}</p>}
+    {items.map((checkpoint) => <div key={checkpoint.id} className="card-surface flex items-center gap-3 rounded-xl p-3">
+      <History size={16} className="shrink-0 text-fg-3" />
+      <span className="min-w-0 flex-1">
+        <b className="block truncate text-[13px] font-medium text-fg" title={checkpoint.workspace}>{checkpoint.workspace.split(/[\\/]/).filter(Boolean).pop() ?? checkpoint.workspace}</b>
+        <small className="block text-[12px] text-fg-3">{relativeTime(checkpoint.created_at)}，{checkpoint.file_count} 个文件</small>
+      </span>
+      <button onClick={() => void restore(checkpoint)} disabled={Boolean(restoring)}
+        className={cn('inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] disabled:opacity-50', confirm === checkpoint.id ? 'bg-danger-soft text-danger' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
+        {restoring === checkpoint.id ? <LoaderCircle size={13} className="spin" /> : <RotateCcw size={13} />}{confirm === checkpoint.id ? '确认恢复' : '恢复'}
+      </button>
+    </div>)}
+    {!items.length && !error && <Empty title="还没有快照" body="Atlas 修改文件时会自动留一份，出了问题可以在这里退回去。" />}
+  </div>;
 }
 
 function Empty({ title, body }: { title: string; body: string }) {
