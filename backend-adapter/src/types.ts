@@ -53,6 +53,10 @@ export interface ConversationSummary {
   /** `atlas` or an external Agent id (codex, claude…). */
   executor?: string | null;
   sandbox?: SandboxSettings | null;
+  /** Further directories this conversation works in, besides `workspace` (at most 5). */
+  extra_roots?: string[] | null;
+  /** Where the conversation came from, e.g. `telegram` for tasks sent from the phone. */
+  source?: string | null;
   [key: string]: unknown;
 }
 
@@ -66,7 +70,23 @@ export interface ConversationUpdate {
   executor?: string;
   /** `null` turns the sandbox off. */
   sandbox?: SandboxSettings | null;
+  extra_roots?: string[];
 }
+
+export interface RewindResult { rewind_id: string; removed_messages: number; restored_files: string[]; skipped: Array<{ path: string; reason: string }> }
+export interface CustomTool {
+  id: string; name: string; description: string; command: string[];
+  input_schema: Record<string, unknown>; timeout_s: number; enabled: boolean;
+}
+export interface TelegramSettings {
+  enabled: boolean; bot_token_set: boolean; allowed_user_ids: number[]; default_workspace: string;
+  notify_on: Array<'completed' | 'failed' | 'approval'>;
+}
+export interface ProjectSource {
+  id: string; kind: 'file' | 'folder' | 'url' | 'note'; title: string; path?: string | null; url?: string | null;
+  text?: string | null; bytes: number; added_at: string;
+}
+export interface ProjectSources { instructions: string; sources: ProjectSource[] }
 
 export interface SandboxSettings { type: 'docker'; image?: string; network?: boolean }
 export interface ExternalAgentInfo { id: string; name: string; available: boolean; version: string | null; detail: string }
@@ -132,6 +152,7 @@ export interface RunStartRequest {
   /** FULL_ACCESS is the default; stricter modes ask before writes or refuse them. */
   permission_mode?: PermissionMode;
   allowed_paths?: string[];
+  extra_roots?: string[];
   executor?: string;
   sandbox?: SandboxSettings | null;
 }

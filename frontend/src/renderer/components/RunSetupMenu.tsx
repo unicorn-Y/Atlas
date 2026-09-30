@@ -29,12 +29,17 @@ export default function RunSetupMenu({ conversation, workspace, onChange, onPick
     void backend.getExternalAgents().then(setAgents).catch(() => setAgents([]));
     void backend.getSandboxStatus().then(setSandbox).catch(() => setSandbox(null));
   };
+  const extraRoots = conversation.extra_roots ?? [];
+  const addRoot = async () => {
+    const picked = await onPickFolder();
+    if (picked && picked !== workspace && !extraRoots.includes(picked)) onChange({ extra_roots: [...extraRoots, picked] });
+  };
   const addFolder = async () => {
     const picked = await onPickFolder();
     if (picked && !allowed.includes(picked)) onChange({ allowed_paths: [...(allowed.length ? allowed : [workspace]), picked] });
   };
 
-  const label = [executor !== 'atlas' ? agentName : '', container ? '容器' : '', restricted ? '限目录' : ''].filter(Boolean).join(' · ');
+  const label = [executor !== 'atlas' ? agentName : '', container ? '容器' : '', extraRoots.length ? `+${extraRoots.length} 目录` : '', restricted ? '限目录' : ''].filter(Boolean).join(' · ');
   const agentBlocked = remote ? '远程目录暂不支持外部 Agent' : !fullAccess ? '外部 Agent 的操作不经过 Atlas 确认，只能在「完全访问」下用' : '';
   const dockerBlocked = remote ? '远程目录不能用容器' : executor !== 'atlas' ? '容器只支持 Atlas 自己执行' : sandbox && !sandbox.docker.available ? sandbox.docker.detail : '';
 
@@ -66,6 +71,14 @@ export default function RunSetupMenu({ conversation, workspace, onChange, onPick
       {container && <MenuItem checked={Boolean(container.network)} onSelect={(event) => { event.preventDefault(); onChange({ sandbox: { ...container, network: !container.network } }); }}>
         <Globe /><Option title="容器可以联网" hint="装依赖、拉代码时需要" />
       </MenuItem>}
+      <MenuSeparator />
+      <MenuLabel>附加目录（同时处理几个文件夹）</MenuLabel>
+      {extraRoots.map((path) => <MenuItem key={path} onSelect={(event) => { event.preventDefault(); onChange({ extra_roots: extraRoots.filter((item) => item !== path) }); }}>
+        <X /><span className="min-w-0 truncate text-[12.5px]" title={`${path}（点击移除）`}>{path}</span>
+      </MenuItem>)}
+      <MenuItem disabled={!workspace || extraRoots.length >= 5} onSelect={() => void addRoot()}>
+        <FolderPlus /><Option title={extraRoots.length ? '再加一个目录…' : '添加目录…'} hint={!workspace ? '先选主工作目录' : extraRoots.length >= 5 ? '最多 5 个' : 'Atlas 可以用绝对路径读写这些目录，规则文件同样要你确认'} />
+      </MenuItem>
       <MenuSeparator />
       <MenuLabel>文件访问范围</MenuLabel>
       <MenuItem checked={!restricted} onSelect={() => onChange({ allowed_paths: [] })}><Option title="不限制" hint="默认" /></MenuItem>

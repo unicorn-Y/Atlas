@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AudioLines, Bell, BookMarked, Brain, Copy, Keyboard, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
+  AudioLines, Bell, BookMarked, Brain, Copy, Keyboard, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
@@ -18,6 +18,8 @@ import TabStrip from './components/TabStrip';
 import OnboardingDialog from './components/OnboardingDialog';
 import SidePane from './components/SidePane';
 import ShortcutsPanel from './pages/ShortcutsPanel';
+import ScriptToolsPanel from './pages/ScriptToolsPanel';
+import TelegramPanel from './pages/TelegramPanel';
 import { loadBindings, matchShortcut } from './services/shortcuts';
 import type { PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
@@ -45,7 +47,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'profiles' | 'hooks' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
+type SheetPane = 'models' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
@@ -103,6 +105,7 @@ export default function App() {
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [besideId, setBesideId] = useState('');
+  const [rewound, setRewound] = useState<{ conversationId: string; rewindId: string; text: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [bindings, setBindings] = useState(loadBindings);
@@ -627,6 +630,21 @@ export default function App() {
   const latestUsage = [...activeEvents].reverse().find((event) => event.type === 'run.usage')?.data;
   const contextUse = typeof latestUsage?.context_tokens === 'number' && typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0
     ? Math.round(latestUsage.context_tokens / latestUsage.context_limit * 100) : null;
+  const rewind = async (messageId: string, files: boolean) => {
+    const conversationId = store.activeConversationId;
+    const result = await store.rewindTo(messageId, files);
+    if (!result) return;
+    const parts = [`撤回了 ${result.removed_messages} 条消息`];
+    if (files) parts.push(result.restored_files.length ? `恢复了 ${result.restored_files.length} 个文件` : '没有文件需要恢复');
+    if (result.skipped.length) parts.push(`${result.skipped.length} 个文件没能恢复`);
+    setRewound({ conversationId, rewindId: result.rewind_id, text: parts.join('，') });
+  };
+  const rewindBanner = rewound && rewound.conversationId === store.activeConversationId && <div className="mb-2.5 flex items-center gap-2.5 pb-2.5 text-[12.5px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
+    <Undo2 size={13} />{rewound.text}
+    <span className="flex-1" />
+    <Button size="sm" variant="ghost" onClick={() => { void store.redoRewind(rewound.conversationId, rewound.rewindId).then((ok) => { if (ok) { setRewound(null); setToast('已重做，回到撤回之前'); } }); }}>重做</Button>
+    <Button size="sm" variant="ghost" onClick={() => setRewound(null)}>知道了</Button>
+  </div>;
   const editBanner = editing && <div className="mb-2.5 flex items-center gap-2.5 pb-2.5 text-[12.5px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
     <Pencil size={13} />修改后重新发送，这条之后的对话会被替换
     <span className="flex-1" />
@@ -767,7 +785,19 @@ export default function App() {
               <div className="mx-auto w-[min(720px,100%)] pb-8">
                 {history.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username}
                   actions={canRewrite && message.id ? message.role === 'user'
-                    ? <MessageAction label="修改后重新发送" onClick={() => { setEditing({ id: message.id, original: message.content }); setInput(message.content); }}><Pencil size={13} /></MessageAction>
+                    ? <>
+                      <MessageAction label="修改后重新发送" onClick={() => { setEditing({ id: message.id, original: message.content }); setInput(message.content); }}><Pencil size={13} /></MessageAction>
+                      <Menu>
+                        <Tip label="回到这条之前"><MenuTrigger asChild>
+                          <button aria-label="回到这条之前" className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Undo2 size={13} /></button>
+                        </MenuTrigger></Tip>
+                        <MenuContent side="top" align="end">
+                          <MenuLabel>回到这条消息之前（可以重做）</MenuLabel>
+                          <MenuItem onSelect={() => void rewind(message.id, false)}><MessageSquareX />只撤回对话</MenuItem>
+                          <MenuItem onSelect={() => void rewind(message.id, true)}><RotateCcw />对话和改过的文件一起撤回</MenuItem>
+                        </MenuContent>
+                      </Menu>
+                    </>
                     : <>
                       <MessageAction label="从这里分叉出一个新对话" onClick={() => void store.forkFrom(message.id)}><GitBranch size={13} /></MessageAction>
                       <MessageAction label="分叉，并把前面的内容总结成一段" onClick={() => void store.forkFrom(message.id, true)}><GitBranchPlus size={13} /></MessageAction>
@@ -789,7 +819,7 @@ export default function App() {
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(720px,100%)]">
                 {queueStrip}
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={editBanner || runHeader || undefined} />
+                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={editBanner || runHeader || rewindBanner || undefined} />
               </div>
             </div>
           </div>
@@ -821,7 +851,7 @@ export default function App() {
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
-        {([['models', '模型与服务', SlidersHorizontal], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
+        {([['models', '模型与服务', SlidersHorizontal], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
           <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
@@ -851,6 +881,8 @@ export default function App() {
         {sheet === 'plugins' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">插件</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力。</p><PluginsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
           <ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /></section>}
+        {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">脚本工具</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">用一个小脚本给 Atlas 加新能力。</p><ScriptToolsPanel /></section>}
+        {sheet === 'telegram' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">手机远程（Telegram）</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">不在电脑前时，用手机给 Atlas 布置任务、看结果、批准操作。</p><TelegramPanel /></section>}
         {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，只在这台电脑上生效。</p><ShortcutsPanel /></section>}
         {sheet === 'hooks' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Hooks</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在任务开始、用工具前后、完成或失败时运行你自己的命令。</p><HooksPanel /></section>}
         {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></section>}

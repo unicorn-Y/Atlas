@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, ExternalLink, Globe, Monitor, RotateCw, Smartphone, Tablet, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, ScrollText, ExternalLink, Globe, Monitor, RotateCw, Smartphone, Tablet, X } from 'lucide-react';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
 
@@ -137,13 +137,15 @@ const normalize = (value: string) => {
  * A browser next to the conversation for checking what the Agent built.
  * Pages run in their own session with no access to Atlas; picking an element hands its details to the composer.
  */
-export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast }: {
+export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast, onAsk }: {
   url: string;
   onUrl: (url: string) => void;
   /** Local servers the Agent mentioned, offered as one-click targets. */
   suggestions: string[];
   onPick: (picked: PickedElement) => void;
   onToast: (text: string) => void;
+  /** Hand a request to Atlas, e.g. to summarise the open page. */
+  onAsk?: (text: string) => void;
 }) {
   const viewRef = useRef<WebviewElement | null>(null);
   const [address, setAddress] = useState(url);
@@ -225,6 +227,13 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast 
         className={cn(button, picking === 'element' && '!bg-brand-soft !text-fg')}><Crosshair size={15} /></button>
       <button type="button" aria-label="框选页面区域发给 Atlas" title="框选一块区域发给 Atlas，可以连续框选几处再发（Esc 取消）" disabled={!url || Boolean(picking)} onClick={() => void pick('region')}
         className={cn(button, picking === 'region' && '!bg-brand-soft !text-fg')}><BoxSelect size={15} /></button>
+      {onAsk && <button type="button" aria-label="让 Atlas 总结这页" title="让 Atlas 读这页正文（视频读字幕）并总结要点" disabled={!url || /^(about|file|data):/i.test(url)}
+        onClick={() => {
+          const current = viewRef.current?.getURL() || url;
+          const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(current);
+          onAsk(`用 web_extract 读取这个${/youtube\.com|youtu\.be|bilibili\.com/i.test(current) ? '视频的字幕' : '网页的正文'}${local ? '（是我本机的开发页面，allow_local 设为 true）' : ''}，然后用中文总结要点，最后列出值得注意的细节：
+${current}`);
+        }} className={button}><ScrollText size={15} /></button>}
       <button type="button" aria-label="开发者工具" disabled={!url} onClick={() => viewRef.current?.openDevTools()} className={button}><Code2 size={15} /></button>
     </form>
     {url && <div className="flex items-center gap-0.5 text-[12px]" role="group" aria-label="预览尺寸">

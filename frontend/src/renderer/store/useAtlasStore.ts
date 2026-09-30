@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { AgentCapabilityInfo, AgentProfile, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentCapabilityInfo, AgentProfile, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -110,6 +110,9 @@ interface AtlasState {
   exportConversation: (id: string, format?: 'json' | 'md') => Promise<void>;
   setWorkspace: (conversationId: string, workspace: string | null) => void;
   editMessage: (messageId: string, content: string) => Promise<void>;
+  /** Drop a message and everything after it; with `files`, also undo what those runs changed. Returns the rewind to redo. */
+  rewindTo: (messageId: string, files: boolean) => Promise<RewindResult | null>;
+  redoRewind: (conversationId: string, rewindId: string) => Promise<boolean>;
   forkFrom: (messageId: string, summarize?: boolean) => Promise<void>;
   compactConversation: (id: string) => Promise<string | null>;
   setProfile: (id: string) => void;
@@ -527,6 +530,23 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         await get().sendMessage(content);
       } catch (error) { set({ error: errorText(error, '没能修改这条消息') }); }
     },
+    rewindTo: async (messageId, files) => {
+      const conversationId = get().activeConversationId;
+      if (!conversationId || activeRunFor(conversationId)) return null;
+      try {
+        const result = await backend.rewindConversation(conversationId, messageId, files);
+        set({ activeRunId: null });
+        await reloadMessages(conversationId);
+        return result;
+      } catch (error) { set({ error: errorText(error, '没能回退') }); return null; }
+    },
+    redoRewind: async (conversationId, rewindId) => {
+      try {
+        await backend.redoRewind(conversationId, rewindId);
+        await reloadMessages(conversationId);
+        return true;
+      } catch (error) { set({ error: errorText(error, '没能重做') }); return false; }
+    },
     forkFrom: async (messageId, summarize = false) => {
       const source = get().activeConversationId;
       if (!source) return;
@@ -673,6 +693,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
     executor: conversation?.executor || 'atlas',
     sandbox: conversation?.sandbox ?? null,
     allowed_paths: conversation?.allowed_paths ?? [],
+    extra_roots: conversation?.extra_roots ?? [],
     ...(item.refs?.files.length ? { context_files: item.refs.files } : {}),
     ...(item.refs?.conversations.length ? { context_conversations: item.refs.conversations } : {}),
   }, handleEvent, () => get().getRun(run.id)?.status === 'paused')

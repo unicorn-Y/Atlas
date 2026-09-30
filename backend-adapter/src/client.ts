@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ExternalAgentInfo, Fact, SandboxStatus, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomTool, ExternalAgentInfo, Fact, ProjectSource, ProjectSources, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -234,6 +234,40 @@ export class BackendAdapter {
   }
   async restoreVersion(root: string, path: string, version: string): Promise<{ restored: boolean; checkpoint_id: string }> {
     return this.request('/api/workspace/history/restore', { method: 'POST', body: JSON.stringify({ root, path, version }) });
+  }
+  /** Remove a message and everything after it; `files` also puts back what those runs changed. */
+  async rewindConversation(id: string, messageId: string, files: boolean): Promise<RewindResult> {
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/rewind`, { method: 'POST', body: JSON.stringify({ message_id: messageId, files }) });
+  }
+  async redoRewind(id: string, rewindId: string): Promise<void> {
+    await this.request(`/api/conversations/${encodeURIComponent(id)}/rewind/${encodeURIComponent(rewindId)}/redo`, { method: 'POST', body: '{}' });
+  }
+  async getCustomTools(): Promise<CustomTool[]> { return this.live ? (await this.request<{ tools: CustomTool[] }>('/api/custom-tools')).tools : []; }
+  async saveCustomTool(tool: CustomTool & { script_name?: string; script?: string }, isNew: boolean): Promise<CustomTool> {
+    return isNew ? this.request('/api/custom-tools', { method: 'POST', body: JSON.stringify(tool) })
+      : this.request(`/api/custom-tools/${encodeURIComponent(tool.id)}`, { method: 'PUT', body: JSON.stringify(tool) });
+  }
+  async deleteCustomTool(id: string): Promise<void> { await this.request(`/api/custom-tools/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+  async testCustomTool(id: string, args: Record<string, unknown>): Promise<{ result?: unknown; stderr?: string; exit_code?: number; is_error?: boolean; error?: string; truncated?: boolean }> {
+    return this.request(`/api/custom-tools/${encodeURIComponent(id)}/test`, { method: 'POST', body: JSON.stringify({ arguments: args }) });
+  }
+  async getTelegram(): Promise<TelegramSettings> { return this.request('/api/channels/telegram'); }
+  async saveTelegram(patch: Partial<Omit<TelegramSettings, 'bot_token_set'>> & { bot_token?: string }): Promise<TelegramSettings> {
+    return this.request('/api/channels/telegram', { method: 'PUT', body: JSON.stringify(patch) });
+  }
+  async testTelegram(): Promise<{ username: string }> { return this.request('/api/channels/telegram/test', { method: 'POST', body: '{}' }); }
+  async getProjectSources(projectId: string): Promise<ProjectSources> { return this.request(`/api/projects/${encodeURIComponent(projectId)}/sources`); }
+  async setProjectInstructions(projectId: string, instructions: string): Promise<void> {
+    await this.request(`/api/projects/${encodeURIComponent(projectId)}/sources/instructions`, { method: 'PUT', body: JSON.stringify({ instructions }) });
+  }
+  async addProjectSource(projectId: string, source: { kind: ProjectSource['kind']; title?: string; path?: string; url?: string; text?: string }): Promise<ProjectSource> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/sources`, { method: 'POST', body: JSON.stringify(source) });
+  }
+  async deleteProjectSource(projectId: string, sourceId: string): Promise<void> {
+    await this.request(`/api/projects/${encodeURIComponent(projectId)}/sources/${encodeURIComponent(sourceId)}`, { method: 'DELETE' });
+  }
+  async refreshProjectSource(projectId: string, sourceId: string): Promise<void> {
+    await this.request(`/api/projects/${encodeURIComponent(projectId)}/sources/${encodeURIComponent(sourceId)}/refresh`, { method: 'POST', body: '{}' });
   }
   async getHooks(): Promise<HookConfig[]> { return this.live ? (await this.request<{ hooks: HookConfig[] }>('/api/hooks')).hooks : []; }
   async saveHook(hook: HookConfig, isNew: boolean): Promise<HookConfig> {

@@ -154,7 +154,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
       </div>}
 
       {browserOpened && <div className={cn('h-full', tab !== 'browser' && 'hidden')}>
-        <BrowserPanel url={browserUrl} onUrl={onBrowserUrl} suggestions={browserSuggestions} onPick={onPick} onToast={onToast} />
+        <BrowserPanel url={browserUrl} onUrl={onBrowserUrl} suggestions={browserSuggestions} onPick={onPick} onToast={onToast} onAsk={onAsk} />
       </div>}
 
       {tab === 'context' && <ContextTab conversationTitle={conversationTitle} modelName={modelName} run={run} tools={tools} skills={skills} activeSkills={activeSkills}
