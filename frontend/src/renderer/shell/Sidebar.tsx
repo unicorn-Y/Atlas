@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Archive, ArchiveRestore, BookOpen, ChevronRight, Code2, CopyPlus, Download, Home, KanbanSquare, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Archive, ArchiveRestore, ArrowUpDown, BookOpen, Check, ChevronRight, Code2, CopyPlus, Download, Home, KanbanSquare, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
 import { nextTheme, themeInfo, type Theme } from './themes';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import Mark from '../components/Mark';
 import { Kbd } from '../ui/Kbd';
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../ui/Menu';
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/Menu';
 import { Tip } from '../ui/Tooltip';
 import { cn } from '../ui/cn';
 
@@ -32,6 +32,24 @@ function groupByDay(conversations: ConversationSummary[]) {
     const index = time >= startOfToday.getTime() ? 0 : time >= startOfToday.getTime() - day ? 1 : time >= startOfToday.getTime() - 7 * day ? 2 : 3;
     groups[index].items.push(conversation);
   }
+  return groups.filter((group) => group.items.length);
+}
+
+/** Colour labels for conversations, kept on this machine. */
+const LABELS = [
+  { id: 'red', name: '红', color: '#e5484d' }, { id: 'orange', name: '橙', color: '#f76b15' }, { id: 'yellow', name: '黄', color: '#e2a336' },
+  { id: 'green', name: '绿', color: '#30a46c' }, { id: 'blue', name: '蓝', color: '#3e63dd' }, { id: 'purple', name: '紫', color: '#8e4ec6' },
+] as const;
+type Arrange = 'time' | 'label' | 'name';
+const ARRANGE: Record<Arrange, string> = { time: '按时间分组', label: '按颜色分组', name: '按名称排序' };
+const readJson = <T,>(key: string, fallback: T): T => { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; } };
+const writeJson = (key: string, value: unknown) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ } };
+
+function arrange(conversations: ConversationSummary[], mode: Arrange, labels: Record<string, string>) {
+  if (mode === 'time') return groupByDay(conversations);
+  if (mode === 'name') return [{ label: '全部', items: [...conversations].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-CN')) }];
+  const groups = LABELS.map((label) => ({ label: `${label.name}色`, items: conversations.filter((item) => labels[item.id] === label.id) }));
+  groups.push({ label: '未标记', items: conversations.filter((item) => !labels[item.id]) });
   return groups.filter((group) => group.items.length);
 }
 
@@ -71,10 +89,19 @@ export default function Sidebar(props: SidebarProps) {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState('');
+  const [labels, setLabels] = useState<Record<string, string>>(() => readJson('atlas.sidebar.labels', {}));
+  const [mode, setMode] = useState<Arrange>(() => readJson<Arrange>('atlas.sidebar.arrange', 'time'));
+  useEffect(() => writeJson('atlas.sidebar.labels', labels), [labels]);
+  useEffect(() => writeJson('atlas.sidebar.arrange', mode), [mode]);
+  const setLabel = (id: string, label: string | null) => setLabels((current) => {
+    const next = { ...current };
+    if (label && current[id] !== label) next[id] = label; else delete next[id];
+    return next;
+  });
   const byId = new Map(props.conversations.map((item) => [item.id, item]));
   const pinnedItems = props.pinned.map((id) => byId.get(id)).filter((item): item is ConversationSummary => Boolean(item) && !props.archived.includes(item!.id));
   const archivedItems = props.conversations.filter((item) => props.archived.includes(item.id));
-  const groups = groupByDay(props.conversations.filter((item) => !props.pinned.includes(item.id) && !props.archived.includes(item.id)));
+  const groups = arrange(props.conversations.filter((item) => !props.pinned.includes(item.id) && !props.archived.includes(item.id)), mode, labels);
   const commitRename = () => {
     if (editing && editing.title.trim() && editing.title.trim() !== byId.get(editing.id)?.title) props.onRename(editing.id, editing.title);
     setEditing(null);
@@ -98,7 +125,8 @@ export default function Sidebar(props: SidebarProps) {
         className={cn('flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-7 pl-2.5 text-left text-[13px] disabled:opacity-60', current ? 'text-fg' : 'text-fg-2 group-hover:text-fg')}>
         {props.running.includes(conversation.id)
           ? <i className="size-1.5 shrink-0 animate-pulse rounded-full bg-brand" aria-label="正在运行" />
-          : props.unread.includes(conversation.id) ? <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" /> : null}
+          : props.unread.includes(conversation.id) ? <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" />
+          : labels[conversation.id] ? <i className="size-2 shrink-0 rounded-[3px]" style={{ background: LABELS.find((label) => label.id === labels[conversation.id])?.color }} aria-label={`${LABELS.find((label) => label.id === labels[conversation.id])?.name}色标签`} /> : null}
         <span className="truncate">{conversation.title}</span>
       </button>
       <Menu onOpenChange={(open) => { if (!open) setConfirmDelete(''); }}>
@@ -110,6 +138,11 @@ export default function Sidebar(props: SidebarProps) {
         </MenuTrigger>
         <MenuContent align="start" className="min-w-[180px]">
           <MenuItem onSelect={() => setEditing({ id: conversation.id, title: conversation.title })}><Pencil />改名</MenuItem>
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5" role="group" aria-label="颜色标签">
+            {LABELS.map((label) => <button key={label.id} aria-label={`${label.name}色`} aria-pressed={labels[conversation.id] === label.id} onClick={() => setLabel(conversation.id, label.id)}
+              className="grid size-5 place-items-center rounded-full outline-none ring-offset-1 ring-offset-[var(--overlay)] hover:ring-2 hover:ring-line-strong focus-visible:ring-2 focus-visible:ring-brand" style={{ background: label.color }}>
+              {labels[conversation.id] === label.id && <Check size={11} className="text-white" strokeWidth={3} />}</button>)}
+          </div>
           {!isArchived && <MenuItem onSelect={() => props.onTogglePinned(conversation.id)}>{isPinned ? <><PinOff />取消置顶</> : <><Pin />置顶</>}</MenuItem>}
           <MenuItem onSelect={() => props.onToggleArchived(conversation.id)}>{isArchived ? <><ArchiveRestore />移出归档</> : <><Archive />归档</>}</MenuItem>
           <MenuItem onSelect={() => props.onDuplicate(conversation.id)}><CopyPlus />复制一份</MenuItem>
@@ -167,6 +200,17 @@ export default function Sidebar(props: SidebarProps) {
     </nav>
 
     {!mini && <div className="mt-5 min-h-0 flex-1 overflow-auto pr-0.5" aria-label="历史任务">
+      {props.conversations.length > 0 && <div className="flex items-center justify-end px-1 pb-1">
+        <Menu>
+          <Tip label={ARRANGE[mode]} side="right"><MenuTrigger asChild>
+            <button aria-label="排列方式" className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><ArrowUpDown size={13} /></button>
+          </MenuTrigger></Tip>
+          <MenuContent align="end" className="min-w-[160px]">
+            <MenuLabel>历史任务怎么排</MenuLabel>
+            {(Object.keys(ARRANGE) as Arrange[]).map((key) => <MenuItem key={key} checked={mode === key} onSelect={() => setMode(key)}>{ARRANGE[key]}</MenuItem>)}
+          </MenuContent>
+        </Menu>
+      </div>}
       {pinnedItems.length > 0 && <section className="mb-3">
         <h3 className="m-0 px-2.5 pb-1 text-[12px] font-normal text-fg-3">置顶</h3>
         {pinnedItems.map(row)}

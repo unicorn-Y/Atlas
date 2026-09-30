@@ -202,7 +202,7 @@ export default function Composer(props: ComposerProps) {
     </div>}
     <input ref={fileRef} hidden type="file" multiple onChange={(event) => { props.onPickImages(event.target.files); event.currentTarget.value = ''; }} />
 
-    <div className={cn('flex items-center gap-1.5', hero ? 'mt-3' : 'mt-2')}>
+    <div className={cn('@container flex items-center gap-1.5', hero ? 'mt-3' : 'mt-2')}>
       <Tip label="添加图片或文件，也可以直接粘贴、拖进来">
         <button type="button" aria-label="添加附件" onClick={() => fileRef.current?.click()}
           className="grid size-8 place-items-center rounded-[9px] text-fg-3 hover:bg-hover hover:text-fg">
@@ -211,13 +211,14 @@ export default function Composer(props: ComposerProps) {
       </Tip>
       {props.tools}
 
-      {props.modes && <div role="radiogroup" aria-label="任务类型" className="flex gap-0.5 rounded-[10px] bg-sunken p-[3px] shadow-[inset_0_0_0_1px_var(--line)]">
+      {props.modes && <div role="radiogroup" aria-label="任务类型" className="flex shrink-0 gap-0.5 rounded-[10px] bg-sunken p-[3px] shadow-[inset_0_0_0_1px_var(--line)]">
         {props.modes.options.map(({ id, label, icon: Icon }) => {
           const on = props.modes!.value === id;
-          return <button key={id} type="button" role="radio" aria-checked={on} onClick={() => props.modes!.onChange(id)}
-            className={cn('inline-flex h-7 items-center gap-1.5 rounded-lg px-3 text-[13px] transition-colors',
+          return <button key={id} type="button" role="radio" aria-checked={on} aria-label={label} title={label} onClick={() => props.modes!.onChange(id)}
+            className={cn('inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] transition-colors',
               on ? 'raised text-fg' : 'text-fg-2 hover:text-fg')}>
-            <Icon size={14} />{label}
+            {/* Labels give way to icons when the toolbar gets crowded. */}
+            <Icon size={14} /><span className="hidden @[700px]:inline">{label}</span>
           </button>;
         })}
       </div>}
