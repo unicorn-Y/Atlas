@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, ExternalLink, Globe, RotateCw, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, ExternalLink, Globe, Monitor, RotateCw, Smartphone, Tablet, X } from 'lucide-react';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
 
 /** Must match BROWSER_PARTITION in the Electron main process: pages here never share the app's session. */
 const PARTITION = 'persist:atlas-browser';
+
+/** Viewport presets for checking a page at other sizes; the panel scales them down to fit. */
+const DEVICES = {
+  fit: { label: '自适应', width: 0, height: 0, icon: Globe },
+  phone: { label: '手机', width: 390, height: 844, icon: Smartphone },
+  tablet: { label: '平板', width: 820, height: 1180, icon: Tablet },
+  desktop: { label: '桌面', width: 1440, height: 900, icon: Monitor },
+} as const;
+type Device = keyof typeof DEVICES;
 
 /** What the user picked on a page, ready to hand to the Agent. */
 export interface PickedElement {
@@ -141,6 +150,16 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast 
   const [loading, setLoading] = useState(false);
   const [nav, setNav] = useState({ back: false, forward: false });
   const [picking, setPicking] = useState<'' | 'element' | 'region'>('');
+  const [device, setDevice] = useState<Device>('fit');
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [stage, setStage] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) => setStage({ width: entry.contentRect.width, height: entry.contentRect.height }));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [url]);
   const desktop = typeof window !== 'undefined' && Boolean(window.atlasDesktop);
 
   useEffect(() => setAddress(url), [url]);
@@ -192,6 +211,8 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast 
 
   if (!desktop) return <Empty title="在桌面版里使用" body="浏览器面板需要 Atlas 桌面应用，网页版里不可用。" icon={<Globe size={22} />} />;
 
+  const size = device === 'fit' ? null : DEVICES[device];
+  const scale = size && stage.width && stage.height ? Math.min(1, stage.width / size.width, stage.height / size.height) : 1;
   const button = 'grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg disabled:opacity-35 disabled:hover:bg-transparent';
   return <div className="flex h-full min-h-0 flex-col gap-2">
     <form onSubmit={go} className="flex items-center gap-1">
@@ -206,10 +227,23 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast 
         className={cn(button, picking === 'region' && '!bg-brand-soft !text-fg')}><BoxSelect size={15} /></button>
       <button type="button" aria-label="开发者工具" disabled={!url} onClick={() => viewRef.current?.openDevTools()} className={button}><Code2 size={15} /></button>
     </form>
+    {url && <div className="flex items-center gap-0.5 text-[12px]" role="group" aria-label="预览尺寸">
+      {(Object.keys(DEVICES) as Device[]).map((key) => {
+        const Icon = DEVICES[key].icon;
+        return <button key={key} type="button" onClick={() => setDevice(key)} aria-pressed={device === key}
+          className={cn('inline-flex h-6 items-center gap-1 rounded-md px-2', device === key ? 'bg-selected text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg')}>
+          <Icon size={12} />{DEVICES[key].label}</button>;
+      })}
+      {size && <span className="ml-auto tabular-nums text-fg-3">{size.width} × {size.height}{scale < 1 ? ` · ${Math.round(scale * 100)}%` : ''}</span>}
+    </div>}
     {url
-      ? <div className="relative flex min-h-0 flex-1">
-        <webview ref={(node) => { viewRef.current = node as WebviewElement | null; }} src={url} partition={PARTITION} plugins="true"
-          className="min-h-0 flex-1 overflow-hidden rounded-xl bg-white shadow-[inset_0_0_0_1px_var(--line)]" />
+      ? <div ref={stageRef} className={cn('relative flex min-h-0 flex-1', size && 'items-start justify-center overflow-hidden')}>
+        {/* Other device sizes render at full size and are scaled to fit, so the page lays out as it would there. */}
+        <div style={size ? { width: size.width * scale, height: size.height * scale } : undefined} className={cn(!size && 'flex min-h-0 flex-1', size && 'relative shrink-0')}>
+          <webview ref={(node) => { viewRef.current = node as WebviewElement | null; }} src={url} partition={PARTITION} plugins="true"
+            style={size ? { width: size.width, height: size.height, transform: `scale(${scale})`, transformOrigin: 'top left', position: 'absolute', left: 0, top: 0 } : undefined}
+            className={cn('overflow-hidden rounded-xl bg-white shadow-[inset_0_0_0_1px_var(--line)]', !size && 'min-h-0 flex-1')} />
+        </div>
         {/* Floats over the page so starting a pick never shifts what the user is about to click. */}
         {picking && <p className="pop pointer-events-none absolute top-2 left-1/2 m-0 -translate-x-1/2 rounded-lg px-3 py-1.5 text-[12px] whitespace-nowrap text-fg">{picking === 'element' ? '点一下页面上的元素' : '按住鼠标拖出一块区域'}，按 Esc 取消</p>}
       </div>
