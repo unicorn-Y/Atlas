@@ -34,15 +34,18 @@ SOURCE: docs/PARITY.md
 
 - 定义格式：Markdown 文件，开头 YAML frontmatter，正文是该 Worker 的系统提示词。字段：`name`（必填，`[a-z0-9-]`）、`description`（必填，告诉协调者什么时候用它）、`tools`（可选，工具名列表或逗号分隔字符串；缺省为全部可用工具）、`model`（可选；缺省或 `inherit` 用父 run 的模型）、`permission_mode`（可选，只能比父 run 更严格）。未知字段忽略。
 - 读取位置（后者同名覆盖前者）：内置 → 数据目录 `agents/` → 工作目录 `.atlas/agents/`。**兼容读取** 工作目录的 `.claude/agents/*.md` 和 `.opencode/agent/*.md`、`.opencode/agents/*.md`（字段按上面映射；OpenCode 的 `tools` 是 `{name: bool}` 对象，true 的算允许；工具名映射不上的忽略并在列表接口里标出来）。工作目录里的定义属于「规则文件」，要走第三波的信任流程，未信任时不加载。
-- 内置三种：
+- **同样兼容 Codex CLI 的角色定义**：`~/.codex/agents/*.toml`（用户级，放在数据目录旁一样读取）和工作目录的 `.codex/agents/*.toml`，每个文件一个角色。把其中的名称、说明、提示词（developer instructions）、模型、工具/沙箱相关字段映射到上面的字段；映射不上的字段忽略并写进 `warnings`。实现前先查 Codex CLI 当前文档确认字段名，结果文件里写明采用的映射。
+- 内置四种：
   - `explore`：只读（文件读/列/搜、git 读、网页提取），快速调查代码或资料，返回结论和证据位置。
   - `plan`：只读，给出实施方案（改哪些文件、步骤、风险），不动手。
   - `general`：通用（当前默认 Worker 的能力）。
+  - `oracle`：只读的深度分析（参考 Amp 的 Oracle）：难以定位的 bug、架构取舍、审查方案。模型用设置里的「强模型」（新增配置 `agents.strong_model`，没配就用父 run 的模型），可以用更高的推理强度。
+- **协调规则**（写进委派工具的说明和主 Agent 的系统提示）：只有互不依赖、以阅读调查为主的任务才并行；会改同一批文件、或后一步依赖前一步结果的，串行做或自己做；任务很小（一两次工具调用就能完成）时不要委派。依据：并行不是免费的，每个子 Agent 都单独消耗模型调用，有依赖的任务拆开反而更差。
 - `delegate_task` / `delegate_parallel` 增加参数 `agent`（类型名，默认 `general`）；工具描述里列出可用类型的 `name: description`（最多 20 个），让模型挑。并行任务每项可以各自指定 `agent`。未知类型回退到 `general` 并在结果里注明。
 - Worker 的工具集 = 类型白名单 ∩ 父 run 允许的工具 − 委派工具。`permission_mode` 取两者中更严格的。
 - `subtask.started` 事件的 `data` 增加 `agent`。
 - `GET /api/agents/types?root=` → `{types: [{name, description, tools, model, source: "builtin"|"user"|"workspace"|"claude"|"opencode", path?, trusted, warnings: [...]}]}`，给前端展示。
-- 测试：frontmatter 解析（含 OpenCode 的对象式 tools、Claude 的逗号字符串）、覆盖顺序、未信任的工作目录定义不加载、explore 类型写文件被拒、未知类型回退。
+- 测试：frontmatter 解析（含 OpenCode 的对象式 tools、Claude 的逗号字符串）、Codex TOML 解析、覆盖顺序、未信任的工作目录定义不加载、explore / oracle 写文件被拒、oracle 使用 strong_model、未知类型回退。
 
 ## 2. 浏览器交接与复用你自己的浏览器 — F139、F140
 
