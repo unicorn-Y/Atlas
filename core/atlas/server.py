@@ -113,6 +113,7 @@ from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.tools.mcp_client import MCPClient
 from atlas.tools.node_runtime import get_node_runtime_status
 from atlas.tools.web import WebRuntime
+from atlas.tools.web_extract import extract_web
 from atlas.task_artifacts import TomlRecordStore, WorktreeService, seed_profiles
 
 log = structlog.get_logger()
@@ -136,6 +137,7 @@ capability_bus: CapabilityBus | None = None
 cua_backend: CuaBackend | None = None
 browser_use: BrowserUseAdapter | None = None
 agent_backend_host: AgentBackendHost | None = None
+web_runtime: WebRuntime | None = None
 skill_mgr: SkillManager | None = None
 skill_registry: SkillRegistry | None = None
 skill_catalog_provider = SkillsShProvider()
@@ -547,7 +549,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
     global capability_bus, cua_backend, browser_use, agent_backend_host
-    global projects, durable, plugin_runtime, notifications
+    global projects, durable, plugin_runtime, notifications, web_runtime
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -759,7 +761,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         local_execution=local_execution,
         computer_use=computer_use,
         agent_backend_host=agent_backend_host,
-        web_runtime=WebRuntime(),
+        web_runtime=web_runtime,
         skill_manager=skill_mgr,
         projects=projects,
         # One store: the Agent's automatic snapshots must be the ones restore and diff read.
@@ -1387,6 +1389,71 @@ async def project_recall(project_id: str, query: str, limit: int = 8) -> dict[st
         "conversation_ids": conversation_ids,
         "results": results,
     }
+
+
+@app.get("/api/projects/{project_id}/sources")
+async def get_project_sources(project_id: str) -> dict[str, Any]:
+    assert projects is not None
+    result = await projects.get_sources(project_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="找不到这个项目。")
+    return result
+
+
+@app.put("/api/projects/{project_id}/sources/instructions")
+async def put_project_source_instructions(project_id: str, req: dict[str, Any]) -> dict[str, str]:
+    assert projects is not None
+    instructions = req.get("instructions", "")
+    if not isinstance(instructions, str):
+        raise HTTPException(status_code=400, detail="项目指令必须是文字。")
+    try:
+        if not await projects.set_source_instructions(project_id, instructions):
+            raise HTTPException(status_code=404, detail="找不到这个项目。")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok", "project_id": project_id}
+
+
+async def _extract_project_url(url: str) -> dict[str, Any]:
+    return await extract_web(url)
+
+
+@app.post("/api/projects/{project_id}/sources", status_code=201)
+async def post_project_source(project_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    assert projects is not None
+    try:
+        return await projects.add_source(
+            project_id, str(req.get("kind", "")),
+            title=str(req.get("title") or ""), path=req.get("path"),
+            url=req.get("url"), text=req.get("text"),
+            web_extractor=_extract_project_url,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="找不到这个项目。") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/projects/{project_id}/sources/{source_id}")
+async def delete_project_source(project_id: str, source_id: str) -> dict[str, str]:
+    assert projects is not None
+    if not await projects.delete_source(project_id, source_id):
+        raise HTTPException(status_code=404, detail="找不到这条项目资料。")
+    return {"status": "deleted", "source_id": source_id}
+
+
+@app.post("/api/projects/{project_id}/sources/{source_id}/refresh")
+async def refresh_project_source(project_id: str, source_id: str) -> dict[str, Any]:
+    assert projects is not None
+    try:
+        result = await projects.refresh_source(
+            project_id, source_id, web_extractor=_extract_project_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="找不到这条项目资料。")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -4872,6 +4939,7 @@ class RunState:
         "permission_mode", "allowed_paths", "trust_future", "trust_event_id",
         "executor", "sandbox", "extra_roots",
         "trust_roots",
+        "project_id",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -4916,6 +4984,7 @@ class RunState:
         self.sandbox: dict[str, Any] | None = None
         self.extra_roots: list[str] = []
         self.trust_roots: list[str] = []
+        self.project_id: str | None = None
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""
@@ -5442,6 +5511,16 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             workspace = project_row["workspace_path"] if project_row else None
         except Exception:
             workspace = None
+    if projects is not None:
+        project = await projects.find_by_conversation(conv_id)
+        if project is not None:
+            run.project_id = project.project_id
+            source_data = await projects.get_sources(project.project_id)
+            instructions = (source_data or {}).get("instructions", "")
+            if instructions:
+                active_skill_instructions = [*active_skill_instructions, {
+                    "name": "项目指令", "content": str(instructions),
+                }]
     if run.sandbox and (not workspace or str(workspace).startswith("ssh://")):
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
         await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
@@ -6190,6 +6269,7 @@ async def _execute_run(
             ssh_checkpoint_callback=ssh_checkpoint,
             sandbox_tool_callback=sandbox_tool if run.sandbox else None,
             sandbox_enabled=bool(run.sandbox),
+            project_id=run.project_id,
             reasoning_effort=(run.reasoning_effort if _model_supports_reasoning(
                 {"litellm_model": model_id or run.model}
             ) else None),

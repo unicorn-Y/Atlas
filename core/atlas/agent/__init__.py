@@ -118,6 +118,7 @@ class AgentRunContext:
     run_id: str | None = None
     goal: str | None = None
     conversation_id: str | None = None
+    project_id: str | None = None
     reminders: SystemReminders = field(default_factory=SystemReminders)
     maintenance_snapshot: dict[str, Any] | None = None
     maintenance_context: dict[str, Any] = field(default_factory=dict)
@@ -595,6 +596,15 @@ class AgentOrchestrator:
                     }, "required": ["key", "value"], "additionalProperties": False},
                 },
             }]
+        if self._projects is not None:
+            tools.append({"type": "function", "function": {
+                "name": "project_sources_search",
+                "description": "Search the current project's attached files, links, and notes.",
+                "parameters": {"type": "object", "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                }, "required": ["query"], "additionalProperties": False},
+            }})
         if self._skills is not None:
             tools = [*tools, {
                 "type": "function",
@@ -786,6 +796,9 @@ class AgentOrchestrator:
             tools = [item for item in tools if item["function"]["name"] in allowed]
         if denied_tools:
             tools = [item for item in tools if item["function"]["name"] not in denied_tools]
+        if self._projects is None or not getattr(runtime, "project_id", None):
+            tools = [item for item in tools
+                     if item["function"]["name"] != "project_sources_search"]
         if runtime.steer_queue is not None:
             while not runtime.steer_queue.empty():
                 steer = runtime.steer_queue.get_nowait()
@@ -1389,6 +1402,17 @@ class AgentOrchestrator:
                         )}],
                         "is_error": False,
                     }
+                elif fn_name == "project_sources_search" and self._projects is not None:
+                    if not getattr(ctx, "project_id", None):
+                        raise RuntimeError("这段对话没有关联项目。")
+                    matches = await self._projects.search_sources(
+                        ctx.project_id, str(fn_args.get("query", "")),
+                        int(fn_args.get("limit", 8)),
+                    )
+                    result = {"data": {"results": matches}, "is_error": False,
+                              "content": [{"type": "text", "text": json.dumps(
+                                  matches, ensure_ascii=False,
+                              )}]}
                 elif fn_name == "run_checks":
                     if (workspace or "").startswith("ssh://"):
                         raise ValueError("run_checks 暂不支持 SSH 工作目录，请在本机工作目录运行检查。")
@@ -1671,6 +1695,7 @@ class AgentOrchestrator:
         sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None,
         sandbox_enabled: bool = False,
         max_tool_rounds: int = MAX_TOOL_ROUNDS,
+        project_id: str | None = None,
         reasoning_effort: str | None = None,
         subtask_started: Callable[..., Any] | None = None,
         subtask_progress: Callable[..., Any] | None = None,
@@ -1705,6 +1730,7 @@ class AgentOrchestrator:
             run_id=run_id or source_run_id,
             goal=message,
             conversation_id=conversation_id,
+            project_id=project_id,
             reminders=SystemReminders(self.reminder_policy),
             steer_queue=steer_queue, input_callback=input_callback,
             workspace=workspace, mode=mode,

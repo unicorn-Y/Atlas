@@ -8,6 +8,7 @@ deliberately a thin store, not a project-management system.
 from __future__ import annotations
 
 import json
+import asyncio
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -16,6 +17,11 @@ from typing import Any
 import aiosqlite
 
 PROJECT_STATUSES = {"active", "paused", "archived"}
+_TEXT_SUFFIXES = {".txt", ".md", ".rst", ".csv", ".json", ".jsonl", ".py", ".js",
+                  ".ts", ".tsx", ".jsx", ".html", ".css", ".scss", ".yaml", ".yml",
+                  ".toml", ".xml", ".sql", ".sh", ".ps1", ".go", ".rs", ".java",
+                  ".c", ".h", ".cpp", ".hpp", ".rb", ".php", ".swift", ".kt",
+                  ".ini", ".cfg", ".log"}
 
 
 @dataclass
@@ -79,6 +85,27 @@ class ProjectStore:
                 conversation_id TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 PRIMARY KEY (project_id, conversation_id)
+            );
+            CREATE TABLE IF NOT EXISTS project_source_settings (
+                project_id TEXT PRIMARY KEY,
+                instructions TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS project_sources (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                path TEXT,
+                url TEXT,
+                text TEXT,
+                bytes INTEGER NOT NULL DEFAULT 0,
+                added_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_project_sources_project
+                ON project_sources(project_id, added_at);
+            CREATE VIRTUAL TABLE IF NOT EXISTS project_source_fts USING fts5(
+                project_id UNINDEXED, source_id UNINDEXED, path UNINDEXED, text,
+                tokenize='unicode61'
             );
         """)
         await self._db.commit()
@@ -236,3 +263,197 @@ class ProjectStore:
             (project_id,),
         )
         return [str(row["conversation_id"]) for row in await cursor.fetchall()]
+
+    async def get_sources(self, project_id: str) -> dict[str, Any] | None:
+        db = self._require_db()
+        if await self.get(project_id) is None:
+            return None
+        cursor = await db.execute(
+            "SELECT instructions FROM project_source_settings WHERE project_id=?",
+            (project_id,),
+        )
+        row = await cursor.fetchone()
+        cursor = await db.execute(
+            "SELECT id, kind, title, path, url, text, bytes, added_at FROM project_sources "
+            "WHERE project_id=? ORDER BY added_at, id", (project_id,),
+        )
+        return {"instructions": str(row["instructions"]) if row else "",
+                "sources": [dict(item) for item in await cursor.fetchall()]}
+
+    async def set_source_instructions(self, project_id: str, instructions: str) -> bool:
+        db = self._require_db()
+        if await self.get(project_id) is None:
+            return False
+        if len(instructions) > 8000:
+            raise ValueError("项目指令不能超过 8000 字。")
+        await db.execute(
+            "INSERT INTO project_source_settings(project_id,instructions) VALUES(?,?) "
+            "ON CONFLICT(project_id) DO UPDATE SET instructions=excluded.instructions",
+            (project_id, instructions),
+        )
+        await db.commit()
+        return True
+
+    async def add_source(
+        self, project_id: str, kind: str, *, title: str = "", path: str | None = None,
+        url: str | None = None, text: str | None = None, web_extractor: Any = None,
+        _source_id: str | None = None,
+    ) -> dict[str, Any]:
+        db = self._require_db()
+        if await self.get(project_id) is None:
+            raise KeyError(project_id)
+        if kind not in {"file", "folder", "url", "note"}:
+            raise ValueError("资料类型无效。")
+        source_id = _source_id or uuid.uuid4().hex
+        source_title = title.strip() or (Path(path).name if path else url or "项目备注")
+        index_entries: list[tuple[str, str, int]] = []
+        stored_text: str | None = None
+        byte_count = 0
+        cursor = await db.execute("SELECT COALESCE(SUM(bytes),0) AS total FROM project_sources WHERE project_id=?",
+                                  (project_id,))
+        current_bytes = int((await cursor.fetchone())["total"])
+        if kind in {"file", "folder"}:
+            if not path or not Path(path).is_absolute():
+                raise ValueError("资料路径必须是绝对路径。")
+            target = Path(path).expanduser().resolve()
+            if kind == "file" and not target.is_file() or kind == "folder" and not target.is_dir():
+                raise ValueError("资料路径不存在或类型不匹配。")
+            candidates = [target] if target.is_file() else sorted(p for p in target.rglob("*") if p.is_file())
+            for item in candidates:
+                size = item.stat().st_size
+                if (size > 2 * 1024 * 1024
+                        or current_bytes + byte_count + size > 50 * 1024 * 1024):
+                    continue
+                extracted = await asyncio.to_thread(_extract_file_text, item)
+                if not extracted:
+                    continue
+                byte_count += size
+                index_entries.extend((str(item), chunk, size) for chunk in _chunks(extracted))
+        elif kind == "url":
+            if not url or web_extractor is None:
+                raise ValueError("网页资料需要有效网址和正文提取服务。")
+            extracted = web_extractor(url)
+            extracted = await extracted if hasattr(extracted, "__await__") else extracted
+            stored_text = str(extracted.get("text", ""))
+            source_title = title.strip() or str(extracted.get("title") or url)
+            byte_count = len(stored_text.encode("utf-8"))
+            index_entries.extend((url, chunk, byte_count) for chunk in _chunks(stored_text))
+        else:
+            stored_text = str(text or "")
+            byte_count = len(stored_text.encode("utf-8"))
+            index_entries.extend(("", chunk, byte_count) for chunk in _chunks(stored_text))
+        await db.execute(
+            "INSERT INTO project_sources(id,project_id,kind,title,path,url,text,bytes) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (source_id, project_id, kind, source_title, path, url, stored_text, byte_count),
+        )
+        await self._replace_source_index(project_id, source_id, index_entries)
+        await db.commit()
+        return next(item for item in (await self.get_sources(project_id))["sources"]
+                    if item["id"] == source_id)
+
+    async def _replace_source_index(
+        self, project_id: str, source_id: str, entries: list[tuple[str, str, int]],
+    ) -> None:
+        db = self._require_db()
+        await db.execute("DELETE FROM project_source_fts WHERE source_id=?", (source_id,))
+        await db.executemany(
+            "INSERT INTO project_source_fts(project_id,source_id,path,text) VALUES(?,?,?,?)",
+            [(project_id, source_id, path, content) for path, content, _size in entries],
+        )
+
+    async def search_sources(
+        self, project_id: str, query: str, limit: int = 8,
+    ) -> list[dict[str, Any]]:
+        db = self._require_db()
+        words = [word for word in query.strip().split() if word]
+        if not words:
+            return []
+        limit = min(max(int(limit), 1), 20)
+        expression = " OR ".join('"' + word.replace('"', '""') + '"' for word in words)
+        try:
+            cursor = await db.execute(
+                "SELECT s.title,f.path,f.text,bm25(project_source_fts) AS rank "
+                "FROM project_source_fts f JOIN project_sources s ON s.id=f.source_id "
+                "WHERE f.project_id=? AND project_source_fts MATCH ? "
+                "ORDER BY rank LIMIT ?", (project_id, expression, limit),
+            )
+            rows = await cursor.fetchall()
+            if not rows:
+                clauses = " OR ".join("f.text LIKE ?" for _ in words)
+                cursor = await db.execute(
+                    "SELECT s.title,f.path,f.text,0.0 AS rank FROM project_source_fts f "
+                    "JOIN project_sources s ON s.id=f.source_id WHERE f.project_id=? AND (" + clauses + ") LIMIT ?",
+                    (project_id, *[f"%{word}%" for word in words], limit),
+                )
+                rows = await cursor.fetchall()
+        except Exception:
+            clauses = " OR ".join("f.text LIKE ?" for _ in words)
+            cursor = await db.execute(
+                "SELECT s.title,f.path,f.text,0.0 AS rank FROM project_source_fts f "
+                "JOIN project_sources s ON s.id=f.source_id WHERE f.project_id=? AND (" + clauses + ") LIMIT ?",
+                (project_id, *[f"%{word}%" for word in words], limit),
+            )
+            rows = await cursor.fetchall()
+        return [{"title": row["title"], "path": row["path"],
+                 "snippet": str(row["text"])[:1200], "score": float(row["rank"])}
+                for row in rows]
+
+    async def delete_source(self, project_id: str, source_id: str) -> bool:
+        db = self._require_db()
+        await db.execute("DELETE FROM project_source_fts WHERE source_id=?", (source_id,))
+        cursor = await db.execute(
+            "DELETE FROM project_sources WHERE project_id=? AND id=?", (project_id, source_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+    async def refresh_source(self, project_id: str, source_id: str, **kwargs: Any) -> dict[str, Any] | None:
+        db = self._require_db()
+        cursor = await db.execute(
+            "SELECT kind,title,path,url,text FROM project_sources WHERE project_id=? AND id=?",
+            (project_id, source_id),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        await self.delete_source(project_id, source_id)
+        return await self.add_source(
+            project_id, row["kind"], title=row["title"], path=row["path"],
+            url=row["url"], text=row["text"], web_extractor=kwargs.get("web_extractor"),
+            _source_id=source_id,
+        )
+
+
+def _chunks(text: str, size: int = 1000, overlap: int = 120) -> list[str]:
+    clean = text.strip()
+    return [clean[index:index + size] for index in range(0, len(clean), size - overlap)] if clean else []
+
+
+def _extract_file_text(path: Path) -> str:
+    suffix = path.suffix.casefold()
+    if suffix in _TEXT_SUFFIXES:
+        return path.read_text(encoding="utf-8", errors="replace")
+    try:
+        if suffix == ".docx":
+            from docx import Document
+            doc = Document(path)
+            return "\n".join([p.text for p in doc.paragraphs] + [
+                "\t".join(cell.text for cell in row.cells)
+                for table in doc.tables for row in table.rows
+            ])
+        if suffix == ".xlsx":
+            from openpyxl import load_workbook
+            book = load_workbook(path, read_only=True, data_only=True)
+            return "\n".join("\t".join(str(value or "") for value in row)
+                              for sheet in book for row in sheet.iter_rows(values_only=True))
+        if suffix == ".pptx":
+            from pptx import Presentation
+            return "\n".join(shape.text for slide in Presentation(path).slides
+                              for shape in slide.shapes if getattr(shape, "has_text_frame", False))
+        if suffix == ".pdf":
+            from pypdf import PdfReader
+            return "\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
+    except (ImportError, OSError, ValueError):
+        return ""
+    return ""
