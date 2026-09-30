@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { FileText, FolderOpen, GitBranch, GitMerge, Trash2, X } from 'lucide-react';
 import type { WorktreeInfo } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun } from '../../types/runtime';
@@ -19,6 +19,40 @@ export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'ter
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
 const WIDE: InspectorTab[] = ['changes', 'files', 'terminal', 'browser'];
+const WIDTH_KEY = 'atlas.preference.inspector-width';
+const readWidth = () => { try { const value = Number(localStorage.getItem(WIDTH_KEY)); return value >= 300 ? value : null; } catch { return null; } };
+
+/** Drag the panel's left edge to set its width (kept on this machine); double-click goes back to automatic. */
+function useResizableWidth() {
+  const [width, setWidth] = useState<number | null>(readWidth);
+  const [dragging, setDragging] = useState(false);
+  const start = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const panel = event.currentTarget.parentElement;
+    if (!panel) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = panel.getBoundingClientRect().width;
+    let latest = startWidth;
+    let moved = false;
+    const move = (moveEvent: PointerEvent) => {
+      // A click (or the two of a double-click) is not a drag: start only once the pointer travels.
+      if (!moved && Math.abs(moveEvent.clientX - startX) < 3) return;
+      if (!moved) { moved = true; setDragging(true); }
+      latest = Math.round(Math.min(window.innerWidth * 0.62, Math.max(300, startWidth + startX - moveEvent.clientX)));
+      setWidth(latest);
+    };
+    const end = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      if (moved) try { localStorage.setItem(WIDTH_KEY, String(latest)); } catch { /* storage unavailable */ }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+  };
+  const reset = () => { setWidth(null); try { localStorage.removeItem(WIDTH_KEY); } catch { /* storage unavailable */ } };
+  return { width, dragging, start, reset };
+}
 
 export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged, onAsk }: {
   tab: InspectorTab;
@@ -60,10 +94,17 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
   const current = artifacts.find((item) => item.id === selected);
   const refreshKey = `${run?.id}:${run?.status}`;
 
+  const resize = useResizableWidth();
   const tabs: Array<[InspectorTab, string]> = [
     ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'],
   ];
-  return <aside aria-label="任务面板" className={cn('anim-fade flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)] transition-[width] duration-200', WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]')}>
+  return <aside aria-label="任务面板" style={resize.width ? { width: resize.width } : undefined}
+    className={cn('anim-fade relative flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)]', !resize.dragging && 'transition-[width] duration-200', !resize.width && (WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]'))}>
+    <div role="separator" aria-orientation="vertical" aria-label="拖动调整任务面板宽度，双击恢复自动" title="拖动调整宽度，双击恢复自动"
+      onPointerDown={resize.start} onDoubleClick={resize.reset}
+      className={cn('absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:rounded-full after:transition-colors hover:after:bg-brand/50', resize.dragging && 'after:bg-brand')} />
+    {/* While dragging, keep the embedded browser from swallowing the pointer. */}
+    {resize.dragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
     <div className="flex items-center gap-2 pr-2 pl-4 pt-3 shadow-[inset_0_-1px_0_var(--line)]">
       <div className="flex min-w-0 flex-1 items-center gap-3.5 overflow-x-auto [scrollbar-width:none]" role="tablist">
       {tabs.map(([id, label]) =>

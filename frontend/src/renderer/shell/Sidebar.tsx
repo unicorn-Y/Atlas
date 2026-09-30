@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Archive, ArchiveRestore, ArrowUpDown, BookOpen, Check, ChevronRight, Code2, CopyPlus, Download, Home, KanbanSquare, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowUpDown, BookOpen, Check, Columns2, ChevronRight, Code2, CopyPlus, Download, Home, KanbanSquare, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
 import { nextTheme, themeInfo, type Theme } from './themes';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import Mark from '../components/Mark';
@@ -82,6 +82,8 @@ interface SidebarProps {
   onToggleArchived: (id: string) => void;
   onExport: (id: string, format: 'json' | 'md') => void;
   onDuplicate: (id: string) => void;
+  /** Show this conversation read-only beside the current one. */
+  onOpenBeside?: (id: string) => void;
 }
 
 export default function Sidebar(props: SidebarProps) {
@@ -145,6 +147,7 @@ export default function Sidebar(props: SidebarProps) {
           </div>
           {!isArchived && <MenuItem onSelect={() => props.onTogglePinned(conversation.id)}>{isPinned ? <><PinOff />取消置顶</> : <><Pin />置顶</>}</MenuItem>}
           <MenuItem onSelect={() => props.onToggleArchived(conversation.id)}>{isArchived ? <><ArchiveRestore />移出归档</> : <><Archive />归档</>}</MenuItem>
+          {props.onOpenBeside && !current && props.view === 'chat' && <MenuItem onSelect={() => props.onOpenBeside!(conversation.id)}><Columns2 />在旁边打开</MenuItem>}
           <MenuItem onSelect={() => props.onDuplicate(conversation.id)}><CopyPlus />复制一份</MenuItem>
           <MenuItem onSelect={() => props.onExport(conversation.id, 'md')}><Download />导出为 Markdown</MenuItem>
           <MenuItem onSelect={() => props.onExport(conversation.id, 'json')}><Download />导出为 JSON</MenuItem>

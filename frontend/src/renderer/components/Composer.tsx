@@ -205,11 +205,13 @@ export default function Composer(props: ComposerProps) {
     <div className={cn('@container flex items-center gap-1.5', hero ? 'mt-3' : 'mt-2')}>
       <Tip label="添加图片或文件，也可以直接粘贴、拖进来">
         <button type="button" aria-label="添加附件" onClick={() => fileRef.current?.click()}
-          className="grid size-8 place-items-center rounded-[9px] text-fg-3 hover:bg-hover hover:text-fg">
+          className="grid size-8 shrink-0 place-items-center rounded-[9px] text-fg-3 hover:bg-hover hover:text-fg">
           {props.attachments.length ? <ImagePlus size={18} /> : <Paperclip size={18} />}
         </button>
       </Tip>
-      {props.tools}
+      {/* Narrow composers (split view, wide task panel): the tool row scrolls rather than pushing send out of view. */}
+      {props.tools && <div onWheel={(event) => { if (!event.deltaX && event.deltaY) event.currentTarget.scrollLeft += event.deltaY; }}
+        className="flex min-w-0 shrink items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{props.tools}</div>}
 
       {props.modes && <div role="radiogroup" aria-label="任务类型" className="flex shrink-0 gap-0.5 rounded-[10px] bg-sunken p-[3px] shadow-[inset_0_0_0_1px_var(--line)]">
         {props.modes.options.map(({ id, label, icon: Icon }) => {
@@ -228,7 +230,7 @@ export default function Composer(props: ComposerProps) {
 
       <Menu>
         <MenuTrigger asChild disabled={!props.models.length}>
-          <button type="button" title="选择模型" className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-[9px] px-2.5 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50">
+          <button type="button" title="选择模型" className="inline-flex h-8 min-w-0 shrink items-center gap-1.5 rounded-[9px] px-2.5 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50">
             <span className={cn('size-1.5 shrink-0 rounded-full', current ? 'bg-ok shadow-[0_0_8px_var(--ok)]' : 'bg-fg-3')} />
             <span className="max-w-[160px] truncate">{current?.name ?? current?.id ?? '默认模型'}</span>
             <ChevronDown size={13} />
@@ -244,13 +246,13 @@ export default function Composer(props: ComposerProps) {
 
       <Tip label={props.listening ? '停止语音输入' : '语音输入'}>
         <button type="button" aria-label={props.listening ? '停止语音输入' : '开始语音输入'} aria-pressed={props.listening} onClick={props.onToggleMic}
-          className={cn('grid size-8 place-items-center rounded-full transition-colors',
+          className={cn('grid size-8 shrink-0 place-items-center rounded-full transition-colors',
             props.listening ? 'bg-brand text-on-primary' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
           <Mic size={17} />
         </button>
       </Tip>
       <button type="submit" aria-label="发送消息" disabled={!canSend}
-        className="primary-fill grid size-9 place-items-center rounded-full transition-[filter,opacity] hover:brightness-110 disabled:opacity-30">
+        className="primary-fill grid size-9 shrink-0 place-items-center rounded-full transition-[filter,opacity] hover:brightness-110 disabled:opacity-30">
         <ArrowUp size={17} strokeWidth={2.2} />
       </button>
     </div>

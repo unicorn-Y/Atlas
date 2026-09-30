@@ -16,6 +16,7 @@ import ForkTree from './components/ForkTree';
 import RunSetupMenu from './components/RunSetupMenu';
 import TabStrip from './components/TabStrip';
 import OnboardingDialog from './components/OnboardingDialog';
+import SidePane from './components/SidePane';
 import ShortcutsPanel from './pages/ShortcutsPanel';
 import { loadBindings, matchShortcut } from './services/shortcuts';
 import type { PermissionMode } from '@atlas/backend-adapter';
@@ -101,6 +102,7 @@ export default function App() {
   const [branches, setBranches] = useState<string[]>([]);
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [besideId, setBesideId] = useState('');
   const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [bindings, setBindings] = useState(loadBindings);
@@ -700,6 +702,7 @@ export default function App() {
   const canRewrite = store.connected && !(activeRun && !runDone) && !loadingMessages;
 
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
+  const besideConversation = view === 'chat' && besideId !== store.activeConversationId ? store.conversations.find((item) => item.id === besideId) : undefined;
   const runningConversations = store.runs.filter((run) => !TERMINAL.includes(run.status)).map((run) => run.conversationId);
   // One open conversation reads better as a plain title; tabs appear from the second one.
   const showTabs = view === 'chat' && tabs.length > 1 && tabs.includes(store.activeConversationId);
@@ -719,7 +722,7 @@ export default function App() {
         pinned={store.pinned} archived={store.archived} unread={store.unread}
         running={runningConversations}
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
-        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} />
+        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} />
 
       <main className="sheet relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[14px]">
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
@@ -790,6 +793,8 @@ export default function App() {
               </div>
             </div>
           </div>
+          {besideConversation && <SidePane conversation={besideConversation} username={username} onClose={() => setBesideId('')}
+            onSwitch={() => { const previous = store.activeConversationId; openConversation(besideConversation); setBesideId(previous); }} />}
           {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => toggleInspector(false)} run={activeRun} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
