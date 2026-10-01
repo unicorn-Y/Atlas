@@ -78,7 +78,7 @@
 | `local_edit patch` | Hermes `patch` | 已桥接，保留 LF/CRLF 行为测试 |
 | `local_shell` | Hermes `terminal`，Atlas Windows 路由到 PowerShell | 前台/后台命令桥接；Hermes `notify`、watch pattern、heartbeat 参数目前被忽略 |
 | `local_process` | Hermes `process_manage` | `list`、`wait`、`poll→status`、`log→read`、`kill→cancel` 已映射 |
-| `local_process` 未覆盖动作 | Hermes `process_manage` | `write_stdin`、`submit`、`close`、`handoff` 未由 Atlas process handler 实现；`pty` 也未保留，因此真终端交互未覆盖（T11 缺口） |
+| `local_process` 交互动作 | Hermes `process_manage` | `write`、`submit`、`close`、手动 `handoff` 已映射并测试；Windows PTY 用已有 pywinpty 可选依赖。Atlas 仍未实现 handoff 后通知父级 Agent 的 Hermes 通知链（T11 剩余差异） |
 | `ask_user` | Hermes `clarify` | 已桥接到 Atlas 输入回调 |
 | Atlas `todo_list`、`execute_code`、`session_search`、`delegate_task` | Atlas 原生 handler 注册至 Hermes registry | 已接入；委派与并行场景有假模型测试 |
 | Atlas 其他模型可见工具 | Hermes `atlas` 工具集及 Atlas registry | 运行时注册；未对每个工具逐一构造独立端到端场景 |
@@ -102,7 +102,7 @@
 ## CORE-PARITY C1 未完成项
 
 - **L9 时间和预算提醒**：Hermes run budget 机制没有接入 Atlas 本轮的会话预算/提醒设置，需补接与测试。
-- **T11 真终端交互**：`process_manage` 的 stdin/submit/close/handoff 和 Hermes PTY 参数未映射到 Atlas 执行器。
+- **T11 真终端交互**：stdin/write/submit/close、Windows PTY 与手动 handoff 已接入；handoff 后向父级 Agent 异步通知完成的链路未实现。
 - **§10 #10**：还缺完整同脚本新旧内核事件序列比较。
 - **T19**：Atlas 工具 registry 已接入，但本轮没有逐项核对并独立跑完每一个旧工具动作；上表明确列出已知 process action 缺口。
 
@@ -117,6 +117,7 @@
 ## 验证记录
 
 - A5 MoA 桥接聚焦测试：`4 passed in 0.21s`（`test_hermes_runtime.py`），使用假参考咨询和 fake gateway 配置；验证 Atlas ModelManager 模型选择、现有 `moa_references` 事件、advisory 系统提示注入及 `/moa` 参数路径，无真实模型调用。
+- T11 交互进程聚焦测试：`4 passed in 12.77s`（stdin 写入/回车/EOF、Windows pywinpty PTY、handoff 后脱离 child-run 清理，以及 Hermes 动作映射）；均使用本地子进程，无模型/网络。
 - 聚焦 C1：权限/运行时、MCP、SSH、压缩、协议版本测试分别通过；协议补正后 3 个相关断言 `3 passed in 8.41s`。运行时 fallback 修正后的核心旧测试 `3 passed in 0.20s`。
 - C1 合并聚焦组在 fallback 修正前：`23 passed, 1 warning in 55.29s`。对应模块为 `test_hermes_runtime_e2e.py`、`test_hermes_mcp_config.py`、`test_hermes_ssh_routing.py`、`test_hermes_runtime.py`。
 - 前端检查：`npx tsc --noEmit -p tsconfig.renderer.json` 通过；`npx tsc --noEmit -p tsconfig.electron.json` 通过；`npx vitest run` 为 7 files / 36 tests 全通过；`npx vite build` 成功（有 chunk 大于 500KB 的告警）。

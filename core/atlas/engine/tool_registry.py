@@ -178,8 +178,12 @@ def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any
         args["command"] = args.pop("command", args.pop("cmd", ""))
         args["shell"] = "powershell"
         args["cwd"] = args.pop("workdir", args.get("cwd", ""))
-        args["detached"] = bool(args.pop("background", False))
-        args.pop("pty", None)
+        background = bool(args.pop("background", False))
+        args["detached"] = background
+        if background:
+            args["keep_stdin"] = True
+        if args.pop("pty", False):
+            args["pty"] = True
         args.pop("notify", None)
         args.pop("notify_on_complete", None)
         args.pop("watch_patterns", None)
@@ -208,7 +212,8 @@ def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any
         process_action = str(args.get("action", "list"))
         mapped_action = {
             "poll": "status", "log": "read", "kill": "cancel",
-            "wait": "wait", "list": "list",
+            "wait": "wait", "list": "list", "write": "write_stdin",
+            "submit": "submit_stdin", "close": "close_stdin", "handoff": "handoff",
         }.get(process_action)
         if mapped_action:
             args["action"] = mapped_action

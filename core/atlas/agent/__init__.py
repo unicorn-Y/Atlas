@@ -1588,7 +1588,8 @@ class AgentOrchestrator:
                         })
                         or fn_name.startswith("custom_")
                         or (fn_name.startswith("local_process") and fn_args.get("action") in {
-                            "start", "write_stdin", "terminate",
+                            "start", "write_stdin", "submit_stdin", "close_stdin",
+                            "handoff", "terminate",
                         })
                         or (fn_name == "local_git" and fn_args.get("action") in {
                             "add", "commit", "pull", "fetch", "push",

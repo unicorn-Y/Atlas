@@ -66,7 +66,7 @@
 | T8 | 编辑后诊断 | OD：改完跑 LSP 诊断回传；CC 的诊断工具；HM `agent/lsp`、`file_operations_lint.py` | △ `run_checks` 要单独调用 | ✔ 语法检查 | LSP 诊断：对比 OD `src/lsp` 和 HM `agent/lsp`，选强的 | C6 |
 | T9 | 搜索 | HM `search_files`：基于 ripgrep，正则、文件过滤、三种输出、上下文行、分页、按修改时间排序 | ✔ Hermes `search_files`（`698b7bb`） | ✔ | — | C1 |
 | T10 | 跑命令：前台、后台、结束通知 | HM `terminal`：后台进程加 `notify` 结束通知、按输出匹配通知、心跳汇报、真终端模式 | △ 前后台命令和完成事件已接；notify/watch/heartbeat 参数未接（`698b7bb`, `805110c`） | ✔ | — | C1 |
-| T11 | 真终端交互（REPL、交互式命令行） | CX `unified_exec`（真终端，可写入 stdin）；HM `pty` 加 `process_manage` 的写入 | △ `pty`/stdin/submit 等 Atlas handler 未覆盖 | ✔ | 补交互式进程动作映射 | C1 |
+| T11 | 真终端交互（REPL、交互式命令行） | CX `unified_exec`（真终端，可写入 stdin）；HM `pty` 加 `process_manage` 的写入 | △ stdin/write/submit/close、Windows PTY 和手动 handoff 已接入并覆盖；父级自动完成通知尚未接入 | ✔ | 接入父级完成通知 | C1 |
 | T12 | Windows shell | CC：PowerShell 和 Bash 两个工具；Pi `powershell.ts` | ✔ Hermes terminal 在 Atlas 路由到 PowerShell；无 Git Bash 回退实测（`698b7bb`） | ✔ | — | C1 |
 | T13 | 网页搜索、抓取 | HM `web_search`/`web_extract`（多后端、缓存、截断）；CC WebFetch | ✔ Atlas 网络工具由 Atlas registry 提供；未做真实网络验收（`698b7bb`） | ✔ | 保留 Atlas 的内网防护 | C1 |
 | T14 | 待办清单 | CC 的任务列表；HM `todo_list`，压缩后自动重新注入 | ✔ Hermes todo 在压缩恢复场景保留（`35cd874`） | ✔ | — | C1 |

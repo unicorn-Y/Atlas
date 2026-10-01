@@ -57,11 +57,26 @@ def test_hermes_tool_calls_translate_to_atlas_tools():
         "command": "Get-Location", "workdir": "D:/Atlas", "background": True,
     }) == ("local_shell", {
         "command": "Get-Location", "shell": "powershell", "cwd": "D:/Atlas",
-        "detached": True,
+        "detached": True, "keep_stdin": True,
+    })
+    assert _translate("terminal", {
+        "command": "python -i", "workdir": "D:/Atlas", "background": True, "pty": True,
+    }) == ("local_shell", {
+        "command": "python -i", "shell": "powershell", "cwd": "D:/Atlas",
+        "detached": True, "keep_stdin": True, "pty": True,
     })
     assert _translate("process_manage", {"action": "poll", "session_id": "proc-1"}) == (
         "local_process", {"action": "status", "execution_id": "proc-1"},
     )
+    for source, target in (
+        ("write", "write_stdin"), ("submit", "submit_stdin"),
+        ("close", "close_stdin"), ("handoff", "handoff"),
+    ):
+        assert _translate("process_manage", {
+            "action": source, "session_id": "proc-1", "data": "answer",
+        }) == ("local_process", {
+            "action": target, "execution_id": "proc-1", "data": "answer",
+        })
 
 
 @pytest.mark.asyncio

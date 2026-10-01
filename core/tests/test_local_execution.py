@@ -254,6 +254,72 @@ async def test_process_stream_status_cancel_and_shutdown(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
+async def test_process_stdin_write_submit_and_close(tmp_path: Path) -> None:
+    runtime = LocalExecutionRuntime()
+    started = await runtime.call_tool(
+        "local_process",
+        {
+            "action": "start",
+            "executable": sys.executable,
+            "args": ["-u", "-c", "import sys; print('ready', flush=True); print('got:' + sys.stdin.readline().strip(), flush=True); print('eof:' + str(sys.stdin.read() == ''), flush=True)"],
+            "cwd": str(tmp_path),
+            "detached": True,
+            "keep_stdin": True,
+        },
+    )
+    execution_id = started["data"]["execution_id"]
+    await runtime.call_tool(
+        "local_process", {"action": "write_stdin", "execution_id": execution_id, "data": "answer"},
+    )
+    submitted = await runtime.call_tool(
+        "local_process", {"action": "submit_stdin", "execution_id": execution_id},
+    )
+    closed = await runtime.call_tool(
+        "local_process", {"action": "close_stdin", "execution_id": execution_id},
+    )
+    waited = await runtime.call_tool(
+        "local_process", {"action": "wait", "execution_id": execution_id, "timeout": 5},
+    )
+    await runtime.shutdown()
+
+    assert submitted["data"]["bytes_written"] == 2
+    assert waited["data"]["exit_code"] == 0
+    assert "got:answer" in waited["data"]["stdout"]
+    assert closed["data"]["closed"] is True
+    assert "eof:True" in waited["data"]["stdout"]
+
+
+@pytest.mark.asyncio
+async def test_process_pty_accepts_interactive_input(tmp_path: Path) -> None:
+    if sys.platform != "win32":
+        pytest.skip("pywinpty PTY integration is Windows-only")
+    pytest.importorskip("winpty")
+    runtime = LocalExecutionRuntime()
+    started = await runtime.call_tool(
+        "local_process",
+        {
+            "action": "start",
+            "executable": sys.executable,
+            "args": ["-u", "-c", "import sys; print('ready', flush=True); print('got:' + input(), flush=True)"],
+            "cwd": str(tmp_path),
+            "detached": True,
+            "keep_stdin": True,
+            "pty": True,
+        },
+    )
+    execution_id = started["data"]["execution_id"]
+    await runtime.call_tool(
+        "local_process", {"action": "submit_stdin", "execution_id": execution_id, "data": "pty-answer"},
+    )
+    waited = await runtime.call_tool(
+        "local_process", {"action": "wait", "execution_id": execution_id, "timeout": 10},
+    )
+    await runtime.shutdown()
+    assert waited["data"]["exit_code"] == 0
+    assert "got:pty-answer" in waited["data"]["stdout"]
+
+
+@pytest.mark.asyncio
 async def test_agent_completes_multi_step_file_edit_and_execution(
     tmp_path: Path, legacy_agent_engine,
 ) -> None:
@@ -685,6 +751,34 @@ async def test_detached_process_survives_run_cleanup_but_stops_on_shutdown(tmp_p
 
     assert status["data"]["state"] == "running"
     assert not marker.exists()
+
+
+@pytest.mark.asyncio
+async def test_process_handoff_detaches_from_child_run(tmp_path: Path) -> None:
+    runtime = LocalExecutionRuntime()
+    started = await runtime.call_tool(
+        "local_process",
+        {
+            "action": "start",
+            "executable": sys.executable,
+            "args": ["-c", "import time; time.sleep(30)"],
+            "cwd": str(tmp_path),
+        },
+        run_id="child-run",
+    )
+    execution_id = started["data"]["execution_id"]
+    handed = await runtime.call_tool(
+        "local_process",
+        {"action": "handoff", "execution_id": execution_id, "data": "Parent should poll this process."},
+        run_id="child-run",
+    )
+    await runtime.cancel_run("child-run")
+    listed = await runtime.call_tool("local_process", {"action": "list"})
+    await runtime.shutdown()
+
+    assert handed["data"]["detached"] is True
+    assert handed["data"]["handoff_note"] == "Parent should poll this process."
+    assert any(item["execution_id"] == execution_id for item in listed["data"]["processes"])
 
 
 @pytest.mark.asyncio

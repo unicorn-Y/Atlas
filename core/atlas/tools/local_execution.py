@@ -1,4 +1,9 @@
-"""Atlas-owned FULL_ACCESS local shell, process, filesystem, and Git tools."""
+"""Atlas-owned FULL_ACCESS local shell, process, filesystem, and Git tools.
+
+Hermes process actions adapted from tools/process_registry.py@562ad75:
+write, submit, close, and handoff map to Atlas process IDs and the shared local
+execution runtime. Windows PTY input/output uses the existing optional pywinpty.
+"""
 
 from __future__ import annotations
 
@@ -61,6 +66,8 @@ LOCAL_TOOLS = [
             "stdin": {"type": "string"},
             "timeout": {"type": "number"},
             "detached": {"type": "boolean"},
+            "keep_stdin": {"type": "boolean"},
+            "pty": {"type": "boolean"},
         },
         ["shell", "command"],
     ),
@@ -85,12 +92,15 @@ LOCAL_TOOLS = [
         "local_process",
         (
             "Start, inspect, read full stdout/stderr logs, wait for, cancel, or list processes "
-            "started by Atlas."
+            "started by Atlas, and write, submit, close stdin, or hand off a running process."
         ),
         {
             "action": {
                 "type": "string",
-                "enum": ["start", "status", "read", "wait", "cancel", "list"],
+                "enum": [
+                    "start", "status", "read", "wait", "cancel", "list",
+                    "write_stdin", "submit_stdin", "close_stdin", "handoff",
+                ],
             },
             "execution_id": {"type": "string"},
             "executable": {"type": "string"},
@@ -102,6 +112,9 @@ LOCAL_TOOLS = [
             "stdin": {"type": "string"},
             "timeout": {"type": "number"},
             "detached": {"type": "boolean"},
+            "keep_stdin": {"type": "boolean"},
+            "pty": {"type": "boolean"},
+            "data": {"type": "string"},
             "stream": {"type": "string", "enum": ["stdout", "stderr"]},
             "offset": {"type": "integer", "minimum": 0},
             "limit": {"type": "integer", "minimum": 1, "maximum": 65536},
@@ -192,10 +205,69 @@ LOCAL_TOOLS = [
 ]
 
 
+class _PtyReader:
+    def __init__(self, process: Any) -> None:
+        self.process = process
+
+    async def read(self, size: int) -> bytes:
+        try:
+            value = await asyncio.to_thread(self.process.read, size)
+        except EOFError:
+            return b""
+        return value.encode("utf-8")
+
+
+class _PtyWriter:
+    def __init__(self, process: Any) -> None:
+        self.process = process
+        self._pending = bytearray()
+        self._closing = False
+
+    def write(self, data: bytes) -> None:
+        if self._closing:
+            raise ValueError("PTY stdin is closed")
+        self._pending.extend(data)
+
+    async def drain(self) -> None:
+        payload = bytes(self._pending).decode("utf-8", errors="replace")
+        self._pending.clear()
+        if payload:
+            await asyncio.to_thread(self.process.write, payload)
+
+    def is_closing(self) -> bool:
+        return self._closing
+
+    def close(self) -> None:
+        self._closing = True
+
+    async def wait_closed(self) -> None:
+        if self._closing:
+            await asyncio.to_thread(self.process.sendcontrol, "z")
+            await asyncio.to_thread(self.process.write, "\r")
+
+
+class _AsyncPtyProcess:
+    def __init__(self, process: Any) -> None:
+        self._pty = process
+        self.pid = process.pid
+        self.returncode: int | None = None
+        self.stdin = _PtyWriter(process)
+        self.stdout = _PtyReader(process)
+        self.stderr = None
+
+    async def wait(self) -> int:
+        if self.returncode is None:
+            self.returncode = await asyncio.to_thread(self._pty.wait)
+        return self.returncode or 0
+
+    def send_signal(self, _signal: int) -> None:
+        self._pty.sendintr()
+
+
 @dataclass
 class LocalProcess:
     execution_id: str
-    process: asyncio.subprocess.Process
+    process: Any
     command: str
     cwd: str
     started_monotonic: float
@@ -211,6 +283,7 @@ class LocalProcess:
     pump_tasks: list[asyncio.Task[None]] = field(default_factory=list)
     wait_task: asyncio.Task[None] | None = None
     cancelled: bool = False
+    handoff_note: str = ""
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -223,6 +296,7 @@ class LocalProcess:
             "started_at": self.started_at,
             "duration_seconds": round(time.monotonic() - self.started_monotonic, 3),
             "detached": self.detached,
+            "handoff_note": self.handoff_note,
         }
 
 
@@ -504,6 +578,8 @@ class LocalExecutionRuntime:
             bool(args.get("detached")),
             run_id,
             callback,
+            bool(args.get("keep_stdin")),
+            bool(args.get("pty")),
         )
 
     async def _start_from_exec(
@@ -525,6 +601,8 @@ class LocalExecutionRuntime:
             bool(args.get("detached")),
             run_id,
             callback,
+            bool(args.get("keep_stdin")),
+            bool(args.get("pty")),
         )
 
     @staticmethod
@@ -560,6 +638,8 @@ class LocalExecutionRuntime:
         detached: bool,
         run_id: str | None,
         callback: OutputCallback | None,
+        keep_stdin: bool = False,
+        pty: bool = False,
     ) -> LocalProcess:
         if not cwd.is_dir():
             raise NotADirectoryError(str(cwd))
@@ -572,15 +652,27 @@ class LocalExecutionRuntime:
             kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
             kwargs["start_new_session"] = True
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            cwd=str(cwd),
-            env=process_env,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            **kwargs,
-        )
+        if pty:
+            if os.name != "nt":
+                raise ValueError("PTY-backed terminals are available only on Windows.")
+            try:
+                from winpty import PtyProcess
+            except ImportError as exc:
+                raise ValueError("pywinpty is required for PTY-backed terminals.") from exc
+            native_process = await asyncio.to_thread(
+                PtyProcess.spawn, argv, cwd=str(cwd), env=process_env,
+            )
+            proc = _AsyncPtyProcess(native_process)
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                cwd=str(cwd),
+                env=process_env,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                **kwargs,
+            )
         execution_id = str(uuid.uuid4())
         stdout_file = tempfile.NamedTemporaryFile(prefix=f"atlas-{execution_id}-out-", delete=False)
         stderr_file = tempfile.NamedTemporaryFile(prefix=f"atlas-{execution_id}-err-", delete=False)
@@ -607,8 +699,9 @@ class LocalExecutionRuntime:
         if stdin is not None and proc.stdin is not None:
             proc.stdin.write(stdin.encode("utf-8"))
             await proc.stdin.drain()
-        if proc.stdin:
+        if proc.stdin and not keep_stdin:
             proc.stdin.close()
+            await proc.stdin.wait_closed()
         record.wait_task = asyncio.create_task(self._watch(record))
         log.info(
             "local_execution.started",
@@ -658,6 +751,9 @@ class LocalExecutionRuntime:
         try:
             record.exit_code = await record.process.wait()
             await asyncio.gather(*record.pump_tasks)
+            native_pty = getattr(record.process, "_pty", None)
+            if native_pty is not None:
+                await asyncio.to_thread(native_pty.close)
             if record.cancelled:
                 record.state = "cancelled"
             elif record.exit_code == 0:
@@ -775,9 +871,42 @@ class LocalExecutionRuntime:
             elif action == "cancel":
                 await self._cancel_process(record)
                 data = record.summary()
+            elif action in {"write_stdin", "submit_stdin", "close_stdin"}:
+                data = await self._write_process_stdin(record, action, str(args.get("data", "")))
+            elif action == "handoff":
+                if record.state != "running":
+                    raise ValueError("Only a running process can be handed off.")
+                record.detached = True
+                record.owner_run_id = None
+                record.handoff_note = str(args.get("data", "")).strip()
+                data = record.summary()
             else:
                 raise ValueError(f"Unsupported process action: {action}")
         return {"data": data, "content": [{"type": "text", "text": str(data)}], "is_error": False}
+
+    async def _write_process_stdin(
+        self, record: LocalProcess, action: str, data: str,
+    ) -> dict[str, Any]:
+        writer = record.process.stdin
+        if writer is None or writer.is_closing():
+            raise ValueError("Process stdin is closed; start the terminal with background=true.")
+        if record.state != "running":
+            raise ValueError("Process has already exited; stdin is unavailable.")
+        if action == "close_stdin":
+            writer.close()
+            await writer.wait_closed()
+            return {"execution_id": record.execution_id, "action": action, "closed": True}
+        payload = data
+        if action == "submit_stdin":
+            payload += "\r\n" if os.name == "nt" else "\n"
+        encoded = payload.encode("utf-8")
+        writer.write(encoded)
+        await writer.drain()
+        return {
+            "execution_id": record.execution_id,
+            "action": action,
+            "bytes_written": len(encoded),
+        }
 
     async def _cancel_process(self, record: LocalProcess) -> None:
         if record.state != "running":
