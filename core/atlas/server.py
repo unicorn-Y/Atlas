@@ -949,6 +949,8 @@ class CustomModelRequest(BaseModel):
     name: str
     provider: str
     litellm_model: str
+    prompt_cache: str | None = None
+    prompt_cache_ttl: str | None = None
 
 
 class ConnectionTestRequest(BaseModel):
@@ -1176,6 +1178,8 @@ async def add_custom_model(req: CustomModelRequest) -> dict[str, Any]:
             "provider": req.provider.strip(),
             "litellm_model": req.litellm_model.strip(),
             "category": "custom",
+            **({"prompt_cache": req.prompt_cache} if req.prompt_cache else {}),
+            **({"prompt_cache_ttl": req.prompt_cache_ttl} if req.prompt_cache_ttl else {}),
         })
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -2615,6 +2619,15 @@ def _sum_usage(calls: list[dict[str, Any]]) -> dict[str, Any]:
     for key in keys:
         values = [item.get(key) for item in calls]
         totals[key] = sum(values) if values and all(isinstance(value, int) for value in values) else None
+    for key in ("cached_input_tokens", "cache_write_tokens"):
+        present = [item.get(key) for item in calls if item.get(key) is not None]
+        totals[key] = sum(value for value in present if isinstance(value, int)) if present else None
+    totals["cache_hit_rate"] = (
+        round(totals["cached_input_tokens"] / totals["input_tokens"], 4)
+        if isinstance(totals["cached_input_tokens"], int)
+        and isinstance(totals["input_tokens"], int) and totals["input_tokens"] > 0
+        else None
+    )
     totals["context_limit"] = next(
         (item.get("context_limit") for item in reversed(calls)
          if item.get("context_limit") is not None), None,

@@ -13,6 +13,8 @@ port = 8765
 [models]
 # Default model when Atlas starts
 default = "claude-sonnet-4"
+prompt_cache = "auto" # auto | off; applies to Claude models by default
+prompt_cache_ttl = "5m" # 5m | 1h
 
 # API gateway (monkeyapi or direct)
 [models.gateway]

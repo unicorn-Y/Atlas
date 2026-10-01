@@ -1655,11 +1655,15 @@ class TestBackendParityWave1:
     async def test_usage_sum_manual_compact_and_missing_conversation(self, client: AsyncClient) -> None:
         total = server._sum_usage([
             {"input_tokens": 2, "output_tokens": 3, "context_tokens": 5,
+             "cached_input_tokens": 1, "cache_write_tokens": 2,
              "context_limit": None, "model": "m"},
             {"input_tokens": 4, "output_tokens": 1, "context_tokens": 5,
+             "cached_input_tokens": 2, "cache_write_tokens": 0,
              "context_limit": None, "model": "m"},
         ])
         assert total["input_tokens"] == 6 and total["output_tokens"] == 4
+        assert total["cached_input_tokens"] == 3 and total["cache_write_tokens"] == 2
+        assert total["cache_hit_rate"] == 0.5
         created = await client.post("/api/conversations", json={})
         conv_id = created.json()["id"]
         await server.memory.save_message(conv_id, "user", "A compactable conversation")

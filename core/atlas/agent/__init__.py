@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import inspect
 import json
 import os
@@ -40,6 +41,10 @@ from atlas.agent.enrichment import (
     TrajectoryReviewer,
 )
 from atlas.agent.results import externalize_tool_output
+from atlas.agent.prompt_caching import (
+    build_prompt_cache_plan,
+    envelope_tool_part_cache_markers_supported,
+)
 from atlas.agent.planning import TaskPlan, requires_plan
 from atlas.checks import parse_test_summary, run_checks
 from atlas.config import get_config
@@ -114,6 +119,7 @@ when they would help accomplish the user's goal.
 """
 
 MAX_TOOL_ROUNDS = 10
+_CACHE_UNSUPPORTED_MODELS: set[str] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -812,10 +818,15 @@ class AgentOrchestrator:
 
     async def _think_node(self, state: AgentState) -> dict[str, Any]:
         """Call the LLM, possibly producing tool calls."""
-        litellm_model = self._model_mgr.current_litellm_model
+        runtime = state["runtime"]
+        selected_model = runtime.model or self._model_mgr.current_model
+        model_config = next(
+            (item for item in self._model_mgr.list_models() if item["id"] == selected_model),
+            {"id": selected_model, "litellm_model": selected_model},
+        )
+        litellm_model = str(model_config.get("litellm_model", selected_model))
         tools = self._model_facing_tools()
 
-        runtime = state["runtime"]
         allowed = getattr(runtime, "tool_allow", None)
         denied_tools = getattr(runtime, "tool_deny", [])
         if allowed is not None:
@@ -843,6 +854,7 @@ class AgentOrchestrator:
                     item["function"]["parameters"]["properties"]["action"]["enum"] = [
                         "read", "list", "glob", "search", "stat",
                     ]
+        tools.sort(key=lambda item: item["function"]["name"])
         goal = str(getattr(runtime, "goal", None) or state["messages"][-1].content)[:240]
         cfg = get_config()
         if getattr(runtime, "maintenance_snapshot", None) is None:
@@ -911,6 +923,32 @@ class AgentOrchestrator:
             lc_messages.append({"role": "system", "content": reminder})
             await state["runtime"].event_queue.put({"type": "system_reminder", "content": reminder})
 
+        cfg = get_config()
+        provider = str(model_config.get("provider", ""))
+        is_claude = "claude" in (litellm_model + " " + provider).casefold()
+        cache_mode = str(model_config.get(
+            "prompt_cache", cfg.get("models.prompt_cache", "auto"),
+        )).lower()
+        cache_enabled = (
+            is_claude and cache_mode != "off"
+            and litellm_model not in _CACHE_UNSUPPORTED_MODELS
+        )
+        if cache_enabled:
+            base_url = str(model_config.get("base_url") or self._model_mgr.gateway_base_url)
+            ttl = str(model_config.get(
+                "prompt_cache_ttl", cfg.get("models.prompt_cache_ttl", "5m"),
+            ))
+            cache_plan = build_prompt_cache_plan(
+                lc_messages, tools, cache_ttl=ttl,
+                static_system_prefix=SYSTEM_PROMPT,
+                tool_part_markers=envelope_tool_part_cache_markers_supported(provider, base_url),
+            )
+            lc_messages = cache_plan.messages
+            tools = cache_plan.tools
+
+        canonical_messages = copy.deepcopy(lc_messages)
+        canonical_tools = copy.deepcopy(tools)
+
         kwargs: dict[str, Any] = {
             "model": litellm_model,
             "messages": lc_messages,
@@ -970,13 +1008,29 @@ class AgentOrchestrator:
                 # Continue consuming the stream so providers that send a final
                 # usage-only chunk are observed after finish_reason.
             if event_queue is not None:
+                prompt_details = get_value(usage, "prompt_tokens_details")
+                cached_input_tokens = (
+                    get_value(prompt_details, "cached_tokens")
+                    or get_value(usage, "cache_read_input_tokens")
+                )
+                cache_write_tokens = get_value(usage, "cache_creation_input_tokens")
                 await event_queue.put({"type": "run_usage", "usage": {
                     "input_tokens": get_value(usage, "prompt_tokens"),
                     "output_tokens": get_value(usage, "completion_tokens"),
+                    "cached_input_tokens": cached_input_tokens or 0,
+                    "cache_write_tokens": cache_write_tokens or 0,
                     "context_tokens": get_value(usage, "total_tokens"),
                     "context_limit": None, "model": litellm_model,
                 }})
         except Exception as exc:
+            status = getattr(exc, "status_code", None)
+            if (cache_enabled and status == 400 and "cache" in str(exc).lower()
+                    and not full_text and not tool_fragments):
+                _CACHE_UNSUPPORTED_MODELS.add(litellm_model)
+                log.warning("agent.prompt_cache_unsupported", model=litellm_model)
+                lc_messages = canonical_messages
+                tools = canonical_tools
+                return await self._think_node(state)
             await self._emit_hook(runtime, "after_model", model=litellm_model, error=str(exc))
             has_image = any(
                 isinstance(message.content, list)
