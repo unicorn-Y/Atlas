@@ -581,7 +581,13 @@ class AgentOrchestrator:
                 status = "failed"
             return {"status": status, "result": "".join(outputs) or "子任务没有给出结果。", "evidence": usage}
         finally:
-            await self._memory.delete_conversation(conversation_id)
+            try:
+                from atlas.config import DATA_ROOT
+                from atlas.engine.session_sync import delete_session
+
+                await asyncio.to_thread(delete_session, DATA_ROOT / "engine", conversation_id)
+            finally:
+                await self._memory.delete_conversation(conversation_id)
 
     async def _summarize_parallel_results(self, results: list[dict[str, Any]]) -> str:
         models = self._model_mgr.list_models()
