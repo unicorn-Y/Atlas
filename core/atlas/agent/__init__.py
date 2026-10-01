@@ -2878,6 +2878,10 @@ class AgentOrchestrator:
                         data_dir=DATA_ROOT,
                         model_manager=self._model_mgr,
                     )
+                    model_input = (
+                        self._multimodal_content(message, image_attachments)
+                        if image_attachments else None
+                    )
                     last_automatic_title: str | None = None
                     automatic_title_candidates = {
                         "", "New Conversation", "New conversation",
@@ -2916,6 +2920,7 @@ class AgentOrchestrator:
 
                     async for event in hermes.run_turn(
                         message=message,
+                        user_content=model_input,
                         conversation_id=conversation_id,
                         workspace=workspace,
                         history=hermes_history,

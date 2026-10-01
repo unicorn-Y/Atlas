@@ -275,6 +275,7 @@ class HermesRuntime:
         self,
         *,
         message: str,
+        user_content: Any | None = None,
         conversation_id: str,
         workspace: str | None,
         history: list[dict[str, Any]],
@@ -572,7 +573,7 @@ class HermesRuntime:
                             # history is passed only once to import pre-C1 conversations.
                             turn_history = stored
                     result = agent.run_conversation(
-                        user_message=message,
+                        user_message=message if user_content is None else user_content,
                         system_message=system_message,
                         conversation_history=turn_history,
                     )
