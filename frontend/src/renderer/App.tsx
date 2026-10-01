@@ -48,7 +48,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'usage' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
@@ -852,7 +852,7 @@ export default function App() {
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
-        {([['models', '模型与服务', SlidersHorizontal], ['usage', '用量', Gauge], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
+        {([['models', '模型与服务', SlidersHorizontal], ['advanced', '高级', Settings], ['usage', '用量', Gauge], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
           <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
@@ -863,6 +863,19 @@ export default function App() {
       <div className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
         <button aria-label="关闭设置" onClick={() => setSheet(null)} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
         {sheet === 'models' && <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; setPref('username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} />}
+        {sheet === 'advanced' && <section>
+          <h3 className="m-0 text-[17px] font-semibold text-heading">高级设置</h3>
+          <p className="mt-1 mb-5 text-[13px] text-fg-3">选择执行对话任务的 Agent 内核。切换只影响新启动的任务。</p>
+          <label className="block max-w-[420px] text-[13px] text-fg-2">当前内核
+            <select aria-label="Agent 内核" value={store.agentEngine} disabled={store.settingsBusy}
+              onChange={(event) => void store.saveAgentEngine(event.target.value as 'hermes' | 'legacy')}
+              className="mt-2 block h-10 w-full rounded-lg border border-line bg-surface px-3 text-fg">
+              <option value="hermes">Hermes（推荐）</option>
+              <option value="legacy">旧内核（兼容模式）</option>
+            </select>
+          </label>
+          {store.error && <p role="alert" className="mt-3 text-[13px] text-danger">{store.error}</p>}
+        </section>}
         {sheet === 'appearance' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">外观与语音</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">只影响这台电脑。</p>

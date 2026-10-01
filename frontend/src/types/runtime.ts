@@ -12,6 +12,7 @@ export type AgentEventType =
   | 'check.results'
   | 'rules.trust_required' | 'hook.ran'
   | 'run.model_switched' | 'run.verify_nudge'
+  | 'process.completed' | 'run.compaction.progress' | 'run.recovery.notice'
   | 'run.completed' | 'run.failed' | 'run.cancelled';
 
 export interface AgentEvent {

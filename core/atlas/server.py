@@ -64,7 +64,7 @@ from atlas.capabilities.computer.cua_backend import CuaBackend
 from atlas.capabilities.computer.uia_backend import list_windows as list_uia_windows
 from atlas.capabilities.durable.dbos_backend import DurableBackend
 from atlas.capabilities.durable.dbos_backend import status as dbos_status
-from atlas.config import get_config
+from atlas.config import get_config, load_user_settings, save_user_settings
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
 from atlas.office import MAX_PREVIEW_BYTES, render_office
@@ -961,6 +961,7 @@ class ModelSelectRequest(BaseModel):
 class ProviderSettingsRequest(BaseModel):
     gateway_base_url: str
     api_key: str | None = None
+    agent_engine: str | None = None
 
 
 class CustomModelRequest(BaseModel):
@@ -1124,6 +1125,9 @@ async def get_configuration() -> dict[str, Any]:
         "api_key_configured": model_mgr.api_key_configured,
         "models": model_mgr.list_models(),
         "current": model_mgr.current_model,
+        "agent_engine": str(load_user_settings().get(
+            "agent_engine", get_config().get("agent.engine", "hermes"),
+        )),
     }
 
 
@@ -1181,8 +1185,14 @@ async def update_configuration(req: ProviderSettingsRequest) -> dict[str, Any]:
     base_url = req.gateway_base_url.strip()
     if not base_url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="服务地址必须以 http:// 或 https:// 开头")
+    if req.agent_engine is not None and req.agent_engine not in {"hermes", "legacy"}:
+        raise HTTPException(status_code=400, detail="agent_engine 只能是 hermes 或 legacy")
     api_key = req.api_key.strip() if req.api_key and req.api_key.strip() else None
     model_mgr.update_provider(base_url, api_key)
+    if req.agent_engine is not None:
+        settings = load_user_settings()
+        settings["agent_engine"] = req.agent_engine
+        save_user_settings(settings)
     return await get_configuration()
 
 
@@ -7062,6 +7072,17 @@ async def _execute_run(
 
             elif etype == "run_model_switched":
                 await emit("run.model_switched", event.get("data", {}))
+
+            elif etype == "run_status":
+                await emit("run.status", {
+                    "status": event.get("status", "running"),
+                    "text": event.get("text", ""),
+                })
+
+            elif etype in {
+                "process.completed", "run.compaction.progress", "run.recovery.notice",
+            }:
+                await emit(etype, event.get("data", {}))
 
             elif etype == "safety_reviewed":
                 await emit("safety.reviewed", event.get("data", {}))

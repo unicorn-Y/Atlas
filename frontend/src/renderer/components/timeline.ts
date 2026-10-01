@@ -48,6 +48,12 @@ export type TimelineItem =
 const TARGET_KEYS = ['path', 'file_path', 'filepath', 'file', 'command', 'cmd', 'query', 'pattern', 'url', 'q', 'target', 'name'];
 
 const VERBS: Array<[RegExp, string]> = [
+  [/^read_file$/, '读文件'],
+  [/^write_file$/, '写入文件'],
+  [/^patch$/, '修改文件'],
+  [/^search_files$/, '搜索文件'],
+  [/^terminal$/, '运行命令'],
+  [/^process_manage$/, '管理后台进程'],
   // Exact tool names first: generic patterns below would misread them ("spreadsheet" contains "read").
   [/^create_document$/, '生成 Word 文档'],
   [/^create_spreadsheet$/, '生成 Excel 表格'],
@@ -280,6 +286,24 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         const paths = Array.isArray(data.changed_paths) ? data.changed_paths.map((path) => shortPath(String(path))) : [];
         items.push({ kind: 'notice', id: event.id, tone: 'verify',
           text: `改了代码还没验证${paths.length ? `（${paths.slice(0, 3).join('、')}${paths.length > 3 ? ` 等 ${paths.length} 个文件` : ''}）` : ''}，Atlas 先去验证一下` });
+        break;
+      }
+      case 'process.completed': {
+        closeReply(); closeBlocks();
+        items.push({ kind: 'notice', id: event.id, tone: 'verify',
+          text: `后台进程已结束${data.name ? `：${String(data.name)}` : ''}${typeof data.exit_code === 'number' ? `（退出码 ${data.exit_code}）` : ''}` });
+        break;
+      }
+      case 'run.compaction.progress': {
+        closeReply(); closeBlocks();
+        items.push({ kind: 'notice', id: event.id, tone: 'verify',
+          text: `正在整理对话上下文${typeof data.percent === 'number' ? `（${Math.max(0, Math.min(100, data.percent))}%）` : ''}` });
+        break;
+      }
+      case 'run.recovery.notice': {
+        closeReply(); closeBlocks();
+        items.push({ kind: 'notice', id: event.id, tone: 'switch',
+          text: String(data.message ?? data.detail ?? '模型遇到问题，正在尝试恢复并继续。') });
         break;
       }
       case 'rules.trust_required':

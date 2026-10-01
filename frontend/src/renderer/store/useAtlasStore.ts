@@ -21,6 +21,7 @@ interface AtlasState {
   apiBaseUrl: string;
   providerBaseUrl: string;
   apiKeyConfigured: boolean;
+  agentEngine: 'hermes' | 'legacy';
   /** The backend's model configuration has been read at least once (apiKeyConfigured is meaningful). */
   configLoaded: boolean;
   settingsBusy: boolean;
@@ -74,6 +75,7 @@ interface AtlasState {
   applySkill: (name: string) => void;
   removeSkill: (name: string) => void;
   saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
+  saveAgentEngine: (engine: 'hermes' | 'legacy') => Promise<boolean>;
   addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
   testModelConnection: (model?: string) => Promise<void>;
   sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs, profileId?: string) => Promise<void>;
@@ -170,7 +172,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
   });
 
   return {
-    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, configLoaded: false, settingsBusy: false, connectionTest: null,
+    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, agentEngine: 'hermes', configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, busy: false, paused: false, error: null,
     model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
@@ -189,7 +191,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         const conversations = await migrateLegacyFlags(loaded);
         const preferredModel = storageGet('atlas.preference.model');
         const model = mode === 'backend' ? configuration.current : preferredModel || configuration.current;
-        set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
+        set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, agentEngine: configuration.agent_engine ?? 'hermes', configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
         const first = conversations.find((item) => !item.archived);
         if (first) await get().openConversation(first);
         // Roles and recipes are extras; the app works without them if the backend predates them.
@@ -256,6 +258,18 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         return true;
       } catch (error) {
         set({ error: errorText(error, '保存 API 配置失败') });
+        return false;
+      } finally { set({ settingsBusy: false }); }
+    },
+
+    saveAgentEngine: async (engine) => {
+      set({ settingsBusy: true, error: null });
+      try {
+        const configuration = await backend.updateConfiguration(get().providerBaseUrl, '', engine);
+        set({ agentEngine: configuration.agent_engine, error: null });
+        return true;
+      } catch (error) {
+        set({ error: errorText(error, '无法切换 Agent 内核') });
         return false;
       } finally { set({ settingsBusy: false }); }
     },

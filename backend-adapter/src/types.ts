@@ -18,6 +18,7 @@ export interface ModelListResponse {
 export interface ConfigurationResponse extends ModelListResponse {
   gateway_base_url: string;
   api_key_configured: boolean;
+  agent_engine: 'hermes' | 'legacy';
 }
 
 export interface CustomModelRequest {
