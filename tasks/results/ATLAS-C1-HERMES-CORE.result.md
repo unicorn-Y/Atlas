@@ -1,7 +1,7 @@
 # ATLAS-C1-HERMES-CORE 施工结果
 
 日期：2026-10-02  
-状态：**部分完成，未验收**。C1 主链路与前端接入已提交并推送；MoA、预算提醒和稳定事件序列桥接已接入 Hermes 并有假服务覆盖；全量测试仍有在 C1 之前复现的失败，CORE-PARITY 的 T11 父级通知和 T19 仍有缺口。本结果不把这些缺口记作完成。
+状态：**部分完成，未验收**。C1 主链路与前端接入已提交并推送；MoA、预算提醒和稳定事件序列桥接已接入 Hermes 并有假服务覆盖；全量 Atlas 后端 pytest 已通过。CORE-PARITY 的 L2、L4、T10、T11、T19、S4、A1 仍有缺口或覆盖不足，不把这些项目记作完成。
 
 ## 提交与远端核验
 
@@ -26,8 +26,9 @@
 | §8 | `fe31ba1` | SSH 工作目录映射及隔离路由测试 |
 | §10 | `4357a86` | C1 运行时、MCP、SSH 和压缩回归测试 |
 | §2 协议补正 | `fafb7c8` | 新增事件对应的 Runtime Event Protocol 版本从 1.9 升至 1.10 |
+| 全量测试修复 | `30f89f4` | Windows scheduler 租约 PID 存活检测；新增回归测试 |
 
-`fafb7c8` 推送前执行了 `git pull --rebase origin main`。推送后核验：本地 `fafb7c8a41f4c9f6191dd3563777b66c714c5073`，远端 `origin/main` 同为 `fafb7c8a41f4c9f6191dd3563777b66c714c5073`。
+最后一次推送前执行了 `git pull --rebase origin main`。修复提交推送后核验：本地 `30f89f4dbff136d7b9e3d91da1682d3e1ac899f1`，远端 `origin/main` 同为 `30f89f4dbff136d7b9e3d91da1682d3e1ac899f1`。本文件和状态文档的最终提交需再次按同一流程推送核验。
 
 ## 各节结果与偏差
 
@@ -40,7 +41,7 @@
 - **§7**：Atlas MCP server 设置转换到 Hermes registry/client；写类 MCP 工具走 Atlas 权限及首次写快照。以本地假 stdio MCP 服务验证实际调用、事件及审批路径；没有对真实远端 HTTP/OAuth 服务做网络验收。
 - **§8**：`ssh://host/path` 映射到 Hermes 每回合 SSH terminal 环境；Atlas 文件读写继续走既有 SSH 文件回调。SSH 测试只验证隔离配置和回调路由，没有连接真实 SSH 主机。worktree 沿用 Atlas 原服务。
 - **§9**：设置默认引擎为 Hermes，`legacy` 保留为显式备用项。外部 Agent 后端不在本波改动中。
-- **§10**：下表列十项验收情景。假模型同脚本的新旧内核比较覆盖有序 `chunk`/`tool_call`/`tool_result`/`done` 内容；Hermes 专属 `run_status` 与新旧结构不同的 `run_usage` 尚未作字段级对应，差异保留。Atlas 全量测试与 Hermes 相关源测试仍有失败，整体未验收。
+- **§10**：下表列十项验收情景。假模型同脚本的新旧内核比较覆盖有序 `chunk`/`tool_call`/`tool_result`/`done` 内容；Hermes 专属 `run_status` 与新旧结构不同的 `run_usage` 尚未作字段级对应，差异保留。Atlas 全量后端 pytest 已通过；Hermes 相关源测试仍有 Windows 平台失败，整体仍未验收。
 - **§11 前端**：timeline/事件呈现、上下文上限、引擎设置已接入；四项前端检查及 Edge 截图完成，记录见“验证”。
 - **安全与语音**：未实现安全审查功能；`core/atlas/safety/` 保持默认关闭；本地语音暂缓，按任务边界处理。
 
@@ -48,7 +49,7 @@
 
 六个依赖旧 LangGraph 行为的集成测试已在 `tests/conftest.py` 的 `legacy_agent_engine` fixture 下明确选择 `agent_engine=legacy`，没有删除用例：三个 `test_local_execution.py` Agent 运行测试，及 `test_planning.py` 的三个规划/验收回归测试。八项当前分支新增失败中的其余两项也已修复：手动压缩 API 测试注入假的 `HermesRuntime.compact_session`；Hub smoke 改用 event trigger 避免意外发起真实模型回合，并用临时 `sitecustomize.py` stub DBOS 启动，只检验服务生命周期。Hub app 与进程 smoke 聚焦测试 `2 passed`，六个 legacy 测试与压缩 endpoint 合并聚焦测试 `7 passed`。
 
-基线核验按指示先将 `docs/plan/CORE-PARITY.md` 与 `tasks/CURRENT.md` 暂存，再切到 `0d48720^ = 805110c` 跑完整 pytest，完成后切回 `main` 并恢复文档。基线失败 9 项；当前分支最终全量的 7 项失败全部是基线失败的子集。基线另有两项（真实桌面剪贴板、Windows batch 参数引用）在当前分支全量中通过。当前没有只出现在 C1 当前分支的全量失败，但全量汇总仍非全绿，因此依此记录为“当前失败均已证实为 C1 之前存在”，不声称 pytest 全量通过。
+按本次巡检要求，先用 `git stash` 暂存 scheduler 修复与测试，再切到 `0d48720^ = 805110c`。七个 scheduler 失败用例在该基线上复现为 `7 failed in 10.14s`，日志为 `C:\t\atlas-c1-scheduler-baseline-805110c-20261002\pytest.stdout.log`。根因是 `AtlasScheduler._claim_lease()` 在 Windows 调用 `os.kill(pid, 0)`，对存活进程抛出 `WinError 87`，被误当成租约错误并让 owner 启动失败。当前分支新增 `_is_process_alive()`：Windows 用 `OpenProcess`/`WaitForSingleObject`，其他平台保留 `os.kill`；新增当前 PID 和不存在 PID 的测试。修复聚焦组为 `8 passed in 10.85s`，修复后全量通过。早前记录的基线全量汇总为 `9 failed, 955 passed, 9 skipped, 2 warnings in 223.86s`；其中 clipboard/window 和 batch quoted-argv 两项在修复后的当前全量通过。
 
 ## 事件映射
 
@@ -101,10 +102,13 @@
 
 ## CORE-PARITY C1 未完成项
 
+- **L2、L4**：Hermes 恢复/续写/记录修复及完成前检查没有完整接入新循环。
+- **T10**：Hermes terminal 的 notify、watch pattern、heartbeat 参数仍未接入 Atlas 事件链。
 - **T11 真终端交互**：stdin/write/submit/close、Windows PTY 与手动 handoff 已接入；handoff 后向父级 Agent 异步通知完成的链路未实现。
 - **T19**：`process_manage` 九个动作的映射已有表驱动覆盖；Atlas 工具 registry 其余工具的所有旧动作尚未逐项核对并独立运行。
+- **S4、A1**：自动标题的新会话验收及子 Agent 独立上下文/权限/完整生命周期尚未覆盖。
 
-这些缺口以及全量测试失败意味着 C1 仍未达到验收清单第 2、3、5 项，不应把本波标为完成。
+这些缺口意味着 C1 仍未达到验收清单第 2、3 项，不应把本波标为完成。
 
 ## 依赖与源码测试
 
@@ -123,7 +127,8 @@
 - C1 合并聚焦组在 fallback 修正前：`23 passed, 1 warning in 55.29s`。对应模块为 `test_hermes_runtime_e2e.py`、`test_hermes_mcp_config.py`、`test_hermes_ssh_routing.py`、`test_hermes_runtime.py`。
 - 前端检查：`npx tsc --noEmit -p tsconfig.renderer.json` 通过；`npx tsc --noEmit -p tsconfig.electron.json` 通过；`npx vitest run` 为 7 files / 36 tests 全通过；`npx vite build` 成功（有 chunk 大于 500KB 的告警）。
 - 无头 Edge 已检查对话页、改动面板、终端面板、设置页；本地截图在 `.playwright-cli/`。页面连接隔离的本地后端；没有访问真实模型。
-- **`0d48720^` 基线 pytest 汇总行原文**：`9 failed, 955 passed, 9 skipped, 2 warnings in 223.86s`。基线失败：`test_wave3_two_live_schedulers_have_one_trigger_owner`、`test_wave3_hub_claim_preempts_desktop_lease`、`test_real_desktop_observe_input_clipboard_and_window_management`、`test_goal_and_progress_survive_scheduler_restart`、`test_windows_batch_executable_preserves_argument_quoting`、`TestSchedulerWithAPScheduler::test_start_stop`、`test_start_idempotent`、`test_add_task_while_running`、`test_pause_resume`。逐项观察到的失败为：两个 scheduler lease 用例没有获得预期 owner/claim；goal scheduler restart 等待超时；`test_start_stop` 与 `test_start_idempotent` 立即检查 `_started` 时为 false；`test_add_task_while_running` 与 `test_pause_resume` 没有观察到预期任务触发次数。
-- **当前 Atlas 全量 pytest 汇总行原文**：`7 failed, 975 passed, 9 skipped, 1 warning in 235.47s (0:03:55)`。当前失败：`test_wave3_two_live_schedulers_have_one_trigger_owner`、`test_wave3_hub_claim_preempts_desktop_lease`、`test_goal_and_progress_survive_scheduler_restart`、`TestSchedulerWithAPScheduler::test_start_stop`、`test_start_idempotent`、`test_add_task_while_running`、`test_pause_resume`。七项都在上述 `805110c` 基线复现；其余两项基线失败在当前运行中通过。基线日志：`C:\\t\\atlas-c1-baseline-805110c-fullpath-20261002\\pytest.stdout.log`；当前日志：`C:\\t\\atlas-c1-final-full-20261002\\pytest.stdout.log`。不得报告全量通过。
+- 0d48720^ 基线全量历史汇总行：9 failed, 955 passed, 9 skipped, 2 warnings in 223.86s。当次基线失败包含七个 scheduler 用例、真实桌面剪贴板/窗口和 Windows batch 参数引用；后两项在最终当前分支的全量重跑中通过。
+- 按本次指示的 stash 基线复现：stash scheduler 源码和测试后 checkout 805110c，上述七个 scheduler 用例逐项复现：7 failed in 10.14s，日志 C:\t\atlas-c1-scheduler-baseline-805110c-20261002\pytest.stdout.log。恢复 main 并应用 stash 后，PID 存活回归和七个失败用例为 8 passed in 10.85s，日志 C:\t\atlas-c1-scheduler-fix-focused-20261002\pytest.stdout.log。
+- 当前 Atlas 全量 pytest 最终汇总行原文：988 passed, 9 skipped, 1 warning in 232.88s (0:03:52)。日志：C:\t\atlas-c1-full-fixed-20261002\pytest.stdout.log。完整运行在脱离控制台进程组的后台进程中完成，测试数据、fake HOME/HERMES_HOME/ATLAS_DATA_DIR 和 pytest basetemp 均位于 C:\t。
 
 测试数据目录、fake HOME/HERMES_HOME/ATLAS_DATA_DIR 与 pytest basetemp 均隔离到仓库外；未使用真实模型或远端 MCP/SSH 网络。`core/atlas/origin_guard.py` 未放宽。已有未跟踪 `design/` 与 `core/uv.lock` 未改动；截图目录 `.playwright-cli/` 是本轮验收产物。

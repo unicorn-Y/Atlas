@@ -1,7 +1,7 @@
 # Atlas Current Task
 
 CURRENT: ATLAS-C1-HERMES-CORE
-STATUS: PARTIAL; NOT ACCEPTED; CURRENT FULL SUITE HAS 7 BASELINE FAILURES; C1 PARITY GAPS REMAIN
+STATUS: PARTIAL; NOT ACCEPTED; FULL PYTEST PASSES; C1 PARITY GAPS REMAIN
 TASKBOOK: tasks/taskbooks/ATLAS-C1-HERMES-CORE.md
 RESULT: tasks/results/ATLAS-C1-HERMES-CORE.result.md
 
@@ -11,11 +11,12 @@ SCOPE: C1 Hermes core replacement, including backend and frontend. `core/atlas/o
 
 DELIVERY:
 - §§1–4 and §9 were already committed before this continuation. This continuation pushed §5 `35cd874`, §6 `b93076b`, §7 `4d975de`, §8 `fe31ba1`, §10 focused coverage `4357a86`, and the protocol 1.10 follow-up `fafb7c8`.
+- Fixed the Windows scheduler lease liveness check after reproducing all seven prior full-suite failures at `0d48720^ = 805110c`; commit `30f89f4`.
 - Frontend checks passed: renderer TypeScript, Electron TypeScript, Vitest (36 tests), Vite build. Edge screenshots were captured for the conversation, changes, terminal, and settings views.
-- Baseline at `805110c` (`0d48720^`): `9 failed, 955 passed, 9 skipped, 2 warnings in 223.86s`; current full run: `7 failed, 975 passed, 9 skipped, 1 warning in 235.47s`. Every current failure reproduces at baseline. No new full-suite failure remains.
+- Final full backend run: `988 passed, 9 skipped, 1 warning in 232.88s (0:03:52)`. The seven scheduler failures were independently reproduced on `805110c` (`7 failed in 10.14s`) and pass after commit `30f89f4`.
 - A5 MoA was connected to Hermes using Atlas ModelManager reference models; fake consultation coverage passed (`4 passed`).
 - T11 stdin/write/submit/close, Windows PTY, and manual handoff now pass focused tests; parent Agent completion notification after handoff remains uncovered.
 - L9 now bridges Atlas `agent.run_budget_seconds` and `agent.budget_warning_ratio` to Hermes' existing one-shot budget reminder hook; focused coverage passed.
 - §10 #10 now compares the ordered stable chunk/tool/result/done fields from one fake model script on both engines. Hermes-only `run_status` and differing `run_usage` diagnostic fields are documented in the result.
-- Not accepted: CORE-PARITY C1 rows T11 parent completion notification and T19 per-action verification remain incomplete or uncovered. Hermes source regression selection also has Windows-specific failures.
+- Not accepted: CORE-PARITY C1 rows L2, L4, T10, T11, T19, S4, and A1 still have documented gaps or incomplete end-to-end coverage; Hermes source regression selection also has Windows-specific failures.
 - No real model or live remote MCP/SSH scenario was run. Local voice remains deferred. Safety review remains user-owned and was not performed.
