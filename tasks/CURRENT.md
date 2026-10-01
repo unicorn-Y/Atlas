@@ -1,20 +1,18 @@
 # Atlas Current Task
 
-CURRENT: CODEX-ATLAS-BACKEND-PARITY-WAVE5
-STATUS: IMPLEMENTED; REQUIRED FULL TEST SUITE VERIFICATION INCOMPLETE
-TASKBOOK: tasks/taskbooks/CODEX-ATLAS-BACKEND-PARITY-WAVE5.md
-RESULT: tasks/results/CODEX-ATLAS-BACKEND-PARITY-WAVE5.result.md
+CURRENT: ATLAS-W06-FOUNDATION-SAFETY
+STATUS: IMPLEMENTED; AUTOMATED FULL SUITE PASSED; REQUIRED REAL-MODEL SAFETY SCENARIOS INCOMPLETE
+TASKBOOK: tasks/taskbooks/ATLAS-W06-FOUNDATION-SAFETY.md
+RESULT: tasks/results/ATLAS-W06-FOUNDATION-SAFETY.result.md
 
-PREVIOUS: CODEX-ATLAS-BACKEND-PARITY-WAVE4
-STATUS: ACCEPTED
-
-BASE_HEAD: c83b3a5d5a92efa0884addd96e3745ca7b6e90cf (Wave5 taskbook commit)
-CODE_HEAD: 38abab8 (implementation and acceptance follow-ups; delivery documentation follows)
+BASE_BRANCH: main
+PROTOCOL: 1.8
+SCOPE: Backend sections 0–6 only. `frontend/`, `backend-adapter/`, and `core/atlas/origin_guard.py` were not changed.
 
 DELIVERY:
-- Completed seven backend feature sections: Atlas subtask workers, extra conversation roots, project sources, rewind/redo, custom tools, web extraction, and Telegram task submission.
-- Runtime Event Protocol is 1.7. `core/atlas/origin_guard.py`, `frontend/`, and `backend-adapter/` were not changed.
-- Per-section implementation commits: b8b5108, 05e91b4, 797bade, 3b2a549, 9b0a169, f9f8c78, b785262. Follow-ups: 6bb027c, 2bf4c70, 38abab8.
-- Focused Wave5 regressions passed (14); OriginGuard route regressions passed (14). Additional independent Wave2–Wave4 and backend batches are recorded in the result file.
-- The required full pytest suite did not complete; it was interrupted after 60 passed and 1 skipped. The Hub child-process smoke test also remained incomplete. No full-suite pass is claimed.
-- Result artifact: tasks/results/CODEX-ATLAS-BACKEND-PARITY-WAVE5.result.md
+- Sections 0–6 implemented in one commit per section: b605d4d, 3955704, d3c4aad, 42415f0, 02d647d, 7e636fa, 590f063.
+- Upstream source adaptations and licenses are recorded in `docs/plan/VENDORED.md` and `THIRD_PARTY_NOTICES.md`.
+- Full backend suite: 719 passed, 6 skipped in 163.45s (0:02:43).
+- Real model connection check passed for `deepseek-v4.1-flash`; the required 5-turn cache-hit scenario was not completed.
+- Real smart-safety trial was stopped after its isolated config exposed `D:/Atlas` as the filesystem MCP root and the model initiated a recursive `C:\` listing. The three taskbook safety scenarios remain unverified. ASR model sample worked with an omitted opening phrase; microphone scenario remains unverified.
+- Result artifact: `tasks/results/ATLAS-W06-FOUNDATION-SAFETY.result.md`.
