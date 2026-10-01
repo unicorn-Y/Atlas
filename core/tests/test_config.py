@@ -10,7 +10,10 @@ from atlas.config import AtlasConfig, load_config
 class TestAtlasConfigDefaults:
     """When no TOML file exists, sensible defaults should work."""
 
-    def test_defaults(self) -> None:
+    def test_defaults(self, monkeypatch) -> None:
+        # The isolated suite disables real scheduler startup globally; this
+        # case checks the configuration default without its environment override.
+        monkeypatch.delenv("ATLAS_SCHEDULER_ENABLED", raising=False)
         cfg = AtlasConfig()
         assert cfg.server_host == "0.0.0.0"
         assert cfg.server_port == 8765
