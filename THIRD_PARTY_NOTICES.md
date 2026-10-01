@@ -2,10 +2,9 @@
 
 ## Hermes Agent
 
-Ported code and logic from [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent), commit `663362680b6ffa4fbffeb58f6682564239a1953b`.
+Source: `https://github.com/NousResearch/hermes-agent`, pinned through the Atlas fork at commit `aea969677c60a1bb72fe227fdfb98f196a2092cc`.
 
-Wave 7 delegation, output-schema, worktree, todo, kanban, and MoA behavior also uses portions of [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent), commit `330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3` (see `docs/plan/VENDORED.md` for file-level mapping).
-
+```text
 MIT License
 
 Copyright (c) 2025 Nous Research
@@ -27,7 +26,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-## sherpa-onnx
-
-The Python runtime dependency `sherpa-onnx` is distributed under Apache License 2.0 by k2-fsa. Atlas downloads the SenseVoice and Silero VAD model bundle from the official `k2-fsa/sherpa-onnx` `asr-models` release at first use; the downloaded model bundle's own `LICENSE` file is retained with the local assets. Model assets are stored under the user's Atlas data directory and are not included in the repository.
+```

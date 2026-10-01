@@ -117,7 +117,32 @@ cd frontend && npx tsc -p tsconfig.renderer.json --noEmit && npx tsc -p tsconfig
   解决冲突，跑 Hermes 的相关测试和 Atlas 全量测试，推 fork，更新 Atlas 里的提交号。
 - **从其他家抄**（OpenCode、Pi、Codex 等）：照第三点五节，翻译成 Python。属于内核的放进 fork，属于 Atlas 的放进 `core/atlas/engine/`。文件头写来源，并登记到 VENDORED.md。
 
-具体命令以 C1 结果文件里补全的为准。
+Atlas C1 当前命令（PowerShell）：
+
+```powershell
+# 首次克隆；已有仓库时只 fetch，不覆盖工作树
+git clone https://github.com/unicorn-Y/hermes-agent.git D:\hermes-agent
+git -C D:\hermes-agent remote add upstream https://github.com/NousResearch/hermes-agent.git
+git -C D:\hermes-agent fetch upstream main
+git -C D:\hermes-agent switch -C atlas upstream/main
+
+# 仅在确认 fork 工作树干净后更新；先 rebase，再提交推送
+git -C D:\hermes-agent fetch origin
+git -C D:\hermes-agent pull --rebase origin atlas
+git -C D:\hermes-agent add <改动路径>
+git -C D:\hermes-agent commit -m "fix: <说明原因>"
+git -C D:\hermes-agent push origin atlas
+
+# Atlas 中更新固定提交号（每次 fork 推送后单独提交）
+# core/pyproject.toml: hermes-agent @ git+https://github.com/unicorn-Y/hermes-agent.git@<commit>
+
+# 同步 Hermes 上游
+git -C D:\hermes-agent fetch upstream
+git -C D:\hermes-agent switch atlas
+git -C D:\hermes-agent merge upstream/main
+```
+
+依赖固定到 `atlas` 分支的提交号；开发验证可在 `core/.venv` 安装本机 `D:\hermes-agent` editable 版本。不要将 Atlas 专属适配放入 fork。
 
 ## 四、交付前自检
 

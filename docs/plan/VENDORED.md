@@ -4,6 +4,7 @@
 
 | Atlas 文件 | 来源仓库 | 来源路径 | 来源提交 | 许可证 | 方式（依赖 / 拷贝改 / 逻辑移植） | 改了什么 | 搬入日期 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `core/pyproject.toml`（Hermes Agent 运行时依赖） | `unicorn-Y/hermes-agent`（上游 `NousResearch/hermes-agent`） | Hermes 包 | `aea969677c60a1bb72fe227fdfb98f196a2092cc` | MIT | 固定 Git 依赖 | C1 将 Hermes 内核固定到 Atlas fork 的同一提交；Atlas 适配保持在 `core/atlas/engine/` | 2026-10-01 |
 | `core/atlas/tools/ssrf_transport.py` | `NousResearch/hermes-agent` | `tools/url_safety.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 保留连接时 DNS 校验并按校验 IP 拨号，使用 Atlas 的公网地址策略 | 2026-10-01 |
 | `core/atlas/agent/prompt_caching.py` | `NousResearch/hermes-agent` | `agent/prompt_caching.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 保留缓存断点布局、TTL 和消息标记规则；按 Atlas 路由判定工具消息标记 | 2026-10-01 |
 | `core/atlas/agent/prompt_cache_boundary.py` | `NousResearch/hermes-agent` | `agent/prompt_cache_boundary.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 保留稳定前缀 LRU 注册和查找 | 2026-10-01 |

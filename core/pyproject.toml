@@ -2,7 +2,7 @@
 name = "atlas-core"
 version = "0.1.0"
 description = "Atlas AI Agent - Core Backend"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 readme = "README.md"
 license = { text = "UNLICENSED" }
 
@@ -45,6 +45,7 @@ dependencies = [
     "pypdf>=5.0",
     "trafilatura>=2.0",
     "youtube-transcript-api>=1.2",
+    "hermes-agent @ git+https://github.com/unicorn-Y/hermes-agent.git@aea969677c60a1bb72fe227fdfb98f196a2092cc",
 ]
 
 [project.optional-dependencies]
