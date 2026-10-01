@@ -2,6 +2,8 @@
 
 **这张表决定 C1–C6 每一波做什么。** 范围只限「主体」：用户每天实际用的部分，包括对话干活、读改代码、跑命令、上下文、会话、交互、子 Agent、扩展、模型、编程。外部功能（渠道、连接器目录、跨设备、分享、电脑和浏览器操作扩展、自我进化）冻结，不在这张表里。
 
+> 2026-10-02 C1 状态更新：下文对应能力行的 Atlas 现状列已按本次 Hermes 接入和聚焦证据更新；保留 △/✘ 的项目是已知缺口。当前全量测试的 7 个失败在 `0d48720` 之前的 `805110c` 基线也复现（基线共 9 个失败）；C1 尚未整体验收，L9、T11、T19、A5 和 §10 #10 仍未完成。详情见 `tasks/results/ATLAS-C1-HERMES-CORE.result.md`。
+
 对标对象：Claude Code（CC）、Codex（CX）、ZCode（ZC）、Hermes（HM）、OpenClaw（OC）、Pi、OpenCode（OD）。
 - HM、OC、OD、Pi、CX 开源，下面的文件路径都对应各自仓库当前的 main。`HM@bafb42b` 是 2026-10-01 克隆时的提交号。
 - CC、ZC 闭源，只能照它们的设计自己写。
@@ -39,65 +41,65 @@
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| L1 | 不限轮数，靠预算和停止条件收尾 | HM：默认不限轮数，用 `agent/iteration_budget.py` 控预算，子 Agent 共享预算；CC 同样不限 | △ 硬上限 10 轮（代码） | ✔ | — | C1 |
+| L1 | 不限轮数，靠预算和停止条件收尾 | HM：默认不限轮数，用 `agent/iteration_budget.py` 控预算，子 Agent 共享预算；CC 同样不限 | ✔ Hermes 超过 10 轮（`4357a86`） | ✔ | — | C1 |
 | L2 | 出错恢复（限流、超时、断流、空回复、输出被截断后续写、上下文超长） | HM：`agent/turn_recovery.py`、`turn_api_error.py`、`empty_response_guard.py`、`turn_truncation.py`、`turn_overflow.py`、`transcript_repair.py`（加起来几千行，各家里最全） | △ 有重试和切换模型，没有续写、超长恢复、记录修复（代码） | ✔ | — | C1 |
 | L3 | 防原地打转 | LangChain：同一文件改了 N 次就提醒换思路；HM：`agent/repetition_guard.py` | ✘ | ✔ 重复检测 | 按文件计数改动的提醒（照 LangChain 做法写进 HM 的 `turn_stop_gates.py`） | C2 |
 | L4 | 完成前自检 | LangChain 的完成前检查清单；HM：`agent/verification_stop.py`、`turn_stop_gates.py` | △ W06 搬过 `verification_stop`（代码），挂在旧循环上 | ✔ | — | C1 |
-| L5 | 并行工具调用 | CC：只读工具并行，写操作串行；HM：`agent/tool_executor.py` 加 `PARALLEL_TOOL_CALL_GUIDANCE` | △ 串行（代码） | ✔ | — | C1 |
+| L5 | 并行工具调用 | CC：只读工具并行，写操作串行；HM：`agent/tool_executor.py` 加 `PARALLEL_TOOL_CALL_GUIDANCE` | ✔ Hermes 并行委派场景（`4357a86`） | ✔ | — | C1 |
 | L6 | 运行中插话（不打断当前工具） | CX 0.159 `instant_interrupt`：模型输出中途也能转向；Pi 的转向队列；HM `/steer` | ✔ 下一次调用模型前插入（代码 1051 行） | ✔ HM steer | CX 的中途转向（`codex-rs/core/src/tasks`，初判） | C3 |
-| L7 | 消息排队 | HM `/queue`；Pi 的后续消息 | ✔（前端） | ✔ | 接到新内核 | C1 |
+| L7 | 消息排队 | HM `/queue`；Pi 的后续消息 | ✔ Hermes steer/排队桥接（`805110c`） | ✔ | — | C1 |
 | L8 | 分阶段分配思考量 | LangChain：规划和验收深想、执行浅想（66.5 对 53.9） | ✘ | ✘ | 在 HM 的 `agent/reasoning_effort.py` 上加按阶段切换 | C5 |
-| L9 | 时间和预算提醒 | LangChain；HM `run_budget_seconds`、`deadline.py` | ✘ | ✔ | — | C1 |
-| L10 | 每轮自动带上本机环境信息 | LangChain 的环境注入；HM `agent/env_probe.py`、`prompt_builder.py` 的环境提示 | ✘（代码） | ✔ | Atlas 的 SSH 远程目录也要带上对应信息 | C1 |
+| L9 | 时间和预算提醒 | LangChain；HM `run_budget_seconds`、`deadline.py` | △ Hermes 时限预算未接入 Atlas 会话设置 | ✔ | — | C1 |
+| L10 | 每轮自动带上本机环境信息 | LangChain 的环境注入；HM `agent/env_probe.py`、`prompt_builder.py` 的环境提示 | ✔ Hermes 环境提示；SSH 信息仅注入 terminal 环境（`805110c`, `fe31ba1`） | ✔ | — | C1 |
 
 ## 3. 文件与命令工具
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 读文件：行号、分页、大文件续读 | HM `read_file`：行号、分页、约 10 万字截断并给出续读位置、找不到时提示相近文件名（`tools/file_tools.py:1146`） | △ 整个文件一次读出，无行号（代码） | ✔ | — | C1 |
-| T2 | 读文档 | HM：ipynb、Office、PDF、ODF、RTF、EPUB、SQLite 都转成文本 | △ 另有 `read_office` | ✔ | — | C1 |
+| T1 | 读文件：行号、分页、大文件续读 | HM `read_file`：行号、分页、约 10 万字截断并给出续读位置、找不到时提示相近文件名（`tools/file_tools.py:1146`） | ✔ Hermes `read_file`（`805110c`） | ✔ | — | C1 |
+| T2 | 读文档 | HM：ipynb、Office、PDF、ODF、RTF、EPUB、SQLite 都转成文本 | ✔ Hermes 文件工具集（`805110c`）；Windows 源回归有失败，见结果文件 | ✔ | — | C1 |
 | T3 | 读图片 | CC 的 Read 直接读图；CX `view_image` | △ 只能作为附件发图 | △ HM 走 `vision_analyze` | 照 CC 让读文件工具直接返回图片（`codex-rs/core/src/tools/handlers/view_image.rs` 作参考） | C2 |
-| T4 | 写文件防覆盖 | HM：没读过或磁盘上已变的文件拒绝覆盖，写完校验哈希，自动语法检查且只报新增错误（`file_tools_write_guards.py`、`file_operations_lint.py`） | △ 只有编辑要求先读，写不检查（代码） | ✔ | — | C1 |
+| T4 | 写文件防覆盖 | HM：没读过或磁盘上已变的文件拒绝覆盖，写完校验哈希，自动语法检查且只报新增错误（`file_tools_write_guards.py`、`file_operations_lint.py`） | ✔ Hermes 写保护经 Atlas 策略/快照桥接（`b93076b`） | ✔ | — | C1 |
 | T5 | 编辑：容错匹配 | HM `patch`：9 种逐级放宽的匹配（`tools/fuzzy_match.py`）；OD `edit.ts` 同样 9 种 Replacer | △ 只认精确匹配（代码） | ✔ | 两家逐策略对比，取并集（初判两家同源） | C2 |
-| T6 | 编辑保留换行和编码 | CC、OD：保留 CRLF/LF 和 BOM | ✘ 会把 LF 改成 CRLF（代码+实测） | 待核 HM 在 Windows 上的行为 | 若 HM 也有问题，照 OD `edit.ts` 的换行处理修 | C1 |
-| T7 | 给 GPT 系模型用补丁格式 | CX `apply_patch`（`codex-rs/apply-patch`）；HM 只对 OpenAI 系模型显示 V4A 补丁模式 | ✘ | ✔ | — | C1 |
+| T6 | 编辑保留换行和编码 | CC、OD：保留 CRLF/LF 和 BOM | ✔ Windows 假文件 LF/CRLF 测试通过（`4357a86`） | ✔ | — | C1 |
+| T7 | 给 GPT 系模型用补丁格式 | CX `apply_patch`（`codex-rs/apply-patch`）；HM 只对 OpenAI 系模型显示 V4A 补丁模式 | ✔ Hermes patch tool 保留模型适配（`698b7bb`） | ✔ | — | C1 |
 | T8 | 编辑后诊断 | OD：改完跑 LSP 诊断回传；CC 的诊断工具；HM `agent/lsp`、`file_operations_lint.py` | △ `run_checks` 要单独调用 | ✔ 语法检查 | LSP 诊断：对比 OD `src/lsp` 和 HM `agent/lsp`，选强的 | C6 |
-| T9 | 搜索 | HM `search_files`：基于 ripgrep，正则、文件过滤、三种输出、上下文行、分页、按修改时间排序 | △ 子串遍历（代码） | ✔ | — | C1 |
-| T10 | 跑命令：前台、后台、结束通知 | HM `terminal`：后台进程加 `notify` 结束通知、按输出匹配通知、心跳汇报、真终端模式 | △ 有 detached 和 local_process，没有通知（代码） | ✔ | — | C1 |
-| T11 | 真终端交互（REPL、交互式命令行） | CX `unified_exec`（真终端，可写入 stdin）；HM `pty` 加 `process_manage` 的写入 | ✘ | ✔ | — | C1 |
-| T12 | Windows shell | CC：PowerShell 和 Bash 两个工具；Pi `powershell.ts` | ✔ PowerShell 和 cmd | 待核 HM 在 Windows 上默认用什么 shell | 保留 PowerShell，并加上 Git Bash（Windows 上很多模型写的是 bash） | C1 |
-| T13 | 网页搜索、抓取 | HM `web_search`/`web_extract`（多后端、缓存、截断）；CC WebFetch | ✔ | ✔ | 保留 Atlas 的内网防护 | C1 |
-| T14 | 待办清单 | CC 的任务列表；HM `todo_list`，压缩后自动重新注入 | ✔ | ✔ | — | C1 |
-| T15 | 向用户提问 | CC AskUserQuestion（选项预览）；HM `clarify` | ✔ `ask_user` | ✔ | 接到 Atlas 的问题卡片 | C1 |
-| T16 | 跑代码片段 | HM `execute_code`（带内核、可远程） | ✔ | ✔ | — | C1 |
-| T17 | 工具按需加载 | CC ToolSearch；CX `tool_search`；HM `tools/tool_search.py` | ✘ | ✔ | — | C1 |
+| T9 | 搜索 | HM `search_files`：基于 ripgrep，正则、文件过滤、三种输出、上下文行、分页、按修改时间排序 | ✔ Hermes `search_files`（`698b7bb`） | ✔ | — | C1 |
+| T10 | 跑命令：前台、后台、结束通知 | HM `terminal`：后台进程加 `notify` 结束通知、按输出匹配通知、心跳汇报、真终端模式 | △ 前后台命令和完成事件已接；notify/watch/heartbeat 参数未接（`698b7bb`, `805110c`） | ✔ | — | C1 |
+| T11 | 真终端交互（REPL、交互式命令行） | CX `unified_exec`（真终端，可写入 stdin）；HM `pty` 加 `process_manage` 的写入 | △ `pty`/stdin/submit 等 Atlas handler 未覆盖 | ✔ | 补交互式进程动作映射 | C1 |
+| T12 | Windows shell | CC：PowerShell 和 Bash 两个工具；Pi `powershell.ts` | ✔ Hermes terminal 在 Atlas 路由到 PowerShell；无 Git Bash 回退实测（`698b7bb`） | ✔ | — | C1 |
+| T13 | 网页搜索、抓取 | HM `web_search`/`web_extract`（多后端、缓存、截断）；CC WebFetch | ✔ Atlas 网络工具由 Atlas registry 提供；未做真实网络验收（`698b7bb`） | ✔ | 保留 Atlas 的内网防护 | C1 |
+| T14 | 待办清单 | CC 的任务列表；HM `todo_list`，压缩后自动重新注入 | ✔ Hermes todo 在压缩恢复场景保留（`35cd874`） | ✔ | — | C1 |
+| T15 | 向用户提问 | CC AskUserQuestion（选项预览）；HM `clarify` | ✔ `clarify` 接 Atlas 输入回调（`698b7bb`） | ✔ | — | C1 |
+| T16 | 跑代码片段 | HM `execute_code`（带内核、可远程） | ✔ Atlas handler 注册至 Hermes（`698b7bb`） | ✔ | — | C1 |
+| T17 | 工具按需加载 | CC ToolSearch；CX `tool_search`；HM `tools/tool_search.py` | ✔ Hermes tool search/toolset（`805110c`） | ✔ | — | C1 |
 | T18 | 工具输出过长时落盘 | HM `tool_result_storage.py`、`tool_output_truncate.py`；W06 已搬一部分 | ✔ 部分 | ✔ | — | C1 |
-| T19 | Atlas 自有工具 | — | ✔ Office 生成、检查点、`run_checks`、项目记事本、看板、电脑操作、SSH、配方委派、自定义脚本工具 | — | 全部注册成 HM 工具（`tools/registry.py`），不能丢 | C1 |
+| T19 | Atlas 自有工具 | — | △ Hermes registry 已接入 Atlas 工具；所有旧工具动作尚未逐项核验，已知进程 stdin/PTY 动作缺口 | — | 完成逐工具动作核对（`tools/registry.py`） | C1 |
 
 ## 4. 上下文、提示词与成本
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| X1 | 自动压缩 | 研究结论：先按规则删旧的工具输出，不够再让模型总结。HM `context_compressor.py`（5753 行，先删工具输出，再用便宜模型总结中段，保护头尾，可多次迭代）；Pi 的结构化摘要格式（目标/约束/进度/决定/下一步/关键上下文，`docs/compaction.md`）；OD `session/compaction.ts` 的旧输出修剪；CX `compact.rs` | ✘ 假压缩（代码） | ✔ | 摘要格式和切分规则对比 Pi，取更好的 | C1，C2 打磨 |
-| X2 | 手动压缩（可带说明） | CC `/compact 说明`；HM `/compress` | △ 有入口，背后是假压缩 | ✔ | — | C1 |
-| X3 | 前缀稳定，保住缓存 | HM：系统提示词整场会话逐字节不变，按稳定/上下文/易变三层组装（`agent/system_prompt.py`）；Manus 的经验是缓存能省 10 倍 | ✘ 每轮都变（代码） | ✔ | Atlas 的记忆、知识等注入改成 HM 的易变层（放在末尾，或只在会话开始时加一次） | C1 |
-| X4 | 各家模型的缓存 | HM：Anthropic 标记、OpenAI/DeepSeek 自动前缀、`prompt_cache_scope.py` | △ 只对 Claude 开（代码） | ✔ | — | C1 |
+| X1 | 自动压缩 | 研究结论：先按规则删旧的工具输出，不够再让模型总结。HM `context_compressor.py`（5753 行，先删工具输出，再用便宜模型总结中段，保护头尾，可多次迭代）；Pi 的结构化摘要格式（目标/约束/进度/决定/下一步/关键上下文，`docs/compaction.md`）；OD `session/compaction.ts` 的旧输出修剪；CX `compact.rs` | ✔ Hermes 真压缩及辅助模型配置（`35cd874`） | ✔ | 摘要格式和切分规则对比 Pi，取更好的 | C1，C2 打磨 |
+| X2 | 手动压缩（可带说明） | CC `/compact 说明`；HM `/compress` | ✔ Hermes ContextCompressor 和 focus topic 桥接（`35cd874`） | ✔ | — | C1 |
+| X3 | 前缀稳定，保住缓存 | HM：系统提示词整场会话逐字节不变，按稳定/上下文/易变三层组装（`agent/system_prompt.py`）；Manus 的经验是缓存能省 10 倍 | ✔ Hermes 三层提示词；动态 Atlas 内容在会话开始注入（`35cd874`） | ✔ | — | C1 |
+| X4 | 各家模型的缓存 | HM：Anthropic 标记、OpenAI/DeepSeek 自动前缀、`prompt_cache_scope.py` | ✔ 交由 Hermes 缓存实现（`35cd874`） | ✔ | — | C1 |
 | X5 | 按模型分别写的系统提示词 | OD `session/prompt/`：anthropic、gpt、gemini、kimi、codex 等 13 份；HM 按模型族加指引 | ✘ 一份 15 行（代码） | △ 按模型族的指引 | 对比 OD 各份，把国产模型（DeepSeek、Kimi、GLM、Qwen）的指引补齐 | C2 |
-| X6 | 规则文件分层 | CC：用户级、项目级、子目录级的 CLAUDE.md；CX `agents_md_manager.rs`；HM `subdirectory_hints.py`（进入子目录时追加） | △ 只读工作目录根下的（代码） | ✔ | 兼容 AGENTS.md、CLAUDE.md、.atlas/rules.md 三种名字 | C1 |
+| X6 | 规则文件分层 | CC：用户级、项目级、子目录级的 CLAUDE.md；CX `agents_md_manager.rs`；HM `subdirectory_hints.py`（进入子目录时追加） | ✔ AGENTS.md、CLAUDE.md、`.atlas/rules.md` 接入（`805110c`） | ✔ | — | C1 |
 | X7 | 看上下文构成 | CC `/context`；HM `context_breakdown.py`；CX `get_context_remaining` | △ 有页面，数字不准（代码） | ✔ | 接前端 | C3 |
-| X8 | 模型的上下文窗口 | HM `model_metadata.py` 加 `models_dev.py` | ✘ 上限为空（代码） | ✔ | — | C1 |
-| X9 | 记录完整保存 | CC、CX、Pi：完整记录工具调用和结果，恢复时一字不差 | ✘ 跨轮丢工具记录（代码） | ✔ HM SessionDB | 和 Atlas 的会话表打通（见 C1 任务书第 4 节） | C1 |
+| X8 | 模型的上下文窗口 | HM `model_metadata.py` 加 `models_dev.py` | ✔ 实际用量及模型上下文上限接入 UI（`805110c`） | ✔ | — | C1 |
+| X9 | 记录完整保存 | CC、CX、Pi：完整记录工具调用和结果，恢复时一字不差 | ✔ Hermes SessionDB 和 Atlas 消息表同步（`15b1416`） | ✔ | — | C1 |
 | X10 | 中途换个干净的上下文 | CX `new_context_window` | ✘ | ✘ | 照 CX `tools/handlers/new_context_window.rs` 写 | C2 |
 
 ## 5. 会话与撤回
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| S1 | 恢复会话 | CC：中断在工具调用中途的，告诉模型「结果未知」；HM `transcript_repair.py` | △ 断线续传，但历史不全 | ✔ | — | C1 |
+| S1 | 恢复会话 | CC：中断在工具调用中途的，告诉模型「结果未知」；HM `transcript_repair.py` | ✔ Hermes SessionDB 恢复接入 Atlas（`15b1416`）；Windows 源测试仍有失败 | ✔ | — | C1 |
 | S2 | 分叉和会话树 | Pi：一个 JSONL 文件里存整棵树，`/tree` 切换，分支自动摘要（`docs/sessions.md`、`docs/compaction.md`「Branch Summarization」）；HM `/branch` | ✔ 界面有分叉树 | △ | 分支摘要照 Pi 补；底层改成存完整记录 | C3 |
 | S3 | 撤回（对话加文件） | CC rewind：可以只撤对话、只撤代码或一起撤；HM `/rollback`、`/snapshot`、`checkpoint_manager.py`；OD snapshot/undo | ✔ 有界面（W06 前做的） | ✔ | 两套检查点只留一套：对比后保留强的，界面不变 | C3 |
-| S4 | 自动起标题 | HM `title_generator.py` | 待核 | ✔ | — | C1 |
-| S5 | 搜历史会话 | HM `session_search`（FTS） | ✔ | ✔ | — | C1 |
+| S4 | 自动起标题 | HM `title_generator.py` | △ Hermes 自动标题在 Atlas 新建会话链路未独立验收 | ✔ | — | C1 |
+| S5 | 搜历史会话 | HM `session_search`（FTS） | ✔ Hermes `session_search` 接入（`698b7bb`） | ✔ | — | C1 |
 | S6 | 导出 | CX `/export`；HM `/export` | ✔ | ✔ | — | — |
 
 ## 6. 交互与模式
@@ -117,17 +119,17 @@
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| A1 | 委派单个子 Agent | CC Task 工具（独立上下文、可指定模型和工具）；HM `delegate_tool*.py`（同步和异步、运行中引导、实时日志） | ✔ W07，挂在旧循环上 | ✔ | W07 的五家定义文件格式解析保留，接到 HM 的委派上 | C1 |
+| A1 | 委派单个子 Agent | CC Task 工具（独立上下文、可指定模型和工具）；HM `delegate_tool*.py`（同步和异步、运行中引导、实时日志） | △ Atlas delegate handler 在 Hermes registry 可调用并有并行假模型覆盖；子 Agent 全链路仍需核验（`4357a86`） | ✔ | — | C1 |
 | A2 | 并行和验收 | Factory Missions；HM 并行委派；W07 的验收 | △ W07 验收有误判（见 W07B 第一节） | ✔ | 验收逻辑在新内核上重写 | C3 |
 | A3 | 自定义子 Agent 定义 | CC `.claude/agents`、OD agents、CX `agent-roles` | ✔ W07 | — | 保留 | — |
 | A4 | 子 Agent 界面 | CC 的任务面板；CX `/agents` 指挥中心 | ✘ W07B 前端没做 | — | 原 W07B 第三节的前端 | C3 |
-| A5 | 多模型会诊 | HM `/moa`、`moa_loop.py` | △ W07 | ✔ | 只接后端，界面后放 | C1 |
+| A5 | 多模型会诊 | HM `/moa`、`moa_loop.py` | △ 旧循环有实现，Hermes `run_turn` 尚未桥接 | ✔ | 接入 Hermes 回合及假模型覆盖 | C1 |
 
 ## 8. 扩展
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| E1 | MCP 客户端 | HM `tools/mcp_tool*.py`（15 个文件：HTTP、OAuth、断线重连、健康检查、按需发现）；CC 的 URL 模式授权 | △ stdio 和 sse，没有 HTTP 和 OAuth（代码） | ✔ | — | C1 |
+| E1 | MCP 客户端 | HM `tools/mcp_tool*.py`（15 个文件：HTTP、OAuth、断线重连、健康检查、按需发现）；CC 的 URL 模式授权 | ✔ Hermes MCP client；本地假 stdio E2E 通过，远端 HTTP/OAuth 未实测（`4d975de`） | ✔ | — | C1 |
 | E2 | 技能 | CC/Agent Skills 格式（SKILL.md 加渐进加载）；HM `skills_tool.py` 等 | ✔ SKILL.md | ✔ | 两套技能目录合一 | C4 |
 | E3 | Hooks | CC 事件最全：工具前、工具后、工具失败、提交提示词、停止、子 Agent 开始和结束、压缩前、会话开始和结束、通知、权限请求；HM 只有 `pre_tool_call`/`post_tool_call` 两个 | △ 5 个事件（代码） | △ | 照 CC 的事件表和输入输出格式补齐，直接兼容 `.claude/settings.json` 里的 hooks | C4 |
 | E4 | 插件 | CC 的插件市场格式（`.claude-plugin`、mcpb）；HM 插件 SDK；Pi 的扩展（TypeScript，可以改工具、命令、事件、界面） | △ 只能本地装 | ✔ HM 插件 | 兼容 CC 插件格式（原 W11 第 4 节）；Pi 的扩展思路写进扩展点设计 | C4 |
@@ -140,8 +142,8 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | M1 | 服务商覆盖 | HM 30 多家（`providers/`、`agent/provider_registry.py`），包括腾讯、Kimi 等；Pi 有统一的模型接口 | △ 只支持 OpenAI 兼容地址 | ✔ | 补齐国内各家（DeepSeek、Kimi、GLM、Qwen、MiniMax、阶跃、小米 MiMo）的原生参数 | C5 |
 | M2 | 多密钥轮换和冷却 | HM `credential_pool*.py` | ✘ | ✔ | — | C5 |
-| M3 | 出错自动切换模型 | HM `fallback_model`、`fallback_cooldown.py`（W06 已搬一部分） | ✔ | ✔ | — | C1 |
-| M4 | 推理参数按服务商适配 | HM `reasoning_params.py`、`lmstudio_reasoning.py` | △ | ✔ | — | C1 |
+| M3 | 出错自动切换模型 | HM `fallback_model`、`fallback_cooldown.py`（W06 已搬一部分） | ✔ Hermes fallback model 配置传递（`805110c`） | ✔ | — | C1 |
+| M4 | 推理参数按服务商适配 | HM `reasoning_params.py`、`lmstudio_reasoning.py` | ✔ Atlas reasoning effort 传入 Hermes（`805110c`）；其他服务商参数未逐个验证 | ✔ | — | C1 |
 | M5 | 用量和费用准确 | CC 会显示「可能的缓存未命中原因」；HM `turn_usage.py`、`usage_pricing.py` | ✔ W06 | ✔ | 缓存未命中原因照 CC 补 | C5 |
 | M6 | 编辑已有模型 | — | ✘（W06 遗留） | — | 原 W07B 第 2.5 节 | C5 |
 
