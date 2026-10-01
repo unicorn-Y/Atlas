@@ -35,6 +35,8 @@
 - C6 验收通过后进入「实测」阶段（Claude 参与，真实模型横向对比），再收尾，最后 Claude 按 `docs/plan/FINAL-REVIEW.md` 做最终审查，向用户汇报。
 - 每次给用户的汇报要短：做到哪了、下一步是什么、需要用户点什么。
 
+**并行规则（用户 2026-10-02）**：主控和验收都可以同时开多个 GPT-6 Luna（high）子代理并行干活，但必须按文件或模块分好：每个子代理只改分给它的文件，开工前写明负责哪些、不许碰哪些；会改到同一文件的活交给同一个子代理，或者排在后面串行做。子代理共用一个工作区，只 git add 自己的文件，提交前 git pull --rebase，不许 reset、stash 或改别人的改动；全量测试和端到端等所有子代理都提交完再统一跑。这条要写进每波的 Sol 主控和独立验收提示词。
+
 **C1（旧流程，正在进行）**：Luna 单独施工；Claude 用会话内定时任务每 20 分钟巡检（`scratchpad/inspect.sh`：两个仓库的提交、结果文件、Luna 最近的话），用户授权 Claude 在 C1 巡检中自己发送纠偏指令。C1 交付后删掉巡检，开新 Sol 对话做独立验收（用下面的「独立验收」提示词）。
 
 ## 4. 当前进度与下一步
@@ -66,7 +68,7 @@
 完整阅读 LUNA_WORKER.md、docs/plan/00-MASTER-PLAN.md、docs/plan/CORE-PARITY.md、docs/plan/EXECUTION-GUIDE.md（尤其第三点五、三点六、第五节），再完整阅读任务书 tasks/taskbooks/<任务书名>.md，它取代 tasks/CURRENT.md 里记录的任务。
 你自己不直接写大段代码，而是这样带队：
 1. 把任务书拆成若干块（通常一节一块），写出每块的完成标准（对应 CORE-PARITY 的哪些行、要过哪些测试）。
-2. 用 spawn_agent 开子代理施工，模型指定 GPT-6 Luna、reasoning_effort 指定 high；给子代理的消息里写清：读哪些文件、这一块的范围和完成标准、本项目的硬规矩（见下）、做完一块提交一次并汇报改了什么和测试结果。互不依赖的块可以并行，会改同一批文件的块按顺序做。
+2. 用 spawn_agent 开子代理施工，模型指定 GPT-6 Luna、reasoning_effort 指定 high；给子代理的消息里写清：读哪些文件、这一块的范围和完成标准、本项目的硬规矩（见下）、做完一块提交一次并汇报改了什么和测试结果。可以同时开多个子代理并行，但要按文件或模块分好：每个子代理只改分给它的文件，开工前写明负责哪些、不许碰哪些；会改同一批文件的块交给同一个子代理或按顺序做；子代理只 git add 自己的文件，提交前 git pull --rebase，不许 reset、stash 或改别人的改动。
 3. 每块完成后你亲自审：看 diff、跑相关测试、对照来源代码检查有没有自写缩水版、有没有砍功能、已有事件和接口是否保持兼容。不合格就让同一个子代理返工（send_input）或纠偏，合格再进行下一块。
 4. 全部完成后，你用后台进程跑完 Atlas 全量测试和前端四项检查，汇总行写进结果文件 tasks/results/<任务书名>.result.md（每块做了什么、偏差、已知限制、没覆盖的项）；更新 tasks/CURRENT.md 和 docs/plan/CORE-PARITY.md；push 前 git pull --rebase；核验 remote HEAD；然后停止。
 硬规矩：搬代码先读源码再搬，Atlas 专属的放 Atlas 仓库，非改内核不可的才改 fork（只进 atlas 分支）；规则表整份拷贝不得缩水；不得放宽 core/atlas/origin_guard.py；测试不写真实数据目录、不在仓库建临时目录、不依赖真实网络；不用真实模型，用假模型服务跑端到端；接口名、事件名、字段名与任务书一致，已有的保持兼容；不要碰用户 8765 上的开发后端和用户的真实文件。安全审查由用户亲自负责，不做任何安全审查相关功能（Hermes 的审批和危险检测保持关闭，core/atlas/safety/ 保持默认关闭）；本地语音暂缓。
@@ -79,7 +81,7 @@
 完整阅读 docs/plan/00-MASTER-PLAN.md、docs/plan/CORE-PARITY.md、docs/plan/EXECUTION-GUIDE.md（尤其第三点六节和第五节验收清单）、任务书 tasks/taskbooks/ATLAS-C1-HERMES-CORE.md 和结果文件 tasks/results/ATLAS-C1-HERMES-CORE.result.md。
 按验收清单逐项做：对比搬入代码与来源规模；自己用后台进程跑完全量测试；读改动的代码找 bug；用假模型服务在隔离环境（独立 ATLAS_DATA_DIR、去掉 MCP、独立端口、假目录）跑任务书要求的端到端测试；对照 CORE-PARITY 里本波的每一行逐项检查；检查已有功能有没有倒退；前端用无头 Edge 截图检查。不要用真实模型。
 不要碰用户 8765 上的开发后端和用户的真实文件。安全审查由用户亲自负责，不做也不评。
-你只负责找问题、审查和验收；修复交给子代理（用户要求，省配额）：用 spawn_agent 开子代理，model 指定 GPT-6 Luna、reasoning_effort 指定 high，每个子代理给一组相关问题，写清问题、位置、复现、修复标准、要补的测试和本项目硬规矩；子代理每个修复一个提交并写清为什么；你审 diff、跑相关测试，不合格让它返工；互不冲突的可以并行。
+你只负责找问题、审查和验收；修复交给子代理（用户要求，省配额）：用 spawn_agent 开子代理，model 指定 GPT-6 Luna、reasoning_effort 指定 high，每个子代理给一组相关问题，写清问题、位置、复现、修复标准、要补的测试和本项目硬规矩；子代理每个修复一个提交并写清为什么；你审 diff、跑相关测试，不合格让它返工；可以同时开多个子代理并行，但要按文件或模块分好，每个只改分给它的文件，只 git add 自己的文件，提交前 git pull --rebase，不许 reset、stash 或改别人的改动；全量和端到端等全部提交完再统一跑。
 验收记录写到 tasks/reviews/ATLAS-C1-HERMES-CORE.review.md：结论、每个问题（问题/影响/修法）、CORE-PARITY 逐行核对结果、全量测试汇总行。更新 CORE-PARITY 状态。push 前 git pull --rebase，然后停止。
 ```
 
