@@ -13,12 +13,15 @@ from atlas.tools.local_execution import LocalExecutionRuntime
 from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
 
 
-async def run_script(tmp_path, monkeypatch, script, *, history=None, **options):
+async def run_script(tmp_path, monkeypatch, script, *, history=None, hermes_config="", **options):
     monkeypatch.setattr("atlas.config.get_config", lambda: {
         "tools.servers": {}, "tools.auto_start": [], "agent.verify_before_stop": True,
     })
     with FakeLLMServer(script) as fake:
         write_hermes_home(tmp_path / "engine", fake.base_url)
+        if hermes_config:
+            config_path = tmp_path / "engine/config.yaml"
+            config_path.write_text(config_path.read_text().replace("api_max_retries: 1", hermes_config), encoding="utf-8")
         monkeypatch.setenv("HERMES_HOME", str(tmp_path / "engine"))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",

@@ -363,7 +363,8 @@ class HermesRuntime:
             return answers
 
         def on_status(kind: str, text: str | None = None) -> None:
-            if str(kind) in {"recovery", "retry", "fallback"}:
+            from gateway.warning_notifications import DiagnosticText
+            if str(kind) in {"recovery", "retry", "fallback"} or isinstance(text, DiagnosticText):
                 emit({"type": "run.recovery.notice", "data": {"message": text or str(kind)}})
             else:
                 emit({"type": "run.status", "status": str(kind), "text": text or ""})
@@ -467,6 +468,23 @@ class HermesRuntime:
             # directly to inject its one-shot time-budget reminder.
             agent.run_budget_seconds = run_budget_seconds
             agent.budget_warning_ratio = budget_warning_ratio
+            # Continuation/empty-response recovery uses diagnostic _vprint calls,
+            # while transport recovery uses the diagnostic lifecycle callback.
+            original_vprint = getattr(agent, "_vprint", None)
+            if callable(original_vprint):
+                def atlas_vprint(*args: Any, **kwargs: Any) -> None:
+                    if kwargs.get("diagnostic"):
+                        emit({"type": "run.recovery.notice", "data": {
+                            "message": "模型正在恢复并继续。", "detail": " ".join(map(str, args)),
+                        }})
+                    original_vprint(*args, **kwargs)
+                agent._vprint = atlas_vprint
+            buffer_diagnostic = getattr(agent, "_buffer_diagnostic_status", None)
+            if callable(buffer_diagnostic):
+                def atlas_buffer_diagnostic(text: str) -> None:
+                    emit({"type": "run.recovery.notice", "data": {"message": "模型正在恢复并继续。", "detail": str(text)}})
+                    buffer_diagnostic(text)
+                agent._buffer_diagnostic_status = atlas_buffer_diagnostic
             self._apply_compression_model_setting(agent, settings)
             volatile_prompt = "\n\n".join(
                 str(section).strip() for section in (volatile_context or []) if str(section).strip()
