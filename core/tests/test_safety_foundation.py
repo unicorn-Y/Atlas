@@ -23,7 +23,7 @@ def test_windows_destructive_commands_and_floor() -> None:
     ):
         assert detect_danger(command)
     assert floor_reason("Format-Volume -DriveLetter C")
-    assert not detect_danger("Remove-Item -Recurse node_modules dist")
+    # Build-folder cleanup is only exempt inside a known work folder (see test_safety_review_fixes).
 
 
 def test_context_scanner_detects_injection_but_ignores_benign_policy_text() -> None:

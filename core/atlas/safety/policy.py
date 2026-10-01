@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from atlas.config import get_config
-from atlas.safety.detection import RULES, detect_danger
-from atlas.safety.floors import floor_reason
+from atlas.safety.detection import RULES, Assessment, assess
 
 _LOG: list[dict[str, Any]] = []
 _DENIALS: dict[str, int] = {}
@@ -44,9 +43,14 @@ def update_settings(value: dict[str, Any]) -> dict[str, Any]:
     return updated
 
 
-def evaluate_rules(tool: str, arguments: dict[str, Any]) -> tuple[list[str], str | None]:
-    text = json.dumps({"tool": tool, "arguments": arguments}, ensure_ascii=False)
-    return detect_danger(text), floor_reason(text)
+def evaluate_rules(
+    tool: str, arguments: dict[str, Any], *, workspace: str | None = None,
+    allowed_paths: list[str] | None = None, write_capable_mcp: bool = False,
+) -> Assessment:
+    """Findings for one write; trusted_paths from settings count as part of the work folder."""
+    roots = [*(allowed_paths or []), *get_settings().get("trusted_paths", [])]
+    return assess(tool, arguments, workspace=workspace, allowed_roots=roots,
+                  write_capable_mcp=write_capable_mcp)
 
 
 def append_log(entry: dict[str, Any]) -> None:

@@ -28,6 +28,16 @@ log = structlog.get_logger()
 # Data types
 # ---------------------------------------------------------------------------
 
+# Ported from NousResearch/hermes-agent@663362680b6ffa4fbffeb58f6682564239a1953b:
+# tools/mcp_tool_registration.py::_annotation_read_only_hint (MIT, (c) Nous Research).
+def _annotation_read_only_hint(mcp_tool: Any) -> bool:
+    """True only when annotations carry ``readOnlyHint is True``; unknown or malformed = write-capable."""
+    annotations = getattr(mcp_tool, "annotations", None)
+    hint = (annotations.get("readOnlyHint") if isinstance(annotations, dict)
+            else getattr(annotations, "readOnlyHint", None))
+    return hint is True
+
+
 @dataclass
 class ToolInfo:
     """Flattened representation of an MCP tool for the LLM."""
@@ -36,6 +46,8 @@ class ToolInfo:
     description: str
     input_schema: dict[str, Any]
     server_name: str  # which server owns this tool
+    # Captured once at discovery; only an explicit readOnlyHint=True counts as read-only.
+    read_only: bool = False
 
     def to_openai_tool(self) -> dict[str, Any]:
         """Convert to OpenAI-compatible tool definition for LiteLLM."""
@@ -237,6 +249,7 @@ class MCPClient:
                     description=tool.description or "",
                     input_schema=tool.input_schema,
                     server_name=cfg.name,
+                    read_only=_annotation_read_only_hint(tool),
                 )
                 handle.tools.append(info)
                 self._tool_index[info.qualified_name] = info

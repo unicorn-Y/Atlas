@@ -35,9 +35,14 @@ def protect_targets(
     arguments: dict[str, Any], *, workspace: str | None,
     run_id: str, checkpoint_store: Any,
 ) -> bool:
+    """True when every existing target is protected (or there is nothing on disk to protect).
+
+    Work-folder changes are also covered by the per-run checkpoint, so a command with no
+    recognisable file targets (``git push --force``, relative paths) is not a failure.
+    """
     targets = _targets(arguments)
     if not targets:
-        return False
+        return True
     root = Path(workspace).resolve() if workspace else None
     in_workspace, outside = [], []
     for target in targets:
@@ -78,4 +83,4 @@ def protect_targets(
                     shutil.copy2(target, destination)
         except OSError:
             return False
-    return bool(in_workspace or outside)
+    return True

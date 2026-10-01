@@ -49,7 +49,6 @@ from atlas.agent.fallback_cooldown import cool as cool_model
 from atlas.agent.fallback_cooldown import is_cooling
 from atlas.agent.retry_utils import jittered_backoff
 from atlas.agent.verification_stop import is_verification_command, requires_verification
-from atlas.safety.floors import floor_reason
 from atlas.safety.checkpoints import protect_targets
 from atlas.safety.policy import (
     append_log as append_safety_log, evaluate_rules as evaluate_safety_rules,
@@ -136,6 +135,8 @@ when they would help accomplish the user's goal.
 
 MAX_TOOL_ROUNDS = 10
 _CACHE_UNSUPPORTED_MODELS: set[str] = set()
+# Gateways that reject stream_options; usage then stays unknown for that model in this process.
+_STREAM_USAGE_UNSUPPORTED: set[str] = set()
 
 
 def _positive_limit(value: Any, *, default: int, maximum: int) -> int:
@@ -999,6 +1000,9 @@ class AgentOrchestrator:
             kwargs["tool_choice"] = "auto"
         if getattr(runtime, "reasoning_effort", None):
             kwargs["reasoning_effort"] = runtime.reasoning_effort
+        # OpenAI-compatible streams only report usage (incl. cached tokens) when asked to.
+        if litellm_model not in _STREAM_USAGE_UNSUPPORTED:
+            kwargs["stream_options"] = {"include_usage": True}
 
         event_queue = getattr(runtime, "event_queue", None)
         events: list[dict[str, Any]] = []
@@ -1054,6 +1058,8 @@ class AgentOrchestrator:
                 cached_input_tokens = (
                     get_value(prompt_details, "cached_tokens")
                     or get_value(usage, "cache_read_input_tokens")
+                    # DeepSeek caches prefixes automatically and reports hits under its own name.
+                    or get_value(usage, "prompt_cache_hit_tokens")
                 )
                 cache_write_tokens = (
                     get_value(prompt_details, "cache_write_tokens")
@@ -1077,6 +1083,12 @@ class AgentOrchestrator:
                 }})
         except Exception as exc:
             status = getattr(exc, "status_code", None)
+            if (status == 400 and "stream_options" in str(exc).lower()
+                    and litellm_model not in _STREAM_USAGE_UNSUPPORTED
+                    and not full_text and not tool_fragments):
+                _STREAM_USAGE_UNSUPPORTED.add(litellm_model)
+                log.warning("agent.stream_usage_unsupported", model=litellm_model)
+                return await self._think_node(state)
             if (cache_enabled and status == 400 and "cache" in str(exc).lower()
                     and not full_text and not tool_fragments):
                 _CACHE_UNSUPPORTED_MODELS.add(litellm_model)
@@ -1348,6 +1360,11 @@ class AgentOrchestrator:
                         or (fn_name == "local_git" and fn_args.get("action") in {
                             "add", "commit", "pull", "fetch", "push",
                         }))
+            # MCP tools are write-capable unless the server annotated them readOnlyHint=True
+            # (Hermes rule: unknown = may modify state), so ask_writes and the reviewer see them.
+            mcp_info = self._mcp.get_tool(fn_name) if self._mcp else None
+            is_mcp_write = mcp_info is not None and not getattr(mcp_info, "read_only", False)
+            is_write = is_write or is_mcp_write
             if permission_mode == "ask_writes" and is_write and ctx.approval_callback:
                 choice = await ctx.approval_callback(f"approval:{tc_id}", fn_name, fn_args)
                 if choice != "allow":
@@ -1360,21 +1377,27 @@ class AgentOrchestrator:
                         await ctx.event_queue.put(events[-1])
                     continue
             if is_write and permission_mode == "full_access":
-                dangerous_rules, _floor = evaluate_safety_rules(fn_name, fn_args)
+                assessment = evaluate_safety_rules(
+                    fn_name, fn_args, workspace=workspace, allowed_paths=allowed_paths,
+                    write_capable_mcp=is_mcp_write,
+                )
+                dangerous_rules, _floor = assessment.reasons, assessment.floor
                 if _floor:
-                    reason = _floor
+                    reason = f"触及不可恢复的底线：{_floor}"
                     append_safety_log({"tool": fn_name, "decision": "deny", "reason": reason,
-                                       "rule_ids": dangerous_rules, "stage": "floor"})
+                                       "rule_ids": [_floor], "stage": "floor"})
                     if ctx.event_queue is not None:
                         await ctx.event_queue.put({"type": "safety_reviewed", "data": {
                             "tool_call_id": tc_id, "tool": fn_name, "decision": "deny",
-                            "reason": reason, "rule_ids": dangerous_rules, "stage": "rule",
+                            "reason": reason, "rule_ids": [_floor], "stage": "rule",
                             "latency_ms": 0,
                         }})
-                    result = {"content": [{"type": "text", "text": f"这一步被安全审查拦下：{reason}"}], "is_error": True}
+                    result = {"content": [{"type": "text", "text": f"这一步被安全审查拦下：{reason}。这类操作不能执行，请换一种做法。"}], "is_error": True}
                     events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
                                    "content": result["content"], "is_error": True})
                     tool_messages.append(ToolMessage(content=result["content"][0]["text"], tool_call_id=tc_id))
+                    if ctx.event_queue is not None:
+                        await ctx.event_queue.put(events[-1])
                     continue
                 settings = get_safety_settings()
                 if (permission_mode == "full_access" and dangerous_rules
@@ -1388,7 +1411,8 @@ class AgentOrchestrator:
                         decision, stage = "allow", "rule"
                     elif settings.get("reviewer") == "smart":
                         models = self._model_mgr.list_models()
-                        reviewer_id = get_config().get("agents.fast_model") or selected_model
+                        reviewer_id = (get_config().get("agents.fast_model")
+                                       or getattr(ctx, "model", None) or self._model_mgr.current_model)
                         reviewer_model = next((item.get("litellm_model") for item in models
                                                if item.get("id") == reviewer_id), reviewer_id)
                         try:
@@ -1401,10 +1425,11 @@ class AgentOrchestrator:
                         stage = "model"
                     else:
                         decision, stage = "ask", "rule"
+                    found = "；".join(dangerous_rules[:3])
                     reason = {
-                        "allow": "辅助审查认为该操作可执行。",
-                        "deny": "安全审查判断该操作可能造成破坏。",
-                        "ask": "安全审查无法确认该操作安全，需要用户确认。",
+                        "allow": f"命中「{found}」，审查后认为可以执行",
+                        "deny": f"命中「{found}」，审查判断可能造成破坏",
+                        "ask": f"命中「{found}」，无法确认是否安全，需要你确认",
                     }[decision]
                     review_event = {
                         "tool_call_id": tc_id, "tool": fn_name, "decision": decision,
