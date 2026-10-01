@@ -1345,7 +1345,16 @@ async def truncate_conversation(conversation_id: str, req: dict[str, Any]) -> di
     message_id = str(req.get("from_message_id", ""))
     if not message_id:
         raise HTTPException(status_code=400, detail="from_message_id is required")
+    messages = await memory.get_messages_with_rowid(conversation_id)
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import rewind_to_atlas_message, restore_session
+
+    snapshot = await asyncio.to_thread(
+        rewind_to_atlas_message, DATA_ROOT / "engine", conversation_id, messages, message_id,
+    )
     if not await memory.truncate_conversation(conversation_id, message_id):
+        if snapshot:
+            await asyncio.to_thread(restore_session, DATA_ROOT / "engine", snapshot)
         raise HTTPException(status_code=404, detail="Conversation or message not found")
     return {"status": "ok", "conversation_id": conversation_id}
 
@@ -1480,6 +1489,14 @@ async def rewind_conversation(conversation_id: str, req: dict[str, Any]) -> dict
     rewind_id = uuid.uuid4().hex
     snapshot = {"messages": messages, "files": file_snapshot,
                 "checkpoints": checkpoints, "files_requested": req["files"]}
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import capture_session, restore_session, rewind_to_atlas_message
+
+    hermes_snapshot = await asyncio.to_thread(
+        capture_session, DATA_ROOT / "engine", conversation_id,
+    )
+    if hermes_snapshot:
+        snapshot["hermes_session"] = hermes_snapshot
     await memory.save_rewind({
         "rewind_id": rewind_id, "conversation_id": conversation_id,
         "removed_messages": len(removed), "restored_files": 0, "snapshot": snapshot,
@@ -1493,10 +1510,19 @@ async def rewind_conversation(conversation_id: str, req: dict[str, Any]) -> dict
         if removed_row is None:
             if req["files"]:
                 await _restore_rewind_files(file_snapshot)
+            if hermes_snapshot:
+                await asyncio.to_thread(restore_session, DATA_ROOT / "engine", hermes_snapshot)
             raise HTTPException(status_code=404, detail="找不到指定消息。")
+        if hermes_snapshot:
+            await asyncio.to_thread(
+                rewind_to_atlas_message, DATA_ROOT / "engine", conversation_id, messages, message_id,
+            )
     except HTTPException:
         raise
     except Exception:
+        await memory.replace_messages(conversation_id, messages)
+        if hermes_snapshot:
+            await asyncio.to_thread(restore_session, DATA_ROOT / "engine", hermes_snapshot)
         if req["files"]:
             await _restore_rewind_files(file_snapshot)
         raise
@@ -1526,6 +1552,12 @@ async def redo_conversation_rewind(conversation_id: str, rewind_id: str) -> dict
     snapshot = record["snapshot"]
     if snapshot.get("files_requested"):
         await _restore_rewind_files(snapshot.get("files", []))
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import restore_session
+
+    await asyncio.to_thread(
+        restore_session, DATA_ROOT / "engine", snapshot.get("hermes_session"),
+    )
     await memory.replace_messages(conversation_id, snapshot.get("messages", []))
     await memory.mark_rewind_redone(conversation_id, rewind_id)
     return {"status": "redone", "rewind_id": rewind_id}
@@ -1543,9 +1575,17 @@ async def list_conversation_rewinds(conversation_id: str) -> list[dict[str, Any]
 async def fork_conversation(conversation_id: str, req: dict[str, Any]) -> dict[str, Any]:
     assert memory is not None
     message_id = str(req.get("through_message_id", ""))
+    source_messages = await memory.get_messages_with_rowid(conversation_id)
     result = await memory.fork_conversation(conversation_id, message_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Conversation or message not found")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import fork_session
+
+    await asyncio.to_thread(
+        fork_session, DATA_ROOT / "engine", conversation_id, str(result["id"]),
+        source_messages, message_id,
+    )
     await memory.update_conversation(
         result["id"], parent_conversation_id=conversation_id, fork_message_id=message_id,
         workspace=(await memory.get_conversation(conversation_id) or {}).get("workspace"),
@@ -1578,6 +1618,13 @@ async def duplicate_conversation(conversation_id: str) -> dict[str, Any]:
     result = await memory.fork_conversation(conversation_id, messages[-1]["id"])
     if result is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import fork_session
+
+    await asyncio.to_thread(
+        fork_session, DATA_ROOT / "engine", conversation_id, str(result["id"]),
+        messages, str(messages[-1]["id"]),
+    )
     source = await memory.get_conversation(conversation_id) or {}
     await memory.update_conversation(result["id"], parent_conversation_id=conversation_id,
                                      fork_message_id=messages[-1]["id"],
@@ -1609,6 +1656,10 @@ async def compact_conversation(conversation_id: str) -> dict[str, Any]:
 async def delete_conversation(conversation_id: str) -> dict[str, str]:
     """Delete a conversation and all its messages."""
     assert memory is not None
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import delete_session
+
+    await asyncio.to_thread(delete_session, DATA_ROOT / "engine", conversation_id)
     ok = await memory.delete_conversation(conversation_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
