@@ -558,6 +558,13 @@ class HermesRuntime:
 
             task = asyncio.create_task(asyncio.to_thread(run_sync))
             while True:
+                inbox = getattr(atlas_context, "process_notifications", None)
+                if inbox is not None:
+                    while not inbox.empty():
+                        notice = inbox.get_nowait().get("data", {})
+                        agent.steer("后台进程已结束：" + str(notice.get("execution_id", ""))
+                                    + "，退出码：" + str(notice.get("exit_code"))
+                                    + "。请检查输出后继续任务。")
                 if cancel_event is not None and cancel_event.is_set() and not task.done():
                     agent.interrupt(hard_cancel=True)
                 if steer_queue is not None:

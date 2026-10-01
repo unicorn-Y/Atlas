@@ -241,6 +241,8 @@ class AgentRunContext:
     permission_mode: str = "full_access"
     allowed_paths: list[str] = field(default_factory=list)
     hermes_preapproved_writes: set[str] = field(default_factory=set)
+    process_notifications: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
+    parent_process_event_callback: Callable[..., Any] | None = None
     user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None
     ssh_tool_callback: Callable[[str, dict[str, Any]], Any] | None = None
     ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None
@@ -542,6 +544,7 @@ class AgentOrchestrator:
                 ssh_checkpoint_callback=options.get("ssh_checkpoint_callback"),
                 sandbox_tool_callback=options.get("sandbox_tool_callback"),
                 sandbox_enabled=bool(options.get("sandbox_enabled")),
+                parent_process_event_callback=options.get("parent_process_event_callback"),
                 subtask_started=options.get("subtask_started"),
                 subtask_progress=options.get("subtask_progress"),
                 subtask_completed=options.get("subtask_completed"),
@@ -1465,6 +1468,12 @@ class AgentOrchestrator:
             choice = ctx.approval_callback(approval_id, child_tool, child_args)
             return await choice if hasattr(choice, "__await__") else choice
 
+        async def process_event(event: dict[str, Any]) -> None:
+            if ctx.event_queue is not None:
+                await ctx.event_queue.put(event)
+            if event.get("type") == "process.completed":
+                await ctx.process_notifications.put(event)
+
         atlas_options = {
             "model": getattr(ctx, "model", None) or self._model_mgr.current_model,
             "permission_mode": permission_mode,
@@ -1487,6 +1496,7 @@ class AgentOrchestrator:
             "subtask_progress": getattr(ctx, "subtask_progress", None),
             "subtask_completed": getattr(ctx, "subtask_completed", None),
             "subtask_group_completed": getattr(ctx, "subtask_group_completed", None),
+            "parent_process_event_callback": process_event,
         }
 
         for tc in last.tool_calls:
@@ -2204,7 +2214,8 @@ class AgentOrchestrator:
                         result = await self._local_execution.call_tool(
                             fn_name, fn_args, run_id=ctx.run_id,
                             output_callback=report_process_output,
-                            event_callback=ctx.event_queue.put if ctx.event_queue is not None else None,
+                            event_callback=(ctx.parent_process_event_callback or process_event)
+                            if fn_name == "local_process" and fn_args.get("action") == "handoff" else process_event,
                         )
                 elif fn_name.startswith("computer_") and self._computer_use:
                     if getattr(ctx, "sandbox_enabled", False):
@@ -2465,6 +2476,7 @@ class AgentOrchestrator:
         subtask_completed: Callable[..., Any] | None = None,
         subtask_group_completed: Callable[..., Any] | None = None,
         worker: bool = False,
+        parent_process_event_callback: Callable[..., Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -2519,6 +2531,7 @@ class AgentOrchestrator:
             subtask_started=subtask_started, subtask_progress=subtask_progress,
             subtask_completed=subtask_completed,
             subtask_group_completed=subtask_group_completed,
+            parent_process_event_callback=parent_process_event_callback,
         )
 
         # Resolve model

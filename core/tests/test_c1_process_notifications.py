@@ -35,3 +35,25 @@ def test_terminal_translation_preserves_notification_options():
     assert args["notify"] == ["READY"]
     assert args["watch_patterns"] == ["DONE"]
     assert args["heartbeat"] == 60
+
+
+@pytest.mark.asyncio
+async def test_handoff_retargets_completion_to_parent_after_child_cleanup(tmp_path):
+    runtime = LocalExecutionRuntime()
+    child_events, parent_events = [], []
+    try:
+        result = await runtime.call_tool("local_exec", {
+            "executable": sys.executable, "args": ["-c", "import time; time.sleep(.2)"],
+            "cwd": str(tmp_path), "detached": True, "notify": True,
+        }, run_id="child", event_callback=child_events.append)
+        process_id = result["data"]["execution_id"]
+        handoff = await runtime.call_tool("local_process", {"action": "handoff", "execution_id": process_id},
+            run_id="child", event_callback=parent_events.append)
+        assert not handoff["is_error"]
+        await runtime.cancel_run("child")
+        await runtime._processes[process_id].wait_task
+        assert not child_events
+        assert len(parent_events) == 1 and parent_events[0]["type"] == "process.completed"
+        assert parent_events[0]["data"]["exit_code"] == 0
+    finally:
+        await runtime.shutdown()

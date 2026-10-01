@@ -351,7 +351,7 @@ class LocalExecutionRuntime:
                 self._configure_notifications(process, args, event_callback)
                 return await self._execute_or_detach(process, args)
             elif name == "local_process":
-                return await self._process_operation(args, run_id, output_callback)
+                return await self._process_operation(args, run_id, output_callback, event_callback)
             else:
                 return self._error(f"Unknown local tool: {name}")
             return {
@@ -880,7 +880,8 @@ class LocalExecutionRuntime:
         return await self._wait_result(record, args.get("timeout"))
 
     async def _process_operation(
-        self, args: dict[str, Any], run_id: str | None, callback: OutputCallback | None
+        self, args: dict[str, Any], run_id: str | None, callback: OutputCallback | None,
+        event_callback: Any = None,
     ) -> dict[str, Any]:
         action = args["action"]
         if action == "list":
@@ -928,6 +929,8 @@ class LocalExecutionRuntime:
                 record.detached = True
                 record.owner_run_id = None
                 record.handoff_note = str(args.get("data", "")).strip()
+                record.notification_callback = event_callback
+                record.notify_on_complete = True
                 data = record.summary()
             else:
                 raise ValueError(f"Unsupported process action: {action}")
