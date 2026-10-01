@@ -7,6 +7,10 @@ def tool_allowed(name, allow=None, deny=()):
     from atlas.engine.tool_registry import _ALIASES
 
     names = {name, _ALIASES.get(name, (name, None))[0]}
+    if name == "delegate_parallel":
+        names.add("delegate_task")
+    if name in {"todo", "todo_list"}:
+        names.update({"todo", "todo_list"})
     matches = lambda patterns: any(fnmatchcase(item, pattern) for item in names for pattern in patterns)
     return (allow is None or matches(allow)) and not matches(deny or ())
 

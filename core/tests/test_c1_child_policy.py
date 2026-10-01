@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from atlas.agent.tool_permissions import intersect_tool_allow, tool_allowed
+from atlas.engine.tool_permissions import intersect_tool_allow, tool_allowed
 from tests.test_c1_review_e2e import run_script
 from tests.fakes.fake_llm_provider import Text, ToolCall
 
@@ -16,6 +16,12 @@ def test_child_whitelist_intersection_preserves_parent_and_aliases():
     assert intersect_tool_allow(["read_file"], None) == ["read_file"]
     assert tool_allowed("write_file", ["local_file"])
     assert not tool_allowed("write_file", ["*"], ["local_*"])
+    assert tool_allowed("delegate_parallel", ["delegate_task"])
+    assert not tool_allowed("delegate_parallel", ["*"], ["delegate_task"])
+    assert tool_allowed("todo", ["todo_list"])
+    assert tool_allowed("todo_list", ["todo"])
+    assert not tool_allowed("todo", ["*"], ["todo_list"])
+    assert not tool_allowed("write_file", ["todo_list"])
 
 
 @pytest.mark.asyncio

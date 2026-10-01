@@ -17,7 +17,7 @@ from typing import Any
 
 import structlog
 
-from atlas.agent.tool_permissions import intersect_tool_allow
+from atlas.engine.tool_permissions import intersect_tool_allow
 
 log = structlog.get_logger()
 
