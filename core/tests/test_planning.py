@@ -67,7 +67,7 @@ def test_plan_round_trip_and_verification_require_evidence():
 
 
 @pytest.mark.asyncio
-async def test_multi_step_run_plans_persists_and_verifies():
+async def test_multi_step_run_plans_persists_and_verifies(legacy_agent_engine):
     orchestrator = _orchestrator()
     persisted = []
     knowledge = {
@@ -155,7 +155,7 @@ async def test_multi_step_run_plans_persists_and_verifies():
 
 
 @pytest.mark.asyncio
-async def test_resumed_plan_skips_generation_and_only_verifies_pending_items():
+async def test_resumed_plan_skips_generation_and_only_verifies_pending_items(legacy_agent_engine):
     orchestrator = _orchestrator()
     recovered = {
         "goal": "Inspect then summarize",
@@ -191,7 +191,9 @@ async def test_resumed_plan_skips_generation_and_only_verifies_pending_items():
 
 
 @pytest.mark.asyncio
-async def test_goal_evaluation_runs_after_plan_verification_and_emits_evidence():
+async def test_goal_evaluation_runs_after_plan_verification_and_emits_evidence(
+    legacy_agent_engine,
+):
     orchestrator = _orchestrator()
     calls = []
     plan_payload = {

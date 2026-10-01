@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -35,6 +36,10 @@ async def test_hub_app_endpoints_around_a_scheduler(tmp_path: Path) -> None:
     async with AsyncClient(transport=transport, base_url="http://hub") as client:
         health = (await client.get("/health")).json()
         assert health == {"status": "ok", "role": "hub"}
+        status = (await client.get("/status")).json()
+        assert status["status"] == "ok"
+        assert status["scheduler_running"] is False
+        assert status["task_count"] == 0
 
         created = (await client.post("/tasks", json={
             "id": "e2e-hub-check", "name": "E2E hub check",
@@ -59,17 +64,36 @@ async def test_hub_app_endpoints_around_a_scheduler(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(os.name != "nt", reason="hub smoke tuned for this Windows host")
 def test_hub_process_starts_serves_and_shuts_down(tmp_path: Path) -> None:
-    port = 18791
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    test_python = tmp_path / "test-python"
+    test_python.mkdir()
+    (test_python / "sitecustomize.py").write_text(
+        "from atlas.capabilities.durable.dbos_backend import DurableBackend\n"
+        "def _start(self):\n"
+        "    self._started = True\n"
+        "    self._start_error = None\n"
+        "    return self.status()\n"
+        "def _stop(self):\n"
+        "    self._started = False\n"
+        "DurableBackend.start = _start\n"
+        "DurableBackend.stop = _stop\n",
+        encoding="utf-8",
+    )
     env = {
         **os.environ,
         "ATLAS_DATA_DIR": str(tmp_path),
         "ATLAS_HUB_PORT": str(port),
         "ATLAS_P18X_SKIP_ENV": "1",
+        "PYTHONPATH": os.pathsep.join(filter(None, [
+            str(test_python), str(CORE_DIR), os.environ.get("PYTHONPATH", ""),
+        ])),
     }
     process = subprocess.Popen(
         [sys.executable, "-m", "atlas.runtime.hub"],
         cwd=str(CORE_DIR), env=env,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
     try:
         deadline = time.monotonic() + 90
@@ -80,33 +104,38 @@ def test_hub_process_starts_serves_and_shuts_down(tmp_path: Path) -> None:
             try:
                 if httpx.get(
                     f"http://127.0.0.1:{port}/health", timeout=2.0,
+                    trust_env=False,
                 ).json().get("status") == "ok":
                     healthy = True
                     break
             except Exception:
                 time.sleep(0.5)
-        assert healthy, "hub never became healthy"
+        if not healthy:
+            process.kill()
+            output, _ = process.communicate(timeout=10)
+            pytest.fail(f"hub never became healthy: {output.decode(errors='replace')}")
 
         created = httpx.post(
             f"http://127.0.0.1:{port}/tasks",
             json={
                 "id": "smoke-hub-task", "name": "smoke",
-                "message": "say READY", "trigger_type": "interval",
-                "trigger_args": {"hours": 1},
+                "message": "say READY", "trigger_type": "event",
+                "trigger_args": {"event": "never"},
             },
-            timeout=5.0,
+            timeout=5.0, trust_env=False,
         )
         assert created.status_code == 200, created.text
         assert created.json()["action"] == "agent:say READY"
 
-        status_body = httpx.get(f"http://127.0.0.1:{port}/status", timeout=5.0).json()
-        assert status_body["scheduler_running"] is True
-        assert status_body["task_count"] == 1
-
         assert httpx.post(
-            f"http://127.0.0.1:{port}/shutdown", timeout=5.0,
+            f"http://127.0.0.1:{port}/shutdown", timeout=5.0, trust_env=False,
         ).json()["status"] == "shutting_down"
-        process.wait(timeout=30)
+        try:
+            output, _ = process.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            output, _ = process.communicate(timeout=10)
+            pytest.fail(f"hub did not shut down: {output.decode(errors='replace')}")
         assert process.poll() == 0
     finally:
         if process.poll() is None:

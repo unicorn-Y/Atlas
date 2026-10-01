@@ -254,7 +254,9 @@ async def test_process_stream_status_cancel_and_shutdown(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
-async def test_agent_completes_multi_step_file_edit_and_execution(tmp_path: Path) -> None:
+async def test_agent_completes_multi_step_file_edit_and_execution(
+    tmp_path: Path, legacy_agent_engine,
+) -> None:
     target = tmp_path / "跨目录 项目" / "value.txt"
 
     class Memory:
@@ -360,7 +362,9 @@ async def test_agent_completes_multi_step_file_edit_and_execution(tmp_path: Path
 
 
 @pytest.mark.asyncio
-async def test_agent_repairs_external_git_project_and_commits(tmp_path: Path) -> None:
+async def test_agent_repairs_external_git_project_and_commits(
+    tmp_path: Path, legacy_agent_engine,
+) -> None:
     project = tmp_path / "MemoryOS 任意路径 Project"
     project.mkdir()
     source = project / "answer.py"
@@ -684,7 +688,9 @@ async def test_detached_process_survives_run_cleanup_but_stops_on_shutdown(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_agent_run_cancel_stops_its_foreground_process(tmp_path: Path) -> None:
+async def test_agent_run_cancel_stops_its_foreground_process(
+    tmp_path: Path, legacy_agent_engine,
+) -> None:
     class Memory:
         async def retrieve_approved_goal_knowledge(self, *_args, **_kwargs):
             return []

@@ -1702,7 +1702,9 @@ class TestBackendParityWave1:
         })
         assert escaped.status_code == 400
 
-    async def test_usage_sum_manual_compact_and_missing_conversation(self, client: AsyncClient) -> None:
+    async def test_usage_sum_manual_compact_and_missing_conversation(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         total = server._sum_usage([
             {"input_tokens": 2, "output_tokens": 3, "context_tokens": 5,
              "cached_input_tokens": 1, "cache_write_tokens": 2,
@@ -1717,6 +1719,16 @@ class TestBackendParityWave1:
         created = await client.post("/api/conversations", json={})
         conv_id = created.json()["id"]
         await server.memory.save_message(conv_id, "user", "A compactable conversation")
+
+        async def fake_compact_session(self, **_kwargs):
+            return {
+                "before_tokens": 6, "after_tokens": 1,
+                "summary": "A compactable conversation", "compressed": True,
+            }
+
+        from atlas.engine.hermes_runtime import HermesRuntime
+
+        monkeypatch.setattr(HermesRuntime, "compact_session", fake_compact_session)
         compacted = await client.post(f"/api/conversations/{conv_id}/compact")
         assert compacted.status_code == 200 and compacted.json()["before_tokens"] > 0
         assert (await client.post("/api/conversations/missing/compact")).status_code == 404
