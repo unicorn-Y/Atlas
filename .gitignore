@@ -15,6 +15,7 @@ build/
 /core/.p18x-pyinstaller-*/
 /core/.p18x-pytest-*/
 /core/.p18x-packaged-path.txt
+/core/uv.lock
 /.aider.chat.history.md
 /.aider.tags.cache.v4/
 
@@ -55,6 +56,7 @@ frontend/release/
 frontend/windows-release/
 frontend/node_modules/
 .playwright-mcp/
+/.playwright-cli/
 /atlas-workspace-v1.png
 
 # Environment
