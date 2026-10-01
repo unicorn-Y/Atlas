@@ -233,6 +233,18 @@ class HermesRuntime:
             emit({"type": "tool_result", "id": tool_call_id, "name": name,
                   "content": [{"type": "text", "text": text}], "is_error": is_error})
 
+        def atlas_or_native_mcp_tool_start(
+            tool_call_id: str, name: str, arguments: dict[str, Any],
+        ) -> None:
+            if atlas_agent is None or name.startswith("mcp__"):
+                on_tool_start(tool_call_id, name, arguments)
+
+        def atlas_or_native_mcp_tool_complete(
+            tool_call_id: str, name: str, arguments: dict[str, Any], result: Any,
+        ) -> None:
+            if atlas_agent is None or name.startswith("mcp__"):
+                on_tool_complete(tool_call_id, name, arguments, result)
+
         def on_event(name: str, data: dict[str, Any]) -> None:
             mapping = {
                 "session:compress": "run.compaction.progress",
