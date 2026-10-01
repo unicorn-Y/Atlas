@@ -1,3 +1,5 @@
+# Ported from NousResearch/hermes-agent@663362680b6ffa4fbffeb58f6682564239a1953b:
+# tests/agent/test_verification_stop.py (MIT, (c) Nous Research); Atlas tool events adapted.
 from atlas.agent.verification_stop import is_verification_command, requires_verification
 
 

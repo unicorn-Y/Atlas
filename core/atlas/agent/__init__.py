@@ -8,6 +8,7 @@ import fnmatch
 import inspect
 import json
 import os
+import re
 import time
 import tempfile
 import uuid
@@ -1170,6 +1171,8 @@ class AgentOrchestrator:
                 "arguments": tc["args"],
             }
             events.append(event)
+            if event_queue is not None:
+                await event_queue.put(event)
 
         if incomplete_tool_arguments:
             if runtime.truncated_tool_retries >= 1:
@@ -1184,9 +1187,6 @@ class AgentOrchestrator:
                 )),
             ])
             return await self._think_node(state)
-            if event_queue is not None:
-                await event_queue.put(event)
-
         ai_msg = (
             AIMessage(content=full_text, tool_calls=tc_list)
             if tc_list else AIMessage(content=full_text)
@@ -1233,7 +1233,7 @@ class AgentOrchestrator:
             return await choice if hasattr(choice, "__await__") else choice
 
         atlas_options = {
-            "model": ctx.model or self._model_mgr.current_model,
+            "model": getattr(ctx, "model", None) or self._model_mgr.current_model,
             "permission_mode": permission_mode,
             "allowed_paths": allowed_paths,
             "tool_allow": getattr(ctx, "tool_allow", None),

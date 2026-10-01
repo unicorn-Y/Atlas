@@ -608,7 +608,9 @@ class TestRun:
         types = [e["type"] for e in events]
         assert "done" in types
         memory.save_message.assert_called_once()
-        memory.extract_conversation_candidates.assert_awaited_once_with("conv-1")
+        memory.extract_conversation_candidates.assert_awaited_once_with(
+            "conv-1", provenance="user",
+        )
 
     async def test_run_includes_retrieved_memories_in_model_context(
         self, orchestrator, memory

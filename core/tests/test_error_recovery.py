@@ -1,3 +1,5 @@
+# Ported from NousResearch/hermes-agent@663362680b6ffa4fbffeb58f6682564239a1953b:
+# tests/agent/test_error_classifier.py and test_retry_utils.py (MIT, (c) Nous Research).
 from types import SimpleNamespace
 
 from atlas.agent.error_classifier import FailoverReason, classify_api_error

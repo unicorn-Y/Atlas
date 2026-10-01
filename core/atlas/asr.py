@@ -1,3 +1,5 @@
+# Filtering and idle-unload behavior adapted from NousResearch/hermes-agent@663362680b6ffa4fbffeb58f6682564239a1953b:
+# tools/transcription_local.py and tools/transcription_common.py (MIT, (c) Nous Research).
 # Model and VAD assets: official k2-fsa/sherpa-onnx ASR release, SenseVoice int8 2025-09-09
 # and Silero VAD (Apache-2.0 runtime dependency sherpa-onnx); implementation is Atlas-local.
 """Local SenseVoice recognition and Silero VAD lifecycle."""

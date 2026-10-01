@@ -1,3 +1,6 @@
+# Ported from NousResearch/hermes-agent@663362680b6ffa4fbffeb58f6682564239a1953b:
+# tests/tools/test_approval_detection.py, test_approval_smart.py, and test_threat_patterns.py
+# (MIT, (c) Nous Research); adapted for Atlas tools and Windows command forms.
 from __future__ import annotations
 
 from types import SimpleNamespace
