@@ -30,7 +30,7 @@
 
 **从 C2 起（用户 2026-10-01 决定）：**
 - **Sol 主控**（主机 Codex，模型 GPT-6.1 Sol）：读任务书、拆块，用 Codex 的子代理（`spawn_agent`，指定 GPT-6 Luna、推理档位 high）逐块施工；每块审 diff、跑测试、纠偏或返工；最后跑全量、写结果文件。
-- **独立验收**（另开一个 Sol 新对话）：没参与施工的 Sol 按 EXECUTION-GUIDE 第五节验收、修问题、写验收记录。**用户要求保留这一步。**
+- **独立验收**（另开一个 Sol 新对话）：没参与施工的 Sol 按 EXECUTION-GUIDE 第五节验收、找问题、写验收记录；**修复交给它开的 GPT-6 Luna（high）子代理**（用户 2026-10-02 要求，省配额）。**用户要求保留这一步。**
 - **Claude（你）**：写任务书 → 填「Sol 主控」提示词 → 用户点发送 → Sol 完成后读结果文件 → 填「独立验收」提示词 → 用户点发送 → 读验收记录 → 写下一波任务书或补做任务书。不巡检、不写代码、不跑测试。
 - C6 验收通过后进入「实测」阶段（Claude 参与，真实模型横向对比），再收尾，最后 Claude 按 `docs/plan/FINAL-REVIEW.md` 做最终审查，向用户汇报。
 - 每次给用户的汇报要短：做到哪了、下一步是什么、需要用户点什么。
@@ -79,7 +79,7 @@
 完整阅读 docs/plan/00-MASTER-PLAN.md、docs/plan/CORE-PARITY.md、docs/plan/EXECUTION-GUIDE.md（尤其第三点六节和第五节验收清单）、任务书 tasks/taskbooks/ATLAS-C1-HERMES-CORE.md 和结果文件 tasks/results/ATLAS-C1-HERMES-CORE.result.md。
 按验收清单逐项做：对比搬入代码与来源规模；自己用后台进程跑完全量测试；读改动的代码找 bug；用假模型服务在隔离环境（独立 ATLAS_DATA_DIR、去掉 MCP、独立端口、假目录）跑任务书要求的端到端测试；对照 CORE-PARITY 里本波的每一行逐项检查；检查已有功能有没有倒退；前端用无头 Edge 截图检查。不要用真实模型。
 不要碰用户 8765 上的开发后端和用户的真实文件。安全审查由用户亲自负责，不做也不评。
-发现的问题直接修复并补测试，每个修复一个提交，提交信息写清为什么。
+你只负责找问题、审查和验收；修复交给子代理（用户要求，省配额）：用 spawn_agent 开子代理，model 指定 GPT-6 Luna、reasoning_effort 指定 high，每个子代理给一组相关问题，写清问题、位置、复现、修复标准、要补的测试和本项目硬规矩；子代理每个修复一个提交并写清为什么；你审 diff、跑相关测试，不合格让它返工；互不冲突的可以并行。
 验收记录写到 tasks/reviews/ATLAS-C1-HERMES-CORE.review.md：结论、每个问题（问题/影响/修法）、CORE-PARITY 逐行核对结果、全量测试汇总行。更新 CORE-PARITY 状态。push 前 git pull --rebase，然后停止。
 ```
 
