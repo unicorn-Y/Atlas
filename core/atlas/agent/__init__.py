@@ -122,6 +122,14 @@ MAX_TOOL_ROUNDS = 10
 _CACHE_UNSUPPORTED_MODELS: set[str] = set()
 
 
+def _positive_limit(value: Any, *, default: int, maximum: int) -> int:
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(limit, 1), maximum)
+
+
 # ---------------------------------------------------------------------------
 # Agent State
 # ---------------------------------------------------------------------------
@@ -158,6 +166,7 @@ class AgentRunContext:
     max_tool_rounds: int = MAX_TOOL_ROUNDS
     reasoning_effort: str | None = None
     model: str | None = None
+    truncated_tool_retries: int = 0
     subtask_started: Callable[..., Any] | None = None
     subtask_progress: Callable[..., Any] | None = None
     subtask_completed: Callable[..., Any] | None = None
@@ -819,9 +828,13 @@ class AgentOrchestrator:
     async def _think_node(self, state: AgentState) -> dict[str, Any]:
         """Call the LLM, possibly producing tool calls."""
         runtime = state["runtime"]
-        selected_model = runtime.model or self._model_mgr.current_model
+        selected_model = runtime.model or getattr(
+            self._model_mgr, "current_model", self._model_mgr.current_litellm_model,
+        )
+        list_models = getattr(self._model_mgr, "list_models", None)
+        models = list_models() if callable(list_models) else []
         model_config = next(
-            (item for item in self._model_mgr.list_models() if item["id"] == selected_model),
+            (item for item in models if item["id"] == selected_model),
             {"id": selected_model, "litellm_model": selected_model},
         )
         litellm_model = str(model_config.get("litellm_model", selected_model))
@@ -952,7 +965,10 @@ class AgentOrchestrator:
         kwargs: dict[str, Any] = {
             "model": litellm_model,
             "messages": lc_messages,
-            "max_tokens": 4096,
+            "max_tokens": _positive_limit(
+                model_config.get("max_output_tokens", cfg.get("models.max_output_tokens", 16384)),
+                default=16384, maximum=200000,
+            ),
         }
         if tools:
             kwargs["tools"] = tools
@@ -965,6 +981,7 @@ class AgentOrchestrator:
         full_text = ""
         tool_fragments: dict[int, dict[str, str]] = {}
         usage = None
+        finish_reason = None
 
         def get_value(value: Any, key: str, default: Any = None) -> Any:
             if isinstance(value, dict):
@@ -984,6 +1001,7 @@ class AgentOrchestrator:
                 choices = get_value(chunk, "choices", []) or []
                 if not choices:
                     continue
+                finish_reason = get_value(choices[0], "finish_reason", finish_reason)
                 delta = get_value(choices[0], "delta")
                 content = get_value(delta, "content")
                 if content:
@@ -1013,9 +1031,20 @@ class AgentOrchestrator:
                     get_value(prompt_details, "cached_tokens")
                     or get_value(usage, "cache_read_input_tokens")
                 )
-                cache_write_tokens = get_value(usage, "cache_creation_input_tokens")
+                cache_write_tokens = (
+                    get_value(prompt_details, "cache_write_tokens")
+                    or get_value(prompt_details, "cache_creation_input_tokens")
+                    or get_value(usage, "cache_creation_input_tokens")
+                    or get_value(usage, "cache_write_tokens")
+                )
+                input_tokens = get_value(usage, "prompt_tokens")
+                if input_tokens is None:
+                    input_tokens = (
+                        (get_value(usage, "input_tokens", 0) or 0)
+                        + (cached_input_tokens or 0) + (cache_write_tokens or 0)
+                    )
                 await event_queue.put({"type": "run_usage", "usage": {
-                    "input_tokens": get_value(usage, "prompt_tokens"),
+                    "input_tokens": input_tokens,
                     "output_tokens": get_value(usage, "completion_tokens"),
                     "cached_input_tokens": cached_input_tokens or 0,
                     "cache_write_tokens": cache_write_tokens or 0,
@@ -1049,11 +1078,15 @@ class AgentOrchestrator:
             raise _RuntimeFailureError("model", f"Model call failed: {exc}") from exc
 
         tc_list: list[dict[str, Any]] = []
+        incomplete_tool_arguments = False
         for index in sorted(tool_fragments):
             fragment = tool_fragments[index]
             try:
                 arguments = json.loads(fragment["arguments"] or "{}")
             except (json.JSONDecodeError, TypeError) as exc:
+                if finish_reason == "length":
+                    incomplete_tool_arguments = True
+                    break
                 raise ValueError(
                     f"Malformed arguments for streamed tool call {fragment['id'] or index}: {exc}"
                 ) from exc
@@ -1074,6 +1107,20 @@ class AgentOrchestrator:
                 "arguments": tc["args"],
             }
             events.append(event)
+
+        if incomplete_tool_arguments:
+            if runtime.truncated_tool_retries >= 1:
+                raise _RuntimeFailureError(
+                    "model", "工具参数连续两次被输出长度截断，未执行不完整的操作。",
+                )
+            runtime.truncated_tool_retries += 1
+            state["messages"].extend([
+                AIMessage(content=full_text),
+                HumanMessage(content=(
+                    "刚才的工具参数被输出长度截断，Atlas 没有执行。请把操作拆成更小的多次工具调用。"
+                )),
+            ])
+            return await self._think_node(state)
             if event_queue is not None:
                 await event_queue.put(event)
 
@@ -1646,12 +1693,12 @@ class AgentOrchestrator:
                         "duration_ms": 0, "items": [], "run_id": ctx.run_id,
                     }})
             full_output_path = None
-            if getattr(ctx, "run_id", None):
-                preview, full_output_path = externalize_tool_output(
-                    full_output, get_config().db_path.parent, ctx.run_id, tc_id,
-                )
-                if full_output_path:
-                    result["content"] = [{"type": "text", "text": preview}]
+            preview, full_output_path = externalize_tool_output(
+                full_output, get_config().db_path.parent,
+                getattr(ctx, "run_id", None), tc_id,
+            )
+            if preview != full_output:
+                result["content"] = [{"type": "text", "text": preview}]
 
             # Keep user-facing runtime events bounded. The full process log
             # remains available through local_process.read using execution_id.

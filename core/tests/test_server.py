@@ -75,7 +75,14 @@ class TestRuntimeProtocol:
         resp = await client.get("/api/runtime/protocol")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["version"] == "1.7"
+        assert data["version"] == "1.8"
+
+    async def test_usage_endpoint_grouping_validation(self, client: AsyncClient) -> None:
+        empty = await client.get("/api/usage", params={"group_by": "model"})
+        assert empty.status_code == 200
+        assert empty.json()["rows"] == []
+        invalid = await client.get("/api/usage", params={"group_by": "week"})
+        assert invalid.status_code == 422
 
     async def test_run_metadata_survives_manager_restart(self, tmp_path) -> None:
         from atlas.server import RunState, RuntimeManager

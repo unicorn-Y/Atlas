@@ -115,6 +115,7 @@ from atlas.tools.mcp_client import MCPClient
 from atlas.tools.node_runtime import get_node_runtime_status
 from atlas.tools.web import WebRuntime
 from atlas.tools.web_extract import extract_web
+from atlas.usage import UsageLedger
 from atlas.telegram import TelegramService
 from atlas.task_artifacts import TomlRecordStore, WorktreeService, seed_profiles
 
@@ -152,6 +153,7 @@ skill_dependency_plans: dict[str, dict[str, Any]] = {}
 scheduler: AtlasScheduler | None = None
 external_agent_status_cache: dict[str, Any] = {}
 external_conversation_sessions: dict[tuple[str, str], str] = {}
+usage_ledger: UsageLedger | None = None
 
 
 def _task_store(kind: str) -> TomlRecordStore:
@@ -626,10 +628,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global skill_mgr, skill_registry, scheduler
     global capability_bus, cua_backend, browser_use, agent_backend_host
     global projects, durable, plugin_runtime, notifications, web_runtime, custom_tools, telegram_service
+    global usage_ledger
 
     model_mgr = ModelManager()
     memory = MemoryStore()
     await memory.init()
+    usage_ledger = UsageLedger(get_config().db_path)
+    await usage_ledger.init()
     projects = ProjectStore(get_config().db_path.parent / "projects.db")
     await projects.init()
     durable = DurableBackend(get_config().db_path.parent / "dbos.sqlite")
@@ -898,6 +903,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         durable.stop()
     if projects:
         await projects.close()
+    if usage_ledger:
+        await usage_ledger.close()
     if memory:
         await memory.close()
     await runtime_mgr.close()
@@ -951,6 +958,8 @@ class CustomModelRequest(BaseModel):
     litellm_model: str
     prompt_cache: str | None = None
     prompt_cache_ttl: str | None = None
+    max_output_tokens: int | None = None
+    price: dict[str, Any] | None = None
 
 
 class ConnectionTestRequest(BaseModel):
@@ -1180,6 +1189,8 @@ async def add_custom_model(req: CustomModelRequest) -> dict[str, Any]:
             "category": "custom",
             **({"prompt_cache": req.prompt_cache} if req.prompt_cache else {}),
             **({"prompt_cache_ttl": req.prompt_cache_ttl} if req.prompt_cache_ttl else {}),
+            **({"max_output_tokens": req.max_output_tokens} if req.max_output_tokens else {}),
+            **({"price": req.price} if req.price else {}),
         })
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -5300,7 +5311,20 @@ async def run_goal_now(goal_id: str) -> dict[str, str]:
 @app.get("/api/runtime/protocol")
 async def runtime_protocol() -> dict[str, str]:
     """Advertise Runtime Event Protocol version."""
-    return {"version": "1.7"}
+    return {"version": "1.8"}
+
+
+@app.get("/api/usage")
+async def get_usage(
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
+    group_by: str = Query(default="day", pattern="^(day|conversation|model)$"),
+) -> dict[str, Any]:
+    if usage_ledger is None:
+        return {"rows": [], "totals": {"runs": 0, "input_tokens": 0,
+                "output_tokens": 0, "cached_input_tokens": 0,
+                "cache_hit_rate": None, "est_cost": 0}}
+    return await usage_ledger.query(start=from_, end=to, group_by=group_by)
 
 
 @app.post("/api/runs/{run_id}/subtasks/{subtask_id}/cancel")
@@ -5323,7 +5347,7 @@ class RunState:
     """Tracks a single agent run's state for the runtime protocol."""
 
     __slots__ = (
-        "run_id", "conversation_id", "model", "sequence",
+        "run_id", "conversation_id", "model", "started_at", "sequence",
         "status", "events", "cancel_event", "pause_event",
         "approval_futures", "task", "plan_state",
         "event_lock", "steer_queue", "input_futures", "mode", "workspace",
@@ -5342,6 +5366,7 @@ class RunState:
         self.run_id = run_id
         self.conversation_id = conversation_id
         self.model = model
+        self.started_at = datetime.now(UTC).isoformat()
         self.sequence = 0
         self.status = "running"  # running | paused | waiting | completed | failed | cancelled
         self.events: list[dict[str, Any]] = []  # full event log for replay
@@ -6763,6 +6788,17 @@ async def _execute_run(
                     )
                     usage["reasoning_effort_applied"] = run.reasoning_effort_applied
                 run.usage.append(usage)
+                if usage_ledger is not None:
+                    event_model = str(usage.get("model") or model_id or run.model)
+                    model_config = next((item for item in model_mgr.list_models()
+                                         if item.get("litellm_model") == event_model
+                                         or item.get("id") == event_model), {}) if model_mgr else {}
+                    with suppress(Exception):
+                        await usage_ledger.record(
+                            run_id=run.run_id, conversation_id=run.conversation_id,
+                            subtask_id=None, model=event_model, started_at=run.started_at,
+                            usage=usage, price=model_config.get("price"),
+                        )
                 await emit("run.usage", usage)
 
             elif etype == "approval_required":

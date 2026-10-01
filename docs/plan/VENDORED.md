@@ -9,6 +9,11 @@
 | `core/atlas/agent/prompt_cache_boundary.py` | `NousResearch/hermes-agent` | `agent/prompt_cache_boundary.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 保留稳定前缀 LRU 注册和查找 | 2026-10-01 |
 | `core/tests/test_prompt_caching.py` | `NousResearch/hermes-agent` | `tests/agent/test_prompt_caching.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 移植缓存边界、复制语义、TTL 与代理布局测试；Atlas 专属代理规划器测试另写 | 2026-10-01 |
 | `core/tests/test_prompt_cache_boundary.py` | `NousResearch/hermes-agent` | `tests/agent/test_prompt_cache_boundary.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 移植稳定前缀查找与请求级拆分测试；未移植 Hermes 专属技能/定时任务构造器测试 | 2026-10-01 |
+| `core/atlas/tools/output_limits.py` | `NousResearch/hermes-agent` | `tools/tool_output_limits.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 使用 Atlas TOML 配置读取字节、行数和行长上限 | 2026-10-01 |
+| `core/atlas/tools/output_truncate.py` | `NousResearch/hermes-agent` | `tools/tool_output_truncate.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 保留 40/60 头尾裁剪与统一截断标记 | 2026-10-01 |
+| `core/atlas/agent/results.py` | `NousResearch/hermes-agent` | `tools/tool_result_storage.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 复用 Atlas run 目录持久化全量结果并返回头尾预览；无 run ID/写入失败时按配置截断 | 2026-10-01 |
+| `core/atlas/usage_pricing.py` | `NousResearch/hermes-agent` | `agent/usage_pricing.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 只保留静态价格计算和自定义价格覆盖；无 Hermes 账户/积分逻辑，表内为当前明确列出的模型 | 2026-10-01 |
+| `core/atlas/usage.py` | `NousResearch/hermes-agent` | `agent/usage_pricing.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | Atlas SQLite 用量记录、分组汇总；以模型+子任务聚合运行数 | 2026-10-01 |
 
 参考提交号（2026-09-30 调研时）：
 - `NousResearch/hermes-agent`：`12e4d3e2dd5281adf289f70e5d6c7f33427d6982`
