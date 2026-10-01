@@ -2808,10 +2808,23 @@ class AgentOrchestrator:
                     from atlas.config import DATA_ROOT
                     from atlas.engine import HermesRuntime
 
-                    system_message = "\n\n".join(
+                    volatile_prefixes = (
+                        "Atlas Skill index ", "Project context ", "Active user context ",
+                        "Knowledge retrieval explanation ", "Historical failure reflections ",
+                        "Approved goal experiences ", "Consolidated goal knowledge ",
+                        "Approved consolidated knowledge insights ",
+                    )
+                    prompt_sections = [
                         str(item.content) for item in initial_messages
-                        if isinstance(item, SystemMessage)
-                        and isinstance(item.content, str)
+                        if isinstance(item, SystemMessage) and isinstance(item.content, str)
+                    ]
+                    volatile_context = [
+                        section for section in prompt_sections
+                        if section.startswith(volatile_prefixes)
+                    ]
+                    system_message = "\n\n".join(
+                        section for section in prompt_sections
+                        if not section.startswith(volatile_prefixes)
                     )
                     hermes_history = [
                         {"role": item["role"], "content": item["content"]}
@@ -2833,6 +2846,7 @@ class AgentOrchestrator:
                         workspace=workspace,
                         history=hermes_history,
                         system_message=system_message,
+                        volatile_context=volatile_context,
                         cancel_event=cancel_event,
                         input_callback=input_callback,
                         steer_queue=steer_queue,

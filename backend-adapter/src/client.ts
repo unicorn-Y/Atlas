@@ -89,11 +89,11 @@ export class BackendAdapter {
   async getModels(): Promise<ModelListResponse> { return this.live ? this.request('/api/models') : mockModels; }
   async getConfiguration(): Promise<ConfigurationResponse> {
     if (this.live) return this.request('/api/settings/configuration');
-    return { ...mockModels, gateway_base_url: this.baseUrl, api_key_configured: false, agent_engine: 'hermes' };
+    return { ...mockModels, gateway_base_url: this.baseUrl, api_key_configured: false, agent_engine: 'hermes', compression_model: '' };
   }
-  async updateConfiguration(gatewayBaseUrl: string, apiKey: string, agentEngine?: 'hermes' | 'legacy'): Promise<ConfigurationResponse> {
+  async updateConfiguration(gatewayBaseUrl: string, apiKey: string, agentEngine?: 'hermes' | 'legacy', compressionModel?: string): Promise<ConfigurationResponse> {
     if (!this.live) throw new Error('连接 Atlas 后端后才能保存 API 配置');
-    return this.request('/api/settings/configuration', { method: 'PUT', body: JSON.stringify({ gateway_base_url: gatewayBaseUrl, api_key: apiKey || null, ...(agentEngine ? { agent_engine: agentEngine } : {}) }) });
+    return this.request('/api/settings/configuration', { method: 'PUT', body: JSON.stringify({ gateway_base_url: gatewayBaseUrl, api_key: apiKey || null, ...(agentEngine ? { agent_engine: agentEngine } : {}), ...(compressionModel !== undefined ? { compression_model: compressionModel } : {}) }) });
   }
   async addCustomModel(model: CustomModelRequest): Promise<ConfigurationResponse> {
     if (!this.live) throw new Error('连接 Atlas 后端后才能保存自定义模型');
@@ -130,8 +130,10 @@ export class BackendAdapter {
   async forkConversation(id: string, throughMessageId: string, summarize = false): Promise<ConversationSummary> {
     return this.request(`/api/conversations/${encodeURIComponent(id)}/fork`, { method: 'POST', body: JSON.stringify({ through_message_id: throughMessageId, ...(summarize ? { summarize: true } : {}) }) });
   }
-  async compactConversation(id: string): Promise<{ before_tokens: number | null; after_tokens: number | null; summary: string }> {
-    return this.request(`/api/conversations/${encodeURIComponent(id)}/compact`, { method: 'POST' });
+  async compactConversation(id: string, note = ''): Promise<{ before_tokens: number | null; after_tokens: number | null; summary: string }> {
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/compact`, {
+      method: 'POST', body: JSON.stringify(note.trim() ? { focus_topic: note.trim() } : {}),
+    });
   }
   async getRunChanges(runId: string): Promise<RunChangeFile[]> {
     return (await this.request<{ files: RunChangeFile[] }>(`/api/runs/${encodeURIComponent(runId)}/changes`)).files;

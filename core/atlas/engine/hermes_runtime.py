@@ -1,12 +1,16 @@
 """Run Atlas turns on the Hermes synchronous conversation loop.
 
-Hermes source: NousResearch/hermes-agent@aea969677c60a1bb72fe227fdfb98f196a2092cc
-(MIT). Atlas-specific model, session, callback, and event adaptation lives here.
+Hermes source: unicorn-Y/hermes-agent@562ad75baec0c8360f6ce2d48b7d9de56506956c
+(upstream NousResearch/hermes-agent, MIT): run_agent.py::AIAgent,
+agent/system_prompt.py::build_system_prompt, agent/compression_facade.py::_compress_context,
+agent/plan_prompt.py::build_plan_prompt, tools/mcp_tool_discovery.py::register_mcp_servers.
+Atlas-specific model, session, callback, and event adaptation lives here.
 """
 
 from __future__ import annotations
 
 import asyncio
+import getpass
 import os
 from pathlib import Path
 from collections.abc import AsyncIterator
@@ -39,6 +43,155 @@ class HermesRuntime:
 
         return AIAgent
 
+    @staticmethod
+    def _ssh_workspace_terminal_policy(
+        workspace: str, configured_hosts: list[dict[str, Any]] | None = None,
+    ) -> tuple[str, dict[str, str]]:
+        """Map Atlas ssh:// workspace to Hermes SSHEnvironment settings.
+
+        Hermes source: tools/environments/ssh.py::SSHEnvironment and
+        hermes_cli/ssh_workspace_fs.py::SshWorkspaceFs (MIT). Atlas file tools
+        continue through Atlas' existing remote filesystem callback.
+        """
+        from atlas.ssh import SSHWorkspaceManager
+
+        host, remote_cwd = SSHWorkspaceManager.parse_workspace(workspace)
+        hosts = configured_hosts if configured_hosts is not None else SSHWorkspaceManager().hosts()
+        match = next((item for item in hosts
+                      if host in {str(item.get("alias") or ""), str(item.get("hostname") or "")}), {})
+        user = str(match.get("user") or getpass.getuser()).strip()
+        if not user:
+            raise ValueError(f"SSH user is unavailable for workspace host {host!r}")
+        return remote_cwd, {
+            "TERMINAL_ENV": "ssh",
+            "TERMINAL_SSH_HOST": host,
+            "TERMINAL_SSH_USER": user,
+            "TERMINAL_SSH_PERSISTENT": "true",
+            "TERMINAL_CWD": remote_cwd,
+        }
+
+    @staticmethod
+    def _adapt_atlas_mcp_servers(
+        raw: dict[str, Any], auto_start: list[str] | set[str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        """Preserve Atlas MCP settings while translating transport names for Hermes."""
+        selected = set(auto_start or [])
+        servers: dict[str, dict[str, Any]] = {}
+        for name, value in raw.items():
+            if not isinstance(value, dict):
+                continue
+            enabled = bool(value.get("enabled", True)) and (not selected or name in selected)
+            transport = str(value.get("transport", "stdio")).lower()
+            if transport == "stdio" or transport == "sse" or transport in {"http", "streamable-http"}:
+                item = dict(value)
+                item["enabled"] = enabled
+                item["transport"] = "http" if transport in {"http", "streamable-http"} else transport
+                if item["transport"] == "stdio":
+                    item["command"] = str(value.get("command") or "")
+                    item["args"] = list(value.get("args") or [])
+                    item["env"] = dict(value.get("env") or {})
+                    if value.get("cwd"):
+                        item["cwd"] = str(value["cwd"])
+            else:
+                continue
+            servers[str(name)] = item
+        return servers
+
+    @staticmethod
+    def _register_atlas_mcp() -> list[str]:
+        """Adapt Atlas [tools.servers] to Hermes MCP registrations for the active process."""
+        from atlas.config import get_config
+
+        config = get_config()
+        servers = HermesRuntime._adapt_atlas_mcp_servers(
+            config.get("tools.servers", {}) or {}, config.get("tools.auto_start", []) or [],
+        )
+        enabled_names = [name for name, value in servers.items() if value.get("enabled")]
+        if not enabled_names:
+            return []
+        from tools.mcp_tool_discovery import register_mcp_servers
+
+        mcp_tool_names = register_mcp_servers(servers)
+        toolsets = {f"mcp-{name}" for name in enabled_names}
+        return sorted(toolsets)
+
+    @staticmethod
+    def _apply_compression_model_setting(agent: Any, model_manager: Any) -> None:
+        """Apply Atlas' optional compression model to Hermes' ContextCompressor.
+
+        Empty setting leaves Hermes on the current run model. Atlas model IDs are
+        translated to their LiteLLM name without copying credentials into Hermes config.
+        """
+        from atlas.config import load_user_settings
+
+        selected = str(load_user_settings().get("compression_model", "")).strip()
+        if not selected:
+            return
+        model = next(
+            (item for item in model_manager.list_models() if item.get("id") == selected), None,
+        )
+        compressor = getattr(agent, "context_compressor", None)
+        if model is not None and compressor is not None:
+            compressor.summary_model = str(model.get("litellm_model") or selected)
+
+    async def compact_session(
+        self, *, conversation_id: str, workspace: str | None, focus_topic: str | None = None,
+    ) -> dict[str, Any]:
+        """Run Hermes' real manual compressor against the durable session transcript."""
+        def compact_sync() -> dict[str, Any]:
+            self.home.mkdir(parents=True, exist_ok=True)
+            os.environ["HERMES_HOME"] = str(self.home)
+            settings = self.model_manager
+            current = settings.current_model
+            model_config = next(
+                (item for item in settings.list_models() if item.get("id") == current), {},
+            )
+            agent = self._agent_factory()(
+                model=settings.current_litellm_model, provider="openai", api_mode="openai",
+                base_url=getattr(settings, "gateway_base_url", None),
+                api_key=getattr(settings, "_api_key", None), session_id=conversation_id,
+                cwd=workspace, skip_memory=True, checkpoints_enabled=False,
+                enabled_toolsets=["file", "terminal", "todo", "clarify", "code_execution",
+                                  "session_search", "delegation", "atlas"],
+                fallback_model=model_config.get("fallback"),
+                max_tokens=model_config.get("max_output_tokens"),
+            )
+            self._apply_compression_model_setting(agent, settings)
+            try:
+                open_session_db = getattr(agent, "_get_session_db_for_recall", None)
+                if callable(open_session_db) and getattr(agent, "_session_db", None) is None:
+                    open_session_db()
+                db = getattr(agent, "_session_db", None)
+                if db is None:
+                    raise RuntimeError("Hermes SessionDB is unavailable")
+                history = db.get_messages_as_conversation(conversation_id, include_ancestors=True)
+                if not history:
+                    return {"compressed": False, "reason": "empty_session", "summary": ""}
+                session = db.get_session(conversation_id) or {}
+                prompt = str(session.get("system_prompt") or agent._build_system_prompt(None))
+                before = sum(max(1, len(str(item.get("content", ""))) // 4) for item in history)
+                compressed, _ = agent._compress_context(
+                    history, prompt, focus_topic=focus_topic or None, force=True, trigger="manual",
+                )
+                after_history = db.get_messages_as_conversation(
+                    conversation_id, include_ancestors=True,
+                )
+                after = sum(max(1, len(str(item.get("content", ""))) // 4)
+                            for item in after_history)
+                summary = "\n".join(
+                    str(item.get("content", "")) for item in after_history[-4:]
+                    if item.get("role") in {"system", "assistant"}
+                    and isinstance(item.get("content"), str)
+                )
+                return {"compressed": len(compressed) < len(history) or after < before,
+                        "before_tokens": before, "after_tokens": after, "summary": summary}
+            finally:
+                close = getattr(agent, "close", None)
+                if callable(close):
+                    close()
+
+        return await asyncio.to_thread(compact_sync)
+
     async def run_turn(
         self,
         *,
@@ -47,6 +200,7 @@ class HermesRuntime:
         workspace: str | None,
         history: list[dict[str, Any]],
         system_message: str | None = None,
+        volatile_context: list[str] | None = None,
         cancel_event: asyncio.Event | None = None,
         input_callback: Callable[[str, str, list[str] | None], Any] | None = None,
         steer_queue: asyncio.Queue[dict[str, str]] | None = None,
@@ -126,14 +280,31 @@ class HermesRuntime:
         base_url = getattr(settings, "gateway_base_url", None)
         agent = None
         task: asyncio.Task[Any] | None = None
+        terminal_scope_token = None
         try:
             self.home.mkdir(parents=True, exist_ok=True)
             os.environ["HERMES_HOME"] = str(self.home)
+            hermes_cwd = workspace
+            if isinstance(workspace, str) and workspace.startswith("ssh://"):
+                from tools.terminal_scope import set_terminal_scope
+
+                hermes_cwd, terminal_policy = self._ssh_workspace_terminal_policy(workspace)
+                terminal_scope_token = set_terminal_scope(terminal_policy)
             factory = self._agent_factory()
             if atlas_agent is not None and atlas_context is not None:
                 from atlas.engine.tool_registry import bind_atlas_tools
+                from atlas.engine.hermes_policy import install_atlas_policy_plugin
 
+                install_atlas_policy_plugin()
                 bind_atlas_tools(atlas_agent, atlas_context, loop)
+            mcp_toolsets = self._register_atlas_mcp() if atlas_agent is not None else []
+            plan_mode = getattr(atlas_context, "mode", "act") == "plan"
+            if plan_mode:
+                from agent.plan_prompt import build_plan_prompt
+
+                plan_prompt = build_plan_prompt(message)
+                system_message = f"{system_message or ''}\n\n{plan_prompt}".strip()
+                enabled_toolsets = ["atlas-plan"]
             agent = factory(
                 model=settings.current_litellm_model,
                 provider="openai",
@@ -141,24 +312,41 @@ class HermesRuntime:
                 base_url=base_url,
                 api_key=api_key,
                 session_id=conversation_id,
-                cwd=workspace,
+                cwd=hermes_cwd,
                 skip_memory=True,
                 checkpoints_enabled=False,
                 enabled_toolsets=enabled_toolsets or [
                     "file", "terminal", "todo", "clarify", "code_execution",
                     "session_search", "delegation", "atlas",
-                ],
+                ] + mcp_toolsets,
                 fallback_model=model_config.get("fallback"),
                 max_tokens=max_output_tokens or model_config.get("max_output_tokens"),
                 reasoning_config={"effort": reasoning_effort} if reasoning_effort else None,
                 stream_delta_callback=lambda text: emit({"type": "chunk", "content": str(text)}),
                 reasoning_callback=lambda text: emit({"type": "thinking", "content": str(text)}),
-                tool_start_callback=(None if atlas_agent is not None else on_tool_start),
-                tool_complete_callback=(None if atlas_agent is not None else on_tool_complete),
+                tool_start_callback=atlas_or_native_mcp_tool_start,
+                tool_complete_callback=atlas_or_native_mcp_tool_complete,
                 clarify_callback=on_clarify,
                 status_callback=on_status,
                 event_callback=on_event,
             )
+            self._apply_compression_model_setting(agent, settings)
+            volatile_prompt = "\n\n".join(
+                str(section).strip() for section in (volatile_context or []) if str(section).strip()
+            )
+            build_system_prompt = agent._build_system_prompt
+
+            def build_atlas_layer(system_message: str | None = None) -> str:
+                prompt = build_system_prompt(system_message)
+                prompt = prompt.replace(
+                    "You are Hermes Agent, built by Nous Research.",
+                    "You are Atlas, the AI assistant for this workspace.", 1,
+                )
+                if volatile_prompt and "Atlas session-start context:" not in prompt:
+                    prompt += "\n\nAtlas session-start context:\n" + volatile_prompt
+                return prompt
+
+            agent._build_system_prompt = build_atlas_layer
             # Hermes opens SessionDB lazily for tools when no gateway supplied one. Atlas
             # always needs its durable turn transcript, even with Hermes memory disabled.
             open_session_db = getattr(agent, "_get_session_db_for_recall", None)
@@ -237,6 +425,10 @@ class HermesRuntime:
                 result = {"final_response": str(result or ""), "messages": []}
             yield {"type": "hermes.result", "result": result}
         finally:
+            if terminal_scope_token is not None:
+                from tools.terminal_scope import reset_terminal_scope
+
+                reset_terminal_scope(terminal_scope_token)
             if task is not None:
                 await asyncio.gather(task, return_exceptions=True)
             close = getattr(agent, "close", None) if agent is not None else None

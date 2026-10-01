@@ -476,7 +476,7 @@ export default function App() {
     { id: 'recipe', label: '/recipe', hint: '打开配方，带参数复跑保存过的任务', run: () => setRecipesOpen(true) },
     ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
-    ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩这个对话的上下文，省 token', run: () => void store.compactConversation(activeConversation.id).then((text) => { if (text) setToast(text); }) }] : []),
+    ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩上下文，可附说明让摘要优先保留相关事项', takesArgument: true, run: (note: string) => void store.compactConversation(activeConversation.id, note).then((text) => { if (text) setToast(text); }) }] : []),
     { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
     { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
     { id: 'memory', label: '/memory', hint: '打开记忆', run: () => go('memory') },
@@ -873,6 +873,15 @@ export default function App() {
               <option value="hermes">Hermes（推荐）</option>
               <option value="legacy">旧内核（兼容模式）</option>
             </select>
+          </label>
+          <label className="mt-5 block max-w-[420px] text-[13px] text-fg-2">压缩辅助模型
+            <select aria-label="压缩辅助模型" value={store.compressionModel} disabled={store.settingsBusy}
+              onChange={(event) => void store.saveCompressionModel(event.target.value)}
+              className="mt-2 block h-10 w-full rounded-lg border border-line bg-surface px-3 text-fg">
+              <option value="">跟随当前模型</option>
+              {store.models.map((model) => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
+            </select>
+            <small className="mt-1 block text-fg-3">默认使用当前模型；也可以为 Hermes 上下文压缩单独选一个已配置模型。</small>
           </label>
           {store.error && <p role="alert" className="mt-3 text-[13px] text-danger">{store.error}</p>}
         </section>}

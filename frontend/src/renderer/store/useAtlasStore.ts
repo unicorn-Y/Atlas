@@ -22,6 +22,7 @@ interface AtlasState {
   providerBaseUrl: string;
   apiKeyConfigured: boolean;
   agentEngine: 'hermes' | 'legacy';
+  compressionModel: string;
   /** The backend's model configuration has been read at least once (apiKeyConfigured is meaningful). */
   configLoaded: boolean;
   settingsBusy: boolean;
@@ -76,6 +77,7 @@ interface AtlasState {
   removeSkill: (name: string) => void;
   saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
   saveAgentEngine: (engine: 'hermes' | 'legacy') => Promise<boolean>;
+  saveCompressionModel: (model: string) => Promise<boolean>;
   addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
   testModelConnection: (model?: string) => Promise<void>;
   sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs, profileId?: string) => Promise<void>;
@@ -116,7 +118,7 @@ interface AtlasState {
   rewindTo: (messageId: string, files: boolean) => Promise<RewindResult | null>;
   redoRewind: (conversationId: string, rewindId: string) => Promise<boolean>;
   forkFrom: (messageId: string, summarize?: boolean) => Promise<void>;
-  compactConversation: (id: string) => Promise<string | null>;
+  compactConversation: (id: string, note?: string) => Promise<string | null>;
   setProfile: (id: string) => void;
   reloadProfiles: () => Promise<void>;
   setReasoningEffort: (effort: ReasoningEffort | '') => void;
@@ -172,7 +174,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
   });
 
   return {
-    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, agentEngine: 'hermes', configLoaded: false, settingsBusy: false, connectionTest: null,
+    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, agentEngine: 'hermes', compressionModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, busy: false, paused: false, error: null,
     model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
@@ -191,7 +193,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         const conversations = await migrateLegacyFlags(loaded);
         const preferredModel = storageGet('atlas.preference.model');
         const model = mode === 'backend' ? configuration.current : preferredModel || configuration.current;
-        set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, agentEngine: configuration.agent_engine ?? 'hermes', configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
+        set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, agentEngine: configuration.agent_engine ?? 'hermes', compressionModel: configuration.compression_model ?? '', configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
         const first = conversations.find((item) => !item.archived);
         if (first) await get().openConversation(first);
         // Roles and recipes are extras; the app works without them if the backend predates them.
@@ -253,8 +255,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     saveProviderSettings: async (baseUrl, apiKey) => {
       set({ settingsBusy: true, connectionTest: null });
       try {
-        const configuration: ConfigurationResponse = await backend.updateConfiguration(baseUrl, apiKey);
-        set({ providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, models: configuration.models, model: configuration.current, error: null });
+        const configuration: ConfigurationResponse = await backend.updateConfiguration(baseUrl, apiKey, undefined, get().compressionModel);
+        set({ providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, models: configuration.models, model: configuration.current, compressionModel: configuration.compression_model ?? '', error: null });
         return true;
       } catch (error) {
         set({ error: errorText(error, '保存 API 配置失败') });
@@ -265,11 +267,25 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     saveAgentEngine: async (engine) => {
       set({ settingsBusy: true, error: null });
       try {
-        const configuration = await backend.updateConfiguration(get().providerBaseUrl, '', engine);
-        set({ agentEngine: configuration.agent_engine, error: null });
+        const configuration = await backend.updateConfiguration(get().providerBaseUrl, '', engine, get().compressionModel);
+        set({ agentEngine: configuration.agent_engine, compressionModel: configuration.compression_model ?? '', error: null });
         return true;
       } catch (error) {
         set({ error: errorText(error, '无法切换 Agent 内核') });
+        return false;
+      } finally { set({ settingsBusy: false }); }
+    },
+
+    saveCompressionModel: async (compressionModel) => {
+      set({ settingsBusy: true, error: null });
+      try {
+        const configuration = await backend.updateConfiguration(
+          get().providerBaseUrl, '', get().agentEngine, compressionModel,
+        );
+        set({ compressionModel: configuration.compression_model ?? '', error: null });
+        return true;
+      } catch (error) {
+        set({ error: errorText(error, '无法保存压缩模型') });
         return false;
       } finally { set({ settingsBusy: false }); }
     },
@@ -625,9 +641,9 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         await get().sendMessage(rendered.prompt);
       } catch (error) { set({ error: errorText(error, '配方没能运行') }); }
     },
-    compactConversation: async (id) => {
+    compactConversation: async (id, note = '') => {
       try {
-        const result = await backend.compactConversation(id);
+        const result = await backend.compactConversation(id, note);
         return result.before_tokens && result.after_tokens ? `上下文从约 ${result.before_tokens} 压到 ${result.after_tokens} tokens` : '已压缩上下文';
       } catch (error) { set({ error: errorText(error, '压缩失败') }); return null; }
     },
