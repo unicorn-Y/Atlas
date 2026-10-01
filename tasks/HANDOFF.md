@@ -27,7 +27,12 @@
 - **重新做了全景调研**（`docs/research/2026-09-30-landscape/`，40 多个产品、9 个专题）。
 - **用户纠正方向**：全部功能都要最新最好的，**有现成开源代码就拿来改**（记忆 `atlas-reuse-first`）；选择「移植」路线：保留 Atlas 后端，从 Hermes Agent（Python、MIT、约 25 万星，几乎覆盖全部能力）等项目逐块搬代码。
 - 新计划：`docs/plan/`（总计划、源码地图、执行指南、代码登记表）+ 七波任务书 `tasks/taskbooks/ATLAS-W06-FOUNDATION-SAFETY.md` … `ATLAS-W12-SELF-EVOLUTION.md`。
-- 旧的 `CODEX-ATLAS-BACKEND-PARITY-WAVE6.md` 已作废。**主机 Codex 输入框里还填着旧第六波的提示词，不要发送**；下一步是把 W06 的新提示词填进去（提示词模板见下）。
+- 旧的 `CODEX-ATLAS-BACKEND-PARITY-WAVE6.md` 已作废。
+- **W06 已完成（2026-10-01）**：Codex 交付后端，Claude 审阅并重做了安全部分（见 `tasks/reviews/ATLAS-W06-FOUNDATION-SAFETY.review.md`），前端接了用量页、模型切换和验证提示（`b9927af`）。
+- **用户决定（2026-10-01）**：安全审查由用户亲自做，计划里不做；`core/atlas/safety/` 代码保留但默认关闭。本地语音暂缓（后端已有，前端不接）。
+- 用户当前模型是第三方中转网关上的 DeepSeek（`openai/deepseek-v4.1-flash`），缓存命中拿不到；用量统计正常。
+- **下一步：W07**（`tasks/taskbooks/ATLAS-W07-ORCHESTRATION.md`），提示词用下面的模板，把任务书名换成 W07。
+- 真机测试方法：隔离 `ATLAS_DATA_DIR` + 去掉 MCP 服务器 + 假目录 + 独立端口（W06 审阅记录里有完整做法），不要碰用户 8765 上的开发后端。
 - 用户决定：自动跟踪各家更新做成 Atlas 自己的功能（W12），不另建定时任务。
 
 ### 给 Codex 的提示词模板（W06 起每波通用，替换任务书名）
