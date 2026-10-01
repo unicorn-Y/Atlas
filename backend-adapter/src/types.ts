@@ -25,7 +25,28 @@ export interface CustomModelRequest {
   name: string;
   provider: string;
   litellm_model: string;
+  /** Longest reply the model may write; the backend default is 16384. */
+  max_output_tokens?: number;
+  /** Per million tokens, in the currency the user thinks in; enables cost estimates. */
+  price?: { input?: number; output?: number; cached_input?: number };
 }
+
+export type UsageGroup = 'day' | 'conversation' | 'model';
+
+export interface UsageTotals {
+  runs: number;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+  /** cached / input; null when nothing was sent. */
+  cache_hit_rate: number | null;
+  /** null when any record in the group has no known price. */
+  est_cost: number | null;
+}
+
+export interface UsageRow extends UsageTotals { key: string; label: string }
+
+export interface UsageReport { rows: UsageRow[]; totals: UsageTotals }
 
 export interface ConnectionTestResponse {
   ok: boolean;

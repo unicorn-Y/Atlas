@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Check, ChevronLeft, LoaderCircle, Plus, Radio } from 'lucide-react';
-import type { ModelInfo } from '@atlas/backend-adapter';
+import type { CustomModelRequest, ModelInfo } from '@atlas/backend-adapter';
 import DependencyCheckPanel from './DependencyCheckPanel';
 import IntegrationPanel from './IntegrationPanel';
 import styles from '../App.module.css';
@@ -20,7 +20,7 @@ interface SettingsPageProps {
   onBack: () => void;
   onSelectModel: (model: string) => void;
   onSaveProvider: (baseUrl: string, apiKey: string) => Promise<boolean>;
-  onAddModel: (model: { id: string; name: string; provider: string; litellm_model: string }) => Promise<boolean>;
+  onAddModel: (model: CustomModelRequest) => Promise<boolean>;
   onTestConnection: (model: string) => void;
 }
 
@@ -31,6 +31,8 @@ export default function SettingsPage(props: SettingsPageProps) {
   const [modelName, setModelName] = useState('');
   const [provider, setProvider] = useState('openai');
   const [litellmModel, setLitellmModel] = useState('');
+  const [maxOutput, setMaxOutput] = useState('');
+  const [price, setPrice] = useState({ input: '', output: '', cached_input: '' });
   const [username, setUsername] = useState(props.username);
   const saveProvider = async (event: FormEvent) => {
     event.preventDefault();
@@ -38,8 +40,14 @@ export default function SettingsPage(props: SettingsPageProps) {
   };
   const addModel = async (event: FormEvent) => {
     event.preventDefault();
-    const added = await props.onAddModel({ id: modelId.trim(), name: modelName.trim() || modelId.trim(), provider: provider.trim(), litellm_model: litellmModel.trim() });
-    if (added) { setModelId(''); setModelName(''); setLitellmModel(''); }
+    const number = (value: string) => value.trim() === '' || Number.isNaN(Number(value)) ? undefined : Number(value);
+    const prices = Object.fromEntries(Object.entries(price).map(([key, value]) => [key, number(value)]).filter(([, value]) => value !== undefined));
+    const added = await props.onAddModel({
+      id: modelId.trim(), name: modelName.trim() || modelId.trim(), provider: provider.trim(), litellm_model: litellmModel.trim(),
+      ...(number(maxOutput) ? { max_output_tokens: number(maxOutput) } : {}),
+      ...(Object.keys(prices).length ? { price: prices } : {}),
+    });
+    if (added) { setModelId(''); setModelName(''); setLitellmModel(''); setMaxOutput(''); setPrice({ input: '', output: '', cached_input: '' }); }
   };
 
   return <section className={styles.settingsPage} aria-label="设置">
@@ -73,7 +81,13 @@ export default function SettingsPage(props: SettingsPageProps) {
       <form className={styles.settingsForm} onSubmit={addModel}>
         <div className={styles.settingsInputGrid}><label>模型 ID<input required value={modelId} onChange={(event) => setModelId(event.target.value)} placeholder="my-model" /></label><label>显示名称<input value={modelName} onChange={(event) => setModelName(event.target.value)} placeholder="My Model" /></label></div>
         <div className={styles.settingsInputGrid}><label>提供商<input required value={provider} onChange={(event) => setProvider(event.target.value)} placeholder="openai" /></label><label>LiteLLM 模型名<input required value={litellmModel} onChange={(event) => setLitellmModel(event.target.value)} placeholder="openai/model-name" /></label></div>
-        <div className={styles.settingsFormFooter}><span>自定义模型会保存在本机 Atlas 用户配置中。</span><button className={styles.settingsAction} disabled={props.busy || !props.connected}><Plus size={14} />添加模型</button></div>
+        <div className={styles.settingsInputGrid}><label>最长输出（token，可不填，默认 16384）<input inputMode="numeric" value={maxOutput} onChange={(event) => setMaxOutput(event.target.value)} placeholder="16384" /></label><span /></div>
+        <div className={styles.settingsInputGrid} style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+          <label>输入价格（每百万 token）<input inputMode="decimal" value={price.input} onChange={(event) => setPrice({ ...price, input: event.target.value })} placeholder="可不填" /></label>
+          <label>输出价格<input inputMode="decimal" value={price.output} onChange={(event) => setPrice({ ...price, output: event.target.value })} placeholder="可不填" /></label>
+          <label>缓存命中价格<input inputMode="decimal" value={price.cached_input} onChange={(event) => setPrice({ ...price, cached_input: event.target.value })} placeholder="可不填" /></label>
+        </div>
+        <div className={styles.settingsFormFooter}><span>自定义模型会保存在本机 Atlas 用户配置中。填了价格，「用量」页才能估算费用。</span><button className={styles.settingsAction} disabled={props.busy || !props.connected}><Plus size={14} />添加模型</button></div>
       </form>
     </section>
     <IntegrationPanel apiBaseUrl={props.apiBaseUrl} />

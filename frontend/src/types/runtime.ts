@@ -11,6 +11,7 @@ export type AgentEventType =
   | 'subtask.started' | 'subtask.progress' | 'subtask.output' | 'subtask.completed' | 'subtask.group_completed'
   | 'check.results'
   | 'rules.trust_required' | 'hook.ran'
+  | 'run.model_switched' | 'run.verify_nudge'
   | 'run.completed' | 'run.failed' | 'run.cancelled';
 
 export interface AgentEvent {

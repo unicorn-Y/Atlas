@@ -25,7 +25,7 @@ export interface Step {
   fullOutputPath?: string;
 }
 
-export interface RunUsage { input_tokens?: number | null; output_tokens?: number | null; context_tokens?: number | null; context_limit?: number | null }
+export interface RunUsage { input_tokens?: number | null; output_tokens?: number | null; cached_input_tokens?: number | null; context_tokens?: number | null; context_limit?: number | null }
 export interface RunChanges { files: number; additions: number; deletions: number }
 
 export type TimelineItem =
@@ -39,6 +39,8 @@ export type TimelineItem =
   | { kind: 'group'; id: string; summary: string; results: Array<{ index: number; title: string; status: string; summary: string; changed_files: string[] }> }
   | { kind: 'checks'; id: string; results: CheckResults }
   | { kind: 'cancelled'; id: string }
+  /** One-line runtime notes: the model was swapped after errors, or Atlas went back to verify its edits. */
+  | { kind: 'notice'; id: string; tone: 'switch' | 'verify'; text: string }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
   | { kind: 'failed'; id: string; detail: string };
@@ -266,6 +268,20 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         } });
         break;
       }
+      case 'run.model_switched': {
+        closeReply(); closeBlocks();
+        const reason = String(data.reason ?? '').trim();
+        items.push({ kind: 'notice', id: event.id, tone: 'switch',
+          text: `${String(data.from ?? '当前模型')} 暂时用不了${reason ? `（${reason}）` : ''}，已换成 ${String(data.to ?? '备用模型')} 继续` });
+        break;
+      }
+      case 'run.verify_nudge': {
+        closeReply(); closeBlocks();
+        const paths = Array.isArray(data.changed_paths) ? data.changed_paths.map((path) => shortPath(String(path))) : [];
+        items.push({ kind: 'notice', id: event.id, tone: 'verify',
+          text: `改了代码还没验证${paths.length ? `（${paths.slice(0, 3).join('、')}${paths.length > 3 ? ` 等 ${paths.length} 个文件` : ''}）` : ''}，Atlas 先去验证一下` });
+        break;
+      }
       case 'rules.trust_required':
         closeReply(); closeBlocks();
         items.push({ kind: 'trust', id: event.id, event });
@@ -324,6 +340,14 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
     }
   }
   return items;
+}
+
+/** Share of input tokens served from the provider's prompt cache, e.g. "缓存 62%"; null when unknown or zero. */
+export function cacheShare(usage?: RunUsage): string | null {
+  const input = usage?.input_tokens ?? 0;
+  const cached = usage?.cached_input_tokens ?? 0;
+  if (!input || !cached) return null;
+  return `缓存 ${Math.round((cached / input) * 100)}%`;
 }
 
 /** "1.2k" style token counts; null when the provider did not report usage. */

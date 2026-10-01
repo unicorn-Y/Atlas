@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, ListChecks, MessageCircleQuestion, ShieldAlert, Square, Users, X } from 'lucide-react';
+import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
-import { buildTimeline, describeTool, duration, tokenCount, type Step, type TimelineItem } from './timeline';
+import { buildTimeline, cacheShare, describeTool, duration, tokenCount, type Step, type TimelineItem } from './timeline';
 import type { InspectorTab } from '../shell/Inspector';
 
 interface ConversationActivityProps {
@@ -45,15 +45,20 @@ export default function ConversationActivity({ events, store, username, setTab }
       case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
       case 'group': return <WorkerGroup key={item.id} item={item} />;
       case 'checks': return <Checks key={item.id} item={item} />;
+      case 'notice': return <div key={item.id} className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
+        {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
+        <span>{item.text}</span>
+      </div>;
       case 'cancelled': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
         <Square size={12} />你停止了这次任务
       </div>;
       case 'done': {
         const tokens = tokenCount(item.usage);
+        const cached = cacheShare(item.usage);
         const changed = item.changes && item.changes.files > 0 ? item.changes : null;
         return <div key={item.id} className="my-4 ml-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-3">
           <Check size={14} className="text-ok" />完成{item.startedAt ? `，用时 ${duration(item.startedAt, item.endedAt)}` : ''}
-          {tokens && <span className="tabular-nums">· {tokens} tokens</span>}
+          {tokens && <span className="tabular-nums">· {tokens} tokens{cached ? `（${cached}）` : ''}</span>}
           {changed && <button className="text-fg-2 hover:text-fg" onClick={() => setTab('changes')}>
             · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
           </button>}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Keyboard, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
-  SlidersHorizontal, Square, Sun, Volume2, VolumeX, X,
+  SlidersHorizontal, Square, Sun, Volume2, VolumeX, X, Gauge,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { RunFile } from '@atlas/backend-adapter';
@@ -20,6 +20,7 @@ import SidePane from './components/SidePane';
 import ShortcutsPanel from './pages/ShortcutsPanel';
 import ScriptToolsPanel from './pages/ScriptToolsPanel';
 import TelegramPanel from './pages/TelegramPanel';
+import UsagePanel from './pages/UsagePanel';
 import { loadBindings, matchShortcut } from './services/shortcuts';
 import type { PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
@@ -47,7 +48,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
+type SheetPane = 'models' | 'usage' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
@@ -851,7 +852,7 @@ export default function App() {
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
-        {([['models', '模型与服务', SlidersHorizontal], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
+        {([['models', '模型与服务', SlidersHorizontal], ['usage', '用量', Gauge], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
           <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
@@ -878,6 +879,7 @@ export default function App() {
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
           </div>
         </section>}
+        {sheet === 'usage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">用量</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">每次任务用了多少 token、缓存帮你省了多少、大概花了多少钱。</p><UsagePanel /></section>}
         {sheet === 'plugins' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">插件</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力。</p><PluginsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
           <ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /></section>}

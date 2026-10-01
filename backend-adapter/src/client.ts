@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomTool, ExternalAgentInfo, Fact, ProjectSource, ProjectSources, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomTool, ExternalAgentInfo, Fact, ProjectSource, ProjectSources, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -250,6 +250,13 @@ export class BackendAdapter {
   async deleteCustomTool(id: string): Promise<void> { await this.request(`/api/custom-tools/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   async testCustomTool(id: string, args: Record<string, unknown>): Promise<{ result?: unknown; stderr?: string; exit_code?: number; is_error?: boolean; error?: string; truncated?: boolean }> {
     return this.request(`/api/custom-tools/${encodeURIComponent(id)}/test`, { method: 'POST', body: JSON.stringify({ arguments: args }) });
+  }
+  /** Token usage and estimated cost from the backend ledger; `from` / `to` are ISO dates (to is exclusive). */
+  async getUsage(groupBy: UsageGroup, from?: string, to?: string): Promise<UsageReport> {
+    const empty: UsageReport = { rows: [], totals: { runs: 0, input_tokens: 0, output_tokens: 0, cached_input_tokens: 0, cache_hit_rate: null, est_cost: 0 } };
+    if (!this.live) return empty;
+    const query = new URLSearchParams({ group_by: groupBy, ...(from ? { from } : {}), ...(to ? { to } : {}) });
+    return this.request(`/api/usage?${query}`);
   }
   async getTelegram(): Promise<TelegramSettings> { return this.request('/api/channels/telegram'); }
   async saveTelegram(patch: Partial<Omit<TelegramSettings, 'bot_token_set'>> & { bot_token?: string }): Promise<TelegramSettings> {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../../types/runtime';
-import { buildTimeline, describeTool, duration, shortPath, tokenCount } from './timeline';
+import { buildTimeline, cacheShare, describeTool, duration, shortPath, tokenCount } from './timeline';
 
 let seq = 0;
 const ev = (type: AgentEvent['type'], data: Record<string, unknown>, second = seq): AgentEvent =>
@@ -85,5 +85,27 @@ describe('protocol 1.3 events', () => {
     const done = items[5] as Extract<typeof items[number], { kind: 'done' }>;
     expect(tokenCount(done.usage)).toBe('1.5k');
     expect(done.changes).toEqual({ files: 1, additions: 1, deletions: 0 });
+  });
+});
+
+describe('runtime notices', () => {
+  it('explains a model switch and a verify-before-stop nudge in one plain line each', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('run.started', { content: '修一下测试' }, 0),
+      ev('run.model_switched', { from: 'dsv4.1flash', to: 'gpt-4o', reason: '请求过于频繁' }, 1),
+      ev('run.verify_nudge', { changed_paths: ['C:\repo\src\a.py', 'b.py', 'c.py', 'd.py'] }, 2),
+      ev('run.completed', {}, 3),
+    ]);
+    const notices = items.flatMap((item) => item.kind === 'notice' ? [[item.tone, item.text]] : []);
+    expect(notices[0]).toEqual(['switch', 'dsv4.1flash 暂时用不了（请求过于频繁），已换成 gpt-4o 继续']);
+    expect(notices[1][0]).toBe('verify');
+    expect(notices[1][1]).toContain('等 4 个文件');
+  });
+
+  it('reports the cached share of input only when the provider said so', () => {
+    expect(cacheShare({ input_tokens: 1000, cached_input_tokens: 620 })).toBe('缓存 62%');
+    expect(cacheShare({ input_tokens: 1000, cached_input_tokens: 0 })).toBeNull();
+    expect(cacheShare(undefined)).toBeNull();
   });
 });
