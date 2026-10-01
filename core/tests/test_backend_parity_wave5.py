@@ -92,6 +92,7 @@ async def test_atlas_subtask_inherits_read_only_and_cannot_redelegate(monkeypatc
     result = await orchestrator._run_atlas_subtask(
         goal="只读检查", context=None, cwd="C:/repo", subtask_id="subtask-a",
         atlas_options={"permission_mode": "read_only", "allowed_paths": ["C:/repo"],
+                       "model": "parent-run-model",
                        "approval_callback": parent_approval},
         on_progress=lambda text: progress.append(text),
     )
@@ -99,6 +100,7 @@ async def test_atlas_subtask_inherits_read_only_and_cannot_redelegate(monkeypatc
     assert "delegate_task" in calls[0]["tool_deny"]
     assert "delegate_parallel" in calls[0]["tool_deny"]
     assert calls[0]["permission_mode"] == "read_only"
+    assert calls[0]["model"] == "parent-run-model"
     assert calls[0]["allowed_paths"] == ["C:/repo"]
     # Worker mode: no user memory/skills/planning, and the prompt forbids asking the user.
     assert calls[0]["worker"] is True
@@ -194,6 +196,24 @@ async def test_web_extract_strips_chrome_and_rejects_private_addresses(monkeypat
     assert "noise" not in result["text"]
     with pytest.raises(ValueError, match="内网"):
         await extract_web("http://10.0.0.1/private")
+
+
+def test_web_extract_rejects_dns_rebinding_between_preflight_and_connect(monkeypatch) -> None:
+    import socket
+
+    from atlas.tools.ssrf_transport import _resolved_connect_ips
+    from atlas.tools.web_extract import _validate_url
+
+    answers = iter(("93.184.216.34", "10.0.0.5"))
+
+    def resolve(*_args, **_kwargs):
+        address = next(answers)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 80))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    assert _validate_url("http://example.com/page", False)
+    with pytest.raises(ValueError, match="private or local"):
+        _resolved_connect_ips("example.com", 80, False)
 
 
 @pytest.mark.asyncio

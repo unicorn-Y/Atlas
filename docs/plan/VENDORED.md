@@ -4,7 +4,7 @@
 
 | Atlas 文件 | 来源仓库 | 来源路径 | 来源提交 | 许可证 | 方式（依赖 / 拷贝改 / 逻辑移植） | 改了什么 | 搬入日期 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| | | | | | | | |
+| `core/atlas/tools/ssrf_transport.py` | `NousResearch/hermes-agent` | `tools/url_safety.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 保留连接时 DNS 校验并按校验 IP 拨号，使用 Atlas 的公网地址策略 | 2026-10-01 |
 
 参考提交号（2026-09-30 调研时）：
 - `NousResearch/hermes-agent`：`12e4d3e2dd5281adf289f70e5d6c7f33427d6982`

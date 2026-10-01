@@ -151,6 +151,7 @@ class AgentRunContext:
     sandbox_enabled: bool = False
     max_tool_rounds: int = MAX_TOOL_ROUNDS
     reasoning_effort: str | None = None
+    model: str | None = None
     subtask_started: Callable[..., Any] | None = None
     subtask_progress: Callable[..., Any] | None = None
     subtask_completed: Callable[..., Any] | None = None
@@ -1068,7 +1069,7 @@ class AgentOrchestrator:
             return await choice if hasattr(choice, "__await__") else choice
 
         atlas_options = {
-            "model": self._model_mgr.current_model,
+            "model": ctx.model or self._model_mgr.current_model,
             "permission_mode": permission_mode,
             "allowed_paths": allowed_paths,
             "tool_allow": getattr(ctx, "tool_allow", None),
@@ -1805,6 +1806,7 @@ class AgentOrchestrator:
                     "detail": f"Model selection failed: {exc}",
                 }
                 return
+        runtime.model = self._model_mgr.current_model
         litellm_model = self._model_mgr.current_litellm_model
 
         log.info(

@@ -9,6 +9,7 @@ build/
 .venv/
 .ruff_cache/
 /core/.pytest-temp-wave1/
+/core/.pytest-*/
 /core/.pytest-p18b*/
 /core/.p18x-packaged-*/
 /core/.p18x-pyinstaller-*/

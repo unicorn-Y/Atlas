@@ -11,6 +11,7 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
 import httpx
+from atlas.tools.ssrf_transport import create_ssrf_safe_async_client
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_TEXT_LENGTH = 60_000
@@ -80,10 +81,11 @@ async def _video_captions(url: str) -> tuple[str, str]:
 
 
 async def _bilibili_captions(
-    url: str, *, client_factory=httpx.AsyncClient,
+    url: str, *, client_factory=None,
 ) -> tuple[str, str]:
     try:
-        async with client_factory(
+        factory = client_factory or create_ssrf_safe_async_client
+        async with factory(
             timeout=httpx.Timeout(20.0), follow_redirects=False,
         ) as client:
             async def fetch_bounded(target: str) -> tuple[str, bytes]:
@@ -161,7 +163,7 @@ async def _bilibili_captions(
 
 
 async def extract_web(url: str, *, allow_local: bool = False,
-                      client_factory=httpx.AsyncClient) -> dict[str, object]:
+                      client_factory=None) -> dict[str, object]:
     checked = await asyncio.wait_for(
         asyncio.to_thread(_validate_url, url, allow_local), timeout=3.0,
     )
@@ -183,7 +185,11 @@ async def extract_web(url: str, *, allow_local: bool = False,
 
     async def fetch_page() -> dict[str, object]:
         timeout = httpx.Timeout(20.0)
-        async with client_factory(timeout=timeout, follow_redirects=False) as client:
+        factory = client_factory or create_ssrf_safe_async_client
+        client_options = {"timeout": timeout, "follow_redirects": False}
+        if client_factory is None:
+            client_options["allow_local"] = allow_local
+        async with factory(**client_options) as client:
             current = checked
             response = None
             for _ in range(6):
