@@ -437,4 +437,4 @@ def test_worktree_placement_is_outside_workspace_and_protocol_is_18(tmp_path: Pa
     record = WorktreeService(tmp_path).create(repo, "session-0001")
     assert Path(record["worktree_path"]).is_relative_to(repo.parent / ".atlas-worktrees" / repo.name)
     WorktreeService(tmp_path).remove(repo, Path(record["worktree_path"]), record["worktree_branch"])
-    assert asyncio.run(server.runtime_protocol()) == {"version": "1.8"}
+    assert asyncio.run(server.runtime_protocol()) == {"version": "1.9"}
