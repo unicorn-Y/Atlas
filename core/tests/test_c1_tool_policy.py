@@ -97,6 +97,64 @@ async def test_ssh_rich_patch_is_rejected_with_native_failure_event():
 
 
 @pytest.mark.asyncio
+async def test_approval_and_user_hook_outcomes_emit_only_matching_native_failures():
+    queue = asyncio.Queue()
+    pause_event = asyncio.Event()
+    pause_event.set()
+
+    async def approval_deny(_event_id, _name, _args):
+        return "deny"
+
+    async def hook_block(_event_name, _payload):
+        return {"blocked": True, "reason": "fixture hook denied"}
+
+    runtime = _runtime(
+        queue, pause_event=pause_event, permission_mode="ask_writes",
+        approval_callback=approval_deny, user_hook_callback=hook_block,
+    )
+    agent = SimpleNamespace(_model_facing_tools=lambda: [])
+    _active_contexts["compat-approval-results"] = (
+        agent, runtime, asyncio.get_running_loop(),
+    )
+    try:
+        denied = await asyncio.to_thread(
+            hermes_policy._pre_tool_call, "terminal", {"command": "echo no"},
+            session_id="compat-approval-results", tool_call_id="approval-denied",
+        )
+        assert denied["action"] == "block"
+        approval_event = queue.get_nowait()
+        assert approval_event["id"] == "approval-denied"
+        assert approval_event["name"] == "terminal"
+        assert approval_event["is_error"] is True
+        assert queue.empty()
+
+        runtime.permission_mode = "full_access"
+        blocked = await asyncio.to_thread(
+            hermes_policy._pre_tool_call, "read_file", {"path": "blocked.txt"},
+            session_id="compat-approval-results", tool_call_id="hook-blocked",
+        )
+        assert blocked["action"] == "block"
+        hook_event = queue.get_nowait()
+        assert hook_event["id"] == "hook-blocked"
+        assert hook_event["name"] == "read_file"
+        assert hook_event["is_error"] is True
+        assert "fixture hook denied" in hook_event["content"][0]["text"]
+        assert queue.empty()
+
+        runtime.user_hook_callback = None
+        runtime.approval_callback = lambda *_args: "allow"
+        runtime.permission_mode = "ask_writes"
+        allowed = await asyncio.to_thread(
+            hermes_policy._pre_tool_call, "terminal", {"command": "echo yes"},
+            session_id="compat-approval-results", tool_call_id="approval-allowed",
+        )
+        assert allowed is None
+        assert queue.empty()
+    finally:
+        _active_contexts.pop("compat-approval-results", None)
+
+
+@pytest.mark.asyncio
 async def test_real_hermes_deferred_atlas_calls_apply_nested_allow_and_deny(tmp_path, monkeypatch):
     from tests.fakes.fake_llm_provider import Text, ToolCall
     from tests.test_c1_review_e2e import run_script
