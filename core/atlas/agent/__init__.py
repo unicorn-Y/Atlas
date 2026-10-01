@@ -1512,8 +1512,8 @@ class AgentOrchestrator:
             allowed_tools = getattr(ctx, "tool_allow", None)
             denied_tools = getattr(ctx, "tool_deny", [])
             read_only = getattr(ctx, "read_only", False)
-            denied = ((allowed_tools is not None and fn_name not in allowed_tools)
-                      or fn_name in denied_tools
+            from atlas.engine.tool_permissions import tool_allowed
+            denied = (not tool_allowed(fn_name, allowed_tools, denied_tools)
                       or (read_only and fn_name not in {
                           "local_file", "read_office", "coding.repo_map", "coding.ast_grep.run",
                       })
@@ -1916,7 +1916,7 @@ class AgentOrchestrator:
                         agent_model = get_config().get("agents.strong_model") or ctx.model
                     elif agent_model == "inherit":
                         agent_model = ctx.model
-                    from atlas.agent.tool_permissions import intersect_tool_allow
+                    from atlas.engine.tool_permissions import intersect_tool_allow
                     tool_allow = intersect_tool_allow(
                         atlas_options.get("tool_allow"), definition.get("tools"),
                         [item["function"]["name"] for item in self._model_facing_tools()],
