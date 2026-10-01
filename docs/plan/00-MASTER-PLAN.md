@@ -62,10 +62,9 @@
 
 ## 六、谁来做
 
-- 用户的默认分工：前端 Claude，后端交给主机上的 Codex（省配额）。
-- 配额不够时，任何 Agent 都可以接手整波。任务书按「后端 / 前端 / 验收」分节，可以拆给不同的 Agent。
-- 做后端的不改 `frontend/`、`backend-adapter/`；做前端的不改 `core/`，除非任务书明确写了。
-- 每波交付后按 EXECUTION-GUIDE 第五节审查。
+- **分工（2026-10-01 起）**：**Luna**（主机 Codex，GPT-6 Luna）做每一波的后端**和前端**；**Sol**（GPT-6.1 Sol）按 EXECUTION-GUIDE 第五节审查，并修审查中发现的问题；**Claude** 只维护计划书和任务书（省 token）。
+- 顺序：W07B（第七波补做 + 第六、七波前端）→ W08 → W09 → W10 → W11 → W12。每波任务书里的「前端」一节也由 Luna 做。
+- 每波交付后先审查（Sol），审查通过再开下一波。
 
 ## 七、协议版本
 
@@ -79,7 +78,7 @@
 | `docs/plan/SOURCE-MAP.md` | 能力 → 开源代码来源 |
 | `docs/plan/EXECUTION-GUIDE.md` | 环境、命令、规则、搬代码的方法、审查清单 |
 | `docs/plan/VENDORED.md` | 已搬进来的代码登记（来源、提交号、许可证、改动） |
-| `tasks/taskbooks/ATLAS-W06-FOUNDATION-SAFETY.md` … `ATLAS-W12-SELF-EVOLUTION.md` | 各波任务书 |
+| `tasks/taskbooks/ATLAS-W06-FOUNDATION-SAFETY.md` … `ATLAS-W12-SELF-EVOLUTION.md`、`ATLAS-W07B-ORCHESTRATION-COMPLETION.md` | 各波任务书 |
 | `docs/research/2026-09-30-landscape/` | 调研依据 |
 | `docs/PARITY.md` | F001–F210 对标表（每波做完更新） |
 | `tasks/HANDOFF.md` | 用户这台笔记本 + 主机的操作细节 |

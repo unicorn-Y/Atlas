@@ -113,9 +113,13 @@ cd frontend && npx tsc -p tsconfig.renderer.json --noEmit && npx tsc -p tsconfig
 - [ ] `docs/PARITY.md` 更新了对应条目和统计
 - [ ] 结果文件写好
 
-## 五、审查清单（每一波交付后，由另一个 Agent 或 Claude 执行）
+## 五、审查清单（每一波交付后，由 Sol 执行）
 
-1. 拉代码，装新依赖，**自己跑一遍全量测试**（不要相信交付方的结果）。
+审查方要做的不只是读代码：**自己跑全量、自己用真实模型跑任务书的真机场景**（W06、W07 都是真机才暴露了 mock 测不到的崩溃和逻辑错误）。发现的问题直接修，修完补测试，记进审查记录。
+
+真机隔离做法：独立 `ATLAS_DATA_DIR`（复制 `config/atlas.toml`，删掉所有 `[tools.servers.*]`）、`ATLAS_SCHEDULER_ENABLED=false`、独立端口（如 8775）、临时工作目录和假文件；用一个小脚本通过 WebSocket `/ws/chat` 发 `run.start`（字段见 `backend-adapter/src/types.ts` 的 `RunStartRequest`），记录 `tool.*`、`subtask.*` 等事件。**不要碰用户 8765 上的开发后端，也不要动用户的真实文件。**
+
+1. 拉代码，装新依赖，**自己跑一遍全量测试**（不要相信交付方的结果）。先对比搬入文件和来源文件的规模，看有没有自写缩水版。
 2. 重点读安全相关代码：OriginGuard 改动、返回文件或 HTML 的接口（CSP）、路径校验、子进程和 shell、密钥存储、网络请求（内网防护、DNS 重绑定）、新的受信方式。
 3. 看审批和权限有没有被绕过：新工具有没有进 `is_write` 集合；`ask_writes` 和 `read_only` 下是否正确拦截；子 Agent 权限是否不超过父级。
 4. **用真实模型跑新能力**。

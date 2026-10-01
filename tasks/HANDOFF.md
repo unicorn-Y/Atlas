@@ -31,20 +31,35 @@
 - **W06 已完成（2026-10-01）**：Codex 交付后端，Claude 审阅并重做了安全部分（见 `tasks/reviews/ATLAS-W06-FOUNDATION-SAFETY.review.md`），前端接了用量页、模型切换和验证提示（`b9927af`）。
 - **用户决定（2026-10-01）**：安全审查由用户亲自做，计划里不做；`core/atlas/safety/` 代码保留但默认关闭。本地语音暂缓（后端已有，前端不接）。
 - 用户当前模型是第三方中转网关上的 DeepSeek（`openai/deepseek-v4.1-flash`），缓存命中拿不到；用量统计正常。
-- **下一步：W07**（`tasks/taskbooks/ATLAS-W07-ORCHESTRATION.md`），提示词用下面的模板，把任务书名换成 W07。
+- **W07 后端已交付（Codex 自标 PARTIAL）**，Claude 审查到一半转交：发现写在 `tasks/taskbooks/ATLAS-W07B-ORCHESTRATION-COMPLETION.md` 第一节（验收误判、汇总时机、看板没有调度器、子任务输出按 token 发事件）。
+- **分工改了（2026-10-01）**：Luna 做后端 + 前端，Sol 审查并修问题，Claude 只维护计划书。
+- **下一步：Luna 执行 W07B**（提示词见下方「给 Luna」），完成后 Sol 审查（「给 Sol」）。
 - 真机测试方法：隔离 `ATLAS_DATA_DIR` + 去掉 MCP 服务器 + 假目录 + 独立端口（W06 审阅记录里有完整做法），不要碰用户 8765 上的开发后端。
 - 用户决定：自动跟踪各家更新做成 Atlas 自己的功能（W12），不另建定时任务。
 
-### 给 Codex 的提示词模板（W06 起每波通用，替换任务书名）
+### 给 Sol 的审查提示词（每波通用，替换任务书名）
+
+```
+你是 Atlas 的审查者。工作目录 D:\Atlas，先 git pull 到最新 main。
+完整阅读 docs/plan/00-MASTER-PLAN.md、docs/plan/EXECUTION-GUIDE.md（尤其第五节审查清单和真机隔离做法）、任务书 tasks/taskbooks/ATLAS-W07B-ORCHESTRATION-COMPLETION.md 和结果文件 tasks/results/ATLAS-W07B-ORCHESTRATION-COMPLETION.result.md。
+按审查清单逐项审查：对比搬入代码与来源规模；自己用后台进程跑完全量测试；读改动的代码找 bug；用本机真实模型在隔离环境（独立 ATLAS_DATA_DIR、去掉 MCP、独立端口、假目录）把任务书的真机场景全部跑一遍；前端用无头 Edge 截图检查。
+不要碰用户 8765 上的开发后端和用户的真实文件。安全审查由用户亲自负责，不做也不评。
+发现的问题直接修复并补测试，每个修复一个提交，提交信息写清为什么。
+审查记录写到 tasks/reviews/ATLAS-W07B-ORCHESTRATION-COMPLETION.review.md：结论、每个问题（问题/影响/修法）、真机记录、全量测试汇总行。更新 docs/PARITY.md。push 前 git pull --rebase，然后停止。
+安全审查由用户亲自负责，不做任何安全审查相关功能（core/atlas/safety/ 保持默认关闭）；本地语音暂缓。
+```
+
+### 给 Luna 的提示词模板（每波通用，替换任务书名；W07B 起前端也由 Luna 做）
 
 ```
 你是 Atlas 施工 Worker。工作目录 D:\Atlas，先 git pull 到最新 main。
-先完整阅读 LUNA_WORKER.md、docs/plan/00-MASTER-PLAN.md、docs/plan/SOURCE-MAP.md、docs/plan/EXECUTION-GUIDE.md（尤其「三点五、怎么搬代码」），再完整阅读任务书 tasks/taskbooks/ATLAS-W06-FOUNDATION-SAFETY.md，它取代 tasks/CURRENT.md 里记录的任务。
+先完整阅读 LUNA_WORKER.md、docs/plan/00-MASTER-PLAN.md、docs/plan/SOURCE-MAP.md、docs/plan/EXECUTION-GUIDE.md（尤其「三点五、怎么搬代码」），再完整阅读任务书 tasks/taskbooks/ATLAS-W07B-ORCHESTRATION-COMPLETION.md，它取代 tasks/CURRENT.md 里记录的任务。
 本波以「从开源项目搬代码改」为主：按任务书点名的来源文件先读源码再搬，不要从零重写；每个搬入的文件写来源注释并登记到 docs/plan/VENDORED.md。
-只做任务书里标「后端」的章节，不改 frontend/ 和 backend-adapter/。不得放宽 core/atlas/origin_guard.py。
+任务书里的后端和前端章节都做（前端按 EXECUTION-GUIDE 第二节的链路接入，四项前端检查必须通过）。不得放宽 core/atlas/origin_guard.py。
 接口名、事件名、字段名与任务书一致，偏离写进结果文件。测试不写真实数据目录、不在仓库建临时目录、不依赖真实网络。
 任务书要求的真机场景用本机真实模型跑并记录。全量测试用后台进程跑完，汇总行写进结果文件。
 按任务书更新 tasks/CURRENT.md；每节一个提交；push 前 git pull --rebase；写结果文件；核验 remote HEAD；然后停止。
+安全审查由用户亲自负责，不做任何安全审查相关功能（core/atlas/safety/ 保持默认关闭）；本地语音暂缓。
 ```
 
 ## 5. Codex 交付后怎么审查（每一波都这样做）
