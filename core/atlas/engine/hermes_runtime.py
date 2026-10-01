@@ -467,6 +467,8 @@ class HermesRuntime:
             # Hermes' turn-context and iteration-prep hooks read these attributes
             # directly to inject its one-shot time-budget reminder.
             agent.run_budget_seconds = run_budget_seconds
+            if atlas_agent is not None:
+                atlas_context.hermes_agent = agent
             agent.budget_warning_ratio = budget_warning_ratio
             # Continuation/empty-response recovery uses diagnostic _vprint calls,
             # while transport recovery uses the diagnostic lifecycle callback.

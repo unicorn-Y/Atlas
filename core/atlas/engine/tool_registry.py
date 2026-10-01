@@ -17,6 +17,7 @@ _plan_registered: set[str] = set()
 _active_contexts: dict[str, tuple[Any, Any, asyncio.AbstractEventLoop]] = {}
 _hermes_fallback_handlers: dict[str, Any] = {}
 _hermes_entries: dict[str, Any] = {}
+_inline_wrapped: set[str] = set()
 NATIVE_FILE_TOOLS = {"read_file", "write_file", "patch", "search_files"}
 
 _ALIASES = {
@@ -61,6 +62,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
     registered = _plan_registered if plan_mode else _registered
     plan_tools = {"read_file", "search_files", "web_fetch"}
     with _lock:
+        _bind_inline_atlas_tools()
         indexed = {str(item.get("function", {}).get("name", "")): item for item in schemas}
         if plan_mode:
             indexed = {name: item for name, item in indexed.items() if name in plan_tools}
@@ -138,6 +140,11 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 )
                 result = future.result()
                 messages = result.get("messages", [])
+                if _name == "todo_list" and getattr(bound_runtime, "hermes_agent", None) is not None:
+                    bound_runtime.hermes_agent._todo_store.write([
+                        {**item, "content": item["text"]}
+                        for item in bound_runtime.todo_store.snapshot()["todos"]
+                    ])
                 return str(messages[-1].content) if messages else "工具没有返回内容。"
 
             native_entry = _hermes_entries.get(name)
@@ -158,6 +165,33 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
             "tools": sorted(registered),
             "includes": [],
         }
+
+
+def _bind_inline_atlas_tools() -> None:
+    """Hermes' inline tools dispatch before the registry; bridge that real path."""
+    from agent.inline_tool_executors import INLINE_TOOL_EXECUTORS
+    from tools.registry import registry
+
+    for name in ("todo_list", "session_search"):
+        if name in _inline_wrapped:
+            continue
+        native = INLINE_TOOL_EXECUTORS[name]
+
+        def inline(agent: Any, args: dict[str, Any], ctx: Any, *, _name=name, _native=native) -> Any:
+            active = _active_contexts.get(str(getattr(agent, "session_id", "")))
+            if active is None:
+                return _native(agent, args, ctx)
+            _, runtime, loop = active
+            native_result = _native(agent, args, ctx)
+            if _name == "todo_list":
+                snapshot = runtime.todo_store.write(agent._todo_store.read())
+                asyncio.run_coroutine_threadsafe(runtime.event_queue.put({"type": "run_todos", **snapshot}), loop).result()
+                return native_result
+            atlas_result = registry.get_entry(_name).handler(args, session_id=agent.session_id)
+            return json.dumps({"hermes": native_result, "atlas": atlas_result}, ensure_ascii=False)
+
+        INLINE_TOOL_EXECUTORS[name] = inline
+        _inline_wrapped.add(name)
 
 def activate_atlas_tool_context(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) -> None:
     _context.agent = agent
