@@ -25,6 +25,7 @@ dependencies = [
     "structlog>=24.4.0",
     "mcp>=2.0.0",
     "pyyaml>=6.0",
+    "jsonschema>=4.0",
     "packaging>=23.0",
     "mss>=10.0.0",
     # P18X upstream integrations (versions pinned for reproducible packaging).

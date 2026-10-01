@@ -18,6 +18,19 @@ prompt_cache_ttl = "5m" # 5m | 1h
 max_output_tokens = 16384
 fallback = [] # Optional ordered model IDs to try after transient provider failures.
 
+[agents]
+# Optional IDs from the configured model list. Empty values inherit the parent model.
+fast_model = ""
+strong_model = ""
+
+[delegation]
+max_concurrent_children = 3
+max_spawn_depth = 2
+
+[moa]
+reference_models = []
+max_references = 3
+
 [agent]
 verify_before_stop = true
 
