@@ -134,6 +134,20 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     result = native(args, **_kwargs)
                     return result
                 tool_name, tool_args = _translate(_name, args)
+                if tool_name in {"local_shell", "local_exec", "local_process"}:
+                    starts_process = (
+                        tool_name != "local_process"
+                        or str(tool_args.get("action", "")) == "start"
+                    )
+                    if starts_process and not tool_args.get("cwd"):
+                        workspace = str(getattr(bound_runtime, "workspace", "") or "")
+                        if workspace:
+                            if workspace.startswith("ssh://"):
+                                from atlas.ssh import SSHWorkspaceManager
+
+                                _host, tool_args["cwd"] = SSHWorkspaceManager.parse_workspace(workspace)
+                            else:
+                                tool_args["cwd"] = workspace
                 if tool_name in {"local_shell", "local_process"}:
                     tool_args["_atlas_conversation_id"] = str(bound_runtime.conversation_id or "")
                 from langchain_core.messages import AIMessage
