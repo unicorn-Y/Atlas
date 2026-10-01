@@ -1,7 +1,11 @@
 # Atlas 总计划书（2026-10-01 改版：主体优先、自有内核）
 
-写给任何接手的 Agent（Claude、Codex 或其他）和用户本人。阅读顺序：
-1. 本文件
+写给任何接手的 Agent（Claude、Codex 或其他）和用户本人。
+
+**2026-10-02 起，用户自己按 [ROADMAP-TO-PRODUCT.md](ROADMAP-TO-PRODUCT.md) 派发 Codex 执行，直到成品；Claude 只在遇到解决不了的问题时介入。** 路线、波次、派发方法、验收判断都以 ROADMAP 为准。
+
+阅读顺序：
+1. 本文件 → ROADMAP-TO-PRODUCT.md
 2. [CORE-PARITY.md](CORE-PARITY.md)：主体对标表，决定 C1–C6 每一波做什么
 3. [EXECUTION-GUIDE.md](EXECUTION-GUIDE.md)：环境、命令、规则、搬代码的方法、验收清单
 4. 当前那一波的任务书 `tasks/taskbooks/ATLAS-C*-*.md`
@@ -71,10 +75,11 @@
 | C5 | 模型 | 国内服务商原生参数、多密钥轮换、按阶段分配思考量、缓存未命中原因、编辑已有模型 | 待做 |
 | C6 | 编程与界面打磨 | LSP 诊断、`/init`、`/review`；长会话界面性能；主体界面逐项对照 CC、CX、ZC 打磨 | 待做 |
 | **实测** | 真实模型横向对比 | 固定一套真实任务（改 bug、加功能、读大仓库、长对话、多轮、子 Agent……），在 Atlas、Claude Code、Codex、OpenCode、Pi、Hermes、ZCode 上各跑一遍，比成功率、改错率、轮数、token 花费、耗时、体验细节；输了的项写补做任务书 | 待做 |
-| 收尾 | 原 W14 | 稳定性、安装包（Python 3.14）、升级不丢数据、文档 | 待做 |
-| 最终审查 | Claude | 按 `FINAL-REVIEW.md` | 待做 |
+| X1–X6 | 外部功能解冻 | 见 `ATLAS-X-EXTERNAL-PHASE.md` | 待做 |
+| R1 | 成品化（取代原 W14） | 稳定性、安装包（Python 3.14 + Hermes）、升级迁移、文档、清理 | 待做 |
+| R2 | 最终审查 | 按 `FINAL-REVIEW.md`，独立 Sol 或 Claude | 待做 |
 
-任务书只提前写好 C1。C2–C6 的任务书在上一波验收通过后，由 Claude 按 CORE-PARITY 的对应行来写。这样每一波都能用上上一波的实际结果。
+全部任务书已写好（2026-10-02）：`ATLAS-C1R-FINISH`、`ATLAS-C2-TOOLS-CONTEXT`、`ATLAS-C3-SESSION-INTERACTION`、`ATLAS-C4-EXTENSIONS`、`ATLAS-C5-MODELS`、`ATLAS-C6-CODING-POLISH`、`ATLAS-T1-HEAD-TO-HEAD`（产出 T1F）、`ATLAS-X-EXTERNAL-PHASE`（X1–X6，每波先按 Hermes 内核重写原任务书）、`ATLAS-R1-RELEASE`，最后 R2 按 `FINAL-REVIEW.md`。
 
 ## 五、冻结（主体实测通过后再排）
 

@@ -1,6 +1,8 @@
 # Atlas 交接（2026-10-01，下午改版）
 
-**新会话先读这份**，再读：`docs/plan/00-MASTER-PLAN.md`（总计划：主体优先、自有内核）→ `docs/plan/CORE-PARITY.md`（主体对标表，决定每波做什么）→ `docs/plan/EXECUTION-GUIDE.md`（环境、fork 工作流、搬代码方法、验收清单）。桌面上的《Atlas会话全貌-2026-10-01.md》讲这两天发生了什么、为什么。
+**2026-10-02 起用户自己派发**：照 `docs/plan/ROADMAP-TO-PRODUCT.md` 第五节在主机 Codex 开对话、贴提示词，Claude 不再调度，只在 ROADMAP 第八节列的情况下被叫来。
+
+**新会话先读这份**，再读：`docs/plan/ROADMAP-TO-PRODUCT.md`（成品路线、派发方法）→ `docs/plan/00-MASTER-PLAN.md`（总计划：主体优先、自有内核）→ `docs/plan/CORE-PARITY.md`（主体对标表，决定每波做什么）→ `docs/plan/EXECUTION-GUIDE.md`（环境、fork 工作流、搬代码方法、验收清单）。桌面上的《Atlas会话全貌-2026-10-01.md》讲这两天发生了什么、为什么。
 
 ## 1. 用户是谁、要什么
 
@@ -29,7 +31,7 @@
 ## 3. 分工与流程（最重要）
 
 **从 C2 起（用户 2026-10-01 决定）：**
-- **Sol 主控**（主机 Codex，模型 GPT-6.1 Sol）：读任务书、拆块，用 Codex 的子代理（`spawn_agent`，指定 GPT-6 Luna、推理档位 high）逐块施工；每块审 diff、跑测试、纠偏或返工；最后跑全量、写结果文件。
+- **Sol 主控**（主机 Codex，模型 GPT-6.1 Sol，推理档位「中」）：读任务书、拆块，用 Codex 的子代理（`spawn_agent`，指定 GPT-6 Luna、推理档位 high）逐块施工；每块审 diff、跑测试、纠偏或返工；最后跑全量、写结果文件。
 - **独立验收**（另开一个 Sol 新对话）：没参与施工的 Sol 按 EXECUTION-GUIDE 第五节验收、找问题、写验收记录；**修复交给它开的 GPT-6 Luna（high）子代理**（用户 2026-10-02 要求，省配额）。**用户要求保留这一步。**
 - **Claude（你）**：写任务书 → 填「Sol 主控」提示词 → 用户点发送 → Sol 完成后读结果文件 → 填「独立验收」提示词 → 用户点发送 → 读验收记录 → 写下一波任务书或补做任务书。不巡检、不写代码、不跑测试。
 - C6 验收通过后进入「实测」阶段（Claude 参与，真实模型横向对比），再收尾，最后 Claude 按 `docs/plan/FINAL-REVIEW.md` 做最终审查，向用户汇报。
