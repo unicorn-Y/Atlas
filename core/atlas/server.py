@@ -107,6 +107,10 @@ from atlas.skills.lifecycle import (
     update_skill as update_lifecycle_skill,
 )
 from atlas.skills.registry import SkillRegistry
+from atlas.safety.policy import (
+    get_log as get_safety_log, get_settings as get_safety_settings,
+    rule_catalog as get_safety_rules, update_settings as update_safety_settings,
+)
 from atlas.ssh import ssh_workspaces
 from atlas.tools.computer_use import ComputerUseRuntime
 from atlas.tools.custom_tools import CustomToolStore
@@ -5327,6 +5331,24 @@ async def get_usage(
     return await usage_ledger.query(start=from_, end=to, group_by=group_by)
 
 
+@app.get("/api/safety")
+async def get_safety() -> dict[str, Any]:
+    return {"settings": get_safety_settings(), "rules": get_safety_rules()}
+
+
+@app.put("/api/safety")
+async def put_safety(body: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return {"settings": update_safety_settings(body), "rules": get_safety_rules()}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/safety/log")
+async def get_safety_review_log(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+    return {"rows": get_safety_log(limit)}
+
+
 @app.post("/api/runs/{run_id}/subtasks/{subtask_id}/cancel")
 async def cancel_subtask(run_id: str, subtask_id: str) -> dict[str, str]:
     run = runtime_mgr.runs.get(run_id)
@@ -6572,9 +6594,11 @@ async def _execute_run(
                 "approval_id": approval_event_id,
                 "description": f"Agent 请求执行工具 {tool_name}，需要你的确认。",
                 "input": {key: value for key, value in tool_args.items()
-                          if key != "subtask_id"},
+                          if key not in {"subtask_id", "_reviewer_reason"}},
                 "tool": tool_name,
             }
+            if tool_args.get("_reviewer_reason"):
+                approval_payload["reviewer_reason"] = str(tool_args["_reviewer_reason"])
             if tool_args.get("subtask_id"):
                 approval_payload["subtask_id"] = tool_args["subtask_id"]
             await emit("approval.required", approval_payload)
@@ -6782,6 +6806,9 @@ async def _execute_run(
 
             elif etype == "run_model_switched":
                 await emit("run.model_switched", event.get("data", {}))
+
+            elif etype == "safety_reviewed":
+                await emit("safety.reviewed", event.get("data", {}))
 
             elif etype == "run_usage":
                 usage = event.get("usage", {})

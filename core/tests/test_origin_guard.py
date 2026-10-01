@@ -142,6 +142,15 @@ async def test_usage_endpoint_uses_origin_guard():
 
 
 @pytest.mark.asyncio
+async def test_safety_endpoint_uses_origin_guard():
+    from atlas.server import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        refused = await client.get("/api/safety", headers={"Origin": EVIL})
+    assert refused.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_wave5_new_routes_reject_untrusted_web_origins():
     from atlas.server import app
 

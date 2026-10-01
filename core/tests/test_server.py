@@ -84,6 +84,13 @@ class TestRuntimeProtocol:
         invalid = await client.get("/api/usage", params={"group_by": "week"})
         assert invalid.status_code == 422
 
+    async def test_safety_settings_api_validates_reviewer(self, client: AsyncClient) -> None:
+        stored = await client.put("/api/safety", json={"reviewer": "rules"})
+        assert stored.status_code == 200
+        assert stored.json()["settings"]["reviewer"] == "rules"
+        invalid = await client.put("/api/safety", json={"reviewer": "unsafe"})
+        assert invalid.status_code == 400
+
     async def test_run_metadata_survives_manager_restart(self, tmp_path) -> None:
         from atlas.server import RunState, RuntimeManager
 

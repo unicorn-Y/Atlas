@@ -18,6 +18,12 @@
 | `core/atlas/agent/retry_utils.py` | `NousResearch/hermes-agent` | `agent/retry_utils.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 采用有上限的抖动指数退避 | 2026-10-01 |
 | `core/atlas/agent/fallback_cooldown.py` | `NousResearch/hermes-agent` | `agent/fallback_cooldown.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 当前进程内按模型设置临时冷却，剔除凭据池耦合 | 2026-10-01 |
 | `core/tests/test_error_recovery.py` | `NousResearch/hermes-agent` | `tests/agent/test_error_classifier.py`, `tests/agent/test_retry_utils.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 移植状态分类、重试退避和冷却核心测试；省略 Hermes 专属规则断言 | 2026-10-01 |
+| `core/atlas/safety/detection.py` | `NousResearch/hermes-agent` | `tools/approval_detection.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 保留风险分类思路，另补 PowerShell/Windows 危险操作；未搬 Hermes 完整 shell 归一化器 | 2026-10-01 |
+| `core/atlas/safety/floors.py` | `NousResearch/hermes-agent` | `tools/approval_floors.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 加入格式化系统卷、系统注册表删除和块设备写入的硬拦截 | 2026-10-01 |
+| `core/atlas/safety/smart.py` | `NousResearch/hermes-agent` | `tools/approval_smart.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 15 秒辅助模型审查，仅传工具名和参数，输入按不可信数据包裹 | 2026-10-01 |
+| `core/atlas/safety/threats.py` | `NousResearch/hermes-agent` | `tools/threat_patterns.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 移植有界文本扫描与提示注入识别；Atlas 当前模式表为子集 | 2026-10-01 |
+| `core/atlas/safety/policy.py` | `NousResearch/hermes-agent` | `tools/approval.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | Atlas 本地安全设置、永久规则匹配与近期审查日志 | 2026-10-01 |
+| `core/tests/test_safety_foundation.py` | `NousResearch/hermes-agent` | `tests/tools/test_approval_detection.py`, `tests/tools/test_approval_smart.py`, `tests/tools/test_threat_patterns.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 覆盖 Windows 危险命令、注入检测和审查输入边界 | 2026-10-01 |
 
 参考提交号（2026-09-30 调研时）：
 - `NousResearch/hermes-agent`：`12e4d3e2dd5281adf289f70e5d6c7f33427d6982`
