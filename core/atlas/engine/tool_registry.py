@@ -16,6 +16,8 @@ _registered: set[str] = set()
 _plan_registered: set[str] = set()
 _active_contexts: dict[str, tuple[Any, Any, asyncio.AbstractEventLoop]] = {}
 _hermes_fallback_handlers: dict[str, Any] = {}
+_hermes_entries: dict[str, Any] = {}
+NATIVE_FILE_TOOLS = {"read_file", "write_file", "patch", "search_files"}
 
 _ALIASES = {
     "read_file": ("local_file", "read"),
@@ -73,6 +75,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
             previous = registry.get_entry(name)
             if previous is not None and name in _HERMES_CORE_TOOLS:
                 _hermes_fallback_handlers.setdefault(name, previous.handler)
+                _hermes_entries.setdefault(name, previous)
         for entry in indexed.values():
             function = entry.get("function", {})
             name = str(function.get("name", ""))
@@ -109,6 +112,12 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     except (TypeError, ValueError):
                         accepted = {}
                     return fallback(args, **accepted)
+                if _name in NATIVE_FILE_TOOLS and not str(bound_runtime.workspace or "").startswith("ssh://"):
+                    # Keep Hermes' complete file implementation: paging, ripgrep,
+                    # stale-write guards, fuzzy/V4A patching and document readers.
+                    native = _hermes_fallback_handlers[_name]
+                    result = native(args, **_kwargs)
+                    return result
                 tool_name, tool_args = _translate(_name, args)
                 from langchain_core.messages import AIMessage
 
@@ -131,9 +140,13 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 messages = result.get("messages", [])
                 return str(messages[-1].content) if messages else "工具没有返回内容。"
 
+            native_entry = _hermes_entries.get(name)
             registry.register(
                 name=name, toolset=atlas_toolset, schema=schema, handler=handler,
                 is_async=False, description=schema["description"], override=True,
+                check_fn=getattr(native_entry, "check_fn", None),
+                max_result_size_chars=getattr(native_entry, "max_result_size_chars", None),
+                dynamic_schema_overrides=getattr(native_entry, "dynamic_schema_overrides", None),
             )
             registered.add(name)
             names.append(name)

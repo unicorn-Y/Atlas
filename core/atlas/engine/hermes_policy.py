@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from pathlib import Path
+import re
 import threading
 from typing import Any
 
@@ -123,13 +125,26 @@ def _pre_tool_call(tool_name: str = "", args: dict[str, Any] | None = None, **kw
         return {"action": "block", "message": "当前对话是只读模式，不能执行写操作。"}
 
     callback = getattr(runtime, "user_hook_callback", None)
-    from atlas.engine.tool_registry import _ALIASES
+    from atlas.engine.tool_registry import _ALIASES, NATIVE_FILE_TOOLS
+
+    if name in NATIVE_FILE_TOOLS:
+        candidates = [str(arguments.get("path") or ".")]
+        if name == "patch" and arguments.get("patch"):
+            candidates = re.findall(r"^\*\*\* (?:Update|Add|Delete) File: (.+)$", str(arguments["patch"]), re.M)
+        workspace = str(getattr(runtime, "workspace", "") or "")
+        if not workspace.startswith("ssh://") and getattr(runtime, "allowed_paths", None):
+            roots = [Path(item).expanduser().resolve() for item in [*runtime.allowed_paths, workspace] if item]
+            for candidate in candidates:
+                path = Path(candidate).expanduser()
+                resolved = (path if path.is_absolute() else Path(workspace) / path).resolve()
+                if not any(resolved == root or root in resolved.parents for root in roots):
+                    return {"action": "block", "message": "这条路径超出了当前允许访问的目录范围。"}
 
     atlas_tool_names = {
         str(item.get("function", {}).get("name", ""))
         for item in agent._model_facing_tools()
     }
-    if callback and name not in _ALIASES and name not in atlas_tool_names:
+    if callback and (name in NATIVE_FILE_TOOLS or (name not in _ALIASES and name not in atlas_tool_names)):
         outcome = _call_async(loop, callback, "tool.before", {
             "tool_name": name, "parameters": arguments,
         })
@@ -171,7 +186,8 @@ def _post_tool_call(
         str(item.get("function", {}).get("name", ""))
         for item in agent._model_facing_tools()
     }
-    if callback and str(tool_name) not in atlas_tool_names:
+    from atlas.engine.tool_registry import NATIVE_FILE_TOOLS
+    if callback and (str(tool_name) in NATIVE_FILE_TOOLS or str(tool_name) not in atlas_tool_names):
         _call_async(loop, callback, "tool.after", {
             "tool_name": str(tool_name), "parameters": dict(args or {}),
             "result": result,
