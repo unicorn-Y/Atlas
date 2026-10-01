@@ -88,6 +88,7 @@ cd frontend && npx tsc -p tsconfig.renderer.json --noEmit && npx tsc -p tsconfig
    ```
 2. **先读完再搬**：读任务书点名的文件，以及它 import 的同目录兄弟文件；读来源项目对应的 `AGENTS.md`（Hermes 每个目录都有）和测试。
 3. **只搬需要的部分**：Hermes 是「门面 + 兄弟文件」结构，耦合重。拿函数、数据结构、规则表，接到 Atlas 已有的位置上；不要把整个包连带依赖拖进来。
+   **但规则表、模式库、检测器这类「数据密集」的文件必须整份拷贝**，只改环境相关的几行，**不得自己重写一个缩水版**。W06 的教训：任务书要求搬 Hermes 1540 行的危险命令识别，首版交付的是 36 行自写正则，漏掉了 `rm -rf ~`、`git push --force`、`curl | sh` 等大半规则。验收时对比来源文件和搬入文件的规则数量。
 4. **替换环境依赖**：
    - Hermes 的配置（`~/.hermes/config.yaml`、`get_hermes_home()`、`hermes_cli.config_defaults`）→ Atlas 的 `atlas.config`（`get_config()`）和数据目录。
    - Hermes 的会话键（`session_key`）→ Atlas 的 `run_id` / `conversation_id`。
