@@ -70,14 +70,22 @@ def test_hermes_tool_calls_translate_to_atlas_tools():
         "local_process", {"action": "status", "execution_id": "proc-1"},
     )
     for source, target in (
-        ("write", "write_stdin"), ("submit", "submit_stdin"),
-        ("close", "close_stdin"), ("handoff", "handoff"),
+        ("list", "list"), ("log", "read"), ("wait", "wait"),
+        ("kill", "cancel"), ("write", "write_stdin"),
+        ("submit", "submit_stdin"), ("close", "close_stdin"),
+        ("handoff", "handoff"),
     ):
+        args = {"action": source}
+        expected = {"action": target}
+        if source != "list":
+            args["session_id"] = expected["execution_id"] = "proc-1"
+        else:
+            expected["execution_id"] = ""
+        if source in {"write", "submit", "handoff"}:
+            args["data"] = expected["data"] = "answer"
         assert _translate("process_manage", {
-            "action": source, "session_id": "proc-1", "data": "answer",
-        }) == ("local_process", {
-            "action": target, "execution_id": "proc-1", "data": "answer",
-        })
+            **args,
+        }) == ("local_process", expected)
 
 
 @pytest.mark.asyncio

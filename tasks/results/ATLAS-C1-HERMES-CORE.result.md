@@ -1,7 +1,7 @@
 # ATLAS-C1-HERMES-CORE 施工结果
 
 日期：2026-10-02  
-状态：**部分完成，未验收**。C1 主链路与前端接入已提交并推送；MoA 和预算提醒已接入 Hermes 并有假服务覆盖；全量测试仍有在 C1 之前复现的失败，CORE-PARITY 的 T11 父级通知、T19 和 §10 #10 仍有缺口。本结果不把这些缺口记作完成。
+状态：**部分完成，未验收**。C1 主链路与前端接入已提交并推送；MoA、预算提醒和稳定事件序列桥接已接入 Hermes 并有假服务覆盖；全量测试仍有在 C1 之前复现的失败，CORE-PARITY 的 T11 父级通知和 T19 仍有缺口。本结果不把这些缺口记作完成。
 
 ## 提交与远端核验
 
@@ -77,7 +77,7 @@
 | `local_file search` | Hermes `search_files`，`pattern` 转 `query` | 已桥接 |
 | `local_edit patch` | Hermes `patch` | 已桥接，保留 LF/CRLF 行为测试 |
 | `local_shell` | Hermes `terminal`，Atlas Windows 路由到 PowerShell | 前台/后台命令桥接；Hermes `notify`、watch pattern、heartbeat 参数目前被忽略 |
-| `local_process` | Hermes `process_manage` | `list`、`wait`、`poll→status`、`log→read`、`kill→cancel` 已映射 |
+| `local_process` | Hermes `process_manage` | `list`、`poll→status`、`log→read`、`wait`、`kill→cancel`、`write`、`submit`、`close`、`handoff` 九个动作已有对应 Atlas handler；动作名映射有表驱动测试 |
 | `local_process` 交互动作 | Hermes `process_manage` | `write`、`submit`、`close`、手动 `handoff` 已映射并测试；Windows PTY 用已有 pywinpty 可选依赖。Atlas 仍未实现 handoff 后通知父级 Agent 的 Hermes 通知链（T11 剩余差异） |
 | `ask_user` | Hermes `clarify` | 已桥接到 Atlas 输入回调 |
 | Atlas `todo_list`、`execute_code`、`session_search`、`delegate_task` | Atlas 原生 handler 注册至 Hermes registry | 已接入；委派与并行场景有假模型测试 |
@@ -102,7 +102,7 @@
 ## CORE-PARITY C1 未完成项
 
 - **T11 真终端交互**：stdin/write/submit/close、Windows PTY 与手动 handoff 已接入；handoff 后向父级 Agent 异步通知完成的链路未实现。
-- **T19**：Atlas 工具 registry 已接入，但本轮没有逐项核对并独立跑完每一个旧工具动作；上表明确列出已知 process action 缺口。
+- **T19**：`process_manage` 九个动作的映射已有表驱动覆盖；Atlas 工具 registry 其余工具的所有旧动作尚未逐项核对并独立运行。
 
 这些缺口以及全量测试失败意味着 C1 仍未达到验收清单第 2、3、5 项，不应把本波标为完成。
 
@@ -117,6 +117,7 @@
 - A5 MoA 桥接聚焦测试：`4 passed in 0.21s`（`test_hermes_runtime.py`），使用假参考咨询和 fake gateway 配置；验证 Atlas ModelManager 模型选择、现有 `moa_references` 事件、advisory 系统提示注入及 `/moa` 参数路径，无真实模型调用。
 - L9 run budget 桥接聚焦测试：`5 passed in 0.21s`（`test_hermes_runtime.py`）；验证 Atlas `agent.run_budget_seconds` 与 `agent.budget_warning_ratio` 传给 Hermes 原有提醒 hook，缺省值保持关闭。
 - §10 #10 同脚本事件对照：`6 passed, 1 warning in 9.96s`（运行时模块和 E2E 对照）；假模型服务驱动相同文件读取脚本，稳定文本/工具/完成事件及字段序列一致。`stream_delta_callback(None)` 被正确视为 Hermes 临时流清理信号，不再产生字面 `None` chunk。
+- T19 process action 映射表驱动验证：`1 passed in 0.06s`；覆盖 `list/poll/log/wait/kill/write/submit/close/handoff` 的 Hermes 到 Atlas 动作名与 process ID 转换。其余 Atlas 工具动作尚未全部独立验收。
 - T11 交互进程聚焦测试：`4 passed in 12.77s`（stdin 写入/回车/EOF、Windows pywinpty PTY、handoff 后脱离 child-run 清理，以及 Hermes 动作映射）；均使用本地子进程，无模型/网络。
 - 聚焦 C1：权限/运行时、MCP、SSH、压缩、协议版本测试分别通过；协议补正后 3 个相关断言 `3 passed in 8.41s`。运行时 fallback 修正后的核心旧测试 `3 passed in 0.20s`。
 - C1 合并聚焦组在 fallback 修正前：`23 passed, 1 warning in 55.29s`。对应模块为 `test_hermes_runtime_e2e.py`、`test_hermes_mcp_config.py`、`test_hermes_ssh_routing.py`、`test_hermes_runtime.py`。

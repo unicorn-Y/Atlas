@@ -74,7 +74,7 @@
 | T16 | 跑代码片段 | HM `execute_code`（带内核、可远程） | ✔ Atlas handler 注册至 Hermes（`698b7bb`） | ✔ | — | C1 |
 | T17 | 工具按需加载 | CC ToolSearch；CX `tool_search`；HM `tools/tool_search.py` | ✔ Hermes tool search/toolset（`805110c`） | ✔ | — | C1 |
 | T18 | 工具输出过长时落盘 | HM `tool_result_storage.py`、`tool_output_truncate.py`；W06 已搬一部分 | ✔ 部分 | ✔ | — | C1 |
-| T19 | Atlas 自有工具 | — | △ Hermes registry 已接入 Atlas 工具；所有旧工具动作尚未逐项核验，已知进程 stdin/PTY 动作缺口 | — | 完成逐工具动作核对（`tools/registry.py`） | C1 |
+| T19 | Atlas 自有工具 | — | △ Hermes registry 已接入 Atlas 工具；`process_manage` 九个动作映射已表驱动覆盖，其余旧工具动作尚未逐项独立核验 | — | 完成逐工具动作核对（`tools/registry.py`） | C1 |
 
 ## 4. 上下文、提示词与成本
 
