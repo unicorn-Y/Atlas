@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, ShieldAlert, Square, Users, X } from 'lucide-react';
+import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, MessagesSquare, Repeat2, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
@@ -27,12 +27,14 @@ export default function ConversationActivity({ events, store, username, setTab }
     const firstInTurn = item.kind !== 'user' && !headed;
     if (item.kind !== 'user') headed = true;
     switch (item.kind) {
-      case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} />;
+      case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : item.moa ? '多模型会诊' : undefined} />;
       case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn}
         status={item.streaming ? '正在回复' : undefined} working={item.streaming && busy} />;
       case 'steps': return <div key={item.id}>
         {firstInTurn && <TurnHeader working={last && busy} />}
-        <StepTrack steps={item.steps} live={last && busy} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
+        <StepTrack steps={item.steps} live={last && busy}
+          onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }}
+          onMessageSubtask={(subtaskId, text) => { const runId = events[0]?.runId; if (runId) store.messageSubtask(runId, subtaskId, text); }} />
       </div>;
       case 'artifact': return <div key={item.id} className="my-3 ml-10 flex items-center gap-3 rounded-xl card-surface px-3.5 py-2.5 text-[13px]">
         <FileText size={16} className="shrink-0 text-brand" />
@@ -45,6 +47,8 @@ export default function ConversationActivity({ events, store, username, setTab }
       case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
       case 'group': return <WorkerGroup key={item.id} item={item} />;
       case 'checks': return <Checks key={item.id} item={item} />;
+      case 'background': return <BackgroundDone key={item.id} item={item} />;
+      case 'moa': return <Consultation key={item.id} item={item} />;
       case 'notice': return <div key={item.id} className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
         {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
         <span>{item.text}</span>
@@ -87,33 +91,77 @@ function TurnHeader({ working }: { working: boolean }) {
 }
 
 /** The "航迹": each step Atlas took, in plain words, strung along a brass meridian line. */
-function StepTrack({ steps, live, onCancelSubtask }: { steps: Step[]; live: boolean; onCancelSubtask: (subtaskId: string) => void }) {
+type SubtaskActions = { onCancelSubtask: (subtaskId: string) => void; onMessageSubtask: (subtaskId: string, text: string) => void };
+
+function StepTrack({ steps, live, ...actions }: { steps: Step[]; live: boolean } & SubtaskActions) {
   return <ol className="relative my-3 ml-[13px] list-none border-l border-line-strong py-1 pl-[26px]" aria-label="Atlas 的步骤">
-    {steps.map((step) => <StepRow key={step.id} step={step} live={live} onCancelSubtask={onCancelSubtask} />)}
+    {steps.map((step) => <StepRow key={step.id} step={step} live={live} {...actions} />)}
   </ol>;
 }
 
-function StepRow({ step, live, onCancelSubtask }: { step: Step; live: boolean; onCancelSubtask: (subtaskId: string) => void }) {
+const AGENT_TYPE: Record<string, string> = { explore: '探索', researcher: '调研', plan: '规划', oracle: '深度分析', verifier: '验收', general: '通用' };
+
+/** Type, model, background and recipe of a delegated sub-agent, as small quiet chips. */
+function AgentChips({ agent }: { agent: NonNullable<Step['agent']> }) {
+  const chips = [
+    agent.type && (AGENT_TYPE[agent.type] ?? agent.type),
+    agent.background && '后台',
+    agent.recipe && `配方 ${agent.recipe}`,
+    agent.model,
+  ].filter(Boolean) as string[];
+  if (!chips.length) return null;
+  return <span className="flex shrink-0 items-center gap-1">
+    {chips.map((chip, index) => <span key={chip} className={cn('rounded-full px-1.5 py-px text-[11px] leading-[1.5]',
+      index === 0 && agent.type ? 'bg-brand-soft text-fg' : 'bg-sunken text-fg-3', index === chips.length - 1 && agent.model && 'max-w-[140px] truncate font-mono')}>{chip}</span>)}
+  </span>;
+}
+
+/** Send a running sub-agent more instructions without stopping it. */
+function SteerSubtask({ onSend }: { onSend: (text: string) => void }) {
   const [open, setOpen] = useState(false);
-  const running = step.state === 'running' && live;
+  const [text, setText] = useState('');
+  if (!open) return <button onClick={() => setOpen(true)} className="text-[12px] text-fg-3 hover:text-fg">补充要求</button>;
+  const send = () => { if (text.trim()) { onSend(text.trim()); setText(''); setOpen(false); } };
+  return <form onSubmit={(event) => { event.preventDefault(); send(); }} className="mt-1 flex items-center gap-1.5">
+    <input autoFocus value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }}
+      placeholder="给这个子任务补充要求，它下一步会看到" aria-label="给这个子任务补充要求"
+      className="h-7 min-w-0 flex-1 rounded-lg bg-sunken px-2.5 text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
+    <button disabled={!text.trim()} className="h-7 shrink-0 rounded-lg px-2 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-40">发送</button>
+  </form>;
+}
+
+function StepRow({ step, live, onCancelSubtask, onMessageSubtask }: { step: Step; live: boolean } & SubtaskActions) {
+  const [open, setOpen] = useState(false);
+  // A background sub-agent keeps going after the conversation moves on, so it stays live on its own.
+  const running = step.state === 'running' && (live || Boolean(step.agent?.background));
   const detail = [step.input && `输入\n${step.input}`, step.result && `结果\n${step.result}`, step.output && `输出\n${step.output}`].filter(Boolean).join('\n\n');
   const hasDetail = Boolean(detail);
   // A failure you have to click to see is a failure hidden: show its evidence straight away.
   useEffect(() => { if (step.state === 'failed' && hasDetail) setOpen(true); }, [step.state, hasDetail]);
-  return <li className="relative py-[5px]">
+  // Nested sub-agents (a coordinator's workers) sit a step further in.
+  const indent = step.agent?.depth && step.agent.depth > 1 ? Math.min(step.agent.depth - 1, 3) * 16 : 0;
+  return <li className="relative py-[5px]" style={indent ? { marginLeft: indent } : undefined}>
     <span className={cn('absolute -left-[31px] top-[11px] size-[9px] rounded-full ring-4 ring-[var(--sheet-solid)]',
       running ? 'bg-brand shadow-[0_0_0_4px_var(--brand-soft)]' : step.state === 'failed' ? 'bg-danger' : step.state === 'cancelled' ? 'bg-fg-3' : 'bg-ok')} />
     <button type="button" onClick={() => detail && setOpen((value) => !value)} aria-expanded={detail ? open : undefined}
       className={cn('group flex w-full items-baseline gap-2 rounded-lg px-2 py-0.5 -mx-2 text-left text-[13.5px]', detail && 'hover:bg-hover')}>
       <span className={cn('shrink-0', step.state === 'failed' ? 'text-danger' : 'text-fg')}>{running ? `正在${step.verb}` : step.verb}</span>
       {step.target && <code className="min-w-0 truncate rounded-[5px] bg-code px-1.5 font-mono text-[12px] text-fg-2">{step.target}</code>}
+      {step.agent && <AgentChips agent={step.agent} />}
       <span className="flex-1" />
       <span className="shrink-0 text-[12px] tabular-nums text-fg-3">
         {step.state === 'failed' ? '失败' : step.state === 'cancelled' ? '已取消' : running ? '进行中' : duration(step.startedAt, step.endedAt)}
       </span>
       {detail && <ChevronRight size={13} className={cn('shrink-0 self-center text-fg-3 transition-transform', open && 'rotate-90')} />}
     </button>
-    {running && step.subtaskId && <button onClick={() => onCancelSubtask(step.subtaskId!)} className="ml-0 text-[12px] text-fg-3 hover:text-danger">停止这个子任务</button>}
+    {step.steers?.map((text, index) => <p key={index} className="m-0 mt-0.5 text-[12px] text-fg-3">你补充了：<span className="text-fg-2">{text}</span></p>)}
+    {step.note && <p className="m-0 mt-0.5 text-[12px] text-fg-3">{step.note}</p>}
+    {running && step.subtaskId && <div className="flex flex-col items-start gap-0.5">
+      <span className="flex items-center gap-3">
+        <SteerSubtask onSend={(text) => onMessageSubtask(step.subtaskId!, text)} />
+        <button onClick={() => onCancelSubtask(step.subtaskId!)} className="text-[12px] text-fg-3 hover:text-danger">停止这个子任务</button>
+      </span>
+    </div>}
     {open && <pre className="anim-fade mt-1.5 mb-1 max-h-72 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">{detail}</pre>}
     {open && step.fullOutputPath && <p className="m-0 mb-1 text-[12px] text-fg-3">结果太长，只显示了开头和结尾。完整内容：
       {window.atlasDesktop?.openPath
@@ -234,21 +282,72 @@ function SaveRecipe({ runId, store }: { runId: string; store: Store }) {
 
 /** Several workers ran side by side; one line each, then the coordinator's summary. */
 function WorkerGroup({ item }: { item: Extract<TimelineItem, { kind: 'group' }> }) {
+  const [openRow, setOpenRow] = useState<number | null>(null);
   const ok = item.results.filter((result) => result.status === 'completed' || result.status === 'done').length;
+  const checked = item.results.filter((result) => result.verified !== undefined);
+  const passed = checked.filter((result) => result.verified).length;
   return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface px-4 py-3.5 text-[13px]">
-    <p className="m-0 flex items-center gap-2 font-semibold text-heading"><Users size={15} className="text-brand" />{item.results.length} 个 Worker 并行完成
-      <span className="font-normal text-fg-3">{ok} 个成功{item.results.length - ok ? `，${item.results.length - ok} 个没完成` : ''}</span></p>
-    <ul className="m-0 mt-2 grid list-none gap-1 p-0">
+    <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-semibold text-heading"><Users size={15} className="text-brand" />{item.results.length} 个 Worker 并行完成
+      <span className="font-normal text-fg-3">{ok} 个成功{item.results.length - ok ? `，${item.results.length - ok} 个没完成` : ''}
+        {checked.length > 0 && ` · 验收通过 ${passed}/${checked.length}`}</span></p>
+    <ul className="m-0 mt-2 grid list-none gap-0.5 p-0">
       {item.results.map((result) => {
         const good = result.status === 'completed' || result.status === 'done';
-        return <li key={result.index} className="flex items-start gap-2" title={result.summary}>
-          {good ? <Check size={14} className="mt-0.5 shrink-0 text-ok" /> : <X size={14} className="mt-0.5 shrink-0 text-danger" />}
-          <span className="min-w-0 flex-1 text-fg-2">{result.title || `Worker ${result.index + 1}`}</span>
-          {result.changed_files.length > 0 && <span className="shrink-0 text-[12px] text-fg-3" title={result.changed_files.join('\n')}>改了 {result.changed_files.length} 个文件</span>}
+        const open = openRow === result.index;
+        const detail = Boolean(result.summary || result.verifier_note || result.changed_files.length);
+        return <li key={result.index}>
+          <button type="button" disabled={!detail} onClick={() => setOpenRow(open ? null : result.index)} aria-expanded={detail ? open : undefined}
+            className="-mx-1.5 flex w-[calc(100%+12px)] items-center gap-2 rounded-lg px-1.5 py-1 text-left enabled:hover:bg-hover">
+            {good ? <Check size={14} className="shrink-0 text-ok" /> : <X size={14} className="shrink-0 text-danger" />}
+            <span className="min-w-0 flex-1 truncate text-fg-2">{result.title || `Worker ${result.index + 1}`}</span>
+            {result.verified !== undefined && <span className={cn('shrink-0 rounded-full px-1.5 py-px text-[11px]', result.verified ? 'bg-ok-soft text-ok' : 'bg-danger-soft text-danger')}>
+              {result.verified ? '已验收' : '未通过'}</span>}
+            {result.changed_files.length > 0 && <span className="shrink-0 text-[12px] text-fg-3">改了 {result.changed_files.length} 个文件</span>}
+            {detail && <ChevronRight size={13} className={cn('shrink-0 text-fg-3 transition-transform', open && 'rotate-90')} />}
+          </button>
+          {open && <div className="anim-fade mb-1.5 ml-[22px] grid gap-1.5 text-[12.5px] leading-[1.65]">
+            {result.verifier_note && <p className={cn('m-0 rounded-lg px-2.5 py-1.5', result.verified ? 'bg-ok-soft text-fg-2' : 'bg-danger-soft text-fg')}>
+              <b className="font-medium">验收意见：</b>{result.verifier_note}</p>}
+            {result.summary && <p className="m-0 max-h-48 overflow-auto whitespace-pre-wrap text-fg-2">{result.summary}</p>}
+            {result.changed_files.length > 0 && <p className="m-0 font-mono text-[11.5px] text-fg-3">{result.changed_files.join('  ')}</p>}
+          </div>}
         </li>;
       })}
     </ul>
-    {item.summary && <p className="m-0 mt-2.5 whitespace-pre-wrap border-t border-line pt-2.5 leading-[1.7] text-fg-2">{item.summary}</p>}
+    {item.summary && <Collapsible text={item.summary} className="mt-2.5 border-t border-line pt-2.5" />}
+  </div>;
+}
+
+/** Long text shown as a few lines with a toggle, so one summary can't take over the thread. */
+function Collapsible({ text, className, lines = 4 }: { text: string; className?: string; lines?: number }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 280 || text.split('\n').length > lines;
+  return <div className={className}>
+    <p className={cn('m-0 whitespace-pre-wrap leading-[1.7] text-fg-2', !open && long && 'line-clamp-4')}>{text}</p>
+    {long && <button onClick={() => setOpen((value) => !value)} className="mt-1 text-[12px] text-fg-3 hover:text-fg">{open ? '收起' : '展开全部'}</button>}
+  </div>;
+}
+
+/** A sub-agent that ran in the background finished after the conversation moved on. */
+function BackgroundDone({ item }: { item: Extract<TimelineItem, { kind: 'background' }> }) {
+  return <div className="my-4 ml-10 rounded-2xl card-surface px-4 py-3 text-[13px]">
+    <p className="m-0 flex items-center gap-2 font-semibold text-heading"><Check size={15} className="text-ok" />后台任务完成</p>
+    {item.summary && <Collapsible text={item.summary} className="mt-1.5" />}
+  </div>;
+}
+
+/** Multi-model consultation: which models weighed in before Atlas answered, each opinion folded away. */
+function Consultation({ item }: { item: Extract<TimelineItem, { kind: 'moa' }> }) {
+  const [open, setOpen] = useState<string | null>(null);
+  return <div className="my-3 ml-10 rounded-2xl card-surface px-4 py-2.5 text-[13px]">
+    <p className="m-0 flex items-center gap-2 text-fg-2"><MessagesSquare size={14} className="text-brand" />
+      参考了 {item.references.length} 个模型的意见<span className="text-[12px] text-fg-3">· {(item.latencyMs / 1000).toFixed(1)} 秒</span></p>
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {item.references.map((reference) => <button key={reference.model} onClick={() => setOpen(open === reference.model ? null : reference.model)} aria-expanded={open === reference.model}
+        className={cn('max-w-[220px] truncate rounded-full px-2 py-0.5 font-mono text-[11.5px]', open === reference.model ? 'bg-brand-soft text-fg' : 'bg-sunken text-fg-3 hover:text-fg')}>{reference.model}</button>)}
+    </div>
+    {open && <p className="anim-fade m-0 mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-sunken px-3 py-2 text-[12.5px] leading-[1.65] text-fg-2">
+      {item.references.find((reference) => reference.model === open)?.text || '（没有内容）'}</p>}
   </div>;
 }
 

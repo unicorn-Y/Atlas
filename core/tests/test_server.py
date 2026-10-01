@@ -1905,3 +1905,40 @@ async def test_knowledge_health_approval_and_consolidated_insights_api(
     applications = await client.get("/api/memory/insight-applications")
     assert applications.status_code == 200
     assert applications.json() == []
+
+
+@pytest.mark.asyncio
+async def test_orchestration_settings_round_trip_and_apply_live(client) -> None:
+    """Settings → 子 Agent: saved to user settings, validated, and visible to the live config."""
+    from atlas import config, server
+
+    models = [item["id"] for item in server.model_mgr.list_models()]
+    assert models, "test setup needs at least one configured model"
+    current = await client.get("/api/settings/agents")
+    assert current.status_code == 200
+    assert current.json()["max_concurrent_children"] >= 1
+
+    saved = await client.put("/api/settings/agents", json={
+        "fast_model": models[0], "max_concurrent_children": 2, "max_spawn_depth": 1,
+        "moa_reference_models": models[:1], "moa_max_references": 2,
+    })
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["fast_model"] == models[0] and body["max_concurrent_children"] == 2
+    assert config.get_config().get("delegation.max_spawn_depth") == 1
+    assert config.load_user_settings()["config_overrides"]["moa.reference_models"] == models[:1]
+
+    for bad in ({"fast_model": "no-such-model"}, {"max_concurrent_children": 9},
+                {"max_spawn_depth": True}, {"moa_reference_models": ["nope"]}):
+        assert (await client.put("/api/settings/agents", json=bad)).status_code == 400
+
+    cleared = await client.put("/api/settings/agents", json={"fast_model": ""})
+    assert cleared.json()["fast_model"] == ""
+
+
+def test_config_overrides_only_touch_whitelisted_keys() -> None:
+    from atlas.config import apply_config_overrides
+
+    data = {"server": {"port": 8765}, "agents": {"fast_model": "a"}}
+    apply_config_overrides(data, {"server.port": 1, "agents.fast_model": None, "moa.max_references": 4})
+    assert data == {"server": {"port": 8765}, "agents": {}, "moa": {"max_references": 4}}

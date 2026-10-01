@@ -1230,6 +1230,69 @@ async def add_custom_model(req: CustomModelRequest) -> dict[str, Any]:
     return await get_configuration()
 
 
+def _orchestration_settings() -> dict[str, Any]:
+    config = get_config()
+    return {
+        "fast_model": str(config.get("agents.fast_model", "") or ""),
+        "strong_model": str(config.get("agents.strong_model", "") or ""),
+        "max_concurrent_children": int(config.get("delegation.max_concurrent_children", 3) or 3),
+        "max_spawn_depth": int(config.get("delegation.max_spawn_depth", 2) or 2),
+        "moa_reference_models": [str(item) for item in config.get("moa.reference_models", []) or []],
+        "moa_max_references": int(config.get("moa.max_references", 3) or 3),
+    }
+
+
+@app.get("/api/settings/agents")
+async def get_orchestration_settings() -> dict[str, Any]:
+    """Sub-agent and multi-model consultation settings shown in Settings → 子 Agent."""
+    return _orchestration_settings()
+
+
+@app.put("/api/settings/agents")
+async def update_orchestration_settings(req: dict[str, Any]) -> dict[str, Any]:
+    assert model_mgr is not None
+    known_models = {str(item.get("id")) for item in model_mgr.list_models()}
+    overrides: dict[str, Any] = {}
+
+    def model_field(field: str, key: str) -> None:
+        if field not in req:
+            return
+        value = str(req[field] or "").strip()
+        if value and value not in known_models:
+            raise HTTPException(status_code=400, detail="模型必须来自已配置的模型列表")
+        overrides[key] = value or None
+
+    def int_field(field: str, key: str, low: int, high: int) -> None:
+        if field not in req:
+            return
+        value = req[field]
+        if not isinstance(value, int) or isinstance(value, bool) or not low <= value <= high:
+            raise HTTPException(status_code=400, detail=f"{field} 必须是 {low} 到 {high} 之间的整数")
+        overrides[key] = value
+
+    model_field("fast_model", "agents.fast_model")
+    model_field("strong_model", "agents.strong_model")
+    int_field("max_concurrent_children", "delegation.max_concurrent_children", 1, 4)
+    int_field("max_spawn_depth", "delegation.max_spawn_depth", 1, 3)
+    int_field("moa_max_references", "moa.max_references", 1, 8)
+    if "moa_reference_models" in req:
+        models = req["moa_reference_models"]
+        if not isinstance(models, list) or len(models) > 8 or any(
+            not isinstance(item, str) or item not in known_models for item in models
+        ):
+            raise HTTPException(status_code=400, detail="会诊参考模型最多 8 个，且必须来自已配置的模型列表")
+        overrides["moa.reference_models"] = list(dict.fromkeys(models))
+    settings = load_user_settings()
+    stored = settings.get("config_overrides") if isinstance(settings.get("config_overrides"), dict) else {}
+    settings["config_overrides"] = {**stored, **overrides}
+    save_user_settings(settings)
+    # Applied to the live config too, so the next run uses it without a restart.
+    from atlas.config import apply_config_overrides
+
+    apply_config_overrides(get_config().raw, overrides)
+    return _orchestration_settings()
+
+
 @app.post("/api/settings/test-connection")
 async def test_connection(req: ConnectionTestRequest) -> dict[str, Any]:
     assert model_mgr is not None

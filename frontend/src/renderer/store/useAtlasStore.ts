@@ -126,6 +126,8 @@ interface AtlasState {
   refreshConversations: () => Promise<void>;
   duplicateConversation: (id: string) => Promise<void>;
   cancelSubtask: (runId: string, subtaskId: string) => void;
+  /** Extra instructions for a running sub-agent. */
+  messageSubtask: (runId: string, subtaskId: string, text: string) => void;
   saveRecipe: (runId: string, name: string) => Promise<boolean>;
   deleteRecipe: (id: string) => Promise<void>;
   runRecipe: (id: string, params: Record<string, string>) => Promise<void>;
@@ -621,6 +623,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         await get().openConversation(copy);
       } catch (error) { set({ error: errorText(error, '没能复制对话') }); }
     },
+    messageSubtask: (runId, subtaskId, text) => backend.messageSubtask(runId, subtaskId, text),
     cancelSubtask: (runId, subtaskId) => { void backend.cancelSubtask(runId, subtaskId).catch((error) => set({ error: errorText(error, '没能停止子任务') })); },
     saveRecipe: async (runId, name) => {
       try {

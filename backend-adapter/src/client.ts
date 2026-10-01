@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomTool, ExternalAgentInfo, Fact, ProjectSource, ProjectSources, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomTool, ExternalAgentInfo, Fact, AgentTypeInfo, OrchestrationSettings, KanbanBoard, KanbanTask, ProjectSource, ProjectSources, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -217,6 +217,36 @@ export class BackendAdapter {
   async getCheckLog(root: string, checkName: string): Promise<string> {
     const result = await this.request<{ log?: string; text?: string } | string>(`/api/git/pr/checks/${encodeURIComponent(checkName)}/log?${new URLSearchParams({ root })}`);
     return typeof result === 'string' ? result : result.log ?? result.text ?? '';
+  }
+  async getAgentTypes(root?: string | null): Promise<AgentTypeInfo[]> {
+    if (!this.live) return [];
+    return (await this.request<{ types: AgentTypeInfo[] }>(`/api/agents/types${root ? `?${new URLSearchParams({ root })}` : ''}`)).types;
+  }
+  async getAgentSettings(): Promise<OrchestrationSettings> { return this.request('/api/settings/agents'); }
+  async saveAgentSettings(patch: Partial<OrchestrationSettings>): Promise<OrchestrationSettings> {
+    return this.request('/api/settings/agents', { method: 'PUT', body: JSON.stringify(patch) });
+  }
+  async getKanbanBoards(): Promise<KanbanBoard[]> {
+    return this.live ? (await this.request<{ boards: KanbanBoard[] }>('/api/kanban/boards')).boards : [];
+  }
+  async createKanbanBoard(name: string): Promise<KanbanBoard> {
+    return this.request('/api/kanban/boards', { method: 'POST', body: JSON.stringify({ name }) });
+  }
+  async getKanbanTasks(boardId: string): Promise<KanbanTask[]> {
+    return (await this.request<{ tasks: KanbanTask[] }>(`/api/kanban/boards/${encodeURIComponent(boardId)}/tasks`)).tasks;
+  }
+  async createKanbanTask(boardId: string, task: Partial<KanbanTask>): Promise<KanbanTask> {
+    return this.request(`/api/kanban/boards/${encodeURIComponent(boardId)}/tasks`, { method: 'POST', body: JSON.stringify(task) });
+  }
+  async updateKanbanTask(boardId: string, taskId: string, patch: Partial<KanbanTask>): Promise<KanbanTask> {
+    return this.request(`/api/kanban/boards/${encodeURIComponent(boardId)}/tasks/${encodeURIComponent(taskId)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  }
+  /** `.atlas/NOTES.md` of a trusted workspace; throws (403) when the folder isn't trusted yet. */
+  async getProjectNotes(root: string): Promise<string> {
+    return (await this.request<{ content: string }>(`/api/workspace/notes?${new URLSearchParams({ root })}`)).content;
+  }
+  async saveProjectNotes(root: string, content: string): Promise<void> {
+    await this.request('/api/workspace/notes', { method: 'PUT', body: JSON.stringify({ root, content }) });
   }
   async getExternalAgents(): Promise<ExternalAgentInfo[]> {
     return this.live ? (await this.request<{ agents: ExternalAgentInfo[] }>('/api/agents/external')).agents : [];
@@ -480,6 +510,11 @@ export class BackendAdapter {
   /** Answer rules.trust_required: whether this directory's AGENTS.md etc. may be loaded. */
   trustRules(runId: string, eventId: string, trust: boolean): void {
     this.sendOnRun(runId, { type: 'rules.trust', run_id: runId, event_id: eventId, trust });
+  }
+
+  /** Extra instructions for a running sub-agent; it reads them at the start of its next turn. */
+  messageSubtask(runId: string, subtaskId: string, text: string): void {
+    this.sendOnRun(runId, { type: 'subtask.message', run_id: runId, subtask_id: subtaskId, text });
   }
 
   approvePlan(runId: string, eventId: string, edits = ''): void {

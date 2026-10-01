@@ -40,6 +40,8 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
     finally { setBusy(''); }
   };
 
+  // Not a git repository: there's no branch to make a PR from, so say nothing.
+  if (/not a git repository/i.test(error)) return null;
   const field = 'rounded-[9px] bg-sunken px-3 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]';
   return <section>
     <h3 className="m-0 mb-2 flex items-center gap-1.5 text-[12.5px] font-semibold text-fg-2"><GitPullRequest size={13} />拉取请求（PR）</h3>

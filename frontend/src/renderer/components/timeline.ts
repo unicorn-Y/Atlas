@@ -21,6 +21,12 @@ export interface Step {
   output: string;
   /** Set for delegated sub-agents, which can be cancelled on their own. */
   subtaskId?: string;
+  /** Sub-agent details: type (explore, verifier…), model, running in the background, nesting level, recipe. */
+  agent?: { type?: string; model?: string; background?: boolean; depth?: number; recipe?: string };
+  /** Extra instructions you sent to this sub-agent while it ran. */
+  steers?: string[];
+  /** A short note under the step, e.g. that an instruction arrived too late. */
+  note?: string;
   /** Where the backend saved a tool result too large for the model's context. */
   fullOutputPath?: string;
 }
@@ -29,14 +35,16 @@ export interface RunUsage { input_tokens?: number | null; output_tokens?: number
 export interface RunChanges { files: number; additions: number; deletions: number }
 
 export type TimelineItem =
-  | { kind: 'user'; id: string; content: string; steered?: boolean }
+  | { kind: 'user'; id: string; content: string; steered?: boolean; moa?: boolean }
   | { kind: 'reply'; id: string; content: string; streaming: boolean }
   | { kind: 'steps'; id: string; steps: Step[] }
   | { kind: 'approval'; id: string; event: AgentEvent }
   | { kind: 'question'; id: string; event: AgentEvent }
   | { kind: 'plan'; id: string; event: AgentEvent }
   | { kind: 'trust'; id: string; event: AgentEvent }
-  | { kind: 'group'; id: string; summary: string; results: Array<{ index: number; title: string; status: string; summary: string; changed_files: string[] }> }
+  | { kind: 'group'; id: string; summary: string; results: Array<{ index: number; title: string; status: string; summary: string; changed_files: string[]; verified?: boolean; verifier_note?: string }> }
+  | { kind: 'background'; id: string; summary: string }
+  | { kind: 'moa'; id: string; latencyMs: number; references: Array<{ model: string; text: string }> }
   | { kind: 'checks'; id: string; results: CheckResults }
   | { kind: 'cancelled'; id: string }
   /** One-line runtime notes: the model was swapped after errors, or Atlas went back to verify its edits. */
@@ -44,6 +52,12 @@ export type TimelineItem =
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
   | { kind: 'failed'; id: string; detail: string };
+
+/** A message sent as `/moa …` asks for a multi-model consultation; show it without the prefix. */
+export function splitMoa(content: string): { moa: boolean; text: string } {
+  const match = /^\s*\/moa(?:\s+|$)/.exec(content);
+  return match ? { moa: true, text: content.slice(match[0].length) } : { moa: false, text: content };
+}
 
 const TARGET_KEYS = ['path', 'file_path', 'filepath', 'file', 'command', 'cmd', 'query', 'pattern', 'url', 'q', 'target', 'name'];
 
@@ -171,7 +185,8 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         if (typeof data.content === 'string' && data.content) {
           // The trust question is asked before the run starts; once the request shows up, put it back under it.
           const early = items.length && items[items.length - 1].kind === 'trust' ? items.pop() : undefined;
-          items.push({ kind: 'user', id: event.id, content: data.content });
+          const asked = splitMoa(data.content);
+          items.push({ kind: 'user', id: event.id, content: asked.text, ...(asked.moa ? { moa: true } : {}) });
           if (early) items.push(early);
         }
         closeBlocks(); reply = null; spoken = '';
@@ -236,7 +251,12 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         const id = String(data.subtask_id ?? event.id);
         const worker = typeof data.index === 'number' ? `并行 Worker ${data.index + 1}` : '';
         const step: Step = { id: event.id, verb: worker || '子任务', target: String(data.title || data.goal || '').slice(0, 120), state: 'running', startedAt: event.timestamp, output: '', subtaskId: id,
-          input: [data.backend && `执行者：${String(data.backend)}`, data.goal && `目标：${String(data.goal)}`].filter(Boolean).join('\n') };
+          input: [data.backend && `执行者：${String(data.backend)}`, data.goal && `目标：${String(data.goal)}`].filter(Boolean).join('\n'),
+          agent: {
+            type: typeof data.agent === 'string' ? data.agent : undefined, model: typeof data.model === 'string' && data.model ? data.model : undefined,
+            background: data.background === true, depth: typeof data.depth === 'number' ? data.depth : undefined,
+            recipe: typeof data.recipe_id === 'string' && data.recipe_id ? data.recipe_id : undefined,
+          } };
         byExecution.set(`subtask:${id}`, step);
         closeReply();
         stepsBlock(event.id).steps.push(step);
@@ -256,12 +276,35 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         step.result = text(data.summary);
         break;
       }
+      case 'subtask.steered': {
+        const step = byExecution.get(`subtask:${String(data.subtask_id ?? '')}`);
+        if (step) step.steers = [...(step.steers ?? []), String(data.text ?? '')];
+        break;
+      }
+      case 'subtask.steer_rejected': {
+        const step = byExecution.get(`subtask:${String(data.subtask_id ?? '')}`);
+        if (step) step.note = '补充要求没有送到：这个子任务已经结束了。';
+        break;
+      }
+      case 'subtask.background_completed':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'background', id: event.id, summary: String(data.summary ?? '') });
+        break;
+      case 'moa.references': {
+        const references = Array.isArray(data.references) ? data.references as Array<Record<string, unknown>> : [];
+        closeReply(); closeBlocks();
+        items.push({ kind: 'moa', id: event.id, latencyMs: Number(data.latency_ms ?? 0),
+          references: references.map((item) => ({ model: String(item.model ?? ''), text: String(item.text ?? '') })) });
+        break;
+      }
       case 'subtask.group_completed': {
         const results = Array.isArray(data.results) ? data.results as Array<Record<string, unknown>> : [];
         closeReply(); closeBlocks();
         items.push({ kind: 'group', id: event.id, summary: String(data.summary ?? ''), results: results.map((item, index) => ({
           index: typeof item.index === 'number' ? item.index : index, title: String(item.title ?? ''), status: String(item.status ?? ''),
           summary: String(item.summary ?? ''), changed_files: Array.isArray(item.changed_files) ? item.changed_files.map(String) : [],
+          verified: typeof item.verified === 'boolean' ? item.verified : undefined,
+          verifier_note: typeof item.verifier_note === 'string' && item.verifier_note ? item.verifier_note : undefined,
         })) });
         break;
       }

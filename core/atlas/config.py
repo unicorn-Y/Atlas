@@ -230,7 +230,33 @@ def load_config(path: Path | None = None) -> AtlasConfig:
         data = tomllib.load(f)
 
     log.info("config.loaded", path=str(cfg_path))
+    if path is None:
+        apply_config_overrides(data, load_user_settings().get("config_overrides", {}))
     return AtlasConfig(data)
+
+
+# Settings the desktop app may change at runtime (Settings → 子 Agent); everything else stays in atlas.toml.
+OVERRIDABLE_CONFIG_KEYS = {
+    "agents.fast_model", "agents.strong_model",
+    "delegation.max_concurrent_children", "delegation.max_spawn_depth",
+    "moa.reference_models", "moa.max_references",
+}
+
+
+def apply_config_overrides(data: dict[str, Any], overrides: Any) -> None:
+    """Merge whitelisted dotted keys into a parsed config dict in place."""
+    if not isinstance(overrides, dict):
+        return
+    for dotted, value in overrides.items():
+        if dotted not in OVERRIDABLE_CONFIG_KEYS:
+            continue
+        section, key = dotted.split(".", 1)
+        node = data.setdefault(section, {})
+        if isinstance(node, dict):
+            if value is None:
+                node.pop(key, None)
+            else:
+                node[key] = value
 
 
 # ---------------------------------------------------------------------------

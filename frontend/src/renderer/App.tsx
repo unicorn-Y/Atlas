@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AudioLines, Bell, BookMarked, Brain, Copy, Keyboard, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
+  AudioLines, Bell, BookMarked, Network, Brain, Copy, Keyboard, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X, Gauge,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
@@ -13,6 +13,8 @@ import SideChat from './components/SideChat';
 import RemoteFolderDialog from './components/RemoteFolderDialog';
 import TimelineNav from './components/TimelineNav';
 import ForkTree from './components/ForkTree';
+import TodoStrip from './components/TodoStrip';
+import { splitMoa } from './components/timeline';
 import RunSetupMenu from './components/RunSetupMenu';
 import TabStrip from './components/TabStrip';
 import OnboardingDialog from './components/OnboardingDialog';
@@ -36,6 +38,7 @@ import CreatePage from './pages/CreatePage';
 import BoardPage from './pages/BoardPage';
 import ProfilesPanel from './pages/ProfilesPanel';
 import HooksPanel from './pages/HooksPanel';
+import SubAgentsPanel from './pages/SubAgentsPanel';
 import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
 import Sidebar, { NAV, type View } from './shell/Sidebar';
 import HomeView, { type Suggestion } from './shell/HomeView';
@@ -48,7 +51,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'profiles' | 'agents' | 'hooks' | 'tools' | 'telegram' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
@@ -97,6 +100,8 @@ export default function App() {
   const [attachments, setAttachments] = useState<string[]>([]);
   const [files, setFiles] = useState<Array<RunFile & { size: number }>>([]);
   const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
+  /** The next message asks other models for their opinion first (sent as `/moa …`). */
+  const [moaNext, setMoaNext] = useState(false);
   const [browserUrl, setBrowserUrl] = useState('');
   const [terminalCommand, setTerminalCommand] = useState<{ id: string; text: string } | null>(null);
   const [mentions, setMentions] = useState<MentionItem[]>([]);
@@ -312,7 +317,8 @@ export default function App() {
     }
     const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: mentions.filter((item) => item.kind === 'conversation').map((item) => item.id).slice(0, 3) };
     setMentions([]);
-    void store.sendMessage(text, images, documents, refs);
+    void store.sendMessage(moaNext && !splitMoa(text).moa ? `/moa ${text}` : text, images, documents, refs);
+    setMoaNext(false);
   };
   /** Images go to the model as pictures; every other file rides along as a document. */
   const addFiles = (picked: FileList | null) => {
@@ -472,6 +478,7 @@ export default function App() {
     ] : []),
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
+    { id: 'moa', label: '/moa', hint: moaNext ? '取消：下一条不会诊' : '下一条先听几个参考模型的意见再回答', run: () => setMoaNext((value) => !value) },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
     { id: 'recipe', label: '/recipe', hint: '打开配方，带参数复跑保存过的任务', run: () => setRecipesOpen(true) },
     ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
@@ -564,7 +571,7 @@ export default function App() {
           </MenuItem>)}
         </MenuContent>
       </Menu>}
-      {activeConversation && <RunSetupMenu conversation={activeConversation} workspace={workspacePath}
+      {activeConversation && <RunSetupMenu conversation={activeConversation} workspace={workspacePath} moa={moaNext} onToggleMoa={() => setMoaNext((value) => !value)}
         onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)}
         onPickFolder={async () => window.atlasDesktop?.selectDirectory
           ? window.atlasDesktop.selectDirectory(workspacePath || undefined)
@@ -784,7 +791,8 @@ export default function App() {
             <div ref={threadRef} aria-label="任务活动" className="min-h-0 flex-1 overflow-auto px-8 pt-2"
               onScroll={(event) => { if (restoredRef.current === store.activeConversationId) scrollPositions.current.set(store.activeConversationId, event.currentTarget.scrollTop); }}>
               <div className="mx-auto w-[min(720px,100%)] pb-8">
-                {history.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username}
+                {history.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'}
+                  {...(message.role === 'user' && splitMoa(message.content).moa ? { content: splitMoa(message.content).text, note: '多模型会诊' } : { content: message.content })} username={username}
                   actions={canRewrite && message.id ? message.role === 'user'
                     ? <>
                       <MessageAction label="修改后重新发送" onClick={() => { setEditing({ id: message.id, original: message.content }); setInput(message.content); }}><Pencil size={13} /></MessageAction>
@@ -819,6 +827,7 @@ export default function App() {
             </div>
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(720px,100%)]">
+                <TodoStrip events={activeEvents} />
                 {queueStrip}
                 <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={editBanner || runHeader || rewindBanner || undefined} />
               </div>
@@ -838,7 +847,7 @@ export default function App() {
             terminalCommand={terminalCommand} onSendToAtlas={(text) => { setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}终端输出：\n\`\`\`\n${text.trimEnd()}\n\`\`\`\n\n`); setToast('已把终端输出放进输入框'); }} />}
         </div>}
 
-        {view === 'board' && <BoardPage conversations={store.conversations} runs={store.runs} queue={store.queue} unread={store.unread} archived={store.archived}
+        {view === 'board' && <BoardPage workspace={workspacePath} conversations={store.conversations} runs={store.runs} queue={store.queue} unread={store.unread} archived={store.archived}
           onOpen={openConversation} onStop={store.stopRun} onArchive={store.toggleArchived} />}
         {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} initialPrompt={createPrompt} />}
@@ -852,7 +861,7 @@ export default function App() {
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
-        {([['models', '模型与服务', SlidersHorizontal], ['advanced', '高级', Settings], ['usage', '用量', Gauge], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
+        {([['models', '模型与服务', SlidersHorizontal], ['advanced', '高级', Settings], ['usage', '用量', Gauge], ['profiles', '角色', UserCog], ['agents', '子 Agent', Network], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
           <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
@@ -901,6 +910,7 @@ export default function App() {
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
           </div>
         </section>}
+        {sheet === 'agents' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">子 Agent</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">Atlas 把大任务拆给子 Agent 并行做时，用哪些模型、一次派几个、有哪些类型可选。</p><SubAgentsPanel models={store.models} workspace={workspacePath} /></section>}
         {sheet === 'usage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">用量</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">每次任务用了多少 token、缓存帮你省了多少、大概花了多少钱。</p><UsagePanel /></section>}
         {sheet === 'plugins' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">插件</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力。</p><PluginsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>

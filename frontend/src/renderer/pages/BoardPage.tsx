@@ -1,10 +1,11 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Archive, CircleAlert, CircleCheck, Clock3, FolderOpen, ListOrdered, LoaderCircle, MessageCircleQuestion, Square } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import type { AgentRun } from '../../types/runtime';
 import type { QueuedMessage } from '../store/useAtlasStore';
 import { relativeTime } from '../services/api';
 import { cn } from '../ui/cn';
+import TeamBoard from './TeamBoard';
 
 type Column = 'running' | 'attention' | 'queued' | 'done';
 
@@ -27,7 +28,7 @@ function columnOf(card: Card): Column {
 }
 
 /** Every conversation at a glance, grouped by what it needs: the command centre for parallel work. */
-export default function BoardPage({ conversations, runs, queue, unread, archived, onOpen, onStop, onArchive }: {
+export default function BoardPage({ conversations, runs, queue, unread, archived, onOpen, onStop, onArchive, workspace = '' }: {
   conversations: ConversationSummary[];
   runs: AgentRun[];
   queue: Record<string, QueuedMessage[]>;
@@ -36,7 +37,15 @@ export default function BoardPage({ conversations, runs, queue, unread, archived
   onOpen: (conversation: ConversationSummary) => void;
   onStop: (runId: string) => void;
   onArchive: (id: string) => void;
+  /** Used to list the sub-agent types a team task can be assigned to. */
+  workspace?: string;
 }) {
+  const [view, setView] = useState<'conversations' | 'team'>(() => { try { return localStorage.getItem('atlas.board.view') === 'team' ? 'team' : 'conversations'; } catch { return 'conversations'; } });
+  const switchView = (next: 'conversations' | 'team') => { setView(next); try { localStorage.setItem('atlas.board.view', next); } catch { /* convenience only */ } };
+  const openRun = (runId: string) => {
+    const conversation = conversations.find((item) => item.id === runs.find((run) => run.id === runId)?.conversationId);
+    if (conversation) onOpen(conversation);
+  };
   const latestRun = new Map<string, AgentRun>();
   for (const run of runs) latestRun.set(run.conversationId, run);
   const cards: Card[] = conversations.filter((conversation) => !archived.includes(conversation.id)).map((conversation) => ({
@@ -48,9 +57,13 @@ export default function BoardPage({ conversations, runs, queue, unread, archived
 
   return <div className="screen page"><div className="page-inner" style={{ maxWidth: 'none' }}>
     <header className="page-head">
-      <div><h1>任务看板</h1><p>所有对话按状态排好，同时跑几件事时从这里照看。</p></div>
+      <div><h1>任务看板</h1><p>{view === 'team' ? '拆开的任务、谁在做、等什么、做出了什么。' : '所有对话按状态排好，同时跑几件事时从这里照看。'}</p></div>
+      <div className="flex rounded-full bg-sunken p-0.5" role="tablist" aria-label="看板视图">
+        {([['conversations', '对话'], ['team', '团队任务']] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={view === id} onClick={() => switchView(id)}
+          className={cn('h-8 rounded-full px-3.5 text-[13px]', view === id ? 'bg-overlay text-fg shadow-sm' : 'text-fg-3 hover:text-fg')}>{label}</button>)}
+      </div>
     </header>
-    <div className="grid min-h-0 gap-4 [grid-template-columns:repeat(4,minmax(220px,1fr))] overflow-x-auto pb-4">
+    {view === 'team' ? <TeamBoard workspace={workspace} onOpenRun={openRun} canOpenRun={(runId) => runs.some((run) => run.id === runId)} /> : <div className="grid min-h-0 gap-4 [grid-template-columns:repeat(4,minmax(220px,1fr))] overflow-x-auto pb-4">
       {COLUMNS.map((column) => {
         const items = grouped.get(column.id)!;
         return <section key={column.id} aria-label={column.title} className="flex min-h-[320px] min-w-0 flex-col rounded-2xl bg-sunken p-3">
@@ -64,7 +77,7 @@ export default function BoardPage({ conversations, runs, queue, unread, archived
           </div>
         </section>;
       })}
-    </div>
+    </div>}
   </div></div>;
 }
 

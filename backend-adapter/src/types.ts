@@ -111,6 +111,22 @@ export interface ProjectSource {
 }
 export interface ProjectSources { instructions: string; sources: ProjectSource[] }
 
+/** A sub-agent type: built in, or read from a definition file (Claude Code, OpenCode, Codex, Copilot formats). */
+export interface AgentTypeInfo {
+  name: string; description: string; tools: string[] | string | null; model: string | null; role: string;
+  source: string; path?: string | null; trusted: boolean; warnings: string[];
+}
+export interface OrchestrationSettings {
+  fast_model: string; strong_model: string; max_concurrent_children: number; max_spawn_depth: number;
+  moa_reference_models: string[]; moa_max_references: number;
+}
+export type KanbanStatus = 'todo' | 'running' | 'blocked' | 'review' | 'done';
+export interface KanbanBoard { id: string; name: string; created_at?: string }
+export interface KanbanTask {
+  id: string; board_id: string; title: string; description: string; assignee: string; dependencies: string[];
+  status: KanbanStatus; output: string; run_id: string; created_at?: string; updated_at?: string;
+}
+
 export interface SandboxSettings { type: 'docker'; image?: string; network?: boolean }
 export interface ExternalAgentInfo { id: string; name: string; available: boolean; version: string | null; detail: string }
 export interface SandboxStatus { docker: { available: boolean; version: string | null; detail: string } }

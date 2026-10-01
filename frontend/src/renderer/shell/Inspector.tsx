@@ -14,6 +14,7 @@ import SpecsPanel from './panels/SpecsPanel';
 import TerminalPanel from './panels/TerminalPanel';
 import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
 import PullRequestSection from './panels/PullRequestSection';
+import ProjectNotesSection from './panels/ProjectNotesSection';
 
 export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context';
 
@@ -196,6 +197,7 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
         {rules.length ? <>会读取的规则文件：{rules.map((file) => shortPath(file.path)).join('、')}</> : '这个目录里没有 AGENTS.md、CLAUDE.md 或 .atlas/rules.md。'}
       </p>}
     </section>
+    {connected && workspace && !workspace.startsWith('ssh://') && <ProjectNotesSection root={workspace} refreshKey={`${run?.id}:${run?.status}`} />}
     {connected && (worktree?.path ?? workspace) && !String(worktree?.path ?? workspace).startsWith('ssh://') && <PullRequestSection root={String(worktree?.path ?? workspace)}
       refreshKey={`${run?.id}:${run?.status}`} onOpenUrl={onPreview} onAsk={onAsk} />}
     {worktree && <WorktreeSection conversationId={conversationId} worktree={worktree} onChanged={onWorktreeChanged} onToast={onToast} refreshKey={`${run?.id}:${run?.status}`} />}
