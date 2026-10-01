@@ -497,6 +497,7 @@ class HermesRuntime:
                 status_callback=on_status,
                 event_callback=on_event,
             )
+            agent._on_session_title = on_session_title
             # Hermes' turn-context and iteration-prep hooks read these attributes
             # directly to inject its one-shot time-budget reminder.
             agent.run_budget_seconds = run_budget_seconds
