@@ -6780,6 +6780,9 @@ async def _execute_run(
                     "event_id": event.get("event_id", ""),
                 })
 
+            elif etype == "run_model_switched":
+                await emit("run.model_switched", event.get("data", {}))
+
             elif etype == "run_usage":
                 usage = event.get("usage", {})
                 if run.reasoning_effort and run.reasoning_effort_applied is None:

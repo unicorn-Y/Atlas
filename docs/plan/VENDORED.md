@@ -14,6 +14,10 @@
 | `core/atlas/agent/results.py` | `NousResearch/hermes-agent` | `tools/tool_result_storage.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 复用 Atlas run 目录持久化全量结果并返回头尾预览；无 run ID/写入失败时按配置截断 | 2026-10-01 |
 | `core/atlas/usage_pricing.py` | `NousResearch/hermes-agent` | `agent/usage_pricing.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 只保留静态价格计算和自定义价格覆盖；无 Hermes 账户/积分逻辑，表内为当前明确列出的模型 | 2026-10-01 |
 | `core/atlas/usage.py` | `NousResearch/hermes-agent` | `agent/usage_pricing.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | Atlas SQLite 用量记录、分组汇总；以模型+子任务聚合运行数 | 2026-10-01 |
+| `core/atlas/agent/error_classifier.py` | `NousResearch/hermes-agent` | `agent/error_classifier.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 移植限流、额度、上下文、过载、网络、认证和格式错误的 provider-neutral 分类；未移植 Hermes 账户/供应商专属规则 | 2026-10-01 |
+| `core/atlas/agent/retry_utils.py` | `NousResearch/hermes-agent` | `agent/retry_utils.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 采用有上限的抖动指数退避 | 2026-10-01 |
+| `core/atlas/agent/fallback_cooldown.py` | `NousResearch/hermes-agent` | `agent/fallback_cooldown.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 当前进程内按模型设置临时冷却，剔除凭据池耦合 | 2026-10-01 |
+| `core/tests/test_error_recovery.py` | `NousResearch/hermes-agent` | `tests/agent/test_error_classifier.py`, `tests/agent/test_retry_utils.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 移植状态分类、重试退避和冷却核心测试；省略 Hermes 专属规则断言 | 2026-10-01 |
 
 参考提交号（2026-09-30 调研时）：
 - `NousResearch/hermes-agent`：`12e4d3e2dd5281adf289f70e5d6c7f33427d6982`

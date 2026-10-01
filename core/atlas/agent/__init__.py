@@ -41,6 +41,10 @@ from atlas.agent.enrichment import (
     TrajectoryReviewer,
 )
 from atlas.agent.results import externalize_tool_output
+from atlas.agent.error_classifier import classify_api_error
+from atlas.agent.fallback_cooldown import cool as cool_model
+from atlas.agent.fallback_cooldown import is_cooling
+from atlas.agent.retry_utils import jittered_backoff
 from atlas.agent.prompt_caching import (
     build_prompt_cache_plan,
     envelope_tool_part_cache_markers_supported,
@@ -167,6 +171,10 @@ class AgentRunContext:
     reasoning_effort: str | None = None
     model: str | None = None
     truncated_tool_retries: int = 0
+    fallback_models: list[str] = field(default_factory=list)
+    failed_models: set[str] = field(default_factory=set)
+    recovery_retries: int = 0
+    context_compression_attempted: bool = False
     subtask_started: Callable[..., Any] | None = None
     subtask_progress: Callable[..., Any] | None = None
     subtask_completed: Callable[..., Any] | None = None
@@ -1060,6 +1068,46 @@ class AgentOrchestrator:
                 lc_messages = canonical_messages
                 tools = canonical_tools
                 return await self._think_node(state)
+            classified = classify_api_error(exc)
+            if classified.should_compress and not runtime.context_compression_attempted:
+                runtime.context_compression_attempted = True
+                recent = [message for message in state["messages"]
+                          if not isinstance(message, SystemMessage)][-8:]
+                preserved_system = [message for message in state["messages"]
+                                    if isinstance(message, SystemMessage)]
+                state["messages"] = preserved_system + recent
+                runtime.maintenance_snapshot = await self.context_maintenance.compact({
+                    **runtime.maintenance_context, "goal": runtime.goal or "",
+                    "session_summary": " | ".join(str(item.content)[:240] for item in recent),
+                })
+                state["messages"].append(SystemMessage(content=(
+                    "Earlier context was compacted after a provider context limit. "
+                    "Continue using the preserved goal and recent messages."
+                )))
+                return await self._think_node(state)
+            if (classified.retryable and runtime.recovery_retries < 1
+                    and classified.reason.value in {"rate_limit", "overloaded", "server_error", "timeout", "network"}):
+                runtime.recovery_retries += 1
+                await asyncio.sleep(min(jittered_backoff(runtime.recovery_retries), 0.25))
+                return await self._think_node(state)
+            if classified.should_fallback:
+                runtime.failed_models.add(selected_model)
+                cool_model(selected_model)
+                next_model = next((candidate for candidate in runtime.fallback_models
+                                   if candidate not in runtime.failed_models and not is_cooling(candidate)), None)
+                if next_model:
+                    runtime.model = next_model
+                    if event_queue is not None:
+                        await event_queue.put({"type": "run_model_switched", "data": {
+                            "from": selected_model, "to": next_model,
+                            "reason": {
+                                "rate_limit": "请求过于频繁", "billing": "额度不足",
+                                "overloaded": "服务繁忙", "server_error": "服务暂时不可用",
+                                "auth": "认证失败", "timeout": "请求超时",
+                                "network": "网络连接失败",
+                            }.get(classified.reason.value, "当前模型调用失败"),
+                        }})
+                    return await self._think_node(state)
             await self._emit_hook(runtime, "after_model", model=litellm_model, error=str(exc))
             has_image = any(
                 isinstance(message.content, list)
@@ -1908,6 +1956,14 @@ class AgentOrchestrator:
                 }
                 return
         runtime.model = self._model_mgr.current_model
+        selected_config = next(
+            (item for item in self._model_mgr.list_models()
+             if item.get("id") == runtime.model), {},
+        )
+        runtime.fallback_models = list(
+            selected_config.get("fallback")
+            or get_config().get("models.fallback", []) or []
+        )
         litellm_model = self._model_mgr.current_litellm_model
 
         log.info(
