@@ -1,6 +1,6 @@
 # CODEX-ATLAS-BACKEND-PARITY-WAVE6
 
-STATUS: READY
+STATUS: SUPERSEDED（2026-09-30 作废，不要执行。改为 docs/plan/00-MASTER-PLAN.md 的 W06–W12：子 Agent → W07，浏览器交接 → W09，局域网与导出网页 → W10，插件市场 → W11）
 WORKER: Luna
 BASE_BRANCH: main
 PREDECESSOR: CODEX-ATLAS-BACKEND-PARITY-WAVE5（已接受，见 tasks/reviews/CODEX-ATLAS-BACKEND-PARITY-WAVE5.review.md，**务必读「实测后追加修复」一节**）

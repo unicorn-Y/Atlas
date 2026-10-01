@@ -1,6 +1,6 @@
 # Atlas 对标工作交接（2026-09-30）
 
-新会话先读这份，再读 `docs/PARITY.md` 和 `docs/research/2026-09-agent-harness-landscape.md`。
+新会话先读这份，再读 `docs/plan/00-MASTER-PLAN.md`（总计划）、`docs/plan/SOURCE-MAP.md`（代码来源）、`docs/plan/EXECUTION-GUIDE.md`（执行和审查方法）。调研依据在 `docs/research/2026-09-30-landscape/`。
 
 ## 1. 用户与规则
 
@@ -21,12 +21,26 @@
 - 笔记本上的助手脚本 `frontend/scripts/.cdp.mjs`（未提交，别提交）：`node scripts/.cdp.mjs <脚本.js> <输出目录>`，脚本里可用 `page`（主窗口 `app://-/index.html`，不是 avatar-overlay 那个）和 `out`。填提示词：点「新聊天」→ 确认项目是 Atlas → 在 `[data-codex-composer="true"]` 里 `insertText`。**发送按钮由用户点**（权限分类器不允许我点）。
 - 看 Codex 进度：截图，或 `ssh zhuji "cd /d D:\Atlas && git log --oneline -5 && git status -sb"`。Codex 没推送前可以在主机上 `git bundle create %TEMP%\w.bundle <base>..main`，`scp` 回来 `git fetch` 审查。
 
-## 4. 当前进度
+## 4. 当前进度（2026-09-30 晚）
 
-- 对标表 `docs/PARITY.md`：170 ✅ / 15 🟡 / 3 ❌ / 18 ➖ / 4 ⚖️。
-- 后端第 1–5 波已接受（协议 1.7）；审阅记录在 `tasks/reviews/`。前端全部接好并实测。
-- **第六波任务书**已推送（`tasks/taskbooks/CODEX-ATLAS-BACKEND-PARITY-WAVE6.md`）：0 遗留（Worker 用父模型、DNS 重绑定、全量测试跑完）、1 子 Agent 体系（多格式定义文件、6 种内置类型、并行验收、后台委派与引导、配方当 Worker）、2 浏览器交接与复用用户 Chrome、3 局域网网页版与手机配对、4 对话导出为网页、5 插件市场。**提示词已填进 Codex，等用户点发送。**
-- 第七波候选（见调研文档第四节）：停止前校验关卡、「改前问我」的 LLM 审批员、工具延迟加载、规则优先的上下文压缩、钩子兼容 Claude Code、Agent 团队模式、远程子 Agent（A2A）、多模型会诊。
+- 对标表 `docs/PARITY.md`：170 ✅ / 15 🟡 / 3 ❌ / 18 ➖ / 4 ⚖️。后端第 1–5 波已接受（协议 1.7）。
+- **重新做了全景调研**（`docs/research/2026-09-30-landscape/`，40 多个产品、9 个专题）。
+- **用户纠正方向**：全部功能都要最新最好的，**有现成开源代码就拿来改**（记忆 `atlas-reuse-first`）；选择「移植」路线：保留 Atlas 后端，从 Hermes Agent（Python、MIT、约 25 万星，几乎覆盖全部能力）等项目逐块搬代码。
+- 新计划：`docs/plan/`（总计划、源码地图、执行指南、代码登记表）+ 七波任务书 `tasks/taskbooks/ATLAS-W06-FOUNDATION-SAFETY.md` … `ATLAS-W12-SELF-EVOLUTION.md`。
+- 旧的 `CODEX-ATLAS-BACKEND-PARITY-WAVE6.md` 已作废。**主机 Codex 输入框里还填着旧第六波的提示词，不要发送**；下一步是把 W06 的新提示词填进去（提示词模板见下）。
+- 用户决定：自动跟踪各家更新做成 Atlas 自己的功能（W12），不另建定时任务。
+
+### 给 Codex 的提示词模板（W06 起每波通用，替换任务书名）
+
+```
+你是 Atlas 施工 Worker。工作目录 D:\Atlas，先 git pull 到最新 main。
+先完整阅读 LUNA_WORKER.md、docs/plan/00-MASTER-PLAN.md、docs/plan/SOURCE-MAP.md、docs/plan/EXECUTION-GUIDE.md（尤其「三点五、怎么搬代码」），再完整阅读任务书 tasks/taskbooks/ATLAS-W06-FOUNDATION-SAFETY.md，它取代 tasks/CURRENT.md 里记录的任务。
+本波以「从开源项目搬代码改」为主：按任务书点名的来源文件先读源码再搬，不要从零重写；每个搬入的文件写来源注释并登记到 docs/plan/VENDORED.md。
+只做任务书里标「后端」的章节，不改 frontend/ 和 backend-adapter/。不得放宽 core/atlas/origin_guard.py。
+接口名、事件名、字段名与任务书一致，偏离写进结果文件。测试不写真实数据目录、不在仓库建临时目录、不依赖真实网络。
+任务书要求的真机场景用本机真实模型跑并记录。全量测试用后台进程跑完，汇总行写进结果文件。
+按任务书更新 tasks/CURRENT.md；每节一个提交；push 前 git pull --rebase；写结果文件；核验 remote HEAD；然后停止。
+```
 
 ## 5. Codex 交付后怎么审查（每一波都这样做）
 
