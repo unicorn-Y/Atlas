@@ -2,7 +2,7 @@
 
 **这张表决定 C1–C6 每一波做什么。** 范围只限「主体」：用户每天实际用的部分，包括对话干活、读改代码、跑命令、上下文、会话、交互、子 Agent、扩展、模型、编程。外部功能（渠道、连接器目录、跨设备、分享、电脑和浏览器操作扩展、自我进化）冻结，不在这张表里。
 
-> 2026-10-02 C1 状态更新：下文对应能力行的 Atlas 现状列已按本次 Hermes 接入和聚焦证据更新；保留 △/✘ 的项目是已知缺口。当前全量测试的 7 个失败在 `0d48720` 之前的 `805110c` 基线也复现（基线共 9 个失败）；C1 尚未整体验收，L9、T11、T19 和 §10 #10 仍未完成。详情见 `tasks/results/ATLAS-C1-HERMES-CORE.result.md`。
+> 2026-10-02 C1 状态更新：下文对应能力行的 Atlas 现状列已按本次 Hermes 接入和聚焦证据更新；保留 △/✘ 的项目是已知缺口。当前全量测试的 7 个失败在 `0d48720` 之前的 `805110c` 基线也复现（基线共 9 个失败）；C1 尚未整体验收，T11 的父级通知、T19 和 §10 #10 仍未完成。详情见 `tasks/results/ATLAS-C1-HERMES-CORE.result.md`。
 
 对标对象：Claude Code（CC）、Codex（CX）、ZCode（ZC）、Hermes（HM）、OpenClaw（OC）、Pi、OpenCode（OD）。
 - HM、OC、OD、Pi、CX 开源，下面的文件路径都对应各自仓库当前的 main。`HM@bafb42b` 是 2026-10-01 克隆时的提交号。
@@ -49,7 +49,7 @@
 | L6 | 运行中插话（不打断当前工具） | CX 0.159 `instant_interrupt`：模型输出中途也能转向；Pi 的转向队列；HM `/steer` | ✔ 下一次调用模型前插入（代码 1051 行） | ✔ HM steer | CX 的中途转向（`codex-rs/core/src/tasks`，初判） | C3 |
 | L7 | 消息排队 | HM `/queue`；Pi 的后续消息 | ✔ Hermes steer/排队桥接（`805110c`） | ✔ | — | C1 |
 | L8 | 分阶段分配思考量 | LangChain：规划和验收深想、执行浅想（66.5 对 53.9） | ✘ | ✘ | 在 HM 的 `agent/reasoning_effort.py` 上加按阶段切换 | C5 |
-| L9 | 时间和预算提醒 | LangChain；HM `run_budget_seconds`、`deadline.py` | △ Hermes 时限预算未接入 Atlas 会话设置 | ✔ | — | C1 |
+| L9 | 时间和预算提醒 | LangChain；HM `run_budget_seconds`、`deadline.py` | ✔ Atlas `agent.run_budget_seconds` / `agent.budget_warning_ratio` 接入 Hermes 原有一次性提醒链，默认关闭 | ✔ | 保留 | — |
 | L10 | 每轮自动带上本机环境信息 | LangChain 的环境注入；HM `agent/env_probe.py`、`prompt_builder.py` 的环境提示 | ✔ Hermes 环境提示；SSH 信息仅注入 terminal 环境（`805110c`, `fe31ba1`） | ✔ | — | C1 |
 
 ## 3. 文件与命令工具

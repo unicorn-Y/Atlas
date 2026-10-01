@@ -215,3 +215,38 @@ async def test_runtime_moa_uses_atlas_models_and_fake_reference_consult(tmp_path
     }
     assert "reference says check the migration boundary" in captured["system_message"]
     assert events[-1]["result"]["final_response"] == "primary answer"
+
+
+@pytest.mark.asyncio
+async def test_runtime_bridges_atlas_run_budget_reminders(tmp_path, monkeypatch):
+    monkeypatch.setattr("atlas.config.get_config", lambda: {
+        "agent.run_budget_seconds": 120,
+        "agent.budget_warning_ratio": 0.8,
+    })
+    models = SimpleNamespace(
+        current_model="test-model",
+        current_litellm_model="openai/test-model",
+        gateway_base_url="http://fake.invalid/v1",
+        _api_key="fake-key",
+        list_models=lambda: [{"id": "test-model", "max_output_tokens": 1024}],
+    )
+    agents = []
+
+    class BudgetAgent(FakeHermesAgent):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            agents.append(self)
+
+        def run_conversation(self, *, user_message, system_message, conversation_history):
+            return {"final_response": "budget answer", "messages": conversation_history}
+
+    runtime = HermesRuntime(
+        data_dir=tmp_path / "atlas-data", model_manager=models, agent_factory=BudgetAgent,
+    )
+    events = [event async for event in runtime.run_turn(
+        message="continue", conversation_id="budget-session", workspace=str(tmp_path),
+        history=[], system_message="Atlas rules",
+    )]
+    assert agents[0].run_budget_seconds == 120
+    assert agents[0].budget_warning_ratio == 0.8
+    assert events[-1]["result"]["final_response"] == "budget answer"

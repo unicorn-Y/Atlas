@@ -2,7 +2,9 @@
 
 Hermes source: unicorn-Y/hermes-agent@562ad75baec0c8360f6ce2d48b7d9de56506956c
 (upstream NousResearch/hermes-agent, MIT): run_agent.py::AIAgent,
-agent/system_prompt.py::build_system_prompt, agent/compression_facade.py::_compress_context,
+agent/system_prompt.py::build_system_prompt, agent/turn_context.py::begin_turn_context,
+agent/turn_iteration_prep.py::_maybe_inject_run_budget_warning,
+agent/compression_facade.py::_compress_context,
 agent/plan_prompt.py::build_plan_prompt, tools/mcp_tool_discovery.py::register_mcp_servers.
 Atlas-specific model, session, callback, and event adaptation lives here.
 """
@@ -359,6 +361,23 @@ class HermesRuntime:
                 emit({"type": "run.status", "status": str(kind), "text": text or ""})
 
         settings = self.model_manager
+        from atlas.config import get_config
+
+        atlas_config = get_config()
+        run_budget_seconds = atlas_config.get("agent.run_budget_seconds")
+        try:
+            run_budget_seconds = float(run_budget_seconds)
+            if not (0 < run_budget_seconds < float("inf")):
+                run_budget_seconds = None
+        except (TypeError, ValueError):
+            run_budget_seconds = None
+        budget_warning_ratio = atlas_config.get("agent.budget_warning_ratio")
+        try:
+            budget_warning_ratio = float(budget_warning_ratio)
+            if not (0 < budget_warning_ratio < 1):
+                budget_warning_ratio = None
+        except (TypeError, ValueError):
+            budget_warning_ratio = None
         current = settings.current_model
         model_config = next(
             (item for item in settings.list_models() if item.get("id") == current), {},
@@ -436,6 +455,10 @@ class HermesRuntime:
                 status_callback=on_status,
                 event_callback=on_event,
             )
+            # Hermes' turn-context and iteration-prep hooks read these attributes
+            # directly to inject its one-shot time-budget reminder.
+            agent.run_budget_seconds = run_budget_seconds
+            agent.budget_warning_ratio = budget_warning_ratio
             self._apply_compression_model_setting(agent, settings)
             volatile_prompt = "\n\n".join(
                 str(section).strip() for section in (volatile_context or []) if str(section).strip()
