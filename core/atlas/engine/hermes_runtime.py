@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import getpass
+import json
 import os
 import time
 from pathlib import Path
@@ -307,9 +308,16 @@ class HermesRuntime:
         def on_tool_complete(
             tool_call_id: str, name: str, _arguments: dict[str, Any], result: Any,
         ) -> None:
+            if isinstance(result, str):
+                try:
+                    parsed = json.loads(result)
+                except (ValueError, TypeError):
+                    parsed = None
+                if isinstance(parsed, dict):
+                    result = parsed
             if isinstance(result, dict):
                 text = str(result.get("content", result))
-                is_error = bool(result.get("is_error", False))
+                is_error = bool(result.get("is_error") or result.get("error") or result.get("success") is False)
             else:
                 text = str(result)
                 is_error = False

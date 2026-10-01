@@ -127,7 +127,7 @@ def _pre_tool_call(tool_name: str = "", args: dict[str, Any] | None = None, **kw
         return {"action": "block", "message": "当前对话是只读模式，不能执行写操作。"}
 
     callback = getattr(runtime, "user_hook_callback", None)
-    from atlas.engine.tool_registry import _ALIASES, NATIVE_FILE_TOOLS
+    from atlas.engine.tool_registry import NATIVE_FILE_TOOLS
 
     if name in NATIVE_FILE_TOOLS:
         candidates = [str(arguments.get("path") or ".")]
@@ -169,6 +169,15 @@ def _pre_tool_call(tool_name: str = "", args: dict[str, Any] | None = None, **kw
                 atlas_name, atlas_args = _translate(name, arguments)
                 approved.add(_approval_fingerprint(atlas_name, atlas_args))
 
+    if is_write and name in NATIVE_FILE_TOOLS and not str(runtime.workspace or "").startswith("ssh://"):
+        try:
+            for candidate in candidates:
+                checkpoint = agent._checkpoint_path(candidate, runtime.workspace, runtime.run_id, runtime.conversation_id)
+                _call_async(loop, runtime.event_queue.put, {
+                    "type": "checkpoint_created", "checkpoint": checkpoint, "tool": name,
+                })
+        except Exception as exc:
+            return {"action": "block", "message": f"写前检查点创建失败，操作已取消：{exc}"}
     if is_write and name.startswith("mcp__"):
         failure = _checkpoint_first_write(agent, runtime, loop)
         if failure:
