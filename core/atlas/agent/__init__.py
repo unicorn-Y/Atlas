@@ -2546,25 +2546,22 @@ class AgentOrchestrator:
         )
 
         # Resolve model
-        if model:
-            try:
-                self._model_mgr.select(model)
-            except Exception as exc:
-                yield {
-                    "type": "error", "category": "model",
-                    "detail": f"Model selection failed: {exc}",
-                }
-                return
-        runtime.model = self._model_mgr.current_model
+        runtime.model = model or self._model_mgr.current_model
         selected_config = next(
             (item for item in self._model_mgr.list_models()
              if item.get("id") == runtime.model), {},
         )
+        if model and not selected_config:
+            yield {
+                "type": "error", "category": "model",
+                "detail": f"Model selection failed: Unknown model: {model}",
+            }
+            return
         runtime.fallback_models = list(
             selected_config.get("fallback")
             or get_config().get("models.fallback", []) or []
         )
-        litellm_model = self._model_mgr.current_litellm_model
+        litellm_model = str(selected_config.get("litellm_model") or runtime.model)
 
         log.info(
             "agent.run",
@@ -2897,6 +2894,8 @@ class AgentOrchestrator:
                         reasoning_effort=reasoning_effort,
                         max_output_tokens=selected_config.get("max_output_tokens"),
                         moa_enabled=runtime.moa_enabled,
+                        model_id=runtime.model,
+                        title_callback=on_session_title,
                     ):
                         if event.get("type") == "hermes.result":
                             final_result = event.get("result", {})
@@ -3061,7 +3060,7 @@ class AgentOrchestrator:
             yield {
                 "type": "done",
                 "message_id": msg_id,
-                "model": self._model_mgr.current_model,
+                "model": runtime.model,
             }
 
         except Exception as e:

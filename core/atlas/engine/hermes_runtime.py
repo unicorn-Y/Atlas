@@ -287,6 +287,8 @@ class HermesRuntime:
         max_output_tokens: int | None = None,
         enabled_toolsets: list[str] | None = None,
         moa_enabled: bool = False,
+        model_id: str | None = None,
+        title_callback: Callable[[str, str], Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute one Hermes turn on a worker thread and yield callback events."""
         loop = asyncio.get_running_loop()
@@ -395,10 +397,11 @@ class HermesRuntime:
                 budget_warning_ratio = None
         except (TypeError, ValueError):
             budget_warning_ratio = None
-        current = settings.current_model
+        current = model_id or settings.current_model
         model_config = next(
             (item for item in settings.list_models() if item.get("id") == current), {},
         )
+        litellm_model = str(model_config.get("litellm_model") or current)
         api_key = getattr(settings, "_api_key", None)
         base_url = getattr(settings, "gateway_base_url", None)
         agent = None
@@ -448,7 +451,7 @@ class HermesRuntime:
                 system_message = f"{system_message or ''}\n\n{plan_prompt}".strip()
                 enabled_toolsets = ["atlas-plan"]
             agent = factory(
-                model=settings.current_litellm_model,
+                model=litellm_model,
                 provider="openai",
                 api_mode="openai",
                 base_url=base_url,
