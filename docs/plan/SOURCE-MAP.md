@@ -88,7 +88,7 @@
 | --- | --- | --- | --- | --- |
 | 文件读写、模糊匹配编辑、补丁 | ✅ | H `tools/file_operations*.py`、`fuzzy_match.py`、`patch_parser.py`、`file_state.py` | 对照补强 | |
 | 终端 / 后台进程 | ✅ | H `tools/terminal_tool*.py`、`process_registry*.py` | 对照补强 | |
-| 执行环境（本机、Docker、SSH、云沙箱） | ✅ 本机 / Docker / SSH | H `tools/environments/`（daytona、modal、singularity、vercel_sandbox、ssh、file_sync） | 拷贝改 | `file_sync.py`：远程执行环境的文件同步（按修改时间和大小增量同步、检测删除），SSH 远程目录可以用它补强（已确认） |
+| 执行环境（本机、SSH；**不做沙箱 / 云端环境**，用户决定） | ✅ 本机 / Docker / SSH | H `tools/environments/`（daytona、modal、singularity、vercel_sandbox、ssh、file_sync） | 拷贝改 | `file_sync.py`：远程执行环境的文件同步（按修改时间和大小增量同步、检测删除），SSH 远程目录可以用它补强（已确认） |
 | 代码执行内核 | ✅ execute_code | H `tools/code_kernel*.py`、`code_execution_*.py` | 对照补强 | |
 | LSP | ❌ | H `agent/lsp/` | 拷贝改 | 编程体验加分项 |
 | 改动 diff | ✅ | H `tools/working_diff.py` | 参考 | |

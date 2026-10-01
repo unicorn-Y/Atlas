@@ -32,7 +32,7 @@
 - **用户决定（2026-10-01）**：安全审查由用户亲自做，计划里不做；`core/atlas/safety/` 代码保留但默认关闭。本地语音暂缓（后端已有，前端不接）。
 - 用户当前模型是第三方中转网关上的 DeepSeek（`openai/deepseek-v4.1-flash`），缓存命中拿不到；用量统计正常。
 - **W07 后端已交付（Codex 自标 PARTIAL）**，Claude 审查到一半转交：发现写在 `tasks/taskbooks/ATLAS-W07B-ORCHESTRATION-COMPLETION.md` 第一节（验收误判、汇总时机、看板没有调度器、子任务输出按 token 发事件）。
-- **分工改了（2026-10-01）**：Luna 做后端 + 前端，Sol 审查并修问题，Claude 只维护计划书。
+- **分工与流程（2026-10-01）**：Luna 做后端 + 前端；Sol 审查并修问题；Claude 调度（Luna 做完 → 给 Sol 下审查指令 → 读审查结果 → 给 Luna 下一步），全部做完后 Claude 最终审查（`docs/plan/FINAL-REVIEW.md`）。完整路线 W07B → W14 见总计划第四节。不要沙箱，本机直接运行。
 - **下一步：Luna 执行 W07B**（提示词见下方「给 Luna」），完成后 Sol 审查（「给 Sol」）。
 - 真机测试方法：隔离 `ATLAS_DATA_DIR` + 去掉 MCP 服务器 + 假目录 + 独立端口（W06 审阅记录里有完整做法），不要碰用户 8765 上的开发后端。
 - 用户决定：自动跟踪各家更新做成 Atlas 自己的功能（W12），不另建定时任务。
