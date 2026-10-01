@@ -6810,6 +6810,9 @@ async def _execute_run(
             elif etype == "safety_reviewed":
                 await emit("safety.reviewed", event.get("data", {}))
 
+            elif etype == "run_verify_nudge":
+                await emit("run.verify_nudge", event.get("data", {}))
+
             elif etype == "run_usage":
                 usage = event.get("usage", {})
                 if run.reasoning_effort and run.reasoning_effort_applied is None:

@@ -24,6 +24,7 @@
 | `core/atlas/safety/threats.py` | `NousResearch/hermes-agent` | `tools/threat_patterns.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 移植有界文本扫描与提示注入识别；Atlas 当前模式表为子集 | 2026-10-01 |
 | `core/atlas/safety/policy.py` | `NousResearch/hermes-agent` | `tools/approval.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | Atlas 本地安全设置、永久规则匹配与近期审查日志 | 2026-10-01 |
 | `core/tests/test_safety_foundation.py` | `NousResearch/hermes-agent` | `tests/tools/test_approval_detection.py`, `tests/tools/test_approval_smart.py`, `tests/tools/test_threat_patterns.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 拷贝改 | 覆盖 Windows 危险命令、注入检测和审查输入边界 | 2026-10-01 |
+| `core/atlas/agent/verification_stop.py` | `NousResearch/hermes-agent` | `agent/verification_stop.py` | `663362680b6ffa4fbffeb58f6682564239a1953b` | MIT | 逻辑移植 | 用 Atlas 工具执行记录判断代码编辑后是否有验证命令，文档路径不触发提醒 | 2026-10-01 |
 
 参考提交号（2026-09-30 调研时）：
 - `NousResearch/hermes-agent`：`12e4d3e2dd5281adf289f70e5d6c7f33427d6982`
