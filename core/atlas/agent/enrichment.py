@@ -17,6 +17,8 @@ from typing import Any
 
 import structlog
 
+from atlas.agent.tool_permissions import intersect_tool_allow
+
 log = structlog.get_logger()
 
 # Delegation lifecycle, bounded schema retry, and child-worktree cleanup follow
@@ -883,7 +885,9 @@ class DelegationService:
                                     "agent_type": str(item.get("agent", "general")),
                                     "agent_role": str(item.get("agent_role", "leaf")),
                                     "depth": metadata["depth"],
-                                    "tool_allow": item.get("agent_tools"),
+                                    "tool_allow": intersect_tool_allow(
+                                        (atlas_options or {}).get("tool_allow"), item.get("agent_tools"),
+                                        (atlas_options or {}).get("available_tools", [])),
                                     "model": item.get("agent_model") or (atlas_options or {}).get("model")}
                     parent_permission = str(task_options.get("permission_mode", "full_access"))
                     child_permission = item.get("agent_permission")

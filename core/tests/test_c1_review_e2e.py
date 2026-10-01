@@ -13,10 +13,12 @@ from atlas.tools.local_execution import LocalExecutionRuntime
 from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
 
 
-async def run_script(tmp_path, monkeypatch, script, *, history=None, hermes_config="", **options):
-    monkeypatch.setattr("atlas.config.get_config", lambda: {
+async def run_script(tmp_path, monkeypatch, script, *, history=None, hermes_config="", configure_agent=None, **options):
+    class FixtureConfig(dict):
+        db_path = tmp_path / "store.db"
+    monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
         "tools.servers": {}, "tools.auto_start": [], "agent.verify_before_stop": True,
-    })
+    }))
     with FakeLLMServer(script) as fake:
         write_hermes_home(tmp_path / "engine", fake.base_url)
         if hermes_config:
@@ -34,6 +36,8 @@ async def run_script(tmp_path, monkeypatch, script, *, history=None, hermes_conf
         mcp.tool_count = 0
         local = LocalExecutionRuntime()
         agent = AgentOrchestrator(models, MagicMock(), mcp_client=mcp, local_execution=local)
+        if configure_agent:
+            configure_agent(agent)
         ctx = AgentRunContext(cancel_event=asyncio.Event(), run_id="review-run",
             conversation_id="review-session", workspace=str(tmp_path), **options)
         try:

@@ -477,6 +477,12 @@ class HermesRuntime:
             agent.run_budget_seconds = run_budget_seconds
             if atlas_agent is not None:
                 atlas_context.hermes_agent = agent
+                from tools.registry import registry
+                def atlas_delegate(args: dict[str, Any]) -> str:
+                    if getattr(atlas_agent, "_delegation", None) is None:
+                        return json.dumps({"error": "当前运行没有可用的 Atlas 子任务执行器。"}, ensure_ascii=False)
+                    return registry.get_entry("delegate_task").handler(args, session_id=conversation_id)
+                agent._dispatch_delegate_task = atlas_delegate
             agent.budget_warning_ratio = budget_warning_ratio
             # Continuation/empty-response recovery uses diagnostic _vprint calls,
             # while transport recovery uses the diagnostic lifecycle callback.

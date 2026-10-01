@@ -1479,6 +1479,7 @@ class AgentOrchestrator:
             "permission_mode": permission_mode,
             "allowed_paths": allowed_paths,
             "tool_allow": getattr(ctx, "tool_allow", None),
+            "available_tools": [item["function"]["name"] for item in self._model_facing_tools()],
             "tool_deny": getattr(ctx, "tool_deny", []),
             "cancel_event": ctx.cancel_event,
             "approval_callback": child_approval,
@@ -1915,7 +1916,11 @@ class AgentOrchestrator:
                         agent_model = get_config().get("agents.strong_model") or ctx.model
                     elif agent_model == "inherit":
                         agent_model = ctx.model
-                    tool_allow = definition.get("tools")
+                    from atlas.agent.tool_permissions import intersect_tool_allow
+                    tool_allow = intersect_tool_allow(
+                        atlas_options.get("tool_allow"), definition.get("tools"),
+                        [item["function"]["name"] for item in self._model_facing_tools()],
+                    )
                     permission_rank = {"full_access": 0, "ask_writes": 1, "read_only": 2}
                     parent_permission = str(atlas_options.get("permission_mode", "full_access"))
                     requested_permission = definition.get("permission_mode")

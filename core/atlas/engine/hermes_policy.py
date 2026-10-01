@@ -120,6 +120,9 @@ def _pre_tool_call(tool_name: str = "", args: dict[str, Any] | None = None, **kw
     agent, runtime, loop = active
     arguments = dict(args or {})
     name = str(tool_name)
+    from atlas.agent.tool_permissions import tool_allowed
+    if not tool_allowed(name, getattr(runtime, "tool_allow", None), getattr(runtime, "tool_deny", [])):
+        return {"action": "block", "message": "当前子任务不允许使用这项工具。"}
     mode = str(getattr(runtime, "permission_mode", "full_access"))
     is_write = _write_tool(name, arguments)
     if (mode == "read_only" or getattr(runtime, "mode", "act") == "plan"
