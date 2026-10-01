@@ -2209,7 +2209,15 @@ class AgentOrchestrator:
                         }:
                             raise PermissionError("Plan mode only allows read-only tools")
                     if workspace:
-                        fn_args.setdefault("cwd", workspace)
+                        workspace_bound = (
+                            fn_name in {"local_shell", "local_exec"}
+                            or (fn_name == "local_process" and fn_args.get("action") == "start")
+                        )
+                        if (workspace_bound and not workspace.startswith("ssh://")
+                                and not str(fn_args.get("cwd") or "").strip()):
+                            fn_args["cwd"] = workspace
+                        else:
+                            fn_args.setdefault("cwd", workspace)
                     if fn_name == "local_edit" or (
                         fn_name == "local_file" and fn_args.get("action") in {
                             "write", "append", "mkdir", "copy", "move", "delete",
