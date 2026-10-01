@@ -190,6 +190,23 @@ class TestMessageConversion:
         roles = [m["role"] for m in msgs]
         assert roles == ["system", "user", "assistant", "tool", "assistant"]
 
+    def test_compaction_tail_keeps_complete_multi_tool_cycle(self) -> None:
+        history = [HumanMessage(content="old request")]
+        history.append(AIMessage(content="", tool_calls=[
+            {"name": "read_a", "args": {}, "id": "a"},
+            {"name": "read_b", "args": {}, "id": "b"},
+        ]))
+        history.extend([
+            ToolMessage(content="a result", tool_call_id="a"),
+            ToolMessage(content="b result", tool_call_id="b"),
+        ])
+        history.extend(HumanMessage(content=f"later {index}") for index in range(13))
+
+        recent = AgentOrchestrator._recent_provider_messages(history, limit=14)
+
+        assert recent[0] is history[1]
+        assert recent[1:3] == history[2:4]
+
 
 # ---------------------------------------------------------------------------
 # Execute tools node
@@ -527,6 +544,41 @@ class TestRun:
         mcp_client.call_tool.assert_awaited_once_with("fs__read", {"path": "README.md"})
         tool_call = next(event for event in events if event["type"] == "tool_call")
         assert tool_call["arguments"] == {"path": "README.md"}
+
+    async def test_run_retries_malformed_streamed_tool_arguments(self, orchestrator, mcp_client):
+        orchestrator._mcp.get_tools_for_llm.return_value = [
+            {"type": "function", "function": {"name": "fs__read", "parameters": {}}}
+        ]
+        calls = 0
+
+        async def fake_acompletion(*, stream, **kwargs):
+            nonlocal calls
+            calls += 1
+            assert stream is True
+            if calls == 1:
+                async def malformed_stream():
+                    fragment = SimpleNamespace(
+                        index=0, id="bad-call",
+                        function=SimpleNamespace(name="fs__read", arguments='{"path": }'),
+                    )
+                    yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(
+                        content=None, tool_calls=[fragment],
+                    ))])
+                return malformed_stream()
+
+            async def final_stream():
+                yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(
+                    content="recovered", tool_calls=None,
+                ))])
+            return final_stream()
+
+        with patch("atlas.agent.acompletion", side_effect=fake_acompletion):
+            events = [event async for event in orchestrator.run("read", "malformed-tool-conv")]
+
+        assert calls == 2
+        assert not any(event["type"] == "tool_call" for event in events)
+        assert any(event["type"] == "chunk" and event["content"] == "recovered" for event in events)
+        mcp_client.call_tool.assert_not_awaited()
 
     async def test_concurrent_runs_keep_approval_contexts_isolated(
         self, orchestrator, mcp_client

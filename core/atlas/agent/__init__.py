@@ -1,9 +1,14 @@
 """Atlas Agent Orchestrator — LangGraph state-machine with tool calling."""
 
+# W07 orchestration adapters are informed by NousResearch/hermes-agent at
+# 330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3 (MIT): delegation context,
+# todo state, kanban tool contracts, and the MoA loop; implemented on Atlas runs.
+
 from __future__ import annotations
 
 import asyncio
 import copy
+from datetime import date
 import fnmatch
 import inspect
 import json
@@ -43,6 +48,7 @@ from atlas.agent.enrichment import (
     SystemReminders,
     TrajectoryReviewer,
 )
+from atlas.agent.todo_state import TodoStore
 from atlas.agent.results import externalize_tool_output
 from atlas.agent.error_classifier import classify_api_error
 from atlas.agent.fallback_cooldown import cool as cool_model
@@ -129,6 +135,7 @@ Core principles:
   `remember: key = value` or `记住：key = value`, or when the user asks you
   to remember/note something — in that case call the `remember` tool with a
   concise key and the exact value, and confirm what you saved
+- Save repeatable project guidance (test/build commands, code conventions, stable user preferences, and pitfalls) with project_note; do not store one-time task details.
 
 You have access to various tools through MCP servers. Use them proactively
 when they would help accomplish the user's goal.
@@ -146,6 +153,56 @@ def _positive_limit(value: Any, *, default: int, maximum: int) -> int:
     except (TypeError, ValueError):
         return default
     return min(max(limit, 1), maximum)
+
+
+def _render_delegation_recipe(recipe_value: Any) -> tuple[dict[str, Any], str]:
+    """Resolve an existing Atlas recipe for single or parallel delegation."""
+    if not isinstance(recipe_value, dict) or not isinstance(recipe_value.get("id"), str):
+        raise ValueError("recipe requires an id and optional params object")
+    params = recipe_value.get("params", {})
+    if not isinstance(params, dict):
+        raise ValueError("recipe.params must be an object")
+    from atlas.task_artifacts import TomlRecordStore
+
+    recipe = TomlRecordStore(get_config().db_path.parent, "recipes").get(recipe_value["id"])
+    if recipe is None:
+        raise ValueError("找不到这个配方。")
+    rendered = recipe["prompt"]
+    missing = []
+    for param in recipe.get("params", []):
+        name = param["name"]
+        value = params.get(name, param.get("default"))
+        if value is None:
+            missing.append(name)
+        else:
+            rendered = rendered.replace("{{" + name + "}}", str(value))
+    if missing:
+        raise ValueError("配方缺少参数：" + ", ".join(missing))
+    return recipe, rendered
+
+
+def _append_project_note(path: Path, section: str, note: str) -> None:
+    content = path.read_text(encoding="utf-8") if path.is_file() else ""
+    sections: list[tuple[str, list[str]]] = []
+    heading = ""
+    entries: list[str] = []
+    for line in content.splitlines():
+        if line.startswith("## "):
+            if heading:
+                sections.append((heading, entries))
+            heading, entries = line, []
+        elif line.strip():
+            entries.append(line)
+    if heading:
+        sections.append((heading, entries))
+    if f"## {section}" not in {item[0] for item in sections}:
+        sections.append((f"## {section}", []))
+    rendered = "\n\n".join("\n".join([title, *rows[-20:]]) for title, rows in sections)
+    if len(rendered.encode("utf-8")) > 8192:
+        sections = [(title, rows[-10:]) for title, rows in sections[-20:]]
+        rendered = "\n\n".join("\n".join([title, *rows]) for title, rows in sections)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text((rendered + f"\n- {date.today().isoformat()}: {note}\n")[-8192:], encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +227,12 @@ class AgentRunContext:
     steer_queue: asyncio.Queue[dict[str, str]] | None = None
     input_callback: Callable[[str, str, list[str] | None], Any] | None = None
     workspace: str | None = None
+    workspace_trusted: bool = False
+    agent_role: str = "general"
+    agent_depth: int = 0
+    agent_type: str = "general"
+    todo_store: TodoStore = field(default_factory=TodoStore)
+    moa_enabled: bool = False
     mode: str = "act"
     tool_allow: list[str] | None = None
     tool_deny: list[str] = field(default_factory=list)
@@ -419,7 +482,11 @@ class AgentOrchestrator:
         self, *, goal: str, context: str | None, cwd: str | None, subtask_id: str,
         atlas_options: dict[str, Any], on_progress: Callable[[str], Any],
     ) -> dict[str, Any]:
-        """Run a bounded child loop through this orchestrator with the parent's policy."""
+        """Run a bounded child loop through this orchestrator with the parent's policy.
+
+        Steering queue behavior follows Hermes Agent delegation_context.py
+        (330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3, MIT), adapted to Atlas events.
+        """
         conversation_id = await self._memory.create_conversation("Atlas 子任务")
         options = dict(atlas_options)
         cancel_event = options.get("cancel_event") or asyncio.Event()
@@ -434,6 +501,15 @@ class AgentOrchestrator:
         )
         status = "completed"
         parent_approval = options.get("approval_callback")
+        child_role = str(options.get("agent_role", "leaf"))
+        child_depth = int(options.get("depth", 0))
+        max_spawn_depth = int(options.get("max_spawn_depth", 2))
+        delegate_denials = []
+        if child_role != "orchestrator" or child_depth >= max_spawn_depth:
+            delegate_denials.extend(["delegate_task", "delegate_parallel"])
+        if child_role == "leaf":
+            delegate_denials.extend(["ask_user", "remember", "session_search",
+                                     "project_sources_search", "use_skill"])
 
         async def approval_callback(
             event_id: str, tool_name: str, arguments: dict[str, Any],
@@ -451,15 +527,23 @@ class AgentOrchestrator:
                 model=options.get("model"), cancel_event=cancel_event,
                 approval_callback=approval_callback,
                 workspace=cwd, mode="act", tool_allow=options.get("tool_allow"),
-                tool_deny=list(options.get("tool_deny") or []) + [
-                    "delegate_task", "delegate_parallel",
+                tool_deny=list(options.get("tool_deny") or []) + delegate_denials + [
+                    "subtask_message", "subtask_status",
                 ], permission_mode=options.get("permission_mode", "full_access"),
                 allowed_paths=options.get("allowed_paths") or [],
+                steer_queue=options.get("steer_queue"),
+                workspace_trusted=bool(options.get("workspace_trusted", False)),
+                agent_role=child_role, agent_depth=child_depth,
+                agent_type=str(options.get("agent_type", "general")),
                 user_hook_callback=options.get("user_hook_callback"),
                 ssh_tool_callback=options.get("ssh_tool_callback"),
                 ssh_checkpoint_callback=options.get("ssh_checkpoint_callback"),
                 sandbox_tool_callback=options.get("sandbox_tool_callback"),
                 sandbox_enabled=bool(options.get("sandbox_enabled")),
+                subtask_started=options.get("subtask_started"),
+                subtask_progress=options.get("subtask_progress"),
+                subtask_completed=options.get("subtask_completed"),
+                subtask_group_completed=options.get("subtask_group_completed"),
                 run_id=subtask_id, max_tool_rounds=12, worker=True,
             ):
                 kind = event.get("type")
@@ -663,6 +747,60 @@ class AgentOrchestrator:
                     }, "required": ["key", "value"], "additionalProperties": False},
                 },
             }]
+        tools.append({"type": "function", "function": {
+            "name": "todo_list",
+            "description": "Track a bounded task list for multi-step work. Replace or merge with todos; call with no todos to read. List every required item, keep one in_progress, and mark completed only after verification.",
+            "parameters": {"type": "object", "properties": {
+                "todos": {"type": "array", "items": {"type": "object", "properties": {
+                    "id": {"type": "string"}, "content": {"type": "string"},
+                    "status": {"type": "string", "enum": ["pending", "in_progress", "completed", "cancelled"]},
+                    "parent": {"type": "string"},
+                }, "required": ["id", "content", "status"]}},
+                "merge": {"type": "boolean"},
+            }, "required": [], "additionalProperties": False},
+        }})
+        tools.append({"type": "function", "function": {
+            "name": "project_note",
+            "description": "Append durable project guidance to .atlas/NOTES.md. Use for repeatable test/build commands, code conventions, user preferences, and known pitfalls. Do not store one-time task details.",
+            "parameters": {"type": "object", "properties": {
+                "section": {"type": "string"}, "text": {"type": "string"},
+            }, "required": ["section", "text"], "additionalProperties": False},
+        }})
+        tools.extend([{
+            "type": "function", "function": {
+                "name": "kanban_create_board", "description": "Create a named Atlas coordination board.",
+                "parameters": {"type": "object", "properties": {
+                    "name": {"type": "string"}, "board_id": {"type": "string"},
+                }, "required": ["name"], "additionalProperties": False},
+            },
+        }, {
+            "type": "function", "function": {
+                "name": "kanban_list", "description": "List task cards on an Atlas coordination board.",
+                "parameters": {"type": "object", "properties": {
+                    "board_id": {"type": "string"},
+                }, "required": ["board_id"], "additionalProperties": False},
+            },
+        }, {
+            "type": "function", "function": {
+                "name": "kanban_create_task", "description": "Create a task card with assignee and dependency ids.",
+                "parameters": {"type": "object", "properties": {
+                    "board_id": {"type": "string"}, "title": {"type": "string"},
+                    "description": {"type": "string"}, "assignee": {"type": "string"},
+                    "dependencies": {"type": "array", "items": {"type": "string"}},
+                    "run_id": {"type": "string"},
+                }, "required": ["board_id", "title"], "additionalProperties": False},
+            },
+        }, {
+            "type": "function", "function": {
+                "name": "kanban_update_task", "description": "Claim or update a task card. Set status to running to claim, review for verification, or done after acceptance.",
+                "parameters": {"type": "object", "properties": {
+                    "board_id": {"type": "string"}, "task_id": {"type": "string"},
+                    "status": {"type": "string", "enum": ["todo", "running", "blocked", "review", "done"]},
+                    "assignee": {"type": "string"}, "output": {"type": "string"},
+                    "run_id": {"type": "string"},
+                }, "required": ["board_id", "task_id"], "additionalProperties": False},
+            },
+        }])
         if self._projects is not None:
             tools.append({"type": "function", "function": {
                 "name": "project_sources_search",
@@ -808,13 +946,21 @@ class AgentOrchestrator:
                 "function": {
                     "name": "delegate_task",
                     "description": (
-                        "Delegate one bounded investigation to a disposable Agent session."
+                        "Delegate one bounded task. agent may be explore, researcher, plan, oracle, "
+                        "verifier, general, or a trusted installed definition. Parallelize only "
+                        "independent read-oriented work; keep dependent steps and shared-file edits serial."
                     ),
                     "parameters": {"type": "object", "properties": {
                         "goal": {"type": "string"}, "context": {"type": "string"},
                         "tool_profile": {"type": "array", "items": {"type": "string"}},
                         "executor": {"type": "string"},
-                    }, "required": ["goal"], "additionalProperties": False},
+                        "agent": {"type": "string"},
+                        "background": {"type": "boolean"},
+                        "output_schema": {"type": ["object", "string", "null"]},
+                        "recipe": {"type": ["object", "null"], "properties": {
+                            "id": {"type": "string"}, "params": {"type": "object"},
+                        }, "required": ["id"], "additionalProperties": False},
+                    }, "required": [], "additionalProperties": False},
                 },
             })
             tools.append({
@@ -831,13 +977,38 @@ class AgentOrchestrator:
                                       "title": {"type": "string"},
                                       "goal": {"type": "string"},
                                       "context": {"type": ["string", "null"]},
-                                  }, "required": ["title", "goal"],
+                                      "output_schema": {"type": ["object", "string", "null"]},
+                                      "agent": {"type": "string"},
+                                      "recipe": {"type": ["object", "null"], "properties": {
+                                          "id": {"type": "string"}, "params": {"type": "object"},
+                                      }, "required": ["id"], "additionalProperties": False},
+                                  }, "required": ["title"],
                                       "additionalProperties": False}},
-                        "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 4},
+                        "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 8},
                         "executor": {"type": "string"},
+                        "verify": {"type": ["object", "null"], "properties": {
+                            "criteria": {"type": "string"},
+                        }, "required": ["criteria"], "additionalProperties": False},
+                        "background": {"type": "boolean"},
                     }, "required": ["tasks"], "additionalProperties": False},
                 },
             })
+            tools.extend([
+                {"type": "function", "function": {
+                    "name": "subtask_status",
+                    "description": "查看一个子任务的状态、最近进度和完成结果。",
+                    "parameters": {"type": "object", "properties": {
+                        "subtask_id": {"type": "string"},
+                    }, "required": ["subtask_id"], "additionalProperties": False},
+                }},
+                {"type": "function", "function": {
+                    "name": "subtask_message",
+                    "description": "向仍在运行的子任务补充要求；消息会在子 Agent 下一轮开始时送达。",
+                    "parameters": {"type": "object", "properties": {
+                        "subtask_id": {"type": "string"}, "text": {"type": "string"},
+                    }, "required": ["subtask_id", "text"], "additionalProperties": False},
+                }},
+            ])
         tools.append({
             "type": "function", "function": {
                 "name": "ask_user",
@@ -869,7 +1040,9 @@ class AgentOrchestrator:
         allowed = getattr(runtime, "tool_allow", None)
         denied_tools = getattr(runtime, "tool_deny", [])
         if allowed is not None:
-            tools = [item for item in tools if item["function"]["name"] in allowed]
+            tools = [item for item in tools if any(
+                fnmatch.fnmatchcase(item["function"]["name"], pattern) for pattern in allowed
+            )]
         if denied_tools:
             tools = [item for item in tools if item["function"]["name"] not in denied_tools]
         if getattr(self, "_projects", None) is None or not getattr(runtime, "project_id", None):
@@ -930,10 +1103,7 @@ class AgentOrchestrator:
                 (item for item in state["messages"] if isinstance(item, SystemMessage)),
                 SystemMessage(content=SYSTEM_PROMPT),
             )
-            recent_messages = [
-                item for item in state["messages"][-12:]
-                if not isinstance(item, SystemMessage)
-            ]
+            recent_messages = self._recent_provider_messages(state["messages"], limit=12)
             reviewer_messages = [
                 item for item in state["messages"]
                 if isinstance(item, SystemMessage)
@@ -948,6 +1118,9 @@ class AgentOrchestrator:
                 *reviewer_messages[-1:],
                 *recent_messages,
             ]
+            preserved_todos = runtime.todo_store.format_for_injection()
+            if preserved_todos:
+                compact_messages.append(HumanMessage(content=preserved_todos))
             lc_messages = self._to_litellm_messages(compact_messages)
         else:
             lc_messages = self._to_litellm_messages(state["messages"])
@@ -1001,6 +1174,42 @@ class AgentOrchestrator:
             kwargs["tool_choice"] = "auto"
         if getattr(runtime, "reasoning_effort", None):
             kwargs["reasoning_effort"] = runtime.reasoning_effort
+        if runtime.moa_enabled:
+            reference_models = get_config().get("moa.reference_models", []) or []
+            max_references = _positive_limit(
+                get_config().get("moa.max_references", 3), default=3, maximum=8,
+            )
+            reference_models = [str(item) for item in reference_models[:max_references]
+                                if str(item) and str(item) != litellm_model]
+            if reference_models:
+                started = time.perf_counter()
+
+                async def consult(reference_model: str) -> tuple[str, str]:
+                    try:
+                        response = await acompletion(
+                            model=reference_model, messages=copy.deepcopy(lc_messages),
+                            max_tokens=1200, stream=False,
+                        )
+                        field = lambda value, key, default=None: (
+                            value.get(key, default) if isinstance(value, dict)
+                            else getattr(value, key, default)
+                        )
+                        choices = field(response, "choices", []) or []
+                        message = field(choices[0], "message", {}) if choices else {}
+                        content = field(message, "content", "") if message else ""
+                        return reference_model, str(content or "")[:6000]
+                    except Exception as exc:
+                        return reference_model, f"参考模型调用失败：{type(exc).__name__}"
+
+                references = await asyncio.gather(*(consult(name) for name in reference_models))
+                latency_ms = int((time.perf_counter() - started) * 1000)
+                reference_data = [{"model": name, "text": text} for name, text in references]
+                lc_messages.append({"role": "system", "content":
+                    "Reference model opinions (advisory; check them against evidence):\n" +
+                    "\n\n".join(f"[{name}]\n{text}" for name, text in references)})
+                await runtime.event_queue.put({"type": "moa_references",
+                    "models": reference_models, "references": reference_data,
+                    "latency_ms": latency_ms})
         # OpenAI-compatible streams only report usage (incl. cached tokens) when asked to.
         if litellm_model not in _STREAM_USAGE_UNSUPPORTED:
             kwargs["stream_options"] = {"include_usage": True}
@@ -1164,6 +1373,15 @@ class AgentOrchestrator:
                 if finish_reason == "length":
                     incomplete_tool_arguments = True
                     break
+                if runtime.truncated_tool_retries < 1:
+                    runtime.truncated_tool_retries += 1
+                    state["messages"].extend([
+                        AIMessage(content=full_text),
+                        HumanMessage(content=(
+                            "上一轮工具参数无法解析，Atlas 未执行该操作。请重新生成完整、合法的单个 JSON 对象作为工具参数。"
+                        )),
+                    ])
+                    return await self._think_node(state)
                 raise ValueError(
                     f"Malformed arguments for streamed tool call {fragment['id'] or index}: {exc}"
                 ) from exc
@@ -1258,6 +1476,15 @@ class AgentOrchestrator:
             "ssh_checkpoint_callback": ssh_checkpoint_callback,
             "sandbox_tool_callback": getattr(ctx, "sandbox_tool_callback", None),
             "sandbox_enabled": getattr(ctx, "sandbox_enabled", False),
+            "workspace_trusted": getattr(ctx, "workspace_trusted", False),
+            "agent_role": getattr(ctx, "agent_role", "leaf"),
+            "agent_type": getattr(ctx, "agent_type", "general"),
+            "depth": getattr(ctx, "agent_depth", 0),
+            "max_spawn_depth": int(get_config().get("delegation.max_spawn_depth", 2)),
+            "subtask_started": getattr(ctx, "subtask_started", None),
+            "subtask_progress": getattr(ctx, "subtask_progress", None),
+            "subtask_completed": getattr(ctx, "subtask_completed", None),
+            "subtask_group_completed": getattr(ctx, "subtask_group_completed", None),
         }
 
         for tc in last.tool_calls:
@@ -1594,13 +1821,117 @@ class AgentOrchestrator:
                     result = {"data": {"answer": answer},
                               "content": [{"type": "text", "text": str(answer)}],
                               "is_error": False}
+                elif fn_name == "project_note":
+                    if ctx.agent_type not in {"general", "verifier"}:
+                        raise ValueError("只有主 Agent 和 general 类型可以写项目记事本。")
+                    if not ctx.workspace or not ctx.workspace_trusted or ctx.workspace.startswith("ssh://"):
+                        raise ValueError("需要已信任的本地工作目录才能写项目记事本。")
+                    section = str(fn_args["section"]).strip()[:100]
+                    note = str(fn_args["text"]).strip()[:4000]
+                    if not section or not note:
+                        raise ValueError("section 和 text 不能为空。")
+                    notes_path = Path(ctx.workspace).resolve() / ".atlas" / "NOTES.md"
+                    _append_project_note(notes_path, section, note)
+                    result = {"data": {"path": str(notes_path), "section": section},
+                              "content": [{"type": "text", "text": "已追加项目记事。"}],
+                              "is_error": False}
+                elif fn_name.startswith("kanban_"):
+                    from atlas.kanban import KanbanStore
+
+                    store = KanbanStore(get_config().db_path)
+                    if fn_name == "kanban_create_board":
+                        data = store.create_board(str(fn_args["name"]), fn_args.get("board_id"))
+                    elif fn_name == "kanban_list":
+                        board_id = str(fn_args["board_id"])
+                        data = store.tasks(board_id)
+                    elif fn_name == "kanban_create_task":
+                        board_id = str(fn_args["board_id"])
+                        data = store.create_task(board_id, fn_args)
+                    else:
+                        board_id = str(fn_args["board_id"])
+                        task_id = str(fn_args.pop("task_id"))
+                        data = store.update_task(board_id, task_id, {
+                            key: value for key, value in fn_args.items() if key != "board_id"
+                        })
+                    result = {"data": data, "content": [{
+                        "type": "text", "text": json.dumps(data, ensure_ascii=False),
+                    }], "is_error": False}
+                elif fn_name == "todo_list":
+                    if fn_args.get("todos") is not None:
+                        snapshot = ctx.todo_store.write(
+                            fn_args["todos"], merge=bool(fn_args.get("merge", False)),
+                        )
+                    else:
+                        snapshot = ctx.todo_store.snapshot()
+                    await ctx.event_queue.put({"type": "run_todos", **snapshot})
+                    result = {"data": snapshot, "content": [{
+                        "type": "text", "text": json.dumps(snapshot, ensure_ascii=False),
+                    }], "is_error": False}
                 elif fn_name == "delegate_task":
                     if self._delegation is None:
                         raise RuntimeError("No AgentBackendHost is configured for delegation")
+                    from atlas.agent.definitions import list_agent_types
+
+                    requested_agent = str(fn_args.get("agent", "general"))
+                    definitions = list_agent_types(
+                        get_config().db_path.parent,
+                        Path(ctx.workspace).resolve() if ctx.workspace else None,
+                        ctx.workspace_trusted,
+                    )
+                    definition = next((item for item in definitions
+                                       if item["name"] == requested_agent and not item["warnings"]), None)
+                    unknown_agent = definition is None or not definition.get("trusted", False)
+                    if unknown_agent:
+                        definition = next(item for item in definitions if item["name"] == "general")
+                    agent_model = definition.get("model", "inherit")
+                    if agent_model == "fast":
+                        agent_model = get_config().get("agents.fast_model") or ctx.model
+                    elif agent_model == "strong":
+                        agent_model = get_config().get("agents.strong_model") or ctx.model
+                    elif agent_model == "inherit":
+                        agent_model = ctx.model
+                    tool_allow = definition.get("tools")
+                    permission_rank = {"full_access": 0, "ask_writes": 1, "read_only": 2}
+                    parent_permission = str(atlas_options.get("permission_mode", "full_access"))
+                    requested_permission = definition.get("permission_mode")
+                    child_permission = parent_permission
+                    if (requested_permission in permission_rank and
+                            permission_rank[requested_permission] > permission_rank.get(parent_permission, 0)):
+                        child_permission = requested_permission
+                    child_options = {**atlas_options, "workspace_trusted": ctx.workspace_trusted,
+                                     "agent_role": definition.get("role", "leaf"),
+                                     "agent_type": definition["name"],
+                                     "depth": ctx.agent_depth + 1, "model": agent_model,
+                                     "permission_mode": child_permission,
+                                     "max_spawn_depth": int(get_config().get(
+                                         "delegation.max_spawn_depth", 2)),
+                                     "tool_allow": tool_allow}
+                    delegated_goal = fn_args.get("goal")
+                    delegated_context = fn_args.get("context")
+                    recipe_id = None
+                    if fn_args.get("recipe") is not None:
+                        recipe, rendered = _render_delegation_recipe(fn_args["recipe"])
+                        recipe_id = recipe["id"]
+                        delegated_goal = f"执行 Atlas 配方：{recipe['name']}"
+                        delegated_context = "\n\n".join(filter(None, [rendered, delegated_context]))
+                    if not isinstance(delegated_goal, str) or not delegated_goal.strip():
+                        raise ValueError("delegate_task requires goal or recipe")
                     result = {"data": await self._delegation.delegate_task(
-                        str(fn_args["goal"]), fn_args.get("context"), fn_args.get("tool_profile"),
+                        delegated_goal, delegated_context, fn_args.get("tool_profile"),
                         executor=str(fn_args.get("executor", "atlas")),
-                        atlas_options=atlas_options,
+                        background=bool(fn_args.get("background", False)),
+                        output_schema=fn_args.get("output_schema", definition.get("output_schema")),
+                        event_metadata={
+                            "agent": definition["name"],
+                            "role": definition.get("role", "leaf"),
+                            "background": bool(fn_args.get("background", False)),
+                            "model": agent_model,
+                            "recipe_id": recipe_id,
+                            "depth": ctx.agent_depth + 1,
+                            **({"warning": f"Agent type {requested_agent!r} unavailable or untrusted; using general."}
+                               if unknown_agent else {}),
+                        },
+                        atlas_options=child_options,
                         on_started=getattr(ctx, "subtask_started", None),
                         on_progress=getattr(ctx, "subtask_progress", None),
                         on_completed=getattr(ctx, "subtask_completed", None),
@@ -1613,12 +1944,70 @@ class AgentOrchestrator:
                         result["data"], ensure_ascii=False,
                     )}]
                     result["is_error"] = False
+                elif fn_name == "subtask_status":
+                    status = self._delegation.subtask_status(str(fn_args["subtask_id"]))
+                    if status is None:
+                        raise ValueError("找不到这个子任务。")
+                    result = {"data": status, "content": [{
+                        "type": "text", "text": json.dumps(status, ensure_ascii=False),
+                    }], "is_error": False}
+                elif fn_name == "subtask_message":
+                    subtask_id = str(fn_args["subtask_id"])
+                    text = str(fn_args["text"])
+                    if not self._delegation.steer_subtask(subtask_id, text):
+                        raise ValueError("子任务不存在、已结束，或不支持运行中引导。")
+                    steered = {"type": "subtask_steered", "subtask_id": subtask_id,
+                               "text": text.strip()}
+                    if ctx.event_queue is not None:
+                        await ctx.event_queue.put(steered)
+                    result = {"data": {"subtask_id": subtask_id, "queued": True},
+                              "content": [{"type": "text", "text": "补充要求已排队，将在子 Agent 下一轮送达。"}],
+                              "is_error": False}
                 elif fn_name == "delegate_parallel":
                     if self._delegation is None:
                         raise RuntimeError("No AgentBackendHost is configured for delegation")
+                    from atlas.agent.definitions import list_agent_types
+
+                    parallel_tasks = []
+                    parallel_definitions = list_agent_types(
+                        get_config().db_path.parent,
+                        Path(ctx.workspace).resolve() if ctx.workspace else None,
+                        ctx.workspace_trusted,
+                    )
+                    for item in fn_args["tasks"]:
+                        task = dict(item)
+                        if task.get("recipe") is not None:
+                            recipe, rendered = _render_delegation_recipe(task["recipe"])
+                            task["recipe_id"] = recipe["id"]
+                            task["goal"] = f"执行 Atlas 配方：{recipe['name']}"
+                            task["context"] = "\n\n".join(filter(
+                                None, [rendered, task.get("context")],
+                            ))
+                        if not str(task.get("goal", "")).strip():
+                            raise ValueError("每个并行项需要 goal 或 recipe")
+                        requested_type = str(task.get("agent", "general"))
+                        definition = next((entry for entry in parallel_definitions
+                                           if entry["name"] == requested_type and not entry["warnings"]), None)
+                        if definition is None or not definition.get("trusted", False):
+                            definition = next(entry for entry in parallel_definitions if entry["name"] == "general")
+                            task["agent_warning"] = f"Agent type {requested_type!r} unavailable or untrusted; using general."
+                        task["agent"] = definition["name"]
+                        task["agent_role"] = definition.get("role", "leaf")
+                        task["agent_model"] = definition.get("model", "inherit")
+                        if task["agent_model"] == "fast":
+                            task["agent_model"] = get_config().get("agents.fast_model") or ctx.model
+                        elif task["agent_model"] == "strong":
+                            task["agent_model"] = get_config().get("agents.strong_model") or ctx.model
+                        elif task["agent_model"] == "inherit":
+                            task["agent_model"] = ctx.model
+                        task["agent_tools"] = definition.get("tools")
+                        task["agent_permission"] = definition.get("permission_mode")
+                        parallel_tasks.append(task)
                     data = await self._delegation.delegate_parallel(
-                        list(fn_args["tasks"]),
-                        max_concurrency=int(fn_args.get("max_concurrency", 3)),
+                        parallel_tasks,
+                        max_concurrency=int(fn_args.get(
+                            "max_concurrency", get_config().get("delegation.max_concurrent_children", 3),
+                        )),
                         cwd=workspace,
                         cancel_event=ctx.cancel_event,
                         summarize=self._summarize_parallel_results,
@@ -1628,6 +2017,8 @@ class AgentOrchestrator:
                         on_group_completed=getattr(ctx, "subtask_group_completed", None),
                         executor=str(fn_args.get("executor", "atlas")),
                         atlas_options=atlas_options,
+                        verify=fn_args.get("verify"),
+                        background=bool(fn_args.get("background", False)),
                     )
                     result = {"data": data,
                               "content": [{"type": "text", "text": data["summary"]}],
@@ -2031,6 +2422,11 @@ class AgentOrchestrator:
         steer_queue: asyncio.Queue[dict[str, str]] | None = None,
         input_callback: Callable[[str, str, list[str] | None], Any] | None = None,
         workspace: str | None = None,
+        workspace_trusted: bool = False,
+        agent_role: str = "general",
+        agent_depth: int = 0,
+        agent_type: str = "general",
+        moa: bool = False,
         workspace_rules: list[dict[str, Any]] | None = None,
         mode: str = "act",
         tool_allow: list[str] | None = None,
@@ -2077,6 +2473,9 @@ class AgentOrchestrator:
             {"type": "done", "message_id": "...", "model": "..."}
             {"type": "error", "detail": "..."}
         """
+        moa_enabled = moa or message.lstrip().startswith("/moa")
+        if message.lstrip().startswith("/moa"):
+            message = message.lstrip()[4:].lstrip()
         runtime = AgentRunContext(
             cancel_event=cancel_event,
             pause_event=pause_event,
@@ -2087,7 +2486,9 @@ class AgentOrchestrator:
             project_id=project_id,
             reminders=SystemReminders(self.reminder_policy),
             steer_queue=steer_queue, input_callback=input_callback,
-            workspace=workspace, mode=mode,
+            workspace=workspace, workspace_trusted=workspace_trusted,
+            agent_role=agent_role, agent_depth=agent_depth, agent_type=agent_type, mode=mode,
+            moa_enabled=moa_enabled,
             tool_allow=tool_allow, tool_deny=tool_deny or [], read_only=read_only,
             permission_mode=permission_mode, allowed_paths=allowed_paths or [],
             user_hook_callback=user_hook_callback,
@@ -2713,6 +3114,23 @@ class AgentOrchestrator:
             "evidence": evidence.strip(),
             "reason": reason.strip(),
         }
+
+    @staticmethod
+    def _recent_provider_messages(messages: list[BaseMessage], *, limit: int) -> list[BaseMessage]:
+        """Keep a compacted tail aligned to complete provider tool-call cycles."""
+        history = [item for item in messages if not isinstance(item, SystemMessage)]
+        start = max(0, len(history) - limit)
+        if start < len(history) and isinstance(history[start], ToolMessage):
+            assistant = start - 1
+            while assistant >= 0 and isinstance(history[assistant], ToolMessage):
+                assistant -= 1
+            if (assistant >= 0 and isinstance(history[assistant], AIMessage)
+                    and history[assistant].tool_calls):
+                start = assistant
+            else:
+                while start < len(history) and isinstance(history[start], ToolMessage):
+                    start += 1
+        return history[start:]
 
     @staticmethod
     def _to_litellm_messages(messages: list[BaseMessage]) -> list[dict[str, Any]]:
