@@ -10,9 +10,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from pathlib import Path
 import re
 import threading
+from pathlib import Path
 from typing import Any
 
 _installed: set[int] = set()
@@ -83,6 +83,45 @@ def _call_async(loop: asyncio.AbstractEventLoop, callback: Any, *args: Any) -> A
     return result
 
 
+async def _wait_if_paused(runtime: Any) -> bool:
+    """Wait while paused; return True when cancellation wins the race."""
+    pause_event = getattr(runtime, "pause_event", None)
+    cancel_event = getattr(runtime, "cancel_event", None)
+    if pause_event is None or pause_event.is_set():
+        return bool(cancel_event is not None and cancel_event.is_set())
+    if cancel_event is not None and cancel_event.is_set():
+        return True
+    pause_task = asyncio.create_task(pause_event.wait())
+    cancel_task = asyncio.create_task(cancel_event.wait()) if cancel_event is not None else None
+    tasks = {pause_task, *([cancel_task] if cancel_task else [])}
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        return cancel_task in done and cancel_task.result()
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _blocked(
+    runtime: Any,
+    loop: asyncio.AbstractEventLoop,
+    name: str,
+    kwargs: dict[str, Any],
+    message: str,
+) -> dict[str, str]:
+    """Bridge Hermes pre-hook blocks to Atlas' native failure event exactly once."""
+    call_id = str(kwargs.get("tool_call_id") or "")
+    event_queue = getattr(runtime, "event_queue", None)
+    if call_id and event_queue is not None:
+        _call_async(loop, event_queue.put, {
+            "type": "tool_result", "id": call_id, "name": name,
+            "content": [{"type": "text", "text": message}], "is_error": True,
+        })
+    return {"action": "block", "message": message}
+
+
 def _checkpoint_first_write(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) -> str | None:
     """Snapshot the current local or SSH workspace once before its first write."""
     if getattr(runtime, "hermes_write_checkpoint_created", False):
@@ -113,57 +152,91 @@ def _checkpoint_first_write(agent: Any, runtime: Any, loop: asyncio.AbstractEven
     return None
 
 
-def _pre_tool_call(tool_name: str = "", args: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, str] | None:
+def _pre_tool_call(
+    tool_name: str = "", args: dict[str, Any] | None = None, **kwargs: Any,
+) -> dict[str, str] | None:
     active = _active(str(kwargs.get("session_id") or ""))
     if active is None:
         return None
     agent, runtime, loop = active
     arguments = dict(args or {})
     name = str(tool_name)
-    from atlas.agent.tool_permissions import tool_allowed
-    if not tool_allowed(name, getattr(runtime, "tool_allow", None), getattr(runtime, "tool_deny", [])):
-        return {"action": "block", "message": "当前子任务不允许使用这项工具。"}
+    if _call_async(loop, _wait_if_paused, runtime):
+        return _blocked(runtime, loop, name, kwargs, "运行已取消，工具未执行。")
+    from atlas.engine.tool_permissions import tool_allowed
+    if name != "tool_call" and not tool_allowed(
+        name, getattr(runtime, "tool_allow", None), getattr(runtime, "tool_deny", []),
+    ):
+        return _blocked(runtime, loop, name, kwargs, "当前子任务不允许使用这项工具。")
     mode = str(getattr(runtime, "permission_mode", "full_access"))
     is_write = _write_tool(name, arguments)
     if (mode == "read_only" or getattr(runtime, "mode", "act") == "plan"
             or bool(getattr(runtime, "read_only", False))) and is_write:
-        return {"action": "block", "message": "当前对话是只读模式，不能执行写操作。"}
+        return _blocked(runtime, loop, name, kwargs, "当前对话是只读模式，不能执行写操作。")
+
+    workspace = str(getattr(runtime, "workspace", "") or "")
+    if (workspace.startswith("ssh://") and name == "patch"
+            and (arguments.get("patch") or arguments.get("replace_all")
+                 or arguments.get("mode") == "patch")):
+        return _blocked(
+            runtime, loop, name, kwargs,
+            "SSH 文件编辑仅支持唯一 old_string/new_string 精确替换；不支持 V4A patch 或 replace_all。",
+        )
 
     callback = getattr(runtime, "user_hook_callback", None)
-    from atlas.engine.tool_registry import NATIVE_FILE_TOOLS
+    from atlas.engine.tool_registry import _ALIASES, NATIVE_FILE_TOOLS
 
     if name in NATIVE_FILE_TOOLS:
         candidates = [str(arguments.get("path") or ".")]
+        if arguments.get("destination"):
+            candidates.append(str(arguments["destination"]))
         if name == "patch" and arguments.get("patch"):
-            candidates = re.findall(r"^\*\*\* (?:Update|Add|Delete) File: (.+)$", str(arguments["patch"]), re.M)
+            patch_text = str(arguments["patch"])
+            candidates = re.findall(
+                r"^\*\*\* (?:Update|Add|Delete) File: (.+)$", patch_text, re.M,
+            )
+            for source, destination in re.findall(
+                r"^\*\*\* Move File: (.+?)\s*->\s*(.+)$", patch_text, re.M,
+            ):
+                candidates.extend((source, destination))
+            move_destinations = re.findall(r"^\*\*\* Move to: (.+)$", patch_text, re.M)
+            candidates.extend(move_destinations)
         workspace = str(getattr(runtime, "workspace", "") or "")
         if not workspace.startswith("ssh://") and getattr(runtime, "allowed_paths", None):
-            roots = [Path(item).expanduser().resolve() for item in [*runtime.allowed_paths, workspace] if item]
+            roots = [
+                Path(item).expanduser().resolve()
+                for item in [*runtime.allowed_paths, workspace] if item
+            ]
             for candidate in candidates:
                 path = Path(candidate).expanduser()
                 resolved = (path if path.is_absolute() else Path(workspace) / path).resolve()
                 if not any(resolved == root or root in resolved.parents for root in roots):
-                    return {"action": "block", "message": "这条路径超出了当前允许访问的目录范围。"}
+                    return _blocked(runtime, loop, name, kwargs, "这条路径超出了当前允许访问的目录范围。")
 
     atlas_tool_names = {
         str(item.get("function", {}).get("name", ""))
         for item in agent._model_facing_tools()
     }
-    if callback and (name in NATIVE_FILE_TOOLS or (name not in _ALIASES and name not in atlas_tool_names)):
+    if callback and (
+        name in NATIVE_FILE_TOOLS or (name not in _ALIASES and name not in atlas_tool_names)
+    ):
         outcome = _call_async(loop, callback, "tool.before", {
             "tool_name": name, "parameters": arguments,
         })
         if isinstance(outcome, dict) and outcome.get("blocked"):
-            return {"action": "block", "message": str(outcome.get("reason", "Blocked by hook"))}
+            return _blocked(
+                runtime, loop, name, kwargs,
+                str(outcome.get("reason", "Blocked by hook")),
+            )
 
     if mode == "ask_writes" and is_write:
         approval = getattr(runtime, "approval_callback", None)
         if approval is None:
-            return {"action": "block", "message": "当前对话没有可用的审批通道，写操作已取消。"}
+            return _blocked(runtime, loop, name, kwargs, "当前对话没有可用的审批通道，写操作已取消。")
         call_id = str(kwargs.get("tool_call_id") or "hermes-tool")
         choice = _call_async(loop, approval, f"approval:{call_id}", name, arguments)
         if choice != "allow":
-            return {"action": "block", "message": "操作未获允许，因此已取消。"}
+            return _blocked(runtime, loop, name, kwargs, "操作未获允许，因此已取消。")
         if not name.startswith("mcp__"):
             from atlas.engine.tool_registry import _approval_fingerprint, _translate
 
@@ -180,11 +253,11 @@ def _pre_tool_call(tool_name: str = "", args: dict[str, Any] | None = None, **kw
                     "type": "checkpoint_created", "checkpoint": checkpoint, "tool": name,
                 })
         except Exception as exc:
-            return {"action": "block", "message": f"写前检查点创建失败，操作已取消：{exc}"}
+            return _blocked(runtime, loop, name, kwargs, f"写前检查点创建失败，操作已取消：{exc}")
     if is_write and name.startswith("mcp__"):
         failure = _checkpoint_first_write(agent, runtime, loop)
         if failure:
-            return {"action": "block", "message": failure}
+            return _blocked(runtime, loop, name, kwargs, failure)
     return None
 
 
@@ -214,7 +287,6 @@ def _post_tool_call(
         str(item.get("function", {}).get("name", ""))
         for item in agent._model_facing_tools()
     }
-    from atlas.engine.tool_registry import NATIVE_FILE_TOOLS
     if callback and (str(tool_name) in NATIVE_FILE_TOOLS or str(tool_name) not in atlas_tool_names):
         _call_async(loop, callback, "tool.after", {
             "tool_name": str(tool_name), "parameters": dict(args or {}),
@@ -229,8 +301,8 @@ def _pre_verify(session_id: str = "", changed_paths: list[str] | None = None, at
     if active is None:
         return None
     _, runtime, loop = active
-    from atlas.config import get_config
     from atlas.agent.verification_stop import requires_verification
+    from atlas.config import get_config
 
     paths = sorted(path for path in set(changed_paths or []) | runtime.changed_paths if requires_verification(path))
     if not paths or runtime.verification_passed or attempt >= 2 or not get_config().get("agent.verify_before_stop", True):
