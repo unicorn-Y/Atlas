@@ -1,7 +1,7 @@
 # ATLAS-C1-HERMES-CORE 施工结果
 
 日期：2026-10-02  
-状态：**部分完成，未验收**。C1 主链路与前端接入已提交并推送；全量测试失败，且 CORE-PARITY 的 L9、T11、A5 仍有缺口。本结果不把这些缺口记作完成。
+状态：**部分完成，未验收**。C1 主链路与前端接入已提交并推送；MoA 已接入 Hermes 并有假咨询覆盖；全量测试仍有在 C1 之前复现的失败，CORE-PARITY 的 L9、T11、T19 和 §10 #10 仍有缺口。本结果不把这些缺口记作完成。
 
 ## 提交与远端核验
 
@@ -103,7 +103,6 @@
 
 - **L9 时间和预算提醒**：Hermes run budget 机制没有接入 Atlas 本轮的会话预算/提醒设置，需补接与测试。
 - **T11 真终端交互**：`process_manage` 的 stdin/submit/close/handoff 和 Hermes PTY 参数未映射到 Atlas 执行器。
-- **A5 多模型会诊**：旧 Atlas 循环有 MoA 路径，但新的 Hermes `run_turn` 尚未桥接，当前 `/moa` 在 Hermes 引擎下不能算完成。
 - **§10 #10**：还缺完整同脚本新旧内核事件序列比较。
 - **T19**：Atlas 工具 registry 已接入，但本轮没有逐项核对并独立跑完每一个旧工具动作；上表明确列出已知 process action 缺口。
 
@@ -117,6 +116,7 @@
 
 ## 验证记录
 
+- A5 MoA 桥接聚焦测试：`4 passed in 0.21s`（`test_hermes_runtime.py`），使用假参考咨询和 fake gateway 配置；验证 Atlas ModelManager 模型选择、现有 `moa_references` 事件、advisory 系统提示注入及 `/moa` 参数路径，无真实模型调用。
 - 聚焦 C1：权限/运行时、MCP、SSH、压缩、协议版本测试分别通过；协议补正后 3 个相关断言 `3 passed in 8.41s`。运行时 fallback 修正后的核心旧测试 `3 passed in 0.20s`。
 - C1 合并聚焦组在 fallback 修正前：`23 passed, 1 warning in 55.29s`。对应模块为 `test_hermes_runtime_e2e.py`、`test_hermes_mcp_config.py`、`test_hermes_ssh_routing.py`、`test_hermes_runtime.py`。
 - 前端检查：`npx tsc --noEmit -p tsconfig.renderer.json` 通过；`npx tsc --noEmit -p tsconfig.electron.json` 通过；`npx vitest run` 为 7 files / 36 tests 全通过；`npx vite build` 成功（有 chunk 大于 500KB 的告警）。

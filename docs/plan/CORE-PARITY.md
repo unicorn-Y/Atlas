@@ -2,7 +2,7 @@
 
 **这张表决定 C1–C6 每一波做什么。** 范围只限「主体」：用户每天实际用的部分，包括对话干活、读改代码、跑命令、上下文、会话、交互、子 Agent、扩展、模型、编程。外部功能（渠道、连接器目录、跨设备、分享、电脑和浏览器操作扩展、自我进化）冻结，不在这张表里。
 
-> 2026-10-02 C1 状态更新：下文对应能力行的 Atlas 现状列已按本次 Hermes 接入和聚焦证据更新；保留 △/✘ 的项目是已知缺口。当前全量测试的 7 个失败在 `0d48720` 之前的 `805110c` 基线也复现（基线共 9 个失败）；C1 尚未整体验收，L9、T11、T19、A5 和 §10 #10 仍未完成。详情见 `tasks/results/ATLAS-C1-HERMES-CORE.result.md`。
+> 2026-10-02 C1 状态更新：下文对应能力行的 Atlas 现状列已按本次 Hermes 接入和聚焦证据更新；保留 △/✘ 的项目是已知缺口。当前全量测试的 7 个失败在 `0d48720` 之前的 `805110c` 基线也复现（基线共 9 个失败）；C1 尚未整体验收，L9、T11、T19 和 §10 #10 仍未完成。详情见 `tasks/results/ATLAS-C1-HERMES-CORE.result.md`。
 
 对标对象：Claude Code（CC）、Codex（CX）、ZCode（ZC）、Hermes（HM）、OpenClaw（OC）、Pi、OpenCode（OD）。
 - HM、OC、OD、Pi、CX 开源，下面的文件路径都对应各自仓库当前的 main。`HM@bafb42b` 是 2026-10-01 克隆时的提交号。
@@ -123,7 +123,7 @@
 | A2 | 并行和验收 | Factory Missions；HM 并行委派；W07 的验收 | △ W07 验收有误判（见 W07B 第一节） | ✔ | 验收逻辑在新内核上重写 | C3 |
 | A3 | 自定义子 Agent 定义 | CC `.claude/agents`、OD agents、CX `agent-roles` | ✔ W07 | — | 保留 | — |
 | A4 | 子 Agent 界面 | CC 的任务面板；CX `/agents` 指挥中心 | ✘ W07B 前端没做 | — | 原 W07B 第三节的前端 | C3 |
-| A5 | 多模型会诊 | HM `/moa`、`moa_loop.py` | △ 旧循环有实现，Hermes `run_turn` 尚未桥接 | ✔ | 接入 Hermes 回合及假模型覆盖 | C1 |
+| A5 | 多模型会诊 | HM `/moa`、`moa_loop.py` | ✔ `/moa` 通过 Atlas ModelManager 并发参考咨询，事件和 advisory prompt 已由假咨询覆盖 | ✔ | 保留 | — |
 
 ## 8. 扩展
 

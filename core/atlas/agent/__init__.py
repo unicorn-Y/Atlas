@@ -2870,6 +2870,7 @@ class AgentOrchestrator:
                         atlas_context=runtime,
                         reasoning_effort=reasoning_effort,
                         max_output_tokens=selected_config.get("max_output_tokens"),
+                        moa_enabled=runtime.moa_enabled,
                     ):
                         if event.get("type") == "hermes.result":
                             final_result = event.get("result", {})

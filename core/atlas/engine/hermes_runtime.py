@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import getpass
 import os
+import time
 from pathlib import Path
 from collections.abc import AsyncIterator
 from typing import Any, Callable
@@ -29,10 +30,83 @@ class HermesRuntime:
         data_dir: str | Path,
         model_manager: Any,
         agent_factory: Callable[..., Any] | None = None,
+        reference_consult: Callable[..., Any] | None = None,
     ) -> None:
         self.home = Path(data_dir).expanduser().resolve() / "engine"
         self.model_manager = model_manager
         self.agent_factory = agent_factory
+        self.reference_consult = reference_consult
+
+    async def _collect_moa_references(
+        self, message: str, history: list[dict[str, Any]], system_message: str | None,
+    ) -> list[dict[str, str]]:
+        """Consult configured Atlas models before the primary Hermes turn.
+
+        Atlas MoA configuration is retained from the legacy Atlas loop, while
+        model IDs and shared gateway credentials come from ModelManager.
+        """
+        from atlas.config import get_config
+
+        config = get_config()
+        configured = config.get("moa.reference_models", []) or []
+        max_references = config.get("moa.max_references", 3)
+        try:
+            max_references = min(8, max(1, int(max_references)))
+        except (TypeError, ValueError):
+            max_references = 3
+        models = self.model_manager.list_models()
+        current = str(self.model_manager.current_model)
+        selected: list[dict[str, str]] = []
+        for value in configured:
+            key = str(value).strip()
+            match = next((item for item in models if key in {
+                str(item.get("id", "")), str(item.get("litellm_model", "")),
+            }), None)
+            if match is None or str(match.get("id", "")) == current:
+                continue
+            litellm_name = str(match.get("litellm_model") or match.get("id") or "")
+            if litellm_name and all(item["model"] != litellm_name for item in selected):
+                selected.append({"id": str(match.get("id") or litellm_name),
+                                 "model": litellm_name})
+            if len(selected) >= max_references:
+                break
+        if not selected:
+            return []
+
+        messages: list[dict[str, str]] = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.extend(
+            {"role": str(item["role"]), "content": str(item["content"])}
+            for item in history[-12:]
+            if item.get("role") in {"user", "assistant"}
+            and isinstance(item.get("content"), str)
+        )
+        messages.append({"role": "user", "content": message})
+        api_key = getattr(self.model_manager, "_api_key", None)
+        api_base = getattr(self.model_manager, "gateway_base_url", None)
+
+        async def consult(item: dict[str, str]) -> dict[str, str]:
+            try:
+                if self.reference_consult is not None:
+                    response = self.reference_consult(item["model"], messages, api_key, api_base)
+                    if asyncio.iscoroutine(response):
+                        response = await response
+                    answer = str(response or "")
+                else:
+                    from litellm import acompletion
+
+                    response = await acompletion(
+                        model=item["model"], messages=messages, max_tokens=1200,
+                        stream=False, api_key=api_key, api_base=api_base,
+                    )
+                    answer = str(response.choices[0].message.content or "")
+                return {"model": item["id"], "text": answer[:6000]}
+            except Exception as exc:
+                return {"model": item["id"],
+                        "text": f"参考模型调用失败：{type(exc).__name__}"}
+
+        return list(await asyncio.gather(*(consult(item) for item in selected)))
 
     def _agent_factory(self) -> Callable[..., Any]:
         if self.agent_factory is not None:
@@ -209,6 +283,7 @@ class HermesRuntime:
         reasoning_effort: str | None = None,
         max_output_tokens: int | None = None,
         enabled_toolsets: list[str] | None = None,
+        moa_enabled: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute one Hermes turn on a worker thread and yield callback events."""
         loop = asyncio.get_running_loop()
@@ -294,6 +369,25 @@ class HermesRuntime:
         task: asyncio.Task[Any] | None = None
         terminal_scope_token = None
         try:
+            if moa_enabled:
+                consult_started = time.perf_counter()
+                references = await self._collect_moa_references(
+                    message, history, system_message,
+                )
+                if references:
+                    reference_prompt = (
+                        "Reference model opinions (advisory; verify against evidence):\n"
+                        + "\n\n".join(
+                            f"[{item['model']}]\n{item['text']}" for item in references
+                        )
+                    )
+                    system_message = f"{system_message or ''}\n\n{reference_prompt}".strip()
+                    await queue.put({
+                        "type": "moa_references",
+                        "models": [item["model"] for item in references],
+                        "references": references,
+                        "latency_ms": int((time.perf_counter() - consult_started) * 1000),
+                    })
             self.home.mkdir(parents=True, exist_ok=True)
             os.environ["HERMES_HOME"] = str(self.home)
             hermes_cwd = workspace

@@ -51,7 +51,7 @@
 | `core/atlas/agent/definitions.py` | `Anthropic`, `OpenHands`, `OpenCode`, `OpenAI Codex`, `GitHub Copilot` | official agent/subagent configuration docs (links in W07 result) | current documentation checked 2026-10-01 | each project's terms | 格式适配 | 读取 Markdown frontmatter、OpenCode tools map、Codex TOML 和 Copilot/Claude/OpenHands Markdown；Atlas 内置类型与信任字段 | 2026-10-01 |
 | `core/atlas/agent/todo_state.py` | `NousResearch/hermes-agent` | `tools/todo_tool.py` | `330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3` | MIT | 逻辑移植 | Atlas 每 run revision 状态、合并/替换、状态约束、大小上限及压缩后注入 | 2026-10-01 |
 | `core/atlas/kanban.py` | `NousResearch/hermes-agent` | `tools/kanban_tools.py`, `tools/kanban_tools_schemas.py` | `330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3` | MIT | 逻辑移植 | 按 Atlas SQLite 持久化看板、任务、依赖、认领状态与产出；只搬核心数据模型/操作，不包含 Hermes 调度器和 CLI 周边 | 2026-10-01 |
-| `core/atlas/agent/__init__.py`（MoA 参考轮） | `NousResearch/hermes-agent` | `agent/moa_loop.py`, `agent/moa_alternation.py`, `agent/moa_trace.py` | `330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3` | MIT | 逻辑移植 | `/moa` 轮次在主模型每轮前并发查询参考模型，作为 advisory 上下文并发出 `moa.references`；未搬 Hermes trace persistence | 2026-10-01 |
+| `core/atlas/agent/__init__.py`, `core/atlas/engine/hermes_runtime.py`（MoA 参考轮桥接） | `NousResearch/hermes-agent` | `agent/moa_loop.py`, `agent/moa_alternation.py`, `agent/moa_trace.py` | `330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3` | MIT | 逻辑移植与 Atlas 适配 | `/moa` 在主模型每轮前并发查询 Atlas 配置的参考模型，凭据取自 ModelManager，作为 advisory 上下文并保留 `moa_references` 事件；未搬 Hermes trace persistence | 2026-10-02 |
 
 参考提交号（2026-09-30 调研时）：
 - `NousResearch/hermes-agent`：`12e4d3e2dd5281adf289f70e5d6c7f33427d6982`

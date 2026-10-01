@@ -151,3 +151,52 @@ async def test_runtime_interrupts_hermes_when_atlas_cancel_is_set(tmp_path):
     assert agents[0].interrupted
     await stream.aclose()
     assert agents[0].closed
+
+
+@pytest.mark.asyncio
+async def test_runtime_moa_uses_atlas_models_and_fake_reference_consult(tmp_path, monkeypatch):
+    captured = {}
+
+    class CapturingAgent(FakeHermesAgent):
+        def run_conversation(self, *, user_message, system_message, conversation_history):
+            captured["system_message"] = system_message
+            return {"final_response": "primary answer", "messages": conversation_history}
+
+    async def consult(model, messages, api_key, api_base):
+        captured.update({"model": model, "messages": messages,
+                         "api_key": api_key, "api_base": api_base})
+        return "reference says check the migration boundary"
+
+    models = SimpleNamespace(
+        current_model="primary",
+        current_litellm_model="openai/primary",
+        gateway_base_url="http://fake.invalid/v1",
+        _api_key="fake-key",
+        list_models=lambda: [
+            {"id": "primary", "litellm_model": "openai/primary"},
+            {"id": "reference", "litellm_model": "openai/reference"},
+        ],
+    )
+    monkeypatch.setattr("atlas.config.get_config", lambda: {
+        "moa.reference_models": ["reference"], "moa.max_references": 2,
+    })
+    runtime = HermesRuntime(
+        data_dir=tmp_path / "atlas-data", model_manager=models,
+        agent_factory=CapturingAgent, reference_consult=consult,
+    )
+    events = [event async for event in runtime.run_turn(
+        message="review this migration", conversation_id="moa-session", workspace=None,
+        history=[], system_message="Atlas rules", moa_enabled=True,
+    )]
+
+    moa = next(event for event in events if event["type"] == "moa_references")
+    assert moa["models"] == ["reference"]
+    assert "migration boundary" in moa["references"][0]["text"]
+    assert captured["model"] == "openai/reference"
+    assert captured["api_key"] == "fake-key"
+    assert captured["api_base"] == "http://fake.invalid/v1"
+    assert captured["messages"][-1] == {
+        "role": "user", "content": "review this migration",
+    }
+    assert "reference says check the migration boundary" in captured["system_message"]
+    assert events[-1]["result"]["final_response"] == "primary answer"
