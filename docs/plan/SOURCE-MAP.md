@@ -151,7 +151,7 @@
 | 产物预览（沙箱实时预览） | ✅ | H `apps/desktop` 的产物预览、`tools/preview_tool.py`、`annotate_preview_tool.py`、`apply_layout_tool.py` | 拷贝改（前端） | |
 | 网页 / 应用产物 | ✅ | O `extensions/canvas` | 参考 | |
 | 文档提取 | ✅ | O `extensions/document-extract`、`web-readability`；H `tools/read_extract.py`、`web_tools_extract.py` | 对照补强 | |
-| 图像 / 视频生成 | 🟡 | H `plugins/image_gen`、`video_gen`、`tools/image_generation_tool.py` | 拷贝改 | |
+| 图像生成（视频暂不做） | 🟡 | H `plugins/image_gen`、`tools/image_generation_tool.py` | 拷贝改 | |
 | 会话分享链接 | ❌ | O `extensions/session-share`（可撤销只读链接） | 移植 | |
 
 ### J. 跨设备、手机、常驻

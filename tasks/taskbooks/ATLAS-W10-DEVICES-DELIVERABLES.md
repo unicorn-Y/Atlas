@@ -51,7 +51,7 @@ PROTOCOL: +1
 1. 前端集成 Univer：文件面板里打开 `.xlsx`、`.docx`（`.pptx` 看 Univer 当前支持程度，不支持就只预览）时，用 Univer 编辑器替代现在的只读预览。保存时写回原文件格式（**导出保真度要实测**：用 Atlas 生成的文件和用户真实文件各测几份，结果写进结果文件）。
 2. **选中让 Atlas 改**：编辑器里选中单元格区域 / 段落，右键「让 Atlas 改」→ 输入要求 → 发起一轮，带上文件路径和选区；Atlas 用 Office 工具改完，编辑器重新加载并高亮改动。
 3. 后端：对照 H 的 Office 技能补强 Atlas 的生成工具（样式、表格、图表、幻灯片版式）；新增「幻灯片版式检查」：生成后把每页渲染成图片（LibreOffice 无头模式，有就用；没有就跳过并提示），检查文字溢出和重叠，有问题让模型修一次。
-4. 图像 / 视频生成：搬 H `plugins/image_gen`、`plugins/video_gen`、`tools/image_generation_tool.py` 的服务商接入（按用户配置的服务商启用）。
+4. 图像生成（视频生成暂不做，用户决定）：搬 H `plugins/image_gen`、`tools/image_generation_tool.py` 的服务商接入（按用户配置的服务商启用）。
 
 ## 5. 本地发布的自动刷新仪表盘（后端，自己写）
 

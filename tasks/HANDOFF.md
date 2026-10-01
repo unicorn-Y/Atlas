@@ -1,41 +1,60 @@
-# Atlas 对标工作交接（2026-09-30）
+# Atlas 交接（2026-10-01）
 
-新会话先读这份，再读 `docs/plan/00-MASTER-PLAN.md`（总计划）、`docs/plan/SOURCE-MAP.md`（代码来源）、`docs/plan/EXECUTION-GUIDE.md`（执行和审查方法）。调研依据在 `docs/research/2026-09-30-landscape/`。
+**新会话先读这份**，再读：`docs/plan/00-MASTER-PLAN.md`（总计划、路线、执行流程）→ `docs/plan/SOURCE-MAP.md`（每个能力从哪个开源仓库拿代码）→ `docs/plan/EXECUTION-GUIDE.md`（环境、代码地图、搬代码方法、审查清单）。桌面上的《Atlas会话全貌-2026-10-01.md》讲这两天发生了什么、为什么。
 
-## 1. 用户与规则
+## 1. 用户是谁、要什么
 
-- **所有回复用中文**（代码、命令、提交信息可以英文）。长会话漂回英文就建议交接。
-- 目标：把 Atlas（`github.com/unicorn-Y/Atlas`，Electron + React 前端，Python FastAPI 后端）做成「全能」桌面 Agent，吸收各家主流 Agent 的能力。设计要**以最新调研为依据**（用 WebSearch 查 2026 年资料），不能凭记忆、不能只看几家。
-- 分工：**Claude 做前端 + 审查后端 + 修安全问题 + 写任务书**；**后端交给主机上的 Codex 桌面端**（省配额）。
-- 已定的决定：FULL_ACCESS 是默认，不做逐工具弹窗；记忆系统冻结；**外部 Agent（ACP 认证）先跳过**；调度器已合并；第三波执行环境选了 SSH。
+- **始终用中文回复**（代码、命令、提交信息可以英文）。长会话会漂回英文，漂了就建议交接。
+- 目标：把 Atlas（`github.com/unicorn-Y/Atlas`，Electron + React 前端，Python FastAPI 后端）做成**全能**桌面 Agent，主要自己用；**每个功能都要当下最新、最强那家的水平，而且要超过它**；**有现成开源代码就拿来改**（不要从零设计）；以后 Atlas 自己跟踪各家更新（W12）。
+- 设计依据必须来自**当下最新**的资料，覆盖很多家，不能凭记忆。
 
-## 2. 两台机器
+## 2. 已定的决定（不要推翻）
 
-- 笔记本（当前会话所在）：仓库 `C:\Users\youdu\Desktop\Atlas`，虚拟环境 `core/.venv`（Python 3.12），GitHub 走 HTTPS + 代理 127.0.0.1:7897。
-- 主机：`ssh zhuji`（192.168.31.158，用户 25011），仓库 `D:\Atlas`，默认 shell 是 cmd。同步：`ssh zhuji "cd /d D:\Atlas && git checkout -- package-lock.json & git pull -q --ff-only"`；装新依赖：`core\.venv\Scripts\python.exe -m pip install -q -e core`。
-- 主机仓库里有 Codex 留下的未跟踪临时目录（`core/.pytest-wave1-*`、`design/`），第六波任务书要求它清掉，别手动删。
+| 决定 | 含义 |
+| --- | --- |
+| 移植路线 | 保留 Atlas 前后端，从 Hermes Agent（`NousResearch/hermes-agent`，Python、MIT，首选来源）、OpenClaw 等逐块搬代码；**不**用 Hermes 整体替换后端 |
+| 规则表整份拷贝 | 规则表、模式库这类文件必须整份搬，不许自写缩水版（W06 被缩成 36 行出过事） |
+| FULL_ACCESS 默认 | 不弹窗、不自动拦截 |
+| **安全审查用户亲自做** | 计划里不做任何安全审查；`core/atlas/safety/` 代码保留，开关默认关 |
+| **不要沙箱** | Atlas 像 CLI 一样本机直接运行 |
+| **视频生成暂不做** | 图像、音频保留 |
+| 本地语音 | W06 后端已有，前端放 W13 |
+| 记忆系统冻结 | 只做「外部内容不进长期记忆」这类小改动 |
+| 外部 Agent ACP 认证跳过 | |
+| 自动跟踪更新 | 做成 Atlas 自己的功能（W12），不要另建 Claude 定时任务 |
 
-## 3. 驱动主机上的 Codex
+## 3. 分工与流程（最重要）
 
-- Codex 桌面端带 `--remote-debugging-port=9333` 启动；隧道：`ssh -N -L 9333:127.0.0.1:9333 zhuji`（端口已被占说明隧道还在）。
-- 笔记本上的助手脚本 `frontend/scripts/.cdp.mjs`（未提交，别提交）：`node scripts/.cdp.mjs <脚本.js> <输出目录>`，脚本里可用 `page`（主窗口 `app://-/index.html`，不是 avatar-overlay 那个）和 `out`。填提示词：点「新聊天」→ 确认项目是 Atlas → 在 `[data-codex-composer="true"]` 里 `insertText`。**发送按钮由用户点**（权限分类器不允许我点）。
-- 看 Codex 进度：截图，或 `ssh zhuji "cd /d D:\Atlas && git log --oneline -5 && git status -sb"`。Codex 没推送前可以在主机上 `git bundle create %TEMP%\w.bundle <base>..main`，`scp` 回来 `git fetch` 审查。
+- **Luna**（主机 Codex 桌面端，模型 GPT-6 Luna）：做每一波的后端**和前端**。
+- **Sol**（同一个 Codex，模型 GPT-6.1 Sol）：审查每一波——自己跑全量、用真实模型实测、修问题、写审查记录。
+- **Claude（你）**：调度。循环：
+  1. 把 Luna 提示词填进 Codex 新对话（模型选 Luna）→ **用户点发送**（权限分类器不让 Claude 点）
+  2. Luna 做完 → Claude 读 `tasks/results/<任务书>.result.md`
+  3. 把 Sol 提示词填进 Codex 新对话（模型选 Sol）→ 用户点发送
+  4. Sol 做完 → Claude 读 `tasks/reviews/<任务书>.review.md`：通过就填下一波的 Luna 提示词；有没修完的就写补做任务书（参照 W07B）再给 Luna
+- **Claude 在循环里不写代码、不跑测试**（用户明确说太费 token），只读结果、写任务书、填提示词。W14 审查通过后，Claude 按 `docs/plan/FINAL-REVIEW.md` 做**最终审查**（这一步亲自实测），再向用户汇报。
+- 每次给用户的汇报要短：做到哪了、下一步是什么、需要用户点什么。
 
-## 4. 当前进度（2026-09-30 晚）
+## 4. 当前进度与下一步
 
-- 对标表 `docs/PARITY.md`：170 ✅ / 15 🟡 / 3 ❌ / 18 ➖ / 4 ⚖️。后端第 1–5 波已接受（协议 1.7）。
-- **重新做了全景调研**（`docs/research/2026-09-30-landscape/`，40 多个产品、9 个专题）。
-- **用户纠正方向**：全部功能都要最新最好的，**有现成开源代码就拿来改**（记忆 `atlas-reuse-first`）；选择「移植」路线：保留 Atlas 后端，从 Hermes Agent（Python、MIT、约 25 万星，几乎覆盖全部能力）等项目逐块搬代码。
-- 新计划：`docs/plan/`（总计划、源码地图、执行指南、代码登记表）+ 七波任务书 `tasks/taskbooks/ATLAS-W06-FOUNDATION-SAFETY.md` … `ATLAS-W12-SELF-EVOLUTION.md`。
-- 旧的 `CODEX-ATLAS-BACKEND-PARITY-WAVE6.md` 已作废。
-- **W06 已完成（2026-10-01）**：Codex 交付后端，Claude 审阅并重做了安全部分（见 `tasks/reviews/ATLAS-W06-FOUNDATION-SAFETY.review.md`），前端接了用量页、模型切换和验证提示（`b9927af`）。
-- **用户决定（2026-10-01）**：安全审查由用户亲自做，计划里不做；`core/atlas/safety/` 代码保留但默认关闭。本地语音暂缓（后端已有，前端不接）。
-- 用户当前模型是第三方中转网关上的 DeepSeek（`openai/deepseek-v4.1-flash`），缓存命中拿不到；用量统计正常。
-- **W07 后端已交付（Codex 自标 PARTIAL）**，Claude 审查到一半转交：发现写在 `tasks/taskbooks/ATLAS-W07B-ORCHESTRATION-COMPLETION.md` 第一节（验收误判、汇总时机、看板没有调度器、子任务输出按 token 发事件）。
-- **分工与流程（2026-10-01）**：Luna 做后端 + 前端；Sol 审查并修问题；Claude 调度（Luna 做完 → 给 Sol 下审查指令 → 读审查结果 → 给 Luna 下一步），全部做完后 Claude 最终审查（`docs/plan/FINAL-REVIEW.md`）。完整路线 W07B → W14 见总计划第四节。不要沙箱，本机直接运行。
-- **下一步：Luna 执行 W07B**（提示词见下方「给 Luna」），完成后 Sol 审查（「给 Sol」）。
-- 真机测试方法：隔离 `ATLAS_DATA_DIR` + 去掉 MCP 服务器 + 假目录 + 独立端口（W06 审阅记录里有完整做法），不要碰用户 8765 上的开发后端。
-- 用户决定：自动跟踪各家更新做成 Atlas 自己的功能（W12），不另建定时任务。
+- **W06 ✅**（Codex 交付，Claude 审查时重做了安全部分并修了两个真机才暴露的崩溃，见 `tasks/reviews/ATLAS-W06-FOUNDATION-SAFETY.review.md`；前端用量页等 `b9927af`）。
+- **W07 🟡**：Codex 交付后端（自标 PARTIAL），Claude 审查到一半转交，发现写在 W07B 任务书第一节。Claude 笔记本上有一份未测试的验收修复存在 `git stash`（「W07 review: per-task verify fix」），不需要用，任务书已写清修法。
+- **下一步：W07B**（`tasks/taskbooks/ATLAS-W07B-ORCHESTRATION-COMPLETION.md`）→ 填「给 Luna」提示词（任务书名已是 W07B）。主机 Codex 当前开着的是 W07 那个旧对话，要先点「新聊天」。
+- 之后顺序：W08 → W09 → W10 → W11 → W12 → W13 → W14 → Claude 最终审查。路线表在总计划第四节。
+- 用户当前用的模型：第三方中转网关上的 DeepSeek（`openai/deepseek-v4.1-flash`），缓存命中拿不到（中转不转回），用量统计正常。
+
+## 5. 两台机器与驱动 Codex
+
+- 笔记本（Claude 所在）：仓库 `C:\Users\youdu\Desktop\Atlas`，venv `core/.venv`（Python 3.12），GitHub 走 HTTPS + 代理 127.0.0.1:7897。端口 8765 / 5173 上可能跑着用户的开发版（旧代码），**不要动**。
+- 主机：`ssh zhuji`（192.168.31.158，用户 25011），仓库 `D:\Atlas`，默认 shell cmd。同步：`ssh zhuji "cd /d D:\Atlas && git checkout -- package-lock.json & git pull -q --ff-only"`。
+- Codex 桌面端开着 `--remote-debugging-port=9333`；隧道 `ssh -N -L 9333:127.0.0.1:9333 zhuji`（端口被占说明隧道还在）。
+- 笔记本助手脚本 `frontend/scripts/.cdp.mjs`（未提交，别提交）：`node scripts/.cdp.mjs <脚本.js> <输出目录>`，脚本里可用 `page`（主窗口）和 `out`。
+- 填提示词：`page.getByText('新聊天', { exact: true }).first().click()` → 确认底部项目是 Atlas → 输入框用 `page.locator('[data-codex-composer="true"]:visible').first()`（页面有两个，只有一个可见）→ Ctrl+A、Delete、`keyboard.insertText(提示词)` → 截图确认。**切换模型（Luna / Sol）**：输入框右下角的模型菜单（目前显示「GPT-6 Luna 高」），填之前先点开选好；不会选就让用户手动切。
+- 看进度：`ssh zhuji "cd /d D:\Atlas && git log --oneline -5 && git status -sb"`，或 `git fetch` 后看 `tasks/results/`、`tasks/reviews/`。
+- 计划书副本在桌面 `Atlas计划书-2026-09-30/`，改了计划书记得同步过去。
+- Git Bash 的 heredoc 会吃掉反斜杠和 `\n`：复杂改动用编辑工具，或写成 Python 脚本文件再运行。
+
+## 6. 提示词（直接复制；换掉任务书名即可）
 
 ### 给 Sol 的审查提示词（每波通用，替换任务书名）
 
@@ -62,28 +81,3 @@
 安全审查由用户亲自负责，不做任何安全审查相关功能（core/atlas/safety/ 保持默认关闭）；本地语音暂缓。
 ```
 
-## 5. Codex 交付后怎么审查（每一波都这样做）
-
-1. 拉代码，`pip install -e core` 装新依赖。
-2. **在笔记本上跑全量**（Codex 那边长命令会被中断，它的全量从来没跑完）：
-   `cd core && .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider --basetemp "$TEMP/pt-x" --ignore=tests/test_computer_use.py`（放后台跑，约 3 分钟）。`test_computer_use.py` 会动真鼠标，永远跳过。
-3. 重点读安全相关代码：OriginGuard、任何返回文件内容的接口（要有沙箱 CSP）、路径校验、子进程、密钥存储、网络请求（内网防护）。
-4. **新 Agent 能力必须用真实模型实测一次**。第五波的 Worker 在 mock 测试里全过，真机上根本收不到任务，还被用户记忆带偏——这类问题只有真跑才能发现。
-5. 修掉的问题追加进 `tasks/reviews/<波次>.review.md`，提交说明写清「为什么」。
-6. 接前端 → 在开发版里实测 → 更新 `docs/PARITY.md` → 提交推送 → 同步主机。
-
-## 6. 本地开发与实测
-
-- 启动：先起后端 `core/.venv/Scripts/python.exe -m uvicorn atlas.server:app --host 127.0.0.1 --port 8765 --app-dir core`，再 `cd frontend && npx vite --host 127.0.0.1`，Electron：`npx tsc -p tsconfig.electron.json && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 ATLAS_PYTHON=<venv python> ../node_modules/electron/dist/electron.exe . --remote-debugging-port=9335`。
-- 当前会话结束时这三个可能还在跑（端口 8765 / 5173 / 9335）；重启后端前先按端口找到进程停掉（`Get-NetTCPConnection -LocalPort 8765`，确认命令行是 uvicorn 再停）。
-- 前端检查：`npx tsc -p tsconfig.renderer.json --noEmit`、`npx tsc -p tsconfig.electron.json --noEmit`、`npx vitest run`、`npx vite build`。
-- 界面实测：用 playwright-core 驱动**无头 Edge**（`C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe`）打开 `http://127.0.0.1:5173`；需要 Electron 专有能力（webview、菜单、token 注入）时连 CDP 9335。选工作目录：无头 Edge 里没有 `atlasDesktop`，会弹 `window.prompt`，用 `page.on('dialog', d => d.accept(路径))`。临时脚本放 `frontend/scripts/.wNN.mjs`，用完删掉。
-- 不要在开发版运行时 `npm ci`。
-- Git Bash 的 heredoc 会吃掉反斜杠和中文：复杂改动先用 Write 写成 Python 脚本再运行，或直接用 Edit。
-
-## 7. 安全模型（改代码时别破坏）
-
-- 后端所有 HTTP / WS 过 `core/atlas/origin_guard.py`：带 `X-Atlas-Api-Token` 可信；没有 Origin 放行；Vite 开发来源放行；`Origin: null` 必须带 token。
-- Electron 主进程只给**主页面**的请求注入 token（子框架不注入——文件预览里的 HTML 拿不到 token）；去掉了默认菜单（Ctrl+W 不再关窗口）；主窗口拒绝 `window.open` 和跳出应用。
-- 浏览器面板用独立 partition `persist:atlas-browser`，没有 token。
-- 返回用户文件的接口都带沙箱 CSP。
