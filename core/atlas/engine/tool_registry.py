@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import math
 import threading
 import uuid
 from typing import Any
@@ -60,10 +61,14 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
     plan_mode = getattr(runtime, "mode", "act") == "plan"
     atlas_toolset = "atlas-plan" if plan_mode else "atlas"
     registered = _plan_registered if plan_mode else _registered
-    plan_tools = {"read_file", "search_files", "web_fetch"}
+    plan_tools = {"read_file", "search_files", "web_fetch", "web_search", "web_extract"}
     with _lock:
         _bind_inline_atlas_tools()
-        indexed = {str(item.get("function", {}).get("name", "")): item for item in schemas}
+        indexed = {
+            str(item.get("function", {}).get("name", "")): item
+            for item in schemas
+            if str(item.get("function", {}).get("name", "")) != "read_office"
+        }
         if plan_mode:
             indexed = {name: item for name, item in indexed.items() if name in plan_tools}
         for name in _ALIASES:
@@ -92,6 +97,14 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 "description": str(function.get("description", "Atlas tool")),
                 "parameters": function.get("parameters", {"type": "object", "properties": {}}),
             }
+            if name == "terminal":
+                schema["parameters"].setdefault("properties", {})["shell"] = {
+                    "type": "string", "enum": ["bash", "powershell", "cmd"],
+                    "description": (
+                        "Shell to use. Defaults to Git Bash when available, "
+                        "otherwise PowerShell."
+                    ),
+                }
 
             def handler(args: dict[str, Any], *, _name: str = name, **_kwargs: Any) -> str:
                 session_id = str(_kwargs.get("session_id") or "")
@@ -121,6 +134,8 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     result = native(args, **_kwargs)
                     return result
                 tool_name, tool_args = _translate(_name, args)
+                if tool_name in {"local_shell", "local_process"}:
+                    tool_args["_atlas_conversation_id"] = str(bound_runtime.conversation_id or "")
                 from langchain_core.messages import AIMessage
 
                 call_id = f"atlas:{uuid.uuid4().hex}"
@@ -223,7 +238,7 @@ def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any
         args["action"] = action
     elif tool_name == "local_shell":
         args["command"] = args.pop("command", args.pop("cmd", ""))
-        args["shell"] = "powershell"
+        args["shell"] = str(args.get("shell") or "bash")
         args["cwd"] = args.pop("workdir", args.get("cwd", ""))
         background = bool(args.pop("background", False))
         args["detached"] = background
@@ -232,18 +247,29 @@ def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any
         if args.pop("pty", False):
             args["pty"] = True
         heartbeat = args.get("heartbeat", 0)
-        if not isinstance(heartbeat, int) or isinstance(heartbeat, bool) or heartbeat < 0:
-            raise ValueError("heartbeat 必须是非负整数秒。")
+        if isinstance(heartbeat, bool):
+            raise ValueError("heartbeat 必须是非负秒数。")
+        try:
+            heartbeat = float(heartbeat or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("heartbeat 必须是非负秒数。") from exc
+        if heartbeat < 0 or not math.isfinite(heartbeat):
+            raise ValueError("heartbeat 必须是非负秒数。")
         if heartbeat:
-            args["heartbeat"] = max(60, heartbeat)
+            args["heartbeat"] = heartbeat
+        notify = args.get("notify")
+        if isinstance(notify, bool):
+            args["notify_on_complete"] = notify
+        if "watch_patterns" in args and not isinstance(args["watch_patterns"], list):
+            raise ValueError("watch_patterns 必须是字符串数组。")
+        runtime = getattr(_context, "runtime", None)
+        args["_atlas_conversation_id"] = str(getattr(runtime, "conversation_id", "") or "")
         args.pop("persist_on_release", None)
     if name == "search_files":
         args["query"] = args.pop("pattern", args.get("query", ""))
         args.setdefault("path", ".")
-    if name == "patch":
-        args.pop("mode", None)
-        args.pop("patch", None)
-        args.pop("replace_all", None)
+    if name == "delegate_task" and isinstance(args.get("tasks"), list):
+        tool_name = "delegate_parallel"
     if name == "clarify":
         question = args.pop("questions", None)
         if question is None:
@@ -266,6 +292,14 @@ def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any
         if mapped_action:
             args["action"] = mapped_action
             args["execution_id"] = args.pop("session_id", args.get("execution_id", ""))
+            if process_action == "log":
+                args["_line_offsets"] = True
+            elif process_action == "poll":
+                args["_native_poll"] = True
         else:
             args["action"] = process_action
+        if tool_name == "local_process":
+            args["_atlas_conversation_id"] = str(
+                getattr(getattr(_context, "runtime", None), "conversation_id", "") or ""
+            )
     return tool_name, args

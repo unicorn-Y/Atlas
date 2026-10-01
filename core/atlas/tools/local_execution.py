@@ -12,6 +12,7 @@ import base64
 import codecs
 import glob as glob_module
 import json
+import math
 import os
 import shutil
 import signal
@@ -31,6 +32,25 @@ from atlas.config import get_config
 
 log = structlog.get_logger()
 OutputCallback = Callable[[str, str, str], Awaitable[None] | None]
+
+
+def _find_git_bash() -> str | None:
+    """Find MSYS/Git Bash, preferring the installation paired with Git on PATH."""
+    candidates: list[Path] = []
+    git = shutil.which("git.exe") or shutil.which("git")
+    if git:
+        git_root = Path(git).resolve().parent.parent
+        candidates.extend((git_root / "bin" / "bash.exe", git_root / "usr" / "bin" / "bash.exe"))
+    for candidate in (shutil.which("bash.exe"), shutil.which("bash")):
+        if candidate:
+            candidates.append(Path(candidate))
+    for candidate in candidates:
+        normalized = str(candidate).lower().replace("/", "\\")
+        if os.name == "nt" and ("\\windowsapps\\" in normalized or "\\system32\\" in normalized):
+            continue
+        if candidate.is_file() or shutil.which(str(candidate)):
+            return str(candidate)
+    return None
 
 
 def _tool(
@@ -59,7 +79,7 @@ LOCAL_TOOLS = [
             "Nonzero exit codes are returned as results."
         ),
         {
-            "shell": {"type": "string", "enum": ["powershell", "cmd"]},
+            "shell": {"type": "string", "enum": ["powershell", "cmd", "bash"]},
             "command": {"type": "string"},
             "cwd": {"type": "string"},
             "env": {"type": "object", "additionalProperties": {"type": "string"}},
@@ -105,7 +125,7 @@ LOCAL_TOOLS = [
             "execution_id": {"type": "string"},
             "executable": {"type": "string"},
             "args": {"type": "array", "items": {"type": "string"}},
-            "shell": {"type": "string", "enum": ["powershell", "cmd"]},
+            "shell": {"type": "string", "enum": ["powershell", "cmd", "bash"]},
             "command": {"type": "string"},
             "cwd": {"type": "string"},
             "env": {"type": "object", "additionalProperties": {"type": "string"}},
@@ -285,7 +305,9 @@ class LocalProcess:
     cancelled: bool = False
     handoff_note: str = ""
     notification_callback: Any = None
+    conversation_id: str = ""
     notification_task: asyncio.Task[None] | None = None
+    notification_sequence: int = 0
     notify_on_complete: bool = False
     watch_patterns: list[str] = field(default_factory=list)
     watch_tail: str = ""
@@ -336,6 +358,7 @@ class LocalExecutionRuntime:
         if self._closed:
             return self._error("Local execution runtime is shutting down.")
         try:
+            self._validate_execution_args(name, args)
             if name == "local_file":
                 data = await asyncio.to_thread(self._file_operation, args)
             elif name == "local_edit":
@@ -344,11 +367,15 @@ class LocalExecutionRuntime:
                 data = await self._git_operation(args, run_id, output_callback)
             elif name == "local_shell":
                 process = await self._start_from_shell(args, run_id, output_callback)
-                self._configure_notifications(process, args, event_callback)
+                self._configure_notifications(
+                    process, args, event_callback, str(args.get("_atlas_conversation_id") or ""),
+                )
                 return await self._execute_or_detach(process, args)
             elif name == "local_exec":
                 process = await self._start_from_exec(args, run_id, output_callback)
-                self._configure_notifications(process, args, event_callback)
+                self._configure_notifications(
+                    process, args, event_callback, str(args.get("_atlas_conversation_id") or ""),
+                )
                 return await self._execute_or_detach(process, args)
             elif name == "local_process":
                 return await self._process_operation(args, run_id, output_callback, event_callback)
@@ -365,8 +392,42 @@ class LocalExecutionRuntime:
             log.warning("local_execution.tool_failed", tool=name, error=str(exc))
             return self._error(f"{type(exc).__name__}: {exc}")
 
-    def _configure_notifications(self, record: LocalProcess, args: dict[str, Any], callback: Any) -> None:
+    @staticmethod
+    def _validate_execution_args(name: str, args: dict[str, Any]) -> None:
+        if name not in {"local_shell", "local_exec", "local_process"}:
+            return
+        for key in ("timeout", "heartbeat"):
+            if key not in args or args[key] in (None, ""):
+                continue
+            if isinstance(args[key], bool):
+                raise ValueError(f"{key} must be a finite non-negative number")
+            try:
+                value = float(args[key])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{key} must be a finite non-negative number") from exc
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"{key} must be a finite non-negative number")
+        if (
+            name in {"local_shell", "local_process"}
+            and args.get("shell") not in {None, "powershell", "cmd", "bash"}
+        ):
+            raise ValueError(f"Unsupported shell: {args['shell']}")
+        patterns = args.get("watch_patterns", [])
+        if patterns is not None and (
+            not isinstance(patterns, list) or not all(isinstance(item, str) for item in patterns)
+        ):
+            raise ValueError("watch_patterns must be a list of strings")
+        notify = args.get("notify")
+        if notify is not None and not isinstance(notify, (bool, list)):
+            raise ValueError("notify must be a boolean or list of strings")
+        if isinstance(notify, list) and not all(isinstance(item, str) for item in notify):
+            raise ValueError("notify patterns must be strings")
+
+    def _configure_notifications(
+        self, record: LocalProcess, args: dict[str, Any], callback: Any, conversation_id: str = "",
+    ) -> None:
         record.notification_callback = callback
+        record.conversation_id = conversation_id
         notify = args.get("notify")
         record.notify_on_complete = bool(args.get("notify_on_complete"))
         record.watch_patterns = list(args.get("watch_patterns") or [])
@@ -375,18 +436,44 @@ class LocalExecutionRuntime:
         elif isinstance(notify, list):
             record.watch_patterns = [str(item) for item in notify]
         heartbeat = float(args.get("heartbeat") or 0)
-        if heartbeat > 0 and callback is not None:
+        if heartbeat > 0 and (callback is not None or conversation_id):
             record.notify_on_complete = True
             record.notification_task = asyncio.create_task(self._heartbeat(record, heartbeat))
 
     async def _notify(self, record: LocalProcess, reason: str, text: str = "") -> None:
+        record.notification_sequence += 1
+        source_id = f"{record.execution_id}:{reason}:{record.notification_sequence}"
+        event = {
+            "type": "process.completed" if reason == "completion" else "process.notification",
+            "data": {**record.summary(), "reason": reason, "text": text, "source_id": source_id},
+            }
+        callback_failed = False
         if record.notification_callback is not None:
-            result = record.notification_callback({
-                "type": "process.completed" if reason == "completion" else "process.notification",
-                "data": {**record.summary(), "reason": reason, "text": text},
-            })
-            if asyncio.iscoroutine(result):
-                await result
+            try:
+                result = record.notification_callback(event)
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception:
+                callback_failed = True
+                log.warning(
+                    "local_execution.notification_callback_failed",
+                    execution_id=record.execution_id,
+                )
+        if record.conversation_id and (record.notification_callback is None or callback_failed):
+            try:
+                from atlas.engine.notifications import publish_notification
+
+                publish_notification(
+                    record.conversation_id,
+                    kind=event["type"],
+                    content=json.dumps(event["data"], ensure_ascii=False),
+                    source_id=source_id,
+                )
+            except Exception:
+                log.warning(
+                    "local_execution.notification_persist_failed",
+                    execution_id=record.execution_id,
+                )
 
     async def _heartbeat(self, record: LocalProcess, seconds: float) -> None:
         while record.state == "running":
@@ -605,6 +692,24 @@ class LocalExecutionRuntime:
                 "/c",
                 f"chcp 65001>nul & {command}",
             ]
+        elif shell == "bash":
+            executable = _find_git_bash()
+            if executable:
+                argv = [executable, "-lc", command]
+            elif os.name == "nt":
+                executable = (
+                    shutil.which("powershell.exe") or shutil.which("pwsh") or "powershell.exe"
+                )
+                utf8 = (
+                    "$utf8 = [Text.UTF8Encoding]::new(); "
+                    "[Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; "
+                )
+                argv = [
+                    executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+                    utf8 + command,
+                ]
+            else:
+                raise ValueError("bash executable was not found")
         else:
             raise ValueError(f"Unsupported shell: {shell}")
         return await self._spawn(
@@ -902,6 +1007,9 @@ class LocalExecutionRuntime:
                 if args.get("shell")
                 else self._start_from_exec(args, run_id, callback)
             )
+            self._configure_notifications(
+                record, args, event_callback, str(args.get("_atlas_conversation_id") or ""),
+            )
             data = record.summary()
         else:
             record = self._processes.get(str(args.get("execution_id", "")))
@@ -909,13 +1017,29 @@ class LocalExecutionRuntime:
                 return self._error("Unknown Atlas execution_id.")
             if action == "status":
                 data = record.summary()
+                if args.get("_native_poll"):
+                    offset = int(args.get("offset", 0))
+                    limit = int(args.get("limit", 100))
+                    stdout = self._read_log_lines(record, "stdout", offset, limit)
+                    stderr = self._read_log_lines(record, "stderr", offset, limit)
+                    data.update({
+                        "stdout": stdout["text"], "stderr": stderr["text"],
+                        "new_output": stdout["text"], "new_stderr": stderr["text"],
+                        "stdout_next_offset": stdout["next_offset"],
+                        "stderr_next_offset": stderr["next_offset"],
+                        "next_offset": max(stdout["next_offset"], stderr["next_offset"]),
+                    })
             elif action == "read":
-                data = self._read_log(
-                    record,
-                    args.get("stream", "stdout"),
-                    int(args.get("offset", 0)),
-                    int(args.get("limit", 65536)),
-                )
+                if args.get("_line_offsets"):
+                    data = self._read_log_lines(
+                        record, args.get("stream", "stdout"),
+                        int(args.get("offset", 0)), int(args.get("limit", 100)),
+                    )
+                else:
+                    data = self._read_log(
+                        record, args.get("stream", "stdout"),
+                        int(args.get("offset", 0)), int(args.get("limit", 65536)),
+                    )
             elif action == "wait":
                 return await self._wait_result(record, args.get("timeout"))
             elif action == "cancel":
@@ -930,11 +1054,27 @@ class LocalExecutionRuntime:
                 record.owner_run_id = None
                 record.handoff_note = str(args.get("data", "")).strip()
                 record.notification_callback = event_callback
+                record.conversation_id = str(args.get("_atlas_conversation_id") or "")
                 record.notify_on_complete = True
                 data = record.summary()
             else:
                 raise ValueError(f"Unsupported process action: {action}")
         return {"data": data, "content": [{"type": "text", "text": str(data)}], "is_error": False}
+
+    def _read_log_lines(
+        self, record: LocalProcess, stream: str, offset: int = 0, limit: int = 100,
+    ) -> dict[str, Any]:
+        if stream not in {"stdout", "stderr"}:
+            raise ValueError("stream must be stdout or stderr")
+        path = record.stdout_path if stream == "stdout" else record.stderr_path
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        start = max(0, offset)
+        end = min(len(lines), start + max(1, min(limit, 10000)))
+        return {
+            "execution_id": record.execution_id, "stream": stream,
+            "offset": start, "next_offset": end, "text": "\n".join(lines[start:end]),
+            "total_lines": len(lines), "complete": end >= len(lines),
+        }
 
     async def _write_process_stdin(
         self, record: LocalProcess, action: str, data: str,
