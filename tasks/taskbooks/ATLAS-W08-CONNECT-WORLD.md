@@ -1,5 +1,7 @@
 # ATLAS-W08-CONNECT-WORLD（第八波：连接外部世界）
 
+> **冻结（2026-10-01）**：主体优先，本书等主体实测通过后再排期；执行前按当时的内核（Hermes）重写接入部分。见 `docs/plan/00-MASTER-PLAN.md` 第五节。
+
 STATUS: READY（W06 交付后即可开始，可与 W07 并行）
 PROTOCOL: +1
 先读：`docs/plan/SOURCE-MAP.md` F 节、`docs/research/2026-09-30-landscape/02-connectors-extensions-automation.md`

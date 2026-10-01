@@ -1,5 +1,7 @@
 # ATLAS-W14-FINAL-ACCEPTANCE（第十四波：收尾与总验收）
 
+> **改为「收尾」（2026-10-01）**：放在 C6 和实测阶段之后执行；第 1 节的真实模型回归并入实测阶段；安装包要按 Python 3.14 重做。见 `docs/plan/00-MASTER-PLAN.md` 第四节。
+
 STATUS: READY（W13 审查通过后）
 执行：Luna。审查：Sol。之后由 Claude 按 `docs/plan/FINAL-REVIEW.md` 做最终审查。
 

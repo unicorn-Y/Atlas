@@ -1,5 +1,7 @@
 # ATLAS-W10-DEVICES-DELIVERABLES（第十波：跨设备与产出物）
 
+> **冻结（2026-10-01）**：主体优先，本书等主体实测通过后再排期；执行前按当时的内核（Hermes）重写接入部分。见 `docs/plan/00-MASTER-PLAN.md` 第五节。
+
 STATUS: READY（W08 交付后）
 PROTOCOL: +1
 先读：`docs/plan/SOURCE-MAP.md` I、J 节；`docs/research/2026-09-30-landscape/03-deliverables.md`、`08-interaction-and-surfaces.md`

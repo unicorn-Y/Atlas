@@ -8,8 +8,8 @@
   - `frontend/`：Electron + React + Vite（Tailwind v4 + Radix）。
   - `backend-adapter/`：前端调用后端的 TypeScript 客户端。
 - 用户的两台机器（细节见 `tasks/HANDOFF.md`）：
-  - 笔记本：`C:\Users\youdu\Desktop\Atlas`，venv 在 `core/.venv`（Python 3.12）。
-  - 主机：`ssh zhuji`，`D:\Atlas`，用户在这里用 Codex 桌面端。
+  - 笔记本：`C:\Users\youdu\Desktop\Atlas`，venv 在 `core/.venv`（Python 3.12；C1 起升到 3.14，因为 Hermes 内核需要）。
+  - 主机：`ssh zhuji`，`D:\Atlas`，用户在这里用 Codex 桌面端；C1 起另有 Hermes fork 克隆在 `D:\hermes-agent`。
 - 用户用的模型：设置里配的 OpenAI 兼容网关（`api.monkeyapi.net`），默认 Claude 系列模型。
 
 ### 常用命令（在仓库根目录）
@@ -40,7 +40,8 @@ cd frontend && npx tsc -p tsconfig.renderer.json --noEmit && npx tsc -p tsconfig
 
 | 要改什么 | 看哪里 |
 | --- | --- |
-| Agent 主循环、模型调用 | `core/atlas/agent/__init__.py`：`acompletion(**kwargs, stream=True)` 在第 940 行附近；系统消息在第 1952 行起拼装；工具执行和审批在第 1050–1240 行 |
+| **新内核（C1 起）** | `core/atlas/engine/`（适配层、Atlas 工具注册、权限插件）+ fork `D:\hermes-agent`（`run_agent.py`、`agent/`、`tools/`），见第三点六节 |
+| 旧 Agent 主循环（C2 删除） | `core/atlas/agent/__init__.py`：`acompletion(**kwargs, stream=True)` 在第 940 行附近；系统消息在第 1952 行起拼装；工具执行和审批在第 1050–1240 行 |
 | 权限判断 | 同上：`permission_mode`（`full_access` / `ask_writes` / `read_only`）、`is_write` 集合、`APPROVAL_REQUIRED_TOOLS` |
 | 工具输出截断 | 同上第 1590 行附近 `externalize_tool_output` |
 | 子任务 / Worker | `_run_atlas_subtask`、`run(worker=True)`（`agent/__init__.py`）；`agent/orchestrator.py` |
@@ -75,7 +76,7 @@ cd frontend && npx tsc -p tsconfig.renderer.json --noEmit && npx tsc -p tsconfig
    - 访问网络的新功能要防内网访问（参考 `web_extract.py` 的 `_validate_url`）。
    - 密钥、令牌存系统凭据库（keyring），接口永远不返回密钥原文。
 4. **测试**：不写用户真实数据目录；不在仓库里建临时目录；不依赖真实网络（用 mock）。
-5. **真机实测**：凡是新的 Agent 能力（子 Agent、审查员、触发器、MCP……），**必须用真实模型跑一次**，把过程和结果写进结果文件。mock 测试全过但真机不工作的事情发生过（第五波 Worker 收不到任务）。
+5. **不逐波用真实模型实测**（用户 2026-10-01 决定，太费配额）：施工和验收都用假模型服务（Hermes 的 `tests/fakes/fake_llm_provider.py` 或同类），把模型回复写成脚本，断言真实行为。mock 测不到的问题（比如第五波 Worker 收不到任务）要靠「端到端走真实代码路径 + 假模型」来防：从 WebSocket 发 `run.start`，一路走到工具执行和事件输出，只把模型换成假的。真实模型实测集中在 C6 之后的「实测」阶段。
 6. **提交**：每节一个提交，提交信息写清「为什么」；推送前 `git pull --rebase`。不要提交 `frontend/scripts/.cdp.mjs`。
 7. **结果文件**：`tasks/results/<任务书名>.result.md`：每节做了什么、偏差、已知限制、手动验证方法、全量测试的汇总行原文。
 
@@ -104,27 +105,42 @@ cd frontend && npx tsc -p tsconfig.renderer.json --noEmit && npx tsc -p tsconfig
 7. **登记**：在 `docs/plan/VENDORED.md` 加一行。
 8. **用户看得到的文字改成中文**。
 
+## 三点六、Hermes 内核 fork 的工作流（C1 起）
+
+- 内核在 `unicorn-Y/hermes-agent` 的 `atlas` 分支上；主机克隆在 `D:\hermes-agent`，远端 `origin` 是 fork，`upstream` 是 `NousResearch/hermes-agent`。
+- **Atlas 专属的东西放在 Atlas 仓库**：适配层、Atlas 工具、权限插件都在 `core/atlas/engine/`，用 Hermes 的注册表和钩子接进去。**只有非改内核不可的才改 fork**，比如给 `terminal` 加 PowerShell、修换行。fork 改得越少，合并上游越容易。
+- 开发：`core/.venv` 里 `pip install -e D:\hermes-agent`。发布：`core/pyproject.toml` 固定到 fork 上的某个提交号。改了 fork 之后，先推 fork，再把 Atlas 里的提交号改成新的，两边各一个提交。
+- **合并上游**（看到 Hermes 出了新东西时）：
+  ```bash
+  cd D:\hermes-agent && git fetch upstream && git checkout atlas && git merge upstream/main
+  ```
+  解决冲突，跑 Hermes 的相关测试和 Atlas 全量测试，推 fork，更新 Atlas 里的提交号。
+- **从其他家抄**（OpenCode、Pi、Codex 等）：照第三点五节，翻译成 Python。属于内核的放进 fork，属于 Atlas 的放进 `core/atlas/engine/`。文件头写来源，并登记到 VENDORED.md。
+
+具体命令以 C1 结果文件里补全的为准。
+
 ## 四、交付前自检
 
 - [ ] 后端全量测试跑完并通过（汇总行写进结果文件）
 - [ ] 前端四项检查通过（tsc ×2、vitest、vite build）
 - [ ] 新接口都有 OriginGuard 测试（无 token 的外部 Origin 被拒）
-- [ ] 真机场景跑过并记录
-- [ ] `docs/PARITY.md` 更新了对应条目和统计
+- [ ] 任务书的假模型端到端测试都在，并且通过
+- [ ] `docs/plan/CORE-PARITY.md` 本波的行更新了状态和提交号；界面功能有变化的同步改 `docs/PARITY.md`
 - [ ] 结果文件写好
 
-## 五、审查清单（每一波交付后，由 Sol 执行）
+## 五、验收清单（每一波交付后，由 Sol 执行）
 
-审查方要做的不只是读代码：**自己跑全量、自己用真实模型跑任务书的真机场景**（W06、W07 都是真机才暴露了 mock 测不到的崩溃和逻辑错误）。发现的问题直接修，修完补测试，记进审查记录。
+验收方不只是读代码：**自己跑全量测试，自己用假模型把任务书的端到端测试跑一遍**，对照 CORE-PARITY 里本波的每一行逐项检查。**不用真实模型。** 发现的问题直接修，修完补测试，记进验收记录。
 
-真机隔离做法：独立 `ATLAS_DATA_DIR`（复制 `config/atlas.toml`，删掉所有 `[tools.servers.*]`）、`ATLAS_SCHEDULER_ENABLED=false`、独立端口（如 8775）、临时工作目录和假文件；用一个小脚本通过 WebSocket `/ws/chat` 发 `run.start`（字段见 `backend-adapter/src/types.ts` 的 `RunStartRequest`），记录 `tool.*`、`subtask.*` 等事件。**不要碰用户 8765 上的开发后端，也不要动用户的真实文件。**
+端到端隔离做法：独立 `ATLAS_DATA_DIR`（复制 `config/atlas.toml`，删掉所有 `[tools.servers.*]`）、`ATLAS_SCHEDULER_ENABLED=false`、独立端口（如 8775）、临时工作目录和假文件、假模型服务；用一个小脚本通过 WebSocket `/ws/chat` 发 `run.start`（字段见 `backend-adapter/src/types.ts` 的 `RunStartRequest`），记录事件序列。**不要碰用户 8765 上的开发后端，也不要动用户的真实文件。**
 
-1. 拉代码，装新依赖，**自己跑一遍全量测试**（不要相信交付方的结果）。先对比搬入文件和来源文件的规模，看有没有自写缩水版。
-2. 重点读安全相关代码：OriginGuard 改动、返回文件或 HTML 的接口（CSP）、路径校验、子进程和 shell、密钥存储、网络请求（内网防护、DNS 重绑定）、新的受信方式。
-3. 看审批和权限有没有被绕过：新工具有没有进 `is_write` 集合；`ask_writes` 和 `read_only` 下是否正确拦截；子 Agent 权限是否不超过父级。
-4. **用真实模型跑新能力**。
-5. 修掉的问题写进 `tasks/reviews/<任务书名>.review.md`，每条写清「问题、影响、修法」。
-6. 前端接好 → 开发版里实测 → 更新对标表 → 提交推送 → 同步主机。
+1. 拉代码（Atlas 和 hermes fork 都拉），装新依赖，**自己跑一遍全量测试**，不要相信交付方的结果。先对比搬入代码和来源的规模，看有没有自写的缩水版。
+2. 对照 CORE-PARITY 本波的每一行：「最强做法」写到的细节，代码里有没有、测试有没有覆盖。
+3. 看已有功能有没有倒退（CORE-PARITY 第 11 节）。
+4. 看权限有没有被绕过：新工具有没有进写操作集合；`ask_writes`、`read_only` 下是否正确拦截；子 Agent 的权限是否不超过父级。
+5. 前端：四项检查自己跑；用无头 Edge 截图检查本波改过的界面。
+6. 修掉的问题写进 `tasks/reviews/<任务书名>.review.md`，每条写清「问题、影响、修法」，再写验收结论和全量测试汇总行。
+7. 提交推送 → 同步主机。
 
 ## 六、界面实测方法
 

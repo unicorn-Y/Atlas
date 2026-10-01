@@ -1,5 +1,7 @@
 # ATLAS-W07B-ORCHESTRATION-COMPLETION（第七波补做 + 第六、七波前端）
 
+> **作废（2026-10-01）**：内核换成 Hermes（见 `docs/plan/00-MASTER-PLAN.md`）。本书内容分到：并行验收修正 → C3；子任务输出合并、多模型会诊后端 → C1；看板调度器 → 冻结；编辑已有模型 → C5；前端（第三节）→ C3。第一节的审查发现仍可参考。
+
 STATUS: READY
 执行：Luna（后端 + 前端都做）。审查：Sol（按 `docs/plan/EXECUTION-GUIDE.md` 第五节）。
 先读：`docs/plan/00-MASTER-PLAN.md`、`docs/plan/EXECUTION-GUIDE.md`、`tasks/taskbooks/ATLAS-W07-ORCHESTRATION.md`、`tasks/results/ATLAS-W07-ORCHESTRATION.result.md`、本文件第一节（第七波审查发现）。

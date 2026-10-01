@@ -1,5 +1,7 @@
 # ATLAS-W09-COMPUTER-BROWSER（第九波：电脑与浏览器）
 
+> **冻结（2026-10-01）**：主体优先，本书等主体实测通过后再排期；执行前按当时的内核（Hermes）重写接入部分。见 `docs/plan/00-MASTER-PLAN.md` 第五节。
+
 STATUS: READY（W06 交付后即可开始）
 PROTOCOL: +1
 先读：`docs/plan/SOURCE-MAP.md` E 节、`docs/research/2026-09-30-landscape/01-computer-and-browser.md`

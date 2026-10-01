@@ -1,5 +1,7 @@
 # ATLAS-W11-EFFICIENCY-SKILLS-CODING（第十一波：效率、技能、编程）
 
+> **冻结 / 拆分（2026-10-01）**：主体优先。第 1、2 节（按需加载、压缩）随 Hermes 内核在 C1 带进来；第 4 节插件 → C4；第 5 节服务商 → C5；第 6 节编程 → C6；第 3 节技能市场冻结。见 `docs/plan/00-MASTER-PLAN.md` 第五节。
+
 STATUS: READY（W08 交付后）
 PROTOCOL: +1
 先读：`docs/plan/SOURCE-MAP.md` A、D、G 节；`docs/research/2026-09-30-landscape/07-context-and-cost.md`、`09-coding.md`

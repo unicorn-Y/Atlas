@@ -1,5 +1,7 @@
 # ATLAS-W13-COMPLETION（第十三波：补全剩余能力）
 
+> **冻结（2026-10-01）**：主体优先，本书等主体实测通过后再排期；执行前按当时的内核（Hermes）重写接入部分。见 `docs/plan/00-MASTER-PLAN.md` 第五节。
+
 STATUS: READY（W12 审查通过后）
 执行：Luna（后端 + 前端）。审查：Sol。
 先读：`docs/plan/00-MASTER-PLAN.md`、`docs/plan/EXECUTION-GUIDE.md`、`docs/PARITY.md`（找所有 🟡 / ❌）
