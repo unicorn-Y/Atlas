@@ -12,9 +12,15 @@ from atlas.safety.detection import RULES, Assessment, assess
 
 _LOG: list[dict[str, Any]] = []
 _DENIALS: dict[str, int] = {}
+# Off by default (user decision 2026-10-01): the user will design safety review personally.
+# With "off" nothing is detected, blocked, reviewed or scanned; the code stays for reference.
 _DEFAULTS = {
-    "reviewer": "smart", "always_allow": [], "always_deny": [], "trusted_paths": [],
+    "reviewer": "off", "always_allow": [], "always_deny": [], "trusted_paths": [],
 }
+
+
+def review_enabled() -> bool:
+    return get_settings().get("reviewer", "off") != "off"
 
 
 def _path() -> Path:

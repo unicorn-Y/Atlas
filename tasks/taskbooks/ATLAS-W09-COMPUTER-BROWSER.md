@@ -27,7 +27,7 @@ PROTOCOL: +1
    - 保留 Atlas 现有工具名（`computer_observe / mouse / keyboard / window / clipboard`）作为兼容别名，内部改走新实现；新增 H 的工具形态（按元素索引点击、`capture_after`）。
 3. 搬 `vision_routing.py`：主模型不支持图片时，截图先交给辅助视觉模型（配置 `agents.vision_model`）转成文字。
 4. `GET /api/computer/status`（就绪、驱动版本、诊断信息，照 H `doctor.py`）。
-5. 电脑操作照常过 W06 智能审批（`computer_*` 写操作）。
+5. 电脑操作遵守权限模式（安全审查由用户亲自负责，本计划不做）。
 6. **操作留痕**：每一步的截图（缩略图）和动作存进运行记录，任务结束后可以按步骤回看。
 
 **测试**：搬 H `tests/tools/` 下 computer_use 测试（mock 驱动）。真机测试单独标记，默认跳过（和 `test_computer_use.py` 一样）。
@@ -44,7 +44,6 @@ PROTOCOL: +1
 1. 对照 Atlas 现有浏览器能力（`capabilities/browser/browser_use.py`、playwright / chrome-devtools MCP），用 H 的浏览器工具作为主路径，保留 browser-use 作为「整段任务交给浏览器 Agent」的选项。
 2. **复用你的浏览器配置**：搬 `browser_tool_real_profile.py`（把你默认的 Chromium / Chrome / Edge 配置复制一份给 Agent，用真实浏览器程序打开，**不碰原配置**）。设置 `browser.mode: "atlas"|"real_profile"|"cdp"|"extension"`；`cdp` 时 `browser.cdp_url` 只允许回环地址。
 3. **浏览器扩展**（类似 Claude in Chrome）：搬 H `gateway/browser_control_broker.py`（512 行，票据短期、一次性、按身份绑定）和 `tools/browser_extension_router.py`（137 行，失败一律关闭，不乱跳后端）。扩展本身：看 H 仓库里是否有扩展源码（搜 `manifest.json` / `browser-extension`），有就搬，没有就照协议写一个最小扩展（Chrome MV3）。扩展连接后端走本机 WebSocket，用一次性配对码配对（**新增一种受信方式，不能放宽 OriginGuard 现有规则**）。
-4. 浏览器工具结果过 W06 威胁扫描（网页注入）。
 5. **选路策略**写进系统提示和工具描述：有连接器、API 或 MCP 能做的不用浏览器；浏览器能做的不用屏幕点击（照 Claude Cowork）。
 
 **测试**：搬 H 对应测试。

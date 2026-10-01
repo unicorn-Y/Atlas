@@ -131,8 +131,34 @@ async def test_read_only_mcp_tool_runs_without_asking(tmp_path: Path) -> None:
     mcp.call_tool.assert_awaited_once()
 
 
+@pytest.fixture
+def review_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Safety review is off by default (user decision); these tests cover it when switched on."""
+    from atlas import agent as agent_module
+
+    monkeypatch.setattr(agent_module, "safety_review_enabled", lambda: True)
+    monkeypatch.setattr(agent_module, "get_safety_settings", lambda: {
+        "reviewer": "smart", "always_allow": [], "always_deny": [], "trusted_paths": [],
+    })
+
+
 @pytest.mark.asyncio
-async def test_full_access_floor_blocks_before_execution_and_reports_it(tmp_path: Path) -> None:
+async def test_safety_review_is_off_by_default_so_full_access_runs_everything(tmp_path: Path) -> None:
+    mcp = _mcp(read_only=False)
+    agent = AgentOrchestrator(MagicMock(), MagicMock(), mcp_client=mcp)
+    state = _call("serena__execute_shell_command", {"command": "git push --force origin main"})
+    runtime = _runtime(tmp_path, "full_access", None)
+    state["runtime"] = runtime
+    await agent._execute_tools_node(state)
+    mcp.call_tool.assert_awaited_once()
+    queued = []
+    while not runtime.event_queue.empty():
+        queued.append(runtime.event_queue.get_nowait())
+    assert not any(item.get("type") == "safety_reviewed" for item in queued)
+
+
+@pytest.mark.asyncio
+async def test_full_access_floor_blocks_before_execution_and_reports_it(tmp_path: Path, review_on) -> None:
     mcp = _mcp(read_only=False)
     agent = AgentOrchestrator(MagicMock(), MagicMock(), mcp_client=mcp)
     state = _call("serena__execute_shell_command", {"command": "Format-Volume -DriveLetter D"})
@@ -151,7 +177,7 @@ async def test_full_access_floor_blocks_before_execution_and_reports_it(tmp_path
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("verdict", "runs"), [("deny", False), ("allow", True)])
 async def test_flagged_write_goes_to_the_reviewer_with_the_run_model(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, verdict: str, runs: bool,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, verdict: str, runs: bool, review_on,
 ) -> None:
     """The reviewer path crashed on a real model (undefined name); mocks never reached it."""
     from atlas import agent as agent_module

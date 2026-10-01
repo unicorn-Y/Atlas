@@ -41,7 +41,7 @@ PROTOCOL: +1
 
 **做法**：
 1. Atlas 已有技能注册、发现、联邦、信任、回滚。把 H 的市场适配器（skills.sh、ClawHub、GitHub、官方）接进 Atlas 的技能发现；搜索结果标来源和信任级别。
-2. 安装前用 `skills_guard` 扫描，扫描报告给用户看（中文），社区来源有问题默认拦截。
+2. 安装前的安全扫描（H `skills_guard`）不做（安全审查由用户亲自负责，本计划不做）；安装前把技能的文件清单和脚本原文给用户看。
 3. 记录每个技能的来源（`skill_provenance`）。
 4. 技能页「市场」标签：搜索、安装、更新、卸载。
 
@@ -53,7 +53,7 @@ PROTOCOL: +1
 1. 插件市场：`GET/POST/DELETE /api/plugins/marketplaces`（git 仓库地址或 `owner/repo`，只允许 https 和 GitHub 简写），拉取到数据目录 `marketplaces/`，`POST .../{id}/refresh` 更新。
 2. `GET /api/plugins/marketplaces/{id}/plugins`：名称、说明、版本、作者、包含的组件。
 3. `POST /api/plugins/install {marketplace_id, name, dry_run=true}`：**先返回清单**（每个技能、子 Agent、Hook、MCP 服务器，尤其是 Hook 命令和 MCP 启动命令的原文），用户看过后再 `dry_run: false` 安装。安装后技能、子 Agent（W07 的定义文件）立即可用；**Hooks 和 MCP 服务器默认停用**，要用户单独打开。
-4. 安装前过 `plugin_guard` 和 `skills_guard`；MCP 服务器启动前过 `osv_check`（W08 已搬）。
+4. `plugin_guard`、`skills_guard`、`osv_check` 不做（安全审查由用户亲自负责，本计划不做）。
 
 ## 5. 模型服务商全套 + 多密钥轮换（后端，从 H 搬）
 

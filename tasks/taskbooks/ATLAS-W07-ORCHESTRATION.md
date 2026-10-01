@@ -35,7 +35,7 @@ Atlas 现在的 `delegate_task` / `delegate_parallel` 能用但很基础（第�
 3. 事件：沿用 `subtask.started / progress / output / completed / group_completed`；`subtask.started.data` 增加 `agent`（类型）、`role`（leaf / orchestrator）、`background`、`model`、`recipe_id?`、`depth`；后台任务完成时发 `subtask.background_completed {subtask_id, summary}`，并在下一轮把结果交给主 Agent。
 4. **运行中引导**：H 是否有给运行中的子 Agent 发消息的接口（`delegate_tool_progress.py`、`delegation_live_log.py`）——有就搬，没有就自己加：工具 `subtask_message {subtask_id, text}`；WS 客户端消息 `{type: "subtask.message", run_id, subtask_id, text}`；子 Agent 下一轮开始时作为用户消息插入；事件 `subtask.steered {subtask_id, text}`。
 5. 工具 `subtask_status {subtask_id}`：状态、最近进度、完成后的结果。
-6. 子 Agent 的工具调用照常过 W06 的智能审批。
+6. 子 Agent 的工具调用遵守父 run 的权限模式（安全审查由用户亲自负责，本计划不做）。
 
 **测试**：搬 H `tests/tools/` 下 delegate、async_delegation、subagent_worktree 的测试，改成 Atlas 接口。
 

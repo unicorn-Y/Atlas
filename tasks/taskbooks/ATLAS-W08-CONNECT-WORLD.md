@@ -35,7 +35,6 @@ PROTOCOL: +1
 4. **elicitation**：服务器向用户要信息时，转成 Atlas 现有的 `input.required` 事件，加字段 `schema`（JSON Schema）和 `source: {server}`；用户回答走 `input.response`，带 `data` 对象。
 5. **sampling**：服务器请求客户端调模型时，用当前 run 的模型，经过 W06 的用量记录；默认需要用户同意一次（每个服务器），设置里可改成总是允许。
 6. **Tasks 扩展**（2026-07-28 规范）：服务器返回任务句柄时，轮询 `tasks/get` 直到结束，进度用 `tool.output` 推送，用户取消运行时调用 `tasks/cancel`。H 如果还没实现，按官方规范自己写。
-7. MCP 工具结果过 W06 的威胁扫描。
 
 **测试**：搬 H 的 MCP 测试（`tests/tools/` 下 mcp 相关），用本地假 MCP 服务器（stdio 和 HTTP）覆盖：连接、OAuth（假授权服务器）、令牌刷新、401 恢复、elicitation、sampling、健康重启、`state` 校验失败被拒。
 
@@ -45,7 +44,7 @@ PROTOCOL: +1
 
 **做法**：
 - 后端：工具定义里带 `_meta.ui.resourceUri`（`ui://...`）的，调用完成后读取该资源；发事件 `tool.ui {tool_call_id, server, resource_uri, html_url}`；新路由 `GET /api/mcp/apps/resource?server=&uri=` 返回 HTML，带沙箱 CSP（`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https:; connect-src 'none'`）。
-- 界面里的操作（调用同一个服务器的工具）：前端经 `POST /api/mcp/apps/call {run_id, server, tool, arguments}` 转发；只允许调用**同一个服务器**的工具；照常过权限模式和 W06 智能审批。
+- 界面里的操作（调用同一个服务器的工具）：前端经 `POST /api/mcp/apps/call {run_id, server, tool, arguments}` 转发；只允许调用**同一个服务器**的工具；照常遵守权限模式（安全审查由用户亲自负责，本计划不做）。
 - 前端：用 `AppRenderer` 在沙箱 iframe（不给 `allow-same-origin`）里渲染，支持内嵌 / 画中画 / 全屏三种显示；通过 postMessage 桥接。**iframe 拿不到 Atlas 的 API token**（Electron 只给主页面注入，保持）。
 - 测试：用 ext-apps 的示例服务器跑一个带界面的工具。
 
@@ -77,7 +76,7 @@ PROTOCOL: +1
 1. Atlas 已有 Telegram 渠道（`core/atlas/telegram.py`）。把它和新渠道统一成「渠道」抽象：参考 H 的适配器接口（收消息、发消息、发卡片 / 按钮、发文件、身份白名单）。只搬 H 网关里**渠道适配所需的最小部分**，不要整个 `gateway/run.py`。
 2. 搬飞书、钉钉、邮件三个适配器。
 3. 行为和 Telegram 一致：只响应白名单里的账号；手机发来的任务默认「改前问我」，审批用卡片按钮；会话标 `source: "feishu"|"dingtalk"|"email"`。
-4. 邮件渠道的邮件内容是**不可信数据**（过 W06 威胁扫描，不进长期记忆）。
+4. 邮件渠道的邮件内容不进长期记忆。
 5. 凭据存系统凭据库。
 6. 接口：`GET/PUT /api/channels/{feishu|dingtalk|email}`、`POST /api/channels/{name}/test`（格式和现有 Telegram 接口一致）。
 
@@ -96,7 +95,7 @@ PROTOCOL: +1
 2. **新邮件触发**（照 O 的 IMAP 扩展）：监视一个邮箱文件夹；发件人白名单；**每封邮件用受限的读信任务处理**（照 O：邮件内容只当数据，不跟随邮件里的链接和指令；读信任务只有最少的工具）；去重状态持久化。
 3. **条件触发**（照 O 的 standing intents）：「当 X 出现时做 Y」。新工具 `intent {action: create|list|cancel, description, triggers: [[关键词…]], scope, expires_at?, cooldown?, max_fires?}`；匹配时**不调用模型**，用 SQLite 全文索引预筛，一组关键词全部出现才命中；默认冷却 24 小时、最多触发 3 次、90 天过期（照 O 的保守默认值）；命中时把一段有长度上限的提示块交给这一轮的主回复。来源：用户消息、聊天渠道消息、新邮件。
 4. **网页变化监控**（自己写）：定时用 `web_extract` 抓取（带 SSRF 防护），和上次正文比较，有实质变化就触发任务；变化内容是不可信数据。
-5. 所有触发器产生的运行：标 `trigger: {type, id}`；内容过 W06 威胁扫描；不进长期记忆；用户请求部分是触发任务配置里的模板（**不是外部内容**），这样 W06 的审查模型只看到用户自己写的模板。
+5. 所有触发器产生的运行：标 `trigger: {type, id}`；外部内容不进长期记忆。
 6. 接口：沿用 `/api/schedules`，`trigger_type` 增加 `webhook`、`email`、`intent`、`web_watch`；`GET /api/intents`、`DELETE /api/intents/{id}`。
 
 **测试**：Webhook 令牌校验、幂等、OriginGuard（API token 在 `/hooks` 上无效）、模板渲染；IMAP 用假服务器；条件触发的匹配、冷却、次数、过期；网页监控的变化判断和 SSRF。

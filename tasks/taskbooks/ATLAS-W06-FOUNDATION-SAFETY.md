@@ -1,6 +1,7 @@
 # ATLAS-W06-FOUNDATION-SAFETY（第六波：地基与安全）
 
-STATUS: READY
+STATUS: 后端已交付并审阅（见 `tasks/reviews/ATLAS-W06-FOUNDATION-SAFETY.review.md`）。
+**2026-10-01 用户决定**：安全审查（§4、§5 之外的安全部分、§7 的安全界面）由用户亲自做，开关默认关闭，前端不接；本地语音（§6.2、§7 第 5 项）暂缓。前端只做用量、模型切换提示、停止前校验提示。
 BASE_BRANCH: main
 PROTOCOL: 1.7 → 1.8
 SUPERSEDES: `tasks/taskbooks/CODEX-ATLAS-BACKEND-PARITY-WAVE6.md`（作废，不要执行；其中子 Agent 移到 W07，浏览器交接移到 W09，手机配对和导出网页移到 W10，插件市场移到 W11）
