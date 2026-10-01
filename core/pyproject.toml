@@ -45,7 +45,7 @@ dependencies = [
     "pypdf>=5.0",
     "trafilatura>=2.0",
     "youtube-transcript-api>=1.2",
-    "hermes-agent @ git+https://github.com/unicorn-Y/hermes-agent.git@aea969677c60a1bb72fe227fdfb98f196a2092cc",
+    "hermes-agent @ git+https://github.com/unicorn-Y/hermes-agent.git@562ad75baec0c8360f6ce2d48b7d9de56506956c",
 ]
 
 [project.optional-dependencies]
@@ -63,6 +63,9 @@ atlas = "atlas.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["atlas"]
