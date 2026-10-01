@@ -346,7 +346,9 @@ class HermesRuntime:
             volatile_prompt = "\n\n".join(
                 str(section).strip() for section in (volatile_context or []) if str(section).strip()
             )
-            build_system_prompt = agent._build_system_prompt
+            build_system_prompt = getattr(
+                agent, "_build_system_prompt", lambda text=None: str(text or ""),
+            )
 
             def build_atlas_layer(system_message: str | None = None) -> str:
                 prompt = build_system_prompt(system_message)

@@ -132,6 +132,7 @@ class FakeLLMServer:
         api_key: str | list[str] | tuple[str, ...] | frozenset[str] | None = None,
         record_get: bool = False,
         prompt_tokens_fn: Callable[[dict[str, Any]], int] | None = None,
+        context_length: int = 128000,
     ) -> None:
         self._script: list[Response] = list(script) if isinstance(script, list) else []
         self._responder: Responder | None = script if callable(script) else None
@@ -146,6 +147,7 @@ class FakeLLMServer:
         # Optional: derive reported ``usage.prompt_tokens`` from each request body (so token-driven
         # logic such as compaction triggers sees a realistic, growing count instead of a constant).
         self.prompt_tokens_fn = prompt_tokens_fn
+        self.context_length = context_length
         self.requests: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -243,7 +245,7 @@ def _handler_for(server: FakeLLMServer) -> type[BaseHTTPRequestHandler]:
                     })
             if self.path.rstrip("/").endswith("/models"):
                 self._send_json(200, {"object": "list", "data": [
-                    {"id": MODEL_ID, "object": "model", "context_length": 128000},
+                    {"id": MODEL_ID, "object": "model", "context_length": server.context_length},
                 ]})
                 return
             self._send_json(404, {"error": {"message": "not found"}})
@@ -417,6 +419,7 @@ def write_hermes_home(
     *,
     api_key: str = "sk-fake-e2e",
     extra_config: str = "",
+    context_length: int = 128000,
 ) -> Path:
     """Write a minimal config.yaml + .env routing the main model to ``base_url``.
 
@@ -430,7 +433,7 @@ def write_hermes_home(
         "  provider: custom\n"
         f"  base_url: {base_url}\n"
         f"  default: {MODEL_ID}\n"
-        "  context_length: 128000\n"
+        f"  context_length: {context_length}\n"
         "agent:\n"
         "  api_max_retries: 1\n"
         # Answered, so an interactive chat never stops on the one-time shared-metrics offer.
