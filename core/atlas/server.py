@@ -166,6 +166,12 @@ def _task_store(kind: str) -> TomlRecordStore:
     return TomlRecordStore(get_config().db_path.parent, kind)
 
 
+def _kanban_store():
+    from atlas.kanban import KanbanStore
+
+    return KanbanStore(get_config().db_path)
+
+
 def _profile_store() -> TomlRecordStore:
     store = _task_store("profiles")
     seed_profiles(store)
@@ -1786,8 +1792,36 @@ async def search_messages(
 
 
 _WORKSPACE_IGNORES = {".git", "node_modules", ".venv", "__pycache__", ".atlas-checkpoints"}
-_RULE_FILES = ("AGENTS.md", "CLAUDE.md", ".atlas/rules.md")
+_RULE_FILES = ("AGENTS.md", "CLAUDE.md", ".atlas/rules.md", ".atlas/NOTES.md")
 _LOADED_RULE_WORKSPACES: set[str] = set()
+
+
+def _bounded_project_notes(content: str) -> str:
+    if len(content.encode("utf-8")) <= 8192:
+        return content
+    sections: list[tuple[str, list[str]]] = []
+    heading = "Project notes"
+    lines: list[str] = []
+    for line in content.splitlines():
+        if line.startswith("## "):
+            if lines:
+                sections.append((heading, lines))
+            heading, lines = line, []
+        elif line.strip():
+            lines.append(line)
+    if lines:
+        sections.append((heading, lines))
+    selected = ["# Project notes (recent entries)"]
+    for heading, entries in sections:
+        selected.extend([heading, *entries[-20:]])
+    result = "\n".join(selected)
+    while len(result.encode("utf-8")) > 8192 and sections:
+        heading, entries = sections.pop(0)
+        selected = ["# Project notes (recent entries)"]
+        for section, rows in sections:
+            selected.extend([section, *rows[-20:]])
+        result = "\n".join(selected)
+    return result[-8192:]
 
 
 def _workspace_trust_path() -> Path:
@@ -2546,6 +2580,13 @@ async def workspace_rules(root: str) -> dict[str, Any]:
         return {"root": root, "files": files}
     base, _ = _workspace_path(root)
     candidates = [base / name for name in _RULE_FILES]
+    for directory, pattern in (
+        (".atlas/agents", "*.md"), (".claude/agents", "*.md"),
+        (".opencode/agent", "*.md"), (".opencode/agents", "*.md"),
+        (".codex/agents", "*.toml"), (".github/agents", "*.agent.md"),
+    ):
+        candidates.extend(sorted((base / directory).glob(pattern))[:20])
+    candidates = list(dict.fromkeys(candidates))
     user_rules = Path.home() / ".atlas" / "AGENTS.md"
     candidates.append(user_rules)
     files = []
@@ -2553,10 +2594,41 @@ async def workspace_rules(root: str) -> dict[str, Any]:
         if not item.is_file():
             continue
         raw = await asyncio.to_thread(item.read_bytes)
+        content = raw[:65536].decode("utf-8", errors="replace")
+        if item.name == "NOTES.md" and item.parent.name == ".atlas":
+            content = _bounded_project_notes(content)
         files.append({"path": str(item.resolve()), "bytes": len(raw),
-                      "content": raw[:65536].decode("utf-8", errors="replace"),
+                      "content": content,
                       "truncated": len(raw) > 65536})
     return {"root": str(base), "files": files}
+
+
+@app.get("/api/workspace/notes")
+async def get_workspace_notes(root: str) -> dict[str, Any]:
+    base, _ = _workspace_path(root)
+    root_key = str(base.resolve())
+    if not _workspace_trust().get(root_key, False):
+        raise HTTPException(status_code=403, detail="Workspace is not trusted")
+    path = base / ".atlas" / "NOTES.md"
+    if not path.is_file():
+        return {"root": root_key, "content": ""}
+    return {"root": root_key, "content": (await asyncio.to_thread(path.read_text, encoding="utf-8"))[:65536]}
+
+
+@app.put("/api/workspace/notes")
+async def put_workspace_notes(req: dict[str, Any]) -> dict[str, Any]:
+    root = str(req.get("root", ""))
+    content = req.get("content")
+    if not isinstance(content, str) or len(content.encode("utf-8")) > 65536:
+        raise HTTPException(status_code=422, detail="content must be a string up to 64 KiB")
+    base, _ = _workspace_path(root)
+    root_key = str(base.resolve())
+    if not _workspace_trust().get(root_key, False):
+        raise HTTPException(status_code=403, detail="Workspace is not trusted")
+    path = base / ".atlas" / "NOTES.md"
+    await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
+    await asyncio.to_thread(path.write_text, content, encoding="utf-8")
+    return {"root": root_key, "bytes": len(content.encode("utf-8"))}
 
 
 @app.get("/api/checkpoints")
@@ -3781,6 +3853,17 @@ async def list_agent_backends() -> dict[str, Any]:
 @app.get("/api/agents/external")
 async def list_external_agents() -> dict[str, Any]:
     return external_agent_status(external_agent_status_cache)
+
+
+@app.get("/api/agents/types")
+async def list_agent_types(root: str | None = Query(default=None)) -> dict[str, Any]:
+    """List built-in and imported sub-agent definitions for a workspace."""
+    from atlas.agent.definitions import list_agent_types as load_types
+
+    workspace = Path(root).expanduser().resolve() if root else None
+    trusted = bool(workspace and _workspace_trust().get(str(workspace), False))
+    types = load_types(get_config().db_path.parent, workspace, trusted)
+    return {"types": types[:20]}
 
 
 @app.post("/api/agent/backends/{name}/sessions")
@@ -5134,6 +5217,47 @@ def _validate_recipe(value: dict[str, Any]) -> dict[str, Any]:
             "mode": value.get("mode", "act")}
 
 
+@app.get("/api/kanban/boards")
+async def list_kanban_boards() -> dict[str, Any]:
+    return {"boards": _kanban_store().boards()}
+
+
+@app.post("/api/kanban/boards", status_code=201)
+async def create_kanban_board(req: dict[str, Any]) -> dict[str, Any]:
+    try:
+        board = _kanban_store().create_board(str(req.get("name", "")), req.get("id"))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return board
+
+
+@app.get("/api/kanban/boards/{board_id}/tasks")
+async def list_kanban_tasks(board_id: str) -> dict[str, Any]:
+    return {"tasks": _kanban_store().tasks(board_id)}
+
+
+@app.post("/api/kanban/boards/{board_id}/tasks", status_code=201)
+async def create_kanban_task(board_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return _kanban_store().create_task(board_id, req)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.patch("/api/kanban/boards/{board_id}/tasks/{task_id}")
+async def update_kanban_task(board_id: str, task_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return _kanban_store().update_task(board_id, task_id, req)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.get("/api/recipes")
 async def list_recipes() -> dict[str, Any]:
     return {"recipes": _task_store("recipes").list()}
@@ -5317,7 +5441,7 @@ async def run_goal_now(goal_id: str) -> dict[str, str]:
 @app.get("/api/runtime/protocol")
 async def runtime_protocol() -> dict[str, str]:
     """Advertise Runtime Event Protocol version."""
-    return {"version": "1.8"}
+    return {"version": "1.9"}
 
 
 @app.get("/api/usage")
@@ -5709,6 +5833,24 @@ async def ws_chat(ws: WebSocket) -> None:
                         await runtime_mgr.send(conn_id, rejected.next_envelope(
                             "run.steer.rejected", {"reason": reason},
                         ))
+
+            elif msg_type == "subtask.message":
+                run_id = str(data.get("run_id", ""))
+                subtask_id = str(data.get("subtask_id", ""))
+                text = data.get("text")
+                run = runtime_mgr.runs.get(run_id)
+                service = getattr(orchestrator, "_delegation", None) if orchestrator else None
+                if (run is None or service is None or not isinstance(text, str)
+                        or not service.steer_subtask(subtask_id, text)):
+                    if run is not None:
+                        await runtime_mgr.send_run(run, run.next_envelope(
+                            "subtask.steer_rejected", {"subtask_id": subtask_id,
+                                                        "reason": "subtask_not_active"},
+                        ), conn_id)
+                else:
+                    await runtime_mgr.send_run(run, run.next_envelope(
+                        "subtask.steered", {"subtask_id": subtask_id, "text": text.strip()},
+                    ), conn_id)
 
             elif msg_type == "input.response":
                 event_id = str(data.get("event_id", ""))
@@ -6723,7 +6865,8 @@ async def _execute_run(
         ) -> asyncio.Event:
             cancel_event = asyncio.Event()
             run.subtasks[subtask_id] = {
-                "status": "running", "cancel_event": cancel_event, **(group_data or {}),
+                "subtask_id": subtask_id, "status": "running", "progress": "子 Agent 已启动。",
+                "cancel_event": cancel_event, **(group_data or {}),
             }
             await emit("subtask.started", {
                 "subtask_id": subtask_id, "goal": goal, "backend": backend,
@@ -6734,6 +6877,8 @@ async def _execute_run(
         async def subtask_progress(
             subtask_id: str, text: str, group_data: dict[str, Any] | None = None,
         ) -> None:
+            if subtask_id in run.subtasks:
+                run.subtasks[subtask_id]["progress"] = text
             event = "subtask.output" if group_data else "subtask.progress"
             await emit(event, {
                 "subtask_id": subtask_id, "text": text, **(group_data or {}),
@@ -6745,15 +6890,39 @@ async def _execute_run(
         ) -> None:
             entry = run.subtasks.get(subtask_id)
             if entry:
-                entry["status"] = status
+                entry.update({"status": status, "progress": summary, "result": summary})
             await emit("subtask.completed", {
                 "subtask_id": subtask_id, "status": status,
                 "summary": summary, "duration_ms": duration_ms,
                 **(group_data or {}),
             })
+            if entry and entry.get("background") and not entry.get("group_id"):
+                if memory is not None and run.conversation_id:
+                    with suppress(Exception):
+                        await memory.save_message(
+                            run.conversation_id, "assistant",
+                            f"后台子 Agent {subtask_id} 已完成：\n{summary}",
+                            {"kind": "subtask.background_completed", "subtask_id": subtask_id},
+                        )
+                await emit("subtask.background_completed", {
+                    "subtask_id": subtask_id, "summary": summary,
+                })
 
         async def subtask_group_completed(payload: dict[str, Any]) -> None:
             await emit("subtask.group_completed", payload)
+            if payload.get("background"):
+                summary = str(payload.get("summary", ""))[:2000]
+                if memory is not None and run.conversation_id:
+                    with suppress(Exception):
+                        await memory.save_message(
+                            run.conversation_id, "assistant",
+                            f"后台 Worker 组 {payload.get('subtask_id', '')} 已完成：\n{summary}",
+                            {"kind": "subtask.background_completed",
+                             "subtask_id": payload.get("subtask_id", "")},
+                        )
+                await emit("subtask.background_completed", {
+                    "subtask_id": payload.get("subtask_id", ""), "summary": summary,
+                })
 
         async def user_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
             return await _hook_store().execute(event_name, {
@@ -6799,6 +6968,9 @@ async def _execute_run(
             steer_queue=run.steer_queue,
             input_callback=input_callback,
             workspace=workspace,
+            workspace_trusted=bool(workspace and _workspace_trust().get(
+                str(Path(workspace).expanduser().resolve()), False,
+            )),
             workspace_rules=workspace_rules,
             mode=mode,
             tool_allow=run.tool_allow,
@@ -6867,6 +7039,25 @@ async def _execute_run(
                 await emit("run.steered", {
                     "content": event.get("content", ""),
                     "event_id": event.get("event_id", ""),
+                })
+
+            elif etype == "subtask_steered":
+                await emit("subtask.steered", {
+                    "subtask_id": event.get("subtask_id", ""),
+                    "text": event.get("text", ""),
+                })
+
+            elif etype == "run_todos":
+                await emit("run.todos", {
+                    "revision": event.get("revision", 0),
+                    "todos": event.get("todos", []),
+                })
+
+            elif etype == "moa_references":
+                await emit("moa.references", {
+                    "models": event.get("models", []),
+                    "references": event.get("references", []),
+                    "latency_ms": event.get("latency_ms", 0),
                 })
 
             elif etype == "run_model_switched":

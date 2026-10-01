@@ -375,13 +375,19 @@
 | F208 | 控制台/管理面板 | ✅ | 设置、集成、依赖检查、可观测性 | |
 | F209 | API/SDK 驱动 | ✅ | HTTP + WebSocket 协议（docs/api-protocol-v1.2.md） | |
 | F210 | Headless/CI | 🟡 | `cli.py` | |
+| F211 | 子 Agent 委派、后台回传、引导与状态 | 🟡 | W07 后端完成一部分，桌面事件卡片与真机引导仍未验收 | Hermes、Atlas W07 |
+| F212 | 多格式子 Agent 定义 | 🟡 | 后端解析器/API 有限支持五家格式；前端设置和完整授权体验未交付 | Claude Code、OpenCode、Codex、Copilot、OpenHands |
+| F213 | 并行验收与自动重派 | 🟡 | 后端验收闭环已接入；桌面验收意见展示未交付 | Factory Missions、Hermes |
+| F214 | 任务看板 | 🟡 | SQLite API 与 Agent 工具已接入；桌面任务看板未交付 | Hermes、Claude Code |
+| F215 | 多模型会诊 | 🟡 | `/moa` 后端参考模型轮已接入；设置和 UI 展示未交付 | Hermes MoA |
+| F216 | 项目记事本 | 🟡 | 信任工作区 API、Agent 追加及规则加载已接入；桌面入口未交付 | Cursor Projects、OpenClaw |
 
 ## 4. 统计
 
 | 状态 | 数量 |
 | --- | --- |
 | ✅ | 170 |
-| 🟡 | 15 |
+| 🟡 | 21 |
 | ❌ | 3 |
 | ➖ | 18 |
 | ⚖️ | 4 |

@@ -75,7 +75,43 @@ class TestRuntimeProtocol:
         resp = await client.get("/api/runtime/protocol")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["version"] == "1.8"
+        assert data["version"] == "1.9"
+
+
+class TestWave7WorkspaceOrchestration:
+    async def test_agent_types_include_workspace_source_and_trust_state(
+        self, client: AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        workspace = tmp_path / "project"
+        agent_dir = workspace / ".claude" / "agents"
+        agent_dir.mkdir(parents=True)
+        (agent_dir / "reviewer.md").write_text(
+            "---\nname: reviewer\ndescription: Review changes\ntools: local_file\n---\nReview only.",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(server, "_workspace_trust", lambda: {str(workspace.resolve()): False})
+        response = await client.get("/api/agents/types", params={"root": str(workspace)})
+        assert response.status_code == 200
+        reviewer = next(item for item in response.json()["types"] if item["name"] == "reviewer")
+        assert reviewer["source"] == "claude"
+        assert reviewer["trusted"] is False
+
+    async def test_project_notes_api_requires_trust_and_roundtrips_isolated_workspace(
+        self, client: AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        workspace = tmp_path / "project"
+        workspace.mkdir()
+        trust = {str(workspace.resolve()): False}
+        monkeypatch.setattr(server, "_workspace_trust", lambda: trust)
+        denied = await client.get("/api/workspace/notes", params={"root": str(workspace)})
+        assert denied.status_code == 403
+        trust[str(workspace.resolve())] = True
+        saved = await client.put("/api/workspace/notes", json={
+            "root": str(workspace), "content": "## Build\n- run pytest\n",
+        })
+        assert saved.status_code == 200
+        read = await client.get("/api/workspace/notes", params={"root": str(workspace)})
+        assert read.json()["content"] == "## Build\n- run pytest\n"
 
     async def test_usage_endpoint_grouping_validation(self, client: AsyncClient) -> None:
         empty = await client.get("/api/usage", params={"group_by": "model"})

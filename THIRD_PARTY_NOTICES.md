@@ -4,6 +4,8 @@
 
 Ported code and logic from [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent), commit `663362680b6ffa4fbffeb58f6682564239a1953b`.
 
+Wave 7 delegation, output-schema, worktree, todo, kanban, and MoA behavior also uses portions of [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent), commit `330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3` (see `docs/plan/VENDORED.md` for file-level mapping).
+
 MIT License
 
 Copyright (c) 2025 Nous Research
