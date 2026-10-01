@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import inspect
 import json
 import threading
 import uuid
@@ -11,6 +13,9 @@ from typing import Any
 _context = threading.local()
 _lock = threading.Lock()
 _registered: set[str] = set()
+_plan_registered: set[str] = set()
+_active_contexts: dict[str, tuple[Any, Any, asyncio.AbstractEventLoop]] = {}
+_hermes_fallback_handlers: dict[str, Any] = {}
 
 _ALIASES = {
     "read_file": ("local_file", "read"),
@@ -36,6 +41,12 @@ _ATLAS_NATIVE_TOOLS = {
 }
 
 
+def _approval_fingerprint(name: str, arguments: dict[str, Any]) -> str:
+    stable = {key: value for key, value in arguments.items() if key not in {"cwd", "workdir"}}
+    payload = json.dumps([name, stable], sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) -> None:
     """Expose Atlas tool schemas and bind sync Hermes handlers to this async Atlas run."""
     from tools.registry import registry
@@ -43,14 +54,25 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
 
     schemas = agent._model_facing_tools()
     names: list[str] = []
+    plan_mode = getattr(runtime, "mode", "act") == "plan"
+    atlas_toolset = "atlas-plan" if plan_mode else "atlas"
+    registered = _plan_registered if plan_mode else _registered
+    plan_tools = {"read_file", "search_files", "web_fetch"}
     with _lock:
         indexed = {str(item.get("function", {}).get("name", "")): item for item in schemas}
+        if plan_mode:
+            indexed = {name: item for name, item in indexed.items() if name in plan_tools}
         for name in _ALIASES:
+            if plan_mode and name not in plan_tools:
+                continue
             if name in _ATLAS_NATIVE_TOOLS:
                 continue
             hermes_schema = registry.get_schema(name)
             if hermes_schema:
                 indexed[name] = {"function": hermes_schema}
+            previous = registry.get_entry(name)
+            if previous is not None and name in _HERMES_CORE_TOOLS:
+                _hermes_fallback_handlers.setdefault(name, previous.handler)
         for entry in indexed.values():
             function = entry.get("function", {})
             name = str(function.get("name", ""))
@@ -67,15 +89,36 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
             }
 
             def handler(args: dict[str, Any], *, _name: str = name, **_kwargs: Any) -> str:
-                bound_agent = getattr(_context, "agent", None)
-                bound_runtime = getattr(_context, "runtime", None)
-                bound_loop = getattr(_context, "loop", None)
+                session_id = str(_kwargs.get("session_id") or "")
+                active = _active_contexts.get(session_id) if session_id else None
+                bound_agent = active[0] if active else getattr(_context, "agent", None)
+                bound_runtime = active[1] if active else getattr(_context, "runtime", None)
+                bound_loop = active[2] if active else getattr(_context, "loop", None)
                 if bound_agent is None or bound_runtime is None or bound_loop is None:
-                    return json.dumps({"error": "Atlas 工具不在活动运行中。"}, ensure_ascii=False)
+                    fallback = _hermes_fallback_handlers.get(_name)
+                    if fallback is None:
+                        return json.dumps({"error": "Atlas 工具不在活动运行中。"}, ensure_ascii=False)
+                    try:
+                        parameters = inspect.signature(fallback).parameters
+                        accepted = {
+                            key: value for key, value in _kwargs.items()
+                            if key in parameters or any(
+                                item.kind is inspect.Parameter.VAR_KEYWORD for item in parameters.values()
+                            )
+                        }
+                    except (TypeError, ValueError):
+                        accepted = {}
+                    return fallback(args, **accepted)
                 tool_name, tool_args = _translate(_name, args)
                 from langchain_core.messages import AIMessage
 
                 call_id = f"atlas:{uuid.uuid4().hex}"
+                event_queue = getattr(bound_runtime, "event_queue", None)
+                if event_queue is not None:
+                    asyncio.run_coroutine_threadsafe(event_queue.put({
+                        "type": "tool_call", "id": call_id, "name": tool_name,
+                        "arguments": tool_args,
+                    }), bound_loop).result()
                 request = {"name": tool_name, "args": tool_args, "id": call_id, "type": "tool_call"}
                 future = asyncio.run_coroutine_threadsafe(
                     bound_agent._execute_tools_node({
@@ -89,30 +132,38 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 return str(messages[-1].content) if messages else "工具没有返回内容。"
 
             registry.register(
-                name=name, toolset="atlas", schema=schema, handler=handler,
+                name=name, toolset=atlas_toolset, schema=schema, handler=handler,
                 is_async=False, description=schema["description"], override=True,
             )
-            _registered.add(name)
+            registered.add(name)
             names.append(name)
 
         # `toolsets` is the shared resolver table; the schema source and handlers remain
         # registered through Hermes' canonical registry.
-        TOOLSETS["atlas"] = {
+        TOOLSETS[atlas_toolset] = {
             "description": "Atlas 工作区、项目和运行工具",
-            "tools": sorted(_registered),
+            "tools": sorted(registered),
             "includes": [],
         }
-
-    activate_atlas_tool_context(agent, runtime, loop)
-
 
 def activate_atlas_tool_context(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) -> None:
     _context.agent = agent
     _context.runtime = runtime
     _context.loop = loop
+    session_id = str(getattr(runtime, "conversation_id", "") or "")
+    if session_id:
+        with _lock:
+            _active_contexts[session_id] = (agent, runtime, loop)
 
 
 def clear_atlas_tool_context() -> None:
+    runtime = getattr(_context, "runtime", None)
+    session_id = str(getattr(runtime, "conversation_id", "") or "")
+    if session_id:
+        with _lock:
+            active = _active_contexts.get(session_id)
+            if active is not None and active[1] is runtime:
+                _active_contexts.pop(session_id, None)
     for name in ("agent", "runtime", "loop"):
         if hasattr(_context, name):
             delattr(_context, name)

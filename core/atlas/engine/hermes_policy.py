@@ -1,0 +1,179 @@
+"""Atlas in-process policy hooks for Hermes tool execution.
+
+Hermes hook API source: ``hermes_cli/plugins.py::PluginContext.register_hook`` and
+``agent/agent_runtime_helpers.py::_dispatch_pre_tool_call_hooks`` at
+unicorn-Y/hermes-agent@562ad75baec0c8360f6ce2d48b7d9de56506956c (MIT).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import inspect
+import threading
+from typing import Any
+
+_installed: set[int] = set()
+_install_lock = threading.Lock()
+_checkpoint_lock = threading.Lock()
+_ATLAS_WRITE_TOOLS = {
+    "remember", "project_note", "create_checkpoint", "restore_checkpoint",
+    "kanban_create_board", "kanban_create_task", "kanban_update_task",
+    "create_document", "create_spreadsheet", "create_presentation", "run_checks",
+    "delegate_task", "delegate_parallel", "subtask_message",
+    "computer_click", "computer_type", "computer_key", "computer_scroll",
+    "computer_drag", "computer_hotkey", "computer_use",
+}
+
+
+def install_atlas_policy_plugin() -> None:
+    """Register Atlas' pre/post tool hooks through Hermes' supported PluginContext API."""
+    from hermes_cli.plugins import PluginContext, get_plugin_manager
+    from hermes_cli.plugins_manifest import PluginManifest
+
+    manager = get_plugin_manager()
+    identity = id(manager)
+    with _install_lock:
+        if identity in _installed:
+            return
+        context = PluginContext(PluginManifest(name="atlas-workspace-policy"), manager)
+        context.register_hook("pre_tool_call", _pre_tool_call)
+        context.register_hook("post_tool_call", _post_tool_call)
+        _installed.add(identity)
+
+
+def _active(session_id: str = "") -> tuple[Any, Any, Any] | None:
+    from atlas.engine.tool_registry import _active_contexts, _context
+
+    if session_id and session_id in _active_contexts:
+        return _active_contexts[session_id]
+
+    agent = getattr(_context, "agent", None)
+    runtime = getattr(_context, "runtime", None)
+    loop = getattr(_context, "loop", None)
+    return (agent, runtime, loop) if agent is not None and runtime is not None and loop else None
+
+
+def _write_tool(name: str, args: dict[str, Any]) -> bool:
+    if name in _ATLAS_WRITE_TOOLS or name in {
+        "write_file", "patch", "terminal", "execute_code", "delegate_task", "delegate_parallel",
+    }:
+        return True
+    if name == "process_manage":
+        return args.get("action", "list") in {
+            "start", "write_stdin", "terminate", "kill", "submit", "close", "handoff",
+        }
+    if name == "local_file":
+        return args.get("action") in {"write", "append", "mkdir", "copy", "move", "delete"}
+    if name in {"local_edit", "local_shell", "local_exec", "execute_command", "run_script"}:
+        return True
+    return name.startswith(("custom_", "mcp-", "mcp_", "mcp__"))
+
+
+def _call_async(loop: asyncio.AbstractEventLoop, callback: Any, *args: Any) -> Any:
+    result = callback(*args)
+    if inspect.isawaitable(result):
+        async def await_result() -> Any:
+            return await result
+
+        return asyncio.run_coroutine_threadsafe(await_result(), loop).result(timeout=310)
+    return result
+
+
+def _checkpoint_first_write(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) -> str | None:
+    """Snapshot the current local or SSH workspace once before its first write."""
+    if getattr(runtime, "hermes_write_checkpoint_created", False):
+        return None
+    workspace = str(getattr(runtime, "workspace", "") or "")
+    try:
+        with _checkpoint_lock:
+            if getattr(runtime, "hermes_write_checkpoint_created", False):
+                return None
+            if workspace.startswith("ssh://"):
+                callback = getattr(runtime, "ssh_checkpoint_callback", None)
+                if callback is None:
+                    return "SSH 写操作缺少检查点通道，操作已取消。"
+                _call_async(loop, callback, "create", {"paths": ["."]})
+            else:
+                if not workspace:
+                    return "当前对话没有工作目录，无法创建写前检查点。"
+                store = getattr(agent, "checkpoints", None)
+                if store is None:
+                    return "当前对话没有检查点存储，写操作已取消。"
+                store.create_checkpoint(
+                    workspace, ["."], run_id=getattr(runtime, "run_id", None),
+                    conversation_id=getattr(runtime, "conversation_id", None),
+                )
+            runtime.hermes_write_checkpoint_created = True
+    except Exception as exc:
+        return f"写前检查点创建失败，操作已取消：{exc}"
+    return None
+
+
+def _pre_tool_call(tool_name: str = "", args: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, str] | None:
+    active = _active(str(kwargs.get("session_id") or ""))
+    if active is None:
+        return None
+    agent, runtime, loop = active
+    arguments = dict(args or {})
+    name = str(tool_name)
+    mode = str(getattr(runtime, "permission_mode", "full_access"))
+    is_write = _write_tool(name, arguments)
+    if (mode == "read_only" or getattr(runtime, "mode", "act") == "plan"
+            or bool(getattr(runtime, "read_only", False))) and is_write:
+        return {"action": "block", "message": "当前对话是只读模式，不能执行写操作。"}
+
+    callback = getattr(runtime, "user_hook_callback", None)
+    from atlas.engine.tool_registry import _ALIASES
+
+    atlas_tool_names = {
+        str(item.get("function", {}).get("name", ""))
+        for item in agent._model_facing_tools()
+    }
+    if callback and name not in _ALIASES and name not in atlas_tool_names:
+        outcome = _call_async(loop, callback, "tool.before", {
+            "tool_name": name, "parameters": arguments,
+        })
+        if isinstance(outcome, dict) and outcome.get("blocked"):
+            return {"action": "block", "message": str(outcome.get("reason", "Blocked by hook"))}
+
+    if mode == "ask_writes" and is_write:
+        approval = getattr(runtime, "approval_callback", None)
+        if approval is None:
+            return {"action": "block", "message": "当前对话没有可用的审批通道，写操作已取消。"}
+        call_id = str(kwargs.get("tool_call_id") or "hermes-tool")
+        choice = _call_async(loop, approval, f"approval:{call_id}", name, arguments)
+        if choice != "allow":
+            return {"action": "block", "message": "操作未获允许，因此已取消。"}
+        if not name.startswith("mcp__"):
+            from atlas.engine.tool_registry import _approval_fingerprint, _translate
+
+            approved = getattr(runtime, "hermes_preapproved_writes", None)
+            if approved is not None:
+                atlas_name, atlas_args = _translate(name, arguments)
+                approved.add(_approval_fingerprint(atlas_name, atlas_args))
+
+    if is_write and name.startswith("mcp__"):
+        failure = _checkpoint_first_write(agent, runtime, loop)
+        if failure:
+            return {"action": "block", "message": failure}
+    return None
+
+
+def _post_tool_call(
+    tool_name: str = "", args: dict[str, Any] | None = None, result: Any = None, **_kwargs: Any,
+) -> None:
+    active = _active(str(_kwargs.get("session_id") or ""))
+    if active is None:
+        return None
+    agent, runtime, loop = active
+    callback = getattr(runtime, "user_hook_callback", None)
+    atlas_tool_names = {
+        str(item.get("function", {}).get("name", ""))
+        for item in agent._model_facing_tools()
+    }
+    if callback and str(tool_name) not in atlas_tool_names:
+        _call_async(loop, callback, "tool.after", {
+            "tool_name": str(tool_name), "parameters": dict(args or {}),
+            "result": result,
+        })
+    return None

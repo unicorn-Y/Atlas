@@ -117,6 +117,7 @@ def _ssh_paths_allowed(workspace: str, allowed_paths: list[str], candidates: lis
     except (ValueError, TypeError):
         return False
 
+
 log = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
@@ -239,6 +240,7 @@ class AgentRunContext:
     read_only: bool = False
     permission_mode: str = "full_access"
     allowed_paths: list[str] = field(default_factory=list)
+    hermes_preapproved_writes: set[str] = field(default_factory=set)
     user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None
     ssh_tool_callback: Callable[[str, dict[str, Any]], Any] | None = None
     ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None
@@ -1576,8 +1578,11 @@ class AgentOrchestrator:
                                     "create_presentation",
                                     # These run project scripts or hand work to sub-agents that can change files.
                                     "run_checks", "execute_code", "delegate_task", "delegate_parallel",
+                                    "remember", "project_note", "create_checkpoint", "restore_checkpoint",
+                                    "kanban_create_board", "kanban_create_task", "kanban_update_task",
+                                    "subtask_message",
                                     "computer_click", "computer_type", "computer_key",
-                                    "computer_scroll", "computer_drag", "computer_hotkey"}
+                                    "computer_scroll", "computer_drag", "computer_hotkey", "computer_use"}
                         or (fn_name == "local_file" and fn_args.get("action") in {
                             "write", "append", "mkdir", "copy", "move", "delete",
                         })
@@ -1594,7 +1599,14 @@ class AgentOrchestrator:
             is_mcp_write = mcp_info is not None and not getattr(mcp_info, "read_only", False)
             is_write = is_write or is_mcp_write
             if permission_mode == "ask_writes" and is_write and ctx.approval_callback:
-                choice = await ctx.approval_callback(f"approval:{tc_id}", fn_name, fn_args)
+                from atlas.engine.tool_registry import _approval_fingerprint
+
+                fingerprint = _approval_fingerprint(fn_name, fn_args)
+                if fingerprint in getattr(ctx, "hermes_preapproved_writes", set()):
+                    ctx.hermes_preapproved_writes.discard(fingerprint)
+                    choice = "allow"
+                else:
+                    choice = await ctx.approval_callback(f"approval:{tc_id}", fn_name, fn_args)
                 if choice != "allow":
                     detail = "操作未获允许，因此已取消。需要执行的话，请在确认卡片中允许这次操作，或调整对话权限。"
                     result = {"content": [{"type": "text", "text": detail}], "is_error": True}
@@ -1702,9 +1714,11 @@ class AgentOrchestrator:
                         tool_messages.append(ToolMessage(content=text, tool_call_id=tc_id))
                         continue
             if user_hook_callback:
-                outcome = await user_hook_callback("tool.before", {
+                outcome = user_hook_callback("tool.before", {
                     "tool_name": fn_name, "parameters": fn_args,
                 })
+                if inspect.isawaitable(outcome):
+                    outcome = await outcome
                 if outcome.get("blocked"):
                     detail = str(outcome.get("reason", "Blocked by hook"))
                     result = {"content": [{"type": "text", "text": detail}], "is_error": True}
@@ -2247,9 +2261,11 @@ class AgentOrchestrator:
 
             await self._emit_hook(ctx, "after_tool", name=fn_name, arguments=fn_args, result=result)
             if user_hook_callback:
-                await user_hook_callback("tool.after", {
+                outcome = user_hook_callback("tool.after", {
                     "tool_name": fn_name, "parameters": fn_args, "result": result,
                 })
+                if inspect.isawaitable(outcome):
+                    await outcome
 
             full_output = "\n".join(
                 str(block.get("text", block)) if isinstance(block, dict) else str(block)
