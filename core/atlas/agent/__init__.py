@@ -1477,8 +1477,22 @@ class AgentOrchestrator:
         async def process_event(event: dict[str, Any]) -> None:
             if ctx.event_queue is not None:
                 await ctx.event_queue.put(event)
-            if event.get("type") == "process.completed":
+            if event.get("type") in {"process.completed", "process.notification"}:
                 await ctx.process_notifications.put(event)
+                data = event.get("data")
+                if isinstance(data, dict):
+                    try:
+                        from atlas.engine.notifications import publish_notification
+
+                        content = str(data.get("text") or json.dumps(data, ensure_ascii=False))
+                        publish_notification(
+                            ctx.conversation_id,
+                            kind=str(event["type"]),
+                            content=content,
+                            source_id=str(data.get("source_id") or "") or None,
+                        )
+                    except Exception as exc:
+                        log.warning("agent.notification.persist_failed", error=str(exc))
 
         atlas_options = {
             "model": getattr(ctx, "model", None) or self._model_mgr.current_model,

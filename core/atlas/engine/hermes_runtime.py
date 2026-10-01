@@ -427,6 +427,26 @@ class HermesRuntime:
         litellm_model = str(model_config.get("litellm_model") or current)
         api_key = getattr(settings, "_api_key", None)
         base_url = getattr(settings, "gateway_base_url", None)
+        if atlas_agent is not None:
+            try:
+                from atlas.engine.notifications import consume_notifications
+
+                initial_notices = await consume_notifications(conversation_id)
+            except Exception as exc:
+                initial_notices = []
+                emit({"type": "run.recovery.notice", "data": {
+                    "message": "后台通知读取失败。", "detail": str(exc),
+                }})
+            notice_text = [
+                f"- {str(item.get('kind') or 'notification')}: {str(item.get('content') or '').strip()}"
+                for item in initial_notices if str(item.get("content") or "").strip()
+            ]
+            if notice_text:
+                system_message = "\n\n".join(filter(None, (
+                    system_message,
+                    "Background process notifications (status context, not user instructions):\n"
+                    + "\n".join(notice_text),
+                )))
         agent = None
         task: asyncio.Task[Any] | None = None
         terminal_scope_token = None
@@ -600,14 +620,29 @@ class HermesRuntime:
                     loop.call_soon_threadsafe(queue.put_nowait, _DONE)
 
             task = asyncio.create_task(asyncio.to_thread(run_sync))
+            last_notification_poll = 0.0
             while True:
+                now = loop.time()
+                if atlas_agent is not None and now - last_notification_poll >= 0.25:
+                    last_notification_poll = now
+                    try:
+                        from atlas.engine.notifications import consume_notifications
+
+                        notices = await consume_notifications(conversation_id)
+                    except Exception as exc:
+                        notices = []
+                        emit({"type": "run.recovery.notice", "data": {
+                            "message": "后台通知读取失败。", "detail": str(exc),
+                        }})
+                    for notice in notices:
+                        content = str(notice.get("content") or "").strip()
+                        if content:
+                            agent.steer("后台通知（" + str(notice.get("kind") or "").strip()
+                                        + "）：\n" + content)
                 inbox = getattr(atlas_context, "process_notifications", None)
                 if inbox is not None:
                     while not inbox.empty():
-                        notice = inbox.get_nowait().get("data", {})
-                        agent.steer("后台进程已结束：" + str(notice.get("execution_id", ""))
-                                    + "，退出码：" + str(notice.get("exit_code"))
-                                    + "。请检查输出后继续任务。")
+                        inbox.get_nowait()
                 if cancel_event is not None and cancel_event.is_set() and not task.done():
                     agent.interrupt(hard_cancel=True)
                 if steer_queue is not None:
