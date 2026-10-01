@@ -2461,6 +2461,7 @@ class AgentOrchestrator:
         run_id: str | None = None,
         steer_queue: asyncio.Queue[dict[str, str]] | None = None,
         input_callback: Callable[[str, str, list[str] | None], Any] | None = None,
+        runtime_event_callback: Callable[[dict[str, Any]], Any] | None = None,
         workspace: str | None = None,
         workspace_trusted: bool = False,
         agent_role: str = "general",
