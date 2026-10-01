@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 from pathlib import Path
 import re
 import threading
@@ -40,6 +41,7 @@ def install_atlas_policy_plugin() -> None:
         context = PluginContext(PluginManifest(name="atlas-workspace-policy"), manager)
         context.register_hook("pre_tool_call", _pre_tool_call)
         context.register_hook("post_tool_call", _post_tool_call)
+        context.register_hook("pre_verify", _pre_verify)
         _installed.add(identity)
 
 
@@ -181,6 +183,20 @@ def _post_tool_call(
     if active is None:
         return None
     agent, runtime, loop = active
+    from atlas.agent.verification_stop import requires_verification
+    from atlas.engine.tool_registry import NATIVE_FILE_TOOLS
+
+    payload = result
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except ValueError:
+            payload = {}
+    if str(tool_name) in {"write_file", "patch"} and isinstance(payload, dict) and not payload.get("error"):
+        path = str((args or {}).get("path") or "")
+        if path and requires_verification(path):
+            runtime.changed_paths.add(path)
+            runtime.verification_passed = False
     callback = getattr(runtime, "user_hook_callback", None)
     atlas_tool_names = {
         str(item.get("function", {}).get("name", ""))
@@ -193,3 +209,21 @@ def _post_tool_call(
             "result": result,
         })
     return None
+
+
+def _pre_verify(session_id: str = "", changed_paths: list[str] | None = None, attempt: int = 0, **_kwargs: Any) -> dict[str, str] | None:
+    """Keep Hermes' real stop gate running until Atlas has fresh check evidence."""
+    active = _active(session_id)
+    if active is None:
+        return None
+    _, runtime, loop = active
+    from atlas.config import get_config
+    from atlas.agent.verification_stop import requires_verification
+
+    paths = sorted(path for path in set(changed_paths or []) | runtime.changed_paths if requires_verification(path))
+    if not paths or runtime.verification_passed or attempt >= 2 or not get_config().get("agent.verify_before_stop", True):
+        return None
+    runtime.verify_nudge_sent = True
+    if runtime.event_queue is not None:
+        _call_async(loop, runtime.event_queue.put, {"type": "run_verify_nudge", "data": {"changed_paths": paths[:8]}})
+    return {"action": "continue", "message": "完成前请验证本次代码改动：运行相关测试或检查，修复失败，再报告验证结果。改动文件：" + ", ".join(paths[:8])}
