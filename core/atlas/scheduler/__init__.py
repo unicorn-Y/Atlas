@@ -136,6 +136,47 @@ def _default_schedules_path() -> Path:
     return data_dir / "schedules.toml"
 
 
+def _is_process_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+        if not handle:
+            error = ctypes.get_last_error()
+            if error == 5:  # Access denied still means the process exists.
+                return True
+            if error == 87:  # Invalid PID.
+                return False
+            raise ctypes.WinError(error)
+        try:
+            state = kernel32.WaitForSingleObject(handle, 0)
+            if state == 0:
+                return False
+            if state == 0x00000102:  # WAIT_TIMEOUT
+                return True
+            raise ctypes.WinError(ctypes.get_last_error())
+        finally:
+            kernel32.CloseHandle(handle)
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def _load_tasks_from_toml(path: Path) -> dict[str, ScheduledTask]:
     """Load tasks from a TOML file."""
     if not path.exists():
@@ -366,7 +407,8 @@ class AtlasScheduler:
             try:
                 current = json.loads(self._lease_path.read_text(encoding="utf-8"))
                 pid = int(current.get("pid", -1))
-                os.kill(pid, 0)
+                if not _is_process_alive(pid):
+                    raise ProcessLookupError(pid)
                 if self._role == "hub" and current.get("role", "desktop") == "desktop":
                     tmp = self._lease_path.with_suffix(".lock.tmp")
                     tmp.write_text(json.dumps({"pid": os.getpid(), "token": self._lease_token,

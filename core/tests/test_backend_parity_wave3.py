@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import os
 import posixpath
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from atlas.scheduler import (
     ScheduledTask,
     TaskStatus,
     TriggerType,
+    _is_process_alive,
     _load_tasks_from_toml,
     _save_tasks_to_toml,
 )
@@ -28,6 +30,11 @@ from atlas.server import (
 )
 from atlas.ssh import SSHWorkspaceManager
 from atlas.task_artifacts import WorktreeService
+
+
+def test_wave3_scheduler_pid_liveness() -> None:
+    assert _is_process_alive(os.getpid())
+    assert not _is_process_alive(2_147_483_647)
 
 
 @pytest.mark.asyncio
