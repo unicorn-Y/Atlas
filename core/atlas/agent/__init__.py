@@ -2796,6 +2796,78 @@ class AgentOrchestrator:
 
         async def execute_graph() -> dict[str, Any]:
             try:
+                engine = str(get_config().get("agent.engine", "hermes")).strip().lower()
+                from atlas.config import load_user_settings
+
+                engine = str(load_user_settings().get(
+                    "agent_engine", engine,
+                )).strip().lower()
+                if engine not in {"hermes", "legacy"}:
+                    raise ValueError("agent.engine 必须是 hermes 或 legacy")
+                if engine == "hermes":
+                    from atlas.config import DATA_ROOT
+                    from atlas.engine import HermesRuntime
+
+                    system_message = "\n\n".join(
+                        str(item.content) for item in initial_messages
+                        if isinstance(item, SystemMessage)
+                        and isinstance(item.content, str)
+                    )
+                    hermes_history = [
+                        {"role": item["role"], "content": item["content"]}
+                        for item in history
+                        if item.get("role") in {"user", "assistant", "tool"}
+                        and isinstance(item.get("content"), str)
+                    ]
+                    if (hermes_history and hermes_history[-1]["role"] == "user"
+                            and hermes_history[-1]["content"] == message):
+                        hermes_history.pop()
+                    hermes = HermesRuntime(
+                        data_dir=DATA_ROOT,
+                        model_manager=self._model_mgr,
+                    )
+                    final_result: dict[str, Any] = {}
+                    async for event in hermes.run_turn(
+                        message=message,
+                        conversation_id=conversation_id,
+                        workspace=workspace,
+                        history=hermes_history,
+                        system_message=system_message,
+                        cancel_event=cancel_event,
+                        input_callback=input_callback,
+                        steer_queue=steer_queue,
+                        atlas_agent=self,
+                        atlas_context=runtime,
+                        reasoning_effort=reasoning_effort,
+                        max_output_tokens=selected_config.get("max_output_tokens"),
+                    ):
+                        if event.get("type") == "hermes.result":
+                            final_result = event.get("result", {})
+                            continue
+                        if event.get("type") == "run.status":
+                            await runtime.event_queue.put({
+                                "type": "run_status", "status": event.get("status"),
+                                "text": event.get("text", ""),
+                            })
+                            continue
+                        if event.get("type") == "thinking":
+                            await runtime.event_queue.put({
+                                "type": "run_status", "status": "reasoning",
+                                "text": event.get("content", ""),
+                            })
+                            continue
+                        await runtime.event_queue.put(event)
+                    final_text = final_result.get("final_response", "")
+                    for usage in final_result.get("usage", []) if isinstance(
+                        final_result.get("usage"), list
+                    ) else []:
+                        await runtime.event_queue.put({"type": "run_usage", "usage": usage})
+                    return {
+                        "messages": [AIMessage(content=str(final_text or ""))],
+                        "pending_events": [],
+                        "tool_rounds": 0,
+                        "runtime": runtime,
+                    }
                 return await self._graph.ainvoke({
                     "messages": initial_messages,
                     "pending_events": [],

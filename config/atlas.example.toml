@@ -32,6 +32,7 @@ reference_models = []
 max_references = 3
 
 [agent]
+engine = "hermes"
 verify_before_stop = true
 
 # API gateway (monkeyapi or direct)

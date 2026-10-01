@@ -16,6 +16,12 @@ from atlas.tools.computer_use import COMPUTER_TOOLS
 from atlas.tools.mcp_client import MCPClient
 
 
+@pytest.fixture(autouse=True)
+def _exercise_legacy_graph(monkeypatch):
+    """These tests pin the retained LangGraph behavior; Hermes has separate E2E coverage."""
+    monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"agent_engine": "legacy"})
+
+
 def _agent_state(ai: AIMessage, *, runtime: Any | None = None) -> AgentState:
     return {
         "messages": [ai],

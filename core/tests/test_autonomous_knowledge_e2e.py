@@ -13,6 +13,12 @@ from atlas.agent import AgentOrchestrator
 from atlas.memory import MemoryStore
 
 
+@pytest.fixture(autouse=True)
+def _exercise_legacy_graph(monkeypatch):
+    """This suite verifies the existing LangGraph knowledge lifecycle."""
+    monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"agent_engine": "legacy"})
+
+
 def _completion(value: str):
     return SimpleNamespace(choices=[SimpleNamespace(
         message=SimpleNamespace(content=value)
