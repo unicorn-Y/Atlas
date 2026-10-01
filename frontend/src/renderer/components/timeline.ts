@@ -288,6 +288,12 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
           text: `改了代码还没验证${paths.length ? `（${paths.slice(0, 3).join('、')}${paths.length > 3 ? ` 等 ${paths.length} 个文件` : ''}）` : ''}，Atlas 先去验证一下` });
         break;
       }
+      case 'process.notification': {
+        closeReply(); closeBlocks();
+        items.push({ kind: 'notice', id: event.id, tone: 'verify',
+          text: data.reason === 'heartbeat' ? '后台进程仍在运行。' : `后台进程输出提醒：${String(data.text ?? '')}` });
+        break;
+      }
       case 'process.completed': {
         closeReply(); closeBlocks();
         items.push({ kind: 'notice', id: event.id, tone: 'verify',

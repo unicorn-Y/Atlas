@@ -197,10 +197,11 @@ def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any
             args["keep_stdin"] = True
         if args.pop("pty", False):
             args["pty"] = True
-        args.pop("notify", None)
-        args.pop("notify_on_complete", None)
-        args.pop("watch_patterns", None)
-        args.pop("heartbeat", None)
+        heartbeat = args.get("heartbeat", 0)
+        if not isinstance(heartbeat, int) or isinstance(heartbeat, bool) or heartbeat < 0:
+            raise ValueError("heartbeat 必须是非负整数秒。")
+        if heartbeat:
+            args["heartbeat"] = max(60, heartbeat)
         args.pop("persist_on_release", None)
     if name == "search_files":
         args["query"] = args.pop("pattern", args.get("query", ""))

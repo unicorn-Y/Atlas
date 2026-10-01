@@ -284,6 +284,11 @@ class LocalProcess:
     wait_task: asyncio.Task[None] | None = None
     cancelled: bool = False
     handoff_note: str = ""
+    notification_callback: Any = None
+    notification_task: asyncio.Task[None] | None = None
+    notify_on_complete: bool = False
+    watch_patterns: list[str] = field(default_factory=list)
+    watch_tail: str = ""
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -320,6 +325,7 @@ class LocalExecutionRuntime:
         *,
         run_id: str | None = None,
         output_callback: OutputCallback | None = None,
+        event_callback: Any = None,
     ) -> dict[str, Any]:
         args = arguments or {}
         output_callback = output_callback or self.output_callback
@@ -338,9 +344,11 @@ class LocalExecutionRuntime:
                 data = await self._git_operation(args, run_id, output_callback)
             elif name == "local_shell":
                 process = await self._start_from_shell(args, run_id, output_callback)
+                self._configure_notifications(process, args, event_callback)
                 return await self._execute_or_detach(process, args)
             elif name == "local_exec":
                 process = await self._start_from_exec(args, run_id, output_callback)
+                self._configure_notifications(process, args, event_callback)
                 return await self._execute_or_detach(process, args)
             elif name == "local_process":
                 return await self._process_operation(args, run_id, output_callback)
@@ -356,6 +364,35 @@ class LocalExecutionRuntime:
         except Exception as exc:
             log.warning("local_execution.tool_failed", tool=name, error=str(exc))
             return self._error(f"{type(exc).__name__}: {exc}")
+
+    def _configure_notifications(self, record: LocalProcess, args: dict[str, Any], callback: Any) -> None:
+        record.notification_callback = callback
+        notify = args.get("notify")
+        record.notify_on_complete = bool(args.get("notify_on_complete"))
+        record.watch_patterns = list(args.get("watch_patterns") or [])
+        if isinstance(notify, bool):
+            record.notify_on_complete = notify
+        elif isinstance(notify, list):
+            record.watch_patterns = [str(item) for item in notify]
+        heartbeat = float(args.get("heartbeat") or 0)
+        if heartbeat > 0 and callback is not None:
+            record.notify_on_complete = True
+            record.notification_task = asyncio.create_task(self._heartbeat(record, heartbeat))
+
+    async def _notify(self, record: LocalProcess, reason: str, text: str = "") -> None:
+        if record.notification_callback is not None:
+            result = record.notification_callback({
+                "type": "process.completed" if reason == "completion" else "process.notification",
+                "data": {**record.summary(), "reason": reason, "text": text},
+            })
+            if asyncio.iscoroutine(result):
+                await result
+
+    async def _heartbeat(self, record: LocalProcess, seconds: float) -> None:
+        while record.state == "running":
+            await asyncio.sleep(seconds)
+            if record.state == "running":
+                await self._notify(record, "heartbeat", "后台进程仍在运行。")
 
     @staticmethod
     def _error(message: str) -> dict[str, Any]:
@@ -730,8 +767,15 @@ class LocalExecutionRuntime:
                 record.stdout_size += len(chunk)
             else:
                 record.stderr_size += len(chunk)
+            text = decoder.decode(chunk)
+            if record.watch_patterns:
+                watched = record.watch_tail + text
+                matches = [pattern for pattern in record.watch_patterns if pattern in watched]
+                if matches:
+                    await self._notify(record, "watch", watched[-4096:])
+                    record.watch_patterns = [pattern for pattern in record.watch_patterns if pattern not in matches]
+                record.watch_tail = watched[-4096:]
             if callback is not None:
-                text = decoder.decode(chunk)
                 try:
                     result = callback(record.execution_id, name, text)
                     if asyncio.iscoroutine(result):
@@ -760,6 +804,11 @@ class LocalExecutionRuntime:
                 record.state = "exited"
             else:
                 record.state = "exited"
+            if record.notification_task is not None:
+                record.notification_task.cancel()
+                await asyncio.gather(record.notification_task, return_exceptions=True)
+            if record.notify_on_complete:
+                await self._notify(record, "completion")
         except asyncio.CancelledError:
             raise
         except Exception:

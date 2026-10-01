@@ -2204,6 +2204,7 @@ class AgentOrchestrator:
                         result = await self._local_execution.call_tool(
                             fn_name, fn_args, run_id=ctx.run_id,
                             output_callback=report_process_output,
+                            event_callback=ctx.event_queue.put if ctx.event_queue is not None else None,
                         )
                 elif fn_name.startswith("computer_") and self._computer_use:
                     if getattr(ctx, "sandbox_enabled", False):
