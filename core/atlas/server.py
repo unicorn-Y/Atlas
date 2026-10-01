@@ -5530,7 +5530,7 @@ async def run_goal_now(goal_id: str) -> dict[str, str]:
 @app.get("/api/runtime/protocol")
 async def runtime_protocol() -> dict[str, str]:
     """Advertise Runtime Event Protocol version."""
-    return {"version": "1.9"}
+    return {"version": "1.10"}
 
 
 @app.get("/api/usage")

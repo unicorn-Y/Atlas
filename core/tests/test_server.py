@@ -75,7 +75,7 @@ class TestRuntimeProtocol:
         resp = await client.get("/api/runtime/protocol")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["version"] == "1.9"
+        assert data["version"] == "1.10"
 
 
 class TestWave7WorkspaceOrchestration:

@@ -456,7 +456,7 @@ async def test_wave3_ssh_test_rejects_unknown_host_alias(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_wave3_runtime_protocol_is_1_8() -> None:
-    assert await runtime_protocol() == {"version": "1.9"}
+    assert await runtime_protocol() == {"version": "1.10"}
 
 
 @pytest.mark.asyncio
