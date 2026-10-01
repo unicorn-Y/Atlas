@@ -19,6 +19,10 @@ import structlog
 
 log = structlog.get_logger()
 
+# Delegation lifecycle, bounded schema retry, and child-worktree cleanup follow
+# NousResearch/hermes-agent at 330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3
+# (MIT), adapted to Atlas run callbacks and workspace permissions.
+
 
 def _workspace_fingerprint(root: str) -> dict[str, str]:
     base = Path(root).resolve()
@@ -346,6 +350,34 @@ class DelegationService:
         self.host, self.hooks, self.timeout = host, hooks, timeout
         self._status_cache: dict[str, Any] = {}
         self.atlas_runner: Callable[..., Any] | None = None
+        self._subtasks: dict[str, dict[str, Any]] = {}
+        self._background_tasks: dict[str, asyncio.Task[Any]] = {}
+        self._steer_queues: dict[str, asyncio.Queue[dict[str, str]]] = {}
+
+    def subtask_status(self, subtask_id: str) -> dict[str, Any] | None:
+        """Return the live summary surface for one child, without its control objects."""
+        record = self._subtasks.get(subtask_id)
+        if record is None:
+            return None
+        return {key: value for key, value in record.items()
+                if key not in {"cancel_event", "steer_queue"}}
+
+    async def wait_background(self, subtask_id: str) -> None:
+        """Wait for one background child; primarily useful to lifecycle owners and tests."""
+        task = self._background_tasks.get(subtask_id)
+        if task is not None:
+            await task
+
+    def steer_subtask(self, subtask_id: str, text: str) -> bool:
+        """Queue a steering message for the child's next model turn."""
+        record = self._subtasks.get(subtask_id)
+        if not text.strip() or record is None or record.get("status") != "running":
+            return False
+        queue = self._steer_queues.get(subtask_id)
+        if queue is None:
+            return False
+        queue.put_nowait({"content": text.strip(), "event_id": secrets.token_hex(8)})
+        return True
 
     async def _pick_backend(self) -> str:
         """First installed external Agent, Hermes preferred; a clear error when none is installed."""
@@ -379,10 +411,99 @@ class DelegationService:
         event_metadata: dict[str, Any] | None = None,
         executor: str = "atlas",
         atlas_options: dict[str, Any] | None = None,
+        background: bool = False,
+        output_schema: dict[str, Any] | str | None = None,
+        _subtask_id: str | None = None,
     ) -> dict[str, Any]:
         if not goal.strip():
             raise ValueError("goal must be non-empty")
+        from atlas.agent.delegation_output_schema import (
+            append_output_contract, build_retry_message, coerce_output_schema,
+            validate_output,
+        )
+
+        schema, schema_error = coerce_output_schema(output_schema)
+        if schema_error:
+            raise ValueError(schema_error)
+        subtask_id = _subtask_id or secrets.token_hex(8)
+        steer_queue = self._steer_queues.setdefault(subtask_id, asyncio.Queue())
+        record = self._subtasks.setdefault(subtask_id, {
+            "subtask_id": subtask_id, "goal": goal, "status": "running",
+            "progress": "等待子 Agent 启动。", "result": None,
+            "background": background, "steer_queue": steer_queue,
+        })
+        record.update({"goal": goal, "status": "running"})
+        if _subtask_id is None:
+            record["background"] = background
+        if _subtask_id is None and background:
+            async def child_callback(callback: Callable[..., Any] | None, *args: Any) -> Any:
+                return await _call_callback(callback, *args)
+
+            async def run_background() -> None:
+                record = self._subtasks[subtask_id]
+
+                async def on_start(child_id: str, child_goal: str, child_backend: str,
+                                   metadata: dict[str, Any] | None = None) -> Any:
+                    record.update({"backend": child_backend, "progress": "子 Agent 已启动。"})
+                    return await child_callback(on_started, child_id, child_goal, child_backend,
+                                                metadata) if event_metadata is not None else await child_callback(
+                                                    on_started, child_id, child_goal, child_backend)
+
+                async def on_update(child_id: str, text: str,
+                                    metadata: dict[str, Any] | None = None) -> Any:
+                    record["progress"] = text
+                    return await child_callback(on_progress, child_id, text, metadata) \
+                        if event_metadata is not None else await child_callback(on_progress, child_id, text)
+
+                async def on_finish(child_id: str, status: str, summary: str, duration_ms: int,
+                                    metadata: dict[str, Any] | None = None) -> Any:
+                    record.update({"status": status, "result": summary,
+                                   "duration_ms": duration_ms, "progress": summary})
+                    try:
+                        if event_metadata is not None:
+                            await child_callback(on_completed, child_id, status, summary,
+                                                 duration_ms, metadata)
+                        else:
+                            await child_callback(on_completed, child_id, status, summary,
+                                                 duration_ms)
+                    finally:
+                        self._steer_queues.pop(subtask_id, None)
+
+                try:
+                    result = await self.delegate_task(
+                        goal, context, tool_profile, backend=backend, cwd=cwd,
+                        on_started=on_start, on_progress=on_update, on_completed=on_finish,
+                        event_metadata=event_metadata, executor=executor,
+                        atlas_options={**(atlas_options or {}), "steer_queue": steer_queue},
+                        background=False, output_schema=schema, _subtask_id=subtask_id,
+                    )
+                    record.update({"status": result.get("status", "completed"),
+                                   "result": result.get("result", "")})
+                except asyncio.CancelledError:
+                    record.update({"status": "cancelled", "result": "子任务已取消。"})
+                    raise
+                except Exception as exc:
+                    record.update({"status": "failed", "result": str(exc)[:1000]})
+                finally:
+                    if record.get("status") == "running":
+                        record.update({"status": "failed", "result": "子任务未能完成。"})
+                    self._steer_queues.pop(subtask_id, None)
+
+            self._background_tasks[subtask_id] = asyncio.create_task(
+                run_background(), name=f"atlas-subtask-{subtask_id}",
+            )
+            return {"backend": "atlas", "session_id": None, "subtask_id": subtask_id,
+                    "status": "running", "background": True}
         name = backend or executor
+        if name != "atlas" and atlas_options is not None and (
+            atlas_options.get("permission_mode", "full_access") != "full_access"
+            or atlas_options.get("tool_allow") is not None
+            or atlas_options.get("tool_deny")
+            or atlas_options.get("agent_type", "general") != "general"
+        ):
+            # ACP backends do not expose Atlas's permission/tool allowlist contract; route
+            # constrained children through the native worker loop instead of widening access.
+            name = "atlas"
         # Models sometimes fill the executor with "default", "auto" or a made-up name; anything that
         # isn't a configured external Agent runs on Atlas itself.
         if name not in (getattr(self.host, "backends", None) or {}):
@@ -390,7 +511,8 @@ class DelegationService:
         if name == "atlas":
             if self.atlas_runner is None:
                 raise RuntimeError("Atlas 子任务执行器尚未就绪。")
-            subtask_id = secrets.token_hex(8)
+            task_context = append_output_contract(context, schema) if schema else context
+            record["backend"] = "atlas"
             await self.hooks.emit("subagent_start", goal=goal, backend="atlas")
             started_at = asyncio.get_running_loop().time()
             status, summary = "failed", "子任务没有返回结果。"
@@ -404,24 +526,44 @@ class DelegationService:
                 )
                 if isinstance(registered_cancel, asyncio.Event):
                     cancel_event = registered_cancel
+                    record["cancel_event"] = cancel_event
                 if parent_cancel is not None:
                     parent_cancel_task = asyncio.create_task(
                         _relay_cancel(parent_cancel, cancel_event),
                     )
-                result = await self.atlas_runner(
-                    goal=goal, context=context, cwd=cwd, subtask_id=subtask_id,
-                    atlas_options={**(atlas_options or {}), "cancel_event": cancel_event},
-                    on_progress=lambda text: _call_callback(
-                        on_progress, subtask_id, _human_subtask_text(text),
-                        *((event_metadata,) if event_metadata is not None else ()),
-                    ),
-                )
+                child_context = task_context
+                for attempt in range(2 if schema else 1):
+                    result = await self.atlas_runner(
+                        goal=goal, context=child_context, cwd=cwd, subtask_id=subtask_id,
+                        atlas_options={**(atlas_options or {}), "cancel_event": cancel_event},
+                        on_progress=lambda text: _call_callback(
+                            on_progress, subtask_id, _human_subtask_text(text),
+                            *((event_metadata,) if event_metadata is not None else ()),
+                        ),
+                    )
+                    if schema is None:
+                        break
+                    valid, errors = validate_output(str(result.get("result", "")), schema)
+                    result["schema_valid"] = valid
+                    if valid:
+                        break
+                    result["schema_errors"] = errors
+                    if attempt == 0:
+                        child_context = (
+                            f"{task_context or ''}\n\n上一次回复：\n"
+                            f"{result.get('result', '')}\n\n{build_retry_message(errors)}"
+                        )
                 status = str(result.get("status", "completed"))
                 summary = str(result.get("result", ""))[:1000] or "子任务已完成。"
+                record.update({"status": status, "progress": summary,
+                               "result": result.get("result", "")})
                 return {"backend": "atlas", "session_id": None,
                         "subtask_id": subtask_id, "status": status,
                         "result": result.get("result", ""),
-                        "evidence": result.get("evidence", [])}
+                        "evidence": result.get("evidence", []),
+                        **({"schema_valid": result["schema_valid"]} if schema else {}),
+                        **({"schema_errors": result["schema_errors"]}
+                           if schema and not result.get("schema_valid") else {})}
             except asyncio.CancelledError:
                 status, summary = "cancelled", "子任务已取消。"
                 raise
@@ -429,6 +571,8 @@ class DelegationService:
                 summary = str(exc)[:1000] or summary
                 raise
             finally:
+                record.update({"status": status, "progress": summary, "result": summary})
+                self._steer_queues.pop(subtask_id, None)
                 if parent_cancel_task:
                     parent_cancel_task.cancel()
                     await asyncio.gather(parent_cancel_task, return_exceptions=True)
@@ -444,7 +588,7 @@ class DelegationService:
                 )
         await self.hooks.emit("subagent_start", goal=goal, backend=name)
         session = None
-        subtask_id = secrets.token_hex(8)
+        record["backend"] = name
         started_at = asyncio.get_running_loop().time()
         cancel_event = asyncio.Event()
         status = "failed"
@@ -466,6 +610,7 @@ class DelegationService:
                     cancel = await cancel
                 if isinstance(cancel, asyncio.Event):
                     cancel_event = cancel
+                    record["cancel_event"] = cancel_event
             session = await asyncio.wait_for(
                 self.host.start(name, cwd), timeout=min(self.timeout, 30),
             )
@@ -479,6 +624,11 @@ class DelegationService:
                 iterator = self.host.events(session.id).__aiter__()
                 next_event = asyncio.create_task(iterator.__anext__())
                 while not cancel_event.is_set():
+                    steer_queue = self._steer_queues.get(subtask_id)
+                    if steer_queue is not None:
+                        while not steer_queue.empty():
+                            steering = steer_queue.get_nowait()
+                            await self.host.send(session.id, steering["content"])
                     done, _ = await asyncio.wait({next_event}, timeout=0.1)
                     if not done:
                         continue
@@ -493,6 +643,7 @@ class DelegationService:
                     now = asyncio.get_running_loop().time()
                     if text and on_progress and now - last_progress >= 0.5:
                         last_progress = now
+                        record["progress"] = text
                         progress = (
                             on_progress(subtask_id, text, event_metadata)
                             if event_metadata is not None else on_progress(subtask_id, text)
@@ -513,6 +664,8 @@ class DelegationService:
             completion_summary = text[:1000] or (
                 "Subtask cancelled." if status == "cancelled" else "Subtask completed without text output."
             )
+            record.update({"status": status, "progress": completion_summary,
+                           "result": completion_summary})
             return {"backend": name, "session_id": session.id, "subtask_id": subtask_id, "status": status, "result": text,
                     "evidence": events}
         except asyncio.TimeoutError:
@@ -524,6 +677,9 @@ class DelegationService:
         finally:
             if cancel_event.is_set():
                 status = "cancelled"
+            record.update({"status": status, "progress": completion_summary,
+                           "result": completion_summary})
+            self._steer_queues.pop(subtask_id, None)
             if session is not None:
                 await self.host.close(session.id)
             await self.hooks.emit(
@@ -557,14 +713,55 @@ class DelegationService:
         on_group_completed: Callable[..., Any] | None = None,
         executor: str = "atlas",
         atlas_options: dict[str, Any] | None = None,
+        verify: dict[str, Any] | None = None,
+        background: bool = False,
+        _batch_background: bool = False,
     ) -> dict[str, Any]:
         if not isinstance(tasks, list) or not 1 <= len(tasks) <= 8:
             raise ValueError("delegate_parallel accepts one to eight tasks")
-        if not isinstance(max_concurrency, int) or not 1 <= max_concurrency <= 4:
-            raise ValueError("max_concurrency must be between 1 and 4")
+        if not isinstance(max_concurrency, int) or not 1 <= max_concurrency <= 8:
+            raise ValueError("max_concurrency must be between 1 and 8")
         if any(not isinstance(item, dict) or not str(item.get("goal", "")).strip()
                or not str(item.get("title", "")).strip() for item in tasks):
             raise ValueError("each parallel task requires a title and goal")
+
+        if background:
+            group_id = secrets.token_hex(8)
+            record = {"subtask_id": group_id, "status": "running", "background": True,
+                      "progress": "后台 Worker 组已排队。", "result": None,
+                      "group": True}
+            self._subtasks[group_id] = record
+
+            async def finish_group(payload: dict[str, Any]) -> None:
+                summary = str(payload.get("summary", ""))[:2000]
+                record.update({"status": "completed", "progress": summary, "result": summary})
+                payload.update({"background": True, "subtask_id": group_id})
+                await _call_callback(on_group_completed, payload)
+
+            async def run_group() -> None:
+                try:
+                    result = await self.delegate_parallel(
+                        tasks, max_concurrency=max_concurrency, cwd=cwd,
+                        cancel_event=cancel_event, summarize=summarize,
+                        on_started=on_started, on_progress=on_progress,
+                        on_completed=on_completed, on_group_completed=finish_group,
+                        executor=executor, atlas_options=atlas_options,
+                        verify=verify, background=False,
+                        _batch_background=True,
+                    )
+                    record.update({"status": "completed", "result": result["summary"],
+                                   "progress": result["summary"]})
+                except asyncio.CancelledError:
+                    record.update({"status": "cancelled", "result": "后台 Worker 组已取消。"})
+                    raise
+                except Exception as exc:
+                    record.update({"status": "failed", "result": str(exc)[:1000]})
+
+            self._background_tasks[group_id] = asyncio.create_task(
+                run_group(), name=f"atlas-subtask-group-{group_id}",
+            )
+            return {"group_id": group_id, "subtask_id": group_id,
+                    "status": "running", "background": True}
 
         # Pick the worker Agent once: with none installed, fail the whole group up front.
         worker_backend = executor
@@ -601,7 +798,12 @@ class DelegationService:
         async def run_one(index: int, item: dict[str, Any]) -> dict[str, Any]:
             title = str(item["title"])
             goal = str(item["goal"])
-            metadata = {"group_id": group_id, "index": index, "title": title}
+            metadata = {"group_id": group_id, "index": index, "title": title,
+                        "agent": str(item.get("agent", "general")),
+                        "role": str(item.get("agent_role", "leaf")), "background": _batch_background,
+                        "model": item.get("agent_model"), "depth": int((atlas_options or {}).get("depth", 0)) + 1,
+                        "recipe_id": item.get("recipe_id"),
+                        **({"warning": item["agent_warning"]} if item.get("agent_warning") else {})}
             async with semaphore:
                 async def setup_failed(summary: str) -> dict[str, Any]:
                     subtask_id = f"{group_id}-{index}"
@@ -623,27 +825,26 @@ class DelegationService:
                     }
                 worker_cwd = cwd
                 worktree: Path | None = None
+                worktree_info: dict[str, str] | None = None
                 shared_before: dict[str, str] | None = None
                 if is_git and git_root is not None and cwd:
-                    worktree = git_root.parent / ".atlas-worktrees" / git_root.name / "parallel" / f"{group_id}-{index}"
                     try:
                         relative_cwd = Path(cwd).resolve().relative_to(git_root)
                     except ValueError:
                         return await setup_failed(
                             "Worker directory is outside the Git repository.",
                         )
-                    worktree.parent.mkdir(parents=True, exist_ok=True)
+                    from atlas.agent.subagent_worktree import create_subagent_worktree
+
                     async with worktree_lock:
-                        add = await asyncio.to_thread(
-                            subprocess.run,
-                            ["git", "-C", str(git_root), "worktree", "add", "--detach",
-                             str(worktree), base_commit or "HEAD"],
-                            capture_output=True, text=True, check=False,
+                        worktree_info = await asyncio.to_thread(
+                            create_subagent_worktree, cwd, f"{group_id}-{index}",
                         )
-                    if add.returncode:
+                    if worktree_info is None:
                         return await setup_failed(
-                            add.stderr.strip() or "Could not create worker worktree.",
+                            "无法创建子 Agent 的隔离 worktree。",
                         )
+                    worktree = Path(worktree_info["path"])
                     worker_cwd = str(worktree / relative_cwd)
                 elif cwd:
                     shared_before = await asyncio.to_thread(_workspace_fingerprint, cwd)
@@ -672,17 +873,30 @@ class DelegationService:
                         "\nShared non-git workspace: only edit files explicitly assigned in "
                         "this task's context; if ownership is unclear, return findings without edits."
                     )
-                elif worktree is not None:
+                elif worktree_info is not None:
                     worker_context += (
-                        "\nThis worker has an isolated git worktree. Do not merge or commit "
-                        "your changes; return your patch for coordinator review."
+                        f"\n当前 Worker 使用隔离 Git worktree：{worktree_info['path']}。"
+                        "不要合并这个分支；父 Agent 会检查改动。"
                     )
                 try:
+                    task_options = {**(atlas_options or {}),
+                                    "agent_type": str(item.get("agent", "general")),
+                                    "agent_role": str(item.get("agent_role", "leaf")),
+                                    "depth": metadata["depth"],
+                                    "tool_allow": item.get("agent_tools"),
+                                    "model": item.get("agent_model") or (atlas_options or {}).get("model")}
+                    parent_permission = str(task_options.get("permission_mode", "full_access"))
+                    child_permission = item.get("agent_permission")
+                    permission_rank = {"full_access": 0, "ask_writes": 1, "read_only": 2}
+                    if (child_permission in permission_rank and
+                            permission_rank[child_permission] > permission_rank.get(parent_permission, 0)):
+                        task_options["permission_mode"] = child_permission
                     result = await self.delegate_task(
                         goal, worker_context or None,
                         backend=str(item.get("executor", worker_backend)), cwd=worker_cwd,
                         on_started=started, on_progress=progress, on_completed=completed,
-                        event_metadata=metadata, atlas_options=atlas_options,
+                        event_metadata=metadata, atlas_options=task_options,
+                        output_schema=item.get("output_schema"),
                     )
                     status = str(result.get("status", "completed"))
                     summary = str(result.get("result", ""))[:1000]
@@ -693,6 +907,7 @@ class DelegationService:
 
                 changed_files: list[str] = []
                 patch_text = ""
+                worktree_payload: dict[str, Any] = {}
                 if worktree is not None:
                     try:
                         await asyncio.to_thread(
@@ -712,7 +927,7 @@ class DelegationService:
                         committed = await asyncio.to_thread(
                             subprocess.run,
                             ["git", "-C", str(worktree), "diff", "--name-only",
-                             base_commit or "HEAD"],
+                             worktree_info["base_commit"]],
                             capture_output=True, text=True, check=False,
                         )
                         changed_files = sorted(set(changed_files) | {
@@ -722,18 +937,19 @@ class DelegationService:
                         diff = await asyncio.to_thread(
                             subprocess.run,
                             ["git", "-C", str(worktree), "diff", "--binary",
-                             base_commit or "HEAD"],
+                             worktree_info["base_commit"]],
                             capture_output=True, text=True, check=False,
                         )
                         patch_text = diff.stdout
                     finally:
+                        from atlas.agent.subagent_worktree import finalize_subagent_worktree
+
                         async with worktree_lock:
-                            await asyncio.to_thread(
-                                subprocess.run,
-                                ["git", "-C", str(git_root), "worktree", "remove",
-                                 "--force", str(worktree)],
-                                capture_output=True, text=True, check=False,
+                            worktree_payload = await asyncio.to_thread(
+                                finalize_subagent_worktree, worktree_info,
                             )
+                    if worktree_payload.get("inspection_failed"):
+                        summary = f"{summary}\n{worktree_payload['note']}"
                 else:
                     if shared_before is not None and cwd:
                         shared_after = await asyncio.to_thread(_workspace_fingerprint, cwd)
@@ -746,6 +962,11 @@ class DelegationService:
                 return {
                     "index": index, "title": title, "status": status,
                     "summary": summary, "changed_files": changed_files, "patch": patch_text,
+                    **({"worktree": worktree_payload} if worktree is not None else {}),
+                    **({"schema_valid": result["schema_valid"]}
+                       if "schema_valid" in result else {}),
+                    **({"schema_errors": result["schema_errors"]}
+                       if result.get("schema_errors") else {}),
                 }
 
         worker_tasks = [
@@ -777,6 +998,55 @@ class DelegationService:
             summary = "; ".join(
                 f"{item['title']}: {item['summary']}" for item in results
             )
+        if verify:
+            from atlas.agent.delegation_output_schema import extract_json_candidate
+
+            criteria = str(verify.get("criteria", "")).strip()
+            if not criteria:
+                raise ValueError("verify.criteria must be non-empty")
+            verdict_schema = {"type": "object", "properties": {
+                "verified": {"type": "boolean"}, "note": {"type": "string"},
+            }, "required": ["verified", "note"], "additionalProperties": False}
+            for index, item in enumerate(results):
+                verdict_result = await self.delegate_task(
+                    f"验收并行任务 {item['title']}",
+                    f"成功标准：{criteria}\n\n任务目标：{tasks[index]['goal']}\n\n产出：{item['summary']}\n\n请仅按标准判断是否通过。",
+                    backend="atlas", cwd=cwd, output_schema=verdict_schema,
+                    event_metadata={"agent": "verifier", "role": "leaf",
+                                    "background": False, "depth": 1},
+                    atlas_options=atlas_options,
+                    on_started=on_started, on_progress=on_progress,
+                    on_completed=on_completed,
+                )
+                try:
+                    verdict = json.loads(extract_json_candidate(str(verdict_result.get("result", ""))))
+                except (ValueError, TypeError):
+                    verdict = {"verified": False, "note": "verifier returned invalid structured output"}
+                item["verified"] = bool(verdict.get("verified"))
+                item["verifier_note"] = str(verdict.get("note", ""))[:1000]
+                if not item["verified"]:
+                    retry_task = {**tasks[index], "context": (
+                        str(tasks[index].get("context") or "") +
+                        f"\n\nVerifier feedback (single retry): {item['verifier_note']}"
+                    )}
+                    retried = await run_one(index, retry_task)
+                    retry_verdict_result = await self.delegate_task(
+                        f"复验并行任务 {item['title']}",
+                        f"成功标准：{criteria}\n\n任务目标：{tasks[index]['goal']}\n\n重派产出：{retried['summary']}",
+                        backend="atlas", cwd=cwd, output_schema=verdict_schema,
+                        event_metadata={"agent": "verifier", "role": "leaf",
+                                        "background": False, "depth": 1},
+                        atlas_options=atlas_options,
+                    )
+                    try:
+                        retry_verdict = json.loads(extract_json_candidate(
+                            str(retry_verdict_result.get("result", "")),
+                        ))
+                    except (ValueError, TypeError):
+                        retry_verdict = {"verified": False, "note": "verifier returned invalid structured output"}
+                    retried["verified"] = bool(retry_verdict.get("verified"))
+                    retried["verifier_note"] = str(retry_verdict.get("note", ""))[:1000]
+                    results[index] = retried
         payload = {
             "group_id": group_id,
             "results": results,
