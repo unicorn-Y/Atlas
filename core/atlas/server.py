@@ -56,6 +56,7 @@ from atlas.agent.enrichment import (
 )
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.agent.planning import TaskPlan
+from atlas.asr import ASRManager
 from atlas.capabilities.browser.browser_use import BrowserUseAdapter
 from atlas.capabilities.coding import ast_grep as ast_grep_capability
 from atlas.capabilities.coding.repo_map import repo_map
@@ -158,6 +159,7 @@ scheduler: AtlasScheduler | None = None
 external_agent_status_cache: dict[str, Any] = {}
 external_conversation_sessions: dict[tuple[str, str], str] = {}
 usage_ledger: UsageLedger | None = None
+asr_manager: ASRManager | None = None
 
 
 def _task_store(kind: str) -> TomlRecordStore:
@@ -5347,6 +5349,69 @@ async def put_safety(body: dict[str, Any]) -> dict[str, Any]:
 @app.get("/api/safety/log")
 async def get_safety_review_log(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
     return {"rows": get_safety_log(limit)}
+
+
+@app.get("/api/asr/status")
+async def get_asr_status() -> dict[str, Any]:
+    global asr_manager
+    if asr_manager is None:
+        asr_manager = ASRManager()
+    return asr_manager.status()
+
+
+@app.post("/api/asr/download")
+async def download_asr_model() -> dict[str, Any]:
+    global asr_manager
+    if asr_manager is None:
+        asr_manager = ASRManager()
+    try:
+        await asr_manager.download()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return asr_manager.status()
+
+
+@app.websocket("/ws/asr")
+async def asr_websocket(websocket: WebSocket) -> None:
+    global asr_manager
+    await websocket.accept()
+    if asr_manager is None:
+        asr_manager = ASRManager()
+    if not asr_manager.status()["ready"]:
+        await websocket.send_json({"type": "error", "detail": "请先下载本地语音模型。"})
+        await websocket.close(code=1013)
+        return
+    try:
+        while True:
+            packet = await websocket.receive()
+            if packet.get("bytes") is not None:
+                data = packet["bytes"]
+                if len(data) > 128 * 1024 or len(data) % 2:
+                    await websocket.send_json({"type": "error", "detail": "音频帧大小或 PCM 格式无效。"})
+                    continue
+                partials, finals = await asyncio.to_thread(asr_manager.process_frame, data)
+                for text in partials:
+                    await websocket.send_json({"type": "partial", "text": text})
+                for text in finals:
+                    await websocket.send_json({"type": "final", "text": text})
+            elif packet.get("text") is not None:
+                try:
+                    message = json.loads(packet["text"])
+                except ValueError:
+                    continue
+                if message.get("type") == "end":
+                    partials, finals = await asyncio.to_thread(asr_manager.process_frame, b"", final=True)
+                    for text in finals:
+                        await websocket.send_json({"type": "final", "text": text})
+                    await websocket.send_json({"type": "ended"})
+                    await websocket.close()
+                    return
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:
+        with suppress(Exception):
+            await websocket.send_json({"type": "error", "detail": str(exc)})
+            await websocket.close(code=1011)
 
 
 @app.post("/api/runs/{run_id}/subtasks/{subtask_id}/cancel")

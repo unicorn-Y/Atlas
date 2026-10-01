@@ -189,6 +189,7 @@ class AgentRunContext:
     changed_paths: set[str] = field(default_factory=set)
     verification_passed: bool = False
     verify_nudge_sent: bool = False
+    external_tool_context: bool = False
     subtask_started: Callable[..., Any] | None = None
     subtask_progress: Callable[..., Any] | None = None
     subtask_completed: Callable[..., Any] | None = None
@@ -1460,6 +1461,7 @@ class AgentOrchestrator:
                     if ctx.event_queue is not None:
                         await ctx.event_queue.put(events[-1])
                     continue
+            ctx.external_tool_context = True
             if hasattr(ctx, "maintenance_context"):
                 refs = ctx.maintenance_context.setdefault("active_tool_refs", [])
                 reference = {"name": fn_name, "tool_call_id": tc_id}
@@ -2468,6 +2470,7 @@ class AgentOrchestrator:
                 # Worker transcripts are internal; nothing in them should become user memory.
                 memory_candidates = None if worker else await self._memory.extract_conversation_candidates(
                     conversation_id,
+                    provenance="external" if runtime.external_tool_context else "user",
                 )
             except Exception as exc:
                 log.warning(

@@ -10,6 +10,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "websockets>=13.0",
+    "sherpa-onnx>=1.12.20",
     "litellm>=1.50.0",
     "langgraph>=0.2.0",
     "langchain-core>=0.3.0",

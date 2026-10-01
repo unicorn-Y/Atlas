@@ -218,6 +218,8 @@ class MemoryStore:
                     CHECK(memory_type IN ('fact', 'identity', 'commitment')),
                 source_conversation_id TEXT NOT NULL,
                 source_message_id TEXT NOT NULL,
+                provenance TEXT NOT NULL DEFAULT 'user'
+                    CHECK(provenance IN ('user', 'agent', 'external')),
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(source_message_id, key, value)
@@ -636,6 +638,10 @@ class MemoryStore:
             await self._db.execute(
                 "ALTER TABLE memory_candidates ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'fact'"
             )
+        if "provenance" not in candidate_columns:
+            await self._db.execute(
+                "ALTER TABLE memory_candidates ADD COLUMN provenance TEXT NOT NULL DEFAULT 'user'"
+            )
         cursor = await self._db.execute("PRAGMA table_info(memory_self_steering_reports)")
         steering_columns = {row["name"] for row in await cursor.fetchall()}
         if "status" not in steering_columns:
@@ -987,10 +993,12 @@ class MemoryStore:
         return extracted
 
     async def extract_conversation_candidates(
-        self, conversation_id: str
+        self, conversation_id: str, *, provenance: str = "user"
     ) -> list[dict[str, Any]]:
         """Extract conservative user-stated memories into a review queue."""
         assert self._db is not None
+        if provenance not in {"user", "agent", "external"}:
+            raise ValueError("invalid memory candidate provenance")
         cursor = await self._db.execute(
             "SELECT id, role, content FROM messages WHERE conversation_id = ? "
             "ORDER BY created_at ASC, rowid ASC",
@@ -1033,14 +1041,18 @@ class MemoryStore:
                         or _UNCERTAIN_MEMORY.search(value)
                     ):
                         continue
+                    if provenance == "external":
+                        from atlas.safety.threats import scan_for_threats
+                        if scan_for_threats(value, scope="strict"):
+                            continue
                     await self._db.execute(
                         "INSERT OR IGNORE INTO memory_candidates "
                         "(id, key, value, category, confidence, memory_type, "
-                        "source_conversation_id, source_message_id) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        "source_conversation_id, source_message_id, provenance) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             str(uuid.uuid4()), key, value, category, 0.9, memory_type,
-                            conversation_id, message["id"],
+                            conversation_id, message["id"], provenance,
                         ),
                     )
                     break
@@ -1065,7 +1077,7 @@ class MemoryStore:
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         cursor = await self._db.execute(
             "SELECT id, key, value, category, confidence, status, memory_type, "
-            "source_conversation_id, source_message_id, created_at, updated_at "
+            "source_conversation_id, source_message_id, provenance, created_at, updated_at "
             "FROM memory_candidates" + where + " ORDER BY created_at, rowid",
             params,
         )

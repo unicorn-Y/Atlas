@@ -25,3 +25,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## sherpa-onnx
+
+The Python runtime dependency `sherpa-onnx` is distributed under Apache License 2.0 by k2-fsa. Atlas downloads the SenseVoice and Silero VAD model bundle from the official `k2-fsa/sherpa-onnx` `asr-models` release at first use; the downloaded model bundle's own `LICENSE` file is retained with the local assets. Model assets are stored under the user's Atlas data directory and are not included in the repository.
