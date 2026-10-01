@@ -1886,19 +1886,23 @@ class AgentOrchestrator:
 
                     store = KanbanStore(get_config().db_path)
                     if fn_name == "kanban_create_board":
-                        data = store.create_board(str(fn_args["name"]), fn_args.get("board_id"))
+                        data = await asyncio.to_thread(
+                            store.create_board, str(fn_args["name"]), fn_args.get("board_id"),
+                        )
                     elif fn_name == "kanban_list":
                         board_id = str(fn_args["board_id"])
-                        data = store.tasks(board_id)
+                        data = await asyncio.to_thread(store.tasks, board_id)
                     elif fn_name == "kanban_create_task":
                         board_id = str(fn_args["board_id"])
-                        data = store.create_task(board_id, fn_args)
+                        data = await asyncio.to_thread(store.create_task, board_id, fn_args)
                     else:
                         board_id = str(fn_args["board_id"])
                         task_id = str(fn_args.pop("task_id"))
-                        data = store.update_task(board_id, task_id, {
-                            key: value for key, value in fn_args.items() if key != "board_id"
-                        })
+                        data = await asyncio.to_thread(
+                            store.update_task, board_id, task_id, {
+                                key: value for key, value in fn_args.items() if key != "board_id"
+                            },
+                        )
                     result = {"data": data, "content": [{
                         "type": "text", "text": json.dumps(data, ensure_ascii=False),
                     }], "is_error": False}
