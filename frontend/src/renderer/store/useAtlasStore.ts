@@ -349,6 +349,9 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       });
       const run = get().getRun(event.runId);
       if (!run) return;
+      if (event.type === 'session.title' && event.data.accepted === true && typeof event.data.title === 'string') {
+        patchConversation(run.conversationId, { title: event.data.title });
+      }
       const title = get().conversations.find((item) => item.id === run.conversationId)?.title ?? run.title;
       if (event.type === 'approval.required' || event.type === 'input.required' || event.type === 'run.plan.proposed' || event.type === 'rules.trust_required') {
         const heading = event.type === 'input.required' ? 'Atlas 有个问题要问你' : event.type === 'run.plan.proposed' ? 'Atlas 的计划等你确认' : event.type === 'rules.trust_required' ? '要不要信任这个目录的规则文件？' : 'Atlas 需要你确认';

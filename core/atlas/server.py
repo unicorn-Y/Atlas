@@ -1347,6 +1347,13 @@ async def update_conversation(
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if values.get("title") is not None:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_titles import set_user_title
+
+        await asyncio.to_thread(
+            set_user_title, DATA_ROOT / "engine", conversation_id, str(values["title"]),
+        )
     return {"status": "ok", "conversation_id": conversation_id}
 
 
@@ -7019,6 +7026,14 @@ async def _execute_run(
                 **payload,
             }, cwd=workspace, emit=emit)
 
+        async def publish_runtime_event(event: dict[str, Any]) -> None:
+            if event.get("type") == "session.title":
+                await emit("session.title", {
+                    "title": event.get("title", ""),
+                    "title_source": event.get("title_source", ""),
+                    "accepted": bool(event.get("accepted", False)),
+                })
+
         async def ssh_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             if not workspace or not workspace.startswith("ssh://"):
                 raise RuntimeError("SSH workspace is unavailable")
@@ -7056,6 +7071,7 @@ async def _execute_run(
             run_id=run.run_id,
             steer_queue=run.steer_queue,
             input_callback=input_callback,
+            runtime_event_callback=publish_runtime_event,
             workspace=workspace,
             workspace_trusted=bool(workspace and _workspace_trust().get(
                 str(Path(workspace).expanduser().resolve()), False,
@@ -7151,6 +7167,13 @@ async def _execute_run(
 
             elif etype == "run_model_switched":
                 await emit("run.model_switched", event.get("data", {}))
+
+            elif etype == "session.title":
+                await emit("session.title", {
+                    "title": event.get("title", ""),
+                    "title_source": event.get("title_source", ""),
+                    "accepted": bool(event.get("accepted", False)),
+                })
 
             elif etype == "run_status":
                 await emit("run.status", {

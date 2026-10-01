@@ -2878,7 +2878,42 @@ class AgentOrchestrator:
                         data_dir=DATA_ROOT,
                         model_manager=self._model_mgr,
                     )
+                    last_automatic_title: str | None = None
+                    automatic_title_candidates = {
+                        "", "New Conversation", "New conversation",
+                        message.strip()[:40],
+                    }
                     final_result: dict[str, Any] = {}
+
+                    async def on_session_title(title: str, title_source: str) -> None:
+                        nonlocal last_automatic_title
+                        current = await self._memory.get_conversation(conversation_id)
+                        current_title = str((current or {}).get("title") or "")
+                        accepted = bool(
+                            title.strip()
+                            and not worker
+                            and (
+                                current_title in automatic_title_candidates
+                                or (last_automatic_title is not None
+                                    and current_title == last_automatic_title)
+                            )
+                        )
+                        if accepted:
+                            await self._memory.update_conversation_title(
+                                conversation_id, title.strip(),
+                            )
+                            last_automatic_title = title.strip()
+                        title_event = {
+                            "type": "session.title", "title": title.strip(),
+                            "title_source": title_source, "accepted": accepted,
+                        }
+                        if runtime_event_callback is not None:
+                            published = runtime_event_callback(title_event)
+                            if inspect.isawaitable(published):
+                                await published
+                        else:
+                            await runtime.event_queue.put(title_event)
+
                     async for event in hermes.run_turn(
                         message=message,
                         conversation_id=conversation_id,
@@ -2905,6 +2940,12 @@ class AgentOrchestrator:
                                 "type": "run_status", "status": event.get("status"),
                                 "text": event.get("text", ""),
                             })
+                            continue
+                        if event.get("type") == "session.title":
+                            await on_session_title(
+                                str(event.get("title") or ""),
+                                str(event.get("title_source") or ""),
+                            )
                             continue
                         if event.get("type") == "thinking":
                             await runtime.event_queue.put({

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import getpass
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -22,6 +23,7 @@ from typing import Any, Callable
 import uuid
 
 _DONE = object()
+logger = logging.getLogger(__name__)
 
 
 class HermesRuntime:
@@ -378,6 +380,26 @@ class HermesRuntime:
                 emit({"type": "run.recovery.notice", "data": {"message": text or str(kind)}})
             else:
                 emit({"type": "run.status", "status": str(kind), "text": text or ""})
+
+        def on_session_title(title: str, title_source: str = "") -> None:
+            if title_callback is None:
+                emit({"type": "session.title", "title": str(title),
+                      "title_source": str(title_source)})
+                return
+            try:
+                response = title_callback(str(title), str(title_source))
+                if asyncio.iscoroutine(response):
+                    future = asyncio.run_coroutine_threadsafe(response, loop)
+
+                    def log_title_callback_error(done: Any) -> None:
+                        try:
+                            done.result()
+                        except Exception:
+                            logger.warning("Atlas title callback failed", exc_info=True)
+
+                    future.add_done_callback(log_title_callback_error)
+            except Exception:
+                logger.warning("Atlas title callback dispatch failed", exc_info=True)
 
         settings = self.model_manager
         from atlas.config import get_config
