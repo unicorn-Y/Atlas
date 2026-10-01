@@ -294,6 +294,12 @@ class HermesRuntime:
         def emit(event: dict[str, Any]) -> None:
             loop.call_soon_threadsafe(queue.put_nowait, event)
 
+        def on_stream_delta(text: Any) -> None:
+            # Hermes sends None to clear its temporary pre-tool display buffer;
+            # Atlas streams append-only chunks and must not render it as "None".
+            if text is not None:
+                emit({"type": "chunk", "content": str(text)})
+
         def on_tool_start(tool_call_id: str, name: str, arguments: dict[str, Any]) -> None:
             emit({"type": "tool_call", "id": tool_call_id, "name": name,
                   "arguments": arguments})
@@ -447,7 +453,7 @@ class HermesRuntime:
                 fallback_model=model_config.get("fallback"),
                 max_tokens=max_output_tokens or model_config.get("max_output_tokens"),
                 reasoning_config={"effort": reasoning_effort} if reasoning_effort else None,
-                stream_delta_callback=lambda text: emit({"type": "chunk", "content": str(text)}),
+                stream_delta_callback=on_stream_delta,
                 reasoning_callback=lambda text: emit({"type": "thinking", "content": str(text)}),
                 tool_start_callback=atlas_or_native_mcp_tool_start,
                 tool_complete_callback=atlas_or_native_mcp_tool_complete,

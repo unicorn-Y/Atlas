@@ -498,6 +498,7 @@ async def test_same_fake_model_script_keeps_legacy_and_hermes_event_sequence(tmp
         engines = {"value": "hermes"}
         monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"agent_engine": engines["value"]})
         sequences = {}
+        event_sequences = {}
         for engine in ("hermes", "legacy"):
             engines["value"] = engine
             orchestrator = AgentOrchestrator(
@@ -508,8 +509,30 @@ async def test_same_fake_model_script_keeps_legacy_and_hermes_event_sequence(tmp
             )]
             sequences[engine] = [event["type"] for event in events
                                  if event.get("type") in {"tool_call", "tool_result", "done", "error"}]
+            sequence = []
+            for event in events:
+                if event.get("type") not in {"chunk", "tool_call", "tool_result", "done", "error"}:
+                    continue
+                stable = {
+                    key: value for key, value in event.items()
+                    if key not in {
+                        "id", "event_id", "run_id", "conversation_id", "message_id",
+                        "created_at", "timestamp",
+                    }
+                }
+                if stable["type"] == "chunk" and sequence and sequence[-1]["type"] == "chunk":
+                    sequence[-1]["content"] += stable.get("content", "")
+                else:
+                    sequence.append(stable)
+            for event in sequence:
+                if event["type"] == "chunk":
+                    event["content"] = event.get("content", "").strip()
+            sequence = [event for event in sequence
+                        if event["type"] != "chunk" or event.get("content")]
+            event_sequences[engine] = sequence
     assert sequences["hermes"] == sequences["legacy"], sequences
     assert sequences["hermes"] == ["tool_call", "tool_result", "done"]
+    assert event_sequences["hermes"] == event_sequences["legacy"], event_sequences
 
 
 @pytest.mark.asyncio

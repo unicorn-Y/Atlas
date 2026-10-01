@@ -29,6 +29,7 @@ class FakeHermesAgent:
         assert system_message == "Atlas rules"
         assert conversation_history[-1]["role"] == "tool"
         self.kwargs["stream_delta_callback"]("reply")
+        self.kwargs["stream_delta_callback"](None)
         self.kwargs["tool_start_callback"]("tc-1", "read_file", {"path": "a.py"})
         self.kwargs["tool_complete_callback"]("tc-1", "read_file", {}, "source")
         self.kwargs["event_callback"]("session:compress", {"compression_count": 1})

@@ -16,5 +16,6 @@ DELIVERY:
 - A5 MoA was connected to Hermes using Atlas ModelManager reference models; fake consultation coverage passed (`4 passed`).
 - T11 stdin/write/submit/close, Windows PTY, and manual handoff now pass focused tests; parent Agent completion notification after handoff remains uncovered.
 - L9 now bridges Atlas `agent.run_budget_seconds` and `agent.budget_warning_ratio` to Hermes' existing one-shot budget reminder hook; focused coverage passed.
-- Not accepted: CORE-PARITY C1 rows T11 parent completion notification and T19 per-action verification, plus §10 #10 full event-sequence comparison, remain incomplete or uncovered. Hermes source regression selection also has Windows-specific failures.
+- §10 #10 now compares the ordered stable chunk/tool/result/done fields from one fake model script on both engines. Hermes-only `run_status` and differing `run_usage` diagnostic fields are documented in the result.
+- Not accepted: CORE-PARITY C1 rows T11 parent completion notification and T19 per-action verification remain incomplete or uncovered. Hermes source regression selection also has Windows-specific failures.
 - No real model or live remote MCP/SSH scenario was run. Local voice remains deferred. Safety review remains user-owned and was not performed.

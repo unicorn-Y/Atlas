@@ -33,14 +33,14 @@
 
 - **§1**：Atlas 固定依赖 Hermes fork 的提交；Python 3.14 环境用于本轮验证。Hermes fork 仍在 `atlas` 分支。详细依赖和仍需补充核验的包见下文。
 - **§2**：每轮在工作线程运行 Hermes，同步事件回调回 Atlas 队列；接入取消、暂停/继续、排队/插话、压缩及模型用量。新增事件后协议为 `1.10`。既有 Atlas 事件继续使用原名称和字段。
-- **§3**：Hermes 核心工具通过 Atlas 注册表路由，保留 Atlas 现有工具注册与权限/快照路径。没有修改 Hermes fork 内核。工具动作覆盖差异见工具表；真终端的 stdin/PTY 操作还未覆盖。
+- **§3**：Hermes 核心工具通过 Atlas 注册表路由，保留 Atlas 现有工具注册与权限/快照路径。没有修改 Hermes fork 内核。stdin/PTY 已接入，handoff 后父级自动接收完成通知尚未覆盖；其余工具动作差异见工具表。
 - **§4**：Hermes SessionDB 保存包含工具调用及结果的上下文，Atlas 消息表继续供 UI 使用；跨轮恢复及会话操作桥接已加入测试。旧对话首次继续时按 Atlas 文字历史导入。
 - **§5**：接入 Hermes 三层提示词和真实 `ContextCompressor`；Atlas 易变记忆上下文在会话开始时放入易变层；压缩辅助模型默认跟随当前模型，可单独配置。压缩后待办保留并继续工作的假模型场景通过。提示缓存转由 Hermes 处理。
 - **§6**：Atlas 插件通过 Hermes `pre_tool_call`/`post_tool_call` 钩子实施 `read_only`、`ask_writes`、`full_access`、工作目录限制、写前检查点和用户工具 Hooks；安全智能审批与危险命令检测仍关闭。C1 测试验证通过/拒绝及快照路径。Atlas 用户 Hooks 只覆盖 Atlas 已有的五个事件，不扩展 CC 全套 Hooks。
 - **§7**：Atlas MCP server 设置转换到 Hermes registry/client；写类 MCP 工具走 Atlas 权限及首次写快照。以本地假 stdio MCP 服务验证实际调用、事件及审批路径；没有对真实远端 HTTP/OAuth 服务做网络验收。
 - **§8**：`ssh://host/path` 映射到 Hermes 每回合 SSH terminal 环境；Atlas 文件读写继续走既有 SSH 文件回调。SSH 测试只验证隔离配置和回调路由，没有连接真实 SSH 主机。worktree 沿用 Atlas 原服务。
 - **§9**：设置默认引擎为 Hermes，`legacy` 保留为显式备用项。外部 Agent 后端不在本波改动中。
-- **§10**：下表列十项验收情景。另跑 Atlas 全量测试与 Hermes 相关源测试，但两者均有失败，故整体未验收。
+- **§10**：下表列十项验收情景。假模型同脚本的新旧内核比较覆盖有序 `chunk`/`tool_call`/`tool_result`/`done` 内容；Hermes 专属 `run_status` 与新旧结构不同的 `run_usage` 尚未作字段级对应，差异保留。Atlas 全量测试与 Hermes 相关源测试仍有失败，整体未验收。
 - **§11 前端**：timeline/事件呈现、上下文上限、引擎设置已接入；四项前端检查及 Edge 截图完成，记录见“验证”。
 - **安全与语音**：未实现安全审查功能；`core/atlas/safety/` 保持默认关闭；本地语音暂缓，按任务边界处理。
 
@@ -97,12 +97,11 @@
 | 7 | 写前快照及回退文件与 Hermes 会话 | 写前快照及会话同步路径已测；完整 UI 回退流程未做浏览器操作验收 |
 | 8 | 子 Agent 委派和并行 Worker | 通过假模型端到端 |
 | 9 | 本地假 MCP 服务调用 | 通过，确认工具实际执行并经过 Atlas 插件路径 |
-| 10 | 新旧内核事件序列对比 | 事件映射和旧事件兼容测试通过；未以同一脚本完整比较所有事件字段序列，仍有验收限制 |
+| 10 | 新旧内核事件序列对比 | 假模型同脚本逐项比较稳定的 `chunk`、工具调用/结果和 `done` 字段通过；忽略非稳定 ID，并合并分片、裁去工具轮后的展示空白。Hermes 额外 `run_status` 与 `run_usage` 结构差异未作等值断言，作为兼容差异保留 |
 
 ## CORE-PARITY C1 未完成项
 
 - **T11 真终端交互**：stdin/write/submit/close、Windows PTY 与手动 handoff 已接入；handoff 后向父级 Agent 异步通知完成的链路未实现。
-- **§10 #10**：还缺完整同脚本新旧内核事件序列比较。
 - **T19**：Atlas 工具 registry 已接入，但本轮没有逐项核对并独立跑完每一个旧工具动作；上表明确列出已知 process action 缺口。
 
 这些缺口以及全量测试失败意味着 C1 仍未达到验收清单第 2、3、5 项，不应把本波标为完成。
@@ -117,6 +116,7 @@
 
 - A5 MoA 桥接聚焦测试：`4 passed in 0.21s`（`test_hermes_runtime.py`），使用假参考咨询和 fake gateway 配置；验证 Atlas ModelManager 模型选择、现有 `moa_references` 事件、advisory 系统提示注入及 `/moa` 参数路径，无真实模型调用。
 - L9 run budget 桥接聚焦测试：`5 passed in 0.21s`（`test_hermes_runtime.py`）；验证 Atlas `agent.run_budget_seconds` 与 `agent.budget_warning_ratio` 传给 Hermes 原有提醒 hook，缺省值保持关闭。
+- §10 #10 同脚本事件对照：`6 passed, 1 warning in 9.96s`（运行时模块和 E2E 对照）；假模型服务驱动相同文件读取脚本，稳定文本/工具/完成事件及字段序列一致。`stream_delta_callback(None)` 被正确视为 Hermes 临时流清理信号，不再产生字面 `None` chunk。
 - T11 交互进程聚焦测试：`4 passed in 12.77s`（stdin 写入/回车/EOF、Windows pywinpty PTY、handoff 后脱离 child-run 清理，以及 Hermes 动作映射）；均使用本地子进程，无模型/网络。
 - 聚焦 C1：权限/运行时、MCP、SSH、压缩、协议版本测试分别通过；协议补正后 3 个相关断言 `3 passed in 8.41s`。运行时 fallback 修正后的核心旧测试 `3 passed in 0.20s`。
 - C1 合并聚焦组在 fallback 修正前：`23 passed, 1 warning in 55.29s`。对应模块为 `test_hermes_runtime_e2e.py`、`test_hermes_mcp_config.py`、`test_hermes_ssh_routing.py`、`test_hermes_runtime.py`。
