@@ -73,6 +73,8 @@ class ScheduledTask:
     next_run_at: str = ""  # computed from APScheduler
     run_count: int = 0
     legacy_goal: str = ""  # read-only import source for pre-C3R schedule files
+    legacy_goal_status: str = ""  # migration input only; discarded after Hermes import
+    legacy_goal_reason: str = ""  # prior last_evaluation.reason for migration only
     runs: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -112,6 +114,8 @@ class ScheduledTask:
             next_run_at=d.get("next_run_at", ""),
             run_count=d.get("run_count", 0),
             legacy_goal=d.get("goal", ""),
+            legacy_goal_status=d.get("legacy_goal_status", ""),
+            legacy_goal_reason=d.get("legacy_goal_reason", ""),
             runs=d.get("runs", []),
         )
 
@@ -178,11 +182,19 @@ def _load_tasks_from_toml(path: Path) -> dict[str, ScheduledTask]:
     tasks: dict[str, ScheduledTask] = {}
     for task_id, task_data in data.get("tasks", {}).items():
         task_data["id"] = task_id
-        # Old goal lifecycle fields are deliberately discarded. The server imports only
-        # the legacy objective into Hermes GoalManager, then rewrites this schedule.
-        task_data.pop("goal_status", None)
-        task_data.pop("goal_progress", None)
-        task_data.pop("goal_progress_json", None)
+        # Keep only the minimum legacy state needed to import into Hermes once.
+        task_data["legacy_goal_status"] = task_data.pop("goal_status", "")
+        progress = task_data.pop("goal_progress", None)
+        serialized_progress = task_data.pop("goal_progress_json", None)
+        if serialized_progress:
+            try:
+                progress = json.loads(serialized_progress)
+            except (TypeError, ValueError):
+                progress = {}
+        evaluation = progress.get("last_evaluation") if isinstance(progress, dict) else None
+        task_data["legacy_goal_reason"] = (
+            str(evaluation.get("reason") or "") if isinstance(evaluation, dict) else ""
+        )
         task_data.pop("goal_events", None)
         task_data.pop("goal_events_json", None)
         for field_name in ("runs", "trigger_args"):
@@ -220,6 +232,14 @@ def _save_tasks_to_toml(path: Path, tasks: dict[str, ScheduledTask]) -> None:
             # Preserve an unimported migration source across scheduler saves.
             # Once GoalManager import succeeds, the adapter clears this field.
             lines.append(f'goal = "{_escape_toml(task.legacy_goal)}"')
+            if task.legacy_goal_status:
+                lines.append(f'goal_status = "{_escape_toml(task.legacy_goal_status)}"')
+            if task.legacy_goal_reason:
+                progress = json.dumps(
+                    {"last_evaluation": {"reason": task.legacy_goal_reason}},
+                    ensure_ascii=False,
+                )
+                lines.append(f'goal_progress_json = "{_escape_toml(progress)}"')
         lines.append(f'status = "{task.status.value}"')
         lines.append(f'created_at = "{task.created_at}"')
         lines.append(f'updated_at = "{task.updated_at}"')

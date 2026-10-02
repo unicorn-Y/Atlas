@@ -371,10 +371,25 @@ async def _ensure_goal_migrated(task: ScheduledTask) -> None:
     state = await asyncio.to_thread(goal_state, home, session_id)
     if state is None:
         await asyncio.to_thread(set_goal, home, session_id, task.legacy_goal)
+        legacy_status = task.legacy_goal_status.strip().casefold()
+        legacy_reason = task.legacy_goal_reason.strip()
+        if legacy_status == "completed":
+            await asyncio.to_thread(
+                mutate_goal, home, session_id, "done",
+                legacy_reason or "Migrated completed legacy goal.",
+            )
+        elif (
+            legacy_status in {"blocked", "awaiting_approval", "paused"}
+            or task.status == TaskStatus.PAUSED
+        ):
+            await asyncio.to_thread(
+                mutate_goal, home, session_id, "pause",
+                legacy_reason or f"legacy schedule {legacy_status or 'paused'}",
+            )
         await asyncio.to_thread(record_goal_event, home, session_id, "goal.created", {"migrated": True})
-        if task.status == TaskStatus.PAUSED:
-            await asyncio.to_thread(mutate_goal, home, session_id, "pause", "legacy schedule paused")
     task.legacy_goal = ""
+    task.legacy_goal_status = ""
+    task.legacy_goal_reason = ""
     await scheduler.update_task(task.id, action="goal", status=TaskStatus.ACTIVE)
 
 

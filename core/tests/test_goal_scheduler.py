@@ -144,23 +144,42 @@ async def test_legacy_schedule_imports_once_and_clear_does_not_resurrect(
         'goal_progress_json = "{\\"turns_used\\":8}"\n'
         'goal_events_json = "[]"\n'
         'trigger_args_json = "{\\"hours\\":1}"\n'
+        'runs_json = "[]"\n'
+        '[tasks.legacy-completed]\n'
+        'name = "Legacy completed"\n'
+        'description = ""\n'
+        'trigger_type = "interval"\n'
+        'action = "agent:Confirm the archive review."\n'
+        'status = "active"\n'
+        'goal = "Confirm the archive review."\n'
+        'goal_status = "completed"\n'
+        'goal_progress_json = "{\\"last_evaluation\\":{\\"reason\\":\\"Legacy completion reason.\\"}}"\n'
+        'trigger_args_json = "{\\"hours\\":1}"\n'
         'runs_json = "[]"\n',
         encoding="utf-8",
     )
     scheduler = AtlasScheduler(schedules_path=path)
     await scheduler.start()
+    await scheduler.update_task("legacy-completed", description="Persist migration inputs")
     await scheduler.stop()
     scheduler = AtlasScheduler(schedules_path=path)
     await scheduler.start()
     assert scheduler.get_task("legacy-review").legacy_goal == "Review the archive."
+    assert scheduler.get_task("legacy-completed").legacy_goal_status == "completed"
+    assert scheduler.get_task("legacy-completed").legacy_goal_reason == "Legacy completion reason."
     monkeypatch.setattr(server, "scheduler", scheduler)
     transport = httpx.ASGITransport(app=server.app)
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://atlas") as client:
             listed = await client.get("/api/goals")
-            goal = listed.json()["goals"][0]
+            goals = {goal["id"]: goal for goal in listed.json()["goals"]}
+            goal = goals["legacy-review"]
             assert goal["goal"] == "Review the archive."
             assert goal["goal_status"] == "paused"
+            completed = goals["legacy-completed"]
+            assert completed["goal_status"] == "done"
+            assert completed["goal_progress"]["last_evaluation"]["reason"] == "Legacy completion reason."
+            assert goal_state(home, "scheduled-goal-legacy-completed")["status"] == "done"
             assert scheduler.get_task("legacy-review").action == "goal"
             assert scheduler.get_task("legacy-review").legacy_goal == ""
             stored = path.read_text(encoding="utf-8")
@@ -174,8 +193,9 @@ async def test_legacy_schedule_imports_once_and_clear_does_not_resurrect(
             await recovered.start()
             monkeypatch.setattr(server, "scheduler", recovered)
             refreshed = await client.get("/api/goals")
-            assert refreshed.json()["goals"][0]["goal_status"] == "cleared"
-            assert refreshed.json()["goals"][0]["goal"] == "Review the archive."
+            refreshed_goals = {goal["id"]: goal for goal in refreshed.json()["goals"]}
+            assert refreshed_goals["legacy-review"]["goal_status"] == "cleared"
+            assert refreshed_goals["legacy-review"]["goal"] == "Review the archive."
             assert goal_state(home, "scheduled-goal-legacy-review")["status"] == "cleared"
             events = goal_events(home, "scheduled-goal-legacy-review")
             assert [item["sequence"] for item in events] == sorted(item["sequence"] for item in events)

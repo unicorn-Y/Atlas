@@ -225,7 +225,7 @@ def set_goal(home: str | Path, conversation_id: str, goal: str) -> dict[str, Any
 def mutate_goal(
     home: str | Path, conversation_id: str, action: str, reason: str = "user-paused",
 ) -> dict[str, Any] | None:
-    """Apply a canonical Hermes pause, resume, or clear action."""
+    """Apply a canonical Hermes done, pause, resume, or clear action."""
     os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
     from hermes_cli.goals import GoalManager
 
@@ -234,6 +234,9 @@ def mutate_goal(
         state = manager.pause(reason)
     elif action == "resume":
         state = manager.resume()
+    elif action == "done":
+        manager.mark_done(reason)
+        state = manager.state
     elif action == "clear":
         manager.clear()
         state = None
