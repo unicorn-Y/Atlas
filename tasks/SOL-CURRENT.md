@@ -13,7 +13,7 @@ MAIN_OWNER: ZCode
 
 ## Goal
 
-Rewrite X1-X7 into implementation-ready taskbooks using current 2026-10 products, official sources and mature open-source implementations.
+Rewrite X1-X7 into implementation-ready taskbooks and also produce a latest-best refresh source map for the already-completed C1-C6 core, using current 2026-10 products, official sources and mature open-source implementations.
 
 Special priority: X7 always-on personal agent architecture, with the laptop acting as Atlas's own always-on computer.
 
