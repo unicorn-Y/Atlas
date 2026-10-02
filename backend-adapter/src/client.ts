@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomTool, ExternalAgentInfo, Fact, ProjectSource, ProjectSources, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomTool, CustomCommandInfo, CommandRenderResult, ExternalAgentInfo, ExternalImportScan, ExternalImportResult, Fact, ProjectSource, ProjectSources, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, HookLog, MarketplaceInfo, MarketplacePluginEntry, PluginActionResult, PluginInfo, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -294,14 +294,77 @@ export class BackendAdapter {
   async refreshProjectSource(projectId: string, sourceId: string): Promise<void> {
     await this.request(`/api/projects/${encodeURIComponent(projectId)}/sources/${encodeURIComponent(sourceId)}/refresh`, { method: 'POST', body: '{}' });
   }
-  async getHooks(): Promise<HookConfig[]> { return this.live ? (await this.request<{ hooks: HookConfig[] }>('/api/hooks')).hooks : []; }
+  async getHooks(workspace?: string): Promise<{ hooks: HookConfig[]; logs: HookLog[] }> {
+    if (!this.live) return { hooks: [], logs: [] };
+    const query = workspace ? `?${new URLSearchParams({ workspace })}` : '';
+    return this.request<{ hooks: HookConfig[]; logs: HookLog[] }>(`/api/hooks${query}`);
+  }
   async saveHook(hook: HookConfig, isNew: boolean): Promise<HookConfig> {
     return isNew ? this.request('/api/hooks', { method: 'POST', body: JSON.stringify(hook) })
       : this.request(`/api/hooks/${encodeURIComponent(hook.id)}`, { method: 'PUT', body: JSON.stringify(hook) });
   }
+  /** Works for Atlas hooks and read-only Claude/plugin hook groups; the choice is stored as an override. */
+  async setHookEnabled(id: string, enabled: boolean, workspace?: string): Promise<HookConfig> {
+    return this.request(`/api/hooks/${encodeURIComponent(id)}/enabled`, { method: 'POST', body: JSON.stringify({ enabled, ...(workspace ? { workspace } : {}) }) });
+  }
   async deleteHook(id: string): Promise<void> { await this.request(`/api/hooks/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
-  async testHook(id: string): Promise<{ exit_code?: number; output?: string; duration_ms?: number }> {
-    return this.request(`/api/hooks/${encodeURIComponent(id)}/test`, { method: 'POST' });
+  async testHook(id: string, workspace?: string): Promise<HookLog> {
+    const query = workspace ? `?${new URLSearchParams({ workspace })}` : '';
+    return this.request(`/api/hooks/${encodeURIComponent(id)}/test${query}`, { method: 'POST' });
+  }
+
+  // -- Plugins & marketplaces ----------------------------------------------
+
+  async getPlugins(): Promise<PluginInfo[]> { return this.live ? (await this.request<{ plugins: PluginInfo[] }>('/api/plugins')).plugins : []; }
+  /** Install from a local directory that holds plugin components (plugin.json etc.). */
+  async installPluginLocal(path: string): Promise<PluginActionResult> {
+    return this.request('/api/plugins/install-local', { method: 'POST', body: JSON.stringify({ path }) });
+  }
+  /** Install from a local directory, git URL or `owner/repo`; a marketplace source registers the marketplace. */
+  async installPlugin(source: string, name?: string, ref?: string): Promise<PluginActionResult> {
+    return this.request('/api/plugins/install', { method: 'POST', body: JSON.stringify({ source, ...(name ? { name } : {}), ...(ref ? { ref } : {}) }) });
+  }
+  async updatePlugin(name: string): Promise<PluginActionResult> {
+    return this.request(`/api/plugins/${encodeURIComponent(name)}/update`, { method: 'POST' });
+  }
+  async uninstallPlugin(name: string): Promise<PluginActionResult> {
+    return this.request(`/api/plugins/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  }
+  async setPluginEnabled(name: string, enabled: boolean): Promise<PluginActionResult> {
+    return this.request(`/api/plugins/${encodeURIComponent(name)}/enabled`, { method: 'POST', body: JSON.stringify({ enabled }) });
+  }
+  async getMarketplaces(): Promise<MarketplaceInfo[]> {
+    return this.live ? (await this.request<{ marketplaces: MarketplaceInfo[] }>('/api/plugin-marketplaces')).marketplaces : [];
+  }
+  async addMarketplace(source: string, name?: string, ref?: string): Promise<{ name: string; path: string; plugins: number }> {
+    return this.request('/api/plugin-marketplaces', { method: 'POST', body: JSON.stringify({ source, ...(name ? { name } : {}), ...(ref ? { ref } : {}) }) });
+  }
+  async getMarketplacePlugins(name: string): Promise<MarketplacePluginEntry[]> {
+    return (await this.request<{ plugins: MarketplacePluginEntry[] }>(`/api/plugin-marketplaces/${encodeURIComponent(name)}/plugins`)).plugins;
+  }
+  async installMarketplacePlugin(marketplace: string, plugin: string): Promise<PluginActionResult> {
+    return this.request(`/api/plugin-marketplaces/${encodeURIComponent(marketplace)}/install`, { method: 'POST', body: JSON.stringify({ plugin }) });
+  }
+
+  // -- Custom commands & external import -----------------------------------
+
+  /** User-defined commands (Markdown commands and exported recipes) for a workspace; omit for user-level only. */
+  async getCommands(workspace?: string): Promise<CustomCommandInfo[]> {
+    if (!this.live) return [];
+    const query = workspace ? `?${new URLSearchParams({ workspace })}` : '';
+    return (await this.request<{ commands: CustomCommandInfo[] }>(`/api/commands${query}`)).commands;
+  }
+  async renderCommand(id: string, args: string, workspace?: string): Promise<CommandRenderResult> {
+    return this.request('/api/commands/render', { method: 'POST', body: JSON.stringify({ id, arguments: args, ...(workspace ? { workspace } : {}) }) });
+  }
+  /** Read-only scan of another agent's config; pass `source: 'claude' | 'codex'`. */
+  async scanExternalImport(source: string, workspace?: string): Promise<ExternalImportScan> {
+    const query = new URLSearchParams({ source, ...(workspace ? { workspace } : {}) });
+    return this.request(`/api/import/external/scan?${query}`);
+  }
+  /** `items` are the scanned items the user approved; source directories are never modified. */
+  async importExternal(source: string, items: ExternalImportScan['items'], workspace?: string): Promise<ExternalImportResult> {
+    return this.request('/api/import/external', { method: 'POST', body: JSON.stringify({ source, items, ...(workspace ? { workspace } : {}) }) });
   }
   /** WebSocket URL for an interactive PowerShell in `cwd`. */
   terminalUrl(cwd: string): string {

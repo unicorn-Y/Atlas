@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { AgentCapabilityInfo, AgentProfile, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -65,6 +65,8 @@ interface AtlasState {
   runPrompts: Record<string, Outgoing>;
   profiles: AgentProfile[];
   recipes: Recipe[];
+  /** User-defined slash commands (Markdown commands and exported recipes) for the current workspace. */
+  customCommands: CustomCommandInfo[];
   /** Role for new runs; the backend applies its model, skills, tools and mode. */
   profileId: string;
   reasoningEffort: ReasoningEffort | '';
@@ -131,6 +133,7 @@ interface AtlasState {
   saveRecipe: (runId: string, name: string) => Promise<boolean>;
   deleteRecipe: (id: string) => Promise<void>;
   runRecipe: (id: string, params: Record<string, string>) => Promise<void>;
+  reloadCommands: (workspace?: string) => Promise<void>;
 }
 
 const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
@@ -182,7 +185,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', answers: {},
     unread: [], pinned: [], archived: [], runPrompts: {},
-    profiles: [], recipes: [], profileId: storageGet(PROFILE) ?? 'default',
+    profiles: [], recipes: [], customCommands: [], profileId: storageGet(PROFILE) ?? 'default',
     reasoningEffort: (['minimal', 'low', 'medium', 'high'].includes(storageGet(REASONING) ?? '') ? storageGet(REASONING) : '') as ReasoningEffort | '',
     worktreeRequests: {},
 
@@ -655,6 +658,13 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         if (rendered.workspace && conversationId) get().setWorkspace(conversationId, rendered.workspace);
         await get().sendMessage(rendered.prompt);
       } catch (error) { set({ error: errorText(error, '配方没能运行') }); }
+    },
+    reloadCommands: async (workspace) => {
+      if (!get().connected) return;
+      try {
+        const commands = await backend.getCommands(workspace);
+        set({ customCommands: commands });
+      } catch { /* keep the previous list; the slash menu still works with built-ins */ }
     },
     compactConversation: async (id, note = '') => {
       try {

@@ -22,7 +22,7 @@ import ScriptToolsPanel from './pages/ScriptToolsPanel';
 import TelegramPanel from './pages/TelegramPanel';
 import UsagePanel from './pages/UsagePanel';
 import { loadBindings, matchShortcut } from './services/shortcuts';
-import type { PermissionMode } from '@atlas/backend-adapter';
+import type { CustomCommandInfo, PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
 import Palette, { type PaletteItem } from './components/Palette';
@@ -36,6 +36,7 @@ import CreatePage from './pages/CreatePage';
 import BoardPage from './pages/BoardPage';
 import ProfilesPanel from './pages/ProfilesPanel';
 import HooksPanel from './pages/HooksPanel';
+import ImportPanel from './components/ImportPanel';
 import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
 import Sidebar, { NAV, type View } from './shell/Sidebar';
 import HomeView, { type Suggestion } from './shell/HomeView';
@@ -511,6 +512,27 @@ export default function App() {
     ...store.conversations.slice(0, 30).map((conversation) => ({ id: `c-${conversation.id}`, group: '任务', label: conversation.title, hint: relativeTime(conversation.updated_at), run: () => openConversation(conversation) })),
   ];
 
+  /** 用户自定义命令（Markdown 命令 / 配方导出）跑起来：配方走配方自己的渲染，其余走命令渲染接口。 */
+  const runCustomCommand = async (command: CustomCommandInfo, argument: string) => {
+    const args = argument.trim();
+    if (command.recipe_id) {
+      const recipe = store.recipes.find((item) => item.id === command.recipe_id);
+      const firstParam = recipe?.params[0]?.name;
+      await store.runRecipe(command.recipe_id, args && firstParam ? { [firstParam]: args } : {});
+      return;
+    }
+    if (!args && command.argument_hint) { setToast(`在 /${command.name} 后面写上：${command.argument_hint}`); return; }
+    try {
+      const rendered = await backend.renderCommand(command.id, args, workspacePath || undefined);
+      if (rendered.mode === 'plan') store.setNextRunMode('plan');
+      await store.sendMessage(rendered.prompt);
+    } catch (error) {
+      setToast(`命令没能运行：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+  const commandGroup = (source: string) => source === 'recipe' ? '配方命令'
+    : source.startsWith('claude') ? 'Claude 命令' : source.startsWith('codex') ? 'Codex 命令'
+      : source.startsWith('plugin') ? '插件命令' : source === 'atlas' ? 'Atlas 命令' : source;
   const slashCommands: SlashCommand[] = [
     { id: 'new', label: '/new', hint: '新任务', run: newTask },
     { id: 'clear', label: '/clear', hint: '开始一段新对话', run: newTask },
@@ -551,6 +573,12 @@ export default function App() {
         else { store.applySkill(skill.name); setToast(`下一次任务会用上 ${skill.name}`); }
       },
     })),
+    ...store.customCommands.map((command) => ({
+      id: `command-${command.id}`, label: `/${command.name}`,
+      hint: command.description || (command.argument_hint ? `参数：${command.argument_hint}` : '自定义命令'),
+      group: commandGroup(command.source), takesArgument: Boolean(command.argument_hint),
+      run: (argument: string) => void runCustomCommand(command, argument),
+    })),
   ];
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'
@@ -576,6 +604,8 @@ export default function App() {
   const remoteHost = /^ssh:\/\/([^/]+)\//.exec(workspacePath)?.[1] ?? '';
   const workspaceName = workspacePath
     ? `${remoteHost ? `${remoteHost}:` : ''}${workspacePath.split(/[\\/]/).filter(Boolean).pop() ?? workspacePath}` : '';
+  // 自定义命令跟工作目录走：换了目录或连上后端就重取一次，供 / 菜单使用。
+  useEffect(() => { void store.reloadCommands(workspacePath || undefined); }, [store.connected, workspacePath]);
   const permission: PermissionMode = (activeConversation?.permission_mode as PermissionMode | undefined) ?? 'full_access';
   const cyclePermission = () => {
     const common: PermissionMode[] = ['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access'];
@@ -948,7 +978,7 @@ export default function App() {
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
-        {([['models', '模型与服务', SlidersHorizontal], ['advanced', '高级', Settings], ['usage', '用量', Gauge], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
+        {([['models', '模型与服务', SlidersHorizontal], ['advanced', '高级', Settings], ['usage', '用量', Gauge], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件与扩展', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
           <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
@@ -990,7 +1020,14 @@ export default function App() {
           </div>
         </section>}
         {sheet === 'usage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">用量</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">每次任务用了多少 token、缓存帮你省了多少、大概花了多少钱。</p><UsagePanel /></section>}
-        {sheet === 'plugins' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">插件</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力。</p><PluginsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'plugins' && <section>
+          <h3 className="m-0 text-[17px] font-semibold text-heading">插件与扩展</h3>
+          <p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力，也可以把 Claude Code / Codex 里已有的配置搬进来。</p>
+          <div className="grid gap-3.5">
+            <PluginsPanel apiBaseUrl={store.apiBaseUrl} />
+            <ImportPanel workspace={workspacePath || undefined} />
+          </div>
+        </section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
           <ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /></section>}
         {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">脚本工具</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">用一个小脚本给 Atlas 加新能力。</p><ScriptToolsPanel /></section>}

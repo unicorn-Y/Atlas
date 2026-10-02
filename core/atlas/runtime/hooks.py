@@ -190,6 +190,10 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
             outcome.update(blocked=True, reason=str(
                 specific.get("permissionDecisionReason") or value.get("reason") or "Blocked by hook"
             ))
+        elif decision == "ask":
+            # Atlas has no approval card for hook-originated asks this wave, so "ask"
+            # blocks with a reason pointing at manual confirmation.
+            outcome.update(blocked=True, reason="Hook 要求人工确认")
         updated = specific.get("updatedInput")
         if isinstance(updated, Mapping):
             outcome["updated_input"] = dict(updated)
@@ -198,8 +202,13 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
             outcome["additional_context"] = context
     elif event == "PermissionRequest":
         decision = specific.get("decision")
-        if isinstance(decision, Mapping) and decision.get("behavior") == "deny":
-            outcome.update(blocked=True, reason=str(decision.get("message") or "Permission denied by hook"))
+        if isinstance(decision, Mapping):
+            if decision.get("behavior") == "deny":
+                outcome.update(blocked=True, reason=str(
+                    decision.get("message") or "Permission denied by hook"
+                ))
+            elif decision.get("behavior") == "ask":
+                outcome["ask_user"] = True
     else:
         if value.get("decision") == "block":
             outcome.update(blocked=True, reason=str(value.get("reason") or "Blocked by hook"))
@@ -325,6 +334,19 @@ async def execute_claude_hooks(
         if result["blocked"]:
             break
     return result
+
+
+async def run_user_hook(
+    callback: Callable[[str, Mapping[str, Any]], Any] | None,
+    event: str, payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Invoke one user hook callback (Atlas or Claude event) and normalize its outcome."""
+    if callback is None:
+        return {}
+    outcome = callback(event, dict(payload))
+    if asyncio.iscoroutine(outcome):
+        outcome = await outcome
+    return dict(outcome) if isinstance(outcome, Mapping) else {}
 
 
 class HookStore:

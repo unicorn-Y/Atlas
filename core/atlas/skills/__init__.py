@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import structlog
 
@@ -69,11 +69,24 @@ class SkillInfo:
 
 @dataclass(frozen=True)
 class SkillSource:
-    """A directory contributing Agent Skills to the shared Atlas index."""
+    """A directory contributing Agent Skills to the shared Atlas index.
+
+    ``layout`` pins the on-disk convention a source is trusted for, so one
+    rglob rule stays stable across sources:
+
+    - ``"category"``: ``<root>/<category>/<skill>/SKILL.md`` (Atlas repo,
+      Hermes bundled skills)
+    - ``"flat"``: ``<root>/<skill>/SKILL.md`` (Claude Code skills dirs)
+    - ``"single"``: ``<root>/SKILL.md`` (one plugin-contributed skill dir)
+    """
 
     name: str
     root: Path
     priority: int
+    layout: str = "flat"
+
+
+_LAYOUT_PARTS = {"single": 1, "flat": 2, "category": 3}
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +302,7 @@ class SkillManager:
         self._skills_dir = skills_dir or SKILLS_DIR
         self._index: dict[str, SkillInfo] = {}  # name → SkillInfo
         self._sources: dict[str, SkillSource] = {
-            "atlas": SkillSource("atlas", self._skills_dir, 10),
+            "atlas": SkillSource("atlas", self._skills_dir, 10, layout="category"),
         }
 
     def register_skill_source(self, source: SkillSource) -> None:
@@ -300,8 +313,10 @@ class SkillManager:
         """
         if not source.name or not isinstance(source.priority, int):
             raise ValueError("skill source requires a name and integer priority")
+        if source.layout not in _LAYOUT_PARTS:
+            raise ValueError(f"skill source layout must be one of {sorted(_LAYOUT_PARTS)}")
         self._sources[source.name] = SkillSource(
-            source.name, Path(source.root).expanduser(), source.priority,
+            source.name, Path(source.root).expanduser(), source.priority, source.layout,
         )
 
     def unregister_skill_source(self, name: str) -> None:
@@ -347,8 +362,10 @@ class SkillManager:
         for source in sources:
             if not source.root.is_dir():
                 continue
+            expected_parts = _LAYOUT_PARTS[source.layout]
             skill_files = sorted(
-                source.root.rglob("SKILL.md"),
+                (path for path in source.root.rglob("SKILL.md")
+                 if len(path.relative_to(source.root).parts) == expected_parts),
                 key=lambda path: path.relative_to(source.root).as_posix().casefold(),
             )
             for skill_md in skill_files:
@@ -357,7 +374,13 @@ class SkillManager:
                     continue
 
                 fm, _body = parsed
-                info = _frontmatter_to_skill_info(fm, skill_md, skills_dir=source.root)
+                # Only the category layout owns the "first directory is the
+                # category" inference; flat/single sources keep the declared
+                # (or empty) category instead of the skill's own folder name.
+                info = _frontmatter_to_skill_info(
+                    fm, skill_md,
+                    skills_dir=source.root if source.layout == "category" else None,
+                )
                 if info is None:
                     continue
                 info.source = source.name
@@ -525,3 +548,73 @@ class SkillManager:
             configured_servers=set(configured_servers) if configured_servers is not None else None,
             registry=registry,
         )
+
+
+# ---------------------------------------------------------------------------
+# Source assembly (E2) — one shared index, stable priorities
+# ---------------------------------------------------------------------------
+
+# Higher priority wins duplicate skill names. The ladder mirrors the custom
+# command sources (atlas/runtime/commands.py): bundled Atlas lowest, then
+# opt-in Hermes, user-level Claude, project-level Claude, plugins on top.
+SKILL_SOURCE_PRIORITY = {"atlas": 10, "hermes": 15, "claude-user": 20, "claude-project": 30, "plugin": 60}
+
+
+def plugin_skill_sources(
+    plugin_skills: Mapping[str, Sequence[Path | str]],
+) -> list[SkillSource]:
+    """Build one source per plugin-contributed skill directory.
+
+    Names follow ``plugin:<plugin>:<skill-dir>`` so a whole plugin family can
+    be swapped atomically via ``SkillManager.replace_skill_sources("plugin:", …)``
+    when plugins are installed, disabled, or uninstalled.
+    """
+    sources: list[SkillSource] = []
+    for plugin_id in sorted(plugin_skills):
+        for directory in plugin_skills[plugin_id]:
+            sources.append(SkillSource(
+                f"plugin:{plugin_id}:{Path(directory).name}",
+                Path(directory), SKILL_SOURCE_PRIORITY["plugin"], layout="single",
+            ))
+    return sources
+
+
+def default_skill_sources(
+    workspace: Path | str | None = None,
+    atlas_home: Path | str | None = None,
+    plugin_skills: Mapping[str, Sequence[Path | str]] | None = None,
+    hermes_skills_dir: Path | str | None = None,
+    user_home: Path | str | None = None,
+) -> list[SkillSource]:
+    """Assemble every skill source feeding the single shared Atlas index.
+
+    - ``atlas``: the built-in repository skills dir (priority 10, category
+      layout). Atlas' own directory convention is unchanged: user-acquired
+      skills install under ``<skills dir>/community/<name>`` and stay inside
+      this source. ``atlas_home/<name>`` overrides the root for tests or
+      read-only installs.
+    - ``hermes``: Hermes bundled skills, only when the caller passes a
+      directory (the server gates this behind the
+      ``extensions.hermes_skills`` config point).
+    - ``claude-user``: ``~/.claude/skills`` (priority 20).
+    - ``claude-project``: ``<workspace>/.claude/skills`` (priority 30).
+    - ``plugin:*``: caller-provided plugin skill dirs (priority 60).
+    """
+    atlas_root = Path(atlas_home).expanduser() / "skills" if atlas_home else SKILLS_DIR
+    sources = [SkillSource("atlas", atlas_root, SKILL_SOURCE_PRIORITY["atlas"], layout="category")]
+    if hermes_skills_dir:
+        sources.append(SkillSource(
+            "hermes", Path(hermes_skills_dir).expanduser(),
+            SKILL_SOURCE_PRIORITY["hermes"], layout="category",
+        ))
+    home = Path(user_home).expanduser() if user_home else Path.home()
+    sources.append(SkillSource(
+        "claude-user", home / ".claude" / "skills", SKILL_SOURCE_PRIORITY["claude-user"],
+    ))
+    if workspace:
+        sources.append(SkillSource(
+            "claude-project", Path(workspace).expanduser() / ".claude" / "skills",
+            SKILL_SOURCE_PRIORITY["claude-project"],
+        ))
+    sources.extend(plugin_skill_sources(plugin_skills or {}))
+    return sources

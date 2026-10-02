@@ -326,11 +326,11 @@
 | F174 | Rules/Instructions | ✅ | 同 F173 | |
 | F175 | Skills | ✅ | 注册、发现、目录联邦、生命周期、信任、回滚；已超过标杆 | |
 | F176 | MCP servers | ✅ | 增删、重启 | |
-| F177 | Plugins | 🟡 | 只支持本地安装 | Claude Code 插件市场 |
-| F178 | Hooks | ✅ | 设置 → Hooks：任务开始/完成/失败、用工具前后运行自己的命令，工具前退出码 2 可拦下；可试跑 | Kiro、Gemini CLI |
+| F177 | Plugins | ✅ | 兼容 Claude Code 插件格式与市场（`.claude-plugin`、marketplace），本地/git/市场三种来源，安装/启停/卸载/更新/更新检查，插件 commands/agents/skills/hooks/MCP 进同一发现层 | Claude Code 插件市场 |
+| F178 | Hooks | ✅ | 直接兼容 Claude Code `.claude/settings.json` hooks（matcher/stdin/stdout/退出码语义），支持拦截、改写工具输入、追加上下文，事件覆盖工具前后/失败、提交提示词、停止、子 Agent 起止、压缩前、通知、权限请求；面板可启停、试跑、看最近运行记录 | Kiro、Gemini CLI |
 | F179 | 自定义工具 | ✅ | 设置 → 脚本工具：写个小脚本+参数说明就成为 Atlas 的工具，可试跑 | Pi |
 | F180 | Agent 配置 | ✅ | 设置 → 角色：新建、编辑指令 / 模型 / 技能 / 工具 / 模式 | Roo Modes |
-| F181 | 扩展包 | 🟡 | skill bundles | Pi Packages |
+| F181 | 扩展包 | ✅ | 插件包自带 skills/commands/agents/hooks/MCP 五类扩展；支持从 Claude Code / Codex 一键导入配置（扫描→勾选→导入，源目录只读） | Pi Packages |
 | F182 | 主题/键位 | ✅ | 三套主题；设置 → 快捷键可改绑所有快捷键（冲突自动提示并清掉旧的） | |
 | F183 | Powers | ➖ | | |
 | F184 | Recipes | ✅ | 同 F064 | goose |

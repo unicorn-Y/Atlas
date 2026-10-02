@@ -213,27 +213,59 @@ function HubPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
 
 interface Plugin {
   name: string;
+  display_name?: string;
   version: string;
-  description: string;
+  description?: string;
+  source?: string;
+  marketplace?: string | null;
   enabled: boolean;
   loaded: boolean;
-  skills: string[];
-  commands: string[];
-  mcp_servers: string[];
+  update_available?: boolean;
+  skills?: string[];
+  commands?: string[];
+  agents?: string[];
+  hooks?: number;
+  mcp_servers?: string[];
 }
+
+interface ReloadReport { loaded?: string[]; skipped?: Array<{ name?: string; reason?: string }>; errors?: Record<string, string> }
+
+/** One line of plain Chinese about what a plugin reload did. */
+const reportText = (report: ReloadReport | undefined) => {
+  if (!report) return null;
+  const parts: string[] = [];
+  const loaded = report.loaded?.length ?? 0;
+  const skipped = report.skipped?.length ?? 0;
+  if (loaded) parts.push(`重新加载了 ${loaded} 个插件`);
+  if (skipped) parts.push(`${skipped} 个没有加载`);
+  const errors = Object.entries(report.errors ?? {});
+  if (errors.length) parts.push(`出问题：${errors.map(([name, detail]) => `${name}（${detail}）`).join('、')}`);
+  return parts.length ? parts.join('；') : null;
+};
+
+const SOURCE_LABEL: Record<string, string> = { local: '本地', git: 'git', marketplace: '市场', builtin: '内置' };
 
 export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
+  const [marketplaces, setMarketplaces] = useState<Array<{ name?: string; type?: string; source?: string; path?: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [source, setSource] = useState('');
+  const [marketSource, setMarketSource] = useState('');
+  const [confirmRemove, setConfirmRemove] = useState('');
+  const [browsing, setBrowsing] = useState<{ name: string; entries: Array<{ name?: string; description?: string }> } | null>(null);
 
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/plugins`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      setPlugins((await response.json()).plugins);
+      const [pluginsResponse, marketResponse] = await Promise.all([
+        fetch(`${apiBaseUrl}/api/plugins`),
+        fetch(`${apiBaseUrl}/api/plugin-marketplaces`).catch(() => null),
+      ]);
+      if (!pluginsResponse.ok) throw new Error(`HTTP ${pluginsResponse.status}`);
+      setPlugins((await pluginsResponse.json()).plugins);
+      if (marketResponse?.ok) setMarketplaces((await marketResponse.json()).marketplaces);
       setError(null);
     } catch (exc) {
       setError(String(exc));
@@ -244,65 +276,136 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const toggle = async (name: string, enabled: boolean) => {
+  /** Shared wrapper for every button action; shows the reload report in plain Chinese. */
+  const act = async (input: RequestInfo, init?: RequestInit, done?: string) => {
     setBusy(true);
+    setError(null);
+    setNotice(null);
     try {
-      await fetch(`${apiBaseUrl}/api/plugins/${name}/enabled`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled }),
-      });
+      const response = await fetch(input, init);
+      if (!response.ok) throw new Error(await response.json().then((body) => body?.detail).catch(() => `HTTP ${response.status}`));
+      const body = await response.json().catch(() => ({}));
+      const detail = reportText(body?.report);
+      setNotice([done, detail].filter(Boolean).join('。') || '已完成');
+      setConfirmRemove('');
       await refresh();
     } catch (exc) {
-      setError(String(exc));
+      setError(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const post = (path: string, body?: unknown) => act(`${apiBaseUrl}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+  const browse = async (name: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/plugin-marketplaces/${encodeURIComponent(name)}/plugins`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const body = await response.json();
+      setBrowsing({ name, entries: body.plugins ?? [] });
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : String(exc));
     } finally {
       setBusy(false);
     }
   };
 
   return <section className={styles.settingsCard} aria-label="插件管理">
-    <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <header className={styles.settingsCardHeading}>
       <h2>插件</h2>
-      <button className={styles.quietButton} onClick={() => void refresh()} disabled={busy}><RefreshCw size={14} /> 刷新</button>
+      <button className={styles.quietButton} onClick={() => void refresh()} disabled={busy}><RefreshCw size={14} className={busy ? styles.settingsSpinner : undefined} /> 刷新</button>
     </header>
-    {error && <p role="alert">{error}</p>}
+    {error && <p className={styles.settingsError} role="alert">{error}</p>}
+    {notice && <p role="status" style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--fg-2)' }}>{notice}</p>}
     <form className={styles.settingsForm} onSubmit={async (event) => {
       event.preventDefault();
       if (!source.trim()) return;
-      setBusy(true);
-      try {
-        await fetch(`${apiBaseUrl}/api/plugins/install-local`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: source.trim() }),
-        });
-        setSource('');
-        await refresh();
-      } catch (exc) {
-        setError(String(exc));
-      } finally {
-        setBusy(false);
-      }
+      await post('/api/plugins/install', { source: source.trim() });
+      setSource('');
     }}>
-      <input placeholder="本地插件目录路径（含 plugin.json）" value={source} onChange={(e) => setSource(e.target.value)} />
-      <button className={styles.settingsAction} disabled={busy || !source.trim()}>从本地安装</button>
+      <label>从哪里安装
+        <input placeholder="本地目录路径、git 地址，或 用户名/仓库" value={source} onChange={(e) => setSource(e.target.value)} />
+      </label>
+      <p style={{ margin: 0, fontSize: 12.5 }}>本地目录要装 Claude Code 插件的格式（带 plugin.json）；git 地址或「用户名/仓库」会自动克隆安装。填一个 marketplace 仓库则注册为插件市场。</p>
+      <button className={styles.settingsAction} disabled={busy || !source.trim()}>安装</button>
     </form>
-    {plugins.length === 0 && !busy && <p>还没有插件。把含 plugin.json 的目录放到 plugins/ 下或从本地安装。</p>}
-    <ul style={{ listStyle: 'none', padding: 0 }}>
+    {plugins.length === 0 && !busy && <p>还没有插件。装一个，或者把含 plugin.json 的目录放进 plugins/ 文件夹。</p>}
+    <ul>
       {plugins.map((plugin) => (
-        <li key={plugin.name} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0' }}>
-          <span style={{ flex: 1 }}>
-            <strong>{plugin.name}</strong> <small>v{plugin.version}{plugin.loaded ? ' · 已加载' : ''}</small>
-            {(plugin.skills.length > 0 || plugin.commands.length > 0 || plugin.mcp_servers.length > 0) && (
-              <div><small>skills {plugin.skills.length} · commands {plugin.commands.length} · mcp {plugin.mcp_servers.length}</small></div>
-            )}
-          </span>
-          <button
-            className={styles.quietButton}
-            onClick={() => void toggle(plugin.name, !plugin.enabled)}
-            disabled={busy}
-          >{plugin.enabled ? '停用' : '启用'}</button>
+        <li key={plugin.name}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <strong>{plugin.display_name || plugin.name}</strong> <small>v{plugin.version} · {SOURCE_LABEL[plugin.source ?? ''] ?? plugin.source ?? '本地'}{plugin.marketplace ? ` · ${plugin.marketplace}` : ''}{plugin.loaded ? ' · 已加载' : ''}{plugin.update_available ? ' · 有新版本' : ''}</small>
+              {plugin.description && <div><small>{plugin.description}</small></div>}
+              {(plugin.skills?.length || plugin.commands?.length || plugin.agents?.length || plugin.mcp_servers?.length || plugin.hooks) && (
+                <div><small>技能 {plugin.skills?.length ?? 0} · 命令 {plugin.commands?.length ?? 0} · Agent {plugin.agents?.length ?? 0} · Hook {plugin.hooks ?? 0} · MCP {plugin.mcp_servers?.length ?? 0}</small></div>
+              )}
+            </span>
+            <button className={styles.quietButton} onClick={() => void post(`/api/plugins/${encodeURIComponent(plugin.name)}/enabled`, { enabled: !plugin.enabled })} disabled={busy}>
+              {plugin.enabled ? '停用' : '启用'}
+            </button>
+            <button className={styles.quietButton} onClick={() => void post(`/api/plugins/${encodeURIComponent(plugin.name)}/update`)} disabled={busy}>更新</button>
+            <button className={styles.quietButton} style={confirmRemove === plugin.name ? { color: 'var(--danger)' } : undefined}
+              onClick={() => {
+                if (confirmRemove !== plugin.name) { setConfirmRemove(plugin.name); return; }
+                void act(`${apiBaseUrl}/api/plugins/${encodeURIComponent(plugin.name)}`, { method: 'DELETE' }, `已卸载 ${plugin.name}`);
+              }} disabled={busy}>
+              {confirmRemove === plugin.name ? '确认卸载' : '卸载'}
+            </button>
+          </div>
         </li>
       ))}
     </ul>
+
+    <h2 style={{ marginTop: 18 }}>插件市场</h2>
+    <p style={{ margin: '0 0 10px', fontSize: 13 }}>市场是一次性加进来的一批插件目录。添加后可以浏览里面的插件并逐个安装。</p>
+    <form className={styles.settingsForm} onSubmit={async (event) => {
+      event.preventDefault();
+      if (!marketSource.trim()) return;
+      await post('/api/plugin-marketplaces', { source: marketSource.trim() });
+      setMarketSource('');
+      setNotice('插件市场已添加');
+    }}>
+      <label>市场来源
+        <input placeholder="本地路径或 git 地址（仓库里要有 marketplace.json）" value={marketSource} onChange={(e) => setMarketSource(e.target.value)} />
+      </label>
+      <button className={styles.settingsAction} disabled={busy || !marketSource.trim()}>添加市场</button>
+    </form>
+    {marketplaces.length > 0 && <ul>
+      {marketplaces.map((market) => (
+        <li key={market.name ?? market.path}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <strong>{market.name ?? '未命名市场'}</strong> <small>{market.type === 'git' ? 'git' : '本地'}{market.source ? ` · ${market.source}` : ''}</small>
+            </span>
+            <button className={styles.quietButton} disabled={busy || !market.name}
+              onClick={() => { if (browsing?.name === market.name) setBrowsing(null); else void browse(market.name ?? ''); }}>
+              {browsing?.name === market.name ? '收起' : '浏览'}
+            </button>
+          </div>
+          {browsing && browsing.name === market.name && (browsing.entries.length ? (
+            <ul style={{ margin: '8px 0 0' }}>
+              {browsing.entries.map((entry, index) => (
+                <li key={entry.name ?? index}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <strong>{entry.name ?? '未命名插件'}</strong>
+                      {entry.description && <div><small>{entry.description}</small></div>}
+                    </span>
+                    <button className={styles.quietButton} disabled={busy || !entry.name}
+                      onClick={() => void post(`/api/plugin-marketplaces/${encodeURIComponent(market.name ?? '')}/install`, { plugin: entry.name })}>
+                      安装
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : <small style={{ display: 'block', marginTop: 6 }}>这个市场里还没有列出插件。</small>)}
+        </li>
+      ))}
+    </ul>}
   </section>;
 }
 

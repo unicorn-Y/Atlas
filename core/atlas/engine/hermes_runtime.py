@@ -235,6 +235,20 @@ class HermesRuntime:
         self, *, conversation_id: str, workspace: str | None, focus_topic: str | None = None,
     ) -> dict[str, Any]:
         """Run Hermes' real manual compressor against the durable session transcript."""
+        # PreCompact hook fires at the Atlas compaction entry point; the server owns
+        # the plugin-hook registry, so plugin-contributed hooks are not included here.
+        from atlas.config import get_config
+        from atlas.runtime.hooks import HookStore
+
+        outcome = await HookStore(
+            get_config().db_path.parent / "hooks.toml",
+        ).execute("PreCompact", {
+            "conversation_id": conversation_id, "trigger": "manual",
+        }, cwd=workspace)
+        if outcome.get("blocked"):
+            return {"compressed": False, "reason": "blocked_by_hook",
+                    "summary": "", "detail": str(outcome.get("reason") or "")}
+
         def compact_sync() -> dict[str, Any]:
             self.home.mkdir(parents=True, exist_ok=True)
             os.environ["HERMES_HOME"] = str(self.home)

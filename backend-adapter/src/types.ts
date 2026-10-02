@@ -183,7 +183,90 @@ export interface RunStartRequest {
 
 export type PermissionMode = 'full_access' | 'ask_each' | 'ask_writes' | 'auto_file' | 'plan' | 'read_only';
 
-export interface HookConfig { id: string; event: string; command: string; timeout_s: number; enabled: boolean }
+/** One command inside a Claude-style hook group. */
+export interface HookSpec { type?: string; command?: string; timeout?: number; [key: string]: unknown }
+/** Atlas hooks carry a single `command`; Claude/plugin hooks carry a `matcher` and a list of specs. */
+export interface HookConfig {
+  id: string; event: string; command: string; timeout_s: number; enabled: boolean;
+  /** `atlas` for hooks Atlas owns; Claude settings ones read `claude:user|project|local`, plugins `plugin`. */
+  source?: string;
+  /** Claude matcher pattern (tool name etc.); `null` means it matches everything. */
+  matcher?: string | null;
+  hooks?: HookSpec[];
+}
+/** One recent hook execution as returned by `GET /api/hooks` and the test endpoint. */
+export interface HookLog {
+  hook_id?: string;
+  event: string;
+  exit_code: number;
+  duration_ms: number;
+  output?: string;
+  stderr?: string;
+  source?: string;
+}
+
+/** A discovered plugin bundle (Claude Code format or Atlas/Hermes native). */
+export interface PluginInfo {
+  name: string;
+  display_name?: string;
+  version: string;
+  description?: string;
+  author?: unknown;
+  path?: string;
+  /** `local`, `git`, `marketplace` or a built-in root name. */
+  source?: string;
+  marketplace?: string | null;
+  skills?: string[];
+  commands?: string[];
+  agents?: string[];
+  hooks?: number;
+  mcp_servers?: string[];
+  enabled: boolean;
+  loaded: boolean;
+  update_available?: boolean;
+}
+/** `report` summarises what a reload of every plugin contributed. */
+export interface PluginReloadReport { loaded: string[]; skipped: Array<{ name?: string; reason?: string }>; errors: Record<string, string> }
+export interface PluginActionResult { name: string; path?: string; removed?: boolean; enabled?: boolean; report?: PluginReloadReport }
+/** A registered plugin marketplace. */
+export interface MarketplaceInfo { name?: string; type?: string; source?: string; path?: string; ref?: string | null; plugins?: number }
+/** One entry of a marketplace.json catalog. */
+export interface MarketplacePluginEntry { name?: string; description?: string; source?: string | { [key: string]: unknown }; marketplace?: string; [key: string]: unknown }
+
+/** A user-defined command (Markdown command or exported Recipe) as returned by `GET /api/commands`. */
+export interface CustomCommandInfo {
+  id: string;
+  name: string;
+  description?: string | null;
+  argument_hint?: string | null;
+  source: string;
+  source_priority?: number;
+  /** Set when the command is backed by an Atlas Recipe; rendering then follows the recipe path. */
+  recipe_id?: string | null;
+}
+/** Result of `POST /api/commands/render`. */
+export interface CommandRenderResult {
+  prompt: string;
+  model?: string | null;
+  tool_allow?: string[] | null;
+  tool_deny?: string[] | null;
+  mode?: 'act' | 'plan';
+  [key: string]: unknown;
+}
+
+/** One scannable item found in an external agent's config. */
+export interface ExternalImportItem {
+  kind: string;
+  name: string;
+  path: string;
+  action?: string;
+  conflict?: boolean;
+  detail?: string;
+}
+/** Result of `GET /api/import/external/scan`. */
+export interface ExternalImportScan { source: string; items: ExternalImportItem[]; sources?: string[] }
+/** Result of `POST /api/import/external`. */
+export interface ExternalImportResult { imported: number; skipped: number; report?: unknown }
 
 export interface PullRequestInfo {
   number: number; title: string; url: string; state: string; draft: boolean; base: string; head: string;

@@ -69,6 +69,7 @@ from atlas.checks import parse_test_summary, run_checks
 from atlas.config import get_config, load_user_settings
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
+from atlas.runtime.hooks import run_user_hook
 from atlas.office import (
     create_document,
     create_presentation,
@@ -503,6 +504,7 @@ class AgentOrchestrator:
         parent_approval = options.get("approval_callback")
         child_role = str(options.get("agent_role", "leaf"))
         child_depth = int(options.get("depth", 0))
+        child_agent_type = str(options.get("agent_type", "general"))
         max_spawn_depth = int(options.get("max_spawn_depth", 2))
         delegate_denials = []
         if child_role != "orchestrator" or child_depth >= max_spawn_depth:
@@ -510,6 +512,10 @@ class AgentOrchestrator:
         if child_role == "leaf":
             delegate_denials.extend(["ask_user", "remember", "session_search",
                                      "project_sources_search", "use_skill"])
+        await run_user_hook(options.get("user_hook_callback"), "SubagentStart", {
+            "agent_type": child_agent_type, "subtask_id": subtask_id,
+            "description": goal, "prompt": worker_prompt,
+        })
 
         async def approval_callback(
             event_id: str, tool_name: str, arguments: dict[str, Any],
@@ -577,6 +583,10 @@ class AgentOrchestrator:
                 status = "failed"
             return {"status": status, "result": "".join(outputs) or "子任务没有给出结果。", "evidence": usage}
         finally:
+            await run_user_hook(options.get("user_hook_callback"), "SubagentStop", {
+                "agent_type": child_agent_type, "subtask_id": subtask_id,
+                "status": status,
+            })
             try:
                 from atlas.config import DATA_ROOT
                 from atlas.engine.session_sync import delete_session
@@ -1045,6 +1055,9 @@ class AgentOrchestrator:
                             content=content,
                             source_id=str(data.get("source_id") or "") or None,
                         )
+                        await run_user_hook(user_hook_callback, "Notification", {
+                            "notification_type": str(event["type"]), "message": content,
+                        })
                     except Exception as exc:
                         log.warning("agent.notification.persist_failed", error=str(exc))
 
@@ -1192,6 +1205,22 @@ class AgentOrchestrator:
                     ctx.hermes_preapproved_writes.discard(fingerprint)
                     choice = "allow"
                 else:
+                    hook_permission = await run_user_hook(
+                        user_hook_callback, "PermissionRequest",
+                        {"tool_name": fn_name, "tool_input": fn_args},
+                    )
+                    if hook_permission.get("blocked") or hook_permission.get("ask_user"):
+                        detail = (
+                            "这次操作被 hook 拦下："
+                            + str(hook_permission.get("reason") or "Hook 要求人工确认")
+                        )
+                        result = {"content": [{"type": "text", "text": detail}], "is_error": True}
+                        events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
+                                       "content": result["content"], "is_error": True})
+                        tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+                        if ctx.event_queue is not None:
+                            await ctx.event_queue.put(events[-1])
+                        continue
                     choice = await ctx.approval_callback(f"approval:{tc_id}", fn_name, fn_args)
                 if choice != "allow":
                     detail = "操作未获允许，因此已取消。需要执行的话，请在确认卡片中允许这次操作，或调整对话权限。"
@@ -1299,12 +1328,11 @@ class AgentOrchestrator:
                                        "content": [{"type": "text", "text": text}], "is_error": True})
                         tool_messages.append(ToolMessage(content=text, tool_call_id=tc_id))
                         continue
+            hook_context = ""
             if user_hook_callback:
-                outcome = user_hook_callback("tool.before", {
+                outcome = await run_user_hook(user_hook_callback, "tool.before", {
                     "tool_name": fn_name, "parameters": fn_args,
                 })
-                if inspect.isawaitable(outcome):
-                    outcome = await outcome
                 if outcome.get("blocked"):
                     detail = str(outcome.get("reason", "Blocked by hook"))
                     result = {"content": [{"type": "text", "text": detail}], "is_error": True}
@@ -1314,6 +1342,10 @@ class AgentOrchestrator:
                     if ctx.event_queue is not None:
                         await ctx.event_queue.put(events[-1])
                     continue
+                updated_input = outcome.get("updated_input")
+                if isinstance(updated_input, dict):
+                    fn_args.update(updated_input)
+                hook_context = str(outcome.get("additional_context") or "")
             ctx.external_tool_context = True
             if hasattr(ctx, "maintenance_context"):
                 refs = ctx.maintenance_context.setdefault("active_tool_refs", [])
@@ -1324,6 +1356,22 @@ class AgentOrchestrator:
             # Approval gate for sensitive tools
             if (fn_name in self.APPROVAL_REQUIRED_TOOLS
                     and permission_mode != "ask_writes" and ctx.approval_callback):
+                hook_permission = await run_user_hook(
+                    user_hook_callback, "PermissionRequest",
+                    {"tool_name": fn_name, "tool_input": fn_args},
+                )
+                if hook_permission.get("blocked") or hook_permission.get("ask_user"):
+                    detail = (
+                        "这次操作被 hook 拦下："
+                        + str(hook_permission.get("reason") or "Hook 要求人工确认")
+                    )
+                    events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
+                                   "content": [{"type": "text", "text": detail}],
+                                   "is_error": True})
+                    tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+                    if getattr(ctx, "event_queue", None) is not None:
+                        await ctx.event_queue.put(events[-1])
+                    continue
                 approval_event_id = f"approval:{tc_id}"
                 events.append({
                     "type": "approval_required",
@@ -1866,16 +1914,26 @@ class AgentOrchestrator:
 
             await self._emit_hook(ctx, "after_tool", name=fn_name, arguments=fn_args, result=result)
             if user_hook_callback:
-                outcome = user_hook_callback("tool.after", {
+                outcome = await run_user_hook(user_hook_callback, "tool.after", {
                     "tool_name": fn_name, "parameters": fn_args, "result": result,
                 })
-                if inspect.isawaitable(outcome):
-                    await outcome
+                post_context = str(outcome.get("additional_context") or "")
+                if post_context:
+                    hook_context = f"{hook_context}\n{post_context}" if hook_context else post_context
 
             full_output = "\n".join(
                 str(block.get("text", block)) if isinstance(block, dict) else str(block)
                 for block in result.get("content", [])
             )
+            if result.get("is_error"):
+                error_data = result.get("data")
+                error_text = str(error_data.get("error") or full_output) if isinstance(
+                    error_data, dict,
+                ) else full_output
+                await run_user_hook(user_hook_callback, "PostToolUseFailure", {
+                    "tool_name": fn_name, "tool_input": fn_args,
+                    "error": error_text[:4000],
+                })
             if fn_name in {"local_edit", "local_file"} and isinstance(fn_args.get("path"), str):
                 path_value = fn_args["path"]
                 if fn_name == "local_file" and fn_args.get("action") not in {"write", "append", "delete", "move", "copy"}:
@@ -1955,6 +2013,8 @@ class AgentOrchestrator:
                 str(b.get("text", b)) if isinstance(b, dict) else str(b)
                 for b in result.get("content", [])
             )
+            if hook_context:
+                result_text = f"{result_text}\n{hook_context}"
             image_url = (
                 result.get("data", {}).get("_image_data_url")
                 if isinstance(result.get("data"), dict)
@@ -2148,6 +2208,30 @@ class AgentOrchestrator:
             conv=conversation_id,
             msg_len=len(message),
         )
+
+        hook_outcome = await run_user_hook(user_hook_callback, "UserPromptSubmit", {
+            "prompt": message,
+        })
+        if hook_outcome.get("blocked"):
+            reason = str(hook_outcome.get("reason") or "Blocked by hook")
+            yield {"type": "chunk", "content": reason}
+            try:
+                msg_id = await self._memory.save_message(
+                    conversation_id=conversation_id, role="assistant", content=reason,
+                    metadata={"model": litellm_model, "hook": "UserPromptSubmit"},
+                )
+            except Exception as e:
+                yield {
+                    "type": "error",
+                    "category": "backend",
+                    "detail": f"Unable to save hook denial message: {e}",
+                }
+                return
+            yield {"type": "done", "message_id": msg_id, "model": runtime.model}
+            return
+        prompt_context = str(hook_outcome.get("additional_context") or "")
+        if prompt_context:
+            message = f"{message}\n\n{prompt_context}"
 
         try:
             consolidated_goal_knowledge = [] if worker else (

@@ -17,6 +17,7 @@ import sys
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -73,13 +74,25 @@ from atlas.origin_guard import DEV_ORIGINS, OriginGuard
 from atlas.plugins import PluginRuntime
 from atlas.projects import ProjectStore
 from atlas.runtime import hub_control
+from atlas.runtime.commands import (
+    CommandSource,
+    UserCommand,
+    list_user_commands,
+    render_user_command,
+)
 from atlas.runtime.hooks import HookStore
 from atlas.runtime.backend_host import AgentBackendHost
 from atlas.runtime.capability_bus import CapabilityBus
 from atlas.runtime.external_agents import external_agent_status, normalize_external_event
 from atlas.scheduler import AtlasScheduler, ScheduledTask, TaskStatus, TriggerType
 from atlas.sandbox import DockerSandboxManager
-from atlas.skills import PROJECT_ROOT, SKILLS_DIR, SkillManager
+from atlas.skills import (
+    PROJECT_ROOT,
+    SKILLS_DIR,
+    SkillManager,
+    default_skill_sources,
+    plugin_skill_sources,
+)
 from atlas.skills.acquisition import (
     CatalogUnavailableError,
     SkillsShProvider,
@@ -252,6 +265,12 @@ async def _telegram_command(command: str, user_id: int) -> str:
 
 def _worktrees() -> WorktreeService:
     return WorktreeService(get_config().db_path.parent)
+
+
+def _default_workspace() -> Path | None:
+    """The user-configured default workspace, if any (workspace-level sources)."""
+    value = load_user_settings().get("default_workspace")
+    return Path(str(value)).expanduser() if value else None
 
 
 def _require_skill_center_authority(request: Request) -> None:
@@ -563,8 +582,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     agent_backend_host = AgentBackendHost()
 
     skill_mgr = SkillManager()
-    await skill_mgr.scan_skills()
     cfg = get_config()
+    # E2: feed the one shared skill index from every source. Hermes skills are
+    # strictly opt-in via `extensions.hermes_skills = "<hermes skills dir>"` in
+    # atlas.toml; plugin skill dirs join through _refresh_extension_sources
+    # once plugin_runtime exists below.
+    hermes_skills = cfg.get("extensions.hermes_skills")
+    for source in default_skill_sources(
+        workspace=_default_workspace(),
+        hermes_skills_dir=(
+            Path(str(hermes_skills).strip()) if isinstance(hermes_skills, str) and hermes_skills.strip() else None
+        ),
+    ):
+        skill_mgr.register_skill_source(source)
+    await skill_mgr.scan_skills()
     custom_tools = CustomToolStore(cfg.db_path.parent / "tools")
     skill_registry = SkillRegistry(cfg.db_path.parent / "skill-registry.db")
     _register_local_skills(skill_mgr, skill_registry)
@@ -771,6 +802,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         mcp_client=mcp_client,
         capabilities=capabilities,
     )
+    _refresh_extension_sources()
 
     notifications = NotificationBus()
     if plugin_load_report.get("errors"):
@@ -3708,8 +3740,8 @@ async def list_marketplace_plugins(name: str) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="插件服务尚未就绪")
     try:
         return {"plugins": plugin_runtime.list_marketplace_plugins(name)}
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0] if exc.args else exc)) from exc
 
 
 @app.post("/api/plugin-marketplaces/{name}/install")
@@ -3720,6 +3752,8 @@ async def install_marketplace_plugin(name: str, req: dict[str, Any]) -> dict[str
         result = await asyncio.to_thread(
             plugin_runtime.install_marketplace_plugin, name, str(req.get("plugin", "")),
         )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0] if exc.args else exc)) from exc
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {**result, "report": await _reload_extensions()}
@@ -3730,10 +3764,57 @@ async def set_plugin_enabled(name: str, req: dict[str, Any]) -> dict[str, Any]:
     """Enable or disable a plugin and reapply every plugin to the runtime."""
     if plugin_runtime is None:
         raise HTTPException(status_code=503, detail="Plugin runtime unavailable")
-    if not plugin_runtime.set_enabled(name, bool(req.get("enabled", True))):
+    if not any(item["name"] == name for item in plugin_runtime.discover()):
         raise HTTPException(status_code=404, detail="插件不存在")
+    plugin_runtime.set_enabled(name, bool(req.get("enabled", True)))
     report = await _reload_extensions()
     return {"name": name, "enabled": bool(req.get("enabled", True)), "report": report}
+
+
+# ---------------------------------------------------------------------------
+# External import (E6)
+# ---------------------------------------------------------------------------
+
+_EXTERNAL_IMPORT_SOURCES = {"claude", "codex"}
+
+
+@app.get("/api/import/external/scan")
+async def scan_external_import(source: str, workspace: str | None = None) -> dict[str, Any]:
+    """Scan a Claude Code / Codex profile and list the importable items."""
+    if source not in _EXTERNAL_IMPORT_SOURCES:
+        raise HTTPException(status_code=422, detail="source must be claude or codex")
+    try:
+        from atlas.runtime.external_import import scan_external
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503, detail=f"external import module unavailable: {exc}",
+        ) from exc
+    return await asyncio.to_thread(
+        scan_external, source,
+        workspace=Path(workspace).expanduser() if workspace else None,
+    )
+
+
+@app.post("/api/import/external")
+async def run_external_import(req: dict[str, Any]) -> dict[str, Any]:
+    """Import user-selected items from Claude Code / Codex; source dirs are read-only."""
+    source = str(req.get("source", ""))
+    items = req.get("items")
+    if source not in _EXTERNAL_IMPORT_SOURCES or not isinstance(items, list):
+        raise HTTPException(
+            status_code=422,
+            detail="source must be claude or codex and items must be a list",
+        )
+    try:
+        from atlas.runtime.external_import import import_external
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503, detail=f"external import module unavailable: {exc}",
+        ) from exc
+    return await asyncio.to_thread(
+        import_external, source, items,
+        workspace=Path(str(req["workspace"])).expanduser() if req.get("workspace") else None,
+    )
 
 
 @app.patch("/api/integrations/{capability_id}/enabled")
@@ -4014,7 +4095,11 @@ async def list_agent_types(root: str | None = Query(default=None)) -> dict[str, 
 
     workspace = Path(root).expanduser().resolve() if root else None
     trusted = bool(workspace and _workspace_trust().get(str(workspace), False))
-    types = load_types(get_config().db_path.parent, workspace, trusted)
+    # Plugin agents join the same discovery layer — no second child runtime.
+    types = load_types(
+        get_config().db_path.parent, workspace, trusted,
+        plugin_agent_dirs=_plugin_agent_dirs(),
+    )
     return {"types": types[:20]}
 
 
@@ -5080,6 +5165,44 @@ def _plugin_contributions() -> list[dict[str, Any]]:
     return plugin_runtime.enabled_contributions() if plugin_runtime else []
 
 
+def _plugin_skill_sources() -> dict[str, list[Path]]:
+    return {
+        plugin["name"]: [Path(item) for item in plugin["skills"]]
+        for plugin in _plugin_contributions()
+    }
+
+
+def _refresh_extension_sources() -> None:
+    """Re-apply plugin contributions to the shared registries (E2/E4).
+
+    Hooks flow through the lazy ``_plugin_hooks`` supplier and MCP/capabilities
+    through ``load_all``; here only the skill index needs re-assembly, always
+    via ``register_skill_source`` — never a second registry.
+    """
+    if skill_mgr is None:
+        return
+    skill_mgr.replace_skill_sources("plugin:", plugin_skill_sources(_plugin_skill_sources()))
+
+
+def _plugin_command_sources() -> list[CommandSource]:
+    return [
+        CommandSource(f"plugin:{plugin['name']}", Path(path), 60, plugin=True)
+        for plugin in _plugin_contributions()
+        for path in plugin["command_sources"]
+    ]
+
+
+def _plugin_agent_dirs() -> list[Path]:
+    """Directories holding plugin agent files, for the shared agent discovery."""
+    dirs: list[Path] = []
+    for plugin in _plugin_contributions():
+        for agent_file in plugin["agents"]:
+            agents_dir = Path(agent_file).parent
+            if agents_dir not in dirs:
+                dirs.append(agents_dir)
+    return dirs
+
+
 def _plugin_hooks() -> list[dict[str, Any]]:
     return [hook for plugin in _plugin_contributions() for hook in plugin["hooks"]]
 
@@ -5161,6 +5284,59 @@ async def test_hook(hook_id: str, workspace: str | None = None) -> dict[str, Any
         return await _hook_store().test(hook_id, cwd=workspace)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Hook not found") from exc
+
+
+# ---------------------------------------------------------------------------
+# Custom commands (E5)
+# ---------------------------------------------------------------------------
+
+def _user_commands(workspace: str | None = None) -> list[UserCommand]:
+    """Atlas, Claude, plugin, and Recipe commands through the shared listing."""
+    return list_user_commands(
+        workspace=Path(workspace).expanduser() if workspace else None,
+        user_dir=get_config().db_path.parent,
+        plugin_sources=_plugin_command_sources(),
+        recipes=_task_store("recipes").list(),
+    )
+
+
+def _render_recipe_command(recipe: dict[str, Any], values: dict[str, str]) -> dict[str, Any]:
+    """Map a Recipe onto the command renderer contract ({{param}} + defaults)."""
+    prompt = str(recipe.get("prompt", ""))
+    for param in recipe.get("params", []):
+        name = str(param.get("name", ""))
+        value = values.get(name, param.get("default"))
+        if value is not None:
+            prompt = prompt.replace("{{" + name + "}}", str(value))
+    # Absent keys stay absent: the renderer distinguishes "unset" from None.
+    rendered = {"prompt": prompt}
+    for key in ("active_skills", "mode", "workspace", "profile_id"):
+        if recipe.get(key) is not None:
+            rendered[key] = recipe[key]
+    return rendered
+
+
+@app.get("/api/commands")
+async def list_commands(workspace: str | None = None) -> dict[str, Any]:
+    """List user-defined, plugin-contributed, and Recipe slash commands."""
+    return {"commands": [item.to_dict() for item in _user_commands(workspace)]}
+
+
+@app.post("/api/commands/render")
+async def render_command(req: dict[str, Any]) -> dict[str, Any]:
+    """Expand one selected command body into a runnable prompt."""
+    command_id = str(req.get("id", ""))
+    command = next(
+        (item for item in _user_commands(req.get("workspace")) if item.id == command_id), None,
+    )
+    if command is None:
+        raise HTTPException(status_code=404, detail=f"Command not found: {command_id}")
+    rendered = render_user_command(
+        command, str(req.get("arguments", "")),
+        recipes=_task_store("recipes").list(),
+        recipe_renderer=_render_recipe_command,
+    )
+    return asdict(rendered)
 
 @app.get("/api/schedules")
 async def list_schedules(

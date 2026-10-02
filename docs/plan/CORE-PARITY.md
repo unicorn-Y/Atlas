@@ -130,11 +130,11 @@
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
 | E1 | MCP 客户端 | HM `tools/mcp_tool*.py`（15 个文件：HTTP、OAuth、断线重连、健康检查、按需发现）；CC 的 URL 模式授权 | ✔ Hermes MCP client；本地假 stdio E2E 通过，远端 HTTP/OAuth 未实测（`4d975de`） | ✔ | — | C1 |
-| E2 | 技能 | CC/Agent Skills 格式（SKILL.md 加渐进加载）；HM `skills_tool.py` 等 | ✔ SKILL.md | ✔ | 两套技能目录合一 | C4 |
-| E3 | Hooks | CC 事件最全：工具前、工具后、工具失败、提交提示词、停止、子 Agent 开始和结束、压缩前、会话开始和结束、通知、权限请求；HM 只有 `pre_tool_call`/`post_tool_call` 两个 | △ 5 个事件（代码） | △ | 照 CC 的事件表和输入输出格式补齐，直接兼容 `.claude/settings.json` 里的 hooks | C4 |
-| E4 | 插件 | CC 的插件市场格式（`.claude-plugin`、mcpb）；HM 插件 SDK；Pi 的扩展（TypeScript，可以改工具、命令、事件、界面） | △ 只能本地装 | ✔ HM 插件 | 兼容 CC 插件格式（原 W11 第 4 节）；Pi 的扩展思路写进扩展点设计 | C4 |
-| E5 | 自定义命令和提示词模板 | CC `.claude/commands`；Pi prompt templates | ✔ 配方 | — | 兼容 `.claude/commands` 格式 | C4 |
-| E6 | 从别家导入配置 | CX `/import`：从 Claude Code 导入设置、项目和最近对话 | ✘ | ✘ | 照 CX `external-agent-migration` 做「从 Claude Code / Codex 导入」 | C4 |
+| E2 | 技能 | CC/Agent Skills 格式（SKILL.md 加渐进加载）；HM `skills_tool.py` 等 | ✔ SKILL.md 加渐进加载；技能目录合一：内建/用户/项目 `.claude/skills`/`~/.claude/skills`/插件/Hermes（可选）统一进同一 SkillManager，同名按稳定优先级取胜（C4） | ✔ | — | C4 |
+| E3 | Hooks | CC 事件最全：工具前、工具后、工具失败、提交提示词、停止、子 Agent 开始和结束、压缩前、会话开始和结束、通知、权限请求；HM 只有 `pre_tool_call`/`post_tool_call` 两个 | ✔ 直接兼容 `.claude/settings.json` hooks（user/project/local 只读 + 插件 hooks 同一执行路径）；matcher/stdin/stdout JSON/exit code 语义；可拦截、改写工具输入、追加上下文；触发点覆盖工具前/后/失败、提交提示词、停止、子 Agent 起止、压缩前、通知、权限请求、会话开始（旧 Atlas 事件保留）；前端可列事件、启停、试跑、看日志（C4） | ✔ | permissionDecision=ask 按阻断处理（未接审批卡片）；会话结束事件无落点未接 | C4 |
+| E4 | 插件 | CC 的插件市场格式（`.claude-plugin`、mcpb）；HM 插件 SDK；Pi 的扩展（TypeScript，可以改工具、命令、事件、界面） | ✔ 兼容 CC 插件格式（`.claude-plugin/plugin.json`、hooks.json、`.mcp.json`、marketplace.json）；本地/git/marketplace 三种来源；安装/启停/卸载/更新/更新检查；与 HM 插件 SDK 进同一 registry；插件五类贡献（commands/agents/skills/hooks/MCP）进 Atlas 同一发现层；前端安装/市场管理面板（C4） | ✔ | mcpb 打包格式未做；Pi 式 TS 扩展点仅思路未实现 | C4 |
+| E5 | 自定义命令和提示词模板 | CC `.claude/commands`；Pi prompt templates | ✔ 兼容 `.claude/commands`（含 frontmatter description/argument-hint/allowed-tools/model/mode 等）；Markdown 命令 + `$ARGUMENTS`/`$1..$n` 占位；Atlas 用户/项目/agents/插件/Recipe 五种来源按稳定优先级合并；`/` 菜单直出，`/api/commands`+render 端点；Recipe 保留并映射为命令（C4） | ✔ | render 结果的按次工具 allow/deny 未接入 run.start（现只消费 prompt/mode） | C4 |
+| E6 | 从别家导入配置 | CX `/import`：从 Claude Code 导入设置、项目和最近对话 | ✔ 「从 Claude Code / Codex 导入」：先扫描出清单（MCP/hooks/规则/skills/agents/commands/模型偏好/只读历史）供勾选，冲突默认跳过，源目录零写入，重复按内容哈希去重；导入落 Atlas 现有格式；前端在「插件与扩展」面板（C4） | ✔ | 最近对话只列出不导入（按任务书只读历史） | C4 |
 
 ## 9. 模型
 

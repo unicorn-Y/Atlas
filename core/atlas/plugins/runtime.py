@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -120,11 +122,17 @@ class PluginRuntime:
     def discover(self) -> list[dict[str, Any]]:
         """List available plugin bundles, preferring user-installed copies."""
         plugins: dict[str, dict[str, Any]] = {}
+        sources = self._state.get("sources", {})
         for root in self._all_plugin_roots():
             manifest_path, base_manifest = _manifest(root)
-            source = self._state.get("sources", {}).get(str(base_manifest.get("name") or root.name), {})
+            # Source records are keyed by plugin name; marketplace/git installs
+            # use the installed directory name, local installs the manifest name.
+            source = sources.get(root.name) or sources.get(str(base_manifest.get("name") or root.name)) or {}
             manifest = self._effective_manifest(root, base_manifest, source)
-            name = _plugin_name(source.get("plugin_name") or manifest.get("name") or root.name)
+            try:
+                name = _plugin_name(source.get("plugin_name") or manifest.get("name") or root.name)
+            except ValueError:
+                continue  # unaddressable directory; never fail the whole listing
             plugins[name] = {
                 "name": name,
                 "display_name": str(manifest.get("displayName") or name),
@@ -175,7 +183,11 @@ class PluginRuntime:
                     paths.append(path)
                 elif path.is_dir():
                     paths.extend(sorted(item for item in path.glob("*.md") if item.is_file()))
-        return paths
+        unique: list[Path] = []
+        for path in paths:  # a declared skills dir equal to the default must not register twice
+            if path not in unique:
+                unique.append(path)
+        return unique
 
     @staticmethod
     def _commands(root: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -302,14 +314,24 @@ class PluginRuntime:
         return self._dirs[-1] if self._dirs else Path("data") / "plugins"
 
     @staticmethod
+    def _rmtree(path: Path) -> None:
+        """rmtree that clears git's read-only object bits (required on Windows)."""
+        def _force(func, item, _exc):
+            os.chmod(item, stat.S_IWRITE)
+            func(item)
+
+        shutil.rmtree(path, onexc=_force)
+
+    @staticmethod
     def _copy_replace(source: Path, target: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         incoming = target.with_name(target.name + ".incoming")
         if incoming.exists():
-            shutil.rmtree(incoming)
-        shutil.copytree(source, incoming)
+            PluginRuntime._rmtree(incoming)
+        # Installed copies are deploy snapshots; history stays in the checkout.
+        shutil.copytree(source, incoming, ignore=shutil.ignore_patterns(".git"))
         if target.exists():
-            shutil.rmtree(target)
+            PluginRuntime._rmtree(target)
         incoming.replace(target)
 
     @staticmethod
@@ -324,10 +346,12 @@ class PluginRuntime:
     def install_local(self, source: str | Path) -> dict[str, Any]:
         source_root = self._plugin_root(Path(source))
         if source_root is None:
-            raise ValueError(f"no Claude Code plugin components found under {source}")
+            raise ValueError(f"no plugin.json or plugin components found under {source}")
         _, manifest = _manifest(source_root)
         name = str(manifest.get("name") or source_root.name)
-        target = self._installed_base() / name
+        # Installed layout convention: keep the source directory name; the
+        # manifest name is only the plugin identity in state/discovery.
+        target = self._installed_base() / source_root.name
         self._copy_replace(source_root, target)
         self._state.setdefault("sources", {})[name] = {"source": "local", "path": str(Path(source_root).resolve())}
         self._save_state()
@@ -344,7 +368,7 @@ class PluginRuntime:
             record = {"type": "local", "source": str(root.resolve()), "path": str(root.resolve())}
         else:
             if target.exists():
-                shutil.rmtree(target)
+                PluginRuntime._rmtree(target)
             self._git_clone(str(source), target, ref)
             root = self._marketplace_root(target)
             if root is None:
@@ -419,7 +443,7 @@ class PluginRuntime:
         else:
             clone = self._installed_base() / ".sources" / plugin_name
             if clone.exists():
-                shutil.rmtree(clone)
+                PluginRuntime._rmtree(clone)
             self._git_clone(str(url), clone, ref)
             plugin_root = clone / subdir if subdir else clone
             plugin_root = self._plugin_root(plugin_root)
@@ -439,7 +463,7 @@ class PluginRuntime:
         plugin_name = _plugin_name(name or Path(url.rstrip("/")).name.removesuffix(".git"))
         clone = self._installed_base() / ".sources" / plugin_name
         if clone.exists():
-            shutil.rmtree(clone)
+            PluginRuntime._rmtree(clone)
         self._git_clone(url, clone, ref)
         root = self._plugin_root(clone / subdir if subdir else clone)
         if root is None:
@@ -475,15 +499,65 @@ class PluginRuntime:
             return False
         root = Path(plugin["path"])
         if root.parent.resolve() == self._installed_base().resolve():
-            shutil.rmtree(root)
+            PluginRuntime._rmtree(root)
         source = self._state.get("sources", {}).pop(name, {})
         checkout = source.get("checkout") if isinstance(source, dict) else None
         if checkout and Path(checkout).exists():
-            shutil.rmtree(checkout)
+            PluginRuntime._rmtree(Path(checkout))
         self._enabled.pop(name, None)
         self._loaded.pop(name, None)
         self._save_state()
         return True
+
+    @staticmethod
+    def _git_repo(path: Path) -> Path | None:
+        repo = Path(path)
+        while repo != repo.parent:
+            if (repo / ".git").exists():
+                return repo
+            repo = repo.parent
+        return None
+
+    def _git_update_available(self, path: Path) -> bool:
+        """True when the checkout's upstream advanced past local HEAD. Failures mean no update."""
+        repo = self._git_repo(path)
+        if repo is None:
+            return False
+        try:
+            subprocess.run(["git", "-C", str(repo), "fetch", "--quiet"], check=True, capture_output=True, text=True, timeout=60)
+            head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+            upstream = subprocess.run(["git", "-C", str(repo), "rev-parse", "@{upstream}"], check=True, capture_output=True, text=True).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return bool(head) and bool(upstream) and head != upstream
+
+    def check_updates(self, name: str | None = None) -> dict[str, bool]:
+        """Refresh ``update_available`` in state for git/marketplace-sourced plugins.
+
+        Local-directory plugins have no remote to compare and are skipped.
+        """
+        results: dict[str, bool] = {}
+        sources = self._state.get("sources", {})
+        for plugin_name, source in sources.items():
+            if not isinstance(source, dict):
+                continue
+            if name is not None and plugin_name != name:
+                continue
+            if source.get("source") == "git":
+                checkout = source.get("checkout")
+                available = self._git_update_available(Path(checkout)) if checkout else False
+            elif source.get("source") == "marketplace":
+                record = self._state.get("marketplaces", {}).get(source.get("marketplace"))
+                checkout = source.get("checkout") or (
+                    record.get("path") if isinstance(record, dict) and record.get("type") == "git" else None
+                )
+                available = self._git_update_available(Path(checkout)) if checkout else False
+            else:
+                continue
+            source["update_available"] = available
+            results[plugin_name] = available
+        self._save_state()
+        return results
 
     def update_marketplace(self, name: str) -> dict[str, Any]:
         record = self._state.get("marketplaces", {}).get(name)
@@ -491,10 +565,9 @@ class PluginRuntime:
             raise KeyError(name)
         if record["type"] == "local":
             return {"name": name, "updated": False, "reason": "local"}
-        path = Path(record["path"])
-        repo = path
-        while repo != repo.parent and not (repo / ".git").exists():
-            repo = repo.parent
+        repo = self._git_repo(Path(record["path"]))
+        if repo is None:
+            raise ValueError(f"marketplace checkout is not a git repository: {name}")
         subprocess.run(["git", "-C", str(repo), "pull", "--ff-only"], check=True, capture_output=True, text=True)
         record["path"] = str(self._marketplace_root(repo) or repo)
         self._save_state()
@@ -522,6 +595,8 @@ class PluginRuntime:
                 raise ValueError(f"plugin components missing after update: {name}")
             target = self._installed_base() / name
             self._copy_replace(root, target)
+            source["update_available"] = False
+            self._save_state()
             return {"name": name, "path": str(target)}
         raise ValueError(f"plugin has no update source: {name}")
 
@@ -594,7 +669,7 @@ class PluginRuntime:
                     name=server_name, transport=transport,
                     command=server.get("command"), args=[str(arg) for arg in server.get("args", [])],
                     env={str(k): str(v) for k, v in (server.get("env") or {}).items()},
-                    cwd=str(root), url=server.get("url"), enabled=True,
+                    cwd=str(server.get("cwd") or root), url=server.get("url"), enabled=True,
                 )
                 await mcp_client._connect_server(config)
                 loaded["mcp"].append(server_name)

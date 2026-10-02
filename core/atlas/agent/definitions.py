@@ -108,7 +108,10 @@ def list_agent_types(data_root: Path, workspace: Path | None = None,
                 continue
             name = str(raw.get("name") or path.name.split(".")[0]).lower()
             if source.startswith("plugin:"):
+                # Namespace plugin agents by their plugin in the returned name
+                # too, not just the entries key.
                 name = f"{source.split(':', 1)[1]}:{name}"
+                raw = {**raw, "name": name}
             in_workspace = bool(workspace and path.resolve().is_relative_to(workspace.resolve()))
             normalized = _normalize(name, raw, source, path, not in_workspace or workspace_trusted)
             if "skipped" not in " ".join(normalized["warnings"]):
