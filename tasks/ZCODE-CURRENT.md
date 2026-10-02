@@ -1,7 +1,7 @@
 # Atlas ZCode Parallel Current
 
 CURRENT: ATLAS-C6A-R1-BASEDPYRIGHT
-STATUS: AWAITING_REVIEW
+STATUS: ACCEPTED
 OWNER: ZCode second construction lane
 ATLAS_BRANCH: zcode/c6a-lsp-parallel
 HERMES_BRANCH: none
