@@ -32,7 +32,7 @@
 
 **从现在起统一用这一套：**
 - **上游规划/验收者**：根据 ROADMAP 和 CORE-PARITY 直接写当前阶段任务书并推送 Atlas 仓库；收到 ZCode 完工通知后，直接检查提交、代码、结果文件和必要测试。通过就立即写下一阶段任务并推送；不通过就直接写补做指令并推送。阶段之间不询问用户。
-- **ZCode**：只做搬运和通知。读取 `tasks/CURRENT.md`，把当前任务路径交给 Codex；Codex 完成并 push 后，把结果通知上游规划/验收者。不要替 Codex 改代码，也不要自行改变任务范围。
+- **ZCode**：默认仍可做搬运，但从 2026-10-02 起新增第二施工线。若 `tasks/ZCODE-CURRENT.md` 为 READY_FOR_EXECUTION，ZCode 直接作为施工主控在该文件指定的独立 branch 上干活；不得改 main 当前任务或覆盖 Codex 工作。完成后 push 独立 branch、写结果、通知上游验收，不自行 merge main。
 - **Codex 施工主控（2026-10-02 当天及后续剩余波次优先）**：使用 **GPT-6.1 Sol / reasoning=medium**。Sol 负责读任务书、拆分模块、并行调度、审 diff、统一收口；实际编码优先交给多个 **GPT-6 Luna / reasoning=high** 子代理。
 - **独立验收**：由上游规划/验收者完成，不再为每波额外开 Sol 验收会话。需要修复时直接发补做任务给 Luna high。
 - 只有任务书明确写“需要真实模型/账号/物理设备”时才需要用户介入。
@@ -51,7 +51,7 @@
 
 ## 4. 当前进度与下一步
 
-- 当前正式任务看 `tasks/CURRENT.md`。截至 2026-10-02，第一轮为 `ATLAS-C1R-FINISH`：C1 Hermes 内核替换收尾。
+- 主施工线看 `tasks/CURRENT.md`；ZCode 并行施工线看 `tasks/ZCODE-CURRENT.md`。两条线可以同时跑，但 ZCode 必须用独立 branch，合并由上游验收后安排。
 - C1R 通过后按 ROADMAP 顺序进入 C2 → C3 → C4 → C5 → C6 → T1/T1F → X1–X6 → R1 → R2。
 - 每一轮都由上游规划/验收者直接在仓库更新 CURRENT 和任务书，ZCode 只需搬当前任务，不需要用户复制提示词。
 - `wip/c3-frontend-from-laptop` 只在 C3 作为参考，当前不要合并。
