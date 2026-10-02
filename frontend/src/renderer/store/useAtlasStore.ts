@@ -22,6 +22,8 @@ interface AtlasState {
   providerBaseUrl: string;
   apiKeyConfigured: boolean;
   compressionModel: string;
+  subagentsEnabled: boolean;
+  subagentDefaultModel: string;
   /** The backend's model configuration has been read at least once (apiKeyConfigured is meaningful). */
   configLoaded: boolean;
   settingsBusy: boolean;
@@ -75,6 +77,7 @@ interface AtlasState {
   applySkill: (name: string) => void;
   removeSkill: (name: string) => void;
   saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
+  saveSubagentSettings: (enabled: boolean, defaultModel: string) => Promise<boolean>;
   saveCompressionModel: (model: string) => Promise<boolean>;
   addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
   testModelConnection: (model?: string) => Promise<void>;
@@ -173,7 +176,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
   });
 
   return {
-    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
+    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, busy: false, paused: false, error: null,
     model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
@@ -192,7 +195,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         const conversations = await migrateLegacyFlags(loaded);
         const preferredModel = storageGet('atlas.preference.model');
         const model = mode === 'backend' ? configuration.current : preferredModel || configuration.current;
-        set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, compressionModel: configuration.compression_model ?? '', configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
+        set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, compressionModel: configuration.compression_model ?? '', subagentsEnabled: configuration.subagents_enabled ?? true, subagentDefaultModel: configuration.subagent_default_model || configuration.current, configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
         const first = conversations.find((item) => !item.archived);
         if (first) await get().openConversation(first);
         // Roles and recipes are extras; the app works without them if the backend predates them.
@@ -265,6 +268,18 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         return true;
       } catch (error) {
         set({ error: errorText(error, '保存 API 配置失败') });
+        return false;
+      } finally { set({ settingsBusy: false }); }
+    },
+
+    saveSubagentSettings: async (enabled, defaultModel) => {
+      set({ settingsBusy: true, error: null });
+      try {
+        const configuration = await backend.updateSubagentSettings(enabled, defaultModel);
+        set({ subagentsEnabled: configuration.subagents_enabled ?? enabled, subagentDefaultModel: configuration.subagent_default_model ?? defaultModel, error: null });
+        return true;
+      } catch (error) {
+        set({ error: errorText(error, '保存子 Agent 设置失败') });
         return false;
       } finally { set({ settingsBusy: false }); }
     },

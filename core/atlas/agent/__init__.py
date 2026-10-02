@@ -66,7 +66,7 @@ from atlas.agent.prompt_caching import (
 )
 from atlas.agent.planning import TaskPlan, requires_plan
 from atlas.checks import parse_test_summary, run_checks
-from atlas.config import get_config
+from atlas.config import get_config, load_user_settings
 from atlas.memory import MemoryStore
 from atlas.models import ModelManager
 from atlas.office import (
@@ -457,7 +457,26 @@ class AgentOrchestrator:
     ) -> dict[str, Any]:
         if self._delegation is None:
             raise RuntimeError("No AgentBackendHost is configured for delegation")
-        return await self._delegation.delegate_task(goal, context, tool_profile)
+        model = self._resolve_subagent_model(None, self._model_mgr.current_model)
+        return await self._delegation.delegate_task(
+            goal, context, tool_profile,
+            atlas_options={"model": model},
+        )
+
+    def _resolve_subagent_model(self, model: str | None, parent_model: str) -> str:
+        """Apply current child settings when resolving a newly created child."""
+        settings = load_user_settings()
+        if settings.get("subagents_enabled", True) is False:
+            raise RuntimeError("子 Agent 已禁用。")
+        if model in (None, "", "inherit"):
+            default_model = str(settings.get("subagent_default_model") or "")
+            if default_model:
+                if not any(item.get("id") == default_model
+                           for item in self._model_mgr.list_models()):
+                    raise RuntimeError(f"Unknown subagent model: {default_model}")
+                return default_model
+            return parent_model
+        return model
 
     async def _run_atlas_subtask(
         self, *, goal: str, context: str | None, cwd: str | None, subtask_id: str,
@@ -1473,8 +1492,7 @@ class AgentOrchestrator:
                         agent_model = get_config().get("agents.fast_model") or ctx.model
                     elif agent_model == "strong":
                         agent_model = get_config().get("agents.strong_model") or ctx.model
-                    elif agent_model == "inherit":
-                        agent_model = ctx.model
+                    agent_model = self._resolve_subagent_model(agent_model, ctx.model)
                     from atlas.engine.tool_permissions import intersect_tool_allow
                     tool_allow = intersect_tool_allow(
                         atlas_options.get("tool_allow"), definition.get("tools"),
@@ -1555,6 +1573,7 @@ class AgentOrchestrator:
                 elif fn_name == "delegate_parallel":
                     if self._delegation is None:
                         raise RuntimeError("No AgentBackendHost is configured for delegation")
+                    self._resolve_subagent_model("inherit", ctx.model)
                     from atlas.agent.definitions import list_agent_types
 
                     parallel_tasks = []
@@ -1587,8 +1606,9 @@ class AgentOrchestrator:
                             task["agent_model"] = get_config().get("agents.fast_model") or ctx.model
                         elif task["agent_model"] == "strong":
                             task["agent_model"] = get_config().get("agents.strong_model") or ctx.model
-                        elif task["agent_model"] == "inherit":
-                            task["agent_model"] = ctx.model
+                        task["agent_model"] = self._resolve_subagent_model(
+                            task["agent_model"], ctx.model,
+                        )
                         task["agent_tools"] = definition.get("tools")
                         task["agent_permission"] = definition.get("permission_mode")
                         parallel_tasks.append(task)

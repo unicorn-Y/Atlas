@@ -842,9 +842,11 @@ class ModelSelectRequest(BaseModel):
 
 
 class ProviderSettingsRequest(BaseModel):
-    gateway_base_url: str
+    gateway_base_url: str | None = None
     api_key: str | None = None
     compression_model: str | None = None
+    subagents_enabled: bool | None = None
+    subagent_default_model: str | None = None
 
 
 class CustomModelRequest(BaseModel):
@@ -1014,6 +1016,11 @@ async def get_configuration() -> dict[str, Any]:
         "models": model_mgr.list_models(),
         "current": model_mgr.current_model,
         "compression_model": str(settings.get("compression_model", "")),
+        "subagents_enabled": (
+            settings.get("subagents_enabled")
+            if isinstance(settings.get("subagents_enabled"), bool) else True
+        ),
+        "subagent_default_model": str(settings.get("subagent_default_model") or ""),
     }
 
 
@@ -1068,20 +1075,36 @@ async def generate_image(req: ImageGenerateRequest) -> dict[str, Any]:
 @app.put("/api/settings/configuration")
 async def update_configuration(req: ProviderSettingsRequest) -> dict[str, Any]:
     assert model_mgr is not None
-    base_url = req.gateway_base_url.strip()
-    if not base_url.startswith(("http://", "https://")):
+    base_url = (
+        req.gateway_base_url.strip()
+        if req.gateway_base_url is not None else model_mgr.gateway_base_url
+    )
+    if req.gateway_base_url is not None and not base_url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="服务地址必须以 http:// 或 https:// 开头")
     if req.compression_model is not None and req.compression_model and not any(
         item.get("id") == req.compression_model for item in model_mgr.list_models()
     ):
         raise HTTPException(status_code=400, detail="压缩模型必须来自已配置的模型列表")
     api_key = req.api_key.strip() if req.api_key and req.api_key.strip() else None
-    model_mgr.update_provider(base_url, api_key)
+    if req.gateway_base_url is not None or api_key:
+        model_mgr.update_provider(base_url, api_key)
     if req.compression_model is not None:
         settings = load_user_settings()
     if req.compression_model is not None:
         settings["compression_model"] = req.compression_model
     if req.compression_model is not None:
+        save_user_settings(settings)
+    if req.subagents_enabled is not None or req.subagent_default_model is not None:
+        settings = load_user_settings()
+        if req.subagents_enabled is not None:
+            settings["subagents_enabled"] = req.subagents_enabled
+        if req.subagent_default_model is not None:
+            subagent_model = req.subagent_default_model.strip()
+            if subagent_model and not any(
+                item.get("id") == subagent_model for item in model_mgr.list_models()
+            ):
+                raise HTTPException(status_code=400, detail="默认子 Agent 模型必须来自已配置的模型列表")
+            settings["subagent_default_model"] = subagent_model
         save_user_settings(settings)
     return await get_configuration()
 

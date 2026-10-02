@@ -19,6 +19,8 @@ export interface ConfigurationResponse extends ModelListResponse {
   gateway_base_url: string;
   api_key_configured: boolean;
   compression_model: string;
+  subagents_enabled?: boolean;
+  subagent_default_model?: string;
 }
 
 export interface CustomModelRequest {

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { backend, useAtlasStore } from './useAtlasStore';
+import SettingsPage from '../pages/SettingsPage';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -117,6 +120,45 @@ describe('settings configuration', () => {
     expect(saved).toBe(true);
     expect(useAtlasStore.getState()).toMatchObject({ providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: true, model: 'gpt-4o' });
     expect(fetchMock.mock.calls[8][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ gateway_base_url: configuration.gateway_base_url, api_key: 'secret', compression_model: '' }) });
+  });
+
+  it('loads and saves subagent enablement and default model together', async () => {
+    const configuration = { gateway_base_url: 'https://api.example.test/v1', api_key_configured: true, models: [{ id: 'gpt-4o' }, { id: 'gpt-4o-mini' }], current: 'gpt-4o', compression_model: '', subagents_enabled: true, subagent_default_model: 'gpt-4o' };
+    const savedConfiguration = { ...configuration, subagents_enabled: false, subagent_default_model: 'gpt-4o-mini' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => configuration } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => [] } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ servers: [], tool_count: 0, tools: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ capabilities: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ profiles: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => savedConfiguration } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await useAtlasStore.getState().initialize();
+    expect(useAtlasStore.getState()).toMatchObject({ subagentsEnabled: true, subagentDefaultModel: 'gpt-4o' });
+    const saved = await useAtlasStore.getState().saveSubagentSettings(false, 'gpt-4o-mini');
+
+    expect(saved).toBe(true);
+    expect(useAtlasStore.getState()).toMatchObject({ subagentsEnabled: false, subagentDefaultModel: 'gpt-4o-mini' });
+    expect(fetchMock.mock.calls[8][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ subagents_enabled: false, subagent_default_model: 'gpt-4o-mini' }) });
+
+    const renderSettings = (subagentsEnabled: boolean) => renderToStaticMarkup(React.createElement(SettingsPage, {
+      username: 'User', onSaveUsername: () => undefined, apiBaseUrl: 'http://127.0.0.1:8765', providerBaseUrl: configuration.gateway_base_url,
+      connected: true, apiKeyConfigured: true, busy: false, connectionTest: null, error: null, models: configuration.models,
+      selectedModel: configuration.current, subagentsEnabled, subagentDefaultModel: 'gpt-4o-mini', onBack: () => undefined,
+      onSelectModel: () => undefined, onSaveSubagentSettings: async () => true, onSaveProvider: async () => true, onAddModel: async () => true,
+      onTestConnection: () => undefined, statusBar: { model: false, reasoning: false, context: false, tokens: false, cost: false, git: false, permission: false, processes: false },
+      onStatusBarChange: () => undefined,
+    }));
+    const enabledMarkup = renderSettings(true);
+    expect(enabledMarkup).toMatch(/<input type="checkbox" checked=""\/>启用子 Agent/);
+    expect(enabledMarkup).toContain('aria-label="默认子 Agent 模型"');
+    expect(enabledMarkup).toMatch(/<option[^>]*value="gpt-4o-mini"[^>]*>gpt-4o-mini<\/option>/);
+    expect(enabledMarkup).not.toContain('aria-label="默认子 Agent 模型" disabled=""');
+    expect(renderSettings(false)).toContain('aria-label="默认子 Agent 模型" disabled=""');
   });
 });
 

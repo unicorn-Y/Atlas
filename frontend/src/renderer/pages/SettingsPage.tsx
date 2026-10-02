@@ -23,8 +23,11 @@ interface SettingsPageProps {
   error: string | null;
   models: ModelInfo[];
   selectedModel: string;
+  subagentsEnabled: boolean;
+  subagentDefaultModel: string;
   onBack: () => void;
   onSelectModel: (model: string) => void;
+  onSaveSubagentSettings: (enabled: boolean, defaultModel: string) => Promise<boolean>;
   onSaveProvider: (baseUrl: string, apiKey: string) => Promise<boolean>;
   onAddModel: (model: CustomModelRequest) => Promise<boolean>;
   onTestConnection: (model: string) => void;
@@ -75,6 +78,18 @@ export default function SettingsPage(props: SettingsPageProps) {
         {STATUS_BAR_ITEMS.map(([key, label]) => <label key={key} className="flex items-center gap-2">
           <input type="checkbox" checked={props.statusBar[key]} onChange={(event) => props.onStatusBarChange(key, event.target.checked)} />{label}
         </label>)}
+      </div>
+    </section>
+    <section className={styles.settingsCard}>
+      <h2>子 Agent</h2>
+      <p>设置只会用于之后新建的子 Agent。</p>
+      <div className={styles.settingsForm}>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={props.subagentsEnabled} disabled={props.busy || !props.connected} onChange={(event) => void props.onSaveSubagentSettings(event.target.checked, props.subagentDefaultModel || props.selectedModel)} />启用子 Agent</label>
+        <label>默认模型
+          <select aria-label="默认子 Agent 模型" value={props.subagentDefaultModel || props.selectedModel} disabled={!props.subagentsEnabled || props.busy || !props.connected || !props.models.length} onChange={(event) => void props.onSaveSubagentSettings(props.subagentsEnabled, event.target.value)}>
+            {props.models.map((model) => <option key={model.id} value={model.id}>{model.name ?? model.id}</option>)}
+          </select>
+        </label>
       </div>
     </section>
     <section className={styles.settingsCard}>
