@@ -1,84 +1,207 @@
-# ATLAS-C4：扩展体系
+# ATLAS-C4-EXTENSIONS：扩展体系
 
-> 先读 ROADMAP-TO-PRODUCT、CORE-PARITY（E 系列各行）、EXECUTION-GUIDE。前提：C3 验收通过。
+> **当前正式任务。主控：GPT-6.1 Sol / reasoning=medium；施工子代理：GPT-6 Luna / reasoning=high。**
+> 前提：C3/C3R 已验收通过。
+> ZCode 正在独立分支做 C5；本波不得合并或覆盖 `zcode/c5-models-parallel`。
 
-## 本波目标
+先读：
+- `tasks/CURRENT.md`
+- `tasks/reviews/ATLAS-C3R-FINISH.review.md`
+- `docs/plan/CORE-PARITY.md` 的 E2–E6
+- `docs/plan/EXECUTION-GUIDE.md`
+- `tasks/HANDOFF.md`
 
-Atlas 的扩展机制直接兼容 Claude Code 的生态：Hooks、插件、技能、自定义命令、子 Agent 定义，网上现成的 Claude Code 插件拿来就能装。另外可以一键从 Claude Code、Codex 导入设置。
-做完以后，CORE-PARITY 里 E2 到 E6 都是 ✔。
+## 目标
 
-查 Claude Code 当前的官方文档：hooks、plugins、skills、slash commands、subagents 这几页。按**当月**的文档来，不要凭记忆。
+把 Atlas 扩展层做到可直接吃 Claude Code / Agent Skills 生态，同时保留 Hermes/Atlas 自己已有的扩展能力：
 
-## 1. Hooks 全套（E3）
+- E2 技能目录合一
+- E3 Hooks 兼容 Claude Code
+- E4 插件兼容 Claude Code
+- E5 自定义命令
+- E6 从 Claude Code / Codex 导入
 
-- **对标**：Claude Code 的事件表：
-  - `PreToolUse`、`PostToolUse`、`PostToolUseFailure`
-  - `UserPromptSubmit`、`Notification`、`PermissionRequest`
-  - `Stop`、`SubagentStart`、`SubagentStop`
-  - `PreCompact`、`SessionStart`、`SessionEnd`
-  
-  以文档为准。输入输出也照它：
-  - 输入：stdin 收到 JSON；
-  - 输出：退出码 0 表示放行，退出码 2 表示拦截，stderr 的内容回给模型；
-  - 也可以在 stdout 输出 JSON 做决定（`decision`、`reason`、改写工具输入、追加上下文等）；
-  - `matcher` 按工具名匹配。
-- **做法**：
-  - 每个事件映射到 Hermes 的插件钩子（`hermes_cli/plugins.py` 的 `VALID_HOOKS`）。对得上的直接映射，例如 `pre_tool_call` → PreToolUse、`pre_verify` → Stop；Hermes 没有的，在 `core/atlas/engine/` 里补上触发点。
-  - 配置来源有三处，都要读：`.claude/settings.json` 和 `~/.claude/settings.json` 里的 `hooks`（兼容）、Atlas 自己的 Hooks 设置、插件自带的 hooks。
-  - Atlas 原有的 5 个事件（`run.started` 等）保留，作为别名映射过去。
-- **前端**：设置 → Hooks 显示全部事件，可以试跑，能看到每次 Hook 运行的日志。
-- **测试**：每个事件至少一个用例，覆盖拦截、改写输入、追加上下文；直接拿一份 Claude Code 格式的 settings.json 测兼容。
+完成后 E2–E6 全部 ✔。
 
-## 2. 插件，兼容 Claude Code 的格式（E4）
+## 主控并行方式
 
-- **对标**：Claude Code 的插件（`.claude-plugin/plugin.json`，里面可以带 commands、agents、skills、hooks、MCP 服务器、mcpb 包）和插件市场（`marketplace.json`，可以从 git 地址添加）。
-- **做法**：
-  - Atlas 能从 git 地址或本地目录添加插件市场，列出插件，安装、启用、停用、卸载、更新。
-  - 装好的插件里带的命令、子 Agent、技能、Hooks、MCP 都自动生效。
-  - Hermes 自带的插件 SDK 也保留，两种插件并存。
-  - 原 W11 第 4 节有设计可以参考（`tasks/taskbooks/ATLAS-W11-EFFICIENCY-SKILLS-CODING.md`）。
-- **不做**：插件安装的安全扫描，那是用户自己做的事。
-- **前端**：设置 → 插件，分三页：市场、已安装、更新。
-- **测试**：用一个按 Claude Code 格式写的示例插件（带命令、子 Agent、技能、Hook、MCP），走一遍安装 → 生效 → 卸载。
+Sol 读完任务书后按真实文件所有权拆成 4–6 个并行块，优先：
+1. Hooks
+2. Plugin loader/marketplace
+3. Skills + custom commands
+4. Claude/Codex import
+5. 前端扩展设置
+6. focused tests / fake plugin E2E
 
-## 3. 技能目录合一（E2）
+每个 Luna high 只改明确文件；共享入口文件交给一个 integration owner 或最后串行接线。
 
-- **现状**：Atlas 有自己的技能系统（`core/atlas/skills/`，SKILL.md 格式，带注册、目录联邦、版本和信任管理）；Hermes 也有技能工具（`tools/skills_tool.py` 等），C1 时关掉了。
-- **做法**：以 Atlas 的技能系统为准，同时读取这些目录：`~/.atlas/skills`、项目里的 `.claude/skills`、`~/.claude/skills`、插件自带的技能。渐进加载：技能索引放进提示词的易变层，模型调用 `use_skill` 时才加载全文。Hermes 的技能工具不再启用；Hermes 自带的那批技能，作为一个可选的技能源导入。
-- **测试**：多个来源有同名技能时，按优先级取用；索引稳定，不会破坏缓存。
+不要让多个 worker 同时改：
+- `core/atlas/server.py`
+- `frontend/src/renderer/App.tsx`
+- 共享 plugin/skill registry
 
-## 4. 自定义命令（E5）
+## 与 ZCode C5 的冲突隔离
 
-- **对标**：Claude Code 的 `.claude/commands/*.md`（支持 `$ARGUMENTS`、frontmatter 里的 `allowed-tools`、`model` 等）；Pi 的 prompt templates（`packages/coding-agent/docs/prompt-templates.md`）。
-- **做法**：读取 `.claude/commands`、`~/.claude/commands`、`.atlas/commands`；这些命令出现在 `/` 菜单里。Atlas 原有的「配方」继续保留，配方也可以导出成命令。
+ZCode C5 正在独立分支改模型层。本波原则上不要碰：
+- `core/atlas/models/**`
+- `frontend/src/renderer/pages/SettingsPage.tsx`
+- `frontend/src/renderer/pages/UsagePanel.tsx`
+- backend-adapter 中纯模型字段
+- provider / credential / reasoning / usage 逻辑
 
-## 5. 从 Claude Code 和 Codex 导入（E6）
+C4 前端优先使用/新增独立扩展页面或现有 `HooksPanel`、Integration/Plugin 类面板；确实需要共享路由时，把接线压成单独小 commit。
 
-- **来源**：Codex 的 `/import`，见 `codex-rs/external-agent-migration/src/`：`hooks_cla.rs`、`mcp.rs`、`memory.rs`、`config_values.rs` 等。
-- **做法**：设置里加「从 Claude Code 导入」「从 Codex 导入」两个入口，导入这些内容：
-  - MCP 服务器；
-  - Hooks；
-  - 规则文件和记忆文件（CLAUDE.md、AGENTS.md）；
-  - 技能、子 Agent、自定义命令；
-  - 模型偏好；
-  - 最近的对话（只读导入，作为历史可以查看和搜索）。
+E6 的“模型偏好导入”只写入**现有** Atlas 设置格式，不在 C4 改模型系统设计；C5 合并后再自然读取。
 
-  导入前列出清单让用户勾选；重复的跳过；导入后显示一份报告。
-- **测试**：用假的 `~/.claude`、`~/.codex` 目录各导入一次，并且确认不会改动源目录。
+## 0. 先核当前格式，不写研究报告
 
-## 6. 子 Agent 定义（核实）
+施工开始先查当月 Claude Code 官方文档和当前本地/上游实现，确认：
+- Hooks 事件、stdin/stdout/exit code、matcher 格式
+- plugin manifest / marketplace 格式
+- Agent Skills / SKILL.md 当前格式与目录
+- custom command / prompt 文件格式
+- subagent 定义格式
 
-W07 已经支持五家的定义文件（`.claude/agents` 等）。核实它在新内核和插件体系下照样能用，插件自带的子 Agent 也能被识别。
+只把最终需要兼容的字段写进结果对照表；不要先花大量时间写调研文档。
 
-## 7. 测试和交付
+## 1. E3：Hooks
 
-- 每节各自的测试；端到端：装一个示例插件 → 它的命令、Hook、技能、MCP 在一次任务里全部生效。
-- 结果文件里写：Claude Code 的事件和字段对照表；插件格式兼容了哪些、没兼容哪些、为什么。
-- 更新 CORE-PARITY、PARITY（F177、F181 等）、VENDORED。
+目标：Claude Code 格式的 hooks 配置可以直接读。
 
-## 验收清单
+来源优先级：
+1. 现有 Atlas hooks
+2. Hermes plugin hooks
+3. Claude Code settings 兼容 adapter
 
-1. 直接拿一份真实的 Claude Code 格式插件和 settings.json，不做任何修改就能用。
-2. 事件对照表里每一项都有实现，或者写明了不做的理由。
-3. 导入功能不会写源目录。
-4. 已有功能不倒退。
+要求：
+- 读取项目和用户 Claude settings 里的 hooks；
+- 支持当前官方核心事件；
+- stdin JSON / stdout JSON / exit code 语义按当前官方格式；
+- matcher 按工具/事件匹配；
+- 可拦截、可改写工具输入、可追加上下文；
+- Atlas 现有事件保留，不破坏已有用户 hooks；
+- Hermes 已有 hook 直接映射，缺的只在 Atlas engine/runtime 加最小触发点；
+- 前端能列事件、启停/试跑、看最近日志。
+
+不要再造第二个完整 hook runtime。
+
+## 2. E4：Claude Code 插件兼容
+
+Atlas 能直接识别 Claude Code 当前 plugin/marketplace 格式。
+
+至少支持插件内：
+- commands / prompts
+- agents
+- skills
+- hooks
+- MCP
+- manifest metadata
+
+支持：
+- 本地目录
+- git/marketplace 源
+- 安装 / 启用 / 停用 / 卸载 / 更新
+
+Hermes 插件 SDK继续可用，两种来源最终进入 Atlas 同一 registry/发现层，不要维护两套运行时。
+
+不用做插件安全扫描。
+
+## 3. E2：技能合一
+
+以 Atlas 当前 skill registry 为唯一目录/索引层。
+
+读取：
+- Atlas 用户技能目录
+- 项目 Agent Skills / Claude skills 目录
+- 用户 Claude skills 目录
+- plugin 自带 skills
+- Hermes 自带技能作为可选 source
+
+要求：
+- 同名技能有稳定优先级；
+- 提示词只放 name/description 等索引；
+- 真正使用时再加载 SKILL.md 和关联资源；
+- 不重新启用 Hermes 的第二套 skill registry。
+
+## 4. E5：自定义命令
+
+读取当前 Claude Code command/prompt 目录和 Atlas 自己的 commands 目录。
+
+至少支持：
+- Markdown 命令
+- 参数占位
+- 当前官方 frontmatter 中 Atlas 能对应的模型/工具限制字段
+- 出现在现有 `/` 菜单
+- Atlas Recipe 保留，可导出/映射为 command
+
+不要重复实现 C3 已有 slash command backend；这里只加“用户定义命令来源”。
+
+## 5. E6：Claude Code / Codex 导入
+
+设置里提供两个导入入口：
+- Claude Code
+- Codex
+
+导入前先扫描并显示清单，让用户选择；导入后给简短报告。
+
+范围：
+- MCP
+- hooks
+- CLAUDE.md / AGENTS.md 等规则
+- skills
+- agents
+- commands/prompts
+- 现有格式可表示的模型偏好
+- 最近对话作为只读历史
+
+要求：
+- 源目录只读，绝不修改；
+- 重复项按稳定规则跳过/合并；
+- 优先复用 Codex external-agent migration 的成熟解析思路，不自己造大迁移框架。
+
+## 6. 子 Agent 定义兼容核实
+
+C3 已有子 Agent runtime；这里只确认：
+- 项目/用户 Claude agent 定义仍可识别；
+- plugin 自带 agent 能进入同一发现层；
+- 不复制第二套 child runtime。
+
+## 最小验证
+
+速度优先，不做巨大矩阵。
+
+- Hooks：按“事件类别”覆盖核心路径，不要求机械地每个事件复制一套测试；
+- Plugin：一个完整 fake Claude-format plugin，带 command + agent + skill + hook + MCP，走安装→发现→生效→禁用/卸载；
+- Skills：同名优先级 + progressive load 1–2 组；
+- Commands：自定义 command 1–2 组；
+- Import：fake `.claude` 和 fake `.codex` 各一组，确认源目录不变；
+- 一条 fake-model E2E：插件安装后 command/hook/skill/MCP 至少跨一次真实 Atlas runtime 路径；
+- 后端 full pytest **最多一次，且只在全部代码整合完成后**；
+- 前端 renderer tsc、electron tsc、Vitest、Vite build 各一次；
+- 不用真实模型、真实外部 MCP 或用户真实配置。
+
+## 硬约束
+
+- 优先复用成熟实现，不写缩水版。
+- 禁止过度防御编程。
+- 禁止第二套 plugin/skill/hook runtime。
+- 不放宽 `origin_guard.py`。
+- 不碰用户真实数据和 `design/`。
+- 不进入 C6。
+- 不合并 ZCode C5 分支。
+- C4 若必须触碰 C5 热文件，必须是最小 integration touchpoint 并在 RESULT 单列。
+
+## 交付
+
+- 更新 `docs/plan/CORE-PARITY.md` E2–E6；
+- 更新需要的 `docs/PARITY.md`、`docs/plan/VENDORED.md`；
+- 写 `tasks/results/ATLAS-C4-EXTENSIONS.result.md`：
+  - E2–E6 完成情况
+  - 官方格式兼容表
+  - 复用来源
+  - 测试结果
+  - 与 ZCode C5 可能的 merge touchpoints
+  - 真实剩余缺口
+- `tasks/CURRENT.md` → `AWAITING_REVIEW`
+- pull --rebase → push → 核对 local == origin/main → 停止
+- 不自行进入下一阶段。
