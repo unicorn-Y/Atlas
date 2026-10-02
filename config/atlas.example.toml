@@ -154,3 +154,14 @@ permission_mode = "full_access"
 [logging]
 level = "INFO"
 format = "json"
+
+# C6 语言服务（LSP）：编辑文件后实时给出诊断。默认开启，只读探测 PATH 上已有的服务，绝不自动安装。
+# [lsp]
+# enabled = true                 # 总开关；false 时所有语言服务保持关闭
+# wait_mode = "document"         # 诊断等待模式："document" 只等当前文件，其他值为尽快返回
+# wait_timeout = 5.0             # 每次编辑后等待诊断的秒数（默认 5 秒）
+# idle_timeout = 600             # 语言服务空闲多少秒后自动退出（最低 30 秒；0 表示不回收）
+# trusted_workspaces = []        # 额外信任的目录列表（如 ["~/code/my-app"]），信任后服务可加载项目自带配置
+# exclude_roots = []             # 永不启用语言服务的目录 glob（如 ["~/big-monorepo", "/srv/*/vendor"]）
+# 内置服务表可用 lsp.servers.<名称> 覆盖（command / env / initialization_options / disabled），
+# 也可声明全新的自定义服务（需要 command 与 extensions 两个字段）。

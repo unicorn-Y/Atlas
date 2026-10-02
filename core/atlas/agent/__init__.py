@@ -971,6 +971,13 @@ class AgentOrchestrator:
                         "executor": {"type": "string"},
                         "agent": {"type": "string"},
                         "background": {"type": "boolean"},
+                        "permission_mode": {
+                            "type": "string", "enum": ["full_access", "ask_writes", "read_only"],
+                            "description": (
+                                "Request a stricter permission mode for the child. Only stricter "
+                                "requests are honored; the child never exceeds the parent."
+                            ),
+                        },
                         "output_schema": {"type": ["object", "string", "null"]},
                         "recipe": {"type": ["object", "null"], "properties": {
                             "id": {"type": "string"}, "params": {"type": "object"},
@@ -1024,6 +1031,32 @@ class AgentOrchestrator:
                     }, "required": ["subtask_id", "text"], "additionalProperties": False},
                 }},
             ])
+        tools.extend([
+            {"type": "function", "function": {
+                "name": "submit_findings",
+                "description": (
+                    "Submit code-review findings and emit the review.findings event. Pass "
+                    "the reviewer's JSON findings array verbatim; an empty array is valid."
+                ),
+                "parameters": {"type": "object", "properties": {
+                    "findings_json": {"type": "string",
+                                      "description": "JSON array of findings, verbatim from the reviewer."},
+                    "scope": {"type": "string", "description": "Review scope: working_tree, branch, or commit."},
+                    "scope_label": {"type": "string", "description": "Chinese display label of the review scope."},
+                }, "required": ["findings_json"], "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "review_command",
+                "description": (
+                    "Run a read-only verification command during a code review (tests, lint, "
+                    "typecheck, git read commands). Write-capable or mutating commands are refused."
+                ),
+                "parameters": {"type": "object", "properties": {
+                    "command": {"type": "string", "description": "The command line to run."},
+                    "cwd": {"type": "string", "description": "Working directory; defaults to the current workspace."},
+                }, "required": ["command"], "additionalProperties": False},
+            }},
+        ])
         tools.append({
             "type": "function", "function": {
                 "name": "ask_user",
@@ -1129,8 +1162,14 @@ class AgentOrchestrator:
             denied_tools = getattr(ctx, "tool_deny", [])
             read_only = getattr(ctx, "read_only", False)
             from atlas.engine.tool_permissions import tool_allowed
+            # 审查链的 review_command/submit_findings 自身就是只读工具（内部拒绝一切写操作），
+            # 但只对显式出现在 tool_allow 里的运行放行，避免给所有只读会话扩大面。
+            review_tool_explicitly_allowed = (
+                read_only and fn_name in {"review_command", "submit_findings"}
+                and tool_allowed(fn_name, allowed_tools, denied_tools)
+            )
             denied = (not tool_allowed(fn_name, allowed_tools, denied_tools)
-                      or (read_only and fn_name not in {
+                      or (read_only and not review_tool_explicitly_allowed and fn_name not in {
                           "local_file", "read_office", "coding.repo_map", "coding.ast_grep.run",
                       })
                       or (read_only and fn_name == "local_file" and fn_args.get("action") not in {"read", "list", "glob", "search", "stat"}))
@@ -1590,10 +1629,12 @@ class AgentOrchestrator:
                     permission_rank = {"full_access": 0, "ask_writes": 1, "read_only": 2}
                     parent_permission = str(atlas_options.get("permission_mode", "full_access"))
                     requested_permission = definition.get("permission_mode")
+                    requested_by_call = fn_args.get("permission_mode")
                     child_permission = parent_permission
-                    if (requested_permission in permission_rank and
-                            permission_rank[requested_permission] > permission_rank.get(parent_permission, 0)):
-                        child_permission = requested_permission
+                    for candidate in (requested_permission, requested_by_call):
+                        if (candidate in permission_rank and
+                                permission_rank[candidate] > permission_rank.get(child_permission, 0)):
+                            child_permission = candidate
                     child_options = {**atlas_options, "workspace_trusted": ctx.workspace_trusted,
                                      "agent_role": definition.get("role", "leaf"),
                                      "agent_type": definition["name"],
@@ -1798,6 +1839,12 @@ class AgentOrchestrator:
                         )}],
                         "is_error": False,
                     }
+                elif fn_name in {"submit_findings", "review_command"}:
+                    from atlas.review import engine as review_engine
+
+                    data, text = await review_engine.handle_agent_tool(fn_name, fn_args, ctx)
+                    result = {"data": data, "content": [{"type": "text", "text": text}],
+                              "is_error": False}
                 elif fn_name == "project_sources_search" and self._projects is not None:
                     if not getattr(ctx, "project_id", None):
                         raise RuntimeError("这段对话没有关联项目。")

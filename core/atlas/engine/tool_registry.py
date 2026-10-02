@@ -21,6 +21,8 @@ _hermes_fallback_handlers: dict[str, Any] = {}
 _hermes_entries: dict[str, Any] = {}
 _inline_wrapped: set[str] = set()
 NATIVE_FILE_TOOLS = {"read_file", "write_file", "patch", "search_files"}
+_LSP_WRITE_TOOLS = {"write_file", "patch"}
+_LSP_SKIP = object()  # sentinel: the LSP write seam did not apply to this call
 
 _ALIASES = {
     "read_file": ("local_file", "read"),
@@ -69,6 +71,66 @@ def _append_repetition_reminder(
         return result + (
             "\n\n提醒：你已在本轮反复修改同一文件，请先重新读取并检查结果，再换一种思路继续。"
         )
+    return result
+
+
+def _read_text_for_lsp(args: dict[str, Any], runtime: Any) -> str | None:
+    """Best-effort read of ``args['path']`` for the LSP delta (``None`` = missing/unreadable)."""
+    raw = str(args.get("path") or "")
+    if not raw:
+        return None
+    try:
+        resolved = Path(raw)
+        if not resolved.is_absolute():
+            workspace = str(getattr(runtime, "workspace", "") or "")
+            if workspace:
+                resolved = Path(workspace) / resolved
+        if resolved.is_file():
+            return resolved.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        pass
+    return None
+
+
+def _lsp_pre_write(args: dict[str, Any], runtime: Any) -> Any:
+    """C6 LSP seam (pre-write): capture current content + delta baseline.  Never raises."""
+    path = str(args.get("path") or "")
+    if not path:
+        return _LSP_SKIP
+    pre = _read_text_for_lsp(args, runtime)
+    try:
+        from atlas.engine.lsp_bridge import snapshot_before_write
+
+        snapshot_before_write(path)
+    except Exception:  # noqa: BLE001
+        pass
+    return pre
+
+
+def _lsp_attach_report(
+    runtime: Any, loop: asyncio.AbstractEventLoop | None, args: dict[str, Any],
+    pre_content: Any, result: Any,
+) -> Any:
+    """C6 LSP seam (post-write): append the atlas.lsp delta report to a successful write."""
+    try:
+        if not isinstance(result, str):
+            return result
+        details = json.loads(result)
+        if not isinstance(details, dict) or details.get("error"):
+            return result  # 失败/被拒的写不上报
+        path = str(args.get("path") or "")
+        if not path:
+            return result
+        from atlas.engine.lsp_bridge import report_after_edit
+
+        report = report_after_edit(
+            runtime, path, None if pre_content is _LSP_SKIP else pre_content,
+            _read_text_for_lsp(args, runtime), loop=loop,
+        )
+        if report:
+            return result + "\n\n" + report
+    except Exception:  # noqa: BLE001
+        pass
     return result
 
 
@@ -233,6 +295,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 if _name in NATIVE_FILE_TOOLS and not str(bound_runtime.workspace or "").startswith("ssh://"):
                     # Keep Hermes' complete file implementation: paging, ripgrep,
                     # stale-write guards, fuzzy/V4A patching and document readers.
+                    lsp_pre = _lsp_pre_write(args, bound_runtime) if _name in _LSP_WRITE_TOOLS else _LSP_SKIP
                     native = _hermes_fallback_handlers[_name]
                     result = native(args, **_kwargs)
                     if _name == "read_file":
@@ -240,6 +303,8 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                             getattr(bound_runtime, "hermes_agent", None) or bound_agent,
                             args, str(result),
                         )
+                    if lsp_pre is not _LSP_SKIP:
+                        result = _lsp_attach_report(bound_runtime, bound_loop, args, lsp_pre, result)
                     return _append_repetition_reminder(bound_runtime, _name, args, str(result)) if isinstance(result, str) else result
                 tool_name, tool_args = _translate(_name, args)
                 if tool_name in {"local_shell", "local_exec", "local_process"}:

@@ -820,6 +820,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     telegram_service.start()
 
+    # C6:注册 /init 与 /review 的路由和工具。这些模块由独立子模块提供,可能晚于
+    # 服务启动落地——注册失败只降级告警,绝不能拖垮 Atlas 本体启动。
+    try:
+        from atlas.commands.init import register_init_routes
+
+        register_init_routes(app)
+    except Exception as exc:  # noqa: BLE001 — /init 模块缺失或注册失败只降级
+        log.warning("C6 启动注册 /init 路由失败，/init 功能暂不可用", error=str(exc))
+    try:
+        from atlas.review.engine import register_review_tools
+
+        register_review_tools()
+    except Exception as exc:  # noqa: BLE001 — review 模块缺失或注册失败只降级
+        log.warning("C6 启动注册审查工具失败，/review 功能暂不可用", error=str(exc))
+    try:
+        from atlas.review.engine import register_review_routes
+
+        register_review_routes(app)
+    except Exception as exc:  # noqa: BLE001 — review 路由注册失败只降级
+        log.warning("C6 启动注册 /review 路由失败，/review 功能暂不可用", error=str(exc))
+
     yield  # app is running
 
     # Shutdown
@@ -1229,13 +1250,17 @@ async def create_conversation(req: ConversationCreateRequest) -> dict[str, Any]:
 async def get_conversation_messages(
     conversation_id: str,
     limit: int = Query(100, ge=1, le=1000),
+    before_id: str | None = Query(None),
 ) -> list[dict[str, Any]]:
-    """Return messages for a conversation."""
+    """Return messages for a conversation: newest ``limit`` in ascending order.
+
+    ``before_id`` pages one window further back in history (same shape, ascending).
+    """
     assert memory is not None
     conv = await memory.get_conversation(conversation_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    return await memory.get_conversation_messages(conversation_id, limit=limit)
+    return await memory.get_conversation_messages(conversation_id, limit=limit, before_id=before_id)
 
 
 @app.get("/api/conversations/{conversation_id}/branches")
@@ -2665,6 +2690,13 @@ async def delete_conversation_worktree(conversation_id: str, keep_branch: bool =
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # C6:worktree 删除成功后，顺手关掉服务于该目录的 LSP 进程（尽力而为）。
+    try:
+        from atlas.lsp import release_workspace
+
+        release_workspace(str(conv["worktree_path"]))
+    except Exception as exc:  # noqa: BLE001 — LSP 释放失败不影响 worktree 删除
+        log.debug("lsp.workspace_release_failed", path=str(conv["worktree_path"]), error=str(exc))
     await memory.update_conversation(conversation_id, worktree_path="", worktree_branch="", base_branch="")
     return {"status": "removed"}
 
@@ -2851,6 +2883,85 @@ async def get_run_changes(run_id: str) -> dict[str, Any]:
                 entry["path"] = f"{name or f'目录{index}'}/{item['path']}"
             combined.append(entry)
     return {"run_id": run_id, "files": combined}
+
+
+@app.get("/api/runs/{run_id}/diagnostics")
+async def get_run_diagnostics(run_id: str) -> dict[str, Any]:
+    """本次 run 改动文件的最新 LSP 诊断（fresh 全量，非 delta）。
+
+    count 为 0 也返回——"没有新问题"是有意义的状态；单文件诊断失败按 0 计；
+    SSH 工作目录不探测，直接返回空列表。
+    """
+    changes = _run_changes(run_id)
+    run = runtime_mgr.runs.get(run_id)
+    if run is not None and run.workspace and str(run.workspace).startswith("ssh://"):
+        return {"run_id": run_id, "files": []}
+    try:
+        from atlas.lsp import diagnostics_for
+    except Exception as exc:  # noqa: BLE001 — LSP 模块缺失时返回空清单
+        log.warning("C6 诊断路由的 LSP 模块不可用", error=str(exc))
+        return {"run_id": run_id, "files": []}
+    files: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in changes["files"]:
+        workspace = str(item.get("workspace", ""))
+        relative = str(item.get("path", ""))
+        key = (workspace, relative)
+        if not relative or key in seen:
+            continue
+        seen.add(key)
+        count = 0
+        diagnostics: list[dict[str, Any]] = []
+        try:
+            for diag in diagnostics_for(str(Path(workspace) / relative)):
+                count += 1
+                diagnostics.append({
+                    "line": diag.line, "column": diag.column,
+                    "severity": diag.severity, "code": diag.code,
+                    "message": diag.message,
+                })
+        except Exception:  # noqa: BLE001 — 单个文件的诊断失败按 0 计
+            count, diagnostics = 0, []
+        files.append({"path": relative, "count": count, "diagnostics": diagnostics})
+    return {"run_id": run_id, "files": files}
+
+
+@app.get("/api/lsp/status")
+async def lsp_status(workspace: str | None = None) -> dict[str, Any]:
+    """逐个语言服务探测可用性；不可用的给出中文安装提示。
+
+    只做二进制探测（与正式启用时的判定一致），不会启动任何语言服务进程。
+    """
+    from atlas.lsp.availability import missing_server_hint
+    from atlas.lsp.servers import SERVERS as LSP_SERVERS, ServerContext, custom_servers
+
+    root = workspace if (workspace and not workspace.startswith("ssh://")
+                         and Path(workspace).is_dir()) else Path.cwd()
+    servers_cfg = get_config().get("lsp.servers", {})
+    servers_cfg = servers_cfg if isinstance(servers_cfg, dict) else {}
+    overrides = {name: cfg["command"] for name, cfg in servers_cfg.items()
+                 if isinstance(cfg, dict) and isinstance(cfg.get("command"), list) and cfg["command"]}
+    disabled = {name for name, cfg in servers_cfg.items()
+                if isinstance(cfg, dict) and cfg.get("disabled")}
+    ctx = ServerContext(workspace_root=str(root), binary_overrides=overrides)
+    servers: list[dict[str, Any]] = []
+    for srv in [*custom_servers(servers_cfg), *LSP_SERVERS]:
+        if srv.server_id in disabled:
+            servers.append({"id": srv.server_id, "languages": list(srv.extensions),
+                            "available": False,
+                            "hint": "该语言服务已在配置中停用（lsp.servers.<id>.disabled）。"})
+            continue
+        available = False
+        hint = ""
+        try:
+            available = srv.build_spawn(str(root), ctx) is not None
+        except Exception:  # noqa: BLE001 — 探测失败按不可用处理
+            hint = "探测该语言服务时出错，请检查安装与配置。"
+        if not available and not hint:
+            hint = missing_server_hint(srv.server_id)
+        servers.append({"id": srv.server_id, "languages": list(srv.extensions),
+                        "available": available, "hint": hint})
+    return {"servers": servers}
 
 
 @app.get("/api/processes")
@@ -6492,6 +6603,78 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     conv_id = data.get("conversation_id") or (
         prior_run.conversation_id if prior_run else str(uuid.uuid4())
     )
+    # C6:/review 拦截——命中审查指令时把正文改写为派发提示词，并固定审查配置。
+    # 放在正文（含附件）就绪之后、档案合并之前，让后续统一的 run 组装吃到强制值。
+    try:
+        from atlas.review.engine import (
+            build_dispatch_prompt, collect_diff, is_review_request, parse_scope,
+        )
+    except Exception as exc:  # noqa: BLE001 — review 模块未就绪时按普通消息放行
+        log.warning("C6 /review 拦截模块不可用，按普通消息处理", error=str(exc))
+    else:
+        if is_review_request(content):
+            review_conv = None
+            if memory is not None and getattr(memory, "_db", None) is not None:
+                try:
+                    review_conv = await memory.get_conversation(conv_id)
+                except Exception:
+                    review_conv = None
+            review_workspace = (requested_workspace
+                                or (review_conv or {}).get("workspace")
+                                or None)
+            if review_workspace is None and projects is not None:
+                try:
+                    review_db = projects._require_db()
+                    review_cursor = await review_db.execute(
+                        "SELECT p.workspace_path FROM projects p JOIN project_conversations pc "
+                        "ON p.project_id=pc.project_id WHERE pc.conversation_id=? "
+                        "ORDER BY p.updated_at DESC LIMIT 1",
+                        (conv_id,),
+                    )
+                    review_row = await review_cursor.fetchone()
+                    review_workspace = review_row["workspace_path"] if review_row else None
+                except Exception:
+                    review_workspace = None
+            if review_conv and review_conv.get("worktree_path"):
+                review_worktree = str(review_conv["worktree_path"])
+                if Path(review_worktree).is_dir():
+                    review_workspace = review_worktree
+            if not review_workspace or str(review_workspace).startswith("ssh://"):
+                invalid_run = RunState(run_id, conv_id, str(data.get("model", "")))
+                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    "category": "validation",
+                    "detail": "/review 需要本机 git 工作目录才能读取改动；请先为本对话选择一个本机工作目录。",
+                }))
+                return
+            try:
+                review_scope = parse_scope(content)
+                review_diff = collect_diff(str(review_workspace), review_scope)
+            except ValueError as exc:
+                invalid_run = RunState(run_id, conv_id, str(data.get("model", "")))
+                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    "category": "validation", "detail": str(exc),
+                }))
+                return
+            if permission_mode == "read_only":
+                # 只读会话里 delegate_task 会被只读门禁拦截，审查员根本派不出去。
+                invalid_run = RunState(run_id, conv_id, str(data.get("model", "")))
+                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    "category": "validation",
+                    "detail": "只读会话不能执行 /review：请先把权限切到『改前问我』或『完全访问』再审查。",
+                }))
+                return
+            content = build_dispatch_prompt(review_diff, str(review_scope.get("user_prompt", "")))
+            # 审查员（子代理）的只读由 delegate 的 permission_mode=read_only 保证；
+            # 父运行只用 ask_writes 兜底（它本该只做派发和提交发现），不挂 reviewer 档案，
+            # 否则 run.read_only 会把父运行的 delegate_task 一并拦掉。
+            profile_id = None
+            profile = None
+            permission_mode = "ask_writes"
+            run_tool_allow = ["delegate_task", "submit_findings", "local_file", "review_command",
+                              "coding.repo_map", "coding.ast_grep.run", "read_office"]
+            run_tool_deny = []
+            log.info("review.intercepted", run_id=run_id,
+                     workspace=str(review_workspace), scope=review_scope.get("scope"))
     assert model_mgr is not None
     run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
     if isinstance(data.get("telegram_user_id"), int):
@@ -7547,6 +7730,8 @@ async def _execute_run(
 
             elif etype in {
                 "process.completed", "process.notification", "run.compaction.progress", "run.recovery.notice",
+                # C6 新增队列事件：wire 事件与内部 type 同名，data 原样透传。
+                "lsp.diagnostics", "review.findings",
             }:
                 await emit(etype, event.get("data", {}))
 

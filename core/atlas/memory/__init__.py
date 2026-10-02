@@ -729,15 +729,38 @@ class MemoryStore:
                  "source": r["source"]} for r in rows]
 
     async def get_conversation_messages(
-        self, conversation_id: str, limit: int = 100
+        self, conversation_id: str, limit: int = 100, before_id: str | None = None
     ) -> list[dict[str, Any]]:
+        """Return a page of messages in ascending order.
+
+        Default page: the NEWEST ``limit`` messages (was: the oldest — the LIMIT
+        on an ASC query silently returned the head of the history).  ``before_id``
+        returns the page immediately BEFORE that message id, so a client can page
+        backwards through history.  Output is always oldest → newest.
+        """
         assert self._db is not None
-        cursor = await self._db.execute(
-            "SELECT id, role, content, metadata, created_at FROM messages "
-            "WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC LIMIT ?",
-            (conversation_id, limit),
-        )
-        rows = await cursor.fetchall()
+        if before_id:
+            cursor = await self._db.execute(
+                "SELECT created_at, rowid FROM messages WHERE id = ? AND conversation_id = ?",
+                (before_id, conversation_id),
+            )
+            anchor = await cursor.fetchone()
+            if anchor is None:
+                return []
+            cursor = await self._db.execute(
+                "SELECT id, role, content, metadata, created_at FROM messages "
+                "WHERE conversation_id = ? "
+                "AND (created_at < ? OR (created_at = ? AND rowid < ?)) "
+                "ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                (conversation_id, anchor["created_at"], anchor["created_at"], anchor["rowid"], limit),
+            )
+        else:
+            cursor = await self._db.execute(
+                "SELECT id, role, content, metadata, created_at FROM messages "
+                "WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                (conversation_id, limit),
+            )
+        rows = list(reversed(await cursor.fetchall()))
         messages: list[dict[str, Any]] = []
         for row in rows:
             message = dict(row)
