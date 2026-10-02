@@ -17,7 +17,7 @@ Status: PARTIAL — implemented and verified capabilities are listed below; the 
 
 ## Commits
 
-- Atlas implementation commit: pending at result creation; populated in the delivery follow-up commit.
+- Atlas implementation commit: `94de9c547f3ac747e8a82e6f892558307737e316`.
 - Hermes repo `D:\hermes-agent`: unchanged at `e287231d7906bcce5bc373d20fb2e3e1e6427220`.
 
 ## Verification
