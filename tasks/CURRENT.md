@@ -1,22 +1,33 @@
 # Atlas Current Task
 
-CURRENT: ATLAS-C1-HERMES-CORE
-STATUS: PARTIAL; NOT ACCEPTED; FULL PYTEST PASSES; C1 PARITY GAPS REMAIN
-TASKBOOK: tasks/taskbooks/ATLAS-C1-HERMES-CORE.md
-RESULT: tasks/results/ATLAS-C1-HERMES-CORE.result.md
+CURRENT: ATLAS-C1R-FINISH
+STATUS: READY_FOR_EXECUTION
+EXECUTOR: GPT-6 Luna / reasoning=high
+TASKBOOK: tasks/taskbooks/ATLAS-C1R-FINISH.md
+RESULT: tasks/results/ATLAS-C1R-FINISH.result.md
+REVIEW: tasks/reviews/ATLAS-C1R-FINISH.review.md
 
 BASE_BRANCH: main
-PROTOCOL: 1.10
-SCOPE: C1 Hermes core replacement, including backend and frontend. `core/atlas/origin_guard.py` was not relaxed; `core/atlas/safety/` remains disabled and unchanged for this work.
 
-DELIVERY:
-- §§1–4 and §9 were already committed before this continuation. This continuation pushed §5 `35cd874`, §6 `b93076b`, §7 `4d975de`, §8 `fe31ba1`, §10 focused coverage `4357a86`, and the protocol 1.10 follow-up `fafb7c8`.
-- Fixed the Windows scheduler lease liveness check after reproducing all seven prior full-suite failures at `0d48720^ = 805110c`; commit `30f89f4`.
-- Frontend checks passed: renderer TypeScript, Electron TypeScript, Vitest (36 tests), Vite build. Edge screenshots were captured for the conversation, changes, terminal, and settings views.
-- Final full backend run: `988 passed, 9 skipped, 1 warning in 232.88s (0:03:52)`. The seven scheduler failures were independently reproduced on `805110c` (`7 failed in 10.14s`) and pass after commit `30f89f4`.
-- A5 MoA was connected to Hermes using Atlas ModelManager reference models; fake consultation coverage passed (`4 passed`).
-- T11 stdin/write/submit/close, Windows PTY, and manual handoff now pass focused tests; parent Agent completion notification after handoff remains uncovered.
-- L9 now bridges Atlas `agent.run_budget_seconds` and `agent.budget_warning_ratio` to Hermes' existing one-shot budget reminder hook; focused coverage passed.
-- §10 #10 now compares the ordered stable chunk/tool/result/done fields from one fake model script on both engines. Hermes-only `run_status` and differing `run_usage` diagnostic fields are documented in the result.
-- Not accepted: CORE-PARITY C1 rows L2, L4, T10, T11, T19, S4, and A1 still have documented gaps or incomplete end-to-end coverage; Hermes source regression selection also has Windows-specific failures.
-- No real model or live remote MCP/SSH scenario was run. Local voice remains deferred. Safety review remains user-owned and was not performed.
+## 当前目标
+
+完成 C1 Hermes 内核替换的最后收尾：只修已经确认的真实缺口，完成最小必要回归与一次全量验证，然后停止，等待独立验收。
+
+## 流程
+
+1. ZCode 把本文件和 TASKBOOK 路径交给 Codex。
+2. Codex 使用 GPT-6 Luna / high 施工，直接从仓库读取任务书。
+3. Codex 完成后自行提交并 push，写 RESULT，并把本文件状态改为 `AWAITING_REVIEW`。
+4. ZCode 通知上游规划者。
+5. 上游规划者直接检查提交、代码和结果，写 REVIEW：
+   - 通过：立即发布下一阶段任务书并更新 CURRENT；
+   - 不通过：直接在仓库发布补做指令，不询问用户。
+6. 循环直到 ROADMAP 完成。
+
+## 执行原则
+
+- 速度优先，优先复用成熟实现。
+- 禁止过度防御编程：不为理论异常堆 fallback、兼容层、抽象层、重复 try/catch。
+- 禁止过度验收：只做任务要求的聚焦测试 + 一次全量，不做重复测试矩阵和无意义审计。
+- 不用真实模型，除非某个后续阶段任务书明确要求。
+- 不进入下一阶段，直到上游规划者验收通过。
