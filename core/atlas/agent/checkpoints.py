@@ -1,11 +1,20 @@
-"""Workspace-scoped snapshots kept outside repositories."""
+"""Workspace-scoped snapshots kept outside repositories.
+
+S3 consolidation (2026-10-03): this store is the single checkpoint implementation.
+The per-checkpoint shadow git repo of the W06 design was removed — it was never
+read as git (restore copies bytes back; history reads ``files/``), doubled the
+storage, cost four ``git`` subprocess calls per snapshot, and made checkpoint
+creation crash when the ``git`` binary was missing. Snapshots are plain
+byte-exact copies under ``files/`` plus ``manifest.json`` (written last, so a
+crashed snapshot is never listed or restored). Snapshots created by older
+builds keep restoring: the ``git/``-first lookup order below is retained.
+"""
 
 from __future__ import annotations
 
 import json
 import os
 import shutil
-import subprocess
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -83,39 +92,22 @@ class ShadowGitCheckpointStore:
             } for relative in paths],
         }
         snapshot_root.mkdir(parents=True, exist_ok=True)
-        shadow_repo = snapshot_root / "git"
-        shadow_repo.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            ["git", "init", "--quiet", str(shadow_repo)], check=True,
-            capture_output=True, text=True,
-        )
-        for item in files:
-            if not item["exists"] or item.get("directory"):
-                continue
-            source = snapshot_root / "files" / item["path"]
-            target = shadow_repo / item["path"]
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
-        subprocess.run(
-            ["git", "-C", str(shadow_repo), "add", "--all"], check=True,
-            capture_output=True, text=True,
-        )
-        staged = subprocess.run(
-            ["git", "-C", str(shadow_repo), "diff", "--cached", "--quiet"],
-            capture_output=True, check=False,
-        )
-        if staged.returncode == 1:
-            subprocess.run(
-                ["git", "-C", str(shadow_repo), "-c", "user.name=Atlas Checkpoint",
-                 "-c", "user.email=checkpoint@atlas.local", "commit", "--quiet", "-m",
-                 f"checkpoint {checkpoint_id}"], check=True,
-                capture_output=True, text=True,
-            )
         (snapshot_root / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8",
         )
         self._prune_checkpoints(checkpoint_id)
         return manifest
+
+    def manifest_path(self, checkpoint_id: str) -> Path | None:
+        """Path to a checkpoint's manifest.json, or None when the id is unknown/unsafe.
+
+        Supported accessor for the storage layout (``<storage_dir>/<id>/manifest.json``)
+        so callers such as server.py's history routes need not hard-code it.
+        """
+        if Path(checkpoint_id).name != checkpoint_id:
+            return None
+        candidate = self.storage_dir / checkpoint_id / "manifest.json"
+        return candidate if candidate.is_file() else None
 
     def _prune_checkpoints(self, newest_id: str) -> None:
         """Keep recent snapshots under simple count and disk-use limits."""

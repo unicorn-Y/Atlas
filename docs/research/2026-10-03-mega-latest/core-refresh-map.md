@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | KEEP | 31 | — |
 | UPGRADE | 10 | 1（条件性：D1 git 安全，跑不可信仓库+子代理 worktree 时） |
-| REPLACE | 1 | 0（S3 双检查点合并，清理债） |
+| REPLACE | 1 | 0（S3 双检查点合并，清理债；**2026-10-03 已施工完成**，见 S3 行） |
 
 UPGRADE 全部 S/M 难度、可直接搬；无 L 级。8 项建议 in-mega 施工，其余 record-only（见表）。
 
@@ -54,7 +54,7 @@ UPGRADE 全部 S/M 难度、可直接搬；无 L 级。8 项建议 in-mega 施�
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | S1 恢复会话 | SessionDB 恢复；窗口内 resume/token_count 修复已随 pin | HM | pin | hermes-agent `agent/transcript_repair.py` | KEEP | 否 | — | — |
 | S2 分叉/会话树 | 分支树界面 + Hermes branch lineage（`engine/session_sync.py`）；**分支切换无自动摘要** | Pi branch summarization（切分支附摘要） | v1.0.0 | pi `docs/compaction.md` Branch Summarization | UPGRADE | 否 | M | in-mega 候选（C3 遗留项收尾） |
-| S3 撤回/检查点 | **两套并存**：`agent/checkpoints.py` ShadowGitCheckpointStore + server.py W06 时代检查点 API（71 处引用） | OD v2 content-addressed snapshot（capture/diff/restore）作合并参照 | v1.18.34 | opencode `packages/core/src/snapshot.ts` | REPLACE（合并为一套，保留强者，界面不变） | 否 | M | in-mega 候选 |
+| S3 撤回/检查点 | **已合并（2026-10-03）**：保留 `agent/checkpoints.py` ShadowGitCheckpointStore 为唯一实现；server.py 全部本地检查点路由（/api/checkpoints、history、rewind、_run_changes）本就调用它（C3 已单库），W06 残留的每检查点 shadow-git 子系统（每快照 4 次 git 子进程+双份存储，从未被当 git 读取）已删除；新增 `manifest_path()` 作为布局访问器。恢复兼容旧快照（git/ 优先回退 files/）。ssh.py `.atlas-checkpoints` 为远程传输适配器保留（文件在远端，本地库无法触及），语义弱（首触快照、无修剪）记录为后续项 | OD v2 content-addressed snapshot（capture/diff/restore）作合并参照 | v1.18.34 | opencode `packages/core/src/snapshot.ts` | implemented（kept ShadowGitCheckpointStore, folded W06 shadow-git machinery; 界面与 HTTP API 零改动, server.py 无需修改） | 否 | S（已完成） | in-mega 已施工 |
 | S4–S6 标题/搜索/导出 | 全有（C1） | HM | pin | — | KEEP | 否 | — | — |
 | I1 权限档位 | 六档 + 子代理不提权 | CC auto-mode 分类器默认全量（用户明确不做安全分类器） | 2.1.284+ | — | KEEP（分类器记 record-only） | 否 | — | record-only |
 | I1b 危险命令审批 | 审批卡片常驻等待 | CC 2.1.281 危险 rm 提示 2min 超时+改写提示（无人值守不卡死） | 2.1.281 | — | UPGRADE | 否 | S | record-only |
@@ -67,8 +67,8 @@ UPGRADE 全部 S/M 难度、可直接搬；无 L 级。8 项建议 in-mega 施�
 | 能力 | Atlas 当前 | 当前最强来源 | version/commit | repo/file | 判定 | 阻塞 | 难度 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | A1–A5 委派/验收/定义/界面/会诊 | 全链（C1/C3✔）；上游窗口 `delegate_tool.py` 未动 | HM | pin | hermes-agent `tools/delegate_tool*.py` | KEEP | 否 | — | — |
-| D1 worktree git 安全 | `agent/subagent_worktree.py` 是 **`330d9d6` 旧移植**，**无** repo 命名 smudge filter 中和 / noninteractive git env | HM 窗口内 git-safety 系列（GHSA-7x36-8jrh-v4pw）：`bba715b42d`/`9c589b91bd`/`803cd03521`/`1ff01f4cf7` | pin 内已含（hermes 侧） | hermes-agent `tools/subagent_worktree.py:18-90`、`hermes_cli/_subprocess_compat.py` | **UPGRADE（阻塞*）** | 是（条件性：对不可信仓库派子代理 worktree 时，恶意 .gitattributes filter 可在 checkout 执行） | S/M | **in-mega（第一优先）** |
-| D2 子代理结果注入防护 | 子代理结果直接拼回父上下文（`agent/results.py`/`enrichment.py` 无 framing） | CC 2.1.277：子代理输出带不可伪造头+缩进，防冒充会话指令 | 2.1.277 | — | UPGRADE | 否 | S | **in-mega**（几行注入格式改动） |
+| D1 worktree git 安全 | **已实现（implemented，2026-10-03）**：`agent/subagent_worktree.py` 已补齐 git-safety 加固——(1) 所有 git 子进程改跑内联 `noninteractive_git_env`（`GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=Never`、`GIT_CONFIG_GLOBAL/SYSTEM` 置空、丢弃 `GIT_CONFIG_*` 注入、pin `core.fsmonitor=false`/`core.hooksPath`/`credential.helper` 等、`safe.directory` 回放）；(2) `worktree add`（smudge 执行点）与 finalize 的 `status` 探针（clean 执行点）改用 `noninteractive_repo_git_env`——按 `.gitattributes` 发现 repo 命名 filter 并追加空命令 + `required=false` 覆盖，发现失败即 fail-closed（创建返回 None / 树保留 unproven）。测试 `core/tests/test_subagent_worktree.py`（7 用例：恶意仓库 E2E smudge/clean/fsmonitor/hook 中和 + fail-closed + env pin 单元）+ `test_backend_parity_wave7.py` 全绿 | HM 窗口内 git-safety 系列（GHSA-7x36-8jrh-v4pw）：`bba715b42d`/`9c589b91bd`/`803cd03521`/`1ff01f4cf7` | pin 内已含（hermes 侧） | hermes-agent `tools/subagent_worktree.py:18-90`、`hermes_cli/_subprocess_compat.py` → Atlas `core/atlas/agent/subagent_worktree.py` | ✅ **UPGRADE 已完成** | 否（原条件性阻塞已消除：不可信仓库派子代理 worktree 时 filter 不再执行） | S/M | **implemented（2026-10-03，commit hash 待提交后回填）** |
+| D2 子代理结果注入防护 | **已实现（implemented，2026-10-03 U1-b）**：`agent/results.py` 新增 `frame_subagent_result`/`frame_delegate_result_data`——结构化头 `<atlas-subagent-result id backend agent status>`（id 由父端生成、子代理上下文不可得）+ 正文全行缩进两格（伪造的头部/关闭标记只会以缩进内容出现，顶格关闭标记仅末尾一处），中文安全（纯 str 操作）；`agent/__init__.py` 三处模型可见文本套框：delegate_task / delegate_parallel（summary）/ subtask_status 的 content 文本，`result["data"]` 与 enrichment record 保持原始结构化字段（usage 提取与前端 schema 不变，output_schema 校验路径不经过该文本）。测试 `core/tests/test_d2_subagent_framing.py`（6 用例：结构/中文安全+伪造中和/空文本/仅动文本不动 schema/E2E 经 Hermes 循环断言 tool 消息） | CC 2.1.277：子代理输出带不可伪造头+缩进，防冒充会话指令 | 2.1.277 | — | ✅ **UPGRADE 已完成** | 否 | S | **implemented（2026-10-03）** |
 | D3 子代理失败可见性 | 失败可重派、schema/status 校验（C3✔）≈ CX 0.160 环境准备失败显式化、OD task_id 可恢复 | CX/OD | 0.160 / v1.18.20 | — | KEEP | 否 | — | — |
 | D4 子代理 frontmatter | 模型/上下文策略可配（`3b8627a`） | CC `omitClaudeMd`(2.1.271)/`cacheTtl`(2.1.248)/`SUBAGENT_MODEL_FORCE`(2.1.257) | 2.1.277 | — | KEEP 部分；cacheTtl/omit 记 record-only | 否 | S | record-only |
 
@@ -77,7 +77,7 @@ UPGRADE 全部 S/M 难度、可直接搬；无 L 级。8 项建议 in-mega 施�
 | 能力 | Atlas 当前 | 当前最强来源 | version/commit | repo/file | 判定 | 阻塞 | 难度 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | E1 MCP | Hermes MCP family（经 pin）+ Atlas `tools/mcp_client.py` 自有层 | CC 2.1.285/287 `alwaysLoad:false` 整服务器延迟加载、`MAX_MCP_DESCRIPTION_LENGTH` | 2.1.287 | — | KEEP（tool_search 已做延迟）；server 级开关记 record-only | 否 | S | record-only |
-| E2 技能 | SKILL.md+渐进加载+统一 SkillManager（C4✔） | CC 2.1.286 **verify 技能约定**（存在名为 verify 的技能则提交前必跑）；2.1.261 **/skill-doctor**（未用技能的上下文成本） | 2.1.286/261 | — | UPGRADE ×2 | 否 | S / S/M | verify=**in-mega**；skill-doctor=in-mega 候选 |
+| E2 技能 | SKILL.md+渐进加载+统一 SkillManager（C4✔）；**verify 技能已实现（2026-10-03 U1-b）**：`skills/dev/verify/SKILL.md`（name/description/version/category/triggers 合规，正文=焦点测试（pytest 触碰文件+紧邻测试）→ 类型检查/静态检查 → 汇报格式含强制「未验证」清单 + 提交前必跑红线），解析经 `atlas.skills._parse_skill_md` 校验 | CC 2.1.286 **verify 技能约定**（存在名为 verify 的技能则提交前必跑）；2.1.261 **/skill-doctor**（未用技能的上下文成本） | 2.1.286/261 | — | UPGRADE ×2 → ✅ verify **已完成**；skill-doctor 仍 in-mega 候选 | 否 | S / S/M | verify=**implemented（2026-10-03，tests/test_e2_verify_skill.py）**；skill-doctor=in-mega 候选 |
 | E3 Hooks | 事件覆盖全（含 PreModelSwitch/PostModelSwitch，`runtime/hooks.py:27`） | CC 2.1.251 SessionStart resume 附 staleness+重缓存估算 | 2.1.251 | — | KEEP；staleness 载荷记 record-only | 否 | S | record-only |
 | E4 插件 | CC 插件格式兼容（C4✔） | CC 2.1.287 Claude Mods（改 harness 行为层）、2.1.285 configure/.mcpb 配置、2.1.269 plugin eval、2.1.271/286 供应链加固 | 2.1.288 | — | KEEP；Mods/mcpb/eval 记 record-only（平台层） | 否 | L | record-only |
 | E5/E6 命令/导入 | 全有（C4✔） | CC 2.1.283 /doctor prompt-audit | 2.1.283 | — | KEEP；prompt-audit 记 record-only | 否 | S/M | record-only |
@@ -86,7 +86,7 @@ UPGRADE 全部 S/M 难度、可直接搬；无 L 级。8 项建议 in-mega 施�
 
 | 能力 | Atlas 当前 | 当前最强来源 | version/commit | repo/file | 判定 | 阻塞 | 难度 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| M1 服务商/目录 | 16 家目录（2026-10-02 查证）+ models.dev ETag 元数据；GPT-6 系（astra/sol/luna/6.1-sol）已在 `models/reasoning_effort.py` | CC 2.1.257–284 三新默认模型：Sonnet 5.5 / Opus 5.5 / Fable 5.1（均 1M） | 2.1.284 | — | UPGRADE（小）：models_dev 离线回退表补 Claude 新旗舰行 | 否 | S | in-mega 候选（在线时 models.dev 已自动覆盖） |
+| M1 服务商/目录 | 16 家目录（2026-10-02 查证）+ models.dev ETag 元数据；GPT-6 系（astra/sol/luna/6.1-sol）已在 `models/reasoning_effort.py`；**离线回退行已实现（2026-10-03 U1-b）**：`models/catalog.py` `CLAUDE_DEFAULT_MODEL_FALLBACKS`（Sonnet 5.5 1M $2/$10+cache_read $0.20 / Opus 5.5 1M $4/$20 / Fable 5.1 1M $10/$50，行形状与 `_BUILTIN_MODEL_METADATA` 一致，未核实字段如 output 上限刻意缺席），`models/models_dev.py::_builtin_model_metadata` 内建表未命中时读取——vendored 表零改动；只补元数据不进选择器目录，在线时 models.dev 仍自动覆盖 | CC 2.1.257–284 三新默认模型：Sonnet 5.5 / Opus 5.5 / Fable 5.1（均 1M） | 2.1.284 | — | ✅ **UPGRADE 已完成** | 否 | S | **implemented（2026-10-03，tests/test_m1_offline_model_rows.py）** |
 | M2 密钥池 | AtlasCredentialPool 全链（C5✔） | HM | pin | — | KEEP | 否 | — | — |
 | M3/M4 fallback/推理参数 | 经 pin；effort 档位规则 per-model（`reasoning_effort.py`） | CC 2.1.251 effort 按模型记忆、2.1.267 maxEffortLevel 上限 | 2.1.267 | — | KEEP；用户 effort 按模型持久化记 record-only | 否 | S | record-only |
 | M5 用量/缓存诊断 | C5 缓存未命中三层哈希归因（`0814f39`）≈ CC 2.1.251/260 /cost 缓存诊断 | CC | 2.1.260 | — | KEEP（等价） | 否 | — | — |

@@ -372,7 +372,8 @@ def test_shadow_git_checkpoint_restores_scoped_file_without_repo_mutation(tmp_pa
     assert unrelated.read_text(encoding="utf-8") == "keep"
     assert restored["restored"] == ["source.py"]
     shadow_git = tmp_path / "atlas-shadow" / checkpoint["id"] / "git"
-    assert (shadow_git / ".git").is_dir()
+    # S3 consolidation: snapshots are plain byte copies; no shadow git repo is built.
+    assert not shadow_git.exists()
     assert store.list_checkpoints(workspace)[0]["id"] == checkpoint["id"]
 
 
