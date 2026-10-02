@@ -19,11 +19,31 @@ import os
 import time
 from pathlib import Path
 from collections.abc import AsyncIterator
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 import uuid
+
+if TYPE_CHECKING:
+    from atlas.runtime.hooks import HookStore
 
 _DONE = object()
 logger = logging.getLogger(__name__)
+
+# Keeps references to fire-and-forget lifecycle-hook futures dispatched from
+# the Hermes worker thread; without a strong reference the loop could collect
+# (and thereby cancel) them before they finish.
+_LIFECYCLE_FUTURES: list[Any] = []
+
+
+async def _fire_lifecycle_hook(
+    callback: Callable[[str, dict[str, Any]], Any], event: str, payload: dict[str, Any],
+) -> None:
+    """Run one lifecycle hook callback (sync or async) without blocking the caller."""
+    try:
+        outcome = callback(event, payload)
+        if asyncio.iscoroutine(outcome):
+            await outcome
+    except Exception:
+        logger.warning("Atlas lifecycle hook %s failed", event, exc_info=True)
 
 
 def _model_family_guidance(model: str) -> str:
@@ -232,76 +252,97 @@ class HermesRuntime:
             compressor.summary_model = str(model.get("litellm_model") or selected)
 
     async def compact_session(
-        self, *, conversation_id: str, workspace: str | None, focus_topic: str | None = None,
+        self, *, conversation_id: str, workspace: str | None,
+        focus_topic: str | None = None, hook_store: HookStore | None = None,
     ) -> dict[str, Any]:
         """Run Hermes' real manual compressor against the durable session transcript."""
-        # PreCompact hook fires at the Atlas compaction entry point; the server owns
-        # the plugin-hook registry, so plugin-contributed hooks are not included here.
-        from atlas.config import get_config
-        from atlas.runtime.hooks import HookStore
+        # PreCompact/PostCompact hooks fire at the Atlas compaction entry and
+        # exit points. Callers pass the server-owned shared HookStore so
+        # plugin-contributed hooks are visible; without one, fall back to the
+        # user-level hook file only.
+        if hook_store is None:
+            from atlas.config import get_config
+            from atlas.runtime.hooks import HookStore
 
-        outcome = await HookStore(
-            get_config().db_path.parent / "hooks.toml",
-        ).execute("PreCompact", {
+            hook_store = HookStore(get_config().db_path.parent / "hooks.toml")
+        outcome = await hook_store.execute("PreCompact", {
             "conversation_id": conversation_id, "trigger": "manual",
         }, cwd=workspace)
         if outcome.get("blocked"):
             return {"compressed": False, "reason": "blocked_by_hook",
                     "summary": "", "detail": str(outcome.get("reason") or "")}
 
-        def compact_sync() -> dict[str, Any]:
-            self.home.mkdir(parents=True, exist_ok=True)
-            os.environ["HERMES_HOME"] = str(self.home)
-            settings = self.model_manager
-            current = settings.current_model
-            model_config = next(
-                (item for item in settings.list_models() if item.get("id") == current), {},
-            )
-            agent = self._agent_factory()(
-                model=settings.current_litellm_model, provider="openai", api_mode="openai",
-                base_url=getattr(settings, "gateway_base_url", None),
-                api_key=getattr(settings, "_api_key", None), session_id=conversation_id,
-                cwd=workspace, skip_memory=True, checkpoints_enabled=False,
-                enabled_toolsets=["file", "terminal", "todo", "clarify", "code_execution",
-                                  "session_search", "delegation", "atlas"],
-                fallback_model=model_config.get("fallback"),
-                max_tokens=model_config.get("max_output_tokens"),
-            )
-            self._apply_compression_model_setting(agent, settings)
-            try:
-                open_session_db = getattr(agent, "_get_session_db_for_recall", None)
-                if callable(open_session_db) and getattr(agent, "_session_db", None) is None:
-                    open_session_db()
-                db = getattr(agent, "_session_db", None)
-                if db is None:
-                    raise RuntimeError("Hermes SessionDB is unavailable")
-                history = db.get_messages_as_conversation(conversation_id, include_ancestors=True)
-                if not history:
-                    return {"compressed": False, "reason": "empty_session", "summary": ""}
-                session = db.get_session(conversation_id) or {}
-                prompt = str(session.get("system_prompt") or agent._build_system_prompt(None))
-                before = sum(max(1, len(str(item.get("content", ""))) // 4) for item in history)
-                compressed, _ = agent._compress_context(
-                    history, prompt, focus_topic=focus_topic or None, force=True, trigger="manual",
-                )
-                after_history = db.get_messages_as_conversation(
-                    conversation_id, include_ancestors=True,
-                )
-                after = sum(max(1, len(str(item.get("content", ""))) // 4)
-                            for item in after_history)
-                summary = "\n".join(
-                    str(item.get("content", "")) for item in after_history[-4:]
-                    if item.get("role") in {"system", "assistant"}
-                    and isinstance(item.get("content"), str)
-                )
-                return {"compressed": len(compressed) < len(history) or after < before,
-                        "before_tokens": before, "after_tokens": after, "summary": summary}
-            finally:
-                close = getattr(agent, "close", None)
-                if callable(close):
-                    close()
+        result = await asyncio.to_thread(
+            self._compact_session_sync, conversation_id, workspace, focus_topic,
+        )
+        if result.get("before_tokens") is not None:
+            # PostCompact is a post-hoc notification: a block cannot undo the
+            # compaction, so the execute outcome is deliberately ignored.
+            await hook_store.execute("PostCompact", {
+                "conversation_id": conversation_id, "trigger": "manual",
+                "before_tokens": result["before_tokens"],
+                "after_tokens": result["after_tokens"],
+            }, cwd=workspace)
+        return result
 
-        return await asyncio.to_thread(compact_sync)
+    def _compact_session_sync(
+        self, conversation_id: str, workspace: str | None, focus_topic: str | None,
+    ) -> dict[str, Any]:
+        """Run the blocking Hermes compressor off the event loop.
+
+        Hermes source: unicorn-Y/hermes-agent@562ad75baec0c8360f6ce2d48b7d9de56506956c
+        compression_facade.py::_compress_context.
+        """
+        self.home.mkdir(parents=True, exist_ok=True)
+        os.environ["HERMES_HOME"] = str(self.home)
+        settings = self.model_manager
+        current = settings.current_model
+        model_config = next(
+            (item for item in settings.list_models() if item.get("id") == current), {},
+        )
+        agent = self._agent_factory()(
+            model=settings.current_litellm_model, provider="openai", api_mode="openai",
+            base_url=getattr(settings, "gateway_base_url", None),
+            api_key=getattr(settings, "_api_key", None), session_id=conversation_id,
+            cwd=workspace, skip_memory=True, checkpoints_enabled=False,
+            enabled_toolsets=["file", "terminal", "todo", "clarify", "code_execution",
+                              "session_search", "delegation", "atlas"],
+            fallback_model=model_config.get("fallback"),
+            max_tokens=model_config.get("max_output_tokens"),
+        )
+        self._apply_compression_model_setting(agent, settings)
+        try:
+            open_session_db = getattr(agent, "_get_session_db_for_recall", None)
+            if callable(open_session_db) and getattr(agent, "_session_db", None) is None:
+                open_session_db()
+            db = getattr(agent, "_session_db", None)
+            if db is None:
+                raise RuntimeError("Hermes SessionDB is unavailable")
+            history = db.get_messages_as_conversation(conversation_id, include_ancestors=True)
+            if not history:
+                return {"compressed": False, "reason": "empty_session", "summary": ""}
+            session = db.get_session(conversation_id) or {}
+            prompt = str(session.get("system_prompt") or agent._build_system_prompt(None))
+            before = sum(max(1, len(str(item.get("content", ""))) // 4) for item in history)
+            compressed, _ = agent._compress_context(
+                history, prompt, focus_topic=focus_topic or None, force=True, trigger="manual",
+            )
+            after_history = db.get_messages_as_conversation(
+                conversation_id, include_ancestors=True,
+            )
+            after = sum(max(1, len(str(item.get("content", ""))) // 4)
+                        for item in after_history)
+            summary = "\n".join(
+                str(item.get("content", "")) for item in after_history[-4:]
+                if item.get("role") in {"system", "assistant"}
+                and isinstance(item.get("content"), str)
+            )
+            return {"compressed": len(compressed) < len(history) or after < before,
+                    "before_tokens": before, "after_tokens": after, "summary": summary}
+        finally:
+            close = getattr(agent, "close", None)
+            if callable(close):
+                close()
 
     async def run_turn(
         self,
@@ -324,6 +365,7 @@ class HermesRuntime:
         moa_enabled: bool = False,
         model_id: str | None = None,
         title_callback: Callable[[str, str], Any] | None = None,
+        lifecycle_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute one Hermes turn on a worker thread and yield callback events."""
         loop = asyncio.get_running_loop()
@@ -391,6 +433,17 @@ class HermesRuntime:
                     emit({"type": event_type, "usage": dict(data)})
                 else:
                     emit({"type": event_type, "data": dict(data)})
+            if str(name) == "session:compress" and lifecycle_hook_callback is not None:
+                # Hermes fires session:compress from its worker thread at the real
+                # automatic-compression boundary; bridge it to PostCompact without
+                # ever blocking that thread (fire-and-forget onto the Atlas loop).
+                payload = {"conversation_id": conversation_id, "trigger": "automatic",
+                           **(data if isinstance(data, dict) else {})}
+                future = asyncio.run_coroutine_threadsafe(
+                    _fire_lifecycle_hook(lifecycle_hook_callback, "PostCompact", payload),
+                    loop,
+                )
+                _LIFECYCLE_FUTURES.append(future)
 
         def on_clarify(questions: Any) -> None:
             if input_callback is None:

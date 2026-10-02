@@ -166,6 +166,9 @@ export interface RunStartRequest {
   /** Run in the conversation's own git worktree, created from base_branch on first use. */
   worktree?: { base_branch?: string };
   profile_id?: string;
+  /** One-run tool allow/deny override (e.g. custom command frontmatter metadata). */
+  tool_allow?: string[];
+  tool_deny?: string[];
   reasoning_effort?: ReasoningEffort;
   /** Workspace-relative files whose content is added to the message (@ mentions). */
   context_files?: string[];

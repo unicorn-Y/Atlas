@@ -525,6 +525,11 @@ export default function App() {
     try {
       const rendered = await backend.renderCommand(command.id, args, workspacePath || undefined);
       if (rendered.mode === 'plan') store.setNextRunMode('plan');
+      store.setPendingRunOverrides({
+        model: rendered.model ?? undefined,
+        tool_allow: rendered.tool_allow ?? undefined,
+        tool_deny: rendered.tool_deny?.length ? rendered.tool_deny : undefined,
+      });
       await store.sendMessage(rendered.prompt);
     } catch (error) {
       setToast(`命令没能运行：${error instanceof Error ? error.message : String(error)}`);

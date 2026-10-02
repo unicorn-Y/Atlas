@@ -79,12 +79,12 @@ C3 child runtime 未复制。项目/用户 Claude agent 定义由既有路径识
 - 唯一相邻点：`backend-adapter/src/{types,client}.ts` 与 `App.tsx`、`useAtlasStore.ts`（C4 面板/菜单接线）。若 C5 也改这些共享文件，合并时按 hunk 人工核对即可，无语义冲突预期。
 - `external_import.py` 的 model_prefs 写 `selected_model`（现有键），C5 合并后自然读取，无需改动。
 
-## 六、真实剩余缺口
+## 六、真实剩余缺口（C4R 后更新）
 
-1. permissionDecision/behavior `"ask"` 按阻断处理（提示"Hook 要求人工确认"）；接 Atlas 审批卡片留待后续。
-2. PreCompact 手动压缩路径拿不到插件 hooks 来源（engine 内构造独立 HookStore）；Hermes fork 内的自动压缩无 Atlas 侧落点，未接。
-3. SubagentStop 的 exit-2 "让子代理继续"语义未实现（仅触发）；SessionEnd 事件无会话级落点未接（run 结束已有 Stop/StopFailure）。
-4. `render` 返回的 `model/tool_allow/tool_deny` 未接入发送链路（`run.start` 暂不支持按次限制），现只消费 `prompt/mode`。
+1. ~~permissionDecision/behavior `"ask"` 按阻断处理~~ **C4R 已收口**：ask 进入既有审批卡片/callback；deny 阻断、allow 按次放行（支持 updatedInput 改写），ask_writes 与敏感工具两条路径一致。
+2. ~~PreCompact 手动压缩拿不到插件 hooks 来源；自动压缩无 Atlas 侧落点~~ **C4R 已收口**：compact 端点传入共享 HookStore（含插件 hooks）；压缩成功触发 PostCompact（trigger=manual）；Hermes `session:compress` 桥接 PostCompact（trigger=automatic，fire-and-forget 不阻塞 worker 线程）。
+3. ~~SubagentStop 的继续语义未实现；SessionEnd 无会话级落点~~ **C4R 已收口**：hook 阻断时同一 child 会话带 reason 续跑（上限 5 次，payload 含 `stop_hook_active`），非阻断 stop 后才销毁；SessionEnd 接在真实销毁点（会话删除端点 reason=delete、子任务会话收尾 reason=子任务状态）。
+4. ~~render 的 `model/tool_allow/tool_deny` 未接入发送链路~~ **C4R 已收口**：run.start 支持 `tool_allow/tool_deny`（单次覆盖 profile，非法载荷校验拒绝）；前端 `pendingRunOverrides` 一次性消费，Recipe 行为不变。
 5. mcpb 打包格式、Pi 式 TypeScript 扩展点未实现（Pi 思路仅保留设计层面）。
 6. hooks 最近日志为内存环形缓冲，重启丢失（持久化属增量优化）。
 7. `check_updates` 暂无独立 HTTP 端点（`POST /api/plugins/{name}/update` 已可用）。
@@ -94,3 +94,38 @@ C3 child runtime 未复制。项目/用户 Claude agent 定义由既有路径识
 
 - 后端全量：1 failed, 1071 passed, 9 skipped（18m33s）。唯一失败 `test_backend_parity_wave2.py::test_goal_replace_pause_resume` 为 main 存量漂移：C3R 提交 138decb 把 `ScheduledTask.goal` 改名 `legacy_goal` 后该测试未跟上，与本波改动无关（本波 diff 未触 scheduler/该测试）。
 - 前端四项：renderer tsc ✅ / electron tsc ✅ / vitest 9 文件 42 用例 ✅ / vite build ✅
+
+## 八、C4R 收口（2026-10-02，ZCode 主控 + 4 并行 worker）
+
+按 `tasks/taskbooks/ATLAS-C4R-FINISH.md` 只收口评审的四项 blocker，未重做已接受部分，未合入 `zcode/c5-models-parallel` / `zcode/c6a-lsp-parallel`。
+
+### R1 PermissionRequest `ask` → 既有审批卡
+- `runtime/hooks.py` `_json_decision`：PermissionRequest 新增 `behavior=="allow"` → `allowed=True` + `updatedInput` 提取为 `updated_input`；deny/ask 原语义保留。
+- `agent/__init__.py` 两处消费点（ask_writes 路径、敏感工具路径）拆分：`blocked` → 合成拒绝（原状）；`allowed` → 合并 `updated_input` 进 `fn_args`、`choice="allow"` 跳过审批卡；其余（`ask_user`/无决策）→ 进入既有 `approval_callback` 审批卡流程（敏感路径仍先发 `approval_required` 事件）。无第二套审批系统。
+
+### R2 SubagentStop 阻断/继续语义
+- `_run_atlas_subtask` 重构为"跑 child → 每轮结束触发 SubagentStop → blocked 则同一 conversation 续跑"：续跑 prompt 注入 hook 的 `reason`/`additional_context`，payload 增加 `stop_hook_active`（Claude 语义字段），上限 `_MAX_SUBAGENT_STOP_CONTINUATIONS = 5` 防死循环；error/cancel 不复活；只有非阻断 stop 后才走既有销毁（同一 child runtime，无第二个 worker loop）。
+
+### R3 真实生命周期钩子接线（同一 HookStore）
+- 手动压缩：`compact_session(hook_store=…)`，compact 端点传入 server 共享 `_hook_store()`（插件 hooks 可见）；压缩真实发生（结果含 `before_tokens`）后触发 PostCompact（trigger=manual）。压缩主体闭包提为 `_compact_session_sync` 实例方法（可测试缝）。
+- 自动压缩：Hermes fork 在压缩边界真实发出的 `session:compress` 事件桥接为 PostCompact（trigger=automatic），经 `run_turn` 新参 `lifecycle_hook_callback` → orchestrator 的 `user_hook_callback`，worker 线程 fire-and-forget 不阻塞。
+- SessionEnd：接在两个真实销毁点——`DELETE /api/conversations/{id}` 成功后（reason=delete）、子任务会话收尾（reason=子任务结束状态）。未制造 Atlas 不存在的生命周期事件。
+
+### R4 自定义命令元数据单次生效
+- 后端 `run.start` 新增 `tool_allow`/`tool_deny`（非空字符串列表校验，非法→run.failed validation）；在 profile 赋值后覆盖，仅本 run 生效（`model` 沿用既有字段）。
+- 前端：`RunStartRequest` 增补类型；store 新增 `pendingRunOverrides`（`model/tool_allow/tool_deny`），`startRun` 消费即清空（与 `nextRunMode` 同款一次性语义）；`runCustomCommand` 把 render 结果写入 overrides。Recipe 路径不变，不落对话全局设置。
+
+### 测试（聚焦，未跑全量）
+| 套件 | 结果 |
+| --- | --- |
+| test_c4_hooks.py（permission 5 条 + subagentstop continue/cap 新增） | ✅ |
+| test_c4r_lifecycle.py（新增 7：PreCompact 经传入 store 阻断 / PostCompact manual 落盘载荷 / empty_session 不触发 / SessionEnd delete 成功路径 + 404 不触发 / `_fire_lifecycle_hook` 3 条） | ✅ |
+| C4 六文件合并（hooks/lifecycle/wiring/skills_commands/external_import/plugin_e2e） | 50 passed |
+| 相邻回归（test_c1_lifecycle_subtask / test_hermes_runtime_e2e / test_agent） | 30 passed |
+| renderer tsc --noEmit | ✅ |
+| Vitest 全量（9 文件，含新增 overrides 两条：首跑带 model/tool_allow/tool_deny 且清空、次跑不继承） | 43 passed |
+
+### 备注
+- 自动压缩 PostCompact 桥未做端到端测试（需真 Hermes 会话，任务书允许）；以 `_fire_lifecycle_hook` 单测 + 代码路径评审覆盖。
+- 命令 frontmatter 的 `model` 原样透传为 Atlas 模型 id；Claude 侧模型别名（sonnet/opus）不做映射（超出本任务书范围）。
+- `docs/plan/CORE-PARITY.md` E3/E5 两行措辞已按现状修正。

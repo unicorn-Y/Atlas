@@ -265,6 +265,9 @@ class AgentRunContext:
 
 
 _EVENT_STREAM_DONE = object()
+# A SubagentStop hook may demand that the same child keeps working; cap the
+# continuations so an always-blocking hook cannot spin the child forever.
+_MAX_SUBAGENT_STOP_CONTINUATIONS = 5
 
 
 class _RuntimeFailureError(Exception):
@@ -501,6 +504,8 @@ class AgentOrchestrator:
             f"目标：{goal}\n补充信息：{context or '无'}"
         )
         status = "completed"
+        prompt = worker_prompt
+        stop_continuations = 0
         parent_approval = options.get("approval_callback")
         child_role = str(options.get("agent_role", "leaf"))
         child_depth = int(options.get("depth", 0))
@@ -528,64 +533,88 @@ class AgentOrchestrator:
             return await response if hasattr(response, "__await__") else response
 
         try:
-            async for event in self.run(
-                worker_prompt, conversation_id=conversation_id,
-                model=options.get("model"), cancel_event=cancel_event,
-                approval_callback=approval_callback,
-                workspace=cwd, mode="act", tool_allow=options.get("tool_allow"),
-                tool_deny=list(options.get("tool_deny") or []) + delegate_denials + [
-                    "subtask_message", "subtask_status",
-                ], permission_mode=options.get("permission_mode", "full_access"),
-                allowed_paths=options.get("allowed_paths") or [],
-                steer_queue=options.get("steer_queue"),
-                workspace_trusted=bool(options.get("workspace_trusted", False)),
-                agent_role=child_role, agent_depth=child_depth,
-                agent_type=str(options.get("agent_type", "general")),
-                user_hook_callback=options.get("user_hook_callback"),
-                ssh_tool_callback=options.get("ssh_tool_callback"),
-                ssh_checkpoint_callback=options.get("ssh_checkpoint_callback"),
-                sandbox_tool_callback=options.get("sandbox_tool_callback"),
-                sandbox_enabled=bool(options.get("sandbox_enabled")),
-                parent_process_event_callback=options.get("parent_process_event_callback"),
-                subtask_started=options.get("subtask_started"),
-                subtask_progress=options.get("subtask_progress"),
-                subtask_completed=options.get("subtask_completed"),
-                subtask_group_completed=options.get("subtask_group_completed"),
-                run_id=subtask_id, worker=True,
-            ):
-                kind = event.get("type")
-                if kind == "chunk":
-                    text = str(event.get("content", ""))
-                    outputs.append(text)
-                    result = on_progress(text)
-                    if hasattr(result, "__await__"):
-                        await result
-                elif kind == "tool_call":
-                    name = str(event.get("name", "操作"))
-                    args = event.get("arguments", {})
-                    path = args.get("path") if isinstance(args, dict) else None
-                    label = f"处理操作：{name}" + (f"（{Path(path).name}）" if path else "")
-                    result = on_progress(label)
-                    if hasattr(result, "__await__"):
-                        await result
-                elif kind == "run_usage":
-                    usage.append(dict(event.get("usage") or {}))
-                elif kind == "error":
-                    status = "failed"
-                    raise RuntimeError(str(event.get("detail") or "子任务执行失败。"))
-                elif kind == "cancelled":
-                    status = "cancelled"
-                    break
-            if cancel_event.is_set():
-                status = "cancelled"
-            elif status == "completed" and not "".join(outputs).strip():
-                # A worker that says nothing did not finish its task, whatever the loop reported.
-                status = "failed"
+            while True:
+                stop_outcome: dict[str, Any] = {}
+                try:
+                    async for event in self.run(
+                        prompt, conversation_id=conversation_id,
+                        model=options.get("model"), cancel_event=cancel_event,
+                        approval_callback=approval_callback,
+                        workspace=cwd, mode="act", tool_allow=options.get("tool_allow"),
+                        tool_deny=list(options.get("tool_deny") or []) + delegate_denials + [
+                            "subtask_message", "subtask_status",
+                        ], permission_mode=options.get("permission_mode", "full_access"),
+                        allowed_paths=options.get("allowed_paths") or [],
+                        steer_queue=options.get("steer_queue"),
+                        workspace_trusted=bool(options.get("workspace_trusted", False)),
+                        agent_role=child_role, agent_depth=child_depth,
+                        agent_type=str(options.get("agent_type", "general")),
+                        user_hook_callback=options.get("user_hook_callback"),
+                        ssh_tool_callback=options.get("ssh_tool_callback"),
+                        ssh_checkpoint_callback=options.get("ssh_checkpoint_callback"),
+                        sandbox_tool_callback=options.get("sandbox_tool_callback"),
+                        sandbox_enabled=bool(options.get("sandbox_enabled")),
+                        parent_process_event_callback=options.get("parent_process_event_callback"),
+                        subtask_started=options.get("subtask_started"),
+                        subtask_progress=options.get("subtask_progress"),
+                        subtask_completed=options.get("subtask_completed"),
+                        subtask_group_completed=options.get("subtask_group_completed"),
+                        run_id=subtask_id, worker=True,
+                    ):
+                        kind = event.get("type")
+                        if kind == "chunk":
+                            text = str(event.get("content", ""))
+                            outputs.append(text)
+                            result = on_progress(text)
+                            if hasattr(result, "__await__"):
+                                await result
+                        elif kind == "tool_call":
+                            name = str(event.get("name", "操作"))
+                            args = event.get("arguments", {})
+                            path = args.get("path") if isinstance(args, dict) else None
+                            label = f"处理操作：{name}" + (f"（{Path(path).name}）" if path else "")
+                            result = on_progress(label)
+                            if hasattr(result, "__await__"):
+                                await result
+                        elif kind == "run_usage":
+                            usage.append(dict(event.get("usage") or {}))
+                        elif kind == "error":
+                            status = "failed"
+                            raise RuntimeError(str(event.get("detail") or "子任务执行失败。"))
+                        elif kind == "cancelled":
+                            status = "cancelled"
+                            break
+                    if cancel_event.is_set():
+                        status = "cancelled"
+                    elif status == "completed" and not "".join(outputs).strip():
+                        # A worker that says nothing did not finish its task, whatever the loop reported.
+                        status = "failed"
+                finally:
+                    stop_outcome = await run_user_hook(
+                        options.get("user_hook_callback"), "SubagentStop", {
+                            "agent_type": child_agent_type, "subtask_id": subtask_id,
+                            "status": status,
+                            "stop_hook_active": stop_continuations > 0,
+                        },
+                    )
+                if (status != "cancelled" and stop_outcome.get("blocked")
+                        and stop_continuations < _MAX_SUBAGENT_STOP_CONTINUATIONS):
+                    # The hook demands more work: the same child session keeps
+                    # running, no second runtime and no new conversation.
+                    stop_continuations += 1
+                    reason = str(stop_outcome.get("reason")
+                                 or stop_outcome.get("additional_context") or "").strip()
+                    status = "completed"
+                    prompt = (
+                        f"你刚才试图结束任务，但有钩子要求继续：{reason or '继续完成目标'}\n"
+                        "请接着完成目标，完成后再次给出结论和证据。"
+                    )
+                    continue
+                break
             return {"status": status, "result": "".join(outputs) or "子任务没有给出结果。", "evidence": usage}
         finally:
-            await run_user_hook(options.get("user_hook_callback"), "SubagentStop", {
-                "agent_type": child_agent_type, "subtask_id": subtask_id,
-                "status": status,
+            await run_user_hook(options.get("user_hook_callback"), "SessionEnd", {
+                "conversation_id": conversation_id, "reason": status,
             })
             try:
                 from atlas.config import DATA_ROOT
@@ -1209,7 +1238,7 @@ class AgentOrchestrator:
                         user_hook_callback, "PermissionRequest",
                         {"tool_name": fn_name, "tool_input": fn_args},
                     )
-                    if hook_permission.get("blocked") or hook_permission.get("ask_user"):
+                    if hook_permission.get("blocked"):
                         detail = (
                             "这次操作被 hook 拦下："
                             + str(hook_permission.get("reason") or "Hook 要求人工确认")
@@ -1221,7 +1250,13 @@ class AgentOrchestrator:
                         if ctx.event_queue is not None:
                             await ctx.event_queue.put(events[-1])
                         continue
-                    choice = await ctx.approval_callback(f"approval:{tc_id}", fn_name, fn_args)
+                    if hook_permission.get("allowed"):
+                        updated_input = hook_permission.get("updated_input")
+                        if isinstance(updated_input, dict):
+                            fn_args.update(updated_input)
+                        choice = "allow"
+                    else:
+                        choice = await ctx.approval_callback(f"approval:{tc_id}", fn_name, fn_args)
                 if choice != "allow":
                     detail = "操作未获允许，因此已取消。需要执行的话，请在确认卡片中允许这次操作，或调整对话权限。"
                     result = {"content": [{"type": "text", "text": detail}], "is_error": True}
@@ -1360,7 +1395,7 @@ class AgentOrchestrator:
                     user_hook_callback, "PermissionRequest",
                     {"tool_name": fn_name, "tool_input": fn_args},
                 )
-                if hook_permission.get("blocked") or hook_permission.get("ask_user"):
+                if hook_permission.get("blocked"):
                     detail = (
                         "这次操作被 hook 拦下："
                         + str(hook_permission.get("reason") or "Hook 要求人工确认")
@@ -1372,21 +1407,27 @@ class AgentOrchestrator:
                     if getattr(ctx, "event_queue", None) is not None:
                         await ctx.event_queue.put(events[-1])
                     continue
-                approval_event_id = f"approval:{tc_id}"
-                events.append({
-                    "type": "approval_required",
-                    "event_id": approval_event_id,
-                    "tool_call_id": tc_id,
-                    "name": fn_name,
-                    "arguments": fn_args,
-                })
-                if getattr(ctx, "event_queue", None) is not None:
-                    await ctx.event_queue.put(events[-1])
+                if hook_permission.get("allowed"):
+                    updated_input = hook_permission.get("updated_input")
+                    if isinstance(updated_input, dict):
+                        fn_args.update(updated_input)
+                    choice = "allow"
+                else:
+                    approval_event_id = f"approval:{tc_id}"
+                    events.append({
+                        "type": "approval_required",
+                        "event_id": approval_event_id,
+                        "tool_call_id": tc_id,
+                        "name": fn_name,
+                        "arguments": fn_args,
+                    })
+                    if getattr(ctx, "event_queue", None) is not None:
+                        await ctx.event_queue.put(events[-1])
 
-                # Ask server layer for approval
-                choice = await ctx.approval_callback(
-                    approval_event_id, fn_name, fn_args
-                )
+                    # Ask server layer for approval
+                    choice = await ctx.approval_callback(
+                        approval_event_id, fn_name, fn_args
+                    )
 
                 if choice != "allow":
                     # Denied — skip this tool, return a synthetic error
@@ -2572,6 +2613,9 @@ class AgentOrchestrator:
                     else:
                         await runtime.event_queue.put(title_event)
 
+                async def lifecycle_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+                    return await run_user_hook(user_hook_callback, event_name, payload)
+
                 async for event in hermes.run_turn(
                     message=message,
                     user_content=model_input,
@@ -2590,6 +2634,7 @@ class AgentOrchestrator:
                     moa_enabled=runtime.moa_enabled,
                     model_id=runtime.model,
                     title_callback=on_session_title,
+                    lifecycle_hook_callback=(lifecycle_hook if user_hook_callback else None),
                 ):
                     if event.get("type") == "hermes.result":
                         final_result = event.get("result", {})

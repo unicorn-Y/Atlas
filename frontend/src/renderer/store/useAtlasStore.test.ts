@@ -260,3 +260,33 @@ describe('steering a running run', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('custom command run overrides', () => {
+  const conversation = { id: 'c-cmd', title: 'Existing chat', created_at: '2026-09-26', updated_at: '2026-09-26' };
+
+  it('applies rendered command metadata to the next run only', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 } as Response));
+    useAtlasStore.setState({
+      activeConversationId: 'c-cmd', conversations: [conversation], model: 'm1',
+      runs: [], queue: {}, queuePaused: {}, pendingSteers: {}, runPrompts: {}, worktreeRequests: {}, unread: [], followUpMode: 'steer',
+      pendingRunOverrides: { model: 'm2', tool_allow: ['read_office'], tool_deny: ['execute_command'] },
+    });
+    const startRun = vi.spyOn(backend, 'startRun').mockImplementation(() => Promise.resolve());
+
+    await useAtlasStore.getState().sendMessage('hi');
+
+    const first = startRun.mock.calls[0][0];
+    expect(first).toMatchObject({ model: 'm2', tool_allow: ['read_office'], tool_deny: ['execute_command'] });
+    expect(useAtlasStore.getState().pendingRunOverrides).toBeNull();
+
+    useAtlasStore.getState().appendEvent({ id: 'e-done', runId: first.run_id, sequence: 1, type: 'run.completed', timestamp: new Date().toISOString(), data: {} });
+
+    await useAtlasStore.getState().sendMessage('again');
+
+    const second = startRun.mock.calls[1][0];
+    expect(second.model).toBe('m1');
+    expect('tool_allow' in second).toBe(false);
+    expect('tool_deny' in second).toBe(false);
+    vi.restoreAllMocks();
+  });
+});

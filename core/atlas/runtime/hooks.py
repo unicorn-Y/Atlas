@@ -209,6 +209,11 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
                 ))
             elif decision.get("behavior") == "ask":
                 outcome["ask_user"] = True
+            elif decision.get("behavior") == "allow":
+                outcome["allowed"] = True
+                updated = decision.get("updatedInput")
+                if isinstance(updated, Mapping):
+                    outcome["updated_input"] = dict(updated)
     else:
         if value.get("decision") == "block":
             outcome.update(blocked=True, reason=str(value.get("reason") or "Blocked by hook"))

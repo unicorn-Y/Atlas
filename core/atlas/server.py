@@ -1681,6 +1681,7 @@ async def compact_conversation(
     ).compact_session(
         conversation_id=conversation_id, workspace=conv.get("workspace"),
         focus_topic=str((req or {}).get("focus_topic") or (req or {}).get("note") or "").strip() or None,
+        hook_store=_hook_store(),
     )
 
 
@@ -1691,10 +1692,15 @@ async def delete_conversation(conversation_id: str) -> dict[str, str]:
     from atlas.config import DATA_ROOT
     from atlas.engine.session_sync import delete_session
 
+    conv = await memory.get_conversation(conversation_id)
     await asyncio.to_thread(delete_session, DATA_ROOT / "engine", conversation_id)
     ok = await memory.delete_conversation(conversation_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    # Real session destruction point: fire SessionEnd after the delete succeeded.
+    await _hook_store().execute("SessionEnd", {
+        "conversation_id": conversation_id, "reason": "delete",
+    }, cwd=conv.get("workspace") if conv else None)
     return {"status": "ok", "conversation_id": conversation_id}
 
 
@@ -6401,6 +6407,17 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     model_id = data.get("model", (profile or {}).get("model"))
     reasoning_effort = data.get("reasoning_effort", (profile or {}).get("reasoning_effort"))
     permission_mode = data.get("permission_mode")
+    run_tool_allow = data.get("tool_allow")
+    run_tool_deny = data.get("tool_deny")
+    if (run_tool_allow is not None and (not isinstance(run_tool_allow, list)
+            or any(not isinstance(item, str) or not item for item in run_tool_allow))) or (
+            run_tool_deny is not None and (not isinstance(run_tool_deny, list)
+            or any(not isinstance(item, str) or not item for item in run_tool_deny))):
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "tool_allow/tool_deny 必须是非空字符串列表",
+        }))
+        return
     allowed_paths = data.get("allowed_paths")
     if allowed_paths is not None and (not isinstance(allowed_paths, list) or any(
             not isinstance(item, str) or not Path(item).is_absolute() for item in allowed_paths)):
@@ -6495,6 +6512,11 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         if profile.get("instructions"):
             active_skill_instructions = [*active_skill_instructions,
                 {"name": f"profile:{profile_id}", "content": profile["instructions"]}]
+    # A one-run override (e.g. custom command frontmatter) wins over the profile for this run only.
+    if run_tool_allow is not None:
+        run.tool_allow = run_tool_allow
+    if run_tool_deny is not None:
+        run.tool_deny = run_tool_deny
     workspace = requested_workspace
     conversation = None
     if memory is not None and getattr(memory, "_db", None) is not None:

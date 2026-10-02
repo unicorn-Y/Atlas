@@ -14,6 +14,8 @@ export interface Outgoing { content: string; attachments: string[]; files: RunFi
 export interface QueuedMessage extends Outgoing { id: string }
 /** How a message typed while a run is working is delivered: folded into the run now, or run afterwards. */
 export type FollowUpMode = 'steer' | 'redirect' | 'queue';
+/** Command-parsed metadata (model, tool allow/deny) that applies to exactly one run, then is discarded. */
+export interface PendingRunOverrides { model?: string; tool_allow?: string[]; tool_deny?: string[] }
 
 export const backend = new BackendAdapter({ baseUrl: desktopApiBaseUrl || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8765' });
 
@@ -57,6 +59,8 @@ interface AtlasState {
   followUpMode: FollowUpMode;
   /** Mode for the next message: `plan` explores read-only and waits for approval. Resets after sending. */
   nextRunMode: 'act' | 'plan';
+  /** Metadata a custom command parsed (model, tool allow/deny); consumed by the next run, then cleared. */
+  pendingRunOverrides: PendingRunOverrides | null;
   /** Answers given to Agent questions, by input event id. */
   answers: Record<string, string>;
   unread: string[];
@@ -104,6 +108,8 @@ interface AtlasState {
   dismissError: () => void;
   setFollowUpMode: (mode: FollowUpMode) => void;
   setNextRunMode: (mode: 'act' | 'plan') => void;
+  /** One-run overrides from custom command metadata; the next startRun consumes and clears them. */
+  setPendingRunOverrides: (overrides: PendingRunOverrides | null) => void;
   removeQueued: (conversationId: string, id: string) => void;
   takeQueued: (conversationId: string, id: string) => QueuedMessage | undefined;
   sendQueuedNow: (conversationId: string, id: string) => void;
@@ -183,7 +189,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     mode: 'mock', connected: false, busy: false, paused: false, error: null,
     model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
-    queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', answers: {},
+    queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', pendingRunOverrides: null, answers: {},
     unread: [], pinned: [], archived: [], runPrompts: {},
     profiles: [], recipes: [], customCommands: [], profileId: storageGet(PROFILE) ?? 'default',
     reasoningEffort: (['minimal', 'low', 'medium', 'high'].includes(storageGet(REASONING) ?? '') ? storageGet(REASONING) : '') as ReasoningEffort | '',
@@ -465,6 +471,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     dismissError: () => set({ error: null }),
     setFollowUpMode: (followUpMode) => { storageSet(FOLLOW_UP, followUpMode); set({ followUpMode }); },
     setNextRunMode: (nextRunMode) => set({ nextRunMode }),
+    setPendingRunOverrides: (pendingRunOverrides) => set({ pendingRunOverrides }),
 
     removeQueued: (conversationId, id) => set((state) => {
       const rest = (state.queue[conversationId] ?? []).filter((item) => item.id !== id);
@@ -725,8 +732,9 @@ async function startRun(conversationId: string, item: QueuedMessage) {
     }
   }
   const mode = get().nextRunMode;
+  const overrides = get().pendingRunOverrides;
   const run = get().createRun(conversationId, conversation?.title ?? content.slice(0, 80));
-  set((current) => ({ runPrompts: { ...current.runPrompts, [run.id]: { content, attachments, files, refs: item.refs } }, nextRunMode: 'act' }));
+  set((current) => ({ runPrompts: { ...current.runPrompts, [run.id]: { content, attachments, files, refs: item.refs } }, nextRunMode: 'act', pendingRunOverrides: null }));
   const handleEvent = (envelope: RuntimeEventEnvelope) => {
     if (!isRuntimeEvent(envelope)) return;
     const event = normalizeRuntimeEvent(envelope);
@@ -738,11 +746,13 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const supportsEffort = Boolean(state.models.find((model) => model.id === state.model)?.supports_reasoning_effort);
   if (worktree) useAtlasStore.getState().requestWorktree(conversationId, null);
   void backend.startRun({
-    type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: state.model, attachments, active_skills: state.activeSkills,
+    type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: overrides?.model ?? state.model, attachments, active_skills: state.activeSkills,
     ...(files.length ? { files } : {}), ...(mode === 'plan' ? { mode } : {}), ...(workspace ? { workspace } : {}),
     ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),
     ...(state.reasoningEffort && supportsEffort ? { reasoning_effort: state.reasoningEffort } : {}),
     ...(worktree && !conversation?.worktree_path ? { worktree } : {}),
+    ...(overrides?.tool_allow ? { tool_allow: overrides.tool_allow } : {}),
+    ...(overrides?.tool_deny?.length ? { tool_deny: overrides.tool_deny } : {}),
     // Always explicit: the backend falls back to the conversation's saved settings when a field is missing.
     permission_mode: conversation?.permission_mode ?? 'full_access',
     executor: conversation?.executor || 'atlas',
