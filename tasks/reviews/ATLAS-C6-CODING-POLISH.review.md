@@ -1,60 +1,72 @@
 # ATLAS-C6-CODING-POLISH Review
 
-Verdict: **PARTIAL — two small hard gaps remain before C6 can close.**
+Verdict: **PASS — C6 is closed.**
 
-Reviewed main head:
-- `51d14c1`
+Reviewed final main implementation through:
+- `5dae93e7664c93e55f80d0fc7ca9ca75fced45d5`
 
-## Accepted
+## Accepted scope
 
-The bulk of C6 is accepted and must not be reopened:
+C6 is accepted end to end:
 
-- T8 LSP core remains the accepted C6A implementation; Atlas added the thin native write-path bridge, events, Changes UI and LSP status UI.
-- P1 `/init`: deterministic project scan, managed AGENTS.md section, diff preview, confirmation-before-write and idempotent rerun.
-- P2 `/review`: working tree / branch / commit scopes, existing child runtime, read-only reviewer posture, structured findings and review cards.
-- long-session work: react-virtuoso virtualization, event batching, newest-page pagination, bounded conversation cache and measured 2000-message benchmark.
-- C6 fake-model main-chain E2E is present.
-- reported backend full suite: **1290 passed, 9 skipped** before the final narrow review-policy tightening; the final review-policy changes have focused regression coverage.
-- renderer/electron typecheck, Vitest, backend-adapter tests and Vite build passed.
-- UX polish and screenshots are accepted.
+- **T8 LSP diagnostics**: accepted C6A core plus Atlas write-path/UI wiring.
+- **P1 /init**: project scan, AGENTS.md managed section, preview-before-write, confirmation and idempotent rerun.
+- **P2 /review**: working-tree/branch/commit scopes, existing child runtime, structurally read-only reviewer, findings UI and fix handoff.
+- **Long-session performance**: virtualized timeline, batched deltas, newest-page pagination, bounded conversation cache and measured 2000-message benchmark.
+- **Core UX polish**: accepted.
+- **Fake-model main-chain E2E**: accepted.
+- **C6R closeout**: both prior blockers are closed.
 
-## Blocker 1 — V4A path-less patch bypasses the LSP seam
+## C6R verification
 
-Current LSP seam in `core/atlas/engine/tool_registry.py` requires `args["path"]`.
+### 1. V4A path-less patch now participates in Atlas LSP delta reporting
 
-Hermes' V4A whole-repository patch mode can call the native `patch` tool without a top-level `path`; therefore:
-- `_lsp_pre_write()` returns the skip sentinel;
-- no pre-edit diagnostics baseline is taken;
-- no post-edit delta is attached/emitted.
+Verified in `core/atlas/engine/tool_registry.py`:
 
-This is not merely cosmetic because GPT/Codex-family models use the V4A patch path.
+- path-less V4A parsing reuses Hermes' existing `tools.file_tools._collect_v4a_header_paths`;
+- Atlas snapshots each touched file before the native patch;
+- Hermes' native patch result supplies `files_modified` (absolute resolved paths);
+- Atlas reuses the existing `report_after_edit` path per file;
+- normal per-file `lsp.diagnostics` events are emitted only for files with new diagnostics;
+- delete/unreadable/zero-diagnostic cases stay non-fatal and quiet;
+- normal single-path write_file/patch continues through the original branch.
 
-Required:
-- for a path-less V4A patch, determine the actual touched file paths from the patch payload/result using the existing Hermes V4A parser/result metadata rather than writing a second patch parser if possible;
-- snapshot all touched local files before the patch;
-- after success, collect delta diagnostics for each touched file;
-- append a compact combined diagnostics block to the tool result and emit the normal per-file `lsp.diagnostics` events;
-- preserve the existing single-path write_file/patch behavior;
-- SSH remains excluded;
-- zero new diagnostics remains silent.
+Hermes fork source confirms `files_modified` is populated from resolved patch paths, so the post-edit matching is grounded in the native patch implementation rather than a second parser.
 
-## Blocker 2 — review card does not actually navigate to the finding line
+Focused evidence:
+- `test_c6_lsp_wiring.py`: **14 passed**
+- C1 tool-policy regression: **7 passed**
+- C1 tool-workspace regression: **2 passed**
 
-The C6 taskbook requires review findings to support **打开文件/定位行**.
+### 2. Review finding opens Atlas's internal file view and locates the line
 
-Current `ReviewFindingsCard.tsx` calls Electron `shell.openPath(target)`. It opens the file in the OS default app and only displays a note saying the problem is on line N; no line navigation occurs.
+Verified:
 
-Required:
-- the review finding action must open the file in Atlas's own file/code view and position/highlight the finding line (or range start);
-- reuse the existing FilesPanel/code preview path instead of creating a second editor;
-- if a finding has no line, opening the file alone is acceptable;
-- browser/dev mode without Electron must still work through the Atlas internal file view.
+- `ReviewFindingsCard` calls `requestFileOpen(file, line)`, not Electron `shell.openPath`;
+- the store uses a nonce-bearing internal open request so the same target can be requested repeatedly;
+- `App` switches the inspector to the Files tab;
+- `FilesPanel` expands ancestors, selects the file, enters code mode, records the requested line, renders line anchors and scrolls the target line into view;
+- the earlier clobber bug is fixed: line/mode reset happens only through the explicit manual-browse `selectFile` path, not a generic `[selected]` effect;
+- browser/dev renderer works because the flow no longer depends on Electron IPC.
 
-## Non-blockers
+Focused evidence:
+- renderer TypeScript: PASS
+- renderer Vitest: **84 passed / 14 files**
 
-These are recorded honestly but do not block C6 closeout:
-- cold conversation switch occasionally measured 250–350 ms around the 300 ms target; the taskbook allows real measured numbers when timing noise is present;
-- real pyright/typescript server smoke was skipped because servers were not installed; missing-server behavior is covered;
-- `test_computer_use.py` remains intentionally excluded.
+The lack of a DOM-mounted scroll assertion is recorded as a test limitation, not a production blocker; the state/effect/render chain is explicit and code-reviewed.
 
-Fix only the two blockers above. Do not reopen /init, /review engine, virtualization, UX polish or the C6A LSP core.
+## Other accepted evidence
+
+- backend full suite from C6 before the final narrow C6R changes: **1290 passed / 9 skipped**
+- final narrow C6/C6R changes have focused regression coverage
+- renderer/electron checks and Vite build from C6: PASS
+- backend-adapter tests from C6: PASS
+- six C6 screenshots accepted
+
+## Non-blocking known limits
+
+- cold large-conversation switch occasionally measured around 250–350 ms;
+- real pyright/typescript smoke was not run because servers were intentionally not auto-installed;
+- `test_computer_use.py` remains intentionally excluded per project rules.
+
+**C1–C6 core construction is now closed.**
