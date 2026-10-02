@@ -4,6 +4,7 @@ import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, CustomModelU
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
+import { createEventBuffer } from '../services/eventBuffer';
 
 const desktopApiBaseUrl = typeof window === 'undefined' ? undefined : window.atlasDesktop?.apiBaseUrl;
 
@@ -50,6 +51,10 @@ interface AtlasState {
   loadingMessagesConversationId: string | null;
   creatingConversation: boolean;
   conversationMessages: Record<string, ConversationMessage[]>;
+  /** 每个会话是否还有更早的历史消息（拉到没有更早的一页后变 false）。 */
+  messagesHasEarlier: Record<string, boolean>;
+  /** 正在向上翻页（加载更早消息）的会话。 */
+  loadingEarlierConversationId: string | null;
   activeConversationId: string;
   runs: AgentRun[];
   activeRunId: string | null;
@@ -82,6 +87,8 @@ interface AtlasState {
   worktreeRequests: Record<string, { base_branch?: string }>;
   initialize: () => Promise<void>;
   openConversation: (conversation: ConversationSummary) => Promise<void>;
+  /** 向上翻页：把当前已载入最早一条之前的一页历史拼到前面（滚动到顶部时调用）。 */
+  loadEarlier: (conversationId: string) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
   selectModel: (model: string) => Promise<void>;
   applySkill: (name: string) => void;
@@ -155,6 +162,42 @@ interface AtlasState {
 }
 
 const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
+
+// -- 长会话有界化：消息分页 + 会话正文的 LRU 缓存 --
+const MESSAGE_PAGE_SIZE = 100;
+const MESSAGE_CACHE_LIMIT = 10;
+/** 会话正文缓存的触达顺序（最旧在前）；只用于淘汰，不参与渲染。 */
+const messageCacheOrder: string[] = [];
+function touchMessageCache(conversationId: string) {
+  const at = messageCacheOrder.indexOf(conversationId);
+  if (at >= 0) messageCacheOrder.splice(at, 1);
+  messageCacheOrder.push(conversationId);
+}
+/** 缓存的会话数超上限时淘汰最久没看的（正在看的永不淘汰）。 */
+function pruneMessageCache(activeId: string) {
+  while (messageCacheOrder.length > MESSAGE_CACHE_LIMIT) {
+    const oldest = messageCacheOrder.find((id) => id !== activeId);
+    if (!oldest) break;
+    messageCacheOrder.splice(messageCacheOrder.indexOf(oldest), 1);
+    useAtlasStore.setState((state) => {
+      if (!(oldest in state.conversationMessages)) return state;
+      const { [oldest]: _dropped, ...conversationMessages } = state.conversationMessages;
+      const { [oldest]: _hasEarlier, ...messagesHasEarlier } = state.messagesHasEarlier;
+      return { conversationMessages, messagesHasEarlier };
+    });
+  }
+}
+
+async function reloadMessages(conversationId: string) {
+  // 只拉最新一页（后端契约：返回最新 limit 条，升序）；更早的由 loadEarlier 按需翻页。
+  const messages = await backend.getMessages(conversationId, { limit: MESSAGE_PAGE_SIZE });
+  touchMessageCache(conversationId);
+  pruneMessageCache(useAtlasStore.getState().activeConversationId);
+  useAtlasStore.setState((state) => ({
+    conversationMessages: { ...state.conversationMessages, [conversationId]: messages },
+    messagesHasEarlier: { ...state.messagesHasEarlier, [conversationId]: messages.length >= MESSAGE_PAGE_SIZE },
+  }));
+}
 const storageGet = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
 const storageSet = (key: string, value: string | null) => {
   try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch { /* storage unavailable */ }
@@ -199,7 +242,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
   return {
     apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, busy: false, paused: false, error: null,
-    model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
+    model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', pendingRunOverrides: null, answers: {},
     unread: [], pinned: [], archived: [], runPrompts: {},
@@ -239,13 +282,42 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const run = [...get().runs].reverse().find((item) => item.conversationId === conversation.id);
       set((state) => ({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null, error: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id) }));
       if (run && !terminal.has(run.status)) return;
-      set({ loadingMessagesConversationId: conversation.id });
+      // 缓存过的会话先立刻显示上次的内容，刷新在后台进行，不再闪「正在载入」。
+      if (!get().conversationMessages[conversation.id]) set({ loadingMessagesConversationId: conversation.id });
+      touchMessageCache(conversation.id);
+      pruneMessageCache(conversation.id);
       try {
         await reloadMessages(conversation.id);
       } catch (error) {
         if (get().activeConversationId === conversation.id) fail(error, '无法读取对话历史');
       } finally {
         if (get().loadingMessagesConversationId === conversation.id) set({ loadingMessagesConversationId: null });
+      }
+    },
+
+    loadEarlier: async (conversationId) => {
+      const state = get();
+      if (state.loadingEarlierConversationId || state.messagesHasEarlier[conversationId] === false) return;
+      const loaded = state.conversationMessages[conversationId];
+      const oldest = loaded?.[0];
+      if (!oldest?.id) return;
+      set({ loadingEarlierConversationId: conversationId });
+      try {
+        const page = await backend.getMessages(conversationId, { limit: MESSAGE_PAGE_SIZE, beforeId: oldest.id });
+        touchMessageCache(conversationId);
+        useAtlasStore.setState((current) => {
+          const existing = current.conversationMessages[conversationId] ?? [];
+          const known = new Set(existing.map((message) => message.id));
+          const fresh = page.filter((message) => !known.has(message.id));
+          return {
+            conversationMessages: fresh.length ? { ...current.conversationMessages, [conversationId]: [...fresh, ...existing] } : current.conversationMessages,
+            messagesHasEarlier: { ...current.messagesHasEarlier, [conversationId]: page.length >= MESSAGE_PAGE_SIZE },
+          };
+        });
+      } catch (error) {
+        if (get().activeConversationId === conversationId) fail(error, '无法读取更早的消息');
+      } finally {
+        if (get().loadingEarlierConversationId === conversationId) set({ loadingEarlierConversationId: null });
       }
     },
 
@@ -607,6 +679,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       if (running) backend.cancelRun(running.id);
       try {
         await backend.deleteConversation(id);
+        const cacheAt = messageCacheOrder.indexOf(id);
+        if (cacheAt >= 0) messageCacheOrder.splice(cacheAt, 1);
         set((state) => {
           const { [id]: _messages, ...conversationMessages } = state.conversationMessages;
           const { [id]: _queue, ...queue } = state.queue;
@@ -635,7 +709,17 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     exportConversation: async (id, format = 'json') => {
       const conversation = get().conversations.find((item) => item.id === id);
       try {
-        const messages = await backend.getMessages(id);
+        // 导出要完整历史：按 before_id 一页页往前翻到头（后端单页上限 1000）。
+        const batches: ConversationMessage[][] = [];
+        let beforeId: string | undefined;
+        for (let page = 0; page < 200; page++) {
+          const loaded = await backend.getMessages(id, { limit: 1000, ...(beforeId ? { beforeId } : {}) });
+          if (!loaded.length) break;
+          batches.push(loaded);
+          beforeId = loaded[0]?.id;
+          if (loaded.length < 1000) break;
+        }
+        const messages = batches.reverse().flat();
         const safeTitle = (conversation?.title ?? id).replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 60);
         if (format === 'md') {
           const title = conversation?.title ?? '对话';
@@ -767,11 +851,6 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
   };
 });
 
-async function reloadMessages(conversationId: string) {
-  const messages = await backend.getMessages(conversationId);
-  useAtlasStore.setState((state) => ({ conversationMessages: { ...state.conversationMessages, [conversationId]: messages } }));
-}
-
 /** Push pins and archives saved by older builds to the backend, then forget the local copy. */
 async function migrateLegacyFlags(conversations: ConversationSummary[]): Promise<ConversationSummary[]> {
   const pinned = new Set(readList(LEGACY_PINNED));
@@ -820,10 +899,12 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const overrides = get().pendingRunOverrides;
   const run = get().createRun(conversationId, conversation?.title ?? content.slice(0, 80));
   set((current) => ({ runPrompts: { ...current.runPrompts, [run.id]: { content, attachments, files, refs: item.refs } }, nextRunMode: 'act', pendingRunOverrides: null }));
+  // 流式 delta 按 ~12.5Hz 合并进 store；其余事件先冲出攒着的 delta 再立即透传，顺序不变。
+  const buffer = createEventBuffer((events) => { for (const event of events) get().appendEvent(event); });
   const handleEvent = (envelope: RuntimeEventEnvelope) => {
     if (!isRuntimeEvent(envelope)) return;
     const event = normalizeRuntimeEvent(envelope);
-    if (event) get().appendEvent(event);
+    if (event) buffer.push(event);
   };
   const workspace = typeof conversation?.workspace === 'string' && conversation.workspace ? conversation.workspace : undefined;
   const state = get();
@@ -851,7 +932,8 @@ async function startRun(conversationId: string, item: QueuedMessage) {
       set({ mode: backend.mode, connected: backend.mode === 'backend', error: errorText(error, '运行启动失败') });
       const current = get().getRun(run.id);
       if (current && !terminal.has(current.status)) get().appendEvent({ id: `${run.id}:transport-failure`, runId: run.id, sequence: current.lastEventSequence + 1, type: 'run.failed', timestamp: new Date().toISOString(), data: { detail: errorText(error, '运行启动失败') } });
-    });
+    })
+    .finally(() => buffer.dispose());
 }
 
 function activeRunFor(conversationId: string): AgentRun | undefined {

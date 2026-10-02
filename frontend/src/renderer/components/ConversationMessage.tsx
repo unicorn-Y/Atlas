@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
@@ -13,8 +13,18 @@ const MARKDOWN_COMPONENTS = {
   },
 };
 
-/** One chat turn. The user speaks in the UI face inside a bubble; Atlas answers in serif, unboxed. */
-export default function ConversationMessage({ role, content, username, status, working = false, continued = false, note, actions }: {
+const MARKDOWN_PLUGINS = { remarkPlugins: [remarkGfm], rehypePlugins: [rehypeHighlight], components: MARKDOWN_COMPONENTS };
+
+/** 还在流式输出的回复：先按纯文本渲染（保留换行），message.completed 后再换完整 Markdown 渲染。 */
+function StreamingText({ content }: { content: string }) {
+  return <div className="prose-atlas whitespace-pre-wrap break-words">{content}</div>;
+}
+
+/**
+ * One chat turn. The user speaks in the UI face inside a bubble; Atlas answers in serif, unboxed.
+ * memo 化：历史消息在流式输出期间属性不变，不随每次 delta 重渲染。
+ */
+const ConversationMessage = memo(function ConversationMessage({ role, content, username, status, working = false, continued = false, note, actions, streaming = false }: {
   role: 'user' | 'assistant'; content: string; username: string; status?: string; working?: boolean;
   /** Small label above a user bubble, e.g. that it was folded into a running task. */
   note?: string;
@@ -22,10 +32,12 @@ export default function ConversationMessage({ role, content, username, status, w
   actions?: ReactNode;
   /** Part of an Atlas turn that already showed its header; renders just the text, aligned under it. */
   continued?: boolean;
+  /** 仍在生成中：用轻量纯文本渲染，落定后再切回完整 Markdown。 */
+  streaming?: boolean;
 }) {
   if (role === 'assistant' && continued) {
     return <div className="my-3 pl-10" data-message-role="assistant">
-      <div className="prose-atlas"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={MARKDOWN_COMPONENTS}>{content}</ReactMarkdown></div>
+      <div className="prose-atlas">{streaming ? <StreamingText content={content} /> : <ReactMarkdown {...MARKDOWN_PLUGINS}>{content}</ReactMarkdown>}</div>
     </div>;
   }
   if (role === 'user') {
@@ -42,8 +54,10 @@ export default function ConversationMessage({ role, content, username, status, w
         <b className="font-serif text-[14px] font-semibold tracking-[.04em] text-heading">Atlas</b>
         {status && <span className="text-[12px] text-fg-3">{status}</span>}
       </div>
-      <div className="prose-atlas"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={MARKDOWN_COMPONENTS}>{content}</ReactMarkdown></div>
+      {streaming ? <StreamingText content={content} /> : <div className="prose-atlas"><ReactMarkdown {...MARKDOWN_PLUGINS}>{content}</ReactMarkdown></div>}
       {actions && <div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">{actions}</div>}
     </div>
   </div>;
-}
+});
+
+export default ConversationMessage;

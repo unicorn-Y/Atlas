@@ -147,6 +147,13 @@ export function describeTool(name: string, args: unknown): { verb: string; targe
 
 const text = (value: unknown) => typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value, null, 2);
 
+/** 步骤详情最多保留的字符数：超长工具输出只留头尾够用的部分，避免大输出撑爆内存和 DOM。 */
+const MAX_STEP_TEXT = 4000;
+const cap = (value: string) => value.length > MAX_STEP_TEXT
+  ? `${value.slice(0, MAX_STEP_TEXT)}\n…（已截断，完整输出共 ${value.length} 个字符）`
+  : value;
+const appendCapped = (current: string, addition: string) => cap(current + addition);
+
 function imageToolResult(value: unknown): { preview?: string; summary?: string } {
   let result: any = value;
   if (typeof result === 'string') {
@@ -195,7 +202,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       case 'tool.started': {
         const key = String(data.tool_call_id || data.call_id || event.id);
         const { verb, target } = describeTool(String(data.name ?? '工具'), data.arguments ?? data.input);
-        const step: Step = { id: event.id, verb, target, state: 'running', startedAt: event.timestamp, input: text(data.arguments ?? data.input), output: '' };
+        const step: Step = { id: event.id, verb, target, state: 'running', startedAt: event.timestamp, input: cap(text(data.arguments ?? data.input)), output: '' };
         byExecution.set(key, step);
         if (!data.tool_call_id) byExecution.set(`name:${String(data.name)}`, step);
         closeReply();
@@ -208,24 +215,24 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         let step = (key && byExecution.get(key)) || byExecution.get(`name:${String(data.name)}`);
         if (!step || step.state !== 'running') {
           const { verb, target } = describeTool(String(data.name ?? '工具'), data.arguments ?? execution?.command);
-          step = { id: event.id, verb, target, state: 'running', startedAt: event.timestamp, input: text(data.arguments), output: '' };
+          step = { id: event.id, verb, target, state: 'running', startedAt: event.timestamp, input: cap(text(data.arguments)), output: '' };
           stepsBlock(event.id).steps.push(step);
         }
         step.state = execution?.state === 'cancelled' ? 'cancelled' : data.is_error ? 'failed' : 'done';
         step.endedAt = event.timestamp;
         const image = imageToolResult(data.result);
         step.imagePreview = image.preview;
-        step.result = image.summary || text(data.result);
+        step.result = image.summary || cap(text(data.result));
         if (typeof data.full_output_path === 'string') step.fullOutputPath = data.full_output_path;
         if (execution) {
-          const parts = [execution.stdout, execution.stderr].map(text).filter(Boolean);
+          const parts = [execution.stdout, execution.stderr].map((value) => cap(text(value))).filter(Boolean);
           if (parts.length && !step.output) step.output = parts.join('\n');
         }
         break;
       }
       case 'tool.output': {
         const step = byExecution.get(String(data.tool_call_id ?? '')) ?? byExecution.get(`name:${String(data.name)}`);
-        if (step) step.output += String(data.text ?? '');
+        if (step) step.output = appendCapped(step.output, String(data.text ?? ''));
         break;
       }
       case 'artifact.updated':
@@ -261,7 +268,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       case 'subtask.progress':
       case 'subtask.output': {
         const step = byExecution.get(`subtask:${String(data.subtask_id ?? '')}`);
-        if (step) step.output += `${String(data.text ?? '')}\n`;
+        if (step) step.output = appendCapped(step.output, `${String(data.text ?? '')}\n`);
         break;
       }
       case 'subtask.completed': {
@@ -269,7 +276,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         if (!step) break;
         step.state = data.status === 'failed' ? 'failed' : data.status === 'cancelled' ? 'cancelled' : 'done';
         step.endedAt = event.timestamp;
-        step.result = text(data.summary);
+        step.result = cap(text(data.summary));
         break;
       }
       case 'subtask.group_completed': {
@@ -345,7 +352,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         stepsBlock(event.id).steps.push({
           id: event.id, verb: data.exit_code === 2 ? 'Hook 拦下了这一步' : '运行 Hook', target: `${String(data.hook_id ?? '')} · ${String(data.event ?? '')}`,
           state: failed ? 'failed' : 'done', startedAt: event.timestamp, endedAt: event.timestamp,
-          result: `退出码 ${String(data.exit_code ?? '?')}，用时 ${String(data.duration_ms ?? '?')} ms`, output: String(data.output ?? ''),
+          result: `退出码 ${String(data.exit_code ?? '?')}，用时 ${String(data.duration_ms ?? '?')} ms`, output: cap(String(data.output ?? '')),
         });
         break;
       }

@@ -299,3 +299,68 @@ describe('custom command run overrides', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('message pagination and bounded cache', () => {
+  const message = (id: string) => ({ id, conversation_id: 'c', role: 'user' as const, content: id, created_at: '' });
+
+  it('defaults to the latest page and prepends an earlier one on loadEarlier', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ models: [], current: '' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'conversation-open', title: 'Open chat', updated_at: '' }] } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ servers: [], tool_count: 0, tools: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ capabilities: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'm-100', role: 'user', content: 'latest', created_at: '' }] } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ profiles: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => REASONING_STAGES } as Response);
+    fetchMock.mockImplementation((url: string) => {
+      if (String(url).includes('/messages?limit=100&before_id=m-100')) {
+        return Promise.resolve({ ok: true, json: async () => [message('m-20'), message('m-21')] } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => [] } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await useAtlasStore.getState().initialize();
+
+    const messagesUrl = String(fetchMock.mock.calls.find(([target]) => String(target).includes('/messages'))?.[0]);
+    expect(messagesUrl).toContain('/api/conversations/conversation-open/messages?limit=100');
+    expect(useAtlasStore.getState().conversationMessages['conversation-open'][0].content).toBe('latest');
+
+    useAtlasStore.setState({
+      activeConversationId: 'c-early', conversations: [{ id: 'c-early', title: 'Early' }],
+      conversationMessages: { 'c-early': [message('m-100')] }, messagesHasEarlier: { 'c-early': true },
+    });
+    await useAtlasStore.getState().loadEarlier('c-early');
+
+    const state = useAtlasStore.getState();
+    const earlierUrl = String(fetchMock.mock.calls.find(([target]) => String(target).includes('before_id'))?.[0]);
+    expect(earlierUrl).toContain('/api/conversations/c-early/messages?limit=100&before_id=m-100');
+    expect(state.conversationMessages['c-early'].map((item) => item.id)).toEqual(['m-20', 'm-21', 'm-100']);
+    // 一页没满 100 条 → 前面没有更早的了
+    expect(state.messagesHasEarlier['c-early']).toBe(false);
+    expect(state.loadingEarlierConversationId).toBeNull();
+  });
+
+  it('evicts the least recently viewed conversation history past 10 entries, never the active one', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      const match = /\/api\/conversations\/([^/]+)\/messages/.exec(String(url));
+      if (match) return Promise.resolve({ ok: true, json: async () => [message(`m-${match[1]}`)] } as Response);
+      return Promise.resolve({ ok: false, status: 503 } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useAtlasStore.setState({ conversations: [], conversationMessages: {}, messagesHasEarlier: {}, activeConversationId: '', runs: [] });
+
+    for (let index = 0; index < 12; index++) {
+      await useAtlasStore.getState().openConversation({ id: `c-lru-${index}`, title: `Chat ${index}` });
+    }
+
+    const state = useAtlasStore.getState();
+    expect(state.activeConversationId).toBe('c-lru-11');
+    expect(state.conversationMessages['c-lru-11']).toHaveLength(1);
+    expect(state.conversationMessages['c-lru-0']).toBeUndefined();
+    expect(state.conversationMessages['c-lru-1']).toBeUndefined();
+    expect(Object.keys(state.conversationMessages)).toHaveLength(10);
+  });
+});

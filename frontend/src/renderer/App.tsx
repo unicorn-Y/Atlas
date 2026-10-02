@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Keyboard, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
   SlidersHorizontal, Square, Sun, Volume2, VolumeX, X, Gauge,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
-import type { RunFile } from '@atlas/backend-adapter';
-import ConversationActivity from './components/ConversationActivity';
-import ConversationMessage from './components/ConversationMessage';
+import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
+import MessageThread from './components/MessageThread';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import RecipesDialog from './components/RecipesDialog';
 import SideChat from './components/SideChat';
@@ -82,7 +82,26 @@ const readStatusBarPreferences = (): StatusBarPreferences => {
 };
 
 export default function App() {
-  const store = useAtlasStore();
+  // 窄选择器：只订阅这个界面真正要读的数据字段；动作函数恒定，从 getState 合入。
+  // conversationMessages 仍在列（朗读/撤回/复制要用），但重列表的渲染已交给 MessageThread 自己的窄订阅。
+  const storeData = useAtlasStore(useShallow((state) => ({
+    apiBaseUrl: state.apiBaseUrl, providerBaseUrl: state.providerBaseUrl, apiKeyConfigured: state.apiKeyConfigured,
+    compressionModel: state.compressionModel, configLoaded: state.configLoaded, settingsBusy: state.settingsBusy,
+    connectionTest: state.connectionTest, mode: state.mode, connected: state.connected, busy: state.busy, paused: state.paused,
+    error: state.error, model: state.model, models: state.models, providers: state.providers, reasoningStages: state.reasoningStages,
+    tools: state.tools, skills: state.skills, activeSkills: state.activeSkills, capabilities: state.capabilities,
+    conversations: state.conversations, conversationsLoading: state.conversationsLoading,
+    loadingMessagesConversationId: state.loadingMessagesConversationId, creatingConversation: state.creatingConversation,
+    conversationMessages: state.conversationMessages, activeConversationId: state.activeConversationId,
+    runs: state.runs, activeRunId: state.activeRunId, artifacts: state.artifacts, queue: state.queue, queuePaused: state.queuePaused,
+    followUpMode: state.followUpMode, nextRunMode: state.nextRunMode, unread: state.unread, pinned: state.pinned,
+    archived: state.archived, runPrompts: state.runPrompts, profiles: state.profiles, recipes: state.recipes,
+    customCommands: state.customCommands, profileId: state.profileId, reasoningEffort: state.reasoningEffort,
+    worktreeRequests: state.worktreeRequests,
+  })));
+  const store = useMemo(() => ({ ...useAtlasStore.getState(), ...storeData }), [storeData]);
+  const storeRef = useRef(store);
+  storeRef.current = store;
   const [view, setView] = useState<View>('home');
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
@@ -267,24 +286,7 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  // Each conversation reopens where it was left; new ones start at the latest message.
-  const scrollPositions = useRef(new Map<string, number>());
-  const restoredRef = useRef('');
-  useEffect(() => {
-    const element = threadRef.current;
-    if (!element || view !== 'chat' || loadingMessages || restoredRef.current === store.activeConversationId) return;
-    restoredRef.current = store.activeConversationId;
-    const saved = scrollPositions.current.get(store.activeConversationId);
-    element.scrollTop = saved ?? element.scrollHeight;
-  }, [store.activeConversationId, loadingMessages, view]);
-  useEffect(() => { if (view !== 'chat') restoredRef.current = ''; }, [view]);
-
-  // Keep the thread pinned to the bottom while new content streams in, unless the user scrolled up.
-  useEffect(() => {
-    const element = threadRef.current;
-    if (!element) return;
-    if (element.scrollHeight - element.scrollTop - element.clientHeight < 160) element.scrollTop = element.scrollHeight;
-  }, [messages.length, activeEvents.length, view]);
+  // 滚动定位（进入会话回到原位、流式跟底）由 MessageThread 里的虚拟列表接管。
 
   // Memories waiting for confirmation show as a badge on the navigation.
   useEffect(() => {
@@ -744,14 +746,38 @@ export default function App() {
   const contextUse = typeof latestUsage?.context_tokens === 'number' && typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0
     ? Math.round(latestUsage.context_tokens / latestUsage.context_limit * 100) : null;
   const rewind = async (messageId: string, files: boolean) => {
-    const conversationId = store.activeConversationId;
-    const result = await store.rewindTo(messageId, files);
+    const conversationId = storeRef.current.activeConversationId;
+    const result = await storeRef.current.rewindTo(messageId, files);
     if (!result) return;
     const parts = [`撤回了 ${result.removed_messages} 条消息`];
     if (files) parts.push(result.restored_files.length ? `恢复了 ${result.restored_files.length} 个文件` : '没有文件需要恢复');
     if (result.skipped.length) parts.push(`${result.skipped.length} 个文件没能恢复`);
     setRewound({ conversationId, rewindId: result.rewind_id, text: parts.join('，') });
   };
+  /** 历史消息的悬浮操作（改写/撤回/分叉），放进虚拟列表的行里。 */
+  const canRewriteRef = useRef(false);
+  const historyActions = useCallback((message: HistoryMessage) => {
+    if (!canRewriteRef.current || !message.id) return undefined;
+    return message.role === 'user'
+      ? <>
+        <MessageAction label="修改后重新发送" onClick={() => { setEditing({ id: message.id, original: message.content }); setInput(message.content); }}><Pencil size={13} /></MessageAction>
+        <Menu>
+          <Tip label="回到这条之前"><MenuTrigger asChild>
+            <button aria-label="回到这条之前" className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Undo2 size={13} /></button>
+          </MenuTrigger></Tip>
+          <MenuContent side="top" align="end">
+            <MenuLabel>回到这条消息之前（可以重做）</MenuLabel>
+            <MenuItem onSelect={() => void rewind(message.id, false)}><MessageSquareX />只撤回对话</MenuItem>
+            <MenuItem onSelect={() => void rewind(message.id, true)}><RotateCcw />对话和改过的文件一起撤回</MenuItem>
+          </MenuContent>
+        </Menu>
+      </>
+      : <>
+        <MessageAction label="从这里分叉出一个新对话" onClick={() => void storeRef.current.forkFrom(message.id)}><GitBranch size={13} /></MessageAction>
+        <MessageAction label="分叉，并把前面的内容总结成一段" onClick={() => void storeRef.current.forkFrom(message.id, true)}><GitBranchPlus size={13} /></MessageAction>
+      </>;
+    // rewind 通过 storeRef 读最新状态，动作保持稳定，虚拟列表的行不必跟着重渲染。
+  }, []);
   const rewindBanner = rewound && rewound.conversationId === store.activeConversationId && <div className="mb-2.5 flex items-center gap-2.5 pb-2.5 text-[12.5px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
     <Undo2 size={13} />{rewound.text}
     <span className="flex-1" />
@@ -840,6 +866,7 @@ export default function App() {
 
   // Rewriting history mid-run would race the run's own writes.
   const canRewrite = store.connected && !(activeRun && !runDone) && !loadingMessages;
+  canRewriteRef.current = canRewrite;
 
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
   const besideConversation = view === 'chat' && besideId !== store.activeConversationId ? store.conversations.find((item) => item.id === besideId) : undefined;
@@ -902,42 +929,13 @@ export default function App() {
         {view === 'chat' && <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
             <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId} />
-            <div ref={threadRef} aria-label="任务活动" className="min-h-0 flex-1 overflow-auto px-8 pt-2"
-              onScroll={(event) => { if (restoredRef.current === store.activeConversationId) scrollPositions.current.set(store.activeConversationId, event.currentTarget.scrollTop); }}>
-              <div className="mx-auto w-[min(720px,100%)] pb-8">
-                {historyWithBranchNotes.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username}
-                  actions={canRewrite && message.id ? message.role === 'user'
-                    ? <>
-                      <MessageAction label="修改后重新发送" onClick={() => { setEditing({ id: message.id, original: message.content }); setInput(message.content); }}><Pencil size={13} /></MessageAction>
-                      <Menu>
-                        <Tip label="回到这条之前"><MenuTrigger asChild>
-                          <button aria-label="回到这条之前" className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Undo2 size={13} /></button>
-                        </MenuTrigger></Tip>
-                        <MenuContent side="top" align="end">
-                          <MenuLabel>回到这条消息之前（可以重做）</MenuLabel>
-                          <MenuItem onSelect={() => void rewind(message.id, false)}><MessageSquareX />只撤回对话</MenuItem>
-                          <MenuItem onSelect={() => void rewind(message.id, true)}><RotateCcw />对话和改过的文件一起撤回</MenuItem>
-                        </MenuContent>
-                      </Menu>
-                    </>
-                    : <>
-                      <MessageAction label="从这里分叉出一个新对话" onClick={() => void store.forkFrom(message.id)}><GitBranch size={13} /></MessageAction>
-                      <MessageAction label="分叉，并把前面的内容总结成一段" onClick={() => void store.forkFrom(message.id, true)}><GitBranchPlus size={13} /></MessageAction>
-                    </> : undefined} />)}
-                {loadingMessages && <p className="py-6 text-center text-[13px] text-fg-3" role="status">正在载入这段对话…</p>}
-                {!messages.length && !activeEvents.length && !loadingMessages && <div className="pt-[16vh] text-center">
-                  <Mark className="mx-auto mb-4 size-11" />
-                  <h2 className="m-0 font-serif text-[24px] font-semibold text-heading">这次要做什么？</h2>
-                  <p className="mt-2 text-[14px] text-fg-3">在下面说清楚目标，Atlas 会把过程和结果都放在这里。</p>
-                </div>}
-                <ConversationActivity events={activeEvents} store={store} username={username} setTab={showInspectorTab} />
-                {working && !activeEvents.some((event) => event.type === 'message.delta' || event.type === 'tool.started') && <div className="my-5 flex items-center gap-3 text-[13px] text-fg-3" aria-label="Atlas 正在思考">
-                  <Mark className="size-[26px]" working />正在想…
-                </div>}
-                {retryNote}
-                {errorNote}
-              </div>
-            </div>
+            <MessageThread history={historyWithBranchNotes} username={username} historyActions={historyActions} threadRef={threadRef} setTab={showInspectorTab}
+              emptyState={!messages.length && !activeEvents.length && !loadingMessages ? <div className="pt-[16vh] text-center">
+                <Mark className="mx-auto mb-4 size-11" />
+                <h2 className="m-0 font-serif text-[24px] font-semibold text-heading">这次要做什么？</h2>
+                <p className="mt-2 text-[14px] text-fg-3">在下面说清楚目标，Atlas 会把过程和结果都放在这里。</p>
+              </div> : null}
+              footerNote={<>{retryNote}{errorNote}</>} />
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(720px,100%)]">
                 {queueStrip}

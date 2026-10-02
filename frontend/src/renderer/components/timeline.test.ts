@@ -62,6 +62,18 @@ describe('buildTimeline', () => {
     expect(items).toContainEqual(expect.objectContaining({ kind: 'notice', text: '已切换到新上下文' }));
   });
 
+  it('caps huge tool outputs so a long session stays bounded', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('tool.started', { tool_call_id: 'big', name: 'local_shell', arguments: { command: 'npm test' } }),
+      ev('tool.completed', { tool_call_id: 'big', name: 'local_shell', result: 'x'.repeat(20000) }, 1),
+    ]);
+    const steps = items.find((item) => item.kind === 'steps');
+    const step = steps?.kind === 'steps' ? steps.steps[0] : undefined;
+    expect(step?.result?.length ?? 0).toBeLessThan(10000);
+    expect(step?.result).toContain('已截断');
+  });
+
   it('does not repeat text Atlas said before a tool call when the final message arrives', () => {
     seq = 0;
     const items = buildTimeline([

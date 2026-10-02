@@ -20,4 +20,25 @@ describe('ConversationMessage', () => {
     expect(html).toContain('class="hljs language-python"');
     expect(html).toContain('hljs-keyword');
   });
+
+  it('renders a still-streaming reply as plain text that keeps newlines, then full markdown once settled', () => {
+    const content = 'Hello **there**\n第二行';
+    const streaming = renderToStaticMarkup(<ConversationMessage role="assistant" content={content} username="User" streaming />);
+    // 流式中不做 Markdown 解析（省掉每个 delta 的重复解析），但保留换行和消息结构。
+    expect(streaming).toContain('data-message-role="assistant"');
+    expect(streaming).toContain('whitespace-pre-wrap');
+    expect(streaming).toContain('Hello **there**');
+    expect(streaming).toContain('第二行');
+    expect(streaming).not.toContain('<strong>');
+
+    const settled = renderToStaticMarkup(<ConversationMessage role="assistant" content={content} username="User" />);
+    expect(settled).toContain('<strong>there</strong>');
+  });
+
+  it('is memoized and keeps identical output for identical props', () => {
+    expect((ConversationMessage as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for('react.memo'));
+    const render = () => renderToStaticMarkup(<ConversationMessage role="assistant" content={'# 标题\n\n正文'} username="User" />);
+    expect(render()).toBe(render());
+    expect(render()).toContain('<h1>标题</h1>');
+  });
 });

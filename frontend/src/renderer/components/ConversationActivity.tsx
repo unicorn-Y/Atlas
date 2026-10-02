@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
@@ -16,6 +16,67 @@ interface ConversationActivityProps {
   setTab: (tab: InspectorTab) => void;
 }
 
+/** 一条时间线渲染所需的上下文；由 ConversationActivity / MessageThread（虚拟列表）提供。 */
+export interface TimelineRowContext {
+  events: AgentEvent[];
+  store: ReturnType<typeof useAtlasStore.getState>;
+  username: string;
+  setTab: (tab: InspectorTab) => void;
+  busy: boolean;
+}
+
+/** 渲染单条时间线（用户消息、步骤、回复、审批卡片…）；虚拟列表按条复用，输出与整段渲染完全一致。 */
+export const TimelineRow = memo(function TimelineRow({ item, context, firstInTurn, last }: { item: TimelineItem; context: TimelineRowContext; firstInTurn: boolean; last: boolean }) {
+  const { events, store, username, setTab, busy } = context;
+  switch (item.kind) {
+    case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} />;
+    case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn} streaming={item.streaming}
+      status={item.status ?? (item.streaming ? '正在回复' : undefined)} working={item.streaming && busy} />;
+    case 'steps': return <div key={item.id}>
+      {firstInTurn && <TurnHeader working={last && busy} />}
+      <StepTrack steps={item.steps} live={last && busy} runId={events[0]?.runId ?? ''} store={store} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
+    </div>;
+    case 'artifact': return <div key={item.id} className="my-3 ml-10 flex items-center gap-3 rounded-xl card-surface px-3.5 py-2.5 text-[13px]">
+      <FileText size={16} className="shrink-0 text-brand" />
+      <div className="min-w-0 flex-1"><b className="font-medium text-fg">{item.name}</b>{item.summary && <p className="m-0 truncate text-fg-3">{item.summary}</p>}</div>
+      <Button size="sm" variant="ghost" onClick={() => setTab('artifacts')}>查看</Button>
+    </div>;
+    case 'approval': return <Approval key={item.id} event={item.event} store={store} />;
+    case 'question': return <Question key={item.id} event={item.event} store={store} />;
+    case 'plan': return <Plan key={item.id} event={item.event} store={store} />;
+    case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
+    case 'group': return <WorkerGroup key={item.id} item={item} />;
+    case 'checks': return <Checks key={item.id} item={item} />;
+    case 'notice': return <div key={item.id} className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
+      {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
+      <span>{item.text}</span>
+    </div>;
+    case 'cancelled': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
+      <Square size={12} />你停止了这次任务
+    </div>;
+    case 'done': {
+      const tokens = tokenCount(item.usage);
+      const cached = cacheShare(item.usage);
+      const changed = item.changes && item.changes.files > 0 ? item.changes : null;
+      return <div key={item.id} className="my-4 ml-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-3">
+        <Check size={14} className="text-ok" />完成{item.startedAt ? `，用时 ${duration(item.startedAt, item.endedAt)}` : ''}
+        {tokens && <span className="tabular-nums">· {tokens} tokens{cached ? `（${cached}）` : ''}</span>}
+        {changed && <button className="text-fg-2 hover:text-fg" onClick={() => setTab('changes')}>
+          · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
+        </button>}
+        <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
+        {changed && store.profiles.some((profile) => profile.id === 'reviewer') && <button className="ml-2 inline-flex items-center gap-1 text-fg-2 hover:text-fg"
+          onClick={() => void store.sendMessage('请审查这次任务的改动：逐个文件指出 bug、风险和可以简化的地方，给出具体位置。只提意见，不要修改文件。', [], [], undefined, 'reviewer')}><SearchCheck size={13} />让审查员检查</button>}
+        {events[0] && <SaveRecipe runId={events[0].runId} store={store} />}
+      </div>;
+    }
+    case 'failed': return <div key={item.id} role="alert" className="my-4 ml-10 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
+      没能完成：{item.detail}
+    </div>;
+    default: return null;
+  }
+});
+
 export default function ConversationActivity({ events, store, username, setTab }: ConversationActivityProps) {
   const items = useMemo(() => buildTimeline(events), [events]);
   const busy = store.busy && !store.paused;
@@ -26,53 +87,7 @@ export default function ConversationActivity({ events, store, username, setTab }
     if (item.kind === 'user') headed = false;
     const firstInTurn = item.kind !== 'user' && !headed;
     if (item.kind !== 'user') headed = true;
-    switch (item.kind) {
-      case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} />;
-      case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn}
-        status={item.status ?? (item.streaming ? '正在回复' : undefined)} working={item.streaming && busy} />;
-      case 'steps': return <div key={item.id}>
-        {firstInTurn && <TurnHeader working={last && busy} />}
-        <StepTrack steps={item.steps} live={last && busy} runId={events[0]?.runId ?? ''} store={store} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
-      </div>;
-      case 'artifact': return <div key={item.id} className="my-3 ml-10 flex items-center gap-3 rounded-xl card-surface px-3.5 py-2.5 text-[13px]">
-        <FileText size={16} className="shrink-0 text-brand" />
-        <div className="min-w-0 flex-1"><b className="font-medium text-fg">{item.name}</b>{item.summary && <p className="m-0 truncate text-fg-3">{item.summary}</p>}</div>
-        <Button size="sm" variant="ghost" onClick={() => setTab('artifacts')}>查看</Button>
-      </div>;
-      case 'approval': return <Approval key={item.id} event={item.event} store={store} />;
-      case 'question': return <Question key={item.id} event={item.event} store={store} />;
-      case 'plan': return <Plan key={item.id} event={item.event} store={store} />;
-      case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
-      case 'group': return <WorkerGroup key={item.id} item={item} />;
-      case 'checks': return <Checks key={item.id} item={item} />;
-      case 'notice': return <div key={item.id} className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
-        {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
-        <span>{item.text}</span>
-      </div>;
-      case 'cancelled': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
-        <Square size={12} />你停止了这次任务
-      </div>;
-      case 'done': {
-        const tokens = tokenCount(item.usage);
-        const cached = cacheShare(item.usage);
-        const changed = item.changes && item.changes.files > 0 ? item.changes : null;
-        return <div key={item.id} className="my-4 ml-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-3">
-          <Check size={14} className="text-ok" />完成{item.startedAt ? `，用时 ${duration(item.startedAt, item.endedAt)}` : ''}
-          {tokens && <span className="tabular-nums">· {tokens} tokens{cached ? `（${cached}）` : ''}</span>}
-          {changed && <button className="text-fg-2 hover:text-fg" onClick={() => setTab('changes')}>
-            · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
-          </button>}
-          <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
-          {changed && store.profiles.some((profile) => profile.id === 'reviewer') && <button className="ml-2 inline-flex items-center gap-1 text-fg-2 hover:text-fg"
-            onClick={() => void store.sendMessage('请审查这次任务的改动：逐个文件指出 bug、风险和可以简化的地方，给出具体位置。只提意见，不要修改文件。', [], [], undefined, 'reviewer')}><SearchCheck size={13} />让审查员检查</button>}
-          {events[0] && <SaveRecipe runId={events[0].runId} store={store} />}
-        </div>;
-      }
-      case 'failed': return <div key={item.id} role="alert" className="my-4 ml-10 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
-        没能完成：{item.detail}
-      </div>;
-      default: return null;
-    }
+    return <TimelineRow key={item.id} item={item} context={{ events, store, username, setTab, busy }} firstInTurn={firstInTurn} last={last} />;
   })}</>;
 }
 

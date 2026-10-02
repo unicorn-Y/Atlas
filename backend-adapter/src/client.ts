@@ -158,7 +158,18 @@ export class BackendAdapter {
     mockConversations.unshift(conversation);
     return conversation;
   }
-  async getMessages(id: string): Promise<ConversationMessage[]> { return this.live ? this.request(`/api/conversations/${encodeURIComponent(id)}/messages`) : []; }
+  /**
+   * 消息历史，一页。limit 返回最新的那么多条（后端默认 100、上限 1000），升序输出；
+   * beforeId 取这条消息之前的更早一页（同样升序），供向上翻页使用。
+   */
+  async getMessages(id: string, opts?: { limit?: number; beforeId?: string }): Promise<ConversationMessage[]> {
+    if (!this.live) return [];
+    const params = new URLSearchParams();
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.beforeId) params.set('before_id', String(opts.beforeId));
+    const query = params.toString();
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/messages${query ? `?${query}` : ''}`);
+  }
   async getConversationBranches(id: string): Promise<Array<{ id: string; parent_session_id?: string | null; title: string; branch_message_id?: string | null }>> {
     return this.live ? this.request(`/api/conversations/${encodeURIComponent(id)}/branches`) : [];
   }

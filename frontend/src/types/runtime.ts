@@ -15,7 +15,8 @@ export type AgentEventType =
   | 'run.model_switched' | 'run.verify_nudge'
   | 'session.title'
   | 'process.completed' | 'process.notification' | 'run.compaction.progress' | 'run.recovery.notice' | 'context.window.switched'
-  | 'run.completed' | 'run.failed' | 'run.cancelled';
+  | 'run.completed' | 'run.failed' | 'run.cancelled'
+  | 'lsp.diagnostics' | 'review.findings';
 
 export interface AgentEvent {
   id: string;
@@ -36,4 +37,8 @@ export interface AgentRun {
   updatedAt: string;
   lastEventSequence: number;
   events: AgentEvent[];
+  /** 长会话有界化：events 超出上限后丢掉了最旧的事件，时间线头部会显示占位。 */
+  eventsTruncated?: boolean;
+  /** 已被丢弃的最旧事件条数。 */
+  droppedEventCount?: number;
 }

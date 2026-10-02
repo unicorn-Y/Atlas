@@ -23,7 +23,8 @@ export function isRuntimeEvent(value: unknown): value is RuntimeEventEnvelope {
 const DOCUMENT_KIND: Record<string, string> = { document: '生成了 Word 文档', spreadsheet: '生成了 Excel 表格', presentation: '生成了 PPT 演示文稿' };
 
 export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEvent | null {
-  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'run.completed', 'run.failed', 'run.cancelled']);
+  // 已知事件才会被渲染；新的 wire 事件（如 lsp.diagnostics、review.findings）加入这里即可显示。
+  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'lsp.diagnostics', 'review.findings', 'run.completed', 'run.failed', 'run.cancelled']);
   known.add('process.notification');
   const base = { id: envelope.event_id, runId: envelope.run_id, sequence: envelope.sequence, timestamp: envelope.timestamp };
   // Office files and other generated documents: shown like any other artifact.
@@ -39,8 +40,10 @@ export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEven
   return { ...base, type: envelope.event as AgentEvent['type'], data: envelope.data ?? {} };
 }
 
+/** 每个运行最多保留的事件数；超出后丢最旧的，时间线头部显示「已折叠早期事件」。 */
+export const MAX_RUN_EVENTS = 800;
+
 export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {
-  if (run.id !== event.runId || run.events.some((item) => item.id === event.id) || run.events.some((item) => item.sequence === event.sequence)) return run;
   const data = event.data;
   let status = run.status;
   let phase = run.phase;
@@ -54,5 +57,22 @@ export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {
   if ((event.type === 'message.delta' || event.type === 'tool.started') && status === 'waiting') status = 'running';
   if (event.type === 'run.completed') { status = 'completed'; phase = 'final'; }
   if (event.type === 'run.failed') status = 'failed';
-  return { ...run, status, phase, updatedAt: event.timestamp, lastEventSequence: Math.max(run.lastEventSequence, event.sequence), events: [...run.events, event].sort((a, b) => a.sequence - b.sequence) };
+  // 去重：sequence 单调递增是 wire 契约，新 sequence 不可能重复，免去每个事件两次 O(n) 扫描；
+  // 乱序/重放（sequence <= lastEventSequence，例如断线续传）才做完整查重并按 sequence 排回原位。
+  let events: AgentEvent[];
+  if (event.sequence > run.lastEventSequence) {
+    events = [...run.events, event];
+  } else {
+    if (run.events.some((item) => item.id === event.id) || run.events.some((item) => item.sequence === event.sequence)) return run;
+    events = [...run.events, event].sort((a, b) => a.sequence - b.sequence);
+  }
+  // 长会话有界化：丢最旧的事件并记录数量，UI 在时间线头部显示占位。
+  let truncated = run.eventsTruncated ?? false;
+  let dropped = run.droppedEventCount ?? 0;
+  if (events.length > MAX_RUN_EVENTS) {
+    dropped += events.length - MAX_RUN_EVENTS;
+    events = events.slice(events.length - MAX_RUN_EVENTS);
+    truncated = true;
+  }
+  return { ...run, status, phase, updatedAt: event.timestamp, lastEventSequence: Math.max(run.lastEventSequence, event.sequence), events, eventsTruncated: truncated, droppedEventCount: dropped };
 }
