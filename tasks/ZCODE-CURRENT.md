@@ -1,10 +1,10 @@
 # Atlas ZCode Parallel Current
 
 CURRENT: ATLAS-C5-ZCODE-PARALLEL
-STATUS: READY_FOR_EXECUTION
+STATUS: AWAITING_REVIEW
 OWNER: ZCode second construction lane
 ATLAS_BRANCH: zcode/c5-models-parallel
-HERMES_BRANCH: zcode/c5-models-parallel
+HERMES_BRANCH: none（未改 fork，hermes 依赖 pin 保持 e287231）
 TASKBOOK: tasks/taskbooks/ATLAS-C5-ZCODE-PARALLEL.md
 RESULT: tasks/results/ATLAS-C5-ZCODE-PARALLEL.result.md
 REVIEW: tasks/reviews/ATLAS-C5-ZCODE-PARALLEL.review.md

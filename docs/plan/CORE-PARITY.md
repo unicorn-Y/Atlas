@@ -48,7 +48,7 @@
 | L5 | 并行工具调用 | CC：只读工具并行，写操作串行；HM：`agent/tool_executor.py` 加 `PARALLEL_TOOL_CALL_GUIDANCE` | ✔ Hermes 并行委派场景（`4357a86`） | ✔ | — | C1 |
 | L6 | 运行中插话（不打断当前工具） | CX 0.159 `instant_interrupt`：模型输出中途也能转向；Pi 的转向队列；HM `/steer` | ✔ 下一次调用模型前插入（代码 1051 行） | ✔ HM steer | CX 的中途转向（`codex-rs/core/src/tasks`，初判） | C3 |
 | L7 | 消息排队 | HM `/queue`；Pi 的后续消息 | ✔ Hermes steer/排队桥接（`805110c`） | ✔ | — | C1 |
-| L8 | 分阶段分配思考量 | LangChain：规划和验收深想、执行浅想（66.5 对 53.9） | ✘ | ✘ | 在 HM 的 `agent/reasoning_effort.py` 上加按阶段切换 | C5 |
+| L8 | 分阶段分配思考量 | LangChain：规划和验收深想、执行浅想（66.5 对 53.9） | ✔ 设置→模型「按阶段分配思考量」默认关；开启后首轮/计划模式=规划档、执行=执行档、stop-gate 验证轮=验收档（`_atlas_before_model_request` 每请求钩子切换，hermes transport 每请求读 `agent.reasoning_config`），关闭时行为不变（`0814f39`） | ✘ | — | C5 |
 | L9 | 时间和预算提醒 | LangChain；HM `run_budget_seconds`、`deadline.py` | ✔ Atlas `agent.run_budget_seconds` / `agent.budget_warning_ratio` 接入 Hermes 原有一次性提醒链，默认关闭 | ✔ | 保留 | — |
 | L10 | 每轮自动带上本机环境信息 | LangChain 的环境注入；HM `agent/env_probe.py`、`prompt_builder.py` 的环境提示 | ✔ Hermes 环境提示；SSH 信息仅注入 terminal 环境（`805110c`, `fe31ba1`） | ✔ | — | C1 |
 
@@ -140,12 +140,12 @@
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| M1 | 服务商覆盖 | HM 30 多家（`providers/`、`agent/provider_registry.py`），包括腾讯、Kimi 等；Pi 有统一的模型接口 | △ 只支持 OpenAI 兼容地址 | ✔ | 补齐国内各家（DeepSeek、Kimi、GLM、Qwen、MiniMax、阶跃、小米 MiMo）的原生参数 | C5 |
-| M2 | 多密钥轮换和冷却 | HM `credential_pool*.py` | ✘ | ✔ | — | C5 |
+| M1 | 服务商覆盖 | HM 30 多家（`providers/`、`agent/provider_registry.py`），包括腾讯、Kimi 等；Pi 有统一的模型接口 | ✔ 16 家服务商目录（catalog.py，端点/文档链接 2026-10-02 查证）+ 原生 provider/api_mode 直传 hermes profile（激活各家原生思考参数）+ models.dev 元数据（ETag 五级缓存，拷贝自 `agent/models_dev.py`@`e287231`）；无 hermes_provider 的旧条目保持 OpenAI 兼容中转行为（`f595110`, `49631e5`, `0814f39`） | ✔ | — | C5 |
+| M2 | 多密钥轮换和冷却 | HM `credential_pool*.py` | ✔ AtlasCredentialPool：一服务商多密钥（keyring 存储，原文不回显），429→1h（上游 reset_at 优先）、401/403→5min、唯一 key→60s、模型级冷却只 bench (key,model)；经 hermes `recover_with_credential_pool` 真实路径验证协议兼容；设置页可见槽位状态/冷却/用量（`80be8fd`） | ✔ | — | C5 |
 | M3 | 出错自动切换模型 | HM `fallback_model`、`fallback_cooldown.py`（W06 已搬一部分） | ✔ Hermes fallback model 配置传递（`805110c`） | ✔ | — | C1 |
 | M4 | 推理参数按服务商适配 | HM `reasoning_params.py`、`lmstudio_reasoning.py` | ✔ Atlas reasoning effort 传入 Hermes（`805110c`）；其他服务商参数未逐个验证 | ✔ | — | C1 |
-| M5 | 用量和费用准确 | CC 会显示「可能的缓存未命中原因」；HM `turn_usage.py`、`usage_pricing.py` | ✔ W06 | ✔ | 缓存未命中原因照 CC 补 | C5 |
-| M6 | 编辑已有模型 | — | ✘（W06 遗留） | — | 原 W07B 第 2.5 节 | C5 |
+| M5 | 用量和费用准确 | CC 会显示「可能的缓存未命中原因」；HM `turn_usage.py`、`usage_pricing.py` | ✔ W06；C5 补缓存未命中原因：system/tools/history 三层稳定哈希，命中率明显下降时对比定位原因（工具定义变了/系统提示词变了/历史前缀变了/未知），随 run_usage 透出并落账本新列（`0814f39`） | ✔ | — | C5 |
+| M6 | 编辑已有模型 | — | ✔ PUT/DELETE /api/models/custom/{id}：名称/provider/端点/模型名/上限/能力标记/价格可改，密钥只能重填不回显；保存后下一次请求生效，运行中任务不受影响；前端编辑/删除入口（`49631e5`, `de8e4eb`, `086a887`） | — | — | C5 |
 
 ## 10. 编程专项
 
