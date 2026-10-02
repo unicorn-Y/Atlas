@@ -383,27 +383,74 @@ async def test_run_start_reuses_profile_and_assigns_worktree(tmp_path: Path, mon
 
 
 async def test_goal_replace_pause_resume(tmp_path: Path, monkeypatch) -> None:
+    # C3R semantics: the schedule task only carries action="goal"; the goal itself and
+    # its paused/active status live in the Hermes GoalManager, keyed by a derived
+    # session id. Pause no longer flips the task status, and the pause gate sits in
+    # server._run_scheduled_goal, not in the scheduler.
+    from atlas import config
+    from atlas.engine.session_sync import goal_state, set_goal
+
+    data_root = tmp_path / "atlas-data"
+    home = tmp_path / "hermes-home"
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("ATLAS_DATA_DIR", str(data_root))
+    monkeypatch.setattr(config, "DATA_ROOT", data_root)
+    data_root.mkdir(parents=True, exist_ok=True)
+    home.mkdir(parents=True, exist_ok=True)
+    engine_home = data_root / "engine"
+    monkeypatch.setattr(server, "memory", None, raising=False)
+    monkeypatch.setattr(server, "durable", None, raising=False)
+
+    session_id = server._goal_session_id("g")
+    await asyncio.to_thread(set_goal, engine_home, session_id, "old")
     scheduler = AtlasScheduler(schedules_path=tmp_path / "schedules.toml")
-    task = ScheduledTask("g", "Goal", "", TriggerType.INTERVAL, {"hours": 1}, "agent:old", goal="old")
-    await scheduler.add_task(task)
-    calls = []
-
-    async def agent_callback(goal_id, message):
-        calls.append((goal_id, message))
-
-    scheduler._agent_callback = agent_callback
+    await scheduler.add_task(
+        ScheduledTask("g", "Goal", "", TriggerType.INTERVAL, {"hours": 1}, "goal")
+    )
     monkeypatch.setattr(server, "scheduler", scheduler)
+
     result = await server.update_goal("g", {"goal": "new"})
-    assert result["goal"] == "new" and result["goal_status"] == "pending"
+    assert result["goal"] == "new" and result["goal_status"] == "active"
     assert (await server.get_goal_trace("g", run_id=None))["events"][-1]["event"] == "goal.replaced"
+
     paused = await server.pause_goal("g")
-    assert paused["goal_status"] == "paused" and paused["status"] == "paused"
-    assert not await scheduler._invoke_goal_callback("g", "should not run")
-    assert calls == []
+    assert paused["goal_status"] == "paused"
+    assert paused["status"] == "active"
+
+    # While paused, firing the schedule must stop at the server-side gate and never
+    # reach the orchestrator.
+    class _NoRunOrchestrator:
+        def run(self, *args, **kwargs):
+            raise AssertionError("paused goal must not run")
+
+    monkeypatch.setattr(server, "orchestrator", _NoRunOrchestrator())
+    await server._run_scheduled_goal("g")
+
     resumed = await server.resume_goal("g")
-    assert resumed["goal_status"] == "pending" and resumed["status"] == "active"
-    assert await scheduler._invoke_goal_callback("g", "now run")
-    assert calls == [("g", "now run")]
+    assert resumed["goal_status"] == "active"
+
+    # After resume the same firing path reaches the orchestrator once; the fake marks
+    # the Hermes goal done so the run loop terminates after a single turn.
+    class _DoneOrchestrator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def run(self, *args, **kwargs):
+            self.calls += 1
+            from atlas.engine.session_sync import mutate_goal
+
+            await asyncio.to_thread(
+                mutate_goal, engine_home, session_id, "done", "test done",
+            )
+            yield {"type": "done", "message_id": ""}
+
+    fake_orchestrator = _DoneOrchestrator()
+    monkeypatch.setattr(server, "orchestrator", fake_orchestrator)
+    scheduler._agent_callback = server._scheduled_goal
+    await scheduler._execute_task(scheduler.get_task("g"))
+    assert fake_orchestrator.calls == 1
+    assert goal_state(engine_home, session_id)["status"] == "done"
+
 
 
 async def test_workspace_raw_content_type_and_escape(tmp_path: Path) -> None:
