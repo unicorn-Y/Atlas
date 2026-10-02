@@ -325,3 +325,132 @@ def test_recordings_dir_under_atlas_data_dir(tmp_path, monkeypatch: pytest.Monke
     directory = rec.recordings_dir()
     assert str(tmp_path) in str(directory)
     assert directory.as_posix().endswith("browser-cache/recordings")
+
+
+# ---------------------------------------------------------------------------
+# Router wiring: to-skill preview default unchanged; save → ONE registry
+# ---------------------------------------------------------------------------
+def _market_env(tmp_path) -> dict:
+    """SkillMarket over isolated discovery dirs (same env as test_skills_market)."""
+    from atlas.skills import SkillManager, default_skill_sources
+    from atlas.skills.market import SkillMarket
+    from atlas.skills.registry import SkillRegistry
+
+    user_skills = tmp_path / "skills"
+    workspace = tmp_path / "ws"
+    registry = SkillRegistry(tmp_path / "skill-registry.db")
+    manager = SkillManager(skills_dir=user_skills)
+    for source in default_skill_sources(workspace=workspace, atlas_home=tmp_path):
+        manager.register_skill_source(source)
+    manager.scan_skills_sync()
+    market = SkillMarket(
+        registry, data_dir=tmp_path, user_skills_dir=user_skills,
+        project_skills_dir=workspace / ".claude" / "skills", skill_manager=manager,
+        adapters=[],
+    )
+    return {"registry": registry, "manager": manager, "market": market,
+            "user_skills": user_skills}
+
+
+def _router_client(env: dict):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from atlas.api import skills_market_router
+    from atlas.api.browser_router import router as browser_router
+    from atlas.origin_guard import OriginGuard
+
+    skills_market_router.set_market_supplier(lambda: env["market"])
+    app = FastAPI()
+    app.add_middleware(OriginGuard)
+    app.include_router(browser_router)
+    return TestClient(app)
+
+
+def test_to_skill_router_preview_default_and_save_registers(tmp_path) -> None:
+    env = _market_env(tmp_path)
+    store = RecordingStore(tmp_path / "recs")
+    doc = sample_doc(store)
+    x2browser.set_runtime(
+        x2browser.X2BrowserRuntime(backend=FakeBrowser(), store=store))
+    client = _router_client(env)
+    name = "shop-example-com-flow"
+    try:
+        # 默认（无 save / dry_run）仍是纯预览：不落盘、不碰注册表。
+        preview = client.post(
+            f"/api/browser/recordings/{doc['recording_id']}/to-skill", json={})
+        assert preview.status_code == 200, preview.text
+        body = preview.json()
+        assert {"name", "description", "skill_md", "steps"} <= set(body)
+        assert "saved" not in body
+        assert env["registry"].list() == []
+
+        # save=true → 写入市场同款用户目录并登记 local_recorded 出处。
+        saved = client.post(
+            f"/api/browser/recordings/{doc['recording_id']}/to-skill", json={"save": True})
+        assert saved.status_code == 200, saved.text
+        result = saved.json()
+        assert result["saved"] is True and result["skill"] == name
+        assert result["origin_kind"] == "local_recorded"
+        skill_dir = env["user_skills"] / "community" / name
+        assert result["path"] == str(skill_dir)
+        assert (skill_dir / "SKILL.md").is_file()
+        provenance = env["market"].provenance(name)
+        assert provenance["origin_kind"] == "local_recorded"
+        assert provenance["provenance"]["installed_path"] == str(skill_dir.resolve())
+        # 发现索引已重扫：技能出现在 GET /api/skills 列表，installed() 带 origin 徽标。
+        assert env["manager"].get_skill(name) is not None
+        rows = [row for row in env["market"].installed() if row["name"] == name]
+        assert rows and rows[0]["origin_kind"] == "local_recorded"
+
+        # 向后兼容：老契约 dry_run=false 仍然保存（新目的地 + 注册）。
+        compat = client.post(
+            f"/api/browser/recordings/{doc['recording_id']}/to-skill",
+            json={"dry_run": False, "name": "checkout-flow"})
+        assert compat.status_code == 200, compat.text
+        assert compat.json()["saved"] is True and compat.json()["skill"] == "checkout-flow"
+        assert env["registry"].get("checkout-flow", "0.0.0") is not None
+        assert (env["user_skills"] / "community" / "checkout-flow" / "SKILL.md").is_file()
+
+        # 非法技能名 → 中文校验错误。
+        bad = client.post(
+            f"/api/browser/recordings/{doc['recording_id']}/to-skill",
+            json={"save": True, "name": "非法名称!"})
+        assert bad.status_code == 422
+        assert "技能名" in bad.json()["detail"]["message"]
+    finally:
+        from atlas.api import skills_market_router
+
+        skills_market_router.set_market_supplier(None)
+        x2browser.set_runtime(None)
+
+
+def test_to_skill_router_re_save_updates_in_place(tmp_path) -> None:
+    """同一录制重存（步骤变化）→ 唯一注册表原地刷新，不产生重复记录。"""
+    env = _market_env(tmp_path)
+    store = RecordingStore(tmp_path / "recs")
+    doc = sample_doc(store)
+    x2browser.set_runtime(
+        x2browser.X2BrowserRuntime(backend=FakeBrowser(), store=store))
+    client = _router_client(env)
+    name = "shop-example-com-flow"
+    try:
+        first = client.post(
+            f"/api/browser/recordings/{doc['recording_id']}/to-skill", json={"save": True})
+        assert first.status_code == 200, first.text
+        doc["steps"] = doc["steps"][:1]
+        store.save(doc)
+        again = client.post(
+            f"/api/browser/recordings/{doc['recording_id']}/to-skill", json={"save": True})
+        assert again.status_code == 200, again.text
+        rows = [row for row in env["registry"].list() if row["name"] == name]
+        assert len(rows) == 1 and rows[0]["status"] == "active"
+        body_text = (env["user_skills"] / "community" / name / "SKILL.md").read_text(
+            encoding="utf-8")
+        assert "结算" not in body_text  # second step dropped from the saved skill
+        assert env["manager"].get_skill(name) is not None
+    finally:
+        from atlas.api import skills_market_router
+
+        skills_market_router.set_market_supplier(None)
+        x2browser.set_runtime(None)

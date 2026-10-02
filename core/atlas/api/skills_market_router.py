@@ -30,10 +30,12 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
+from atlas.skills.acquisition import _parse_manifest, payload_sha256
 from atlas.skills.market import (
     MarketConflictError,
     MarketError,
     MarketUnavailableError,
+    _canonical_name,
 )
 
 router = APIRouter(tags=["skill-market"])
@@ -80,6 +82,64 @@ def _http_error(exc: MarketError) -> HTTPException:
         "message": exc.message, "code": exc.code,
         **({"details": exc.details} if exc.details else {}),
     })
+
+
+# ---------------------------------------------------------------------------
+# Local-origin persistence (X2 recordings / X5 evolved skills)
+# ---------------------------------------------------------------------------
+LOCAL_ORIGIN_KINDS = ("local_recorded", "local_evolved")
+
+
+def save_local_skill_bundle(
+    name: str,
+    files: dict[str, str],
+    *,
+    origin_kind: str,
+    reason: str,
+    market: Any | None = None,
+) -> dict[str, Any]:
+    """Write a locally-produced skill bundle (X2 recording / X5 evolved) into
+    the user-scope discovery directory and register it in the ONE registry.
+
+    Layout and writers are SkillMarket's own — no second layout, no second
+    registry: destination via the same ``_destination`` resolution ``install``
+    uses (``<user skills>/community/<name>``, priority-10 ``atlas`` source),
+    staged atomic payload via ``_write_payload``, provenance + audit history via
+    ``register_local``. Re-saving the same origin updates in place: prior
+    local-origin rows whose version or content no longer match are dropped
+    (the same drop-before-reinstall rule ``_resolve_conflict`` applies to
+    market-managed copies); foreign rows are never touched.
+    """
+    if market is None:
+        market = get_market()
+    if origin_kind not in LOCAL_ORIGIN_KINDS:
+        raise MarketError(
+            f"origin_kind 只支持 {'、'.join(LOCAL_ORIGIN_KINDS)}。", code="invalid_origin_kind")
+    name = _canonical_name(name)
+    if not isinstance(files, dict) or not str(files.get("SKILL.md") or "").strip():
+        raise MarketError("技能包缺少 SKILL.md，无法保存。", code="invalid_local_skill")
+    dest = market._destination("user", name)
+    try:
+        manifest, _dependencies = _parse_manifest(files["SKILL.md"], name)
+    except ValueError as exc:
+        raise MarketError(
+            f"技能「{name}」的 SKILL.md 不符合 Atlas 规范：{exc}", code="invalid_manifest",
+        ) from exc
+    digest = payload_sha256(files)
+    for row in market.registry.list():
+        if row["name"] != name:
+            continue
+        provenance = row.get("provenance") or {}
+        managed = provenance.get("origin_kind") in LOCAL_ORIGIN_KINDS or provenance.get(
+            "installed_path") in {str(dest), str(dest.resolve())}
+        if managed and (row["version"] != manifest["version"]
+                        or provenance.get("computed_sha256") != digest):
+            market.registry.remove(name, row["version"])
+    market._write_payload(dest, files)
+    result = market.register_local(
+        name, path=dest, origin_kind=origin_kind, source="local", reason=reason)
+    market._rescan()
+    return {**result, "saved": True, "skill": name, "path": str(dest)}
 
 
 @router.get("/api/skills/market/search", dependencies=[Depends(_require_trusted_origin)])
@@ -262,4 +322,4 @@ async def uninstall_skill_route(name: str) -> dict[str, Any]:
         raise _http_error(exc) from None
 
 
-__all__ = ["router", "set_market_supplier", "get_market"]
+__all__ = ["router", "set_market_supplier", "get_market", "save_local_skill_bundle"]

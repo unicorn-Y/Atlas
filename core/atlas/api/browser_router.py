@@ -156,24 +156,42 @@ async def get_recording(recording_id: str) -> dict[str, Any]:
 
 class ToSkillRequest(BaseModel):
     dry_run: bool = True
+    save: bool = False
     name: str | None = None
 
 
 @router.post("/recordings/{recording_id}/to-skill", dependencies=[Depends(_require_trusted_origin)])
 async def recording_to_skill(recording_id: str, req: ToSkillRequest) -> dict[str, Any]:
     from atlas.tools.x2.browser import get_runtime
-    from atlas.tools.x2.recording import save_skill, to_skill_bundle
+    from atlas.tools.x2.recording import to_skill_bundle
 
     doc = get_runtime().recordings.load(recording_id)
     if doc is None:
         raise HTTPException(status_code=404, detail=f"没有 id 为 {recording_id!r} 的浏览器录制")
     bundle = to_skill_bundle(doc, name=req.name or "")
-    if req.dry_run:
+    # 默认仍是纯预览（前端 dry_run 契约不变）；save=true 或显式 dry_run=false 才落盘。
+    if not (req.save or not req.dry_run):
         return {"name": bundle["name"], "description": bundle["description"],
                 "skill_md": bundle["skill_md"], "steps": bundle["steps"]}
-    path = await asyncio.to_thread(save_skill, bundle)
-    return {"skill_id": bundle["name"], "name": bundle["name"],
-            "path": str(path), "skill_md": bundle["skill_md"]}
+    # 保存：写入用户技能目录（与市场安装同一布局 <user skills>/community/<name>），
+    # 并经 register_local 以 origin_kind=local_recorded 记入唯一注册表。
+    from atlas.api.skills_market_router import _http_error, save_local_skill_bundle
+    from atlas.skills.market import MarketError
+
+    def persist() -> dict[str, Any]:
+        return save_local_skill_bundle(
+            bundle["name"], {"SKILL.md": bundle["skill_md"]},
+            origin_kind="local_recorded",
+            reason=f"X2 浏览器录制保存为技能（录制 {doc.get('recording_id')}）")
+
+    try:
+        result = await asyncio.to_thread(persist)
+    except MarketError as exc:
+        raise _http_error(exc) from None
+    return {"saved": True, "skill": bundle["name"], "skill_id": bundle["name"],
+            "name": bundle["name"], "version": result["version"],
+            "path": result["path"], "origin_kind": "local_recorded",
+            "skill_md": bundle["skill_md"]}
 
 
 # ---------------------------------------------------------------------------

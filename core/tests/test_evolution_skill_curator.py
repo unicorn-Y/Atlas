@@ -187,3 +187,100 @@ def test_candidates_dir_follows_evolution_root(tmp_path, monkeypatch) -> None:
     from atlas.evolution.skill_curator import candidates_dir
 
     assert candidates_dir() == tmp_path / "evo" / "candidates"
+
+
+# ---------------------------------------------------------------------------
+# 路由接线：approve → 用户技能目录（市场同款布局）+ 唯一注册表 local_evolved
+# ---------------------------------------------------------------------------
+def _market_env(tmp_path: Path) -> dict:
+    from atlas.skills import SkillManager, default_skill_sources
+    from atlas.skills.market import SkillMarket
+    from atlas.skills.registry import SkillRegistry
+
+    user_skills = tmp_path / "skills"
+    registry = SkillRegistry(tmp_path / "skill-registry.db")
+    manager = SkillManager(skills_dir=user_skills)
+    for source in default_skill_sources(workspace=tmp_path / "ws", atlas_home=tmp_path):
+        manager.register_skill_source(source)
+    manager.scan_skills_sync()
+    market = SkillMarket(registry, data_dir=tmp_path, user_skills_dir=user_skills,
+                         skill_manager=manager, adapters=[])
+    return {"registry": registry, "manager": manager, "market": market,
+            "user_skills": user_skills}
+
+
+def test_approve_endpoint_registers_local_evolved(tmp_path, monkeypatch) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from atlas.api import skills_market_router
+    from atlas.api.evolution_router import evolution_router
+
+    monkeypatch.setattr("atlas.evolution.watcher.evolution_root",
+                        lambda: tmp_path / "evo")
+    env = _market_env(tmp_path)
+    skills_market_router.set_market_supplier(lambda: env["market"])
+    app = FastAPI()
+    app.include_router(evolution_router)
+    client = TestClient(app)
+    curator = SkillCurator()  # 目录经 evolution_root 惰性解析到 tmp
+    curator.create_candidate(
+        name="login-flow", description="登录流程", origin="recording_bundle",
+        references=["recordings/login.jsonl"],
+        parameters={"steps": ["打开页面", "填表单"]}, source_version="1.0.0")
+    try:
+        first = client.post("/api/evolution/candidates/login-flow/approve")
+        assert first.status_code == 200, first.text
+        result = first.json()
+        assert result["ok"] is True and result["saved"] is True
+        assert result["skill"] == "login-flow"
+        assert result["origin_kind"] == "local_evolved"
+        assert result["version"] == "1.0.0"  # source_version 成为初始版本
+        skill_dir = env["user_skills"] / "community" / "login-flow"
+        assert result["path"] == str(skill_dir)
+        text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        assert "version: 1.0.0" in text and "打开页面" in text
+        provenance = env["market"].provenance("login-flow")
+        assert provenance["origin_kind"] == "local_evolved"
+        assert env["manager"].get_skill("login-flow") is not None  # 发现索引已重扫
+        assert curator.get("login-flow")["status"] == "approved"
+
+        # 幂等重批准：原地更新、版本号递增、不产生重复记录。
+        curator.create_candidate(
+            name="login-flow", description="登录流程（更新）", origin="recording_bundle",
+            parameters={"steps": ["打开页面", "填表单", "提交"]})
+        second = client.post("/api/evolution/candidates/login-flow/approve").json()
+        assert second["ok"] is True and second["saved"] is True
+        assert second["version"] == "1.0.1"
+        active = [row for row in env["registry"].list(status="active")
+                  if row["name"] == "login-flow"]
+        assert len(active) == 1 and active[0]["version"] == "1.0.1"
+        assert env["registry"].get("login-flow", "1.0.0") is None
+        updated = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        assert "version: 1.0.1" in updated and "提交" in updated
+    finally:
+        skills_market_router.set_market_supplier(None)
+
+
+def test_approve_endpoint_degrades_when_market_unavailable(tmp_path, monkeypatch) -> None:
+    """技能库不可用（无注册表）时：批准生效，saved=false + 中文原因，绝不阻塞。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from atlas.api import skills_market_router
+    from atlas.api.evolution_router import evolution_router
+
+    def unavailable() -> None:
+        raise RuntimeError("skill registry unavailable")
+
+    monkeypatch.setattr(skills_market_router, "_market_supplier", unavailable)
+    monkeypatch.setattr("atlas.evolution.watcher.evolution_root",
+                        lambda: tmp_path / "evo")
+    curator = SkillCurator()
+    curator.create_candidate(name="solo", description="仅批准", origin="user_request")
+    app = FastAPI()
+    app.include_router(evolution_router)
+    result = TestClient(app).post("/api/evolution/candidates/solo/approve").json()
+    assert result["ok"] is True and result["saved"] is False
+    assert "技能库" in result["note"]
+    assert curator.get("solo")["status"] == "approved"
