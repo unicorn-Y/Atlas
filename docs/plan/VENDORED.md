@@ -67,3 +67,7 @@
 
 参考提交号（2026-09-30 调研时）：
 - `NousResearch/hermes-agent`：`12e4d3e2dd5281adf289f70e5d6c7f33427d6982`
+
+| `core/atlas/commands/init.py` | `NousResearch/hermes-agent` | `hermes_cli/init_command.py`（质量标准与合并纪律）；OpenCode `command/template/initialize.txt`（扫描清单对照） | `e287231d7906bcce5bc373d20fb2e3e1e6427220` | MIT | 逻辑移植 | 移植为确定性生成器：托管区段标记保留人工内容、写前 diff 预览、竞态防护、二次运行幂等；扫描有界且命令全部带来源 | 2026-10-03 |
+| `core/atlas/review/engine.py` | `NousResearch/hermes-agent` | `agent/review_engine.py`（审查简报与派发结构）；Codex `/review`、OpenCode review template（findings schema 对照） | `e287231d7906bcce5bc373d20fb2e3e1e6427220` | MIT | 逻辑移植 | 只读审查员经 delegate 子运行时派发（permission_mode 只读、只能更严）；`review_command` 只读验证命令（拒绝写操作）；findings JSON schema 与容错解析；diff 由 Atlas git 只读收集 | 2026-10-03 |
+| `core/atlas/engine/lsp_bridge.py`, `core/atlas/engine/tool_registry.py`（写路径 seam） | `NousResearch/hermes-agent` | `tools/file_operations_lint.py`, `tools/file_operations.py`（LSP seam 调用点） | `e287231d7906bcce5bc373d20fb2e3e1e6427220` | MIT | 接线适配 | C6A 已搬 `agent/lsp` 核心；本行接真实写/编辑链：写前快照基线、写后 delta 中文报告与 `lsp.diagnostics` 事件；Hermes 自带 LSP 层在桥接处钝化避免双跑 | 2026-10-03 |

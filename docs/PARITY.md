@@ -237,7 +237,7 @@
 | F115 | Diff 查看 | ✅ | 面板「改动」逐文件 diff | Claude Code |
 | F116 | 逐行评论 | ✅ | 改动面板里对 diff 的任意行写评论，攒几条后一起「发给 Atlas 修改」，带文件、行号和那行代码 | Claude Code |
 | F117 | Accept/Reject | ⚖️ | 与 FULL_ACCESS 冲突，可做成事后撤销代替 | |
-| F118 | Agent 自检/Review | ✅ | 改了文件的任务完成后「让审查员检查」 | |
+| F118 | Agent 自检/Review | ✅ | 「审查本次改动」/`/review`（支持 `branch <名>` / `commit <sha>`）：只读审查员子代理出结构化 findings 卡片，可逐条「让 Atlas 修」、全部发回、复制；改动面板每文件显示诊断数 | Hermes review_engine、Codex /review |
 | F119 | Git commit | ✅ | Agent 用 git | |
 | F120 | 创建/跟踪 PR | ✅ | 右栏「上下文」显示当前分支的 PR 和检查状态，可直接推送并创建（需 gh 登录） | |
 | F121 | CI 自动修复 | ✅ | 失败的检查旁「让 Atlas 修」：拉日志末尾交给 Atlas | |
@@ -317,7 +317,7 @@
 | F170 | 用户记忆 | ✅ | facts + 候选审批 | |
 | F171 | 项目记忆 | ✅ | 项目 recall | |
 | F172 | 记忆启停/查看 | ✅ | 记忆页；已超过标杆 | |
-| F173 | 规则文件 | ✅ | 读取工作目录的 AGENTS.md / CLAUDE.md / .atlas/rules.md，时间线里显示 | OpenCode |
+| F173 | 规则文件 | ✅ | 读取工作目录的 AGENTS.md / CLAUDE.md / .atlas/rules.md，时间线里显示；`/init` 可扫描工作区生成/补全 AGENTS.md（diff 预览确认后写入，幂等） | OpenCode、Codex /init |
 
 ### 17 扩展与自定义行为
 

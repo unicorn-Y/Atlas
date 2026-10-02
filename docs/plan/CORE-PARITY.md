@@ -63,7 +63,7 @@
 | T5 | 编辑：容错匹配 | HM `patch`：逐级放宽匹配；OD `edit.ts`：唯一锚点间的变量长度替换 | ✔ Hermes 9 种策略 + OpenCode 唯一边界锚点间可变长度匹配；歧义仍拒绝，CRLF/LF/BOM 保留 | ✔ | — | C2 |
 | T6 | 编辑保留换行和编码 | CC、OD：保留 CRLF/LF 和 BOM | ✔ Windows 假文件 LF/CRLF 测试通过（`4357a86`） | ✔ | — | C1 |
 | T7 | 给 GPT 系模型用补丁格式 | CX `apply_patch`（`codex-rs/apply-patch`）；HM 只对 OpenAI 系模型显示 V4A 补丁模式 | ✔ Hermes patch tool 保留模型适配（`698b7bb`） | ✔ | — | C1 |
-| T8 | 编辑后诊断 | OD：改完跑 LSP 诊断回传；CC 的诊断工具；HM `agent/lsp`、`file_operations_lint.py` | ◐ LSP 诊断核心已合入 main（C6A：`core/atlas/lsp/**` 移植 Hermes `agent/lsp`，版本化新鲜度、before/after 差分行位移、Windows 进程树管理、28 条 server 注册表、fake LSP 套件 73 passed；`110fdc2`）；剩瘦写路径/UI 接线（编辑后触发与诊断回传进编辑流），完整 T8 UX 未完成 | ✔ 语法检查 | LSP 诊断：对比 OD `src/lsp` 和 HM `agent/lsp`，选强的 | C6 |
+| T8 | 编辑后诊断 | OD：改完跑 LSP 诊断回传；CC 的诊断工具；HM `agent/lsp`、`file_operations_lint.py` | ✔ LSP 核心（C6A `core/atlas/lsp/**`）已接真实写/编辑链：native write/patch seam 写前快照基线、写后只报本次新增诊断（行位移不算新增、修后清零、0 条不刷事件），工具结果附中文诊断块，`lsp.diagnostics` 运行事件进时间线（可展开），改动面板按文件显示诊断数；Hermes 自带 LSP 层在桥接处钝化避免双跑；LSP 不可用时文件操作照常成功（`engine/lsp_bridge.py` + `tool_registry.py`，`e07e0e6`；前端 `e976815`） | ✔ 语法检查 | — | C6 |
 | T9 | 搜索 | HM `search_files`：基于 ripgrep，正则、文件过滤、三种输出、上下文行、分页、按修改时间排序 | ✔ Hermes `search_files`（`698b7bb`） | ✔ | — | C1 |
 | T10 | 跑命令：前台、后台、结束通知 | HM `terminal`：后台进程加 `notify` 结束通知、按输出匹配通知、心跳汇报、真终端模式 | ✔ 前后台、完成通知、notify/watch/heartbeat 参数映射由 `test_c1_process_notifications.py` 覆盖 | ✔ | — | C1 |
 | T11 | 真终端交互（REPL、交互式命令行） | CX `unified_exec`（真终端，可写入 stdin）；HM `pty` 加 `process_manage` 的写入 | ✔ stdin/write/submit/close、Windows PTY、handoff 和子进程结束后的父级通知由 `test_c1_tool_compat.py`、`test_c1_process_notifications.py` 覆盖 | ✔ | — | C1 |
@@ -110,7 +110,7 @@
 | I2 | 计划模式 | CC：只读探索后用 ExitPlanMode 交计划；HM `plan_prompt.py`；OD `plan-enter`/`plan-exit` 工具 | ✔ 只读文件、搜索、网页与安全终端命令；计划写入拦截，批准后回到执行 | ✔ | — | C3 |
 | I3 | 持续目标 | CX `/goal`；ZC `/goal`（不断迭代直到验证达成）；HM `/goal`、`/subgoal` | ✔ Automation 与对应聊天会话共用 Hermes GoalManager / SessionDB；暂停、恢复、替换、清除、评价与续跑同源，Scheduler 只负责触发；旧目标完成/暂停状态一次迁移（`d13d941`, `138decb`，C3R focused verification） | ✔ | — | C3 |
 | I4 | 旁问 | CC `/btw`；CX `/side`；HM `side_question.py` | ✔ | ✔ | — | C3 |
-| I5 | 斜杠命令覆盖面 | CX 约 60 条、HM 约 100 条、CC 约 50 条 | ✔ 任务书列出的 21 个日常命令有分组/模糊搜索；`/review`、`/init` 留 C6 | ✔ Hermes 命令 | — | C3 |
+| I5 | 斜杠命令覆盖面 | CX 约 60 条、HM 约 100 条、CC 约 50 条 | ✔ 任务书列出的 21 个日常命令有分组/模糊搜索；`/init`、`/review` 已在 C6 落地（`e976815`） | ✔ Hermes 命令 | — | C3 |
 | I6 | 状态栏 | CC、CX：可以配置显示模型、上下文百分比、花费、分支 | ✔ 模型、推理、上下文、tokens、费用、Git、权限、后台进程可分别开关并保存在本地偏好 | — | — | C3 |
 | I7 | 后台任务面板 | CC `/tasks`；CX `/ps`、`/stop` | ✔ | ✔ | 接 HM 的进程表 | C3 |
 | I8 | 完成提醒 | goose：回合结束响铃；Atlas 有系统通知 | ✔ | — | — | — |
@@ -151,8 +151,8 @@
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| P1 | 生成 AGENTS.md | CX `/init`；OD `command/template/initialize.txt` | ✘ | ✔ HM `/init` | 前端入口 | C6 |
-| P2 | 审查当前改动 | CX `/review`（`command/template/review.txt` 是 OD 的同类）；HM `review_engine.py` | △ 「让审查员检查」 | ✔ | 对比 CX 和 OD 的审查提示词 | C6 |
+| P1 | 生成 AGENTS.md | CX `/init`；OD `command/template/initialize.txt` | ✔ `/init`：确定性工作区扫描（语言/包管理/构建测试命令/入口，全部带来源）+ Hermes `init_command` 质量标准与合并纪律（托管区段标记，保留人工内容），preview 展示 diff、确认后才写入、竞态防护、二次运行幂等；`/init` 入口进 `/` 菜单，DiffView 复用改动面板（`core/atlas/commands/init.py`，`e07e0e6`；前端 `e976815`） | ✔ HM `/init` | — | C6 |
+| P2 | 审查当前改动 | CX `/review`（`command/template/review.txt` 是 OD 的同类）；HM `review_engine.py` | ✔ `/review`（默认未提交改动，支持 `branch <名>` / `commit <sha>` + 追加关注点）：审查简报与 findings schema 移植 Hermes `review_engine`；拦截后派结构化只读审查员子代理（delegate_task `permission_mode` 只读、只读门禁 + `review_command` 只读验证命令），`review.findings` 事件 → 审查卡片（打开文件/让 Atlas 修这一条/全部发回/复制）；原「让审查员检查」按钮合并为同一入口，不留两套 reviewer（`core/atlas/review/engine.py`，`e07e0e6`/`f9191b1`；前端 `e976815`） | ✔ | — | C6 |
 | P3 | worktree | CX `/worktree`；HM `subagent_worktree.py` | ✔ | ✔ | — | — |
 | P4 | 代码地图、语义搜索 | 11 家都没用向量检索；Atlas 有 `coding_repo_map`、`ast_grep` | ✔ | — | 保留 | — |
 
