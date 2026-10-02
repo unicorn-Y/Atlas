@@ -169,14 +169,18 @@ def _simple_spawn(server_id: str, which: Sequence[str], args: Sequence[str] = ()
 # ---- bespoke spawn builders ----
 
 def _spawn_pyright(root: str, ctx: ServerContext) -> Optional[SpawnSpec]:
-    bin_path = _find_binary(ctx, "pyright", ("pyright-langserver", "pyright"))
+    # basedpyright is a drop-in pyright fork (same stdio protocol, same python.pythonPath
+    # setting) and serves as the fallback when pyright itself is absent; server_id stays
+    # "pyright" so trust, overrides and hints key on one adapter (C6A-R1).
+    bin_path = _find_binary(ctx, "pyright",
+                            ("pyright-langserver", "pyright", "basedpyright-langserver", "basedpyright"))
     if bin_path is None:
         return None
-    # If we got the cli ``pyright``, the langserver is its sibling — same suffix, since on Windows
-    # the bare sibling is npm's unrunnable POSIX shim.
+    # If we got a cli (``pyright``/``basedpyright``), the langserver is its sibling — same suffix,
+    # since on Windows the bare sibling is npm's unrunnable POSIX shim.
     stem, suffix = os.path.splitext(os.path.basename(bin_path))
-    if stem == "pyright":
-        sibling = os.path.join(os.path.dirname(bin_path), f"pyright-langserver{suffix}")
+    if stem in ("pyright", "basedpyright"):
+        sibling = os.path.join(os.path.dirname(bin_path), f"{stem}-langserver{suffix}")
         if os.path.exists(sibling):
             bin_path = sibling
     # Point pyright at the project venv; its default "python on PATH" rarely is.  Pyright executes

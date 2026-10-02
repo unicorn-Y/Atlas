@@ -110,3 +110,15 @@ taskbook 最小验收逐条映射：
 - `test_computer_use.py` 类全量测试未跑（taskbook 禁止跑全量）；如需在 C6 合入前回归，`core` 全量 pytest 由主线自跑。
 - vue/powershell 两个 bespoke builder 按"表不缩水"保留，但安装 staging（Hermes `lsp/bin`）不存在，两者只能用 PATH/手动安装——已在 availability 提示中说明。
 - OpenCode `src/tool/lsp.ts` 的交互式查询工具面（goToDefinition/findReferences 等）留待后续波次按需引入，本波无消费者。
+
+---
+
+## R1 附注（ATLAS-C6A-R1-BASEDPYRIGHT，2026-10-02）
+
+最小修复：Python LSP 兼容 basedpyright，不重做 C6A、不动共享文件。
+
+- **改动 1 — `core/atlas/lsp/servers.py::_spawn_pyright`**：探测顺序扩为 `pyright-langserver → pyright → basedpyright-langserver → basedpyright`；CLI→langserver 兄弟解析泛化为 `pyright`/`basedpyright` 两个词干（同一后缀规则，Windows 下裸兄弟是 npm 不可运行的 POSIX shim）。server_id 保持 `"pyright"`——信任白名单、binary_overrides、缺失提示仍键在同一适配器上，无第二个 manager/运行时。
+- **改动 2 — `core/atlas/lsp/availability.py`**：`pyright` 缺失提示改为「未找到 Python 语言服务：安装 pyright 或 basedpyright 均可（如 npm install -g pyright 或 pip install basedpyright），重启 Atlas 即可自动启用。」
+- **新增测试 — `core/tests/test_lsp_pyright_fallback.py`**（7 条，monkeypatch `shutil.which`，不起真进程）：basedpyright-langserver 直接可用；basedpyright CLI 无兄弟时本身即为合法 spec；有兄弟时解析到兄弟；两族并存时 pyright 优先（langserver 与 CLI 两形态各一条）；全部缺失→无 spec；提示含"安装…均可"。
+- **测试结果**：`pytest tests/test_lsp_service.py tests/test_lsp_pyright_fallback.py` → 13 passed（6 条既有服务级用例无回归 + 7 条新增）。按任务书只跑直接受影响文件，未重跑 66 条全套。
+- 本轮改动文件：`servers.py`、`availability.py`、新增 `test_lsp_pyright_fallback.py`、本 result、`ZCODE-CURRENT`。其余一律未动。

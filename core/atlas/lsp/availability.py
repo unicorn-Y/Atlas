@@ -16,7 +16,7 @@ from typing import Dict, Optional, Sequence
 # sync with the server ids in atlas.lsp.servers.
 _HINTS: Dict[str, str] = {
     "pyright":
-        "未找到 Python 语言服务 pyright：请运行 npm install -g pyright（或 pip install pyright）安装，重启 Atlas 即可自动启用。",
+        "未找到 Python 语言服务：安装 pyright 或 basedpyright 均可（如 npm install -g pyright 或 pip install basedpyright），重启 Atlas 即可自动启用。",
     "typescript":
         "未找到 TypeScript 语言服务 typescript-language-server：请运行 npm install -g typescript-language-server typescript 安装，重启 Atlas 即可自动启用。",
     "gopls":
