@@ -15,7 +15,8 @@
 Atlas 做到下面全部，才算「成品」：
 
 1. **主体比各家强**：CORE-PARITY 每一行都是 ✔；实测阶段（T1）的同一批真实任务里，Atlas 在成功率、改错率、token 花费、体验这几项上不输 Claude Code、Codex、OpenCode、Pi、Hermes、ZCode 中最强的那家。输了的项都补完。
-2. **全能**：解冻的外部功能（X1–X6：连接外部世界、电脑和浏览器、跨设备和产出物、技能市场、自我进化、语音和统一入口）都做完并验收。
+2. **全能**：解冻的外部功能（X1–X7：连接外部世界、电脑和浏览器、跨设备和产出物、技能市场、自我进化、语音和统一入口、**常驻个人 Agent**，对标 OpenAI dots、Meta Muse、Grok Bot、Gemini Spark 等）都做完并验收。
+2.5 **笔记本是 Atlas 自己的电脑**（用户 2026-10-02 决定）：Atlas 常驻在笔记本上，相当于各家的云端虚拟机；主机是用户自己工作的机器。
 3. **能交付**：
    - 安装包在干净的 Windows 机器上一次装好就能用，不需要装 Python 或 Node；
    - 升级不丢数据；
@@ -60,7 +61,7 @@ Atlas 做到下面全部，才算「成品」：
 | 6 | C6 | `ATLAS-C6-CODING-POLISH.md` | LSP 诊断、/init、/review；长会话性能；主体界面打磨 | 中 |
 | 7 | T1 | `ATLAS-T1-HEAD-TO-HEAD.md` | 真实模型横向实测，输了的项生成 T1F 补做任务书 | 中（**需要用户参与**） |
 | 8 | T1F | T1 生成 | 补实测输掉的项 | 视结果 |
-| 9 | X1–X6 | `ATLAS-X-EXTERNAL-PHASE.md` | 解冻外部功能，每一项先按 Hermes 内核重写原任务书，再做 | 大 |
+| 9 | X1–X7 | `ATLAS-X-EXTERNAL-PHASE.md` | 解冻外部功能，每一项先按 Hermes 内核重写原任务书，再做；X7 是常驻个人 Agent（dots、Muse、Grok Bot、Spark 那一类全部抄） | 大 |
 | 10 | R1 | `ATLAS-R1-RELEASE.md` | 稳定性、安装包、升级迁移、文档、清理 | 中 |
 | 11 | R2 | `FINAL-REVIEW.md` | 最终审查（独立的 Sol，或者找 Claude） | 小 |
 
