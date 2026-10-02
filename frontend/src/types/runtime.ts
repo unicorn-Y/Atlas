@@ -16,7 +16,9 @@ export type AgentEventType =
   | 'session.title'
   | 'process.completed' | 'process.notification' | 'run.compaction.progress' | 'run.recovery.notice' | 'context.window.switched'
   | 'run.completed' | 'run.failed' | 'run.cancelled'
-  | 'lsp.diagnostics' | 'review.findings';
+  | 'lsp.diagnostics' | 'review.findings'
+  | 'computer.foreground_required' | 'computer.foreground_resumed' | 'computer.step'
+  | 'browser.handoff_required' | 'browser.handoff_resolved' | 'browser.panel.sync' | 'browser.step';
 
 export interface AgentEvent {
   id: string;

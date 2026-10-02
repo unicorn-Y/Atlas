@@ -33,8 +33,8 @@ browser 13 / desktop 111 / models 73 / gateway 49 / files+terminal 49 / tests+do
 
 | 来源 | 版本/日期 | 决策要点 |
 | --- | --- | --- |
-| Claude Code | 见 02 | 待汇总 |
-| OpenAI Codex | 见 03 | 待汇总 |
+| Claude Code | npm **2.1.288**(10-02)/stable 2.1.285(09-29) | 关键变化:Claude Mods(插件改 harness 行为,2.1.287)、Auto mode 权限分类器默认全量(2.1.278+)、AGENTS.md 支持(2.1.277)、子代理输出注入防护框架(2.1.277)、Pre/PostModelSwitch hooks(2.1.251)、plugin eval/configure(2.1.269/285)、/skill-doctor(2.1.261)、MCP alwaysLoad:false 延迟加载(2.1.287)、/cost 缓存未命中原因诊断(2.1.251,Atlas C5 已有同类)、每模型 /autocompact 窗口(2.1.288)、send-now 后台化运行中工具(2.1.281)。Atlas 对照:大多数已有等价;可借鉴=Mod 式深度扩展点(记录不阻塞)、per-model autocompact 窗口(X 域 UPGRADE 候选) |
+| OpenAI Codex | rust-v**0.160.0**(10-01;基线 0.154.0) | 关键变化:instant_interrupt 中断转向(0.159,Atlas 已有 redirect 等价)、Guardian 自动审批审查(0.157,用户不做安全审查→记录不搬)、/agents 指挥中心+子代理一等公民(0.157,Atlas 已有)、Plan mode 掩码协作模式(0.158)、exec-server bearer WS+网络策略(0.156)、OAuth client-secret MCP(0.160)、远程压缩 v2+/recap(0.155)、云同步 skills+预算去重(main)、/side 旁问(main,Atlas 已有 /btw 等价)。apply_patch/V4A 未变 KEEP |
 | OpenCode | anomalyco/opencode **v1.18.34**(09-30;v1 Bun CLI + v2 Effect/SQLite 重写并行) | 编辑工具/LSP/plan/plugins 窗口期未动;KEEP。可借鉴:子代理失败以 task_id 可恢复(Atlas 已有重派)、压缩保留完整近期轮 |
 | Pi | earendil-works/pi **v1.0.0**(10-01,首个稳定版;13 包) | **确认无内置子代理** → Atlas 保留更强子代理体系(A 系 KEEP);快照回退=仅会话树分支,Atlas 的文件级撤回更强 KEEP;可借鉴:prompt cache warming、每模型压缩预算、ContextEditEntry、结构化压缩摘要(Atlas 已有) |
 | Browser Use | **0.13.10**(2026-09-04;CLI 3.0,CDP attach `BU_CDP_URL`;本地无 turnkey 录制→重放→自愈,云版才有) | X2:KEEP 现有依赖版本;录制/重放/自愈自建薄层(基于 Hermes a11y `@eN` refs),不引云 |

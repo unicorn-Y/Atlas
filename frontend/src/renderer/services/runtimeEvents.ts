@@ -23,8 +23,12 @@ export function isRuntimeEvent(value: unknown): value is RuntimeEventEnvelope {
 const DOCUMENT_KIND: Record<string, string> = { document: '生成了 Word 文档', spreadsheet: '生成了 Excel 表格', presentation: '生成了 PPT 演示文稿' };
 
 export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEvent | null {
-  // 已知事件才会被渲染；新的 wire 事件（如 lsp.diagnostics、review.findings）加入这里即可显示。
-  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'lsp.diagnostics', 'review.findings', 'run.completed', 'run.failed', 'run.cancelled']);
+  // 已知事件才会被渲染；新的 wire 事件（如 lsp.diagnostics、review.findings、X2 的 computer.* / browser.*）加入这里即可显示。
+  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'lsp.diagnostics', 'review.findings', 'run.completed', 'run.failed', 'run.cancelled',
+    // X2 电脑操控：前台确认、恢复与每一步动作（供 ForegroundConfirmCard / ComputerEdgeBar / ComputerReplayPanel）。
+    'computer.foreground_required', 'computer.foreground_resumed', 'computer.step',
+    // X2 浏览器代理：交接确认与结果、面板地址同步、录制中的每一步（供 BrowserHandoffCard / BrowserRecorderPanel）。
+    'browser.handoff_required', 'browser.handoff_resolved', 'browser.panel.sync', 'browser.step']);
   known.add('process.notification');
   const base = { id: envelope.event_id, runId: envelope.run_id, sequence: envelope.sequence, timestamp: envelope.timestamp };
   // Office files and other generated documents: shown like any other artifact.
