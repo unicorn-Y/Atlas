@@ -58,6 +58,10 @@ export type TimelineItem =
   | { kind: 'question'; id: string; event: AgentEvent }
   | { kind: 'plan'; id: string; event: AgentEvent }
   | { kind: 'trust'; id: string; event: AgentEvent }
+  /** X2：电脑操控要动你正在用的前台窗口，需要你批准（computer.foreground_required）。 */
+  | { kind: 'foreground'; id: string; event: AgentEvent }
+  /** X2：浏览器代理卡住要把这一步交还给人（browser.handoff_required）。 */
+  | { kind: 'handoff'; id: string; event: AgentEvent }
   | { kind: 'group'; id: string; summary: string; results: Array<{ index: number; title: string; status: string; accepted?: boolean; verification_status?: string; verifier_note?: string; summary: string; changed_files: string[] }> }
   | { kind: 'checks'; id: string; results: CheckResults }
   | { kind: 'cancelled'; id: string }
@@ -307,6 +311,14 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       case 'approval.required':
         items.push({ kind: 'approval', id: event.id, event });
         closeBlocks();
+        break;
+      case 'computer.foreground_required':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'foreground', id: event.id, event });
+        break;
+      case 'browser.handoff_required':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'handoff', id: event.id, event });
         break;
       case 'message.delta':
         if (!reply) { reply = { kind: 'reply', id: event.id, content: '', streaming: true }; items.push(reply); closeBlocks(); }

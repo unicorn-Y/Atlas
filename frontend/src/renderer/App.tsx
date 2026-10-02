@@ -30,7 +30,8 @@ import Mark, { MarkDefs } from './components/Mark';
 import Palette, { type PaletteItem } from './components/Palette';
 import VoiceOverlay, { getSpeechRecognition, type SpeechRecognitionLike } from './components/VoiceOverlay';
 import SettingsPage, { STATUS_BAR_ITEMS, type StatusBarPreferences } from './pages/SettingsPage';
-import SkillDiscoveryPage from './pages/SkillDiscoveryPage';
+import SkillsMarketPage from './pages/SkillsMarketPage';
+import EvolutionPage from './pages/EvolutionPage';
 import MemoryPage from './pages/MemoryPage';
 import AutomationPage from './pages/AutomationPage';
 import CodePage from './pages/CodePage';
@@ -47,6 +48,7 @@ import type { PickedElement } from './shell/panels/BrowserPanel';
 import { THEMES, isTheme, nextTheme, themeInfo, type Theme } from './shell/themes';
 import { api, relativeTime } from './services/api';
 import { buildTimeline } from './components/timeline';
+import { ComputerEdgeBar } from './components/x2';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
@@ -205,6 +207,15 @@ export default function App() {
   }, [activeEvents]);
   // 当前运行的时间线，与 MessageThread 里的构建保持一致；TimelineNav 也要按它数行。
   const timelineItems = useMemo(() => buildTimeline(activeEvents), [activeEvents]);
+  // X2：活动任务要求操作前台窗口、还没等到 computer.foreground_resumed 时，会话区顶部挂一条提示。
+  const foregroundEvent = useMemo(() => {
+    for (let index = activeEvents.length - 1; index >= 0; index--) {
+      const type = activeEvents[index].type;
+      if (type === 'computer.foreground_required') return activeEvents[index];
+      if (type === 'computer.foreground_resumed') return undefined;
+    }
+    return undefined;
+  }, [activeEvents]);
 
   const go = useCallback((next: View) => setView(next), []);
 
@@ -946,12 +957,14 @@ export default function App() {
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
+            {foregroundEvent && <ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={foregroundEvent.runId} className="shrink-0" />}
             <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId}
               history={historyWithBranchNotes} items={timelineItems}
               hasEarlier={Boolean(store.messagesHasEarlier[store.activeConversationId])}
               truncatedCount={activeRun?.eventsTruncated ? (activeRun.droppedEventCount ?? 0) : 0}
               loading={loadingMessages} />
             <MessageThread history={historyWithBranchNotes} username={username} historyActions={historyActions} threadRef={threadRef} setTab={showInspectorTab}
+              onOpenBrowser={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }}
               emptyState={!messages.length && !activeEvents.length && !loadingMessages ? <div className="pt-[16vh] text-center">
                 <Mark className="mx-auto mb-4 size-11" />
                 <h2 className="m-0 font-serif text-[24px] font-semibold text-heading">这次要做什么？</h2>
@@ -995,7 +1008,9 @@ export default function App() {
         {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} initialPrompt={createPrompt} />}
         {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'memory' && <MemoryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} onPendingChange={setPendingCount} />}
-        {view === 'skills' && <div className="screen"><SkillDiscoveryPage apiBaseUrl={store.apiBaseUrl} activeSkills={store.activeSkills} onApplySkill={(name) => store.activeSkills.includes(name) ? store.removeSkill(name) : store.applySkill(name)} /></div>}
+        {view === 'skills' && <div className="screen"><SkillsMarketPage apiBaseUrl={store.apiBaseUrl} onToast={notify}
+          onTryInConversation={(name) => { store.applySkill(name); go('chat'); }} /></div>}
+        {view === 'evolution' && <EvolutionPage apiBaseUrl={store.apiBaseUrl} onToast={notify} />}
       </main>
     </div>
 

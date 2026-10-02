@@ -823,17 +823,23 @@ class HermesRuntime:
                 if cancel_event is not None and cancel_event.is_set() and not task.done():
                     agent.interrupt(hard_cancel=True)
                 if steer_queue is not None:
+                    from atlas.engine.steer_dispatch import apply_steer_payload
+
                     while True:
                         try:
                             steer = steer_queue.get_nowait()
                         except asyncio.QueueEmpty:
                             break
-                        text = str(steer.get("content") or steer.get("text") or "").strip()
-                        immediate = bool(steer.get("immediate", False))
-                        accepted = agent.redirect(text) if immediate else agent.steer(text)
-                        if text and accepted:
-                            yield {"type": "run_steered", "content": text,
-                                   "event_id": steer.get("event_id", ""), "immediate": immediate}
+                        outcome = apply_steer_payload(agent, steer)
+                        if outcome["accepted"]:
+                            # send_now: the running tool was asked to yield to the
+                            # background registry; the message rides the steer drain
+                            # onto the next model turn either way.
+                            yield {"type": "run_steered", "content": outcome["text"],
+                                   "event_id": steer.get("event_id", ""),
+                                   "immediate": outcome["immediate"],
+                                   "send_now": outcome["send_now"],
+                                   "yield_requested": outcome["yield_requested"]}
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=0.05)
                 except TimeoutError:

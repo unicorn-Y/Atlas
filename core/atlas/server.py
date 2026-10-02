@@ -1282,9 +1282,26 @@ async def get_conversation_branches(conversation_id: str) -> list[dict[str, Any]
     if await memory.get_conversation(conversation_id) is None:
         raise HTTPException(status_code=404, detail="找不到这段对话。")
     from atlas.config import DATA_ROOT
+    from atlas.engine.branch_summaries import branch_summaries
     from atlas.engine.session_sync import list_branch_tree
 
-    return await asyncio.to_thread(list_branch_tree, DATA_ROOT / "engine", conversation_id)
+    tree = await asyncio.to_thread(list_branch_tree, DATA_ROOT / "engine", conversation_id)
+    # S2: attach per-branch summaries (cached instantly, missing ones generated
+    # fire-and-forget so switching never blocks on a model call).
+    try:
+        summaries = await branch_summaries(memory, conversation_id)
+    except Exception:  # noqa: BLE001 - summaries are advisory, never break the tree
+        summaries = {}
+    if summaries:
+        merged = []
+        for node in tree:
+            if isinstance(node, dict):
+                summary = summaries.get(str(node.get("id") or ""))
+                if summary:
+                    node = {**node, "summary": summary}
+            merged.append(node)
+        return merged
+    return tree
 
 
 @app.get("/api/conversations/{conversation_id}/goal")
@@ -6389,9 +6406,9 @@ async def ws_chat(ws: WebSocket) -> None:
                         "run.steer.rejected", {"reason": "run_not_active"},
                     ))
                 else:
-                    reason = _queue_run_steer(
-                        run, data.get("content"), data.get("event_id"), data.get("immediate", False),
-                    )
+                    from atlas.engine.steer_dispatch import queue_run_steer
+
+                    reason = queue_run_steer(run, data)
                     if reason:
                         rejected = RunState(run_id, "", "")
                         await runtime_mgr.send(conn_id, rejected.next_envelope(

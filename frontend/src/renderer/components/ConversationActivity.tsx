@@ -7,6 +7,8 @@ import { cn } from '../ui/cn';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
 import ReviewFindingsCard from './ReviewFindingsCard';
+import ForegroundConfirmCard from './x2/ForegroundConfirmCard';
+import BrowserHandoffCard from './x2/BrowserHandoffCard';
 import { DiagnosticsList } from './diagnostics';
 import { buildTimeline, cacheShare, describeTool, duration, tokenCount, type Step, type TimelineItem } from './timeline';
 import type { InspectorTab } from '../shell/Inspector';
@@ -16,6 +18,8 @@ interface ConversationActivityProps {
   store: ReturnType<typeof useAtlasStore.getState>;
   username: string;
   setTab: (tab: InspectorTab) => void;
+  /** X2 交接卡「在浏览器面板打开」时由宿主打开浏览器面板并带上网址。 */
+  onOpenBrowser?: (url: string) => void;
 }
 
 /** 一条时间线渲染所需的上下文；由 ConversationActivity / MessageThread（虚拟列表）提供。 */
@@ -25,11 +29,12 @@ export interface TimelineRowContext {
   username: string;
   setTab: (tab: InspectorTab) => void;
   busy: boolean;
+  onOpenBrowser?: (url: string) => void;
 }
 
 /** 渲染单条时间线（用户消息、步骤、回复、审批卡片…）；虚拟列表按条复用，输出与整段渲染完全一致。 */
 export const TimelineRow = memo(function TimelineRow({ item, context, firstInTurn, last }: { item: TimelineItem; context: TimelineRowContext; firstInTurn: boolean; last: boolean }) {
-  const { events, store, username, setTab, busy } = context;
+  const { events, store, username, setTab, busy, onOpenBrowser } = context;
   switch (item.kind) {
     case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} />;
     case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn} streaming={item.streaming}
@@ -47,6 +52,24 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     case 'question': return <Question key={item.id} event={item.event} store={store} />;
     case 'plan': return <Plan key={item.id} event={item.event} store={store} />;
     case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
+    case 'foreground': {
+      const data = item.event.data;
+      return <div key={item.id} className="my-4 ml-10">
+        <ForegroundConfirmCard apiBaseUrl={store.apiBaseUrl} runId={item.event.runId}
+          reason={typeof data.reason === 'string' && data.reason ? data.reason : 'Atlas 想在你正在使用的窗口里操作'}
+          target={typeof data.target === 'string' ? data.target : undefined} />
+      </div>;
+    }
+    case 'handoff': {
+      const data = item.event.data;
+      const url = typeof data.url === 'string' ? data.url : undefined;
+      return <div key={item.id} className="my-4 ml-10">
+        <BrowserHandoffCard apiBaseUrl={store.apiBaseUrl} runId={item.event.runId}
+          reason={typeof data.reason === 'string' && data.reason ? data.reason : '浏览器这一步需要你搭把手'}
+          url={url}
+          onOpenPanel={() => { if (url && onOpenBrowser) onOpenBrowser(url); else setTab('browser'); }} />
+      </div>;
+    }
     case 'group': return <WorkerGroup key={item.id} item={item} />;
     case 'checks': return <Checks key={item.id} item={item} />;
     case 'notice': return <div key={item.id} className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
@@ -81,7 +104,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
   }
 });
 
-export default function ConversationActivity({ events, store, username, setTab }: ConversationActivityProps) {
+export default function ConversationActivity({ events, store, username, setTab, onOpenBrowser }: ConversationActivityProps) {
   const items = useMemo(() => buildTimeline(events), [events]);
   const busy = store.busy && !store.paused;
   // Each Atlas turn shows its header once; later steps and replies in the same turn hang beneath it.
@@ -91,7 +114,7 @@ export default function ConversationActivity({ events, store, username, setTab }
     if (item.kind === 'user') headed = false;
     const firstInTurn = item.kind !== 'user' && !headed;
     if (item.kind !== 'user') headed = true;
-    return <TimelineRow key={item.id} item={item} context={{ events, store, username, setTab, busy }} firstInTurn={firstInTurn} last={last} />;
+    return <TimelineRow key={item.id} item={item} context={{ events, store, username, setTab, busy, onOpenBrowser }} firstInTurn={firstInTurn} last={last} />;
   })}</>;
 }
 

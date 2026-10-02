@@ -8,7 +8,7 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } fr
 import { Tip } from '../ui/Tooltip';
 import { cn } from '../ui/cn';
 
-export type View = 'home' | 'chat' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills';
+export type View = 'home' | 'chat' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'evolution';
 
 export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
   { view: 'home', label: '首页', icon: Home },
@@ -18,6 +18,7 @@ export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
   { view: 'auto', label: '自动化', icon: Repeat },
   { view: 'memory', label: '记忆', icon: BookOpen },
   { view: 'skills', label: '技能', icon: Puzzle },
+  { view: 'evolution', label: '自动追新', icon: Sparkles },
 ];
 
 function groupByDay(conversations: ConversationSummary[]) {

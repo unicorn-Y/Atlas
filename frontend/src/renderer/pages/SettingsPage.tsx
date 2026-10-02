@@ -3,6 +3,7 @@ import { Check, ChevronLeft, LoaderCircle, Pencil, Radio, Trash2, X } from 'luci
 import type { CustomModelRequest, CustomModelUpdateRequest, ModelInfo, ProviderState, ReasoningStagesConfig } from '@atlas/backend-adapter';
 import DependencyCheckPanel from './DependencyCheckPanel';
 import IntegrationPanel from './IntegrationPanel';
+import { BrowserSettingsSection, ComputerStatusSection } from '../components/x2';
 import KeyManager from './models/KeyManager';
 import ModelForm, { buildCreateRequest, buildUpdatePatch, type ModelFormValues } from './models/ModelForm';
 import ProviderGrid from './models/ProviderGrid';
@@ -201,6 +202,8 @@ export default function SettingsPage(props: SettingsPageProps) {
       <ReasoningStages config={props.reasoningStages} busy={props.busy} onChange={props.onSaveReasoningStages} />
     </section>
     <IntegrationPanel apiBaseUrl={props.apiBaseUrl} />
+    <BrowserSettingsSection apiBaseUrl={props.apiBaseUrl} />
+    <ComputerStatusSection apiBaseUrl={props.apiBaseUrl} />
     <DependencyCheckPanel apiBaseUrl={props.apiBaseUrl} />
     {(props.error || props.busy) && <div className={props.error ? styles.settingsError : styles.settingsStatus} role={props.error ? 'alert' : 'status'}>{props.busy && <LoaderCircle size={14} className={styles.settingsSpinner} />}{props.error ?? '正在保存或测试配置…'}</div>}
     <footer className={styles.settingsFooter}>Atlas 后端 {props.apiBaseUrl}　模型服务 {props.providerBaseUrl}</footer>

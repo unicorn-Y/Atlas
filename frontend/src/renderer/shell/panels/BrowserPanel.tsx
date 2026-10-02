@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, ScrollText, ExternalLink, Globe, Monitor, RotateCw, Smartphone, Tablet, X } from 'lucide-react';
+import type { AgentEvent } from '../../../types/runtime';
+import BrowserRecorderPanel from '../../components/x2/BrowserRecorderPanel';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
 
@@ -137,7 +139,7 @@ const normalize = (value: string) => {
  * A browser next to the conversation for checking what the Agent built.
  * Pages run in their own session with no access to Atlas; picking an element hands its details to the composer.
  */
-export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast, onAsk }: {
+export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast, onAsk, apiBaseUrl, runId, events }: {
   url: string;
   onUrl: (url: string) => void;
   /** Local servers the Agent mentioned, offered as one-click targets. */
@@ -146,6 +148,11 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   onToast: (text: string) => void;
   /** Hand a request to Atlas, e.g. to summarise the open page. */
   onAsk?: (text: string) => void;
+  /** X2 操作录制：后端地址；给了才显示底部的录制区。 */
+  apiBaseUrl?: string;
+  /** 活动任务的 runId / 事件流；缺省时录制面板自己从全局事件流取。 */
+  runId?: string;
+  events?: AgentEvent[];
 }) {
   const viewRef = useRef<WebviewElement | null>(null);
   const [address, setAddress] = useState(url);
@@ -153,6 +160,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const [nav, setNav] = useState({ back: false, forward: false });
   const [picking, setPicking] = useState<'' | 'element' | 'region'>('');
   const [device, setDevice] = useState<Device>('fit');
+  const [recorderOpen, setRecorderOpen] = useState(false);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stage, setStage] = useState({ width: 0, height: 0 });
   useEffect(() => {
@@ -265,5 +273,12 @@ ${current}`);
           </button>)}
         </div>}
       </div>}
+    {apiBaseUrl && <div className="shrink-0 border-t border-line pt-1.5">
+      <button type="button" onClick={() => setRecorderOpen((value) => !value)} aria-expanded={recorderOpen}
+        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-fg-3 hover:bg-hover hover:text-fg">
+        <ScrollText size={13} />{recorderOpen ? '收起操作录制' : '操作录制（可存成技能）'}
+      </button>
+      {recorderOpen && <BrowserRecorderPanel apiBaseUrl={apiBaseUrl} runId={runId} events={events} className="mt-2 max-h-72 overflow-auto pr-1" />}
+    </div>}
   </div>;
 }

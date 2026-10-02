@@ -53,14 +53,14 @@ UPGRADE 全部 S/M 难度、可直接搬；无 L 级。8 项建议 in-mega 施�
 | 能力 | Atlas 当前 | 当前最强来源 | version/commit | repo/file | 判定 | 阻塞 | 难度 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | S1 恢复会话 | SessionDB 恢复；窗口内 resume/token_count 修复已随 pin | HM | pin | hermes-agent `agent/transcript_repair.py` | KEEP | 否 | — | — |
-| S2 分叉/会话树 | 分支树界面 + Hermes branch lineage（`engine/session_sync.py`）；**分支切换无自动摘要** | Pi branch summarization（切分支附摘要） | v1.0.0 | pi `docs/compaction.md` Branch Summarization | UPGRADE | 否 | M | in-mega 候选（C3 遗留项收尾） |
+| S2 分叉/会话树 | 分支树界面 + Hermes branch lineage（`engine/session_sync.py`）；**分支切换自动摘要已实现（2026-10-03）**：`engine/branch_summaries.py` 异步+缓存+single-flight，复用 `compression_model` 便宜模型与 `save_branch_summary`/`append_branch_summary` 落库路径，fake-model 测试断言只请求一次且读缓存不阻塞切换 | Pi branch summarization（切分支附摘要） | v1.0.0 | pi `docs/compaction.md` Branch Summarization | implemented（待 server 分支路由一行接线，注记在模块注释内） | 否 | M（已完成） | in-mega 已施工 |
 | S3 撤回/检查点 | **已合并（2026-10-03）**：保留 `agent/checkpoints.py` ShadowGitCheckpointStore 为唯一实现；server.py 全部本地检查点路由（/api/checkpoints、history、rewind、_run_changes）本就调用它（C3 已单库），W06 残留的每检查点 shadow-git 子系统（每快照 4 次 git 子进程+双份存储，从未被当 git 读取）已删除；新增 `manifest_path()` 作为布局访问器。恢复兼容旧快照（git/ 优先回退 files/）。ssh.py `.atlas-checkpoints` 为远程传输适配器保留（文件在远端，本地库无法触及），语义弱（首触快照、无修剪）记录为后续项 | OD v2 content-addressed snapshot（capture/diff/restore）作合并参照 | v1.18.34 | opencode `packages/core/src/snapshot.ts` | implemented（kept ShadowGitCheckpointStore, folded W06 shadow-git machinery; 界面与 HTTP API 零改动, server.py 无需修改） | 否 | S（已完成） | in-mega 已施工 |
 | S4–S6 标题/搜索/导出 | 全有（C1） | HM | pin | — | KEEP | 否 | — | — |
 | I1 权限档位 | 六档 + 子代理不提权 | CC auto-mode 分类器默认全量（用户明确不做安全分类器） | 2.1.284+ | — | KEEP（分类器记 record-only） | 否 | — | record-only |
 | I1b 危险命令审批 | 审批卡片常驻等待 | CC 2.1.281 危险 rm 提示 2min 超时+改写提示（无人值守不卡死） | 2.1.281 | — | UPGRADE | 否 | S | record-only |
 | I2 计划模式 | 只读+批准执行 | CX mode presets（已并入 L8 行） | — | — | KEEP | 否 | — | — |
 | I3/I4 目标/旁问 | 全有 | CX `/side`（main 新增，等价） | — | — | KEEP | 否 | — | — |
-| I5–I8 命令/状态栏/后台面板/提醒 | 全有；后台任务面板接 HM 进程表 | CC 2.1.281 **send-now 把运行中工具转后台而非取消**；Atlas 插话只能排队/转向 | 2.1.281/286 | — | I7 相关：UPGRADE | 否 | M | in-mega 候选（发消息时运行中工具转后台） |
+| I5–I8 命令/状态栏/后台面板/提醒 | 全有；后台任务面板接 HM 进程表；**I7 send-now 已实现（2026-10-03）**：`engine/steer_dispatch.py` + hermes_runtime steer 循环——send-now 消息经 `agent.steer` 入队并对工具 worker 发 `tools.interrupt.request_yield`，前台终端把活进程移交 `tools/process_registry` 后台继续（不取消），下一模型轮注入；不可后台的工具天然回退排队。fake 工具测试覆盖后台/不可后台/回退 | CC 2.1.281 **send-now 把运行中工具转后台而非取消** | 2.1.281/286 | — | I7 相关：implemented（send_now WS 字段待 server 一行接线，注记在 `steer_dispatch.queue_run_steer`） | 否 | M（已完成） | in-mega 已施工 |
 
 ## D. 子代理 / 编排（A1–A5）
 

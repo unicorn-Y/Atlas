@@ -40,9 +40,11 @@ export interface MessageThreadProps {
   threadRef: MutableRefObject<HTMLDivElement | null>;
   /** 任务面板跳转。 */
   setTab: (tab: InspectorTab) => void;
+  /** X2 交接卡「在浏览器面板打开」：带网址打开浏览器面板。 */
+  onOpenBrowser?: (url: string) => void;
 }
 
-export default function MessageThread({ history, username, historyActions, emptyState, footerNote, threadRef, setTab }: MessageThreadProps) {
+export default function MessageThread({ history, username, historyActions, emptyState, footerNote, threadRef, setTab, onOpenBrowser }: MessageThreadProps) {
   // 窄选择器：只有当前会话的运行事件/正文变化才重渲染这里，别的会话流式输出不打扰。
   const conversationId = useAtlasStore((state) => state.activeConversationId);
   const events = useAtlasStore((state) => state.runs.find((run) => run.id === state.activeRunId)?.events ?? EMPTY_EVENTS);
@@ -88,7 +90,7 @@ export default function MessageThread({ history, username, historyActions, empty
     return rows;
   }, [history, loading, timelineItems, hasEarlier, truncatedCount]);
 
-  const context = useMemo(() => ({ events, store: activityStore, username, setTab, busy: working }), [events, activityStore, username, setTab, working]);
+  const context = useMemo(() => ({ events, store: activityStore, username, setTab, busy: working, onOpenBrowser }), [events, activityStore, username, setTab, working, onOpenBrowser]);
 
   // 会话切换：卸载前把当前滚动位置存起来；新会话没有存档就从最新一条开始。
   useEffect(() => {
