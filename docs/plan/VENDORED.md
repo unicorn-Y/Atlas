@@ -61,5 +61,7 @@
 | `core/atlas/engine/tool_registry.py` | `anomalyco/opencode` | `packages/opencode/src/tool/edit.ts` | `1ddb0873aee50d209d1a8d7f91b89c5daf692d49` | MIT | 逻辑移植 | 加入唯一边界锚点间可变长度匹配；保留多处命中报错，不复制 OpenCode 文件 | 2026-10-02 |
 | `core/atlas/engine/hermes_runtime.py`, `core/atlas/engine/tool_registry.py`, `core/atlas/agent/__init__.py` | `Atlas` | C2 taskbook ATLAS-C2-TOOLS-CONTEXT | local implementation | n/a | 自行实现 / API 适配 | 同文件编辑提醒、视觉读文件桥接、模型族稳定短提示、结构化上下文交接及新上下文事件 | 2026-10-02 |
 
+| `core/atlas/engine/session_sync.py`, `core/atlas/server.py`（Automation Goal 适配） | `NousResearch/hermes-agent` | `hermes_cli/goals.py`, `hermes_cli/goal_command.py` | `e287231d7906bcce5bc373d20fb2e3e1e6427220` | MIT | 原生 API 复用 | C3R 将 Automation 与聊天目标统一到现有 GoalManager / SessionDB；Scheduler 只保存触发元数据，不复制目标生命周期实现 | 2026-10-02 |
+
 参考提交号（2026-09-30 调研时）：
 - `NousResearch/hermes-agent`：`12e4d3e2dd5281adf289f70e5d6c7f33427d6982`

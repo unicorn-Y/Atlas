@@ -108,7 +108,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | I1 | 权限档位 | ZC 五档（每步都问 / 改前问 / 自动改文件但命令要问 / 计划 / 完全放开，Shift+Tab 切换）；CC 的 auto 模式（分类器判断，不弹窗）；OC 按会话设权限、文件访问限定在工作区 | ✔ ask_each / ask_writes / auto_file / plan / full_access，另保留 read_only；按对话保存，子 Agent 不可提权 | ✔ HM 的审批档位 | —（不做安全审查分类器） | C3 |
 | I2 | 计划模式 | CC：只读探索后用 ExitPlanMode 交计划；HM `plan_prompt.py`；OD `plan-enter`/`plan-exit` 工具 | ✔ 只读文件、搜索、网页与安全终端命令；计划写入拦截，批准后回到执行 | ✔ | — | C3 |
-| I3 | 持续目标 | CX `/goal`；ZC `/goal`（不断迭代直到验证达成）；HM `/goal`、`/subgoal` | △ 对话目标走 Hermes GoalManager，回合后自动评价与续跑；Automation GoalsPanel 仍走 Atlas Scheduler 独立目标存储/执行闭环 | ✔ | Automation 目标需统一到 Hermes GoalManager，移除第二套目标状态机 | C3 |
+| I3 | 持续目标 | CX `/goal`；ZC `/goal`（不断迭代直到验证达成）；HM `/goal`、`/subgoal` | ✔ Automation 与对应聊天会话共用 Hermes GoalManager / SessionDB；暂停、恢复、替换、清除、评价与续跑同源，Scheduler 只负责触发；旧目标完成/暂停状态一次迁移（`d13d941`, `138decb`，C3R focused verification） | ✔ | — | C3 |
 | I4 | 旁问 | CC `/btw`；CX `/side`；HM `side_question.py` | ✔ | ✔ | — | C3 |
 | I5 | 斜杠命令覆盖面 | CX 约 60 条、HM 约 100 条、CC 约 50 条 | ✔ 任务书列出的 21 个日常命令有分组/模糊搜索；`/review`、`/init` 留 C6 | ✔ Hermes 命令 | — | C3 |
 | I6 | 状态栏 | CC、CX：可以配置显示模型、上下文百分比、花费、分支 | ✔ 模型、推理、上下文、tokens、费用、Git、权限、后台进程可分别开关并保存在本地偏好 | — | — | C3 |
@@ -122,7 +122,7 @@
 | A1 | 委派单个子 Agent | CC Task 工具（独立上下文、可指定模型和工具）；HM `delegate_tool*.py`（同步和异步、运行中引导、实时日志） | ✔ Atlas 子 Agent 全链路、模型/上下文策略、只读路径限制、进度和清理由 `test_c1_lifecycle_subtask.py`、`test_c1_child_policy.py` 覆盖 | ✔ | — | C1 |
 | A2 | 并行和验收 | Factory Missions；HM 并行委派；W07 的验收 | ✔ 仅 completed 且 verifier 明确通过才 accepted；失败可重派，schema/status 不完整不计通过 | ✔ | — | C3 |
 | A3 | 自定义子 Agent 定义 | CC `.claude/agents`、OD agents、CX `agent-roles` | ✔ W07 | — | 保留 | — |
-| A4 | 子 Agent 界面 | CC 的任务面板；CX `/agents` 指挥中心 | △ Worker 状态/验收卡片、活动 Worker 补充要求、任务看板、项目 NOTES 编辑已接现有后端；未补子 Agent 启停/默认模型设置 UI | — | 子 Agent 设置面板 | C3 |
+| A4 | 子 Agent 界面 | CC 的任务面板；CX `/agents` 指挥中心 | ✔ 既有 Worker/验收/看板/NOTES 保留；设置接现有配置 API 与 ModelManager，可启用/禁用并选择默认子 Agent 模型；仅影响后续新建 child，运行中的 child 保留原模型（`3b8627a`，C3R focused verification） | — | — | C3 |
 | A5 | 多模型会诊 | HM `/moa`、`moa_loop.py` | ✔ `/moa` 通过 Atlas ModelManager 并发参考咨询，事件和 advisory prompt 已由假咨询覆盖 | ✔ | 保留 | — |
 
 ## 8. 扩展
