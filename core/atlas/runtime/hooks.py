@@ -1,45 +1,428 @@
-"""User-configured command hooks for Atlas runtime events."""
+"""Atlas command hooks with Claude Code settings compatibility."""
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
+import re
+import shutil
 import subprocess
 import time
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Iterable, Mapping
+
+
+# Kept in sync with the current Claude Code hooks reference. Event declarations may
+# be read even when Atlas does not yet have a real lifecycle point for that event.
+CLAUDE_HOOK_EVENTS = frozenset({
+    "SessionStart", "Setup", "InstructionsLoaded", "UserPromptSubmit",
+    "UserPromptExpansion", "MessageDisplay", "PreToolUse", "PermissionRequest",
+    "PostToolUse", "PostToolUseFailure", "PostToolBatch", "PermissionDenied",
+    "Notification", "SubagentStart", "SubagentStop", "TaskCreated", "TaskCompleted",
+    "Stop", "StopFailure", "TeammateIdle", "ConfigChange", "CwdChanged",
+    "DirectoryAdded", "FileChanged", "WorktreeCreate", "WorktreeRemove",
+    "PreCompact", "PostCompact", "PreModelSwitch", "PostModelSwitch",
+    "SessionEnd", "Elicitation", "ElicitationResult",
+})
+
+_ATLAS_TO_CLAUDE = {
+    "run.started": "SessionStart",
+    "tool.before": "PreToolUse",
+    "tool.after": "PostToolUse",
+    "run.completed": "Stop",
+    "run.failed": "StopFailure",
+}
+_BLOCKING_EXIT_EVENTS = {
+    "PreToolUse", "UserPromptSubmit", "UserPromptExpansion", "Stop",
+    "SubagentStop", "TeammateIdle", "TaskCreated", "TaskCompleted",
+    "PostToolBatch", "PreCompact", "PreModelSwitch", "ConfigChange",
+    "Elicitation", "ElicitationResult", "WorktreeCreate", "WorktreeRemove",
+}
+_MATCH_FIELDS = {
+    "PreToolUse": "tool_name", "PostToolUse": "tool_name",
+    "PostToolUseFailure": "tool_name", "PermissionRequest": "tool_name",
+    "PermissionDenied": "tool_name", "SessionStart": "source", "Setup": "trigger",
+    "SessionEnd": "reason", "Notification": "notification_type",
+    "SubagentStart": "agent_type", "SubagentStop": "agent_type",
+    "PreCompact": "trigger", "PostCompact": "trigger",
+    "PreModelSwitch": "model", "PostModelSwitch": "model",
+    "ConfigChange": "source", "DirectoryAdded": "source", "FileChanged": "file_path",
+    "StopFailure": "error_type", "InstructionsLoaded": "load_reason",
+    "UserPromptExpansion": "command_name", "Elicitation": "mcp_server_name",
+    "ElicitationResult": "mcp_server_name",
+}
+_EXACT_MATCHER = re.compile(r"^[A-Za-z0-9_\- ,|]*$")
+
+
+def parse_claude_hooks(
+    config: Mapping[str, Any], *, source: str = "",
+) -> list[dict[str, Any]]:
+    """Normalize Claude settings/plugin hooks into event/matcher/handler records."""
+    events = config.get("hooks", config)
+    if not isinstance(events, Mapping):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for event, groups in events.items():
+        if not isinstance(event, str) or not isinstance(groups, list):
+            continue
+        for group in groups:
+            if not isinstance(group, Mapping):
+                continue
+            hooks = group.get("hooks")
+            if not isinstance(hooks, list):
+                continue
+            commands = [dict(item) for item in hooks if isinstance(item, Mapping)]
+            if commands:
+                item = {
+                    "event": event,
+                    "matcher": group.get("matcher"),
+                    "hooks": commands,
+                    "source": source,
+                }
+                item["id"] = _claude_hook_id(item)
+                normalized.append(item)
+    return normalized
+
+
+def claude_hook_settings(
+    project_dir: str | Path | None = None,
+    user_settings_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Read user and project Claude settings without modifying their source files."""
+    paths: list[tuple[str, Path]] = []
+    user_path = Path(user_settings_path).expanduser() if user_settings_path else Path.home() / ".claude" / "settings.json"
+    paths.append(("user", user_path))
+    if project_dir is not None:
+        project = Path(project_dir).expanduser()
+        paths.extend((
+            ("project", project / ".claude" / "settings.json"),
+            ("local", project / ".claude" / "settings.local.json"),
+        ))
+    result: list[dict[str, Any]] = []
+    for scope, path in paths:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        if isinstance(data, Mapping):
+            result.extend(parse_claude_hooks(data, source=f"claude:{scope}:{path}"))
+    return result
+
+
+def _event_payload(event: str, payload: Mapping[str, Any], cwd: str | None) -> dict[str, Any]:
+    data = dict(payload)
+    data["hook_event_name"] = event
+    if cwd:
+        data.setdefault("cwd", cwd)
+    if "parameters" in data and "tool_input" not in data:
+        data["tool_input"] = data["parameters"]
+    if "tool_response" not in data and "result" in data:
+        data["tool_response"] = data["result"]
+    return data
+
+
+def _matches(matcher: Any, event: str, payload: Mapping[str, Any]) -> bool:
+    if matcher is None or matcher in ("", "*"):
+        return True
+    if not isinstance(matcher, str):
+        return False
+    field = _MATCH_FIELDS.get(event)
+    if field is None:
+        return True
+    value = payload.get(field)
+    if value is None and field == "file_path":
+        value = payload.get("file") or payload.get("path")
+    if value is None and field == "error_type" and isinstance(payload.get("error"), Mapping):
+        value = payload["error"].get("type")
+    if value is None:
+        return False
+    value = str(value)
+    if _EXACT_MATCHER.fullmatch(matcher):
+        return value in [item.strip() for item in re.split(r"[|,]", matcher)]
+    try:
+        return re.search(matcher, value) is not None
+    except re.error:
+        return False
+
+
+def _matches_if(condition: Any, event: str, payload: Mapping[str, Any]) -> bool:
+    if condition is None or condition == "":
+        return True
+    if not isinstance(condition, str):
+        return False
+    # Claude Code's command-hook `if` form is ToolName(argument-pattern).
+    match = re.fullmatch(r"([A-Za-z0-9_.:-]+)\((.*)\)", condition)
+    if not match:
+        return True
+    tool_name, pattern = match.groups()
+    if str(payload.get("tool_name") or "") != tool_name:
+        return False
+    tool_input = payload.get("tool_input")
+    command = tool_input.get("command", "") if isinstance(tool_input, Mapping) else ""
+    if pattern.endswith("*"):
+        return str(command).startswith(pattern[:-1])
+    return str(command) == pattern
+
+
+def _claude_hook_id(item: Mapping[str, Any]) -> str:
+    identity = json.dumps(
+        {key: item.get(key) for key in ("source", "event", "matcher", "hooks")},
+        sort_keys=True, ensure_ascii=False, default=str,
+    )
+    return "claude-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
+
+
+def _json_decision(event: str, value: Any) -> dict[str, Any]:
+    outcome: dict[str, Any] = {"blocked": False, "reason": ""}
+    if not isinstance(value, Mapping):
+        return outcome
+    specific = value.get("hookSpecificOutput")
+    specific = specific if isinstance(specific, Mapping) else {}
+    if event == "PreToolUse":
+        decision = specific.get("permissionDecision")
+        if decision is None:
+            decision = value.get("decision")
+            decision = {"block": "deny", "approve": "allow"}.get(decision, decision)
+        if decision == "deny":
+            outcome.update(blocked=True, reason=str(
+                specific.get("permissionDecisionReason") or value.get("reason") or "Blocked by hook"
+            ))
+        updated = specific.get("updatedInput")
+        if isinstance(updated, Mapping):
+            outcome["updated_input"] = dict(updated)
+        context = specific.get("additionalContext") or value.get("additionalContext")
+        if isinstance(context, str) and context:
+            outcome["additional_context"] = context
+    elif event == "PermissionRequest":
+        decision = specific.get("decision")
+        if isinstance(decision, Mapping) and decision.get("behavior") == "deny":
+            outcome.update(blocked=True, reason=str(decision.get("message") or "Permission denied by hook"))
+    else:
+        if value.get("decision") == "block":
+            outcome.update(blocked=True, reason=str(value.get("reason") or "Blocked by hook"))
+        context = specific.get("additionalContext") or value.get("additionalContext")
+        if isinstance(context, str) and context:
+            outcome["additional_context"] = context
+    if event == "Stop":
+        outcome["continue"] = not outcome["blocked"]
+    return outcome
+
+
+async def _run_command(
+    spec: Mapping[str, Any], input_data: dict[str, Any], *, cwd: str | None,
+    plugin_root: str | None,
+) -> tuple[int, str, str]:
+    command = str(spec.get("command") or "")
+    if not command:
+        return 1, "", "hook command is empty"
+    replacements = {
+        "${CLAUDE_PROJECT_DIR}": cwd or "",
+        "${CLAUDE_PLUGIN_ROOT}": plugin_root or "",
+    }
+    command = _substitute(command, replacements)
+    args = spec.get("args")
+    env = os.environ.copy()
+    if cwd:
+        env["CLAUDE_PROJECT_DIR"] = cwd
+    if plugin_root:
+        env["CLAUDE_PLUGIN_ROOT"] = plugin_root
+    timeout = max(1, min(300, int(spec.get("timeout", 30))))
+    if isinstance(args, list):
+        argv = [command, *[_substitute(str(arg), replacements) for arg in args]]
+    else:
+        shell = str(spec.get("shell") or "")
+        if os.name == "nt":
+            if shell.lower() in {"powershell", "pwsh"}:
+                argv = [shutil.which("pwsh") or "powershell.exe", "-NoProfile", "-Command", command]
+            else:
+                bash = shutil.which("bash")
+                argv = [bash, "-lc", command] if bash else ["powershell.exe", "-NoProfile", "-Command", command]
+        else:
+            argv = ["sh", "-lc", command]
+    proc = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv, cwd=cwd or None, env=env, stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(json.dumps(input_data, ensure_ascii=False, default=str).encode("utf-8")),
+            timeout=timeout,
+        )
+        return proc.returncode or 0, stdout[:4096].decode("utf-8", errors="replace"), stderr[:4096].decode("utf-8", errors="replace")
+    except Exception as exc:
+        if proc is not None and proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+        return 1, "", str(exc)[:4096]
+
+
+def _substitute(value: str, replacements: Mapping[str, str]) -> str:
+    for key, replacement in replacements.items():
+        value = value.replace(key, replacement)
+    return value
+
+
+async def execute_claude_hooks(
+    hooks: Iterable[Mapping[str, Any]], event: str, payload: Mapping[str, Any], *,
+    cwd: str | None = None, emit: Any = None,
+) -> dict[str, Any]:
+    """Execute normalized Claude command hooks and combine event decisions."""
+    result: dict[str, Any] = {
+        "blocked": False, "reason": "", "updated_input": None,
+        "additional_context": "", "continue": None, "logs": [],
+    }
+    event_payload = _event_payload(event, payload, cwd)
+    for group in hooks:
+        if group.get("event") != event or not _matches(group.get("matcher"), event, event_payload):
+            continue
+        for spec in group.get("hooks", []):
+            if not isinstance(spec, Mapping) or spec.get("type", "command") != "command":
+                continue
+            if not _matches_if(spec.get("if"), event, event_payload):
+                continue
+            started = time.monotonic()
+            code, output, stderr = await _run_command(
+                spec, event_payload, cwd=cwd, plugin_root=group.get("plugin_root"),
+            )
+            try:
+                structured = json.loads(output) if output.strip() else None
+            except json.JSONDecodeError:
+                structured = None
+            decision = _json_decision(event, structured)
+            if code == 2 and event in _BLOCKING_EXIT_EVENTS:
+                decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Blocked by hook")
+            elif not output.strip() and event in {"SessionStart", "UserPromptSubmit", "UserPromptExpansion", "PostModelSwitch"} and code == 0:
+                decision["additional_context"] = ""
+            elif structured is None and code == 0 and event in {"SessionStart", "UserPromptSubmit", "UserPromptExpansion", "PostModelSwitch"}:
+                decision["additional_context"] = output.strip()
+            if decision.get("updated_input"):
+                current = result["updated_input"] or {}
+                result["updated_input"] = {**current, **decision["updated_input"]}
+            if decision.get("additional_context"):
+                result["additional_context"] = "\n".join(
+                    item for item in (result["additional_context"], decision["additional_context"]) if item
+                )
+            if decision.get("blocked"):
+                result.update(blocked=True, reason=decision["reason"])
+                if event == "Stop":
+                    result["continue"] = False
+            log = {
+                "event": event, "source": group.get("source", "claude"),
+                "exit_code": code, "duration_ms": round((time.monotonic() - started) * 1000),
+                "output": output, "stderr": stderr,
+            }
+            result["logs"].append(log)
+            if emit:
+                maybe_awaitable = emit("hook.ran", log)
+                if asyncio.iscoroutine(maybe_awaitable):
+                    await maybe_awaitable
+            if result["blocked"]:
+                break
+        if result["blocked"]:
+            break
+    return result
 
 
 class HookStore:
     EVENTS = {"run.started", "tool.before", "tool.after", "run.completed", "run.failed"}
 
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        plugin_hooks: Iterable[Mapping[str, Any]] | Callable[[], Iterable[Mapping[str, Any]]] = (),
+    ) -> None:
         self.path = path
+        self.plugin_hooks = plugin_hooks
+        self._recent_logs: list[dict[str, Any]] = []
+
+    def _data(self) -> dict[str, Any]:
+        if not self.path.exists():
+            return {}
+        with self.path.open("rb") as stream:
+            return tomllib.load(stream)
 
     def list(self) -> list[dict[str, Any]]:
-        if not self.path.exists():
-            return []
-        with self.path.open("rb") as stream:
-            data = tomllib.load(stream)
-        return list(data.get("hooks", []))
+        return list(self._data().get("hooks", []))
+
+    def list_claude(self, cwd: str | None = None) -> list[dict[str, Any]]:
+        hooks = claude_hook_settings(cwd)
+        hooks.extend(self._plugin_hook_list())
+        overrides = {
+            item.get("id"): bool(item.get("enabled", True))
+            for item in self._data().get("hook_overrides", [])
+        }
+        for item in hooks:
+            item["enabled"] = overrides.get(item["id"], True)
+        return hooks
+
+    def list_all(self, cwd: str | None = None) -> list[dict[str, Any]]:
+        legacy = [
+            {**hook, "source": "atlas", "matcher": None}
+            for hook in self.list()
+        ]
+        claude = []
+        for group in self.list_claude(cwd):
+            claude.append({
+                "id": group["id"], "event": group["event"],
+                "matcher": group.get("matcher"), "source": group.get("source", "claude"),
+                "enabled": group.get("enabled", True), "hooks": group.get("hooks", []),
+                "command": "; ".join(str(spec.get("command") or "") for spec in group.get("hooks", [])),
+            })
+        return legacy + claude
+
+    def set_hook_enabled(self, hook_id: str, enabled: bool, cwd: str | None = None) -> dict[str, Any]:
+        legacy = self.list()
+        for index, hook in enumerate(legacy):
+            if hook.get("id") == hook_id:
+                legacy[index] = {**hook, "enabled": bool(enabled)}
+                self.save(legacy)
+                return legacy[index]
+        item = next((item for item in self.list_all(cwd) if item.get("id") == hook_id), None)
+        if item is None:
+            raise KeyError(hook_id)
+        data = self._data()
+        overrides = {
+            row.get("id"): bool(row.get("enabled", True))
+            for row in data.get("hook_overrides", [])
+        }
+        overrides[hook_id] = bool(enabled)
+        data["hook_overrides"] = [{"id": key, "enabled": value} for key, value in overrides.items()]
+        self._save_data(data)
+        return {**item, "enabled": bool(enabled)}
+
+    def recent_logs(self) -> list[dict[str, Any]]:
+        return list(self._recent_logs)
 
     def save(self, hooks: list[dict[str, Any]]) -> None:
+        data = self._data()
+        data["hooks"] = hooks
+        self._save_data(data)
+
+    def _save_data(self, data: Mapping[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         lines = []
-        for hook in hooks:
-            lines.extend(
-                [
-                    "[[hooks]]",
-                    f"id = {json.dumps(hook['id'], ensure_ascii=False)}",
-                    f"event = {json.dumps(hook['event'], ensure_ascii=False)}",
-                    f"command = {json.dumps(hook['command'], ensure_ascii=False)}",
-                    f"timeout_s = {int(hook.get('timeout_s', 30))}",
-                    f"enabled = {str(bool(hook.get('enabled', True))).lower()}",
-                    "",
-                ]
-            )
+        for hook in data.get("hooks", []):
+            lines.extend([
+                "[[hooks]]",
+                f"id = {json.dumps(hook['id'], ensure_ascii=False)}",
+                f"event = {json.dumps(hook['event'], ensure_ascii=False)}",
+                f"command = {json.dumps(hook['command'], ensure_ascii=False)}",
+                f"timeout_s = {int(hook.get('timeout_s', 30))}",
+                f"enabled = {str(bool(hook.get('enabled', True))).lower()}",
+                "",
+            ])
+        for override in data.get("hook_overrides", []):
+            lines.extend([
+                "[[hook_overrides]]",
+                f"id = {json.dumps(override['id'], ensure_ascii=False)}",
+                f"enabled = {str(bool(override.get('enabled', True))).lower()}",
+                "",
+            ])
         tmp = self.path.with_suffix(".toml.tmp")
         tmp.write_text("\n".join(lines), encoding="utf-8")
         os.replace(tmp, self.path)
@@ -51,93 +434,83 @@ class HookStore:
         *,
         cwd: str | None = None,
         emit: Any = None,
+        claude_hooks: Iterable[Mapping[str, Any]] = (),
     ) -> dict[str, Any]:
-        blocked = {"blocked": False, "reason": ""}
+        blocked = {"blocked": False, "reason": "", "updated_input": None,
+                   "additional_context": "", "continue": None, "logs": []}
         for hook in self.list():
             if not hook.get("enabled", True) or hook.get("event") != event:
                 continue
             started = time.monotonic()
-            code, output = 1, ""
-            proc = None
-            try:
-                if os.name == "nt":
-                    command = ["cmd.exe", "/d", "/s", "/c", str(hook["command"])]
-                else:
-                    command = ["sh", "-lc", str(hook["command"])]
-                proc = await asyncio.create_subprocess_exec(
-                    *command,
-                    cwd=cwd or None,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-                stdout, _stderr = await asyncio.wait_for(
-                    proc.communicate(
-                        json.dumps({"event": event, **payload}, ensure_ascii=False).encode()
-                    ),
-                    timeout=max(1, int(hook.get("timeout_s", 30))),
-                )
-                code, output = proc.returncode or 0, stdout[:4096].decode("utf-8", errors="replace")
-            except Exception as exc:
-                if proc is not None and proc.returncode is None:
-                    proc.kill()
-                    await proc.wait()
-                output = str(exc)[:4096]
-            result = {
-                "hook_id": hook["id"],
-                "event": event,
-                "exit_code": code,
-                "duration_ms": round((time.monotonic() - started) * 1000),
-                "output": output,
-            }
+            code, output, stderr = await _run_command(
+                {"command": hook["command"], "timeout": hook.get("timeout_s", 30)},
+                {"event": event, **payload}, cwd=cwd, plugin_root=None,
+            )
+            log = {"hook_id": hook["id"], "event": event, "exit_code": code,
+                   "duration_ms": round((time.monotonic() - started) * 1000),
+                   "output": output, "stderr": stderr, "source": "atlas"}
+            self._record(log)
+            blocked["logs"].append(log)
             if emit:
-                await emit("hook.ran", result)
+                maybe_awaitable = emit("hook.ran", log)
+                if asyncio.iscoroutine(maybe_awaitable):
+                    await maybe_awaitable
             if event == "tool.before" and code == 2:
-                blocked = {"blocked": True, "reason": output.strip() or "Blocked by hook"}
+                blocked.update(blocked=True, reason=stderr.strip() or output.strip() or "Blocked by hook")
                 break
+
+        if blocked["blocked"]:
+            return blocked
+        claude_event = event if event in CLAUDE_HOOK_EVENTS else _ATLAS_TO_CLAUDE.get(event)
+        if claude_event:
+            all_hooks = [item for item in self.list_claude(cwd) if item.get("enabled", True)]
+            all_hooks.extend(item for item in claude_hooks if item.get("enabled", True))
+            result = await execute_claude_hooks(all_hooks, claude_event, payload, cwd=cwd, emit=emit)
+            for log in result["logs"]:
+                self._record(log)
+            prior_logs = blocked["logs"]
+            blocked.update(result)
+            blocked["logs"] = prior_logs + result["logs"]
         return blocked
 
-    async def test(self, hook_id: str) -> dict[str, Any]:
+    def _plugin_hook_list(self) -> list[dict[str, Any]]:
+        hooks = self.plugin_hooks() if callable(self.plugin_hooks) else self.plugin_hooks
+        return [dict(item) for item in hooks if isinstance(item, Mapping)]
+
+    def _record(self, log: dict[str, Any]) -> None:
+        self._recent_logs.append(log)
+        del self._recent_logs[:-100]
+
+    async def test(self, hook_id: str, cwd: str | None = None) -> dict[str, Any]:
         hook = next((item for item in self.list() if item.get("id") == hook_id), None)
-        if not hook:
+        if hook:
+            started = time.monotonic()
+            code, output, stderr = await _run_command(
+                {"command": hook["command"], "timeout": hook.get("timeout_s", 30)},
+                {"event": hook["event"], "run_id": "example-run",
+                 "conversation_id": "example-conversation", "tool_name": "example",
+                 "parameters": {}, "result": None}, cwd=None, plugin_root=None,
+            )
+            log = {"hook_id": hook_id, "event": hook["event"], "exit_code": code,
+                   "duration_ms": round((time.monotonic() - started) * 1000),
+                   "output": output, "stderr": stderr}
+            self._record(log)
+            return log
+        group = next((item for item in self.list_claude(cwd) if item.get("id") == hook_id), None)
+        if not group:
             raise KeyError(hook_id)
-        started = time.monotonic()
-        command = (
-            ["cmd.exe", "/d", "/s", "/c", str(hook["command"])]
-            if os.name == "nt"
-            else ["sh", "-lc", str(hook["command"])]
-        )
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *command,
-                cwd=None,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(
-                proc.communicate(
-                    json.dumps(
-                        {
-                            "event": hook["event"],
-                            "run_id": "example-run",
-                            "conversation_id": "example-conversation",
-                            "tool_name": "example",
-                            "parameters": {},
-                            "result": None,
-                        },
-                        ensure_ascii=False,
-                    ).encode()
-                ),
-                timeout=max(1, int(hook.get("timeout_s", 30))),
-            )
-            code, output = proc.returncode or 0, stdout[:4096].decode("utf-8", errors="replace")
-        except Exception as exc:
-            code, output = 1, str(exc)[:4096]
-        return {
-            "hook_id": hook_id,
-            "event": hook["event"],
-            "exit_code": code,
-            "duration_ms": round((time.monotonic() - started) * 1000),
-            "output": output,
+        payload = {
+            "session_id": "example-session", "tool_name": "example",
+            "tool_input": {"command": "example", "file_path": "example.txt"},
+            "cwd": cwd or "", "prompt": "example prompt",
         }
+        result = await execute_claude_hooks([group], str(group["event"]), payload, cwd=cwd)
+        for log in result["logs"]:
+            log["hook_id"] = hook_id
+            self._record(log)
+        return {"hook_id": hook_id, "event": group["event"], **result}
+
+
+async def maybe_awaitable(value: Any) -> None:
+    if asyncio.iscoroutine(value):
+        await value

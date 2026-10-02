@@ -25,7 +25,7 @@ BUILTINS: dict[str, dict[str, Any]] = {
     "general": {"description": "通用子 Agent", "tools": None, "model": "inherit", "role": "leaf"},
 }
 
-_NAME = re.compile(r"^[a-z0-9-]+$")
+_NAME = re.compile(r"^[a-z0-9-]+(?::[a-z0-9-]+)?$")
 _KNOWN = {"name", "description", "tools", "model", "role", "permission_mode", "skills", "mcp", "max_turns", "output_schema", "mode", "prompt", "developer_instructions", "sandbox_mode", "approval_policy", "nickname_candidates"}
 
 
@@ -82,7 +82,8 @@ def _normalize(name: str, raw: dict[str, Any], source: str, path: Path | None,
 
 
 def list_agent_types(data_root: Path, workspace: Path | None = None,
-                     workspace_trusted: bool = False) -> list[dict[str, Any]]:
+                     workspace_trusted: bool = False,
+                     plugin_agent_dirs: tuple[Path, ...] | list[Path] = ()) -> list[dict[str, Any]]:
     """Load built-ins then user/workspace imports; later definitions replace earlier."""
     entries = {name: _normalize(name, {"name": name, **value}, "builtin", None, True)
                for name, value in BUILTINS.items()}
@@ -96,12 +97,18 @@ def list_agent_types(data_root: Path, workspace: Path | None = None,
         paths.extend((p, "copilot", "markdown") for p in sorted((workspace / ".github/agents").glob("*.agent.md")))
         paths.extend((p, "codex", "toml") for p in sorted((workspace / ".codex/agents").glob("*.toml")))
         paths.extend((p, "workspace", "markdown") for p in sorted((workspace / ".atlas/agents").glob("*.md")))
+    for agents_dir in plugin_agent_dirs:
+        plugin_name = Path(agents_dir).parent.name.lower()
+        paths.extend((p, f"plugin:{plugin_name}", "markdown")
+                     for p in sorted(Path(agents_dir).glob("*.md")))
     for path, source, kind in paths:
         try:
             raw = tomllib.loads(path.read_text(encoding="utf-8")) if kind == "toml" else _markdown(path)
             if source == "opencode" and raw.get("mode") == "primary":
                 continue
             name = str(raw.get("name") or path.name.split(".")[0]).lower()
+            if source.startswith("plugin:"):
+                name = f"{source.split(':', 1)[1]}:{name}"
             in_workspace = bool(workspace and path.resolve().is_relative_to(workspace.resolve()))
             normalized = _normalize(name, raw, source, path, not in_workspace or workspace_trusted)
             if "skipped" not in " ".join(normalized["warnings"]):

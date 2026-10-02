@@ -3631,7 +3631,98 @@ async def install_local_plugin(req: dict[str, Any]) -> dict[str, Any]:
         result = plugin_runtime.install_local(source)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result["report"] = await _reload_extensions()
     return result
+
+
+async def _reload_extensions() -> dict[str, Any]:
+    assert plugin_runtime is not None
+    report = await plugin_runtime.load_all(
+        hook_bus=orchestrator.hooks if orchestrator else None,
+        mcp_client=mcp_client,
+        capabilities=orchestrator.capabilities if orchestrator else None,
+    )
+    _refresh_extension_sources()
+    return report
+
+
+@app.post("/api/plugins/install")
+async def install_plugin(req: dict[str, Any]) -> dict[str, Any]:
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        result = await asyncio.to_thread(
+            plugin_runtime.install, str(req.get("source", "")),
+            name=req.get("name"), ref=req.get("ref"),
+        )
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {**result, "report": await _reload_extensions()}
+
+
+@app.post("/api/plugins/{name}/update")
+async def update_plugin(name: str) -> dict[str, Any]:
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        result = await asyncio.to_thread(plugin_runtime.update, name)
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {**result, "report": await _reload_extensions()}
+
+
+@app.delete("/api/plugins/{name}")
+async def uninstall_plugin(name: str) -> dict[str, Any]:
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        removed = await asyncio.to_thread(plugin_runtime.uninstall, name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not removed:
+        raise HTTPException(status_code=404, detail="插件不存在")
+    return {"name": name, "removed": True, "report": await _reload_extensions()}
+
+
+@app.get("/api/plugin-marketplaces")
+async def list_plugin_marketplaces() -> dict[str, Any]:
+    return {"marketplaces": plugin_runtime.list_marketplaces() if plugin_runtime else []}
+
+
+@app.post("/api/plugin-marketplaces")
+async def add_plugin_marketplace(req: dict[str, Any]) -> dict[str, Any]:
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        return await asyncio.to_thread(
+            plugin_runtime.add_marketplace, str(req.get("source", "")),
+            name=req.get("name"), ref=req.get("ref"),
+        )
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/plugin-marketplaces/{name}/plugins")
+async def list_marketplace_plugins(name: str) -> dict[str, Any]:
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        return {"plugins": plugin_runtime.list_marketplace_plugins(name)}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/plugin-marketplaces/{name}/install")
+async def install_marketplace_plugin(name: str, req: dict[str, Any]) -> dict[str, Any]:
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        result = await asyncio.to_thread(
+            plugin_runtime.install_marketplace_plugin, name, str(req.get("plugin", "")),
+        )
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {**result, "report": await _reload_extensions()}
 
 
 @app.post("/api/plugins/{name}/enabled")
@@ -3639,12 +3730,9 @@ async def set_plugin_enabled(name: str, req: dict[str, Any]) -> dict[str, Any]:
     """Enable or disable a plugin and reapply every plugin to the runtime."""
     if plugin_runtime is None:
         raise HTTPException(status_code=503, detail="Plugin runtime unavailable")
-    plugin_runtime.set_enabled(name, bool(req.get("enabled", True)))
-    report = await plugin_runtime.load_all(
-        hook_bus=orchestrator.hooks if orchestrator else None,
-        mcp_client=mcp_client,
-        capabilities=orchestrator.capabilities if orchestrator else None,
-    )
+    if not plugin_runtime.set_enabled(name, bool(req.get("enabled", True))):
+        raise HTTPException(status_code=404, detail="插件不存在")
+    report = await _reload_extensions()
     return {"name": name, "enabled": bool(req.get("enabled", True)), "report": report}
 
 
@@ -4985,13 +5073,39 @@ async def search_skills(query: str) -> dict[str, Any]:
 # Schedules
 # ---------------------------------------------------------------------------
 
+_active_hook_store: HookStore | None = None
+
+
+def _plugin_contributions() -> list[dict[str, Any]]:
+    return plugin_runtime.enabled_contributions() if plugin_runtime else []
+
+
+def _plugin_hooks() -> list[dict[str, Any]]:
+    return [hook for plugin in _plugin_contributions() for hook in plugin["hooks"]]
+
+
 def _hook_store() -> HookStore:
-    return HookStore(get_config().db_path.parent / "hooks.toml")
+    global _active_hook_store
+    path = get_config().db_path.parent / "hooks.toml"
+    if _active_hook_store is None or _active_hook_store.path != path:
+        _active_hook_store = HookStore(path, plugin_hooks=_plugin_hooks)
+    return _active_hook_store
 
 
 @app.get("/api/hooks")
-async def list_hooks() -> dict[str, Any]:
-    return {"hooks": _hook_store().list()}
+async def list_hooks(workspace: str | None = None) -> dict[str, Any]:
+    store = _hook_store()
+    return {"hooks": store.list_all(workspace), "logs": store.recent_logs()}
+
+
+@app.post("/api/hooks/{hook_id}/enabled")
+async def set_hook_enabled(hook_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return _hook_store().set_hook_enabled(
+            hook_id, bool(req.get("enabled", True)), req.get("workspace"),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Hook 不存在") from exc
 
 
 @app.post("/api/hooks", status_code=201)
@@ -5042,9 +5156,9 @@ async def delete_hook(hook_id: str) -> dict[str, str]:
 
 
 @app.post("/api/hooks/{hook_id}/test")
-async def test_hook(hook_id: str) -> dict[str, Any]:
+async def test_hook(hook_id: str, workspace: str | None = None) -> dict[str, Any]:
     try:
-        return await _hook_store().test(hook_id)
+        return await _hook_store().test(hook_id, cwd=workspace)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Hook not found") from exc
 

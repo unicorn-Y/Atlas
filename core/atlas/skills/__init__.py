@@ -47,6 +47,8 @@ class SkillInfo:
     tags: list[str] = field(default_factory=list)
     related_skills: list[str] = field(default_factory=list)
     author: str = ""
+    source: str = "atlas"
+    source_priority: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for API responses with canonical dependencies."""
@@ -60,7 +62,18 @@ class SkillInfo:
             "dependencies": self.dependency_contract,
             "related_skills": self.related_skills,
             "author": self.author,
+            "source": self.source,
+            "source_priority": self.source_priority,
         }
+
+
+@dataclass(frozen=True)
+class SkillSource:
+    """A directory contributing Agent Skills to the shared Atlas index."""
+
+    name: str
+    root: Path
+    priority: int
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +288,47 @@ class SkillManager:
     def __init__(self, skills_dir: Path | None = None) -> None:
         self._skills_dir = skills_dir or SKILLS_DIR
         self._index: dict[str, SkillInfo] = {}  # name → SkillInfo
+        self._sources: dict[str, SkillSource] = {
+            "atlas": SkillSource("atlas", self._skills_dir, 10),
+        }
+
+    def register_skill_source(self, source: SkillSource) -> None:
+        """Register or replace an external source before scanning the index.
+
+        Higher priorities win duplicate names. Equal-priority ties are resolved
+        by source name and then path, so discovery is stable across runs.
+        """
+        if not source.name or not isinstance(source.priority, int):
+            raise ValueError("skill source requires a name and integer priority")
+        self._sources[source.name] = SkillSource(
+            source.name, Path(source.root).expanduser(), source.priority,
+        )
+
+    def unregister_skill_source(self, name: str) -> None:
+        """Remove a dynamic source, for example after a plugin is disabled."""
+        if name == "atlas":
+            raise ValueError("the built-in Atlas skills source cannot be removed")
+        self._sources.pop(name, None)
+
+    def replace_skill_sources(self, prefix: str, sources: list[SkillSource]) -> None:
+        """Replace a family of dynamic sources and rebuild the canonical index."""
+        for name in tuple(self._sources):
+            if name.startswith(prefix) and name != "atlas":
+                del self._sources[name]
+        for source in sources:
+            if not source.name.startswith(prefix):
+                raise ValueError(f"skill source name must start with {prefix!r}")
+            self.register_skill_source(source)
+        self.scan_skills_sync()
+
+    def with_sources(self, sources: list[SkillSource]) -> "SkillManager":
+        """Build a request-scoped view using this same index/activation layer."""
+        scoped = SkillManager(self._skills_dir)
+        scoped._sources = dict(self._sources)
+        for source in sources:
+            scoped.register_skill_source(source)
+        scoped.scan_skills_sync()
+        return scoped
 
     # -- scanning --------------------------------------------------------------
 
@@ -286,38 +340,40 @@ class SkillManager:
         """Scan skills directory and build index (synchronous)."""
         self._index.clear()
 
-        if not self._skills_dir.is_dir():
-            log.warning("skills.dir_not_found", path=str(self._skills_dir))
-            return
-
         count = 0
-        skill_files = [
-            path for path in self._skills_dir.rglob("SKILL.md")
-            if len(path.relative_to(self._skills_dir).parts) == 3
-        ]
-        skill_files.sort(
-            key=lambda path: path.relative_to(self._skills_dir).as_posix().casefold()
+        sources = sorted(
+            self._sources.values(), key=lambda item: (item.priority, item.name, str(item.root)),
         )
-        for skill_md in skill_files:
-            parsed = _parse_skill_md(skill_md)
-            if parsed is None:
+        for source in sources:
+            if not source.root.is_dir():
                 continue
+            skill_files = sorted(
+                source.root.rglob("SKILL.md"),
+                key=lambda path: path.relative_to(source.root).as_posix().casefold(),
+            )
+            for skill_md in skill_files:
+                parsed = _parse_skill_md(skill_md)
+                if parsed is None:
+                    continue
 
-            fm, _body = parsed
-            info = _frontmatter_to_skill_info(fm, skill_md, skills_dir=self._skills_dir)
-            if info is None:
-                continue
+                fm, _body = parsed
+                info = _frontmatter_to_skill_info(fm, skill_md, skills_dir=source.root)
+                if info is None:
+                    continue
+                info.source = source.name
+                info.source_priority = source.priority
 
-            if info.name in self._index:
-                log.warning("skills.duplicate_name", name=info.name,
-                            existing=self._index[info.name].path,
-                            new=str(skill_md))
-                continue
+                existing = self._index.get(info.name)
+                if existing is not None:
+                    log.warning("skills.duplicate_name", name=info.name,
+                                existing=existing.path, new=str(skill_md))
+                    if existing.source_priority >= info.source_priority:
+                        continue
+                self._index[info.name] = info
+                if existing is None:
+                    count += 1
 
-            self._index[info.name] = info
-            count += 1
-
-        log.info("skills.scanned", count=count, directory=str(self._skills_dir))
+        log.info("skills.scanned", count=count, sources=len(sources))
 
     # -- querying --------------------------------------------------------------
 
