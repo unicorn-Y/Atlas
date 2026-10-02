@@ -19,7 +19,7 @@ PREVIOUS_REVIEW: PASS — tasks/reviews/ATLAS-C3R-FINISH.review.md
 ## 施工模式
 
 - GPT-6.1 Sol / medium 主控。
-- 按文件/模块并行派 GPT-6 Luna / high，优先 4–6 个互不冲突 worker。
+- 按文件/模块并行派 GPT-6 Luna / high，**同时最多 3 个 worker**；更多任务按依赖分波次。
 - 共享核心文件只给一个 owner 或最后串行接线。
 - 速度优先，成熟实现直接复用，不做大重构/大测试矩阵。
 
