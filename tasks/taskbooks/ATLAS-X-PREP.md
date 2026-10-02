@@ -523,6 +523,46 @@ CLI、desktop、web/channel 必须共用后端/session，而不是各自一套 a
 
 ---
 
+# 9A. 新增：已完成 C1–C6 的 Latest-Best 回扫
+
+用户 2026-10-03 新决定：**已经做完的主体也不能冻结在旧版本。**
+
+除 X1–X7 外，再加一份主体刷新来源图：
+
+`docs/research/2026-10-03-x-prep/10-core-latest-best.md`
+
+逐项对：
+- Hermes current main
+- Claude Code current release/changelog
+- Codex current stable + main
+- OpenCode current release/main
+- Pi current release/main
+- ZCode 当前可验证能力
+
+覆盖：
+- agent loop/recovery/context
+- file/edit/terminal/LSP
+- session/fork/rewind
+- permissions/plan/queue
+- subagents/orchestration/worktree
+- hooks/plugins/skills/MCP
+- models/provider/cache/reasoning
+- /init /review / long-session / coding UX
+
+每项输出：
+能力 | Atlas 当前 | 最新来源 | version/commit/date | repo/file | KEEP/UPGRADE/REPLACE | U1 施工建议
+
+重要：
+- 最新不等于盲抄。若新版本删掉某能力但 Atlas 当前实现更强（例如 Pi 新版不再内置 subagent），结论应是 KEEP Atlas，而不是跟着删。
+- Claude Code 最新的 Mods、side-agent、plugin eval/configure、prompt-audit 等要核。
+- Codex 最新 command center/fullscreen/history/parallel-work 变化要核。
+- Hermes 最新 delegation/browser/skills/bot/gateway 要核。
+- OpenCode/Pi 最新 edit/session/runtime 变化要核。
+
+这份来源图将直接喂给 `ATLAS-U1-LATEST-BEST-REFRESH.md`，不要在 X-PREP 分支施工生产代码。
+
+---
+
 # 10. 调研产物
 
 写：
