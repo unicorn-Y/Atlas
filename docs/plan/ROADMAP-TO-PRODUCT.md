@@ -15,7 +15,7 @@
 1. C6R 验收收尾
 2. **X2 电脑与浏览器**：`ATLAS-X2-COMPUTER-BROWSER.md`
 3. **X4 技能市场**：`ATLAS-X4-SKILL-MARKET.md`
-4. **K1 上线前全面检查**：`ATLAS-K1-PRELAUNCH-CHECK.md`。把 Atlas 在笔记本上装成常驻；对照 Hermes 源码检查能力是否都接通；用 Hermes 自己的测试检查；12 条日常路径；4 小时长时间运行；错误提示和界面检查；3 个真实模型冒烟（先问用户）。做完告诉用户「可以开始日常使用」
+4. **K1 上线前检查**：`ATLAS-K1-PRELAUNCH-CHECK.md`。只检查有没有问题：Hermes 的能力有没有接上、测试、假模型走一遍常用路径，有问题就修。**实测由用户自己来**
 5. **日常使用 → 优化的循环**：`docs/plan/USAGE-FEEDBACK.md`。用户用的时候随手记问题，攒到 5 到 10 条开一波 F 波来修，长期执行
 6. 其他（完整 T1、X1、X3、X5–X7、R1）以后再说，由用户决定什么时候开
 
