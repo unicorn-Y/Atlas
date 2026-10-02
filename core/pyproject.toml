@@ -44,7 +44,7 @@ dependencies = [
     "pypdf>=5.0",
     "trafilatura>=2.0",
     "youtube-transcript-api>=1.2",
-    "hermes-agent @ git+https://github.com/unicorn-Y/hermes-agent.git@e287231d7906bcce5bc373d20fb2e3e1e6427220",
+    "hermes-agent @ git+https://github.com/unicorn-Y/hermes-agent.git@27c63095b002b531b07bd6ad31da88bfe821f55f",
 ]
 
 [project.optional-dependencies]

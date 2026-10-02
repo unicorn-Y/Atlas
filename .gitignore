@@ -104,3 +104,6 @@ desktop.ini
 /pelican-wing-circus.html
 /Atlas竞品对比报告_2026-09-28.docx
 .worktrees/
+
+# Hermes engine runtime home (X2/U0 sync writes here)
+data/engine/
