@@ -1,83 +1,258 @@
-# ATLAS-C6：编程专项与界面打磨
+# ATLAS-C6：编程专项 + 长会话性能 + 主体 UX 收口
 
-> 先读 ROADMAP-TO-PRODUCT、CORE-PARITY（T8、P1、P2 和第 11 节）、EXECUTION-GUIDE。前提：C5 验收通过。
+> 当前正式任务。C4、C5、C6A 已 PASS 并进入 main。
+> **不要重做 `core/atlas/lsp/**`。** C6A 已完成 LSP client/server/workspace/delta/Windows lifecycle，本波只做真实编辑链接线和 UI。
 
-## 本波目标
+先读：
+- `tasks/CURRENT.md`
+- `tasks/reviews/ATLAS-C5-C6A-INTEGRATION.review.md`
+- `docs/plan/CORE-PARITY.md`：T8、P1、P2、第 11 节
+- `docs/plan/EXECUTION-GUIDE.md`
+- C6A result/review
 
-1. 改完代码自动拿到诊断；`/init`、`/review` 做到 Codex 和 OpenCode 的水平。
-2. 长会话不卡。
-3. 把主体界面逐项对照 Claude Code、Codex、ZCode 打磨一遍，这是进实测前的最后一波。
+## 本波一次收完
 
-## 1. LSP 诊断（T8）
+1. T8：LSP 核心接真实写/编辑链和 UI
+2. P1：`/init`
+3. P2：`/review`
+4. 长会话性能
+5. 主体 UX 最后一轮打磨
+6. 修正 C6 负责的 CORE-PARITY 缺口，准备进入 T1
 
-- **来源**：OpenCode `packages/opencode/src/lsp/`（`client.ts`、`server.ts`、`launch.ts`、`language.ts`、`diagnostic.ts`）、`src/tool/lsp.ts`；Hermes `agent/lsp/`、`tools/file_operations_lint.py`。
-- **做法**：
-  1. 对比两家：支持哪些语言、怎么启动和管理语言服务、怎么把诊断附进工具结果，选强的一家。
-  2. 编辑或写入文件后自动取这个文件的诊断，只把这次新增的错误附在工具结果后面（Hermes 的做法）。
-  3. 支持 Python（pyright 或 basedpyright）、TypeScript 和 JavaScript（typescript-language-server），其他语言能检测到就用。语言服务缺失时，在设置里提示怎么安装，不自动下载。
-  4. Windows 下能正常启动和退出，不能留下孤儿进程。
-- **前端**：改动面板里每个文件显示诊断数量；时间线里显示「发现 N 个新问题」。
-- **测试**：用假的语言服务器，或者测试机上真有的 pyright，跑通改出一个类型错误 → 结果里出现诊断 → 修好后诊断消失。
+速度优先。能直接搬成熟实现就搬，不写缩水版。
 
-## 2. `/init`（P1）
+## 并行施工
 
-- **来源**：OpenCode `packages/opencode/src/command/template/initialize.txt`；Codex `/init`；Hermes `/init`。
-- **做法**：`/init` 扫描项目（结构、构建和测试命令、代码约定），生成或更新 `AGENTS.md`；已有的内容保留，只追加缺的部分；写之前先给用户看 diff。
+Sol 按真实文件所有权拆块，能独立的尽量派 Luna high 并行，使用当前运行环境允许的最大并发，不写死数量。
 
-## 3. `/review`（P2）
+建议独立块：
+- LSP 写路径接线
+- LSP UI
+- /init
+- /review backend
+- /review frontend
+- 长会话性能
+- UX polish
+- benchmark / fake E2E / focused tests
 
-- **来源**：Codex `/review`（审当前改动，找问题）；OpenCode `command/template/review.txt`；Hermes `agent/review_engine.py`；GitHub Copilot 9 月的代码审查（会用 shell 验证改动）。
-- **做法**：
-  1. 对比三家的审查提示词和流程，择优合并。
-  2. `/review` 可以审：未提交的改动、某个分支和 main 的差异、某个提交。
-  3. 审查跑在一个只读的子 Agent 里，可以执行只读命令和测试来验证自己的判断。
-  4. 输出逐条问题，每条带文件、行号、严重程度、修改建议。前端显示成卡片，可以一键「让 Atlas 修」，也可以把整批发回对话。
+共享热文件（App/store/server/Composer/ConversationActivity 等）只给一个 integration owner 或最后串行接线。
 
-  和现有的「让审查员检查」合并成同一个功能。
+---
+
+## 1. T8：LSP 接线
+
+已有：
+- `core/atlas/lsp/**`
+- `snapshot_baseline(path)`
+- `edit_report(path, pre_content, post_content)`
+- `diagnostics_for(path)`
+- `missing_hint(path)`
+
+不准再造第二套 LSP manager/client。
+
+### 后端
+
+找到 Hermes/Atlas 文件写入的最薄公共边界：
+
+- 写/编辑前 snapshot baseline
+- 成功后取 delta
+- 工具结果只附“本次新增诊断”
+- 原有错误仅移动行号不算新增
+- 修好后诊断消失
+- LSP 不可用时文件操作照常成功
+- 缺 server 只返回短中文安装提示，不自动安装
+- SSH/远程 workspace 不启动本机 LSP
+- worktree 删除/切换时释放对应 workspace
+
+### 前端
+
+- 改动/diff 面板显示每文件 diagnostics 数量，可展开 line/severity/message
+- 时间线出现轻量事件「发现 N 个新问题」
+- 0 diagnostics 不刷事件
+- 不新建大型 LSP 页面
+
+---
+
+## 2. P1：/init
+
+开工先核当前 Hermes / OpenCode / Codex 的 /init 行为，优先复用成熟实现，不写长研究报告。
+
+行为：
+1. 扫描 workspace 结构、语言、包管理器、入口
+2. 找 build/test/lint/typecheck 命令
+3. 读取已有 AGENTS.md / CLAUDE.md / 规则
+4. 生成精炼 AGENTS.md 建议
+5. 保留已有人工内容，只补缺项或更新 Atlas 自管区段
+6. 写入前展示 diff
+7. 用户确认后才写
+8. 二次运行近似幂等，不越写越长
+
+入口直接进现有 / 菜单；diff/确认复用现有 UI，不造第二套。
+
+---
+
+## 3. P2：/review
+
+把现有“让审查员检查”和成熟 code review 合成一个功能，不留两套 reviewer。
+
+开工对比：
+- Hermes `agent/review_engine.py`
+- Codex /review
+- OpenCode review template
+
+优先搬 Hermes review engine 结构，再吸收 Codex/OpenCode 强项。
+
+至少支持：
+- 默认：当前未提交改动
+- `/review branch <name>`
+- `/review commit <sha>`
+
+执行：
+- 用现有 child runtime
+- reviewer 强制只读
+- 可跑只读 shell、git diff、搜索、测试/lint/typecheck 验证判断
+- 不得修改文件
+- finding 必须有证据，不凑数量
+
+finding schema：
+- file
+- line/range
+- severity
+- title
+- explanation
+- evidence
+- suggested_fix
+
+前端 review cards：
+- 打开文件/定位行
+- 让 Atlas 修这一条
+- 全部发回对话修复
+- 复制 finding
+- 与现有 reviewer/trajectory review 合并入口
+
+---
 
 ## 4. 长会话性能
 
-- 对话列表做虚拟滚动；时间线里的长输出默认折叠；事件很多时合并渲染。
-- 指标（测试机上测，结果写进结果文件）：
+如果当前前端没有成熟虚拟化方案，选一个支持**动态高度聊天消息**的成熟 React virtualization 库；不要手搓固定行高方案。
 
-| 场景 | 要求 |
-| --- | --- |
-| 打开 2000 条消息的会话 | 首屏小于 1 秒 |
-| 流式输出 | 不掉帧 |
-| 切换会话 | 小于 300 毫秒 |
-| 内存 | 不随会话数量线性增长 |
-
-## 5. 主体界面打磨
-
-逐项对照 Claude Code 桌面端、Codex 桌面端、ZCode 的同类界面打磨下面这些：
-
-1. 输入框；
-2. 消息和工具步骤的显示；
-3. 改动面板；
-4. 终端面板；
-5. 文件面板；
-6. 权限菜单；
-7. 模型菜单；
-8. 状态栏；
-9. 斜杠菜单；
-10. 设置页；
-11. 错误和重试；
-12. 空状态；
-13. 快捷键。
+目标：
+- 2000 条消息会话打开到可交互首屏 < 1s
+- 切换两个已存在大对话 < 300ms
+- 流式输出无持续卡顿
+- 长工具输出默认折叠
+- 多会话不预加载所有历史正文，缓存有边界
 
 要求：
-- 每一项写出「对方哪里做得好 → Atlas 怎么改」，并附截图。
-- 三套主题都要截图检查。
-- 中文文案统一：白话，不出现英文报错原文。原文可以放在「详情」里。
+- 消息/活动时间线真正虚拟化或窗口化
+- Markdown、动态高度、工具卡展开不破坏滚动
+- 流式时保持跟底；用户上滚后不强拉到底
+- 高频事件批量/合并更新，避免每 token 全 store 重算
+- inactive conversation 不无限缓存正文
 
-## 6. 测试和交付
+做可重复 benchmark fixture：2000 条消息 + 大工具输出，用 Playwright/Performance API 测，不用真实模型。硬件噪声大时写真实数字和瓶颈，不伪造 PASS。
 
-- 每节各自的测试；性能指标的数字；界面打磨的对照清单和改前改后截图。
-- 更新 CORE-PARITY 和 PARITY。到这一波结束，CORE-PARITY 应当**全部是 ✔**，有遗漏的列出来。
+---
 
-## 验收清单
+## 5. 主体 UX 最后一轮
 
-1. LSP 在 Windows 上不留孤儿进程。
-2. 性能指标都达到。
-3. CORE-PARITY 全部 ✔。
-4. 已有功能不倒退。
+这是打磨，不是重做视觉设计。
+
+对照当前 Claude Code、Codex、ZCode 的成熟交互，逐项只修真实问题：
+1. 输入框
+2. 普通消息
+3. 工具步骤 / 思考 / 子 Agent
+4. 改动 diff
+5. 终端
+6. 文件面板
+7. 权限切换
+8. 模型选择
+9. 状态栏
+10. / 菜单
+11. 设置页
+12. 错误 / 重试 / 恢复
+13. 空状态
+14. 快捷键
+
+每项结果只写：
+- 真实问题
+- 借鉴哪家
+- Atlas 实际改了什么
+
+规则：
+- 减少点击/弹窗，状态更清楚
+- 中文白话，英文原始错误只放详情
+- 不加大动画
+- 不改用户已定浅色方向和整体结构
+- 三套现有主题都不能坏
+
+最终截图：主聊天、改动/终端、设置页、review UI、大对话，各至少一张。
+
+---
+
+## 6. 顺手修已知旧测试漂移
+
+检查此前 full pytest 唯一已知漂移：C3R 将 ScheduledTask goal 迁为 legacy_goal 后旧测试未更新。
+
+如果当前仍存在，只修测试预期；不要改回生产实现。若已不存在则不碰。
+
+---
+
+## 7. 验证
+
+各 worker 只跑 focused tests；主控整合后统一验证。
+
+后端：
+- fake LSP E2E：干净 → 编辑引入错误 → 工具结果出现新增诊断 → 修复 → 消失
+- /init：已有 AGENTS.md 保留 + diff preview + 确认写入 + 二次运行幂等
+- /review：working tree / branch / commit 各 1 个 fixture；验证只读
+- finding schema + no finding
+- 相关 child/read-only 回归
+
+前端：
+- renderer tsc
+- electron tsc
+- Vitest
+- Vite build
+
+性能：
+- 2000 message benchmark，写出真实数据
+
+E2E：
+- 一条 fake-model 主链：代码 workspace → 编辑 → LSP 新诊断 → /review 找到问题 → “让 Atlas 修”回到正常执行入口
+
+backend full pytest：
+- 最多跑一次，只在 focused 全绿以后
+- 不循环跑全量
+
+不用真实模型/provider。
+
+---
+
+## 8. 交付
+
+更新：
+- `docs/plan/CORE-PARITY.md`
+- 必要的 `docs/PARITY.md`
+- `tasks/results/ATLAS-C6-CODING-POLISH.result.md`
+
+result 必须写：
+- T8/P1/P2 最终状态
+- 上游复用来源和具体文件
+- LSP 接线点
+- review 只读链
+- 性能实测数字
+- 14 项 UX 修改清单
+- screenshots 路径
+- focused / frontend / full-suite 汇总
+- 仍存在的真实缺口
+
+目标：C6 负责的 CORE-PARITY 行全部 ✔。做不到就明确列 blocker，不准偷偷标 ✔。
+
+最后：
+- `tasks/CURRENT.md` → `AWAITING_REVIEW`
+- pull --rebase
+- push main
+- 核对 local HEAD == origin/main
+- 停止
+- **不要自行进入 T1**
