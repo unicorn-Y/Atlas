@@ -944,6 +944,10 @@ app.add_middleware(
 )
 app.add_middleware(OriginGuard, extra_origins=_configured_origins)
 
+from atlas.models.routes import models_router  # noqa: E402  # C5 integration touchpoint: mount models router
+
+app.include_router(models_router)
+
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas
