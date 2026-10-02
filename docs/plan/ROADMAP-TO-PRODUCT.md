@@ -10,16 +10,26 @@
 
 ---
 
-## 〇、当前顺序（用户 2026-10-02 调整，优先于第四节的原表）
+## 〇、当前顺序（用户 2026-10-03 调整，优先于第四节原表）
 
-1. C6R 验收收尾
-2. **X2 电脑与浏览器**：`ATLAS-X2-COMPUTER-BROWSER.md`
-3. **X4 技能市场**：`ATLAS-X4-SKILL-MARKET.md`
-4. **K1 上线前检查**：`ATLAS-K1-PRELAUNCH-CHECK.md`。只检查有没有问题：Hermes 的能力有没有接上、测试、假模型走一遍常用路径，有问题就修。**实测由用户自己来**
-5. **日常使用 → 优化的循环**：`docs/plan/USAGE-FEEDBACK.md`。用户用的时候随手记问题，攒到 5 到 10 条开一波 F 波来修，长期执行
-6. 其他（完整 T1、X1、X3、X5–X7、R1）以后再说，由用户决定什么时候开
+原则：**Atlas 所有已做能力和后续能力都以当前最新第一梯队实现重新核对；追求“最新情报 + 最强实现”，不是机械跟版本号。**
 
-`ATLAS-O1-HERMES-PARITY.md` 已被 K1 取代，只作参考。派发方法不变（第五节）。笔记本是 Atlas 自己的电脑。
+1. **U0 Hermes 最新上游同步**：`ATLAS-U0-HERMES-UPSTREAM-SYNC.md`
+   - 先把 NousResearch/hermes-agent current main 合进 Atlas fork；
+   - 保留 Atlas 自己的增强；
+   - upstream 已经做得更强的重复实现删掉/改成薄 adapter。
+2. **U1 全局 Latest-Best Refresh**：`ATLAS-U1-LATEST-BEST-REFRESH.md`
+   - C1–C6 全部重新对标当前 Hermes / Claude Code / Codex / OpenCode / Pi / ZCode 等；
+   - 已做好的也分 KEEP / UPGRADE / REPLACE；
+   - 明显落后且影响日常强度的直接升级。
+3. **X2 电脑与浏览器**：使用 X-PREP 产出的 2026-10 最新任务书；以最新 Hermes Browser/Computer 栈为底，再吸收 Browser Use / Stagehand / 当前最佳 browser-agent 实现。
+4. **X4 技能市场**：使用最新 Hermes Skills Hub + 当前 skills.sh / ClawHub / GitHub / Claude plugins/skills 等。
+5. **X5 自我进化**：先做 upstream/changelog watcher、capability diff、parity mapper、taskbook draft、skill learning/curator 等成熟闭环，让 Atlas 后面自己持续追新。
+6. **K1 上线前检查**：`ATLAS-K1-PRELAUNCH-CHECK.md`。只检查有没有问题：Hermes/Atlas 能力是否接通、测试、假模型常用路径；发现问题就修。真实日常实测由用户自己做。
+7. **日常使用 → 优化循环**：`docs/plan/USAGE-FEEDBACK.md`。
+8. 其他 X1/X3/X6/X7、完整 T1、R1 由用户后续决定何时启动；但任务书和来源必须保持最新。
+
+`ATLAS-O1-HERMES-PARITY.md` 已被 K1 取代，只作参考。笔记本是 Atlas 自己的电脑。
 
 ## 一、成品的标准
 
