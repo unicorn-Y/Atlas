@@ -36,7 +36,7 @@ const LONG_PASTE = 4000;
 export interface ComposerMode { id: string; label: string; icon: LucideIcon }
 
 /** An entry in the `/` menu. `takesArgument` commands receive the text typed after the command name. */
-export interface SlashCommand { id: string; label: string; hint?: string; takesArgument?: boolean; run: (argument: string) => void }
+export interface SlashCommand { id: string; label: string; hint?: string; group?: string; takesArgument?: boolean; run: (argument: string) => void }
 
 /** Commands matching a `/query` draft; only while the draft is a single command word (plus an argument for argument commands). */
 export function matchCommands(value: string, commands: SlashCommand[]): SlashCommand[] {
@@ -45,7 +45,18 @@ export function matchCommands(value: string, commands: SlashCommand[]): SlashCom
   const [, word, rest] = match;
   if (rest !== undefined) return commands.filter((command) => command.takesArgument && command.label === `/${word}`);
   const query = word.toLowerCase();
-  return commands.filter((command) => command.label.slice(1).toLowerCase().includes(query)).slice(0, 8);
+  const score = (name: string) => {
+    const word = name.toLowerCase();
+    if (!query) return 0;
+    if (word.startsWith(query)) return 100 - word.length;
+    const at = word.indexOf(query);
+    if (at >= 0) return 70 - at;
+    let cursor = 0;
+    for (const char of query) { cursor = word.indexOf(char, cursor); if (cursor < 0) return -1; cursor += 1; }
+    return 30 - (cursor - query.length);
+  };
+  return commands.map((command, index) => ({ command, index, rank: score(command.label.slice(1)) }))
+    .filter((item) => item.rank >= 0).sort((a, b) => b.rank - a.rank || a.index - b.index).slice(0, 12).map((item) => item.command);
 }
 
 interface ComposerProps {
@@ -67,6 +78,7 @@ interface ComposerProps {
   /** `hero` is the large home composer; `dock` sits under a conversation. */
   variant?: 'hero' | 'dock';
   modes?: { value: string; options: ComposerMode[]; onChange: (id: string) => void };
+  onCyclePermission?: () => void;
   /** Content shown above the text area, e.g. the live run status. */
   header?: ReactNode;
   commands?: SlashCommand[];
@@ -138,6 +150,11 @@ export default function Composer(props: ComposerProps) {
     if (canSend) props.onSubmit();
   };
   const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Tab' && event.shiftKey && props.onCyclePermission) {
+      event.preventDefault();
+      props.onCyclePermission();
+      return;
+    }
     if (matches.length && !event.nativeEvent.isComposing) {
       if (event.key === 'ArrowDown') { event.preventDefault(); setCursor((value) => (value + 1) % matches.length); return; }
       if (event.key === 'ArrowUp') { event.preventDefault(); setCursor((value) => (value - 1 + matches.length) % matches.length); return; }
@@ -166,6 +183,7 @@ export default function Composer(props: ComposerProps) {
         className={cn('flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13.5px]', index === cursor && 'bg-selected')}>
         {'run' in item ? <span className="shrink-0 font-mono text-[13px] text-fg">{item.label}</span>
           : <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-fg">{item.kind === 'file' ? <AtSign size={13} className="text-fg-3" /> : <Hash size={13} className="text-fg-3" />}<span className="max-w-[260px] truncate">{item.label}</span></span>}
+        {'run' in item && item.group && <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 text-[10.5px] text-fg-3">{item.group}</span>}
         {item.hint && <span className="min-w-0 truncate text-[12.5px] text-fg-3">{item.hint}</span>}
       </button>)}
     </div>}

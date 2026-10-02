@@ -1,25 +1,38 @@
+import { useEffect, useState } from 'react';
 import { GitBranch } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
+import { backend } from '../store/useAtlasStore';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '../ui/Menu';
 
 /** The family of conversations forked from one another, with the open one marked; pick any to jump. */
 export default function ForkTree({ conversations, activeId, onOpen }: {
   conversations: ConversationSummary[]; activeId: string; onOpen: (conversation: ConversationSummary) => void;
 }) {
+  const [tree, setTree] = useState<Array<{ id: string; parent_session_id?: string | null; title: string }> | null>(null);
+  useEffect(() => {
+    let stale = false;
+    setTree(null);
+    void backend.getConversationBranches(activeId).then((value) => { if (!stale) setTree(value); })
+      .catch(() => { if (!stale) setTree([]); });
+    return () => { stale = true; };
+  }, [activeId]);
   const byId = new Map(conversations.map((item) => [item.id, item]));
   const active = byId.get(activeId);
-  if (!active) return null;
+  if (!active || !tree?.length) return null;
+  const treeById = new Map(tree.map((item) => [item.id, item]));
   const children = new Map<string, ConversationSummary[]>();
-  for (const item of conversations) {
-    const parent = item.parent_conversation_id;
-    if (parent && byId.has(parent)) children.set(parent, [...(children.get(parent) ?? []), item]);
+  for (const node of tree) {
+    const item = byId.get(node.id);
+    const parent = node.parent_session_id;
+    if (item && parent && byId.has(parent)) children.set(parent, [...(children.get(parent) ?? []), item]);
   }
-  const parent = active.parent_conversation_id ? byId.get(active.parent_conversation_id) : undefined;
+  const actualParent = treeById.get(activeId)?.parent_session_id;
+  const parent = actualParent ? byId.get(actualParent) : undefined;
   if (!parent && !children.get(activeId)?.length) return null;
   let root = active;
-  for (const seen = new Set<string>(); root.parent_conversation_id && byId.has(root.parent_conversation_id) && !seen.has(root.id);) {
+  for (const seen = new Set<string>(); treeById.get(root.id)?.parent_session_id && byId.has(String(treeById.get(root.id)?.parent_session_id)) && !seen.has(root.id);) {
     seen.add(root.id);
-    root = byId.get(root.parent_conversation_id)!;
+    root = byId.get(String(treeById.get(root.id)?.parent_session_id))!;
   }
   const rows: Array<{ item: ConversationSummary; depth: number }> = [];
   const walk = (item: ConversationSummary, depth: number) => {

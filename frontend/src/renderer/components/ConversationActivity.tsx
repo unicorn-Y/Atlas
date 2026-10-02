@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, ShieldAlert, Square, Users, X } from 'lucide-react';
+import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
@@ -29,10 +29,10 @@ export default function ConversationActivity({ events, store, username, setTab }
     switch (item.kind) {
       case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} />;
       case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn}
-        status={item.streaming ? '正在回复' : undefined} working={item.streaming && busy} />;
+        status={item.status ?? (item.streaming ? '正在回复' : undefined)} working={item.streaming && busy} />;
       case 'steps': return <div key={item.id}>
         {firstInTurn && <TurnHeader working={last && busy} />}
-        <StepTrack steps={item.steps} live={last && busy} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
+        <StepTrack steps={item.steps} live={last && busy} runId={events[0]?.runId ?? ''} store={store} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
       </div>;
       case 'artifact': return <div key={item.id} className="my-3 ml-10 flex items-center gap-3 rounded-xl card-surface px-3.5 py-2.5 text-[13px]">
         <FileText size={16} className="shrink-0 text-brand" />
@@ -87,17 +87,22 @@ function TurnHeader({ working }: { working: boolean }) {
 }
 
 /** The "航迹": each step Atlas took, in plain words, strung along a brass meridian line. */
-function StepTrack({ steps, live, onCancelSubtask }: { steps: Step[]; live: boolean; onCancelSubtask: (subtaskId: string) => void }) {
+function StepTrack({ steps, live, runId, store, onCancelSubtask }: { steps: Step[]; live: boolean; runId: string; store: Store; onCancelSubtask: (subtaskId: string) => void }) {
   return <ol className="relative my-3 ml-[13px] list-none border-l border-line-strong py-1 pl-[26px]" aria-label="Atlas 的步骤">
-    {steps.map((step) => <StepRow key={step.id} step={step} live={live} onCancelSubtask={onCancelSubtask} />)}
+    {steps.map((step) => <StepRow key={step.id} step={step} live={live} runId={runId} store={store} onCancelSubtask={onCancelSubtask} />)}
   </ol>;
 }
 
-function StepRow({ step, live, onCancelSubtask }: { step: Step; live: boolean; onCancelSubtask: (subtaskId: string) => void }) {
+function StepRow({ step, live, runId, store, onCancelSubtask }: { step: Step; live: boolean; runId: string; store: Store; onCancelSubtask: (subtaskId: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [steerText, setSteerText] = useState('');
+  const [steerState, setSteerState] = useState<{ sequence: number; text: string } | null>(null);
   const running = step.state === 'running' && live;
   const detail = [step.input && `输入\n${step.input}`, step.result && `结果\n${step.result}`, step.output && `输出\n${step.output}`].filter(Boolean).join('\n\n');
   const hasDetail = Boolean(detail);
+  const steerFeedback = steerState && store.getRun(runId)?.events.find((event) => event.sequence > steerState.sequence
+    && event.data.subtask_id === step.subtaskId
+    && (event.type === 'subtask.steered' || event.type === 'subtask.steer_rejected'));
   // A failure you have to click to see is a failure hidden: show its evidence straight away.
   useEffect(() => { if (step.state === 'failed' && hasDetail) setOpen(true); }, [step.state, hasDetail]);
   return <li className="relative py-[5px]">
@@ -115,6 +120,24 @@ function StepRow({ step, live, onCancelSubtask }: { step: Step; live: boolean; o
     </button>
     {step.imagePreview && <img src={step.imagePreview} alt={step.target || '读取的图片'} className="mt-2 max-h-32 max-w-48 rounded-lg border border-line object-contain" />}
     {running && step.subtaskId && <button onClick={() => onCancelSubtask(step.subtaskId!)} className="ml-0 text-[12px] text-fg-3 hover:text-danger">停止这个子任务</button>}
+    {running && step.subtaskId && <form className="mt-2 flex items-center gap-2" onSubmit={(event) => {
+      event.preventDefault();
+      const text = steerText.trim();
+      if (!text || !runId) return;
+      const current = store.getRun(runId);
+      const eventId = crypto.randomUUID();
+      if (store.steerSubtask(runId, step.subtaskId!, eventId, text)) {
+        setSteerState({ sequence: current?.lastEventSequence ?? 0, text });
+        setSteerText('');
+      }
+    }}>
+      <input aria-label="补充子任务要求" value={steerText} onChange={(event) => setSteerText(event.target.value)} placeholder="补充要求给这个子 Agent…"
+        className="min-w-0 flex-1 rounded-lg border border-line bg-sheet px-2.5 py-1.5 text-[12px] text-fg outline-none placeholder:text-fg-3 focus:border-brand" />
+      <Button type="submit" size="sm" variant="ghost" disabled={!steerText.trim()}><Send size={13} />发送</Button>
+    </form>}
+    {steerState && <p role="status" className={cn('m-0 mt-1 text-[11px]', steerFeedback?.type === 'subtask.steer_rejected' ? 'text-danger' : 'text-fg-3')}>
+      {steerFeedback?.type === 'subtask.steer_rejected' ? `子任务拒绝补充：${String(steerFeedback.data.reason ?? '子任务已不在运行')}` : steerFeedback?.type === 'subtask.steered' ? '补充要求已送达' : `已发送补充要求：${steerState.text}`}
+    </p>}
     {open && <pre className="anim-fade mt-1.5 mb-1 max-h-72 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">{detail}</pre>}
     {open && step.fullOutputPath && <p className="m-0 mb-1 text-[12px] text-fg-3">结果太长，只显示了开头和结尾。完整内容：
       {window.atlasDesktop?.openPath
@@ -235,17 +258,23 @@ function SaveRecipe({ runId, store }: { runId: string; store: Store }) {
 
 /** Several workers ran side by side; one line each, then the coordinator's summary. */
 function WorkerGroup({ item }: { item: Extract<TimelineItem, { kind: 'group' }> }) {
-  const ok = item.results.filter((result) => result.status === 'completed' || result.status === 'done').length;
+  const ok = item.results.filter((result) => result.accepted === true).length;
+  const unverified = item.results.filter((result) => result.accepted === undefined).length;
   return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface px-4 py-3.5 text-[13px]">
     <p className="m-0 flex items-center gap-2 font-semibold text-heading"><Users size={15} className="text-brand" />{item.results.length} 个 Worker 并行完成
-      <span className="font-normal text-fg-3">{ok} 个成功{item.results.length - ok ? `，${item.results.length - ok} 个没完成` : ''}</span></p>
+      <span className="font-normal text-fg-3">{ok} 个验收通过{unverified ? `，${unverified} 个未验收` : ''}{item.results.length - ok - unverified ? `，${item.results.length - ok - unverified} 个未通过` : ''}</span></p>
     <ul className="m-0 mt-2 grid list-none gap-1 p-0">
       {item.results.map((result) => {
-        const good = result.status === 'completed' || result.status === 'done';
+        const good = result.accepted === true;
         return <li key={result.index} className="flex items-start gap-2" title={result.summary}>
           {good ? <Check size={14} className="mt-0.5 shrink-0 text-ok" /> : <X size={14} className="mt-0.5 shrink-0 text-danger" />}
-          <span className="min-w-0 flex-1 text-fg-2">{result.title || `Worker ${result.index + 1}`}</span>
+          <span className="min-w-0 flex-1 text-fg-2">{result.title || `Worker ${result.index + 1}`} <span className="text-fg-3">{good ? '验收通过' : result.accepted === false ? '验收未通过' : result.status === 'failed' ? '执行失败' : '未验收'}</span>{result.verifier_note && <span className="block text-fg-3">{result.verifier_note}</span>}</span>
           {result.changed_files.length > 0 && <span className="shrink-0 text-[12px] text-fg-3" title={result.changed_files.join('\n')}>改了 {result.changed_files.length} 个文件</span>}
+          {(result.summary || result.changed_files.length > 0) && <details className="basis-full pl-5 text-[12px] text-fg-3">
+            <summary className="cursor-pointer">查看 Worker 结果和改动</summary>
+            {result.summary && <p className="my-1 whitespace-pre-wrap text-fg-2">{result.summary}</p>}
+            {result.changed_files.length > 0 && <ul className="my-1 list-disc pl-4">{result.changed_files.map((path) => <li key={path} className="break-all">{path}</li>)}</ul>}
+          </details>}
         </li>;
       })}
     </ul>

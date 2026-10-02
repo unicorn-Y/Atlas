@@ -671,14 +671,22 @@ class HermesRuntime:
                         context_limit = getattr(compressor, "context_length", None)
                         if not isinstance(context_limit, int) or context_limit <= 0:
                             context_limit = getattr(agent, "_config_context_length", None)
-                        emit({"type": "run_usage", "usage": {
+                        usage_payload = {
                             "input_tokens": usage.get("prompt_tokens", usage.get("input_tokens")),
                             "output_tokens": usage.get("completion_tokens", usage.get("output_tokens")),
                             "cached_input_tokens": usage.get("cached_input_tokens", 0),
                             "context_tokens": usage.get("total_tokens", usage.get("prompt_tokens")),
                             "context_limit": context_limit,
                             "model": getattr(agent, "model", current),
-                        }})
+                        }
+                        try:
+                            from agent.context_breakdown import compute_session_context_breakdown
+
+                            messages = result.get("messages", turn_history) if isinstance(result, dict) else turn_history
+                            usage_payload["context_breakdown"] = compute_session_context_breakdown(agent, messages)
+                        except Exception as exc:
+                            logger.warning("context breakdown unavailable: %s", exc)
+                        emit({"type": "run_usage", "usage": usage_payload})
                     return result
                 finally:
                     if atlas_agent is not None:
@@ -720,9 +728,11 @@ class HermesRuntime:
                         except asyncio.QueueEmpty:
                             break
                         text = str(steer.get("content") or steer.get("text") or "").strip()
-                        if text and agent.steer(text):
+                        immediate = bool(steer.get("immediate", False))
+                        accepted = agent.redirect(text) if immediate else agent.steer(text)
+                        if text and accepted:
                             yield {"type": "run_steered", "content": text,
-                                   "event_id": steer.get("event_id", "")}
+                                   "event_id": steer.get("event_id", ""), "immediate": immediate}
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=0.05)
                 except TimeoutError:

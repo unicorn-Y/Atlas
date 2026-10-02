@@ -995,6 +995,10 @@ class ConversationCreateRequest(BaseModel):
     title: str = "New Conversation"
 
 
+class ConversationGoalCommandRequest(BaseModel):
+    command: str
+
+
 class FactCreateRequest(BaseModel):
     key: str
     value: str
@@ -1277,6 +1281,72 @@ async def get_conversation_messages(
     return await memory.get_conversation_messages(conversation_id, limit=limit)
 
 
+@app.get("/api/conversations/{conversation_id}/branches")
+async def get_conversation_branches(conversation_id: str) -> list[dict[str, Any]]:
+    assert memory is not None
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话。")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import list_branch_tree
+
+    return await asyncio.to_thread(list_branch_tree, DATA_ROOT / "engine", conversation_id)
+
+
+@app.get("/api/conversations/{conversation_id}/goal")
+async def get_conversation_goal(conversation_id: str) -> dict[str, Any]:
+    assert memory is not None
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话。")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import goal_command
+    return await asyncio.to_thread(goal_command, DATA_ROOT / "engine", conversation_id, "status")
+
+
+@app.post("/api/conversations/{conversation_id}/goal")
+async def run_conversation_goal_command(conversation_id: str, request: ConversationGoalCommandRequest) -> dict[str, Any]:
+    assert memory is not None
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话。")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import goal_command
+    result = await asyncio.to_thread(goal_command, DATA_ROOT / "engine", conversation_id, request.command)
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result["output"])
+    return result
+
+
+@app.post("/api/conversations/{conversation_id}/branch-summary")
+async def summarize_conversation_branch(conversation_id: str) -> dict[str, Any]:
+    assert memory is not None
+    child = await memory.get_conversation(conversation_id)
+    if not child or not child.get("parent_conversation_id") or not child.get("fork_message_id"):
+        return {"created": False, "reason": "not_a_branch"}
+    parent_id, fork_id = str(child["parent_conversation_id"]), str(child["fork_message_id"])
+    messages = await memory.get_conversation_messages(conversation_id, limit=100000)
+    fork_at = next((index for index, item in enumerate(messages) if item["id"] == fork_id), None)
+    if fork_at is None or fork_at >= len(messages) - 1:
+        return {"created": False, "reason": "no_branch_progress"}
+    delta = messages[fork_at + 1:]
+    transcript = "\n".join(f"{item['role']}: {str(item['content'])[:1200]}" for item in delta[-30:])
+    if orchestrator:
+        summary = await orchestrator.context_maintenance.compact({
+            "goal": "Summarize this branch's progress and decisions at its fork point.",
+            "session_summary": transcript,
+        })
+        content = str(summary.get("session_summary") or "").strip()
+    else:
+        content = "\n".join(f"{item['role']}: {str(item['content'])[:350]}" for item in delta[-8:]).strip()
+    if not content:
+        return {"created": False, "reason": "empty_summary"}
+    content = "分支摘要：\n" + content[:2000]
+    await memory.save_branch_summary(parent_id, conversation_id, fork_id, content)
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import append_branch_summary
+    await asyncio.to_thread(append_branch_summary, DATA_ROOT / "engine", parent_id, conversation_id, fork_id, content)
+    return {"created": True, "parent_conversation_id": parent_id, "fork_message_id": fork_id,
+            "summary": content}
+
+
 @app.put("/api/conversations/{conversation_id}")
 async def update_conversation(
     conversation_id: str,
@@ -1286,7 +1356,7 @@ async def update_conversation(
     assert memory is not None
     values = req.model_dump(exclude_unset=True)
     if values.get("permission_mode") not in {
-        None, "full_access", "ask_writes", "read_only",
+        None, "full_access", "ask_each", "ask_writes", "auto_file", "plan", "read_only",
     }:
         raise HTTPException(status_code=400, detail="invalid permission_mode")
     paths = values.get("allowed_paths")
@@ -1991,13 +2061,16 @@ def _plan_mode_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _queue_run_steer(
-    run: "RunState", content: Any, event_id: Any,
+    run: "RunState", content: Any, event_id: Any, immediate: Any = False,
 ) -> str | None:
     if run.status in {"completed", "failed", "cancelled"}:
         return "run_not_active"
     if not isinstance(content, str) or not content.strip():
         return "invalid_content"
-    run.steer_queue.put_nowait({"content": content, "event_id": str(event_id or uuid.uuid4())})
+    if not isinstance(immediate, bool):
+        return "invalid_immediate"
+    run.steer_queue.put_nowait({"content": content, "event_id": str(event_id or uuid.uuid4()),
+                                "immediate": immediate})
     return None
 
 
@@ -5897,7 +5970,9 @@ async def ws_chat(ws: WebSocket) -> None:
                         "run.steer.rejected", {"reason": "run_not_active"},
                     ))
                 else:
-                    reason = _queue_run_steer(run, data.get("content"), data.get("event_id"))
+                    reason = _queue_run_steer(
+                        run, data.get("content"), data.get("event_id"), data.get("immediate", False),
+                    )
                     if reason:
                         rejected = RunState(run_id, "", "")
                         await runtime_mgr.send(conn_id, rejected.next_envelope(
@@ -6047,7 +6122,9 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         permission_mode = "invalid"
     if permission_mode is None:
         permission_mode = "full_access"
-    if permission_mode not in {"full_access", "ask_writes", "read_only"}:
+    if permission_mode == "plan":
+        effective_mode = "plan"
+    if permission_mode not in {"full_access", "ask_each", "ask_writes", "auto_file", "plan", "read_only"}:
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
         await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
             "category": "validation", "detail": "invalid permission_mode or allowed_paths",
@@ -6182,9 +6259,10 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     if run.executor != "atlas":
         # External Agents get every permission request auto-approved (runtime/backends.py), so
         # Atlas can't honour "ask before changes" for them either; only full access may start one.
-        if run.permission_mode in {"read_only", "ask_writes"} or run.read_only:
+        if run.permission_mode != "full_access" or run.read_only:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            mode = "只读" if run.permission_mode == "read_only" or run.read_only else "改前问我"
+            mode = ("只读" if run.permission_mode == "read_only" or run.read_only
+                    else "改前问我" if run.permission_mode == "ask_writes" else "需要确认")
             await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "permission",
                 "detail": f"当前对话是「{mode}」模式，外部 Agent 的操作不经过 Atlas 确认，所以不能启动。"
@@ -7118,6 +7196,7 @@ async def _execute_run(
                 await emit("run.steered", {
                     "content": event.get("content", ""),
                     "event_id": event.get("event_id", ""),
+                    "immediate": bool(event.get("immediate", False)),
                 })
 
             elif etype == "subtask_steered":
@@ -7259,6 +7338,42 @@ async def _execute_run(
         run.status = "completed"
         if had_tool_failure:
             await mark_reflections_recovered()
+        if full_response.strip() and run.conversation_id:
+            try:
+                from atlas.config import DATA_ROOT
+                from atlas.engine.session_sync import evaluate_goal_after_turn
+
+                goal_decision = await asyncio.to_thread(
+                    evaluate_goal_after_turn, DATA_ROOT / "engine",
+                    run.conversation_id, full_response,
+                )
+            except Exception as exc:
+                log.warning("conversation.goal_evaluation_failed",
+                            conversation_id=run.conversation_id, error=str(exc))
+                goal_decision = None
+            if goal_decision is not None:
+                if goal_decision.get("message"):
+                    await emit("goal.updated", {
+                        "status": goal_decision.get("status"),
+                        "verdict": goal_decision.get("verdict"),
+                        "reason": goal_decision.get("reason"),
+                        "message": goal_decision.get("message"),
+                    })
+                continuation_prompt = goal_decision.get("continuation_prompt")
+                if goal_decision.get("should_continue") and continuation_prompt:
+                    run.status = "running"
+                    await emit("goal.continuation", {
+                        "status": goal_decision.get("status"),
+                        "reason": goal_decision.get("reason"),
+                    })
+                    await _execute_run(
+                        conn_id, run, str(continuation_prompt), model_id,
+                        image_attachments=image_attachments,
+                        active_skill_instructions=active_skill_instructions,
+                        workspace=workspace, workspace_rules=workspace_rules,
+                        mode="act", continuation=True,
+                    )
+                    return
         await emit("run.completed", {
             "result": "completed",
             "model": run.model,

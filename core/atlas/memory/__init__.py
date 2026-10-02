@@ -808,6 +808,34 @@ class MemoryStore:
         await self._db.commit()
         return msg_id
 
+    async def save_branch_summary(
+        self, parent_id: str, child_id: str, fork_message_id: str, content: str,
+    ) -> str:
+        """Upsert one structured branch summary immediately after its fork-point message."""
+        assert self._db is not None
+        messages = await self.get_conversation_messages(parent_id, limit=100000)
+        anchor = next((item for item in messages if item["id"] == fork_message_id), None)
+        if anchor is None:
+            raise ValueError("branch fork point is missing from the parent transcript")
+        metadata = {"kind": "branch_summary", "child_conversation_id": child_id,
+                    "fork_message_id": fork_message_id}
+        existing = next((item for item in messages
+                         if item.get("metadata", {}).get("kind") == "branch_summary"
+                         and item.get("metadata", {}).get("child_conversation_id") == child_id), None)
+        if existing:
+            await self._db.execute("UPDATE messages SET content=?,metadata=? WHERE id=?",
+                                   (content, json.dumps(metadata), existing["id"]))
+            msg_id = str(existing["id"])
+        else:
+            msg_id = str(uuid.uuid4())
+            await self._db.execute(
+                "INSERT INTO messages (id, conversation_id, role, content, metadata, created_at) VALUES (?,?,?,?,?,?)",
+                (msg_id, parent_id, "assistant", content, json.dumps(metadata), anchor["created_at"]),
+            )
+        await self._db.execute("UPDATE conversations SET updated_at=datetime('now') WHERE id=?", (parent_id,))
+        await self._db.commit()
+        return msg_id
+
     # ----- Search -----
 
     async def search(

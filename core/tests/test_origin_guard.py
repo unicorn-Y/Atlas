@@ -103,6 +103,10 @@ async def test_atlas_backend_applies_the_guard_to_every_route():
         refused = await client.get("/api/health", headers={"Origin": EVIL})
         assert refused.status_code == 403
         assert "access-control-allow-origin" not in refused.headers
+        goal = await client.post("/api/conversations/isolation/goal", json={"command": "status"}, headers={"Origin": EVIL})
+        assert goal.status_code == 403
+        branches = await client.get("/api/conversations/isolation/branches", headers={"Origin": EVIL})
+        assert branches.status_code == 403
         preflight = await client.options("/api/conversations", headers={
             "Origin": EVIL, "Access-Control-Request-Method": "POST",
         })

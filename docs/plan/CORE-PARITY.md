@@ -46,7 +46,7 @@
 | L3 | 防原地打转 | LangChain：同一文件改了 N 次就提醒换思路；HM：`agent/repetition_guard.py` | ✔ Hermes repetition guard + Atlas 同 run 同文件计数，第 6 次起提醒 | ✔ | — | C2 |
 | L4 | 完成前自检 | LangChain 的完成前检查清单；HM：`agent/verification_stop.py`、`turn_stop_gates.py` | ✔ Hermes 循环在完成前执行验证闸门；未验证完成会触发修正提示，见 `test_c1_stop_gate.py` | ✔ | — | C1 |
 | L5 | 并行工具调用 | CC：只读工具并行，写操作串行；HM：`agent/tool_executor.py` 加 `PARALLEL_TOOL_CALL_GUIDANCE` | ✔ Hermes 并行委派场景（`4357a86`） | ✔ | — | C1 |
-| L6 | 运行中插话（不打断当前工具） | CX 0.159 `instant_interrupt`：模型输出中途也能转向；Pi 的转向队列；HM `/steer` | ✔ 下一次调用模型前插入（代码 1051 行） | ✔ HM steer | CX 的中途转向（`codex-rs/core/src/tasks`，初判） | C3 |
+| L6 | 运行中插话（不打断当前工具） | CX 0.159 `instant_interrupt`：模型输出中途也能转向；Pi 的转向队列；HM `/steer` | ✔ 默认排队下一步；立即转向用 Hermes redirect，只中断生成并保留 partial | ✔ HM steer | — | C3 |
 | L7 | 消息排队 | HM `/queue`；Pi 的后续消息 | ✔ Hermes steer/排队桥接（`805110c`） | ✔ | — | C1 |
 | L8 | 分阶段分配思考量 | LangChain：规划和验收深想、执行浅想（66.5 对 53.9） | ✘ | ✘ | 在 HM 的 `agent/reasoning_effort.py` 上加按阶段切换 | C5 |
 | L9 | 时间和预算提醒 | LangChain；HM `run_budget_seconds`、`deadline.py` | ✔ Atlas `agent.run_budget_seconds` / `agent.budget_warning_ratio` 接入 Hermes 原有一次性提醒链，默认关闭 | ✔ | 保留 | — |
@@ -86,7 +86,7 @@
 | X4 | 各家模型的缓存 | HM：Anthropic 标记、OpenAI/DeepSeek 自动前缀、`prompt_cache_scope.py` | ✔ 交由 Hermes 缓存实现（`35cd874`） | ✔ | — | C1 |
 | X5 | 按模型分别写的系统提示词 | OD `session/prompt/`：anthropic、gpt、gemini、kimi、codex 等 13 份；HM 按模型族加指引 | ✔ Hermes 稳定提示层按 Claude、GPT/Codex、Gemini、DeepSeek、Kimi、GLM、Qwen、MiniMax 和默认模型族提供短指引 | ✔ | — | C2 |
 | X6 | 规则文件分层 | CC：用户级、项目级、子目录级的 CLAUDE.md；CX `agents_md_manager.rs`；HM `subdirectory_hints.py`（进入子目录时追加） | ✔ AGENTS.md、CLAUDE.md、`.atlas/rules.md` 接入（`805110c`） | ✔ | — | C1 |
-| X7 | 看上下文构成 | CC `/context`；HM `context_breakdown.py`；CX `get_context_remaining` | △ 有页面，数字不准（代码） | ✔ | 接前端 | C3 |
+| X7 | 看上下文构成 | CC `/context`；HM `context_breakdown.py`；CX `get_context_remaining` | ✔ 接 Hermes breakdown 并显示系统提示、工具、规则、记忆/历史、工具输出与余量；缺数据项按实际用量显示 | ✔ | — | C3 |
 | X8 | 模型的上下文窗口 | HM `model_metadata.py` 加 `models_dev.py` | ✔ 实际用量及模型上下文上限接入 UI（`805110c`） | ✔ | — | C1 |
 | X9 | 记录完整保存 | CC、CX、Pi：完整记录工具调用和结果，恢复时一字不差 | ✔ Hermes SessionDB 和 Atlas 消息表同步（`15b1416`） | ✔ | — | C1 |
 | X10 | 中途换个干净的上下文 | CX `new_context_window` | ✔ 交接摘要与当前 todo 进入干净模型上下文；Atlas 历史保留，时间线显示切换分隔事件 | ✔ | — | C2 |
@@ -106,12 +106,12 @@
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| I1 | 权限档位 | ZC 五档（每步都问 / 改前问 / 自动改文件但命令要问 / 计划 / 完全放开，Shift+Tab 切换）；CC 的 auto 模式（分类器判断，不弹窗）；OC 按会话设权限、文件访问限定在工作区 | ✔ 三档 | ✔ HM 的审批档位 | 补齐 ZC 五档（默认仍是完全放开）；auto 分类器属于安全审查，由用户亲自做，不做 | C3 |
-| I2 | 计划模式 | CC：只读探索后用 ExitPlanMode 交计划；HM `plan_prompt.py`；OD `plan-enter`/`plan-exit` 工具 | △ 计划模式下只给文件读和网页工具，不能用 git 和搜索（代码） | ✔ | 计划模式开放只读命令 | C3 |
-| I3 | 持续目标 | CX `/goal`；ZC `/goal`（不断迭代直到验证达成）；HM `/goal`、`/subgoal` | ✔ 自动化页里有 | ✔ | 对话内 `/goal` 改走新内核 | C3 |
+| I1 | 权限档位 | ZC 五档（每步都问 / 改前问 / 自动改文件但命令要问 / 计划 / 完全放开，Shift+Tab 切换）；CC 的 auto 模式（分类器判断，不弹窗）；OC 按会话设权限、文件访问限定在工作区 | ✔ ask_each / ask_writes / auto_file / plan / full_access，另保留 read_only；按对话保存，子 Agent 不可提权 | ✔ HM 的审批档位 | —（不做安全审查分类器） | C3 |
+| I2 | 计划模式 | CC：只读探索后用 ExitPlanMode 交计划；HM `plan_prompt.py`；OD `plan-enter`/`plan-exit` 工具 | ✔ 只读文件、搜索、网页与安全终端命令；计划写入拦截，批准后回到执行 | ✔ | — | C3 |
+| I3 | 持续目标 | CX `/goal`；ZC `/goal`（不断迭代直到验证达成）；HM `/goal`、`/subgoal` | △ 对话目标走 Hermes GoalManager，回合后自动评价与续跑；Automation GoalsPanel 仍走 Atlas Scheduler 独立目标存储/执行闭环 | ✔ | Automation 目标需统一到 Hermes GoalManager，移除第二套目标状态机 | C3 |
 | I4 | 旁问 | CC `/btw`；CX `/side`；HM `side_question.py` | ✔ | ✔ | — | C3 |
-| I5 | 斜杠命令覆盖面 | CX 约 60 条、HM 约 100 条、CC 约 50 条 | △ 14 条（代码） | ✔ 后端命令 | 逐条比较三家的命令表，前端补上主体相关的（`/model`、`/context`、`/diff`、`/review`、`/init`、`/resume`、`/fork`、`/undo`、`/status`、`/usage` 等） | C3 |
-| I6 | 状态栏 | CC、CX：可以配置显示模型、上下文百分比、花费、分支 | △ 运行头部显示一部分 | — | 照 CX `/statusline` 做 | C3 |
+| I5 | 斜杠命令覆盖面 | CX 约 60 条、HM 约 100 条、CC 约 50 条 | ✔ 任务书列出的 21 个日常命令有分组/模糊搜索；`/review`、`/init` 留 C6 | ✔ Hermes 命令 | — | C3 |
+| I6 | 状态栏 | CC、CX：可以配置显示模型、上下文百分比、花费、分支 | ✔ 模型、推理、上下文、tokens、费用、Git、权限、后台进程可分别开关并保存在本地偏好 | — | — | C3 |
 | I7 | 后台任务面板 | CC `/tasks`；CX `/ps`、`/stop` | ✔ | ✔ | 接 HM 的进程表 | C3 |
 | I8 | 完成提醒 | goose：回合结束响铃；Atlas 有系统通知 | ✔ | — | — | — |
 
@@ -120,9 +120,9 @@
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
 | A1 | 委派单个子 Agent | CC Task 工具（独立上下文、可指定模型和工具）；HM `delegate_tool*.py`（同步和异步、运行中引导、实时日志） | ✔ Atlas 子 Agent 全链路、模型/上下文策略、只读路径限制、进度和清理由 `test_c1_lifecycle_subtask.py`、`test_c1_child_policy.py` 覆盖 | ✔ | — | C1 |
-| A2 | 并行和验收 | Factory Missions；HM 并行委派；W07 的验收 | △ W07 验收有误判（见 W07B 第一节） | ✔ | 验收逻辑在新内核上重写 | C3 |
+| A2 | 并行和验收 | Factory Missions；HM 并行委派；W07 的验收 | ✔ 仅 completed 且 verifier 明确通过才 accepted；失败可重派，schema/status 不完整不计通过 | ✔ | — | C3 |
 | A3 | 自定义子 Agent 定义 | CC `.claude/agents`、OD agents、CX `agent-roles` | ✔ W07 | — | 保留 | — |
-| A4 | 子 Agent 界面 | CC 的任务面板；CX `/agents` 指挥中心 | ✘ W07B 前端没做 | — | 原 W07B 第三节的前端 | C3 |
+| A4 | 子 Agent 界面 | CC 的任务面板；CX `/agents` 指挥中心 | △ Worker 状态/验收卡片、活动 Worker 补充要求、任务看板、项目 NOTES 编辑已接现有后端；未补子 Agent 启停/默认模型设置 UI | — | 子 Agent 设置面板 | C3 |
 | A5 | 多模型会诊 | HM `/moa`、`moa_loop.py` | ✔ `/moa` 通过 Atlas ModelManager 并发参考咨询，事件和 advisory prompt 已由假咨询覆盖 | ✔ | 保留 | — |
 
 ## 8. 扩展

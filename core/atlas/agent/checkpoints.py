@@ -15,6 +15,9 @@ from typing import Any
 class ShadowGitCheckpointStore:
     """Snapshot explicitly selected workspace paths without touching its .git directory."""
 
+    MAX_CHECKPOINTS = 100
+    MAX_STORAGE_BYTES = 1024 * 1024 * 1024
+
     EXCLUDED_PARTS = {
         ".git", "node_modules", "__pycache__", ".pytest_cache", ".venv", "venv",
         "dist", "build", ".pytest-wave1-temp",
@@ -111,7 +114,33 @@ class ShadowGitCheckpointStore:
         (snapshot_root / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8",
         )
+        self._prune_checkpoints(checkpoint_id)
         return manifest
+
+    def _prune_checkpoints(self, newest_id: str) -> None:
+        """Keep recent snapshots under simple count and disk-use limits."""
+        snapshots: list[tuple[float, Path, int]] = []
+        for manifest_path in self.storage_dir.glob("*/manifest.json"):
+            folder = manifest_path.parent
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                size = sum(item.stat().st_size for item in folder.rglob("*") if item.is_file())
+                created = datetime.fromisoformat(str(manifest["created_at"]).replace("Z", "+00:00")).timestamp()
+                snapshots.append((created, folder, size))
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+        snapshots.sort(key=lambda item: item[0], reverse=True)
+        total = sum(item[2] for item in snapshots)
+        remaining = len(snapshots)
+        for _, folder, size in reversed(snapshots):
+            if remaining <= self.MAX_CHECKPOINTS and total <= self.MAX_STORAGE_BYTES:
+                break
+            if folder.name == newest_id:
+                continue
+            shutil.rmtree(folder, ignore_errors=True)
+            if not (folder / "manifest.json").exists():
+                remaining -= 1
+                total -= size
 
     def list_checkpoints(
         self, workspace: str | Path | None = None, run_id: str | None = None,

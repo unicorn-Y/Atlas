@@ -59,6 +59,18 @@ class TestConversations:
         conv = await store.get_conversation(conv_id)
         assert conv["title"] == "New Title"
 
+    async def test_branch_summary_is_upserted_after_its_fork_point(self, store: MemoryStore) -> None:
+        parent = await store.create_conversation("parent")
+        fork_point = await store.save_message(parent, "user", "fork here")
+        await store.save_message(parent, "assistant", "later parent message")
+        first = await store.save_branch_summary(parent, "child", fork_point, "first summary")
+        second = await store.save_branch_summary(parent, "child", fork_point, "updated summary")
+        messages = await store.get_conversation_messages(parent)
+        summary = next(item for item in messages if item["id"] == first)
+        assert first == second
+        assert summary["content"] == "updated summary"
+        assert summary["metadata"]["fork_message_id"] == fork_point
+
         # Non-existent conversation
         ok = await store.update_conversation_title("nonexistent", "X")
         assert ok is False

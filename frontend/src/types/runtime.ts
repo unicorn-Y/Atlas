@@ -9,6 +9,7 @@ export type AgentEventType =
   | 'run.plan.updated'
   | 'run.steered' | 'run.usage' | 'rules.loaded' | 'input.required' | 'run.plan.proposed'
   | 'subtask.started' | 'subtask.progress' | 'subtask.output' | 'subtask.completed' | 'subtask.group_completed'
+  | 'subtask.steered' | 'subtask.steer_rejected'
   | 'check.results'
   | 'rules.trust_required' | 'hook.ran'
   | 'run.model_switched' | 'run.verify_nudge'

@@ -67,7 +67,7 @@ def _normalize(name: str, raw: dict[str, Any], source: str, path: Path | None,
         warnings.append("invalid model; using inherit")
         model = "inherit"
     permission_mode = raw.get("permission_mode")
-    if permission_mode is not None and permission_mode not in {"full_access", "ask_writes", "read_only"}:
+    if permission_mode is not None and permission_mode not in {"full_access", "ask_each", "ask_writes", "auto_file", "plan", "read_only"}:
         warnings.append("invalid permission_mode; ignored")
         permission_mode = None
     prompt = str(raw.get("prompt", raw.get("developer_instructions", "")))

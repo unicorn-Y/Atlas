@@ -148,7 +148,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
     plan_mode = getattr(runtime, "mode", "act") == "plan"
     atlas_toolset = "atlas-plan" if plan_mode else "atlas"
     registered = _plan_registered if plan_mode else _registered
-    plan_tools = {"read_file", "search_files", "web_fetch", "web_search", "web_extract"}
+    plan_tools = {"read_file", "search_files", "terminal", "web_fetch", "web_search", "web_extract"}
     with _lock:
         _bind_inline_atlas_tools()
         indexed = {

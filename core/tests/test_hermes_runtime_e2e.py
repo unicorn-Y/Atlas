@@ -412,7 +412,7 @@ async def test_write_snapshot_and_rewind_restore_file_and_hermes_session(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_hermes_plan_mode_uses_plan_prompt_and_only_read_tools(tmp_path, monkeypatch):
+async def test_hermes_plan_mode_uses_plan_prompt_and_read_only_tools(tmp_path, monkeypatch):
     _disable_external_mcp(monkeypatch)
     target = tmp_path / "must-not-be-created.txt"
     with FakeLLMServer([
@@ -446,7 +446,8 @@ async def test_hermes_plan_mode_uses_plan_prompt_and_only_read_tools(tmp_path, m
         assert not target.exists()
         request = fake.main_requests()[0]
         tools = {tool["function"]["name"] for tool in request["tools"]}
-        assert tools <= {"read_file", "search_files", "web_fetch"}
+        assert tools <= {"read_file", "search_files", "terminal", "web_fetch", "web_search", "web_extract"}
+        assert "terminal" in tools
         prompt = next(item["content"] for item in request["messages"] if item["role"] == "system")
         assert "[/plan — plan mode]" in prompt
 

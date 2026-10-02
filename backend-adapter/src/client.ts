@@ -116,6 +116,18 @@ export class BackendAdapter {
     return conversation;
   }
   async getMessages(id: string): Promise<ConversationMessage[]> { return this.live ? this.request(`/api/conversations/${encodeURIComponent(id)}/messages`) : []; }
+  async getConversationBranches(id: string): Promise<Array<{ id: string; parent_session_id?: string | null; title: string; branch_message_id?: string | null }>> {
+    return this.live ? this.request(`/api/conversations/${encodeURIComponent(id)}/branches`) : [];
+  }
+  async getConversationGoal(id: string): Promise<{ output: string; goal: { text: string; status: string; turns_used: number; max_turns: number; subgoals: unknown[] } | null }> {
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/goal`);
+  }
+  async runConversationGoalCommand(id: string, command: string): Promise<{ output: string; prompt?: string | null; kickoff?: boolean; goal: { text: string; status: string; turns_used: number; max_turns: number; subgoals: unknown[] } | null }> {
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/goal`, { method: 'POST', body: JSON.stringify({ command }) });
+  }
+  async summarizeConversationBranch(id: string): Promise<{ created: boolean; reason?: string; summary?: string }> {
+    return this.request(`/api/conversations/${encodeURIComponent(id)}/branch-summary`, { method: 'POST' });
+  }
   async renameConversation(id: string, title: string): Promise<void> {
     await this.updateConversation(id, { title });
   }
@@ -469,8 +481,13 @@ export class BackendAdapter {
   }
 
   /** Add an instruction to a running run; it reaches the model before its next turn. */
-  steerRun(runId: string, content: string, eventId: string): void {
-    this.sendOnRun(runId, { type: 'run.steer', run_id: runId, content, event_id: eventId });
+  steerRun(runId: string, content: string, eventId: string, immediate = false): void {
+    this.sendOnRun(runId, { type: 'run.steer', run_id: runId, content, event_id: eventId, immediate });
+  }
+
+  /** Add an instruction directly to a running delegated subtask. */
+  steerSubtask(runId: string, subtaskId: string, text: string, eventId: string): void {
+    this.sendOnRun(runId, { type: 'subtask.message', run_id: runId, subtask_id: subtaskId, text, event_id: eventId });
   }
 
   respondToInput(runId: string, eventId: string, text: string): void {

@@ -75,6 +75,16 @@ describe('buildTimeline', () => {
     const replies = items.flatMap((item) => item.kind === 'reply' ? [[item.content, item.streaming]] : []);
     expect(replies).toEqual([['我来看看。', false], ['现在是 10 点。', false]]);
   });
+
+  it('marks a streamed reply as interrupted when an immediate redirect arrives', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('run.started', { content: 'start' }),
+      ev('message.delta', { content: 'partial output' }),
+      ev('run.steered', { immediate: true, content: 'new direction' }),
+    ]);
+    expect(items).toContainEqual(expect.objectContaining({ kind: 'reply', content: 'partial output', status: '被用户打断' }));
+  });
 });
 
 describe('helpers', () => {

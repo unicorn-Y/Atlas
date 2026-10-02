@@ -891,7 +891,7 @@ class DelegationService:
                                     "model": item.get("agent_model") or (atlas_options or {}).get("model")}
                     parent_permission = str(task_options.get("permission_mode", "full_access"))
                     child_permission = item.get("agent_permission")
-                    permission_rank = {"full_access": 0, "ask_writes": 1, "read_only": 2}
+                    permission_rank = {"full_access": 0, "auto_file": 1, "ask_writes": 2, "ask_each": 3, "plan": 4, "read_only": 5}
                     if (child_permission in permission_rank and
                             permission_rank[child_permission] > permission_rank.get(parent_permission, 0)):
                         task_options["permission_mode"] = child_permission
@@ -902,7 +902,7 @@ class DelegationService:
                         event_metadata=metadata, atlas_options=task_options,
                         output_schema=item.get("output_schema"),
                     )
-                    status = str(result.get("status", "completed"))
+                    status = str(result.get("status", "unknown"))
                     summary = str(result.get("result", ""))[:1000]
                 except asyncio.CancelledError:
                     status, summary, result = "cancelled", "Worker cancelled.", {}
@@ -1026,8 +1026,14 @@ class DelegationService:
                     verdict = json.loads(extract_json_candidate(str(verdict_result.get("result", ""))))
                 except (ValueError, TypeError):
                     verdict = {"verified": False, "note": "verifier returned invalid structured output"}
-                item["verified"] = bool(verdict.get("verified"))
+                item["verified"] = bool(
+                    item.get("status") == "completed"
+                    and item.get("schema_valid", True) is not False
+                    and verdict_result.get("status") == "completed"
+                    and verdict.get("verified")
+                )
                 item["verifier_note"] = str(verdict.get("note", ""))[:1000]
+                item["accepted"] = item["verified"]
                 if not item["verified"]:
                     retry_task = {**tasks[index], "context": (
                         str(tasks[index].get("context") or "") +
@@ -1048,9 +1054,19 @@ class DelegationService:
                         ))
                     except (ValueError, TypeError):
                         retry_verdict = {"verified": False, "note": "verifier returned invalid structured output"}
-                    retried["verified"] = bool(retry_verdict.get("verified"))
+                    retried["verified"] = bool(
+                        retried.get("status") == "completed"
+                        and retried.get("schema_valid", True) is not False
+                        and retry_verdict_result.get("status") == "completed"
+                        and retry_verdict.get("verified")
+                    )
                     retried["verifier_note"] = str(retry_verdict.get("note", ""))[:1000]
+                    retried["accepted"] = retried["verified"]
                     results[index] = retried
+        else:
+            for item in results:
+                item["accepted"] = False
+                item["verification_status"] = "not_requested"
         payload = {
             "group_id": group_id,
             "results": results,

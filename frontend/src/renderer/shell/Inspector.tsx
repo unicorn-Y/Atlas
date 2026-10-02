@@ -13,9 +13,10 @@ import FilesPanel from './panels/FilesPanel';
 import SpecsPanel from './panels/SpecsPanel';
 import TerminalPanel from './panels/TerminalPanel';
 import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
+import ProcessesPanel from './panels/ProcessesPanel';
 import PullRequestSection from './panels/PullRequestSection';
 
-export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context';
+export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes';
 
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
@@ -97,7 +98,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
   const resize = useResizableWidth();
   const tabs: Array<[InspectorTab, string]> = [
-    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'],
+    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'],
   ];
   return <aside aria-label="任务面板" style={resize.width ? { width: resize.width } : undefined}
     className={cn('anim-fade relative flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)]', !resize.dragging && 'transition-[width] duration-200', !resize.width && (WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]'))}>
@@ -157,6 +158,8 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
         <BrowserPanel url={browserUrl} onUrl={onBrowserUrl} suggestions={browserSuggestions} onPick={onPick} onToast={onToast} onAsk={onAsk} />
       </div>}
 
+      {tab === 'processes' && <ProcessesPanel onToast={onToast} />}
+
       {tab === 'context' && <ContextTab conversationTitle={conversationTitle} modelName={modelName} run={run} tools={tools} skills={skills} activeSkills={activeSkills}
         capabilities={capabilities} workspace={workspace} onChooseWorkspace={onChooseWorkspace} connected={connected}
         conversationId={conversationId} worktree={worktree} onWorktreeChanged={onWorktreeChanged} onToast={onToast} onPreview={onPreview} onAsk={onAsk} />}
@@ -180,6 +183,7 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
   const latestUsage = [...(run?.events ?? [])].reverse().find((event) => event.type === 'run.usage')?.data;
   const context = typeof latestUsage?.context_tokens === 'number' && typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0
     ? `${Math.round(latestUsage.context_tokens / latestUsage.context_limit * 100)}%（${latestUsage.context_tokens} / ${latestUsage.context_limit}）` : '—';
+  const breakdown = latestUsage?.context_breakdown as { categories?: Array<{ id: string; label: string; tokens: number }>; context_max?: number; context_used?: number } | undefined;
 
   // minmax(0,1fr): long unbroken paths must truncate, not widen the column past the panel.
   return <div className="grid grid-cols-[minmax(0,1fr)] gap-5 text-[13px]">
@@ -187,6 +191,17 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
       {[['任务', conversationTitle ?? '未选择'], ['模型', modelName], ['状态', run ? RUN_LABEL[run.status] ?? run.status : '空闲'], ['上下文占用', context], ['可用工具', `${tools.length} 个`]].map(([label, value]) =>
         <div key={label} className="flex justify-between gap-4"><dt className="shrink-0 text-fg-3">{label}</dt><dd className="m-0 min-w-0 truncate text-right text-fg">{value}</dd></div>)}
     </dl>
+    {breakdown?.categories && <section>
+      <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">上下文构成</h3>
+      <div className="grid gap-1.5">
+        {breakdown.categories.map((item) => <div key={item.id} className="flex justify-between gap-3 text-[12.5px]">
+          <span className="text-fg-3">{item.label}</span><span className="tabular-nums text-fg-2">{item.tokens.toLocaleString()} tokens</span>
+        </div>)}
+        {typeof breakdown.context_max === 'number' && <div className="mt-1 flex justify-between border-t border-line pt-1.5 text-[12.5px]">
+          <span className="text-fg-3">剩余额度</span><span className="tabular-nums text-fg-2">{Math.max(0, breakdown.context_max - (breakdown.context_used ?? 0)).toLocaleString()} tokens</span>
+        </div>}
+      </div>
+    </section>}
     <section>
       <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">工作目录</h3>
       <button onClick={onChooseWorkspace} title={workspace ?? undefined} className="flex w-full items-center gap-2 rounded-xl bg-sunken px-3 py-2.5 text-left text-fg-2 hover:text-fg">

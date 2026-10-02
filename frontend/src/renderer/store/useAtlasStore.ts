@@ -13,7 +13,7 @@ export interface ContextRefs { files: string[]; conversations: string[] }
 export interface Outgoing { content: string; attachments: string[]; files: RunFile[]; refs?: ContextRefs; /** One-off role for this message only. */ profileId?: string }
 export interface QueuedMessage extends Outgoing { id: string }
 /** How a message typed while a run is working is delivered: folded into the run now, or run afterwards. */
-export type FollowUpMode = 'steer' | 'queue';
+export type FollowUpMode = 'steer' | 'redirect' | 'queue';
 
 export const backend = new BackendAdapter({ baseUrl: desktopApiBaseUrl || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8765' });
 
@@ -124,6 +124,7 @@ interface AtlasState {
   refreshConversations: () => Promise<void>;
   duplicateConversation: (id: string) => Promise<void>;
   cancelSubtask: (runId: string, subtaskId: string) => void;
+  steerSubtask: (runId: string, subtaskId: string, eventId: string, text: string) => boolean;
   saveRecipe: (runId: string, name: string) => Promise<boolean>;
   deleteRecipe: (id: string) => Promise<void>;
   runRecipe: (id: string, params: Record<string, string>) => Promise<void>;
@@ -204,6 +205,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     },
 
     openConversation: async (conversation) => {
+      const previousId = get().activeConversationId;
+      if (previousId && previousId !== conversation.id && get().conversations.some((item) => item.id === previousId)) {
+        void backend.summarizeConversationBranch(previousId).catch(() => undefined);
+      }
       const run = [...get().runs].reverse().find((item) => item.conversationId === conversation.id);
       set((state) => ({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null, error: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id) }));
       if (run && !terminal.has(run.status)) return;
@@ -221,6 +226,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       if (get().creatingConversation) return;
       set({ creatingConversation: true });
       try {
+        const previousId = get().activeConversationId;
+        if (previousId) await backend.summarizeConversationBranch(previousId).catch(() => undefined);
         const conversation = await backend.createConversation(title);
         set((state) => ({
           conversations: [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)],
@@ -388,7 +395,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const running = activeRunFor(conversationId);
       if (running) {
         // Attachments can't join a run in flight, so those always wait for the next run.
-        if (get().followUpMode === 'steer' && !attachments.length && !files.length && !item.refs && !item.profileId && steer(running, item)) return;
+        if (get().followUpMode !== 'queue' && !attachments.length && !files.length && !item.refs && !item.profileId && steer(running, item, get().followUpMode === 'redirect')) return;
         set((state) => ({ queue: { ...state.queue, [conversationId]: [...(state.queue[conversationId] ?? []), item] } }));
         return;
       }
@@ -608,6 +615,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       } catch (error) { set({ error: errorText(error, '没能复制对话') }); }
     },
     cancelSubtask: (runId, subtaskId) => { void backend.cancelSubtask(runId, subtaskId).catch((error) => set({ error: errorText(error, '没能停止子任务') })); },
+    steerSubtask: (runId, subtaskId, eventId, text) => {
+      try { backend.steerSubtask(runId, subtaskId, text.trim(), eventId); return true; }
+      catch (error) { set({ error: errorText(error, '没能发送给子任务') }); return false; }
+    },
     saveRecipe: async (runId, name) => {
       try {
         const recipe = await backend.recipeFromRun(runId, name.trim());
@@ -668,8 +679,8 @@ function respondToApproval(eventId: string, choice: 'allow' | 'deny') {
 }
 
 /** Fold a message into a running run. Returns false when it can't be delivered, so the caller can queue it. */
-function steer(run: AgentRun, item: QueuedMessage): boolean {
-  try { backend.steerRun(run.id, item.content, item.id); } catch { return false; }
+function steer(run: AgentRun, item: QueuedMessage, immediate = false): boolean {
+  try { backend.steerRun(run.id, item.content, item.id, immediate); } catch { return false; }
   useAtlasStore.setState((state) => ({ pendingSteers: { ...state.pendingSteers, [run.id]: [...(state.pendingSteers[run.id] ?? []), item] } }));
   return true;
 }

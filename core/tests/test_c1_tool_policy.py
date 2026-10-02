@@ -155,6 +155,50 @@ async def test_approval_and_user_hook_outcomes_emit_only_matching_native_failure
 
 
 @pytest.mark.asyncio
+async def test_plan_mode_read_only_terminal_allowlist_and_shell_redirection_block():
+    queue = asyncio.Queue()
+    pause = asyncio.Event(); pause.set()
+    runtime = _runtime(queue, pause_event=pause, mode="plan")
+    _active_contexts["plan-read-shell"] = (SimpleNamespace(_model_facing_tools=lambda: []), runtime, asyncio.get_running_loop())
+    try:
+        for command in ("git status --short", "git log -3", "rg needle .", "Get-Content notes.txt"):
+            assert await asyncio.to_thread(hermes_policy._pre_tool_call, "terminal", {"command": command},
+                session_id="plan-read-shell", tool_call_id=command) is None
+        for command in ("git status > out.txt", "git status; Remove-Item file", "Write-Output $env:PATH"):
+            blocked = await asyncio.to_thread(hermes_policy._pre_tool_call, "terminal", {"command": command},
+                session_id="plan-read-shell", tool_call_id=command)
+            assert blocked["action"] == "block"
+        assert queue.qsize() == 3
+    finally:
+        _active_contexts.pop("plan-read-shell", None)
+
+
+@pytest.mark.asyncio
+async def test_ask_each_and_auto_file_request_only_their_configured_approvals():
+    queue = asyncio.Queue()
+    pause = asyncio.Event(); pause.set()
+    calls = []
+    async def approve(event_id, name, _args):
+        calls.append((event_id, name))
+        return "allow"
+    runtime = _runtime(queue, pause_event=pause, permission_mode="ask_each", approval_callback=approve,
+                       workspace="C:/fixture", hermes_write_checkpoint_created=True)
+    agent = SimpleNamespace(_model_facing_tools=lambda: [], _checkpoint_path=lambda *_args: {"id": "checkpoint-fixture"})
+    runtime.run_id = "run-fixture"
+    runtime.conversation_id = "conversation-fixture"
+    _active_contexts["permission-modes"] = (agent, runtime, asyncio.get_running_loop())
+    try:
+        assert await asyncio.to_thread(hermes_policy._pre_tool_call, "read_file", {}, session_id="permission-modes", tool_call_id="read") is None
+        assert calls == [("approval:read", "read_file")]
+        runtime.permission_mode = "auto_file"
+        assert await asyncio.to_thread(hermes_policy._pre_tool_call, "write_file", {}, session_id="permission-modes", tool_call_id="file") is None
+        assert await asyncio.to_thread(hermes_policy._pre_tool_call, "terminal", {"command": "echo fixture"}, session_id="permission-modes", tool_call_id="shell") is None
+        assert calls == [("approval:read", "read_file"), ("approval:shell", "terminal")]
+    finally:
+        _active_contexts.pop("permission-modes", None)
+
+
+@pytest.mark.asyncio
 async def test_real_hermes_deferred_atlas_calls_apply_nested_allow_and_deny(tmp_path, monkeypatch):
     from tests.fakes.fake_llm_provider import Text, ToolCall
     from tests.test_c1_review_e2e import run_script

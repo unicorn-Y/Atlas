@@ -376,6 +376,24 @@ def test_shadow_git_checkpoint_restores_scoped_file_without_repo_mutation(tmp_pa
     assert store.list_checkpoints(workspace)[0]["id"] == checkpoint["id"]
 
 
+def test_shadow_git_checkpoint_prunes_oldest_to_count_cap(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    note = workspace / "note.txt"
+    note.write_text("first", encoding="utf-8")
+    store = ShadowGitCheckpointStore(tmp_path / "checkpoints")
+    monkeypatch.setattr(store, "MAX_CHECKPOINTS", 2)
+    first = store.create_checkpoint(workspace, ["note.txt"])
+    note.write_text("second", encoding="utf-8")
+    store.create_checkpoint(workspace, ["note.txt"])
+    note.write_text("third", encoding="utf-8")
+    newest = store.create_checkpoint(workspace, ["note.txt"])
+    remaining = store.list_checkpoints(workspace)
+    assert len(remaining) == 2
+    assert first["id"] not in {item["id"] for item in remaining}
+    assert newest["id"] in {item["id"] for item in remaining}
+
+
 def test_plugin_bundle_manifest_discovery_and_plain_skill_compatibility(tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugins" / "sample"
     plugin_dir.mkdir(parents=True)

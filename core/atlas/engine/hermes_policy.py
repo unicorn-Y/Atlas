@@ -73,6 +73,19 @@ def _write_tool(name: str, args: dict[str, Any]) -> bool:
     return name.startswith(("custom_", "mcp-", "mcp_", "mcp__"))
 
 
+_PLAN_READ_COMMAND = re.compile(
+    r"^\s*(?:git\s+(?:-C\s+\S+\s+)?(?:status|log|diff|show)\b"
+    r"|rg\b|ls\b|dir\b|cat\b|type\b|get-content\b)(?:\s|$)", re.I,
+)
+
+
+def _plan_command_is_read_only(command: str) -> bool:
+    """Allow the small read-only shell surface used by plan mode."""
+    if any(token in command for token in (";", "|", "&", "`", "$(", ">", "<", "\n", "\r")):
+        return False
+    return bool(_PLAN_READ_COMMAND.match(command))
+
+
 def _call_async(loop: asyncio.AbstractEventLoop, callback: Any, *args: Any) -> Any:
     result = callback(*args)
     if inspect.isawaitable(result):
@@ -175,6 +188,8 @@ def _pre_tool_call(
         return _blocked(runtime, loop, name, kwargs, "当前子任务不允许使用这项工具。")
     mode = str(getattr(runtime, "permission_mode", "full_access"))
     is_write = _write_tool(name, arguments)
+    if getattr(runtime, "mode", "act") == "plan" and name == "terminal":
+        is_write = not _plan_command_is_read_only(str(arguments.get("command") or arguments.get("cmd") or ""))
     if (mode == "read_only" or getattr(runtime, "mode", "act") == "plan"
             or bool(getattr(runtime, "read_only", False))) and is_write:
         return _blocked(runtime, loop, name, kwargs, "当前对话是只读模式，不能执行写操作。")
@@ -234,7 +249,10 @@ def _pre_tool_call(
                 str(outcome.get("reason", "Blocked by hook")),
             )
 
-    if mode == "ask_writes" and is_write:
+    ask_for_step = mode == "ask_each"
+    ask_for_write = mode == "ask_writes" and is_write
+    ask_for_non_file_write = mode == "auto_file" and is_write and name not in {"write_file", "patch"}
+    if ask_for_step or ask_for_write or ask_for_non_file_write:
         approval = getattr(runtime, "approval_callback", None)
         if approval is None:
             return _blocked(runtime, loop, name, kwargs, "当前对话没有可用的审批通道，写操作已取消。")

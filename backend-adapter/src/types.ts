@@ -179,7 +179,7 @@ export interface RunStartRequest {
   sandbox?: SandboxSettings | null;
 }
 
-export type PermissionMode = 'full_access' | 'ask_writes' | 'read_only';
+export type PermissionMode = 'full_access' | 'ask_each' | 'ask_writes' | 'auto_file' | 'plan' | 'read_only';
 
 export interface HookConfig { id: string; event: string; command: string; timeout_s: number; enabled: boolean }
 

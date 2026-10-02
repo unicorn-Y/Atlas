@@ -27,7 +27,7 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } fr
 import Mark, { MarkDefs } from './components/Mark';
 import Palette, { type PaletteItem } from './components/Palette';
 import VoiceOverlay, { getSpeechRecognition, type SpeechRecognitionLike } from './components/VoiceOverlay';
-import SettingsPage from './pages/SettingsPage';
+import SettingsPage, { STATUS_BAR_ITEMS, type StatusBarPreferences } from './pages/SettingsPage';
 import SkillDiscoveryPage from './pages/SkillDiscoveryPage';
 import MemoryPage from './pages/MemoryPage';
 import AutomationPage from './pages/AutomationPage';
@@ -60,7 +60,10 @@ const HOME_MODES: ComposerMode[] = [
 ];
 const PERMISSION: Record<PermissionMode, { label: string; hint: string }> = {
   full_access: { label: '完全访问', hint: 'Atlas 直接读写文件、运行命令（默认）' },
+  ask_each: { label: '每步确认', hint: '每次调用工具前都先问你' },
   ask_writes: { label: '改前问我', hint: '改文件、运行命令前先问你' },
+  auto_file: { label: '自动改文件', hint: '文件编辑自动进行，命令和 MCP 写操作前先问你' },
+  plan: { label: '计划模式', hint: '只读探索并先提交计划，批准后再执行' },
   read_only: { label: '只读', hint: '只能查看，不能改任何东西' },
 };
 const EFFORT_LABEL: Record<string, string> = { minimal: '最低', low: '低', medium: '中', high: '高' };
@@ -71,6 +74,11 @@ const writeDraft = (conversationId: string, text: string) => {
 };
 const pref = (key: string) => { try { return localStorage.getItem(`atlas.preference.${key}`); } catch { return null; } };
 const setPref = (key: string, value: string) => { try { localStorage.setItem(`atlas.preference.${key}`, value); } catch { /* storage unavailable */ } };
+const readStatusBarPreferences = (): StatusBarPreferences => {
+  let saved: Partial<StatusBarPreferences> = {};
+  try { saved = JSON.parse(pref('statusbar') ?? '{}') as Partial<StatusBarPreferences>; } catch { /* use defaults */ }
+  return Object.fromEntries(STATUS_BAR_ITEMS.map(([key]) => [key, typeof saved[key] === 'boolean' ? saved[key] : true])) as StatusBarPreferences;
+};
 
 export default function App() {
   const store = useAtlasStore();
@@ -103,6 +111,8 @@ export default function App() {
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
   const [branches, setBranches] = useState<string[]>([]);
+  const [gitBranch, setGitBranch] = useState('');
+  const [processCount, setProcessCount] = useState<number | null>(null);
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [besideId, setBesideId] = useState('');
@@ -118,8 +128,15 @@ export default function App() {
   const [listening, setListening] = useState(false);
   const [voiceOutput, setVoiceOutput] = useState(() => pref('voice-output') === 'true');
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
+  const [statusBar, setStatusBar] = useState(readStatusBarPreferences);
   const [maximized, setMaximized] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [conversationGoal, setConversationGoal] = useState<{ text: string; status: string; turns_used: number; max_turns: number; subgoals: unknown[] } | null>(null);
+  const updateStatusBar = (key: keyof StatusBarPreferences, visible: boolean) => setStatusBar((current) => {
+    const next = { ...current, [key]: visible };
+    setPref('statusbar', JSON.stringify(next));
+    return next;
+  });
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const spokenSequenceRef = useRef(0);
   const spokenRunRef = useRef('');
@@ -142,6 +159,17 @@ export default function App() {
     ? String(activeEvents.find((event) => event.type === 'run.started')?.data.content ?? '') : '';
   const runTurnIndex = runPrompt ? messages.map((message) => message.role === 'user' ? message.content : null).lastIndexOf(runPrompt) : -1;
   const history = runTurnIndex >= 0 && runTurnIndex >= messages.length - 3 ? messages.slice(0, runTurnIndex) : messages;
+  const historyWithBranchNotes = [...history];
+  for (const note of history.filter((item) => {
+    const metadata = item.metadata as Record<string, unknown> | undefined;
+    return metadata?.kind === 'branch_summary' && typeof metadata.fork_message_id === 'string';
+  })) {
+    const metadata = note.metadata as Record<string, unknown>;
+    const oldIndex = historyWithBranchNotes.indexOf(note);
+    if (oldIndex >= 0) historyWithBranchNotes.splice(oldIndex, 1);
+    const forkIndex = historyWithBranchNotes.findIndex((item) => item.id === metadata.fork_message_id);
+    historyWithBranchNotes.splice(forkIndex >= 0 ? forkIndex + 1 : historyWithBranchNotes.length, 0, note);
+  }
   const modelName = store.models.find((model) => model.id === store.model)?.name ?? store.model ?? '默认模型';
   const loadingMessages = store.loadingMessagesConversationId === store.activeConversationId && Boolean(store.activeConversationId);
   const working = store.busy && !store.paused;
@@ -167,6 +195,25 @@ export default function App() {
   const notify = useCallback((text: string) => setToast(text), []);
 
   useEffect(() => { void store.initialize(); }, []);
+  useEffect(() => {
+    let stale = false;
+    const refresh = () => void backend.getProcesses().then((items) => { if (!stale) setProcessCount(items.filter((item) => item.status === 'running').length); }).catch(() => { if (!stale) setProcessCount(null); });
+    refresh(); const timer = window.setInterval(refresh, 8000);
+    return () => { stale = true; window.clearInterval(timer); };
+  }, []);
+  useEffect(() => {
+    const id = store.activeConversationId;
+    if (!id || !store.connected) { setConversationGoal(null); return; }
+    let stale = false;
+    void backend.getConversationGoal(id).then((result) => { if (!stale) setConversationGoal(result.goal); }).catch(() => { if (!stale) setConversationGoal(null); });
+    return () => { stale = true; };
+  }, [store.activeConversationId, store.connected]);
+  useEffect(() => {
+    if (activeEvents.at(-1)?.type !== 'run.completed' || !store.activeConversationId || !store.connected) return;
+    void backend.getConversationGoal(store.activeConversationId)
+      .then((result) => setConversationGoal(result.goal))
+      .catch(() => setConversationGoal(null));
+  }, [activeEvents, store.activeConversationId, store.connected]);
   // First run: the settings sheet opens once, as soon as the backend reports no API key.
   useEffect(() => {
     if (firstRunShownRef.current || !store.connected || store.conversationsLoading || store.apiKeyConfigured) return;
@@ -466,9 +513,14 @@ export default function App() {
 
   const slashCommands: SlashCommand[] = [
     { id: 'new', label: '/new', hint: '新任务', run: newTask },
+    { id: 'clear', label: '/clear', hint: '开始一段新对话', run: newTask },
     ...(activeConversation ? [
       { id: 'export', label: '/export', hint: '导出当前对话为 JSON', run: () => void store.exportConversation(activeConversation.id) },
       { id: 'rename', label: '/rename', hint: '把后面的文字设为对话名称', takesArgument: true, run: (title: string) => { if (title.trim()) void store.renameConversation(activeConversation.id, title); else setToast('在 /rename 后面写上新名称'); } },
+      { id: 'resume', label: '/resume', hint: '继续打开最近对话，或按名称搜索', takesArgument: true, run: (query: string) => { const target = query.trim() ? store.conversations.find((item) => item.id === query.trim() || item.title.toLowerCase().includes(query.trim().toLowerCase())) : store.conversations[0]; if (target) openConversation(target); else setToast('没有找到可恢复的对话'); } },
+      { id: 'fork', label: '/fork', hint: '从最近一条用户消息分叉', run: () => { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void store.forkFrom(last.id); else setToast('当前对话还没有用户消息'); } },
+      { id: 'undo', label: '/undo', hint: '撤回最近一条用户消息及其之后内容', run: () => { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void rewind(last.id, false); else setToast('当前对话没有可撤回的用户消息'); } },
+      { id: 'redo', label: '/redo', hint: '恢复刚刚撤回的内容', run: () => { if (rewound) void store.redoRewind(rewound.conversationId, rewound.rewindId).then((ok) => { if (ok) { setRewound(null); setToast('已重做'); } }); else setToast('当前没有可重做的撤回'); } },
     ] : []),
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
@@ -480,6 +532,17 @@ export default function App() {
     { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
     { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
     { id: 'memory', label: '/memory', hint: '打开记忆', run: () => go('memory') },
+    { id: 'context', label: '/context', hint: '查看上下文用量明细', run: () => showInspectorTab('context') },
+    { id: 'diff', label: '/diff', hint: '查看本次运行的文件改动', run: () => showInspectorTab('changes') },
+    { id: 'model', label: '/model', hint: '选择或切换模型', takesArgument: true, run: (query: string) => { const found = store.models.find((item) => item.id.toLowerCase() === query.trim().toLowerCase() || (item.name ?? '').toLowerCase() === query.trim().toLowerCase()); if (found) void store.selectModel(found.id); else setSheet('models'); } },
+    { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
+    { id: 'status', label: '/status', hint: '显示当前模型、推理强度和权限', run: () => setToast(`${modelName} · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
+    { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } const common: PermissionMode[] = ['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access']; const next = common[(common.indexOf(permission) + 1) % common.length]; cyclePermission(); setToast(`权限模式：${PERMISSION[next].label}`); } },
+    { id: 'agents', label: '/agents', hint: '打开任务看板查看 Agent 状态', run: () => go('board') },
+    { id: 'ps', label: '/ps', hint: '查看后台进程和最近输出', run: () => showInspectorTab('processes') },
+    { id: 'stop', label: '/stop', hint: '停止后台进程；不带编号时停止当前运行', takesArgument: true, run: (id: string) => { if (!id.trim()) store.stopTask(); else void backend.killProcess(id.trim()).then(() => setToast('后台进程已停止')).catch((error) => setToast(String(error))); } },
+    { id: 'goal', label: '/goal', hint: '设置、查看、暂停、恢复或清除当前会话目标', takesArgument: true, run: (command: string) => { if (!activeConversation) { setToast('先打开一个对话再设置目标'); return; } void backend.runConversationGoalCommand(activeConversation.id, command).then((result) => { setConversationGoal(result.goal); setToast(result.output); if (result.prompt) void store.sendMessage(result.prompt); }).catch((error) => setToast(error instanceof Error ? error.message : String(error))); } },
+    { id: 'copy', label: '/copy', hint: '复制最近一条 Atlas 回复', run: () => { const text = [...messages].reverse().find((item) => item.role === 'assistant')?.content; if (text) void navigator.clipboard.writeText(text).then(() => setToast('已复制最近回复')).catch(() => setToast('复制失败')); else setToast('还没有可复制的回复'); } },
     ...store.skills.map((skill) => ({
       id: `skill-${skill.name}`, label: `/${skill.name}`,
       hint: store.activeSkills.includes(skill.name) ? '技能已启用，选中后停用' : skill.description || '启用这个技能',
@@ -489,6 +552,12 @@ export default function App() {
       },
     })),
   ];
+  slashCommands.forEach((command) => {
+    command.group ??= command.id.startsWith('skill-') ? '技能'
+      : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export'].includes(command.id) ? '会话'
+        : ['goal', 'plan', 'agents', 'ps', 'stop', 'status'].includes(command.id) ? '任务'
+          : ['model', 'permissions', 'usage', 'context', 'diff'].includes(command.id) ? '状态' : '工具';
+  });
   const conversationsRef = useRef(store.conversations);
   conversationsRef.current = store.conversations;
   const searchMessages = useCallback(async (query: string): Promise<PaletteItem[]> => {
@@ -508,6 +577,13 @@ export default function App() {
   const workspaceName = workspacePath
     ? `${remoteHost ? `${remoteHost}:` : ''}${workspacePath.split(/[\\/]/).filter(Boolean).pop() ?? workspacePath}` : '';
   const permission: PermissionMode = (activeConversation?.permission_mode as PermissionMode | undefined) ?? 'full_access';
+  const cyclePermission = () => {
+    const common: PermissionMode[] = ['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access'];
+    const next = common[(common.indexOf(permission) + 1) % common.length];
+    const executor = activeConversation?.executor && activeConversation.executor !== 'atlas' && next !== 'full_access'
+      ? { executor: 'atlas' } : {};
+    store.setConversationSettings(store.activeConversationId, { permission_mode: next, ...executor });
+  };
   const findMentions = async (trigger: '@' | '#', query: string): Promise<MentionItem[]> => {
     const taken = new Set(mentions.map((item) => `${item.kind}:${item.id}`));
     if (trigger === '#') {
@@ -549,12 +625,12 @@ export default function App() {
       {activeConversation && <Menu>
         <Tip label={PERMISSION[permission].hint}><MenuTrigger asChild>
           <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', permission === 'full_access' ? 'text-fg-3 hover:text-fg' : 'bg-brand-soft text-fg')}>
-            {permission === 'read_only' ? <Lock size={15} /> : permission === 'ask_writes' ? <ShieldAsk size={15} /> : <ShieldCheck size={15} />}{permission !== 'full_access' && PERMISSION[permission].label}
+            {permission === 'read_only' ? <Lock size={15} /> : permission === 'full_access' ? <ShieldCheck size={15} /> : <ShieldAsk size={15} />}{permission !== 'full_access' && PERMISSION[permission].label}
           </button>
         </MenuTrigger></Tip>
         <MenuContent side="top">
           <MenuLabel>这个对话的权限</MenuLabel>
-          {(['full_access', 'ask_writes', 'read_only'] as const).map((mode) => <MenuItem key={mode} checked={permission === mode} onSelect={() => {
+          {(['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access', 'read_only'] as const).map((mode) => <MenuItem key={mode} checked={permission === mode} onSelect={() => {
             // External Agents only run with full access; a stricter mode hands the work back to Atlas.
             const executor = activeConversation.executor && activeConversation.executor !== 'atlas' && mode !== 'full_access' ? { executor: 'atlas' } : {};
             store.setConversationSettings(activeConversation.id, { permission_mode: mode, ...executor });
@@ -594,7 +670,7 @@ export default function App() {
           {(['minimal', 'low', 'medium', 'high'] as const).map((effort) => <MenuItem key={effort} checked={store.reasoningEffort === effort} onSelect={() => store.setReasoningEffort(effort)}>{EFFORT_LABEL[effort]}</MenuItem>)}
         </MenuContent>
       </Menu>}
-      {workspaceName && !remoteHost && <Menu onOpenChange={(opening) => { if (opening && !worktreeActive) void backend.getBranches(String(activeConversation?.workspace)).then((result) => setBranches(result.branches)).catch(() => setBranches([])); }}>
+      {workspaceName && !remoteHost && <Menu onOpenChange={(opening) => { if (opening && !worktreeActive) void backend.getBranches(String(activeConversation?.workspace)).then((result) => { setBranches(result.branches); setGitBranch(result.current); }).catch(() => { setBranches([]); setGitBranch(''); }); }}>
         <Tip label={worktreeActive ? `在独立分支 ${activeConversation?.worktree_branch} 上工作` : worktreeRequested ? '下一条会在独立 worktree 里执行' : '隔离分支：在独立的 git worktree 里改，不动主目录'}><MenuTrigger asChild>
           <button type="button" className={cn('inline-flex h-8 max-w-[150px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', worktreeActive || worktreeRequested ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
             <GitBranch size={15} className="shrink-0" />{(worktreeActive || worktreeRequested) && <span className="truncate">{worktreeActive ? String(activeConversation?.worktree_branch ?? '') : '隔离'}</span>}
@@ -622,6 +698,7 @@ export default function App() {
     </>,
     models: store.models, model: store.model, onSelectModel: (id: string) => void store.selectModel(id), onManageModels: () => setSheet('models'),
     status: composerStatus, autoFocus: true, commands: slashCommands,
+    onCyclePermission: activeConversation ? cyclePermission : undefined,
   };
   const errorNote = store.error && <div role="alert" className="anim-fade mt-3 flex items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-[13px] text-danger">
     <span>{store.error}</span>
@@ -661,7 +738,7 @@ export default function App() {
     {contextUse !== null && <Tip label="这次对话占用的上下文窗口，快满时可以用 /compact 压缩"><span className={cn('tabular-nums', contextUse >= 80 ? 'text-danger' : 'text-fg-3')}>上下文 {contextUse}%</span></Tip>}
     <span className="flex-1" />
     <div role="radiogroup" aria-label="运行中发的消息" className="flex gap-0.5 rounded-[8px] bg-sunken p-[2px] shadow-[inset_0_0_0_1px_var(--line)]">
-      {([['steer', '插话', '马上交给正在做的任务'], ['queue', '排队', '等这次做完再发']] as const).map(([id, label, hint]) =>
+      {([['steer', '下一步', '等当前这一步结束后交给任务'], ['redirect', '立即转向', '中止正在生成的回复；工具运行时等工具结束'], ['queue', '排队', '等这次任务做完再发']] as const).map(([id, label, hint]) =>
         <Tip key={id} label={hint}><button role="radio" aria-checked={store.followUpMode === id} onClick={() => store.setFollowUpMode(id)}
           className={cn('h-6 rounded-[6px] px-2 text-[12px]', store.followUpMode === id ? 'raised text-fg' : 'text-fg-3 hover:text-fg')}>{label}</button></Tip>)}
     </div>
@@ -669,6 +746,10 @@ export default function App() {
       <Button size="sm" variant="ghost" onClick={() => store.togglePaused()}>{store.paused ? <Play /> : <Pause />}{store.paused ? '继续' : '暂停'}</Button>
       <Button size="sm" variant="ghost" onClick={() => store.stopTask()}><Square />停止</Button>
     </>}
+  </div>;
+  const goalHeader = conversationGoal && <div className="mb-2 flex items-center gap-2 rounded-lg bg-brand-soft px-2.5 py-1.5 text-[12px] text-fg-2" aria-label="当前会话目标">
+    <ListChecks size={13} className="shrink-0 text-brand" /><span className="min-w-0 flex-1 truncate">目标：{conversationGoal.text}</span>
+    <span className="shrink-0 text-fg-3">{conversationGoal.status === 'active' ? '进行中' : conversationGoal.status === 'paused' ? '已暂停' : conversationGoal.status === 'done' ? '已完成' : conversationGoal.status} · {conversationGoal.turns_used}/{conversationGoal.max_turns}</span>
   </div>;
 
   const localUrls = useMemo(() => {
@@ -694,6 +775,11 @@ export default function App() {
 
   const conversationQueue = store.queue[store.activeConversationId] ?? [];
   const queuePaused = Boolean(store.queuePaused[store.activeConversationId]);
+  const latestTodos = [...activeEvents].reverse().find((event) => String(event.type) === 'run.todos')?.data.todos;
+  const todoItems = Array.isArray(latestTodos) ? latestTodos.filter((item): item is { text?: string; status?: string } => Boolean(item) && typeof item === 'object') : [];
+  const todoStrip = todoItems.length > 0 && <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-sunken px-3 py-2 text-[12px] text-fg-2" aria-label="任务清单">
+    <ListChecks size={14} className="shrink-0 text-brand" />{todoItems.map((item, index) => <span key={`${index}:${item.text ?? ''}`} className={item.status === 'completed' ? 'text-fg-3 line-through' : item.status === 'in_progress' ? 'text-fg font-medium' : 'text-fg-3'}>{item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○'} {item.text ?? `步骤 ${index + 1}`}</span>)}
+  </div>;
   const queueStrip = conversationQueue.length > 0 && <div className="mb-2 grid gap-1.5" aria-label="待发送的消息">
     {queuePaused && <div className="flex items-center gap-2 rounded-xl bg-sunken px-3 py-2 text-[12.5px] text-fg-2">
       <Pause size={13} />任务已停止，后面的 {conversationQueue.length} 条先不发。<span className="flex-1" />
@@ -784,7 +870,7 @@ export default function App() {
             <div ref={threadRef} aria-label="任务活动" className="min-h-0 flex-1 overflow-auto px-8 pt-2"
               onScroll={(event) => { if (restoredRef.current === store.activeConversationId) scrollPositions.current.set(store.activeConversationId, event.currentTarget.scrollTop); }}>
               <div className="mx-auto w-[min(720px,100%)] pb-8">
-                {history.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username}
+                {historyWithBranchNotes.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username}
                   actions={canRewrite && message.id ? message.role === 'user'
                     ? <>
                       <MessageAction label="修改后重新发送" onClick={() => { setEditing({ id: message.id, original: message.content }); setInput(message.content); }}><Pencil size={13} /></MessageAction>
@@ -820,7 +906,17 @@ export default function App() {
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(720px,100%)]">
                 {queueStrip}
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={editBanner || runHeader || rewindBanner || undefined} />
+                {todoStrip}
+                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={<>{editBanner}{goalHeader}{runHeader}{rewindBanner}</>} />
+                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[10.5px] text-fg-3" aria-label="运行状态">
+                  {statusBar.model && <span className="max-w-36 truncate" title={modelName}>{modelName}</span>}{statusBar.reasoning && <span>推理 {store.reasoningEffort ? EFFORT_LABEL[store.reasoningEffort] : '默认'}</span>}
+                  {statusBar.context && contextUse !== null && <span>上下文 {contextUse}%</span>}
+                  {statusBar.tokens && typeof latestUsage?.input_tokens === 'number' && <span>用量 {Number(latestUsage.input_tokens) + Number(latestUsage.output_tokens ?? 0)} tokens</span>}
+                  {statusBar.cost && typeof latestUsage?.cost_usd === 'number' && <span>${Number(latestUsage.cost_usd).toFixed(4)}</span>}
+                  {statusBar.git && (activeConversation?.worktree_branch || gitBranch) && <span className="max-w-32 truncate"><GitBranch size={10} className="mr-1 inline" />{String(activeConversation?.worktree_branch || gitBranch)}</span>}
+                  {statusBar.permission && activeConversation && <span>{PERMISSION[permission].label}</span>}
+                  {statusBar.processes && processCount !== null && <button onClick={() => showInspectorTab('processes')} className="hover:text-fg">后台进程 {processCount}</button>}
+                </div>
               </div>
             </div>
           </div>
@@ -862,7 +958,7 @@ export default function App() {
       </nav>
       <div className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
         <button aria-label="关闭设置" onClick={() => setSheet(null)} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
-        {sheet === 'models' && <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; setPref('username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} />}
+        {sheet === 'models' && <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; setPref('username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} />}
         {sheet === 'advanced' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">高级设置</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">配置会话压缩使用的辅助模型。</p>

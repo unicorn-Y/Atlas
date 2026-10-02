@@ -104,11 +104,11 @@ def test_parallel_verification_retries_one_failed_worker(tmp_path: Path) -> None
         async def runner(**kwargs):
             nonlocal worker_runs
             if kwargs["goal"].startswith("验收"):
-                return {"status": "completed", "result": '{"verified": false, "note": "missing evidence"}'}
+                return {"status": "completed", "result": '{"verified": true, "note": "worker returned output"}'}
             if kwargs["goal"].startswith("复验"):
                 return {"status": "completed", "result": '{"verified": true, "note": "evidence present"}'}
             worker_runs += 1
-            return {"status": "completed", "result": "worker result"}
+            return {"status": "failed" if worker_runs == 1 else "completed", "result": "worker result"}
 
         service.atlas_runner = runner
         group = await service.delegate_parallel(
@@ -116,6 +116,7 @@ def test_parallel_verification_retries_one_failed_worker(tmp_path: Path) -> None
             verify={"criteria": "contains evidence"},
         )
         assert group["results"][0]["verified"] is True
+        assert group["results"][0]["accepted"] is True
         assert worker_runs == 2
 
     asyncio.run(run())

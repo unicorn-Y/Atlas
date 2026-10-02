@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BackendAdapter } from '../src/client';
 
 class MockWebSocket extends EventTarget {
+  static OPEN = 1;
   static instances: MockWebSocket[] = [];
   readyState = 0;
   sent: string[] = [];
@@ -32,6 +33,31 @@ afterEach(() => {
 });
 
 describe('BackendAdapter availability and recovery', () => {
+  it('sends subtask steering over its owning run socket with run and event ids', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return url.endsWith('/api/health')
+        ? { ok: true } as Response
+        : { ok: true, json: async () => ({ version: '1.3' }) } as Response;
+    }));
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+    const running = adapter.startRun({ type: 'run.start', run_id: 'run-1', content: 'delegate', conversation_id: 'conv-1' }, () => undefined);
+    while (!MockWebSocket.instances.length) await flushAsync();
+    const socket = MockWebSocket.instances[0];
+    socket.open();
+    adapter.steerSubtask('run-1', 'child-1', 'check one more edge case', 'steer-1');
+
+    expect(JSON.parse(socket.sent[1])).toEqual({
+      type: 'subtask.message', run_id: 'run-1', subtask_id: 'child-1', text: 'check one more edge case', event_id: 'steer-1',
+    });
+    socket.receive(runtimeEvent(1, 'run.started'));
+    socket.receive(runtimeEvent(2, 'run.completed'));
+    await running;
+  });
+
   it('loads and saves provider configuration without a mock-only path', async () => {
     const configuration = { gateway_base_url: 'https://api.example.test/v1', api_key_configured: true, models: [], current: '' };
     const fetchMock = vi.fn()

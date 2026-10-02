@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { File, Folder, FolderOpen, Globe, NotebookText, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import type { ProjectSource, ProjectSources } from '@atlas/backend-adapter';
 import { backend } from '../store/useAtlasStore';
+import { api } from '../services/api';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 
@@ -14,9 +15,14 @@ const KINDS: Record<ProjectSource['kind'], { label: string; icon: typeof File; p
 const size = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : bytes >= 1024 ? `${Math.round(bytes / 1024)} KB` : `${bytes} B`;
 
 /** What every conversation in the project can use: standing instructions plus indexed files, links and notes. */
-export default function ProjectSourcesPanel({ projectId, onToast }: { projectId: string; onToast: (text: string) => void }) {
+export default function ProjectSourcesPanel({ projectId, workspacePath, apiBaseUrl, onToast }: { projectId: string; workspacePath: string; apiBaseUrl: string; onToast: (text: string) => void }) {
   const [data, setData] = useState<ProjectSources | null>(null);
   const [instructions, setInstructions] = useState('');
+  const [notes, setNotes] = useState('');
+  const [savedNotes, setSavedNotes] = useState('');
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesBusy, setNotesBusy] = useState(false);
+  const [notesError, setNotesError] = useState('');
   const [kind, setKind] = useState<ProjectSource['kind']>('folder');
   const [value, setValue] = useState('');
   const [title, setTitle] = useState('');
@@ -25,6 +31,17 @@ export default function ProjectSourcesPanel({ projectId, onToast }: { projectId:
   const load = () => backend.getProjectSources(projectId).then((result) => { setData(result); setInstructions(result.instructions); setError(''); })
     .catch((exc) => setError(exc instanceof Error ? exc.message : String(exc)));
   useEffect(() => { setData(null); void load(); }, [projectId]);
+  useEffect(() => {
+    let cancelled = false;
+    setNotes(''); setSavedNotes(''); setNotesError('');
+    if (!workspacePath || workspacePath.startsWith('ssh://')) return;
+    setNotesLoading(true);
+    void api<{ content: string }>(apiBaseUrl, `/api/workspace/notes?root=${encodeURIComponent(workspacePath)}`)
+      .then((result) => { if (!cancelled) { setNotes(result.content); setSavedNotes(result.content); } })
+      .catch((exc) => { if (!cancelled) setNotesError(exc instanceof Error ? exc.message : String(exc)); })
+      .finally(() => { if (!cancelled) setNotesLoading(false); });
+    return () => { cancelled = true; };
+  }, [apiBaseUrl, workspacePath]);
 
   const run = async (key: string, action: () => Promise<unknown>, done: string) => {
     setBusy(key); setError('');
@@ -54,6 +71,29 @@ export default function ProjectSourcesPanel({ projectId, onToast }: { projectId:
         placeholder="比如：代码风格跟 src/ 里现有的保持一致；改完要跑 npm test；不要动 legacy/ 目录" className={cn(field, 'py-2 leading-[1.6]')} /></label>
     {data && instructions !== data.instructions && <div><Button size="sm" variant="primary" disabled={busy === 'instructions'}
       onClick={() => void run('instructions', () => backend.setProjectInstructions(projectId, instructions), '项目指令已保存')}>保存指令</Button></div>}
+
+    <div className="grid gap-1.5">
+      <label className="grid gap-1 text-fg-2" htmlFor="project-notes">项目 NOTES.md（工作区的 .atlas/NOTES.md）</label>
+      {!workspacePath || workspacePath.startsWith('ssh://')
+        ? <p className="m-0 text-[12.5px] text-fg-3">项目没有本地工作区路径，无法编辑 NOTES.md。</p>
+        : <>
+          {notesError && <p role="alert" className="m-0 text-[12px] text-danger">读取或保存 NOTES.md 失败：{notesError}</p>}
+          <textarea id="project-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={5} maxLength={65536}
+            disabled={notesLoading || notesBusy} placeholder={notesLoading ? '正在读取…' : '写下这个项目需要长期保留的说明'}
+            className={cn(field, 'py-2 leading-[1.6]')} />
+          <div className="flex items-center justify-between gap-2">
+            <small className="text-[11.5px] text-fg-3">保存到工作区 .atlas/NOTES.md，最多 64 KiB。</small>
+            {notes !== savedNotes && <Button size="sm" variant="primary" disabled={notesLoading || notesBusy || new TextEncoder().encode(notes).length > 65536}
+              onClick={() => {
+                setNotesBusy(true); setNotesError('');
+                void api(apiBaseUrl, '/api/workspace/notes', { method: 'PUT', json: { root: workspacePath, content: notes } })
+                  .then(() => { setSavedNotes(notes); onToast('项目 NOTES.md 已保存'); })
+                  .catch((exc) => setNotesError(exc instanceof Error ? exc.message : String(exc)))
+                  .finally(() => setNotesBusy(false));
+              }}>{notesBusy ? '保存中…' : '保存 NOTES.md'}</Button>}
+          </div>
+        </>}
+    </div>
 
     <div className="grid gap-1.5">
       {data?.sources.map((source) => {

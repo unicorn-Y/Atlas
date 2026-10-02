@@ -5,6 +5,12 @@ import DependencyCheckPanel from './DependencyCheckPanel';
 import IntegrationPanel from './IntegrationPanel';
 import styles from '../App.module.css';
 
+export const STATUS_BAR_ITEMS = [
+  ['model', '模型'], ['reasoning', '推理强度'], ['context', '上下文占用'], ['tokens', 'Token 用量'],
+  ['cost', '费用估算'], ['git', 'Git 分支'], ['permission', '权限模式'], ['processes', '后台进程'],
+] as const;
+export type StatusBarPreferences = Record<(typeof STATUS_BAR_ITEMS)[number][0], boolean>;
+
 interface SettingsPageProps {
   username: string;
   onSaveUsername: (username: string) => void;
@@ -22,6 +28,8 @@ interface SettingsPageProps {
   onSaveProvider: (baseUrl: string, apiKey: string) => Promise<boolean>;
   onAddModel: (model: CustomModelRequest) => Promise<boolean>;
   onTestConnection: (model: string) => void;
+  statusBar: StatusBarPreferences;
+  onStatusBarChange: (key: keyof StatusBarPreferences, visible: boolean) => void;
 }
 
 export default function SettingsPage(props: SettingsPageProps) {
@@ -59,6 +67,15 @@ export default function SettingsPage(props: SettingsPageProps) {
         <label>用户名<input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="User" /></label>
         <div className={styles.settingsFormFooter}><span>用户名会保存在此设备的浏览器存储中。</span><button className={styles.settingsAction}>保存用户名</button></div>
       </form>
+    </section>
+    <section className={styles.settingsCard}>
+      <h2>状态栏</h2>
+      <p>选择对话底部显示的状态信息。新安装时默认全部显示。</p>
+      <div className={styles.settingsForm}>
+        {STATUS_BAR_ITEMS.map(([key, label]) => <label key={key} className="flex items-center gap-2">
+          <input type="checkbox" checked={props.statusBar[key]} onChange={(event) => props.onStatusBarChange(key, event.target.checked)} />{label}
+        </label>)}
+      </div>
     </section>
     <section className={styles.settingsCard}>
       <h2>API 提供商</h2>

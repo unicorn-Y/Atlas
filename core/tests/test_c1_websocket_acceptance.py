@@ -381,6 +381,139 @@ async def test_websocket_steering_queue_and_stop(backend):
 
 
 @pytest.mark.asyncio
+async def test_websocket_immediate_redirect_fork_branch_switch_undo_redo(backend):
+    requests = 0
+    def respond(record):
+        nonlocal requests
+        requests += 1
+        return StallMidStream(text="partial response before redirect", after_chars=12, seconds=20) if requests == 1 else Text(
+            "redirect accepted" if requests == 2 else "branch response complete")
+    backend.fake._responder = respond
+    conversation = await backend.conversation()
+    run_id = uuid.uuid4().hex
+    events = []
+    redirected = False
+    async with connect(backend.url.replace("http", "ws", 1) + "/ws/chat",
+                       additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+        await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": "start redirect fixture",
+            "conversation_id": conversation, "workspace": str(backend.root / "workspace"), "model": "fake-model"}))
+        async with asyncio.timeout(90):
+            while True:
+                event = json.loads(await ws.recv())
+                events.append(event)
+                if event.get("event") == "message.delta" and not redirected:
+                    redirected = True
+                    await ws.send(json.dumps({"type": "run.steer", "run_id": run_id,
+                        "event_id": "immediate-fixture", "content": "TURN_TO_FIXTURE", "immediate": True}))
+                if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                    break
+    assert redirected
+    ack = next(item for item in events if item["event"] == "run.steered")
+    assert ack["data"].get("immediate") is True
+    assert any(item["event"] == "message.delta" for item in events)
+
+    messages = (await backend.http.get(f"/api/conversations/{conversation}/messages")).json()
+    through = next(item["id"] for item in reversed(messages) if item["role"] == "assistant")
+    fork_response = await backend.http.post(f"/api/conversations/{conversation}/fork", json={"through_message_id": through})
+    assert fork_response.status_code == 201, fork_response.text
+    fork_id = fork_response.json()["id"]
+    tree = (await backend.http.get(f"/api/conversations/{conversation}/branches")).json()
+    assert any(item["id"] == fork_id and item["parent_session_id"] == conversation for item in tree)
+    await backend.run("continue on the child branch", conversation=fork_id)
+    child_messages = (await backend.http.get(f"/api/conversations/{fork_id}/messages")).json()
+    last_user = next(item["id"] for item in reversed(child_messages) if item["role"] == "user")
+    rewind = await backend.http.post(f"/api/conversations/{fork_id}/rewind", json={"message_id": last_user, "files": False})
+    assert rewind.status_code == 200, rewind.text
+    assert not any(item["id"] == last_user for item in (await backend.http.get(f"/api/conversations/{fork_id}/messages")).json())
+    redo = await backend.http.post(f"/api/conversations/{fork_id}/rewind/{rewind.json()['rewind_id']}/redo")
+    assert redo.status_code == 200, redo.text
+    assert any(item["id"] == last_user for item in (await backend.http.get(f"/api/conversations/{fork_id}/messages")).json())
+
+
+@pytest.mark.asyncio
+async def test_websocket_plan_permission_goal_and_failed_child_redelivery(backend):
+    script = [
+        Text("plan ready"),
+        ToolCall("delegate_task", {"tasks": [{"title": "fixture child", "goal": "return OK"}],
+            "max_concurrency": 1, "verify": {"criteria": "the result must contain OK"}}),
+        Text("first attempt lacks the required result"),
+        Text("OK after redelivery"),
+        Text("goal complete after verified redelivery"),
+    ]
+    parent_delegated = False
+    child_attempts = set()
+    verifier_attempts = 0
+    def respond(record):
+        nonlocal parent_delegated, verifier_attempts
+        messages = record["body"].get("messages", [])
+        current_prompt = next((str(item.get("content", "")) for item in reversed(messages)
+                               if item.get("role") == "user"), "")
+        if "plan this fixture" in current_prompt:
+            return script[0]
+        if "验收并行任务" in current_prompt or "复验并行任务" in current_prompt:
+            verifier_attempts += 1
+            return Text(
+                '{"verified":false,"note":"The first attempt did not contain OK."}'
+                if verifier_attempts == 1 else
+                '{"verified":true,"note":"The result contains OK."}'
+            )
+        if "return OK" in current_prompt or "fixture child" in current_prompt:
+            retry = "Verifier feedback (single retry)" in current_prompt
+            child_attempts.add("retry" if retry else "initial")
+            return script[3] if retry else script[2]
+        if "delegated task" in current_prompt.lower() and not parent_delegated:
+            parent_delegated = True
+            return script[1]
+        return script[4]
+    backend.fake._responder = respond
+    auxiliary_calls = 0
+    def respond_aux(_record):
+        nonlocal auxiliary_calls
+        auxiliary_calls += 1
+        return Text(
+            '{"goal":"plan fixture","subtasks":[{"id":"step1","title":"Inspect fixture","verification":"fixture inspected"}]}'
+            if auxiliary_calls == 1 else
+            '{"results":[{"id":"step1","completed":true,"evidence":"fixture inspected"}]}'
+            if auxiliary_calls == 2 else
+            '{"verdict":"done","reason":"The delegated result was verified."}'
+        )
+    backend.fake._aux = respond_aux
+    conversation = await backend.conversation()
+    plan_approved = False
+    async def approve_plan(ws, event):
+        nonlocal plan_approved
+        if event["event"] == "run.plan.proposed":
+            plan_approved = True
+            await ws.send(json.dumps({"type": "run.plan.approve", "run_id": event["run_id"],
+                "event_id": event["data"]["event_id"]}))
+    _, plan_events = await backend.run("plan this fixture", conversation=conversation,
+        mode="plan", permission_mode="plan", respond=approve_plan)
+    assert plan_events[-1]["event"] == "run.completed"
+    assert any(item["event"] == "run.plan.proposed" for item in plan_events)
+    assert plan_approved
+    goal = await backend.http.post(f"/api/conversations/{conversation}/goal",
+        json={"command": "Complete the delegated task and verify its result."})
+    assert goal.status_code == 200, goal.text
+    assert goal.json()["goal"]["status"] == "active"
+
+    async def approve_each_tool(ws, event):
+        if event["event"] == "approval.required":
+            await ws.send(json.dumps({"type": "approval.response", "run_id": event["run_id"],
+                "event_id": event["data"]["approval_id"], "choice": "allow"}))
+    _, events = await backend.run(goal.json()["prompt"], conversation=conversation,
+        permission_mode="ask_each", respond=approve_each_tool)
+    group = next((item for item in events if item["event"] == "subtask.group_completed"), None)
+    assert group is not None
+    assert parent_delegated
+    assert group["data"]["results"][0]["accepted"] is True, group["data"]["results"]
+    assert group["data"]["results"][0]["status"] == "completed"
+    assert child_attempts == {"initial", "retry"}
+    assert verifier_attempts == 2
+    assert any(item["event"] == "approval.required" for item in events)
+    assert any(item["event"] == "goal.updated" and item["data"]["status"] == "done" for item in events)
+
+
+@pytest.mark.asyncio
 async def test_websocket_pause_blocks_next_provider_turn_until_resume(backend):
     count = 0
     started_marker = backend.root / "workspace/pause-command-started.txt"

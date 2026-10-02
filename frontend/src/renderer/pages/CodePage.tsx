@@ -102,7 +102,7 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
           <div><dt>进度</dt><dd>{current.current_state || '还没有记录'}</dd></div>
           {current.workspace_path && <div><dt>工作区</dt><dd style={{ fontFamily: 'var(--f-mono)', fontSize: 13 }}>{current.workspace_path}</dd></div>}
         </dl>
-        <ProjectSourcesPanel projectId={current.project_id} onToast={onToast} />
+        <ProjectSourcesPanel projectId={current.project_id} workspacePath={current.workspace_path} apiBaseUrl={apiBaseUrl} onToast={onToast} />
         <form onSubmit={(event) => void recall(event)} style={{ marginTop: 18 }}>
           <label className="field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="在这个项目的历史对话里找…" aria-label="项目历史搜索" /></label>
         </form>

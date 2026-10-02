@@ -31,13 +31,13 @@ export interface RunChanges { files: number; additions: number; deletions: numbe
 
 export type TimelineItem =
   | { kind: 'user'; id: string; content: string; steered?: boolean }
-  | { kind: 'reply'; id: string; content: string; streaming: boolean }
+  | { kind: 'reply'; id: string; content: string; streaming: boolean; status?: string }
   | { kind: 'steps'; id: string; steps: Step[] }
   | { kind: 'approval'; id: string; event: AgentEvent }
   | { kind: 'question'; id: string; event: AgentEvent }
   | { kind: 'plan'; id: string; event: AgentEvent }
   | { kind: 'trust'; id: string; event: AgentEvent }
-  | { kind: 'group'; id: string; summary: string; results: Array<{ index: number; title: string; status: string; summary: string; changed_files: string[] }> }
+  | { kind: 'group'; id: string; summary: string; results: Array<{ index: number; title: string; status: string; accepted?: boolean; verification_status?: string; verifier_note?: string; summary: string; changed_files: string[] }> }
   | { kind: 'checks'; id: string; results: CheckResults }
   | { kind: 'cancelled'; id: string }
   /** One-line runtime notes: the model was swapped after errors, or Atlas went back to verify its edits. */
@@ -164,7 +164,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
   const items: TimelineItem[] = [];
   const byExecution = new Map<string, Step>();
   let track: { kind: 'steps'; id: string; steps: Step[] } | null = null;
-  let reply: { kind: 'reply'; id: string; content: string; streaming: boolean } | null = null;
+  let reply: { kind: 'reply'; id: string; content: string; streaming: boolean; status?: string } | null = null;
   let runStartedAt: string | undefined;
   let earlyRules: Step | null = null;
   // Text Atlas streamed before a tool call. The final message.completed repeats it, so it is trimmed off there.
@@ -277,6 +277,9 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         closeReply(); closeBlocks();
         items.push({ kind: 'group', id: event.id, summary: String(data.summary ?? ''), results: results.map((item, index) => ({
           index: typeof item.index === 'number' ? item.index : index, title: String(item.title ?? ''), status: String(item.status ?? ''),
+          accepted: typeof item.accepted === 'boolean' ? item.accepted : undefined,
+          verification_status: typeof item.verification_status === 'string' ? item.verification_status : undefined,
+          verifier_note: typeof item.verifier_note === 'string' ? item.verifier_note : undefined,
           summary: String(item.summary ?? ''), changed_files: Array.isArray(item.changed_files) ? item.changed_files.map(String) : [],
         })) });
         break;
@@ -347,6 +350,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         break;
       }
       case 'run.steered':
+        if (data.immediate && reply) reply.status = '被用户打断';
         closeReply(); closeBlocks();
         items.push({ kind: 'user', id: event.id, content: String(data.content ?? ''), steered: true });
         break;
