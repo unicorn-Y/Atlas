@@ -1,7 +1,7 @@
 # Atlas ZCode Parallel Current
 
 CURRENT: ATLAS-C5R-ZCODE-FINISH
-STATUS: AWAITING_REVIEW
+STATUS: ACCEPTED
 OWNER: ZCode second construction lane
 ATLAS_BRANCH: zcode/c5-models-parallel
 HERMES_BRANCH: none
