@@ -1,7 +1,7 @@
 # Atlas Current Task
 
 CURRENT: ATLAS-C6-CODING-POLISH
-STATUS: READY_FOR_EXECUTION
+STATUS: AWAITING_REVIEW
 CONTROLLER: GPT-6.1 Sol / reasoning=medium
 WORKERS: GPT-6 Luna / reasoning=high (parallel)
 TASKBOOK: tasks/taskbooks/ATLAS-C6-CODING-POLISH.md
@@ -14,23 +14,14 @@ PREVIOUS_REVIEW: PASS — tasks/reviews/ATLAS-C5-C6A-INTEGRATION.review.md
 
 ## Current goal
 
-Finish the remaining C6 before T1:
-
-1. Wire the already-integrated LSP core into real edits + UI.
-2. Implement /init.
-3. Implement /review using the existing child runtime.
-4. Fix long-session rendering/performance.
-5. Do the final core UX polish pass.
-
-Do not rebuild the C6A LSP core.
+C6 全部收完（T8 LSP 接线 / P1 /init / P2 /review / 长会话性能 / 14 项 UX 打磨 / 旧测试漂移），
+等验收。不要重做 C6A LSP core。验收前不要开始 T1。
 
 ## Execution
 
-Use subagents aggressively for independent modules and use the maximum concurrency the current runtime allows.
-Do not hard-code a worker limit.
-Prefer mature upstream implementations/components over custom reduced versions.
+验收方按任务书 §5 跑：拉代码、自跑全量与假模型 E2E、对照 CORE-PARITY T8/P1/P2 逐项、
+权限不被绕过（重点看 review 只读链与只读门禁例外）、前端四项 + 截图目检。
 
 ## Completion
 
-Write C6 result, set CURRENT to AWAITING_REVIEW, push main, verify remote HEAD, then stop.
-Do not start T1.
+（由验收方填写）
