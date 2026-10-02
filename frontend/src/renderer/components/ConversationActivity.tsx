@@ -1,11 +1,13 @@
 import { memo, useEffect, useMemo, useState } from 'react';
-import { BookMarked, Check, FileCheck2, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
+import { BookMarked, Check, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
+import ReviewFindingsCard from './ReviewFindingsCard';
+import { DiagnosticsList } from './diagnostics';
 import { buildTimeline, cacheShare, describeTool, duration, tokenCount, type Step, type TimelineItem } from './timeline';
 import type { InspectorTab } from '../shell/Inspector';
 
@@ -51,6 +53,8 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
       {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
       <span>{item.text}</span>
     </div>;
+    case 'lsp': return <LspNotice key={item.id} item={item} />;
+    case 'review': return <ReviewFindingsCard key={item.id} item={item} store={store} />;
     case 'cancelled': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
       <Square size={12} />你停止了这次任务
     </div>;
@@ -65,8 +69,8 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
           · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
         </button>}
         <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
-        {changed && store.profiles.some((profile) => profile.id === 'reviewer') && <button className="ml-2 inline-flex items-center gap-1 text-fg-2 hover:text-fg"
-          onClick={() => void store.sendMessage('请审查这次任务的改动：逐个文件指出 bug、风险和可以简化的地方，给出具体位置。只提意见，不要修改文件。', [], [], undefined, 'reviewer')}><SearchCheck size={13} />让审查员检查</button>}
+        {changed && <button className="ml-2 inline-flex items-center gap-1 text-fg-2 hover:text-fg"
+          onClick={() => void store.sendMessage('/review')}><SearchCheck size={13} />审查本次改动</button>}
         {events[0] && <SaveRecipe runId={events[0].runId} store={store} />}
       </div>;
     }
@@ -332,6 +336,25 @@ const relativeTo = (root: string, path: string) => {
   const base = root.replace(/[\\/]+$/, '');
   return base && path.toLowerCase().startsWith(base.toLowerCase()) ? path.slice(base.length).replace(/^[\\/]+/, '') || path : path;
 };
+
+/** LSP 编辑后的新增诊断：默认只占一行，点开看明细（后端最多带 20 条）。 */
+function LspNotice({ item }: { item: Extract<TimelineItem, { kind: 'lsp' }> }) {
+  const [open, setOpen] = useState(false);
+  const name = item.path.split(/[\\/]/).pop() || item.path || '文件';
+  const truncated = item.count > item.diagnostics.length;
+  return <div className="my-2 ml-10 text-[12.5px] text-fg-2">
+    <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}
+      className="-mx-2 flex items-center gap-2 rounded-lg px-2 py-0.5 text-left hover:bg-hover">
+      <FileWarning size={13} className="shrink-0 text-brand" />
+      <span>发现 {item.count} 个新问题 · {name}</span>
+      <ChevronRight size={12} className={cn('shrink-0 text-fg-3 transition-transform', open && 'rotate-90')} />
+    </button>
+    {open && <div className="anim-fade mt-1.5 mb-1">
+      <DiagnosticsList diagnostics={item.diagnostics} />
+      {truncated && <p className="m-0 mt-1 text-[11.5px] text-fg-3">仅显示前 20 条</p>}
+    </div>}
+  </div>;
+}
 
 /** First run in a directory: its AGENTS.md / CLAUDE.md only reach the Agent once you trust the directory. */
 function Trust({ event, store }: { event: AgentEvent; store: Store }) {

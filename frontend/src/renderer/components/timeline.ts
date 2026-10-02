@@ -29,6 +29,27 @@ export interface Step {
 export interface RunUsage { input_tokens?: number | null; output_tokens?: number | null; cached_input_tokens?: number | null; context_tokens?: number | null; context_limit?: number | null }
 export interface RunChanges { files: number; additions: number; deletions: number }
 
+/** lsp.diagnostics 里的一条诊断；后端最多带 20 条，超出时 count 仍是真实总数。 */
+export interface LspDiagnosticItem {
+  line: number;
+  column?: number;
+  severity: 'error' | 'warning' | 'information' | 'hint';
+  code?: string;
+  message: string;
+}
+
+/** review.findings 里的一条发现；line 为 1 起始行号或 null。 */
+export interface ReviewFinding {
+  file: string;
+  line: number | null;
+  range: number[] | null;
+  severity: 'blocker' | 'major' | 'minor';
+  title: string;
+  explanation: string;
+  evidence: string;
+  suggested_fix: string;
+}
+
 export type TimelineItem =
   | { kind: 'user'; id: string; content: string; steered?: boolean }
   | { kind: 'reply'; id: string; content: string; streaming: boolean; status?: string }
@@ -42,6 +63,10 @@ export type TimelineItem =
   | { kind: 'cancelled'; id: string }
   /** One-line runtime notes: the model was swapped after errors, or Atlas went back to verify its edits. */
   | { kind: 'notice'; id: string; tone: 'switch' | 'verify'; text: string }
+  /** LSP 在编辑后报的新问题：默认收成一行，可展开看明细。 */
+  | { kind: 'lsp'; id: string; path: string; count: number; diagnostics: LspDiagnosticItem[] }
+  /** /review 代码审查的结构化结论，由 ReviewFindingsCard 渲染；findings 为空即「没有发现问题」。 */
+  | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; findings: ReviewFinding[] }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
   | { kind: 'failed'; id: string; detail: string };
@@ -146,6 +171,46 @@ export function describeTool(name: string, args: unknown): { verb: string; targe
 }
 
 const text = (value: unknown) => typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value, null, 2);
+
+const DIAGNOSTIC_SEVERITIES = ['error', 'warning', 'information', 'hint'] as const;
+const FINDING_SEVERITIES = ['blocker', 'major', 'minor'] as const;
+
+/** lsp.diagnostics.data.diagnostics → 逐条规整；非法条目丢弃，最多 20 条。 */
+function parseDiagnostics(value: unknown): LspDiagnosticItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 20).flatMap((item): LspDiagnosticItem[] => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    const severity = String(record.severity);
+    return [{
+      line: Number(record.line ?? 0),
+      column: typeof record.column === 'number' ? record.column : undefined,
+      severity: (DIAGNOSTIC_SEVERITIES as readonly string[]).includes(severity) ? severity as LspDiagnosticItem['severity'] : 'warning',
+      code: typeof record.code === 'string' && record.code ? record.code : undefined,
+      message: String(record.message ?? ''),
+    }];
+  });
+}
+
+/** review.findings.data.findings → 逐条规整；非法条目丢弃。 */
+function parseFindings(value: unknown): ReviewFinding[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): ReviewFinding[] => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    const severity = String(record.severity);
+    return [{
+      file: String(record.file ?? ''),
+      line: typeof record.line === 'number' ? record.line : null,
+      range: Array.isArray(record.range) ? record.range.map(Number) : null,
+      severity: (FINDING_SEVERITIES as readonly string[]).includes(severity) ? severity as ReviewFinding['severity'] : 'minor',
+      title: String(record.title ?? ''),
+      explanation: String(record.explanation ?? ''),
+      evidence: String(record.evidence ?? ''),
+      suggested_fix: String(record.suggested_fix ?? ''),
+    }];
+  });
+}
 
 /** 步骤详情最多保留的字符数：超长工具输出只留头尾够用的部分，避免大输出撑爆内存和 DOM。 */
 const MAX_STEP_TEXT = 4000;
@@ -383,6 +448,25 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         closeBlocks();
         items.push({ kind: 'plan', id: event.id, event });
         break;
+      case 'lsp.diagnostics': {
+        closeReply(); closeBlocks();
+        const diagnostics = parseDiagnostics(data.diagnostics);
+        const count = typeof data.count === 'number' ? data.count : diagnostics.length;
+        if (count <= 0 && !diagnostics.length) break;
+        items.push({ kind: 'lsp', id: event.id, path: String(data.path ?? ''), count, diagnostics });
+        break;
+      }
+      case 'review.findings': {
+        closeReply(); closeBlocks();
+        items.push({
+          kind: 'review', id: event.id,
+          scope: String(data.scope ?? 'working_tree'),
+          scopeLabel: String(data.scope_label ?? '当前未提交改动'),
+          workspace: String(data.workspace ?? ''),
+          findings: parseFindings(data.findings),
+        });
+        break;
+      }
       case 'run.completed':
         items.push({
           kind: 'done', id: event.id, result: text(data.result), startedAt: runStartedAt, endedAt: event.timestamp,

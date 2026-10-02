@@ -519,3 +519,48 @@ export interface MCPServerAddRequest {
   cwd?: string;
   url?: string;
 }
+
+// -- C6: /init 提案、LSP 诊断与服务状态 -------------------------------------
+
+/** POST /api/init/preview 里对工作区的只读扫描结果。 */
+export interface InitScan {
+  /** 探到的语言与大致文件数（最多 10 项）。 */
+  languages: Array<{ name: string; count: number }>;
+  package_managers: string[];
+  build_commands: string[];
+  test_commands: string[];
+  lint_commands: string[];
+  typecheck_commands: string[];
+  entrypoints: string[];
+  /** AGENTS.md / CLAUDE.md / .atlas/rules.md 等规则文件是否已经存在。 */
+  existing: Record<string, boolean>;
+}
+
+/** AGENTS.md 提案：现有内容、提议内容和两者的 unified diff（为空表示无需改动）。 */
+export interface InitProposal {
+  path: string;
+  exists: boolean;
+  existing_content: string;
+  proposed_content: string;
+  scan: InitScan;
+  diff: string;
+}
+
+export interface InitApplyResult { written: boolean }
+
+/** 一条 LSP 诊断；severity ∈ error|warning|information|hint。 */
+export interface LspDiagnostic {
+  line: number;
+  column: number;
+  severity: 'error' | 'warning' | 'information' | 'hint';
+  code?: string;
+  message: string;
+}
+
+/** GET /api/runs/{run_id}/diagnostics 的一个文件条目（fresh 快照，不是增量）。 */
+export interface RunDiagnosticsFile { path: string; count: number; diagnostics: LspDiagnostic[] }
+export interface RunDiagnostics { files: RunDiagnosticsFile[] }
+
+/** GET /api/lsp/status 的一个服务条目：本机是否装了某个语言服务。 */
+export interface LspServerStatus { id: string; languages: string[]; available: boolean; hint?: string | null }
+export interface LspStatus { servers: LspServerStatus[] }

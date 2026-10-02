@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, CustomModelUpdateRequest, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ProviderState, ReasoningEffort, ReasoningStagesConfig, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, CustomModelUpdateRequest, InitProposal, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ProviderState, ReasoningEffort, ReasoningStagesConfig, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -85,6 +85,12 @@ interface AtlasState {
   reasoningEffort: ReasoningEffort | '';
   /** Conversations whose next run should start in their own git worktree. */
   worktreeRequests: Record<string, { base_branch?: string }>;
+  /** /init：AGENTS.md 提案与对话框状态。open 时 App 挂着的 InitDialog 会显示。 */
+  initOpen: boolean;
+  initBusy: boolean;
+  initApplying: boolean;
+  initError: string | null;
+  initProposal: InitProposal | null;
   initialize: () => Promise<void>;
   openConversation: (conversation: ConversationSummary) => Promise<void>;
   /** 向上翻页：把当前已载入最早一条之前的一页历史拼到前面（滚动到顶部时调用）。 */
@@ -159,6 +165,11 @@ interface AtlasState {
   deleteRecipe: (id: string) => Promise<void>;
   runRecipe: (id: string, params: Record<string, string>) => Promise<void>;
   reloadCommands: (workspace?: string) => Promise<void>;
+  /** /init：扫描当前工作区并生成 AGENTS.md 提案；没有工作目录时记录错误。 */
+  runInit: () => Promise<void>;
+  /** /init：写入提案内容。写入成功后关掉对话框并返回 true。 */
+  applyInit: () => Promise<boolean>;
+  closeInit: () => void;
 }
 
 const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
@@ -249,6 +260,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     profiles: [], recipes: [], customCommands: [], profileId: storageGet(PROFILE) ?? 'default',
     reasoningEffort: (['minimal', 'low', 'medium', 'high'].includes(storageGet(REASONING) ?? '') ? storageGet(REASONING) : '') as ReasoningEffort | '',
     worktreeRequests: {},
+    initOpen: false, initBusy: false, initApplying: false, initError: null, initProposal: null,
 
     initialize: async () => {
       set({ conversationsLoading: true });
@@ -848,6 +860,39 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         return result.before_tokens && result.after_tokens ? `上下文从约 ${result.before_tokens} 压到 ${result.after_tokens} tokens` : '已压缩上下文';
       } catch (error) { set({ error: errorText(error, '压缩失败') }); return null; }
     },
+
+    // -- /init：AGENTS.md 提案 --------------------------------------------
+
+    runInit: async () => {
+      if (get().initBusy) return;
+      const conversationId = get().activeConversationId;
+      const workspace = get().conversations.find((item) => item.id === conversationId)?.workspace;
+      if (typeof workspace !== 'string' || !workspace) { set({ error: '请先选择工作目录' }); return; }
+      set({ initOpen: true, initBusy: true, initError: null });
+      try {
+        const proposal = await backend.initPreview(workspace);
+        set({ initProposal: proposal, initBusy: false });
+      } catch (error) {
+        set({ initBusy: false, initError: errorText(error, '没能生成 AGENTS.md 提案') });
+      }
+    },
+    applyInit: async () => {
+      const proposal = get().initProposal;
+      if (!proposal || get().initApplying) return false;
+      const conversationId = get().activeConversationId;
+      const workspace = get().conversations.find((item) => item.id === conversationId)?.workspace ?? '';
+      set({ initApplying: true, initError: null });
+      try {
+        // 后端冲突检测的接缝：文件已存在时必须原样回传预览读到的旧内容，不存在时必须是 null。
+        await backend.initApply(workspace, proposal.proposed_content, proposal.exists ? proposal.existing_content : null);
+        set({ initApplying: false, initOpen: false, initProposal: null, initError: null });
+        return true;
+      } catch (error) {
+        set({ initApplying: false, initError: errorText(error, '写入失败') });
+        return false;
+      }
+    },
+    closeInit: () => set({ initOpen: false, initBusy: false, initApplying: false, initError: null, initProposal: null }),
   };
 });
 

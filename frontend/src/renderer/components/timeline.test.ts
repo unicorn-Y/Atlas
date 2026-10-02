@@ -99,6 +99,72 @@ describe('buildTimeline', () => {
   });
 });
 
+describe('C6 runtime events', () => {
+  it('turns lsp.diagnostics into a quiet notice item with its real count and capped list', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('run.started', { content: '修一下' }, 0),
+      ev('lsp.diagnostics', {
+        path: 'src/app.py', workspace: 'C:/ws', count: 2,
+        diagnostics: [
+          { line: 12, column: 5, severity: 'error', code: 'T999', message: 'oops' },
+          { line: 30, column: 1, severity: 'hint', message: 'style' },
+        ],
+      }, 1),
+    ]);
+    const item = items.find((target) => target.kind === 'lsp');
+    expect(item).toMatchObject({ kind: 'lsp', path: 'src/app.py', count: 2 });
+    if (item?.kind === 'lsp') {
+      expect(item.diagnostics).toHaveLength(2);
+      expect(item.diagnostics[0]).toEqual({ line: 12, column: 5, severity: 'error', code: 'T999', message: 'oops' });
+      expect(item.diagnostics[1]).toMatchObject({ severity: 'hint', code: undefined });
+    }
+  });
+
+  it('keeps the true count when the backend truncates diagnostics to 20 and drops junk entries', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('lsp.diagnostics', {
+        path: 'a.py', count: 23,
+        diagnostics: [...Array.from({ length: 20 }, (_, index) => ({ line: index + 1, column: 1, severity: 'warning', message: 'w' })), 'junk', null],
+      }, 1),
+    ]);
+    const item = items.find((target) => target.kind === 'lsp');
+    expect(item?.kind === 'lsp' && item.count).toBe(23);
+    expect(item?.kind === 'lsp' && item.diagnostics).toHaveLength(20);
+  });
+
+  it('never emits an lsp item for the zero-diagnostics case', () => {
+    seq = 0;
+    const items = buildTimeline([ev('lsp.diagnostics', { path: 'a.py', count: 0, diagnostics: [] }, 1)]);
+    expect(items).toEqual([]);
+  });
+
+  it('turns review.findings into a review item, normalizing each finding', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('review.findings', {
+        scope: 'working_tree', scope_label: '当前未提交改动', workspace: 'C:/ws',
+        findings: [
+          { file: 'src/app.py', line: 12, range: [12, 20], severity: 'blocker', title: '空指针', explanation: '可能为 None', evidence: 'x.foo', suggested_fix: '加判空' },
+          { file: 'src/b.py', line: null, range: null, severity: ' nonsense', title: '命名', explanation: '', evidence: '', suggested_fix: '' },
+          'junk',
+        ],
+      }, 1),
+      ev('review.findings', { scope: 'branch', scope_label: '分支 dev 相对 main', findings: [] }, 2),
+    ]);
+    const reviews = items.filter((target) => target.kind === 'review');
+    expect(reviews[0]).toMatchObject({ kind: 'review', scope: 'working_tree', scopeLabel: '当前未提交改动', workspace: 'C:/ws' });
+    if (reviews[0]?.kind === 'review') {
+      expect(reviews[0].findings).toHaveLength(2);
+      expect(reviews[0].findings[0]).toEqual({ file: 'src/app.py', line: 12, range: [12, 20], severity: 'blocker', title: '空指针', explanation: '可能为 None', evidence: 'x.foo', suggested_fix: '加判空' });
+      // 非法严重级落回 minor，缺失行号保持 null。
+      expect(reviews[0].findings[1]).toMatchObject({ severity: 'minor', line: null, range: null });
+    }
+    expect(reviews[1]).toMatchObject({ kind: 'review', scopeLabel: '分支 dev 相对 main', findings: [] });
+  });
+});
+
 describe('helpers', () => {
   it('shortens long paths and formats durations', () => {
     expect(shortPath('C:\\a\\b')).toBe('C:\\a\\b');

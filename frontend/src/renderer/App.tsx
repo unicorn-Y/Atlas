@@ -11,6 +11,8 @@ import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from
 import RecipesDialog from './components/RecipesDialog';
 import SideChat from './components/SideChat';
 import RemoteFolderDialog from './components/RemoteFolderDialog';
+import InitDialog from './components/InitDialog';
+import LspStatusSection from './components/LspStatusSection';
 import TimelineNav from './components/TimelineNav';
 import ForkTree from './components/ForkTree';
 import RunSetupMenu from './components/RunSetupMenu';
@@ -44,6 +46,7 @@ import Inspector, { type InspectorTab } from './shell/Inspector';
 import type { PickedElement } from './shell/panels/BrowserPanel';
 import { THEMES, isTheme, nextTheme, themeInfo, type Theme } from './shell/themes';
 import { api, relativeTime } from './services/api';
+import { buildTimeline } from './components/timeline';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
@@ -198,6 +201,8 @@ export default function App() {
     if (completed?.data.content) return String(completed.data.content);
     return activeEvents.filter((event) => event.type === 'message.delta').map((event) => String(event.data.content ?? '')).join('');
   }, [activeEvents]);
+  // 当前运行的时间线，与 MessageThread 里的构建保持一致；TimelineNav 也要按它数行。
+  const timelineItems = useMemo(() => buildTimeline(activeEvents), [activeEvents]);
 
   const go = useCallback((next: View) => setView(next), []);
 
@@ -554,6 +559,8 @@ export default function App() {
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
+    { id: 'init', label: '/init', hint: '扫描工作区，生成或更新 AGENTS.md', run: () => { if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('请先选择工作目录'); return; } void store.runInit(); } },
+    { id: 'review', label: '/review', hint: '代码审查：branch <名> / commit <sha>，默认审查未提交改动', takesArgument: true, run: (arg: string) => { const focus = arg.trim(); void store.sendMessage(focus ? `/review ${focus}` : '/review'); } },
     { id: 'recipe', label: '/recipe', hint: '打开配方，带参数复跑保存过的任务', run: () => setRecipesOpen(true) },
     ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
@@ -928,7 +935,11 @@ export default function App() {
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
-            <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId} />
+            <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId}
+              history={historyWithBranchNotes} items={timelineItems}
+              hasEarlier={Boolean(store.messagesHasEarlier[store.activeConversationId])}
+              truncatedCount={activeRun?.eventsTruncated ? (activeRun.droppedEventCount ?? 0) : 0}
+              loading={loadingMessages} />
             <MessageThread history={historyWithBranchNotes} username={username} historyActions={historyActions} threadRef={threadRef} setTab={showInspectorTab}
               emptyState={!messages.length && !activeEvents.length && !loadingMessages ? <div className="pt-[16vh] text-center">
                 <Mark className="mx-auto mb-4 size-11" />
@@ -1005,6 +1016,9 @@ export default function App() {
             <small className="mt-1 block text-fg-3">默认使用当前模型；也可以为 Hermes 上下文压缩单独选一个已配置模型。</small>
           </label>
           {store.error && <p role="alert" className="mt-3 text-[13px] text-danger">{store.error}</p>}
+          <div className="mt-8 border-t border-line pt-6">
+            <LspStatusSection workspace={workspacePath} connected={store.connected} />
+          </div>
         </section>}
         {sheet === 'appearance' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">外观与语音</h3>
@@ -1058,6 +1072,7 @@ export default function App() {
         const conversationId = useAtlasStore.getState().activeConversationId;
         if (conversationId) { store.setWorkspace(conversationId, workspace); setToast(`工作目录：${workspace}`); }
       })(); }} />
+    <InitDialog onToast={notify} />
     <OnboardingDialog open={onboardingOpen} onClose={closeOnboarding} username={username}
       onUsername={(value) => { setPref('username', value); setUsername(value); }}
       defaultWorkspace={defaultWorkspace} onDefaultWorkspace={(path) => { setPref('default-workspace', path); setDefaultWorkspace(path); }}

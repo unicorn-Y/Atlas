@@ -364,3 +364,69 @@ describe('message pagination and bounded cache', () => {
     expect(Object.keys(state.conversationMessages)).toHaveLength(10);
   });
 });
+
+describe('/init flow', () => {
+  const proposal = {
+    path: 'C:/ws/AGENTS.md', exists: false, existing_content: '', proposed_content: '# Atlas',
+    scan: { languages: [{ name: 'Python', count: 3 }], package_managers: ['pip'], build_commands: [], test_commands: ['pytest'], lint_commands: [], typecheck_commands: [], entrypoints: [], existing: { 'AGENTS.md': false } },
+    diff: '--- \n+++ AGENTS.md',
+  };
+  const withWorkspace = { activeConversationId: 'c-init', conversations: [{ id: 'c-init', title: 'Chat', workspace: 'C:/ws' }] };
+  const resetInit = { initOpen: false, initBusy: false, initApplying: false, initError: null as string | null, initProposal: null as typeof proposal | null };
+
+  afterEach(() => { useAtlasStore.setState({ ...resetInit, error: null }); });
+
+  it('refuses /init without a workspace, then previews with the conversation workspace', async () => {
+    useAtlasStore.setState({ activeConversationId: 'c-init', conversations: [], ...resetInit });
+    await useAtlasStore.getState().runInit();
+    expect(useAtlasStore.getState().error).toBe('请先选择工作目录');
+    expect(useAtlasStore.getState().initOpen).toBe(false);
+
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => String(url).endsWith('/api/init/preview')
+      ? Promise.resolve({ ok: true, json: async () => proposal } as Response)
+      : Promise.resolve({ ok: false, status: 503 } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+    useAtlasStore.setState(withWorkspace);
+    await useAtlasStore.getState().runInit();
+
+    expect(useAtlasStore.getState().initOpen).toBe(true);
+    expect(useAtlasStore.getState().initBusy).toBe(false);
+    expect(useAtlasStore.getState().initProposal?.path).toBe('C:/ws/AGENTS.md');
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/init/preview'));
+    expect(String(call?.[0])).toBe('http://127.0.0.1:8765/api/init/preview');
+    expect(call?.[1]).toMatchObject({ method: 'POST', body: JSON.stringify({ workspace: 'C:/ws' }) });
+  });
+
+  it('sends the conflict seam exactly: expected_existing is null for a new file, verbatim content for an existing one', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => Promise.resolve({ ok: true, json: async () => ({ written: true }) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+    useAtlasStore.setState({ ...withWorkspace, ...resetInit, initProposal: proposal, initOpen: true });
+    await useAtlasStore.getState().applyInit();
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://127.0.0.1:8765/api/init/apply');
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ workspace: 'C:/ws', content: '# Atlas', expected_existing: null }) });
+    expect(useAtlasStore.getState().initOpen).toBe(false);
+    expect(useAtlasStore.getState().initProposal).toBeNull();
+
+    useAtlasStore.setState({ initProposal: { ...proposal, exists: true, existing_content: '# 人工写的内容' }, initOpen: true });
+    await useAtlasStore.getState().applyInit();
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ body: JSON.stringify({ workspace: 'C:/ws', content: '# Atlas', expected_existing: '# 人工写的内容' }) });
+  });
+
+  it('keeps the dialog open and shows the backend detail when the write is rejected (422)', async () => {
+    vi.stubGlobal('fetch', vi.fn((_url: string, _init?: RequestInit) => Promise.resolve({ ok: false, status: 422, json: async () => ({ detail: '磁盘上的 AGENTS.md 已被别人改过，请重新预览' }) } as Response)));
+    useAtlasStore.setState({ ...withWorkspace, ...resetInit, initProposal: proposal, initOpen: true });
+    const written = await useAtlasStore.getState().applyInit();
+
+    expect(written).toBe(false);
+    expect(useAtlasStore.getState().initApplying).toBe(false);
+    expect(useAtlasStore.getState().initError).toBe('磁盘上的 AGENTS.md 已被别人改过，请重新预览');
+    expect(useAtlasStore.getState().initOpen).toBe(true);
+  });
+
+  it('closeInit clears the whole dialog state', () => {
+    useAtlasStore.setState({ ...withWorkspace, initOpen: true, initProposal: proposal, initError: 'x' });
+    useAtlasStore.getState().closeInit();
+    expect(useAtlasStore.getState()).toMatchObject({ initOpen: false, initProposal: null, initError: null });
+  });
+});

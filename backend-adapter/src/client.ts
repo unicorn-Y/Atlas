@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockProviders, mockReasoningStages, mockTools, streamMockRun } from './mock';
-import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomModelUpdateRequest, CustomTool, CustomCommandInfo, CommandRenderResult, ExternalAgentInfo, ExternalImportScan, ExternalImportResult, Fact, KeySlotInfo, ModelInfo, ModelTestResponse, ProjectSource, ProjectSources, ProviderState, ReasoningStagesConfig, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, HookLog, MarketplaceInfo, MarketplacePluginEntry, PluginActionResult, PluginInfo, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomModelUpdateRequest, CustomTool, CustomCommandInfo, CommandRenderResult, ExternalAgentInfo, ExternalImportScan, ExternalImportResult, Fact, InitApplyResult, InitProposal, KeySlotInfo, LspStatus, ModelInfo, ModelTestResponse, ProjectSource, ProjectSources, ProviderState, ReasoningStagesConfig, RewindResult, RunDiagnostics, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, HookLog, MarketplaceInfo, MarketplacePluginEntry, PluginActionResult, PluginInfo, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -204,6 +204,29 @@ export class BackendAdapter {
   async getRunChanges(runId: string): Promise<RunChangeFile[]> {
     return (await this.request<{ files: RunChangeFile[] }>(`/api/runs/${encodeURIComponent(runId)}/changes`)).files;
   }
+
+  // -- C6: /init 提案、LSP 诊断与服务状态 ------------------------------------
+
+  /** 只读扫描工作区并生成 AGENTS.md 提案（含 unified diff），不落盘。 */
+  async initPreview(workspace: string): Promise<InitProposal> {
+    return this.request('/api/init/preview', { method: 'POST', body: JSON.stringify({ workspace }) });
+  }
+  /**
+   * 写入 AGENTS.md。冲突检测契约：`expectedExisting` 必须是预览时读到的旧内容——
+   * 文件不存在时必须传 null，存在时原样回传 existing_content；磁盘内容一旦对不上，后端以 422 拒绝。
+   */
+  async initApply(workspace: string, content: string, expectedExisting: string | null): Promise<InitApplyResult> {
+    return this.request('/api/init/apply', { method: 'POST', body: JSON.stringify({ workspace, content, expected_existing: expectedExisting }) });
+  }
+  /** 这次运行改过的文件当前的 LSP 诊断（全新快照，非增量）。 */
+  async getRunDiagnostics(runId: string): Promise<RunDiagnostics> {
+    return this.request(`/api/runs/${encodeURIComponent(runId)}/diagnostics`);
+  }
+  /** 逐个探测本机的语言服务是否可用；`hint` 说明缺了什么。 */
+  async getLspStatus(workspace: string): Promise<LspStatus> {
+    return this.request(`/api/lsp/status?${new URLSearchParams({ workspace })}`);
+  }
+
   async getWorkspaceTree(root: string, path = ''): Promise<WorkspaceEntry[]> {
     return (await this.request<{ entries: WorkspaceEntry[] }>(`/api/workspace/tree?${new URLSearchParams({ root, path })}`)).entries;
   }

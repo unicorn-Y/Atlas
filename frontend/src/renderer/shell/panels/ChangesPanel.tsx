@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, FileDiff, History, LoaderCircle, MessageSquarePlus, RotateCcw, Send, X } from 'lucide-react';
-import type { RunChangeFile } from '@atlas/backend-adapter';
+import type { RunChangeFile, RunDiagnosticsFile } from '@atlas/backend-adapter';
 import { backend } from '../../store/useAtlasStore';
 import { api, relativeTime } from '../../services/api';
+import { DiagnosticsList, SeverityDots } from '../../components/diagnostics';
+import type { LspDiagnosticItem } from '../../components/timeline';
 import { shortPath } from '../../components/timeline';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
@@ -43,6 +45,16 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
       .catch((exc) => { if (!stale) { setFiles([]); setError(exc instanceof Error ? exc.message : String(exc)); } });
     return () => { stale = true; };
   }, [runId, runStatus, connected]);
+  // 这次运行改过的文件当前的 LSP 诊断。路径统一成正斜杠再对上；拉不到就不显示徽标。
+  const [diagnostics, setDiagnostics] = useState<Record<string, RunDiagnosticsFile>>({});
+  useEffect(() => {
+    if (!runId || !connected) { setDiagnostics({}); return; }
+    let stale = false;
+    backend.getRunDiagnostics(runId)
+      .then((result) => { if (!stale) setDiagnostics(Object.fromEntries(result.files.map((file) => [normalizePath(file.path), file]))); })
+      .catch(() => { if (!stale) setDiagnostics({}); });
+    return () => { stale = true; };
+  }, [runId, runStatus, connected]);
 
   const toggle = (path: string) => setOpen((current) => current.includes(path) ? current.filter((item) => item !== path) : [...current, path]);
   const additions = files?.reduce((sum, file) => sum + file.additions, 0) ?? 0;
@@ -57,16 +69,27 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
       {files === null ? <p className="py-6 text-center text-[13px] text-fg-3">正在读取改动…</p>
         : files.length ? <div className="grid gap-1.5">{files.map((file) => {
           const expanded = open.includes(file.path);
+          const fileDiagnostics = diagnostics[normalizePath(file.path)];
           return <div key={`${file.workspace}:${file.path}`} className="overflow-hidden rounded-xl card-surface">
             <button onClick={() => toggle(file.path)} aria-expanded={expanded} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-hover">
               <ChevronRight size={13} className={cn('shrink-0 text-fg-3 transition-transform', expanded && 'rotate-90')} />
               <span className={cn('shrink-0 text-[11.5px]', STATUS[file.status]?.tone)}>{STATUS[file.status]?.label ?? file.status}</span>
               <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg" title={file.path}>{shortPath(file.path)}</code>
+              {fileDiagnostics && fileDiagnostics.count > 0 && <span title="LSP 诊断" className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sunken px-2 py-0.5 text-[11px] tabular-nums text-fg-2">
+                <SeverityDots diagnostics={fileDiagnostics.diagnostics as LspDiagnosticItem[]} />{fileDiagnostics.count} 个问题
+              </span>}
               <span className="shrink-0 text-[11.5px] tabular-nums"><span className="text-ok">+{file.additions}</span> <span className="text-danger">−{file.deletions}</span></span>
             </button>
-            {expanded && <DiffView diff={file.diff} truncated={file.truncated} path={file.path} comments={onAsk ? comments.filter((comment) => comment.path === file.path) : undefined}
-              onAdd={(comment) => setComments((current) => [...current, { ...comment, id: `${Date.now()}-${current.length}` }])}
-              onRemove={(id) => setComments((current) => current.filter((comment) => comment.id !== id))} />}
+            {expanded && <>
+              <DiffView diff={file.diff} truncated={file.truncated} path={file.path} comments={onAsk ? comments.filter((comment) => comment.path === file.path) : undefined}
+                onAdd={(comment) => setComments((current) => [...current, { ...comment, id: `${Date.now()}-${current.length}` }])}
+                onRemove={(id) => setComments((current) => current.filter((comment) => comment.id !== id))} />
+              {fileDiagnostics && fileDiagnostics.diagnostics.length > 0 && <div className="border-t border-line px-3 py-2">
+                <p className="m-0 mb-1.5 text-[11.5px] text-fg-3">LSP 诊断（当前共 {fileDiagnostics.count} 个）</p>
+                <DiagnosticsList diagnostics={fileDiagnostics.diagnostics as LspDiagnosticItem[]} />
+                {fileDiagnostics.count > fileDiagnostics.diagnostics.length && <p className="m-0 mt-1 text-[11.5px] text-fg-3">仅显示前 20 条</p>}
+              </div>}
+            </>}
           </div>;
         })}</div>
         : <Empty title={runId ? '这次没有改文件' : '还没有开始'} body={runId ? 'Atlas 这次只读了东西、运行了命令，或者直接回答了。' : '发出一个任务后，改过的文件会列在这里。'} />}
@@ -81,6 +104,9 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
 }
 
 type DiffLine = { text: string; kind: 'add' | 'del' | 'ctx' | 'hunk'; oldNo: number | null; newNo: number | null };
+
+/** 诊断表和改动清单都按正斜杠对齐路径，避免 \ 与 / 混写对不上。 */
+const normalizePath = (path: string) => path.replace(/\\/g, '/');
 
 /** Unified diff lines with their old/new line numbers, read from the @@ hunk headers. */
 function numberLines(diff: string): DiffLine[] {
@@ -97,7 +123,8 @@ function numberLines(diff: string): DiffLine[] {
   });
 }
 
-function DiffView({ diff, truncated, path, comments, onAdd, onRemove }: {
+/** 统一 diff 渲染（含行号）；InitDialog 复用它来预览 AGENTS.md 的提案差异。 */
+export function DiffView({ diff, truncated, path, comments, onAdd, onRemove }: {
   diff: string; truncated?: boolean; path: string; comments?: LineComment[];
   onAdd: (comment: Omit<LineComment, 'id'>) => void; onRemove: (id: string) => void;
 }) {
