@@ -1,0 +1,20 @@
+{
+  "repository": "anomalyco/opencode",
+  "commit": "1ddb0873aee50d209d1a8d7f91b89c5daf692d49",
+  "source_path": "packages/opencode/src/provider/provider.ts",
+  "facts": {
+    "configured_small_model": "parse and getModel; missing model yields undefined",
+    "plugin_precedes_provider_fallback": true,
+    "azure_provider_fallback": "undefined",
+    "opencode_family_priority": ["gpt-nano"],
+    "github_copilot_family_priority": ["gpt-mini", "gemini-flash", "gpt-nano", "claude-haiku"],
+    "other_family_priority": ["gemini-flash", "gpt-nano", "claude-haiku"],
+    "candidate_sort": ["release_date:desc", "id:desc"],
+    "bedrock_candidate_order": ["global-prefix", "configured-us-or-eu-region-prefix", "unprefixed"],
+    "bedrock_region_prefix": "first segment of region; only us and eu are selected"
+  },
+  "evidence": [
+    {"path": "packages/opencode/src/provider/provider.ts", "start_line": 1961, "end_line": 2027},
+    {"path": "packages/opencode/src/provider/provider.ts", "start_line": 2070, "end_line": 2070}
+  ]
+}

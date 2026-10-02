@@ -1,0 +1,1 @@
+{"people":["  ada lovelace ","Grace Hopper"],"products":[{"id":"p1","locale":"zh-HK","active":true},{"id":"p2","locale":"en-US","active":true},{"id":"p3","locale":"zh-HK","active":false}],"lines":[{"cents":1200,"void":false},{"cents":300,"void":true},{"cents":99,"void":false}]}

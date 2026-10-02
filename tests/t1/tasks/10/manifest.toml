@@ -1,0 +1,8 @@
+id = "10"
+title = "用户展示格式化模块重构"
+kind = "refactor"
+allowed_changes = ["src/**", "tests/test_refactor.py"]
+protected_paths = ["tests/test_public_api.py"]
+timeout_seconds = 120
+multi_round = false
+capabilities = []

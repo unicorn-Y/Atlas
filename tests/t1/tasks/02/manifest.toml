@@ -1,0 +1,8 @@
+id = "02"
+title = "Python TTL 缓存边界修复"
+kind = "bugfix"
+allowed_changes = ["ttl_cache.py", "tests/**"]
+protected_paths = ["tests/test_ttl_cache.py"]
+timeout_seconds = 120
+multi_round = false
+capabilities = []

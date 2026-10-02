@@ -1,0 +1,1 @@
+{"currency":"CNY","unit":"cents","version":2,"orders":[{"id":"甲","discount_cents":1000,"shipping_cents":0,"total_cents":11000,"note":"保留中文"},{"id":"丙","discount_cents":1000,"shipping_cents":800,"total_cents":8800,"note":"保留中文"}],"grand_total_cents":19800}

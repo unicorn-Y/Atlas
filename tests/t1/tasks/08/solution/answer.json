@@ -1,0 +1,14 @@
+{
+  "repository": "NousResearch/hermes-agent",
+  "commit": "9a71d5a8b59b37d1795ab7065fbbe3b647ba5249",
+  "source_path": "tools/mcp_tool_discovery.py",
+  "facts": {
+    "default_concurrency": 4,
+    "config_key": "mcp.discovery_concurrency",
+    "zero_means": "unlimited",
+    "negative_falls_back_to": 4,
+    "boolean_falls_back_to": 4,
+    "config_load_error_falls_back_to": 4
+  },
+  "evidence": [{"path": "tools/mcp_tool_discovery.py", "start_line": 25, "end_line": 42}]
+}

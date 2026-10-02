@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+results/*
+!results/.gitkeep
+node_modules/
+.cache/
+workspaces/

@@ -1,0 +1,8 @@
+id = "06"
+title = "笔记标签查询"
+kind = "feature"
+allowed_changes = ["src/**", "tests/test_tag_search.py"]
+protected_paths = ["tests/test_notes.py"]
+timeout_seconds = 120
+multi_round = false
+capabilities = []

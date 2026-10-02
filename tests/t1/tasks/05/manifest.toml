@@ -1,0 +1,8 @@
+id = "05"
+title = "Catalog 名称前缀搜索"
+kind = "feature"
+allowed_changes = ["src/**", "tests/test_search.py"]
+protected_paths = ["tests/test_catalog.py"]
+timeout_seconds = 120
+multi_round = false
+capabilities = []

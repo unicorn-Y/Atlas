@@ -1,0 +1,6 @@
+{
+  "incident_id": "T1-PROVIDER-20",
+  "faults": ["429", "500", "disconnect"],
+  "attempts": 4,
+  "response": "recovered"
+}

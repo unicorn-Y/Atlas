@@ -1,0 +1,8 @@
+id = "11"
+title = "八轮配送规则约束保持"
+kind = "long_conversation"
+allowed_changes = ["delivery.json"]
+protected_paths = ["orders.json"]
+timeout_seconds = 120
+multi_round = true
+capabilities = ["multi_round"]

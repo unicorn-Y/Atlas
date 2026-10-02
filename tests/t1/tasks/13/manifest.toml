@@ -1,0 +1,8 @@
+id = "13"
+title = "本地服务启动与调试"
+kind = "debugging"
+allowed_changes = ["service.py", "service.json"]
+protected_paths = ["tests/**"]
+timeout_seconds = 30
+multi_round = false
+capabilities = []

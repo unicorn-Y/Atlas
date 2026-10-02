@@ -1,0 +1,8 @@
+id = "15"
+title = "计划模式批准门"
+kind = "approval_gate"
+allowed_changes = ["result.json"]
+protected_paths = ["request.json"]
+timeout_seconds = 120
+multi_round = true
+capabilities = ["plan", "approval"]

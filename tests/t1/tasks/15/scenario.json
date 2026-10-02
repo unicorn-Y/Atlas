@@ -1,0 +1,1 @@
+{"steps":[{"action":"plan","text":"先阅读 request.json，只输出计划。此时严禁写入 workspace。"},{"action":"approve","text":"批准执行。现在按计划生成 result.json。"}]}

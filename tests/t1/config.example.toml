@@ -1,0 +1,51 @@
+# Copy to a local file and adjust before a benchmark. No credentials belong here.
+budget_usd = 0.0
+repetitions = 1
+result_dir = "results/runs"
+
+[tracks.same-model]
+timeout_seconds = 120
+# Set the actual selected model window before real task 12 execution.
+# context_window_tokens = 128000
+
+[tracks.same-model.models]
+atlas = ""
+claude = ""
+codex = ""
+opencode = ""
+pi = ""
+hermes = ""
+zcode = "manual"
+fake = "fake"
+
+[tracks.best]
+timeout_seconds = 120
+# Per-participant context_window_tokens overrides this track value.
+# context_window_tokens = 128000
+
+[tracks.best.models]
+atlas = ""
+claude = ""
+codex = ""
+opencode = ""
+pi = ""
+hermes = ""
+zcode = "manual"
+fake = "fake"
+
+[participants]
+
+[participants.fake]
+fake_mode = "success" # success | failure | timeout | forbidden
+fake_cost_usd = 0.0
+
+[participant_commands]
+# Optional executable overrides, e.g. codex = "codex".
+
+# Optional task 20 binding, only for a separately authorized formal run.
+# See participants/COMMANDS.md for verified native commands/protocols.
+# [participants.hermes.fault_proxy_binding]
+# kind = "env"
+# name = "OPENAI_BASE_URL"
+# [participants.hermes.fault_proxy]
+# upstream_url = "http://127.0.0.1:PORT/v1" # local fake by default when omitted

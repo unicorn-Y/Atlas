@@ -1,0 +1,8 @@
+id = "18"
+title = "Markdown 项目报告产出"
+kind = "document"
+allowed_changes = ["report.md"]
+protected_paths = ["project/**"]
+timeout_seconds = 120
+multi_round = false
+capabilities = []

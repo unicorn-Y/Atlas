@@ -1,0 +1,10 @@
+id = "09"
+title = "OpenCode small model 选择源码问答"
+kind = "repository_qa"
+allowed_changes = ["answer.json"]
+protected_paths = ["source/snapshot/packages/opencode/src/provider/provider.ts"]
+timeout_seconds = 180
+multi_round = false
+capabilities = []
+upstream_repository = "https://github.com/anomalyco/opencode.git"
+upstream_commit = "1ddb0873aee50d209d1a8d7f91b89c5daf692d49"

@@ -1,0 +1,1 @@
+{"steps":[{"action":"prompt","text":"初始要求：只汇总 paid，使用整数分。"},{"action":"steer","text":"中途更新：改为统计 paid 与 pending，排除 refunded，并在 summary.json 写入 note=已应用中途更新。此要求覆盖初始状态。","trigger":{"after_seconds":0.1}}]}

@@ -1,0 +1,8 @@
+id = "14"
+title = "三个独立子目标并行实现"
+kind = "subagents"
+allowed_changes = ["src/**", "tests/test_profile.py", "tests/test_catalog.py", "tests/test_invoice.py"]
+protected_paths = ["tests/test_legacy.py", "requirements.json"]
+timeout_seconds = 120
+multi_round = false
+capabilities = ["subagents"]

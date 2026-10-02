@@ -1,0 +1,8 @@
+id = "20"
+title = "provider 故障后的恢复记录"
+kind = "fault_recovery"
+allowed_changes = ["recovery.json"]
+protected_paths = ["release.json", "tests/**"]
+timeout_seconds = 120
+multi_round = false
+capabilities = ["fault_proxy"]

@@ -1,0 +1,8 @@
+id = "19"
+title = "执行中途插话与 steer"
+kind = "steer"
+allowed_changes = ["summary.json"]
+protected_paths = ["transactions.json"]
+timeout_seconds = 120
+multi_round = true
+capabilities = ["steer"]

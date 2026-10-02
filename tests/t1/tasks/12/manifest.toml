@@ -1,0 +1,8 @@
+id = "12"
+title = "上下文压力下保持早期发布约束"
+kind = "context_compaction"
+allowed_changes = ["release.json"]
+protected_paths = ["inputs/**"]
+timeout_seconds = 180
+multi_round = true
+capabilities = ["multi_round", "context"]

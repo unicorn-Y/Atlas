@@ -1,0 +1,9 @@
+id = "03"
+title = "TypeScript 闭区间边界修复"
+kind = "bugfix"
+allowed_changes = ["src/**", "tests/**", "tsconfig.json"]
+protected_paths = ["tests/run.cjs"]
+timeout_seconds = 120
+multi_round = false
+capabilities = []
+runtime_requirements = ["node", "typescript"]

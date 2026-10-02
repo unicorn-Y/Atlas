@@ -1,0 +1,8 @@
+id = "07"
+title = "安全库存调整"
+kind = "feature"
+allowed_changes = ["src/**", "tests/test_stock_adjustment.py"]
+protected_paths = ["tests/test_inventory.py"]
+timeout_seconds = 120
+multi_round = false
+capabilities = []
