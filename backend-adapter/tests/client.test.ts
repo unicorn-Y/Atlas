@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BackendAdapter } from '../src/client';
+import { BackendAdapter, BackendError } from '../src/client';
 
 class MockWebSocket extends EventTarget {
   static OPEN = 1;
@@ -75,7 +75,7 @@ describe('BackendAdapter availability and recovery', () => {
   });
 
   it('creates a conversation through the backend API', async () => {
-    const created = { id: 'conversation-1', title: 'New conversation' };
+    const created = { id: 'conversation-1', title: '新对话' };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => created } as Response);
@@ -85,7 +85,7 @@ describe('BackendAdapter availability and recovery', () => {
 
     await expect(adapter.createConversation()).resolves.toEqual(created);
     expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8765/api/conversations');
-    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ title: 'New conversation' }) });
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ title: '新对话' }) });
   });
 
   it('can recover from an unavailable backend when initialized again', async () => {
@@ -96,7 +96,7 @@ describe('BackendAdapter availability and recovery', () => {
     const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
 
     await expect(adapter.initialize()).resolves.toBe('mock');
-    expect(adapter.availabilityError).toBe('offline');
+    expect(adapter.availabilityError).toBe('连不上 Atlas 后端，请确认它已经启动');
     await expect(adapter.initialize()).resolves.toBe('backend');
     expect(adapter.availabilityError).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -116,6 +116,20 @@ describe('BackendAdapter availability and recovery', () => {
     expect(adapter.availabilityError).toBe('temporarily unavailable');
     await expect(adapter.initialize()).resolves.toBe('backend');
     expect(adapter.availabilityError).toBeNull();
+  });
+
+  it('throws Chinese-primary errors and keeps the raw English line in detail', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+
+    const error = await adapter.getModels().then(() => null, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(BackendError);
+    expect((error as BackendError).message).toBe('后端请求失败（HTTP 500）');
+    expect((error as BackendError).detail).toBe('Backend request failed (500)');
   });
 
   it('accepts successful empty responses for void backend operations', async () => {
@@ -192,7 +206,9 @@ describe('BackendAdapter availability and recovery', () => {
       MockWebSocket.instances[0].receive({ ...runtimeEvent(1, 'run.completed'), run_id: `run-${version}` });
       await running;
     }
-    await expect(connect('1.1')).rejects.toThrow('Runtime 1.2 is required');
+    await expect(connect('1.1')).rejects.toThrow('版本太旧');
+    // 中文主文案之外，原始英文保留在 detail 里供界面展开。
+    await expect(connect('1.1').catch((error: BackendError) => error.detail)).resolves.toBe('Backend Agent Runtime 1.2 is required for event runs and approvals');
   });
 
   it('rejects a second start for a run that is already connecting', async () => {
@@ -213,7 +229,7 @@ describe('BackendAdapter availability and recovery', () => {
     await expect(Promise.race([
       adapter.startRun(request, () => undefined),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('duplicate start did not reject')), 50)),
-    ])).rejects.toThrow('Run run-1 is already active');
+    ])).rejects.toThrow('这个任务已经在运行了');
     expect(MockWebSocket.instances).toHaveLength(1);
     MockWebSocket.instances[0].open();
     MockWebSocket.instances[0].receive(runtimeEvent(1, 'run.completed'));
@@ -235,7 +251,7 @@ describe('BackendAdapter availability and recovery', () => {
     const failed = adapter.startRun(request, () => undefined);
     await flushAsync();
     MockWebSocket.instances[0].dispatchEvent(new Event('error'));
-    await expect(failed).rejects.toThrow('WebSocket connection failed');
+    await expect(failed).rejects.toThrow('连不上后端的任务通道');
 
     await expect(adapter.initialize()).resolves.toBe('backend');
     const retried = adapter.startRun(request, () => undefined);
@@ -331,5 +347,53 @@ describe('BackendAdapter provider catalog and reasoning stages', () => {
     await expect(adapter.getReasoningStages()).resolves.toEqual({ enabled: false, planning: 'high', execution: 'medium', verification: 'high' });
     await expect(adapter.updateProviderConfig('deepseek', null)).rejects.toThrow('连接 Atlas 后端后才能保存服务商设置');
     await expect(adapter.deleteCustomModel('deepseek/deepseek-chat')).rejects.toThrow('连接 Atlas 后端后才能删除自定义模型');
+  });
+});
+
+describe('BackendAdapter C6 init, diagnostics and lsp status', () => {
+  const proposal = {
+    path: 'C:/ws/AGENTS.md', exists: true, existing_content: '# 旧内容', proposed_content: '# 新内容',
+    scan: { languages: [{ name: 'Python', count: 3 }], package_managers: ['pip'], build_commands: [], test_commands: [], lint_commands: [], typecheck_commands: [], entrypoints: [], existing: { 'AGENTS.md': true } },
+    diff: '--- \n+++ AGENTS.md',
+  };
+
+  it('previews and applies the AGENTS.md proposal with the conflict seam intact', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => proposal } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ written: true }) } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 422, json: async () => ({ detail: '磁盘上的 AGENTS.md 已被改过' }) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+
+    await expect(adapter.initPreview('C:/ws')).resolves.toEqual(proposal);
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8765/api/init/preview');
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ workspace: 'C:/ws' }) });
+
+    await expect(adapter.initApply('C:/ws', '# 新内容', '# 旧内容')).resolves.toEqual({ written: true });
+    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8765/api/init/apply');
+    // 存在时必须原样回传 existing_content；不存在时应为 null
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({ body: JSON.stringify({ workspace: 'C:/ws', content: '# 新内容', expected_existing: '# 旧内容' }) });
+
+    await expect(adapter.initApply('C:/ws', '# 新内容', '# 旧内容')).rejects.toThrow('磁盘上的 AGENTS.md 已被改过');
+  });
+
+  it('reads per-run diagnostics and lsp server status', async () => {
+    const diagnostics = { files: [{ path: 'src/a.py', count: 1, diagnostics: [{ line: 3, column: 7, severity: 'error', code: 'E501', message: 'too long' }] }] };
+    const status = { servers: [{ id: 'pylsp', languages: ['python'], available: false, hint: 'pip install python-lsp-server' }] };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => diagnostics } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => status } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+
+    await expect(adapter.getRunDiagnostics('run-9')).resolves.toEqual(diagnostics);
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8765/api/runs/run-9/diagnostics');
+
+    await expect(adapter.getLspStatus('C:/ws')).resolves.toEqual(status);
+    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8765/api/lsp/status?workspace=C%3A%2Fws');
   });
 });

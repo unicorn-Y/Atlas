@@ -6655,21 +6655,13 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                     "category": "validation", "detail": str(exc),
                 }))
                 return
-            if permission_mode == "read_only":
-                # 只读会话里 delegate_task 会被只读门禁拦截，审查员根本派不出去。
-                invalid_run = RunState(run_id, conv_id, str(data.get("model", "")))
-                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
-                    "category": "validation",
-                    "detail": "只读会话不能执行 /review：请先把权限切到『改前问我』或『完全访问』再审查。",
-                }))
-                return
             content = build_dispatch_prompt(review_diff, str(review_scope.get("user_prompt", "")))
             # 审查员（子代理）的只读由 delegate 的 permission_mode=read_only 保证；
-            # 父运行只用 ask_writes 兜底（它本该只做派发和提交发现），不挂 reviewer 档案，
-            # 否则 run.read_only 会把父运行的 delegate_task 一并拦掉。
+            # 父运行也是 read_only：只读门禁按显式 tool_allow 放行 delegate/submit/review_command
+            #（agent 只读门禁的审查例外），写操作被结构性拒绝且不弹任何审批卡。
             profile_id = None
             profile = None
-            permission_mode = "ask_writes"
+            permission_mode = "read_only"
             run_tool_allow = ["delegate_task", "submit_findings", "local_file", "review_command",
                               "coding.repo_map", "coding.ast_grep.run", "read_office"]
             run_tool_deny = []

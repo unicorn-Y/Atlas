@@ -236,14 +236,14 @@ async def test_review_intercept_rewrites_run(tmp_path: Path, monkeypatch) -> Non
     assert calls["build_dispatch_prompt"][1] == "重点看回归风险"
     assert captured["content"] == "[审查派发] 当前未提交改动：重点看回归风险"
     run = captured["run"]
-    # 集成决策 D1：父运行不挂 reviewer 档案（read_only 会拦掉父的 delegate_task），
-    # 权限强制 ask_writes 兜底，审查员子代理的只读由 delegate 的 permission_mode 保证。
+    # 集成决策 D1（v2）：父运行也是 read_only——只读门禁按显式 tool_allow 放行
+    # delegate/submit/review_command，写操作结构性拒绝且不弹审批卡。
     assert run.profile_id is None
     assert run.tool_allow == ["delegate_task", "submit_findings", "local_file", "review_command",
                               "coding.repo_map", "coding.ast_grep.run", "read_office"]
     assert run.tool_deny == []
-    assert run.read_only is False
-    assert run.permission_mode == "ask_writes"
+    assert run.read_only is True
+    assert run.permission_mode == "read_only"
     assert run.user_input == captured["content"]
     assert run.workspace == str(workspace)
 
@@ -391,7 +391,8 @@ async def test_review_intercept_with_real_engine(tmp_path: Path, monkeypatch) ->
     assert "delegate_task" in captured["content"] and "submit_findings" in captured["content"]
     run = captured["run"]
     assert run.profile_id is None
-    assert run.permission_mode == "ask_writes"
+    assert run.permission_mode == "read_only"
+    assert run.read_only is True
     assert "review_command" in run.tool_allow
 
 

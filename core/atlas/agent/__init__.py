@@ -1162,10 +1162,13 @@ class AgentOrchestrator:
             denied_tools = getattr(ctx, "tool_deny", [])
             read_only = getattr(ctx, "read_only", False)
             from atlas.engine.tool_permissions import tool_allowed
-            # 审查链的 review_command/submit_findings 自身就是只读工具（内部拒绝一切写操作），
-            # 但只对显式出现在 tool_allow 里的运行放行，避免给所有只读会话扩大面。
+            # 审查链的 delegate_task/review_command/submit_findings 在只读运行里按显式授权放行：
+            # 仅当工具名**精确出现**在该运行的 tool_allow 里（目前只有 /review 拦截会这么配），
+            # 普通只读会话的 tool_allow 不会包含它们，行为不变。
             review_tool_explicitly_allowed = (
-                read_only and fn_name in {"review_command", "submit_findings"}
+                read_only
+                and fn_name in {"delegate_task", "review_command", "submit_findings"}
+                and allowed_tools is not None and fn_name in allowed_tools
                 and tool_allowed(fn_name, allowed_tools, denied_tools)
             )
             denied = (not tool_allowed(fn_name, allowed_tools, denied_tools)

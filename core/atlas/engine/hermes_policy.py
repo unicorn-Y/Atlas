@@ -192,7 +192,15 @@ def _pre_tool_call(
         is_write = not _plan_command_is_read_only(str(arguments.get("command") or arguments.get("cmd") or ""))
     if (mode == "read_only" or getattr(runtime, "mode", "act") == "plan"
             or bool(getattr(runtime, "read_only", False))) and is_write:
-        return _blocked(runtime, loop, name, kwargs, "当前对话是只读模式，不能执行写操作。")
+        # 审查链例外：delegate/review/submit 工具**精确出现**在运行 tool_allow 里时放行
+        # （目前只有 /review 拦截会这样配置只读运行）；普通只读会话 tool_allow 不含它们，照旧拦截。
+        allow = getattr(runtime, "tool_allow", None)
+        review_allowed = (
+            name in {"delegate_task", "review_command", "submit_findings"}
+            and isinstance(allow, (list, tuple)) and name in allow
+        )
+        if not review_allowed:
+            return _blocked(runtime, loop, name, kwargs, "当前对话是只读模式，不能执行写操作。")
 
     workspace = str(getattr(runtime, "workspace", "") or "")
     if (workspace.startswith("ssh://") and name == "patch"
