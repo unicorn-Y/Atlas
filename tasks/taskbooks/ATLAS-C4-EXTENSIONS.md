@@ -25,7 +25,7 @@
 
 ## 主控并行方式
 
-Sol 读完任务书后按真实文件所有权拆成 4–6 个并行块，优先：
+Sol 读完任务书后按真实文件所有权拆成多个施工块，**但账号实测同时运行的 Luna high 最多 3 个；超过 3 个必须分波次派工**。优先：
 1. Hooks
 2. Plugin loader/marketplace
 3. Skills + custom commands
@@ -33,7 +33,7 @@ Sol 读完任务书后按真实文件所有权拆成 4–6 个并行块，优先
 5. 前端扩展设置
 6. focused tests / fake plugin E2E
 
-每个 Luna high 只改明确文件；共享入口文件交给一个 integration owner 或最后串行接线。
+每个 Luna high 只改明确文件；同一波最多 3 个并发。共享入口文件交给一个 integration owner 或最后串行接线。
 
 不要让多个 worker 同时改：
 - `core/atlas/server.py`
