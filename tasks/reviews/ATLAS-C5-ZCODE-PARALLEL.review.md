@@ -1,56 +1,35 @@
 # ATLAS-C5-ZCODE-PARALLEL Review
 
-Verdict: **PARTIAL — two tiny production fixes required before merge.**
+Verdict: **PASS — C5 is accepted.**
 
 Reviewed branch/head:
 - `zcode/c5-models-parallel`
-- `a0bf87e`
+- `265c6820f6ec811538bd038dc64118362f6c8ffd`
 
 ## Accepted
 
-The C5 architecture and focused evidence are sufficient to accept the main implementation direction:
+- **M1** provider catalog/native routing: PASS
+- **M2** multi-key rotation/cooldown: PASS
+- **L8** staged reasoning effort: PASS
+- **M5** cache-miss diagnostics: PASS
+- **M6** edit/delete custom model: PASS
+- legacy OpenAI-compatible gateway behavior remains intact for models without `hermes_provider`
+- OriginGuard unchanged
+- secrets remain in keyring only
 
-- **M1** provider catalog/native routing is wired through Hermes provider profiles while legacy models without `hermes_provider` keep the old gateway path.
-- The catalog/Hermes provider namespace is normalized at the runtime routing boundary (`qwen ↔ alibaba`, `kimi ↔ kimi-coding`, etc.).
-- **M2** multi-key pool implements the Hermes credential-pool protocol used by the real recovery path and persists secrets only in the existing keyring.
-- **L8** staged reasoning is applied per model request and leaves existing behavior unchanged when disabled.
-- **M5** cache-miss diagnostics are additive and flow into usage events/ledger.
-- **M6** custom model edit/delete and provider-first UI are present.
-- Focused backend **172 passed**, frontend TypeScript/Vitest/Vite and adapter tests passed.
-- OriginGuard was not weakened and the C5 hot-file touches are narrow.
+## C5R fixes verified
 
-No full-suite rerun is required for this review.
+1. `update_model()` now validates Hermes provider ids through `resolve_catalog_id()`, so aliases such as `alibaba → qwen` and `kimi-coding → kimi` are accepted while the stored runtime-facing Hermes id is preserved.
 
-## Blocking fix 1 — edit models whose Hermes provider id differs from catalog id
+2. `add_key()` now raises `RuntimeError` if keyring persistence fails and removes the temporary empty provider slot; no ghost key metadata is persisted.
 
-`ModelManager.update_model()` validates:
+Focused repair verification reported:
+- `test_models.py + test_models_routes.py`: **48 passed**
+- `TestUpdateModel`: **5 passed**
+- `test_models_routes.py`: **17 passed**
 
-```py
-_catalog.get_provider(str(hermes_pid))
-```
+The repair is local and does not require rerunning the previous 172-test C5 focused set or frontend checks.
 
-but the frontend's `buildUpdatePatch()` sends the model's existing `hermes_provider`.
-For providers such as Qwen this is `alibaba`, while the catalog id is `qwen`.
-Therefore a legitimate edit of a Qwen/Kimi-style model can be rejected as “unknown provider”.
+## Merge status
 
-Required fix:
-- validate through `resolve_catalog_id()` (or equivalent alias-aware check);
-- preserve the model-facing Hermes provider id after validation;
-- add one regression using a provider where ids differ, e.g. qwen/alibaba.
-
-## Blocking fix 2 — keyring write failure must not create a ghost key slot
-
-`ModelManager.add_key()` currently catches a keyring write failure, logs it, then still appends metadata and returns success.
-
-That can make the UI show a configured key that has no secret behind it and can make pool sizing/counts incorrect.
-
-Required fix:
-- if secret persistence fails, do **not** append/persist key metadata;
-- raise `RuntimeError` so the existing route returns a failure;
-- add one focused regression proving no ghost metadata remains.
-
-## Scope
-
-Everything else in C5 stays closed. Do not rework provider routing, credential cooldown logic, staged reasoning, cache diagnostics, or UI.
-
-After these two fixes pass focused tests, C5 may be marked PASS and prepared for rebase/merge after the active C4 main-line work reaches a safe merge point.
+C5 is accepted but remains on its independent branch. Do not merge it into main while C4 is actively changing shared files. Rebase/merge will be handled at the next safe integration point.
