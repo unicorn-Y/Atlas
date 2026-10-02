@@ -10,26 +10,44 @@
 
 ---
 
-## 〇、当前顺序（用户 2026-10-03 调整，优先于第四节原表）
+## 〇、当前顺序（用户 2026-10-03 最新决定，优先于后文旧表）
 
-原则：**Atlas 所有已做能力和后续能力都以当前最新第一梯队实现重新核对；追求“最新情报 + 最强实现”，不是机械跟版本号。**
+当前只派发 **一个连续大任务**：
 
-1. **U0 Hermes 最新上游同步**：`ATLAS-U0-HERMES-UPSTREAM-SYNC.md`
-   - 先把 NousResearch/hermes-agent current main 合进 Atlas fork；
-   - 保留 Atlas 自己的增强；
-   - upstream 已经做得更强的重复实现删掉/改成薄 adapter。
-2. **U1 全局 Latest-Best Refresh**：`ATLAS-U1-LATEST-BEST-REFRESH.md`
-   - C1–C6 全部重新对标当前 Hermes / Claude Code / Codex / OpenCode / Pi / ZCode 等；
-   - 已做好的也分 KEEP / UPGRADE / REPLACE；
-   - 明显落后且影响日常强度的直接升级。
-3. **X2 电脑与浏览器**：使用 X-PREP 产出的 2026-10 最新任务书；以最新 Hermes Browser/Computer 栈为底，再吸收 Browser Use / Stagehand / 当前最佳 browser-agent 实现。
-4. **X4 技能市场**：使用最新 Hermes Skills Hub + 当前 skills.sh / ClawHub / GitHub / Claude plugins/skills 等。
-5. **X5 自我进化**：先做 upstream/changelog watcher、capability diff、parity mapper、taskbook draft、skill learning/curator 等成熟闭环，让 Atlas 后面自己持续追新。
-6. **K1 上线前检查**：`ATLAS-K1-PRELAUNCH-CHECK.md`。只检查有没有问题：Hermes/Atlas 能力是否接通、测试、假模型常用路径；发现问题就修。真实日常实测由用户自己做。
-7. **日常使用 → 优化循环**：`docs/plan/USAGE-FEEDBACK.md`。
-8. 其他 X1/X3/X6/X7、完整 T1、R1 由用户后续决定何时启动；但任务书和来源必须保持最新。
+### ATLAS-MEGA-LATEST-DAILY-READY
 
-`ATLAS-O1-HERMES-PARITY.md` 已被 K1 取代，只作参考。笔记本是 Atlas 自己的电脑。
+任务书：
+`tasks/taskbooks/ATLAS-MEGA-LATEST-DAILY-READY.md`
+
+它一次连续完成：
+
+1. 当前最新来源冻结；
+2. Hermes upstream 最新同步；
+3. 已完成 C1–C6 的 Latest-Best 全局刷新；
+4. X2 Computer / Browser；
+5. X4 Skill Market；
+6. X5 Self-Evolution；
+7. 跨模块集成；
+8. K1 上线前检查 + 发现问题立即修复；
+9. 交付“可以开始用户日常实测”的版本。
+
+**中间不再按 U0/U1/X2/X4/X5/K1 分波停下来等待人工验收。**
+这些旧任务书仍作为细节参考，但主控以 Mega taskbook 为唯一施工契约。
+
+### 并行原则
+
+ZCodex 主控必须：
+- 能拆开的工作尽量全部交子代理并行；
+- 使用当前运行环境允许的最大子代理并发；
+- 不写死 worker 数量；
+- spawn 撞并发/配额上限时自动缩 batch，槽位释放后继续派；
+- 不能因为一次 spawn 失败就停用子代理或退回单线程；
+- 共享热文件由单一 owner / integration owner 串行收口。
+
+完成 Mega 后：
+- 用户开始自己日常使用；
+- 按 `docs/plan/USAGE-FEEDBACK.md` 持续优化；
+- X1/X3/X6/X7/full T1/R1 由用户后续决定何时启动。
 
 ## 一、成品的标准
 
