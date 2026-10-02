@@ -201,6 +201,30 @@ async def test_add_key_requires_secret_and_known_provider(
     assert unknown.status_code == 404
 
 
+async def test_add_key_keyring_failure_returns_500_without_ghost_slot(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """keyring 写失败 → 500；不留假 key 槽位（元数据/provider 配置/settings 均无痕）。"""
+    import keyring
+
+    def broken_set_password(service: str, account: str, value: str) -> None:
+        raise RuntimeError("keyring backend unavailable")
+
+    monkeypatch.setattr(keyring, "set_password", broken_set_password)
+
+    resp = await client.post("/api/providers/deepseek/keys", json={"secret": "sk-ghost"})
+    assert resp.status_code == 500
+    assert "凭据库" in resp.json()["detail"]
+
+    assert (await client.get("/api/providers/deepseek/keys")).json() == {"keys": []}
+    assert _settings().get("providers", {}).get("deepseek") is None
+    deepseek = next(
+        p for p in (await client.get("/api/providers")).json() if p["id"] == "deepseek"
+    )
+    assert deepseek["configured"] is False
+    assert deepseek["key_count"] == 0
+
+
 async def test_delete_key_returns_204(client: AsyncClient, fake_keyring: dict[tuple[str, str], str]) -> None:
     created = (await client.post(
         "/api/providers/deepseek/keys", json={"secret": "sk-gone-soon"},

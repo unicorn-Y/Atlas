@@ -102,3 +102,19 @@
 ## 建议 merge 顺序
 
 先合 main 上的 C3（会话交互），然后本分支 rebase main 再合 C5。理由：双方都改 `hermes_runtime.py`、`test_hermes_runtime_e2e.py`、`backend-adapter/src/types.ts|client.ts`、`useAtlasStore(.test).ts`；C5 在这些文件的改动均为小而集中的 touchpoint/纯追加，后合一方 rebase 冲突小且好解。C5 分支未 merge main、未动 `tasks/CURRENT.md`。
+
+## 修复附录（ATLAS-C5R-ZCODE-FINISH，2026-10-02）
+
+按 `tasks/reviews/ATLAS-C5-ZCODE-PARALLEL.review.md` 的两项 blocking fix 最小补做，未扩展任何其他 C5 范围、未 merge main。
+
+### Fix 1 — 编辑模型时 hermes_provider 别名校验（blocking fix 1）
+- `core/atlas/models/__init__.py` `update_model()`：校验由 `_catalog.get_provider(...)` 改为 `_catalog.resolve_catalog_id(...)` 别名映射。前端 `buildUpdatePatch()` 回传模型已有 `hermes_provider`（qwen 模型为 `alibaba`、kimi 为 `kimi-coding`），此前会被误判「未知服务商」拒绝编辑；现在合法通过，且存储/返回仍保持运行时路由期望的 hermes id（`alibaba` 等），不归一成 catalog id。
+- 回归：`tests/test_models.py::TestUpdateModel::test_update_accepts_alias_hermes_provider` — 前端同形状 payload（含 `hermes_provider: "alibaba"`）编辑 qwen 自定义模型，断言编辑成功、hermes id 原样存储与持久化。
+
+### Fix 2 — keyring 写失败不留假 key 槽位（blocking fix 2）
+- `core/atlas/models/__init__.py` `add_key()`：凭据库写入失败时不再吞错留元数据，改为回收本次新建的空服务商槽位、不追加 key 元数据、不调用 `_persist_settings()`，抛 `RuntimeError("密钥写入系统凭据库失败: ...")`；既有路由 `POST /api/providers/{pid}/keys` 的 `RuntimeError → 500` 分支原样上报，无需改路由。
+- 回归：`tests/test_models_routes.py::test_add_key_keyring_failure_returns_500_without_ghost_slot` — monkeypatch `keyring.set_password` 抛错，断言 500 + 中文 detail、`GET /keys` 为空、settings 无 `providers.deepseek`、provider 列表 `configured=false`/`key_count=0`。
+
+### 验证（聚焦运行，任务书豁免全量）
+- `tests/test_models.py` + `tests/test_models_routes.py` 合并运行：**48 passed**（含 2 个新回归；两文件单独运行亦全绿：TestUpdateModel 5 passed、test_models_routes.py 17 passed）。
+- 命令：`cd core && .venv/Scripts/python.exe -m pytest tests/test_models.py tests/test_models_routes.py -q --basetemp=./.pytest-tmp`。未重跑 172 全聚焦集/前端四项/全量 pytest（两处改动均为单方法内局部修改，未扩散）。

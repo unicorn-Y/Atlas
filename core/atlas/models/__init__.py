@@ -272,8 +272,11 @@ class ModelManager:
         }
         try:
             self._credential_store().set(self._keyring_account(pid, key_id), secret)
-        except Exception as exc:  # 凭据库缺失/失败不崩：留元数据，resolve 时读不到即跳过
+        except Exception as exc:  # 凭据库写失败：不留假 key 槽位，由路由转 500 上报
+            if not entry["keys"] and not entry.get("base_url"):
+                self._providers.pop(pid, None)  # 本次新建的空服务商槽位一并回收
             log.warning("model_manager.keyring_write_failed", provider=pid, key_id=key_id, error=str(exc))
+            raise RuntimeError(f"密钥写入系统凭据库失败: {exc}") from exc
         entry["keys"].append(meta)
         self._persist_settings()
         log.info("model_manager.key_added", provider=pid, key_id=key_id)
@@ -366,8 +369,10 @@ class ModelManager:
         if not target.get("custom"):
             raise ValueError("仅支持编辑自定义模型")
         patch = patch if isinstance(patch, dict) else {}
+        # hermes_provider 存的是 hermes id（qwen→alibaba、kimi→kimi-coding），
+        # 校验必须走别名映射；存储/返回仍保持运行时路由期望的 hermes id。
         hermes_pid = patch.get("hermes_provider")
-        if hermes_pid and _catalog.get_provider(str(hermes_pid)) is None:
+        if hermes_pid and _catalog.resolve_catalog_id(str(hermes_pid)) is None:
             raise ValueError(f"未知服务商: {hermes_pid}")
         for field in _MODEL_PATCH_FIELDS:
             if field not in patch:

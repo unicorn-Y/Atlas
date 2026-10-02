@@ -175,6 +175,32 @@ class TestUpdateModel:
         with pytest.raises(ValueError, match="未知服务商"):
             mgr.update_model("glm-5.3", {"hermes_provider": "not-a-provider"})
 
+    def test_update_accepts_alias_hermes_provider(self, mgr: ModelManager) -> None:
+        """qwen 模型的 hermes_provider 是 alibaba（hermes id ≠ catalog id）；编辑不得误判未知服务商。"""
+        mgr.add_model({
+            "id": "qwen3-max",
+            "name": "Qwen3 Max",
+            "provider": "qwen",
+            "litellm_model": "qwen/qwen3-max",
+            "category": "flagship",
+            "hermes_provider": "alibaba",
+            "native_model": "qwen3-max",
+        })
+        # 前端 buildUpdatePatch() 回传模型已有的 hermes_provider（此处为 hermes id "alibaba"）
+        updated = mgr.update_model("qwen3-max", {
+            "name": "Qwen3 Max 改",
+            "base_url": None,
+            "litellm_model": "qwen/qwen3-max",
+            "native_model": "qwen3-max",
+            "hermes_provider": "alibaba",
+            "capabilities": {},
+        })
+        assert updated["name"] == "Qwen3 Max 改"
+        assert updated["hermes_provider"] == "alibaba"  # 存储/返回仍是 hermes id
+        reloaded = ModelManager(default_model="claude-sonnet-4")
+        entry = next(m for m in reloaded.list_models() if m["id"] == "qwen3-max")
+        assert entry["hermes_provider"] == "alibaba"
+
 
 class TestDeleteModel:
     def test_delete_selected_switches_to_first(self, mgr: ModelManager, glm_model: str) -> None:
