@@ -1,8 +1,8 @@
 # ATLAS-C3-SESSION-INTERACTION：会话与交互
 
-> **当前正式任务。执行模型：GPT-6 Luna，reasoning=high。**
+> **当前正式任务。主控：GPT-6.1 Sol，reasoning=medium；施工子代理：GPT-6 Luna，reasoning=high。**
 > 前提：C2 已验收通过。不要回头重做 C2，不要开始 C4。
-> 本波功能多，但要求是“功能做全、实现尽量复用、验证最小”，不要做大型重构或测试工程。
+> 本波功能多，必须并行：Sol 按文件/模块拆成多个互不冲突的施工块，同时开多个 Luna high 子代理。功能做全、实现尽量复用、验证最小，不做大型重构或测试工程。
 
 先读：
 - `docs/plan/ROADMAP-TO-PRODUCT.md`
@@ -13,6 +13,14 @@
 参考界面分支：`wip/c3-frontend-from-laptop`。**只挑能复用的界面组件，不直接整分支合并；事件和字段以当前 Hermes 内核为准。**
 
 工作目录：`D:\Atlas`。Hermes fork：`D:\hermes-agent` 的 `atlas` 分支。
+
+## 主控并行方式
+
+- Sol 先快速读完整任务书和相关文件，再按实际文件归属拆任务；优先让前端、后端、Hermes fork、测试/迁移并行。
+- 同时开多个 Luna high 子代理；每个子代理只负责明确的一组文件/模块，不碰别人负责的文件。
+- 会改同一核心文件（尤其 `core/atlas/agent/`、`hermes_runtime.py`、共享 store）的任务交给同一个子代理或排队串行。
+- 子代理各自完成聚焦测试后回报；Sol 审 diff、处理整合，全部完成后再跑本任务书要求的一次全量和前端四项。
+- Sol 不要自己重复写一遍子代理已完成的代码。
 
 ## 1. L6：插话两档
 
