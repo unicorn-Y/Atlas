@@ -1,32 +1,31 @@
 # Atlas Current Task
 
-CURRENT: ATLAS-C4R-FINISH
-STATUS: AWAITING_REVIEW
+CURRENT: ATLAS-C5-C6A-INTEGRATION
+STATUS: READY_FOR_EXECUTION
 CONTROLLER: GPT-6.1 Sol / reasoning=medium
 WORKERS: GPT-6 Luna / reasoning=high (parallel)
-TASKBOOK: tasks/taskbooks/ATLAS-C4R-FINISH.md
-RESULT: tasks/results/ATLAS-C4-EXTENSIONS.result.md
-REVIEW: tasks/reviews/ATLAS-C4-EXTENSIONS.review.md
+TASKBOOK: tasks/taskbooks/ATLAS-C5-C6A-INTEGRATION.md
+RESULT: tasks/results/ATLAS-C5-C6A-INTEGRATION.result.md
+REVIEW: tasks/reviews/ATLAS-C5-C6A-INTEGRATION.review.md
 
 BASE_BRANCH: main
-PREVIOUS: ATLAS-C4-EXTENSIONS
-PREVIOUS_REVIEW: PARTIAL — four focused repairs only
+PREVIOUS: ATLAS-C4R-FINISH
+PREVIOUS_REVIEW: PASS — tasks/reviews/ATLAS-C4-EXTENSIONS.review.md
 
 ## Current goal
 
-Close only:
-1. PermissionRequest ask → existing approval flow
-2. SubagentStop continue semantics
-3. existing PreCompact/PostCompact + SessionEnd lifecycle hook gaps
-4. custom command model/tool metadata → one-run execution
+Integrate the already accepted:
+1. C6A LSP core
+2. C5 model layer
 
-C5 and C6A are already accepted on independent branches and must not be merged during this repair.
+into current main while preserving all C4/C4R behavior.
 
 ## Execution
 
-Use subagents aggressively for independent files/modules and use the maximum concurrency the current runtime allows.
+Use subagents aggressively for independent conflict-review/file groups and use the maximum concurrency the runtime allows.
 Do not hard-code a worker limit.
 
 ## Completion
 
-Update result + CURRENT(AWAITING_REVIEW), push main, verify remote HEAD, then stop.
+Write integration result, set CURRENT to AWAITING_REVIEW, push main, verify remote HEAD, then stop.
+Do not start the remaining C6.
