@@ -1,21 +1,20 @@
 # Atlas ZCode Parallel Current
 
-CURRENT: ATLAS-C5-ZCODE-PARALLEL
-STATUS: READY_FOR_EXECUTION
+CURRENT: ATLAS-C6A-R1-BASEDPYRIGHT
+STATUS: ACCEPTED
 OWNER: ZCode second construction lane
-ATLAS_BRANCH: zcode/c5-models-parallel
-HERMES_BRANCH: zcode/c5-models-parallel
-TASKBOOK: tasks/taskbooks/ATLAS-C5-ZCODE-PARALLEL.md
-RESULT: tasks/results/ATLAS-C5-ZCODE-PARALLEL.result.md
-REVIEW: tasks/reviews/ATLAS-C5-ZCODE-PARALLEL.review.md
+ATLAS_BRANCH: zcode/c6a-lsp-parallel
+HERMES_BRANCH: none
+TASKBOOK: tasks/taskbooks/ATLAS-C6A-R1-BASEDPYRIGHT.md
+RESULT: tasks/results/ATLAS-C6A-LSP-CORE-PARALLEL.result.md
+REVIEW: tasks/reviews/ATLAS-C6A-LSP-CORE-PARALLEL.review.md
 
-MAIN_CURRENT: ATLAS-C3-SESSION-INTERACTION
-MAIN_OWNER: Codex — GPT-6.1 Sol medium + parallel GPT-6 Luna high
+MAIN_CURRENT: ATLAS-C4-EXTENSIONS
 
-## Rules
+## Current goal
 
-- This lane is independent from tasks/CURRENT.md.
-- Work only on the zcode/c5-models-parallel branch.
-- Do not merge main yourself.
-- Do not overwrite or reset Codex C3 work.
-- Push the branch and set STATUS to AWAITING_REVIEW when finished.
+Only add basedpyright fallback compatibility to the accepted C6A LSP core.
+
+Use subagents if useful; do not impose a fixed concurrency limit.
+
+Do not merge main and do not start another stage.
