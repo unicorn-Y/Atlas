@@ -1,7 +1,7 @@
 # Atlas Sol Parallel Current
 
 CURRENT: ATLAS-T1-PREP
-STATUS: READY_FOR_EXECUTION
+STATUS: AWAITING_REVIEW
 OWNER: GPT-6.1 Sol / medium
 WORKERS: GPT-6 Luna / high
 BRANCH: sol/t1-prep
