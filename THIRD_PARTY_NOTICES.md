@@ -32,6 +32,14 @@ SOFTWARE.
 
 Source: `https://github.com/NousResearch/hermes-agent`, pinned through the Atlas fork at commit `aea969677c60a1bb72fe227fdfb98f196a2092cc`.
 
+Vendored files (C5 model core, copied 2026-10-02 from the local checkout at commit
+`e287231d7906bcce5bc373d20fb2e3e1e6427220`):
+
+- `core/atlas/models/reasoning_effort.py` ← `agent/reasoning_effort.py` (verbatim copy, provenance header added).
+- `core/atlas/models/models_dev.py` ← `agent/models_dev.py` (adapted: `requests` → `httpx` sync client, cache
+  directory injected from `atlas.config`, `hermes_cli.config` / `hermes_constants` / `utils` helpers inlined,
+  provider-plugin capability seam stubbed empty, `PROVIDER_TO_MODELS_DEV` extended with Atlas-only provider ids).
+
 ```text
 MIT License
 

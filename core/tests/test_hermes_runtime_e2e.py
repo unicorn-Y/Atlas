@@ -660,3 +660,53 @@ async def test_real_hermes_parallel_child_agents_use_fake_model(tmp_path, monkey
             item.get("summary") for item in record["result"].get("results", [])
         }
         assert child_summaries == {"alpha child complete", "beta child complete"}, record
+
+
+@pytest.mark.asyncio
+async def test_reasoning_stages_first_turn_planning_then_execution(tmp_path, monkeypatch):
+    """L8：stages enabled 时首轮走 planning 档、后续轮走 execution 档。"""
+    with FakeLLMServer([Text("planned"), Text("done")]) as fake:
+        home = tmp_path / "engine"
+        write_hermes_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        monkeypatch.setattr(
+            "atlas.models.reasoning_stages.load_user_settings", lambda: {
+                "reasoning_stages": {"enabled": True, "planning": "high",
+                                     "execution": "low", "verification": "high"},
+            })
+        models = SimpleNamespace(
+            current_model="fake-model", current_litellm_model="fake-model",
+            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
+            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
+        )
+        captured: list[dict] = []
+
+        def agent_factory(**kwargs):
+            from run_agent import AIAgent
+
+            agent = AIAgent(**kwargs)
+            original = agent._build_api_kwargs
+
+            def spy(api_messages, tools_for_api=None):
+                captured.append(dict(getattr(agent, "reasoning_config", None) or {}))
+                return original(api_messages, tools_for_api)
+
+            agent._build_api_kwargs = spy
+            return agent
+
+        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models,
+                                agent_factory=agent_factory)
+        first = [event async for event in runtime.run_turn(
+            message="plan this", conversation_id="stage-first", workspace=str(tmp_path),
+            history=[], system_message="Atlas system prompt", enabled_toolsets=["file"],
+        )]
+        later = [event async for event in runtime.run_turn(
+            message="go on", conversation_id="stage-second", workspace=str(tmp_path),
+            history=[{"role": "user", "content": "plan this"},
+                     {"role": "assistant", "content": "planned"}],
+            system_message="Atlas system prompt", enabled_toolsets=["file"],
+        )]
+
+        assert first[-1]["result"]["final_response"] == "planned"
+        assert later[-1]["result"]["final_response"] == "done"
+        assert captured == [{"effort": "high"}, {"effort": "low"}]

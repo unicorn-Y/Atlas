@@ -77,7 +77,9 @@ export default function UsagePanel() {
           <td className="px-3 py-2 text-right tabular-nums">{row.runs}</td>
           <td className="px-3 py-2 text-right tabular-nums">{tokens(row.input_tokens)}</td>
           <td className="px-3 py-2 text-right tabular-nums">{tokens(row.output_tokens)}</td>
-          <td className="px-3 py-2 text-right tabular-nums">{percent(row.cache_hit_rate)}</td>
+          <td className="px-3 py-2 text-right tabular-nums">{percent(row.cache_hit_rate)}
+            {row.cache_miss_reason && <div className="mt-0.5 whitespace-normal text-left text-[11px] font-normal leading-[1.5] text-fg-3" title="最近一次请求的缓存未命中原因">{row.cache_miss_reason}</div>}
+          </td>
           <td className="px-3 py-2 text-right tabular-nums">{cost(row.est_cost)}</td>
         </tr>)}</tbody>
       </table>

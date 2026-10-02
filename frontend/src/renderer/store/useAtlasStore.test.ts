@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { backend, useAtlasStore } from './useAtlasStore';
 import SettingsPage from '../pages/SettingsPage';
 
+const REASONING_STAGES = { enabled: false, planning: 'high', execution: 'medium', verification: 'high' };
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('conversation creation', () => {
@@ -36,7 +38,8 @@ describe('conversation creation', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ skills: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ capabilities: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ profiles: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response);
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => REASONING_STAGES } as Response);
     vi.stubGlobal('fetch', fetchMock);
 
     await useAtlasStore.getState().initialize();
@@ -56,6 +59,7 @@ describe('conversation creation', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ capabilities: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ profiles: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => REASONING_STAGES } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => created } as Response);
     vi.stubGlobal('fetch', fetchMock);
 
@@ -65,7 +69,7 @@ describe('conversation creation', () => {
     const state = useAtlasStore.getState();
     expect(state.activeConversationId).toBe(created.id);
     expect(state.conversations[0]).toMatchObject({ id: created.id, title: created.title });
-    expect(fetchMock.mock.calls[8][1]).toMatchObject({ method: 'POST' });
+    expect(fetchMock.mock.calls[9][1]).toMatchObject({ method: 'POST' });
   });
 
   it('loads history and selects each opened conversation', async () => {
@@ -77,7 +81,8 @@ describe('conversation creation', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ skills: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ capabilities: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ profiles: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response);
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => REASONING_STAGES } as Response);
     vi.stubGlobal('fetch', fetchMock);
     await useAtlasStore.getState().initialize();
 
@@ -111,6 +116,7 @@ describe('settings configuration', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ capabilities: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ profiles: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => REASONING_STAGES } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => configuration } as Response);
     vi.stubGlobal('fetch', fetchMock);
 
@@ -119,7 +125,7 @@ describe('settings configuration', () => {
 
     expect(saved).toBe(true);
     expect(useAtlasStore.getState()).toMatchObject({ providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: true, model: 'gpt-4o' });
-    expect(fetchMock.mock.calls[8][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ gateway_base_url: configuration.gateway_base_url, api_key: 'secret', compression_model: '' }) });
+    expect(fetchMock.mock.calls[9][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ gateway_base_url: configuration.gateway_base_url, api_key: 'secret', compression_model: '' }) });
   });
 
   it('loads and saves subagent enablement and default model together', async () => {

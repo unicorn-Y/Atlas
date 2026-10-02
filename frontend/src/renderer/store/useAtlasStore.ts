@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter } from '@atlas/backend-adapter';
-import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ReasoningEffort, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, CustomModelUpdateRequest, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ProviderState, ReasoningEffort, ReasoningStagesConfig, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -37,6 +37,10 @@ interface AtlasState {
   error: string | null;
   model: string;
   models: ModelListResponse['models'];
+  /** Supported model services (catalog + this installation's keys and endpoints). */
+  providers: ProviderState[];
+  /** Per-phase thinking budget; disabled = the previous single-effort behaviour. */
+  reasoningStages: ReasoningStagesConfig;
   tools: ToolListResponse['tools'];
   skills: SkillInfo[];
   activeSkills: string[];
@@ -86,6 +90,14 @@ interface AtlasState {
   saveSubagentSettings: (enabled: boolean, defaultModel: string) => Promise<boolean>;
   saveCompressionModel: (model: string) => Promise<boolean>;
   addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
+  /** C5: provider catalog, provider keys, custom-model edit/delete and reasoning stages. */
+  loadProviders: () => Promise<void>;
+  saveProviderConfig: (providerId: string, baseUrl: string | null) => Promise<boolean>;
+  addProviderKey: (providerId: string, secret: string, label: string) => Promise<boolean>;
+  removeProviderKey: (providerId: string, keyId: string) => Promise<void>;
+  updateCustomModel: (modelId: string, patch: CustomModelUpdateRequest) => Promise<boolean>;
+  deleteCustomModel: (modelId: string) => Promise<boolean>;
+  saveReasoningStages: (config: ReasoningStagesConfig) => Promise<void>;
   testModelConnection: (model?: string) => Promise<void>;
   sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs, profileId?: string) => Promise<void>;
   createRun: (conversationId: string, title: string) => AgentRun;
@@ -187,7 +199,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
   return {
     apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, busy: false, paused: false, error: null,
-    model: '', models: [], tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
+    model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', pendingRunOverrides: null, answers: {},
     unread: [], pinned: [], archived: [], runPrompts: {},
@@ -210,6 +222,9 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         // Roles and recipes are extras; the app works without them if the backend predates them.
         const [profiles, recipes] = await Promise.all([backend.getProfiles().catch(() => []), backend.getRecipes().catch(() => [])]);
         set((state) => ({ profiles, recipes, profileId: profiles.some((profile) => profile.id === state.profileId) ? state.profileId : 'default' }));
+        // Per-phase thinking budget (C5); older backends answer nothing and the default (off) stands.
+        const stages = await backend.getReasoningStages().catch(() => null);
+        if (stages) set({ reasoningStages: stages });
       } catch (error) {
         fail(error, '无法读取后端数据');
         set({ conversationsLoading: false });
@@ -317,6 +332,76 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         set({ error: errorText(error, '保存模型配置失败') });
         return false;
       } finally { set({ settingsBusy: false }); }
+    },
+
+    // -- C5: provider catalog, provider keys, custom-model edit/delete, reasoning stages --
+
+    loadProviders: async () => {
+      try { set({ providers: await backend.getProviders() }); }
+      catch (error) { fail(error, '无法读取服务商列表'); }
+    },
+
+    saveProviderConfig: async (providerId, baseUrl) => {
+      try {
+        await backend.updateProviderConfig(providerId, baseUrl);
+        await get().loadProviders();
+        return true;
+      } catch (error) {
+        set({ error: errorText(error, '保存服务商设置失败') });
+        return false;
+      }
+    },
+
+    addProviderKey: async (providerId, secret, label) => {
+      try {
+        await backend.addProviderKey(providerId, secret, label || undefined);
+        await get().loadProviders();
+        return true;
+      } catch (error) {
+        set({ error: errorText(error, '添加密钥失败') });
+        return false;
+      }
+    },
+
+    removeProviderKey: async (providerId, keyId) => {
+      try {
+        await backend.removeProviderKey(providerId, keyId);
+        await get().loadProviders();
+      } catch (error) { set({ error: errorText(error, '删除密钥失败') }); }
+    },
+
+    updateCustomModel: async (modelId, patch) => {
+      set({ settingsBusy: true });
+      try {
+        await backend.updateCustomModel(modelId, patch);
+        const list = await backend.getModels();
+        set({ models: list.models, model: list.current, error: null });
+        return true;
+      } catch (error) {
+        set({ error: errorText(error, '修改模型失败') });
+        return false;
+      } finally { set({ settingsBusy: false }); }
+    },
+
+    deleteCustomModel: async (modelId) => {
+      set({ settingsBusy: true });
+      try {
+        await backend.deleteCustomModel(modelId);
+        const list = await backend.getModels();
+        // Deleting the selected model makes the backend fall back to the first model in the list.
+        set((state) => ({ models: list.models, model: state.model === modelId ? list.current : state.model, error: null }));
+        return true;
+      } catch (error) {
+        set({ error: errorText(error, '删除模型失败') });
+        return false;
+      } finally { set({ settingsBusy: false }); }
+    },
+
+    saveReasoningStages: async (config) => {
+      set({ reasoningStages: config });
+      try {
+        set({ reasoningStages: await backend.saveReasoningStages(config), error: null });
+      } catch (error) { fail(error, '思考量分配没能保存'); }
     },
 
     testModelConnection: async (model) => {

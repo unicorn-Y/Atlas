@@ -516,6 +516,20 @@ class HermesRuntime:
         litellm_model = str(model_config.get("litellm_model") or current)
         api_key = getattr(settings, "_api_key", None)
         base_url = getattr(settings, "gateway_base_url", None)
+        route_kwargs = {"model": litellm_model, "provider": "openai", "api_mode": "openai",
+                        "base_url": base_url, "api_key": api_key}
+        if pid := str(model_config.get("hermes_provider") or "").strip():
+            from atlas.models.catalog import api_mode_for, get_provider, resolve_catalog_id
+
+            catalog_id = resolve_catalog_id(pid) or pid
+            provider_cfg = settings.provider_config(catalog_id)
+            route_kwargs.update(
+                model=str(model_config.get("native_model") or litellm_model),
+                provider=pid, api_mode=api_mode_for(catalog_id),
+                base_url=(model_config.get("base_url") or provider_cfg.get("base_url")
+                          or (get_provider(catalog_id) or {}).get("default_base_url") or base_url),
+                api_key=settings.resolve_api_key(catalog_id) or api_key,
+                credential_pool=settings.credential_pool(catalog_id))
         if atlas_agent is not None:
             try:
                 from atlas.engine.notifications import consume_notifications
@@ -582,12 +596,13 @@ class HermesRuntime:
                 plan_prompt = build_plan_prompt(message)
                 system_message = f"{system_message or ''}\n\n{plan_prompt}".strip()
                 enabled_toolsets = ["atlas-plan"]
+            # L8 分阶段思考量：plan_mode/首轮 → planning 档，否则 execution 档（验证轮在钩子里切）。
+            from atlas.models.reasoning_stages import effort_for_phase, load_stage_config
+            stage_cfg = load_stage_config()
+            phase = "planning" if (plan_mode or not history) else "execution"
+            reasoning_effort = effort_for_phase(stage_cfg, phase) or reasoning_effort
             agent = factory(
-                model=litellm_model,
-                provider="openai",
-                api_mode="openai",
-                base_url=base_url,
-                api_key=api_key,
+                **route_kwargs,
                 session_id=conversation_id,
                 cwd=hermes_cwd,
                 skip_memory=True,
@@ -610,9 +625,16 @@ class HermesRuntime:
             if atlas_context is not None:
                 from atlas.engine.hermes_policy import wait_before_model_request
 
-                agent._atlas_before_model_request = lambda: wait_before_model_request(
-                    atlas_context, loop,
-                )
+                def before_model_request() -> bool:
+                    blocked = wait_before_model_request(atlas_context, loop)
+                    # 每次模型请求前都会调用；stop-gate 验证轮已发 nudge 时切 verification 档。
+                    if (stage_cfg.get("enabled")
+                            and getattr(agent, "_verification_stop_nudges", 0)
+                            + getattr(agent, "_pre_verify_nudges", 0) > 0
+                            and (verify_effort := effort_for_phase(stage_cfg, "verification"))):
+                        agent.reasoning_config = {"effort": verify_effort}
+                    return blocked
+                agent._atlas_before_model_request = before_model_request
             agent._on_session_title = on_session_title
             # Hermes' turn-context and iteration-prep hooks read these attributes
             # directly to inject its one-shot time-budget reminder.
@@ -738,6 +760,17 @@ class HermesRuntime:
                         context_limit = getattr(compressor, "context_length", None)
                         if not isinstance(context_limit, int) or context_limit <= 0:
                             context_limit = getattr(agent, "_config_context_length", None)
+                        from atlas.models.cache_diagnostics import (
+                            explain_cache_drop, record_layer_hashes)
+                        tool_signature = json.dumps(getattr(agent, "enabled_toolsets", []))
+                        hashes = record_layer_hashes(
+                            conversation_id, system_message or "", tool_signature,
+                            f"{len(turn_history)}:{turn_history[-1].get('content') or ''}"
+                            if turn_history else "0:")
+                        reason = explain_cache_drop(
+                            conversation_id, hashes,
+                            int(usage.get("cached_input_tokens", 0) or 0),
+                            int(usage.get("prompt_tokens", usage.get("input_tokens")) or 0))
                         usage_payload = {
                             "input_tokens": usage.get("prompt_tokens", usage.get("input_tokens")),
                             "output_tokens": usage.get("completion_tokens", usage.get("output_tokens")),
@@ -745,6 +778,7 @@ class HermesRuntime:
                             "context_tokens": usage.get("total_tokens", usage.get("prompt_tokens")),
                             "context_limit": context_limit,
                             "model": getattr(agent, "model", current),
+                            **({"cache_miss_reason": reason} if reason else {}),
                         }
                         try:
                             from agent.context_breakdown import compute_session_context_breakdown
