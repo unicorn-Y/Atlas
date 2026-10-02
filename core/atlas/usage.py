@@ -32,9 +32,15 @@ class UsageLedger:
                 output_tokens INTEGER NOT NULL DEFAULT 0,
                 cached_input_tokens INTEGER NOT NULL DEFAULT 0,
                 cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-                est_cost REAL
+                est_cost REAL,
+                cache_miss_reason TEXT
             )
         """)
+        columns = {row[1] async for row in await self._db.execute(
+            "PRAGMA table_info(usage_records)")}
+        if "cache_miss_reason" not in columns:
+            await self._db.execute(
+                "ALTER TABLE usage_records ADD COLUMN cache_miss_reason TEXT")
         await self._db.execute(
             "CREATE INDEX IF NOT EXISTS idx_usage_started ON usage_records(started_at)")
         await self._db.commit()
@@ -61,12 +67,14 @@ class UsageLedger:
         await self._db.execute(
             """INSERT INTO usage_records
             (run_id, conversation_id, subtask_id, model, started_at, input_tokens,
-             output_tokens, cached_input_tokens, cache_write_tokens, est_cost)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             output_tokens, cached_input_tokens, cache_write_tokens, est_cost,
+             cache_miss_reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (run_id, conversation_id, subtask_id, model, started_at,
              values["input_tokens"], values["output_tokens"],
              values["cached_input_tokens"], values["cache_write_tokens"],
-             float(cost) if cost is not None else None),
+             float(cost) if cost is not None else None,
+             usage.get("cache_miss_reason") or None),
         )
         await self._db.commit()
 
@@ -87,7 +95,9 @@ class UsageLedger:
         if end:
             where.append("started_at < ?")
             params.append(end)
-        sql = "SELECT " + expression + " AS grp, run_id, subtask_id, model, input_tokens, output_tokens, cached_input_tokens, est_cost FROM usage_records"
+        sql = ("SELECT " + expression
+               + " AS grp, run_id, subtask_id, model, input_tokens, output_tokens, "
+               + "cached_input_tokens, est_cost, cache_miss_reason FROM usage_records")
         if where:
             sql += " WHERE " + " AND ".join(where)
         async with self._db.execute(sql, params) as cursor:
@@ -99,6 +109,10 @@ class UsageLedger:
         rows = []
         for key, items in sorted(grouped.items()):
             row = _aggregate(items)
+            # 分组行附带未命中原因：取组内最近一条非空记录（通常同组同轮）。
+            reasons = [item.get("cache_miss_reason") for item in items
+                       if item.get("cache_miss_reason")]
+            row["cache_miss_reason"] = reasons[-1] if reasons else None
             rows.append({"key": key, "label": key, **row})
         return {"rows": rows, "totals": _aggregate(records)}
 
