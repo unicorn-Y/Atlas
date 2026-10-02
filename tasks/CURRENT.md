@@ -1,7 +1,7 @@
 # Atlas Current Task
 
 CURRENT: ATLAS-C5-C6A-INTEGRATION
-STATUS: READY_FOR_EXECUTION
+STATUS: AWAITING_REVIEW
 CONTROLLER: GPT-6.1 Sol / reasoning=medium
 WORKERS: GPT-6 Luna / reasoning=high (parallel)
 TASKBOOK: tasks/taskbooks/ATLAS-C5-C6A-INTEGRATION.md

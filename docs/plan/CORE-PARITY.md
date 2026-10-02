@@ -63,7 +63,7 @@
 | T5 | 编辑：容错匹配 | HM `patch`：逐级放宽匹配；OD `edit.ts`：唯一锚点间的变量长度替换 | ✔ Hermes 9 种策略 + OpenCode 唯一边界锚点间可变长度匹配；歧义仍拒绝，CRLF/LF/BOM 保留 | ✔ | — | C2 |
 | T6 | 编辑保留换行和编码 | CC、OD：保留 CRLF/LF 和 BOM | ✔ Windows 假文件 LF/CRLF 测试通过（`4357a86`） | ✔ | — | C1 |
 | T7 | 给 GPT 系模型用补丁格式 | CX `apply_patch`（`codex-rs/apply-patch`）；HM 只对 OpenAI 系模型显示 V4A 补丁模式 | ✔ Hermes patch tool 保留模型适配（`698b7bb`） | ✔ | — | C1 |
-| T8 | 编辑后诊断 | OD：改完跑 LSP 诊断回传；CC 的诊断工具；HM `agent/lsp`、`file_operations_lint.py` | △ `run_checks` 要单独调用 | ✔ 语法检查 | LSP 诊断：对比 OD `src/lsp` 和 HM `agent/lsp`，选强的 | C6 |
+| T8 | 编辑后诊断 | OD：改完跑 LSP 诊断回传；CC 的诊断工具；HM `agent/lsp`、`file_operations_lint.py` | ◐ LSP 诊断核心已合入 main（C6A：`core/atlas/lsp/**` 移植 Hermes `agent/lsp`，版本化新鲜度、before/after 差分行位移、Windows 进程树管理、28 条 server 注册表、fake LSP 套件 73 passed；`110fdc2`）；剩瘦写路径/UI 接线（编辑后触发与诊断回传进编辑流），完整 T8 UX 未完成 | ✔ 语法检查 | LSP 诊断：对比 OD `src/lsp` 和 HM `agent/lsp`，选强的 | C6 |
 | T9 | 搜索 | HM `search_files`：基于 ripgrep，正则、文件过滤、三种输出、上下文行、分页、按修改时间排序 | ✔ Hermes `search_files`（`698b7bb`） | ✔ | — | C1 |
 | T10 | 跑命令：前台、后台、结束通知 | HM `terminal`：后台进程加 `notify` 结束通知、按输出匹配通知、心跳汇报、真终端模式 | ✔ 前后台、完成通知、notify/watch/heartbeat 参数映射由 `test_c1_process_notifications.py` 覆盖 | ✔ | — | C1 |
 | T11 | 真终端交互（REPL、交互式命令行） | CX `unified_exec`（真终端，可写入 stdin）；HM `pty` 加 `process_manage` 的写入 | ✔ stdin/write/submit/close、Windows PTY、handoff 和子进程结束后的父级通知由 `test_c1_tool_compat.py`、`test_c1_process_notifications.py` 覆盖 | ✔ | — | C1 |

@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { backend, useAtlasStore } from './useAtlasStore';
 import SettingsPage from '../pages/SettingsPage';
 
-const REASONING_STAGES = { enabled: false, planning: 'high', execution: 'medium', verification: 'high' };
+const REASONING_STAGES = { enabled: false, planning: 'high', execution: 'medium', verification: 'high' } as const;
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -140,6 +140,7 @@ describe('settings configuration', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ capabilities: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ profiles: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => REASONING_STAGES } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => savedConfiguration } as Response);
     vi.stubGlobal('fetch', fetchMock);
 
@@ -149,14 +150,16 @@ describe('settings configuration', () => {
 
     expect(saved).toBe(true);
     expect(useAtlasStore.getState()).toMatchObject({ subagentsEnabled: false, subagentDefaultModel: 'gpt-4o-mini' });
-    expect(fetchMock.mock.calls[8][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ subagents_enabled: false, subagent_default_model: 'gpt-4o-mini' }) });
+    expect(fetchMock.mock.calls[9][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ subagents_enabled: false, subagent_default_model: 'gpt-4o-mini' }) });
 
     const renderSettings = (subagentsEnabled: boolean) => renderToStaticMarkup(React.createElement(SettingsPage, {
       username: 'User', onSaveUsername: () => undefined, apiBaseUrl: 'http://127.0.0.1:8765', providerBaseUrl: configuration.gateway_base_url,
       connected: true, apiKeyConfigured: true, busy: false, connectionTest: null, error: null, models: configuration.models,
-      selectedModel: configuration.current, subagentsEnabled, subagentDefaultModel: 'gpt-4o-mini', onBack: () => undefined,
+      selectedModel: configuration.current, providers: [], reasoningStages: REASONING_STAGES, subagentsEnabled, subagentDefaultModel: 'gpt-4o-mini', onBack: () => undefined,
       onSelectModel: () => undefined, onSaveSubagentSettings: async () => true, onSaveProvider: async () => true, onAddModel: async () => true,
-      onTestConnection: () => undefined, statusBar: { model: false, reasoning: false, context: false, tokens: false, cost: false, git: false, permission: false, processes: false },
+      onTestConnection: () => undefined, onLoadProviders: () => undefined, onSaveProviderConfig: async () => true, onAddProviderKey: async () => true,
+      onRemoveProviderKey: () => undefined, onUpdateModel: async () => true, onDeleteModel: async () => true, onSaveReasoningStages: () => undefined,
+      statusBar: { model: false, reasoning: false, context: false, tokens: false, cost: false, git: false, permission: false, processes: false },
       onStatusBarChange: () => undefined,
     }));
     const enabledMarkup = renderSettings(true);
