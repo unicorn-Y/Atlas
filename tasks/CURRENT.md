@@ -1,30 +1,44 @@
 # Atlas Current Task
 
-CURRENT: ATLAS-C6R-FINISH
-STATUS: AWAITING_REVIEW
+CURRENT: ATLAS-X2-COMPUTER-BROWSER
+STATUS: READY_FOR_EXECUTION
 CONTROLLER: ZCode
-TASKBOOK: tasks/taskbooks/ATLAS-C6R-FINISH.md
-RESULT: tasks/results/ATLAS-C6-CODING-POLISH.result.md
-REVIEW: tasks/reviews/ATLAS-C6-CODING-POLISH.review.md
+TASKBOOK: tasks/taskbooks/ATLAS-X2-COMPUTER-BROWSER.md
+RESULT: tasks/results/ATLAS-X2-COMPUTER-BROWSER.result.md
+REVIEW: tasks/reviews/ATLAS-X2-COMPUTER-BROWSER.review.md
 
 BASE_BRANCH: main
-PREVIOUS: ATLAS-C6-CODING-POLISH
-PREVIOUS_REVIEW: PARTIAL — two focused closeout fixes
+PREVIOUS: ATLAS-C6R-FINISH
+PREVIOUS_REVIEW: PASS — tasks/reviews/ATLAS-C6-CODING-POLISH.review.md
 
 ## Current goal
 
-Close only:
-1. V4A path-less patch LSP diagnostics;
-2. /review finding internal file + line navigation.
+Build the next user-priority external phase: X2 computer + browser.
 
-Everything else in C6 is accepted and must not be reopened.
+The latest roadmap order is:
+1. X2 computer/browser
+2. X4 skill market
+3. K1 prelaunch check
+4. daily use / feedback loop
+
+Full T1 and the other X phases are deferred until the user chooses to start them.
+
+## Coordination
+
+Sol is independently running `sol/x-prep` to refresh X1–X7 research/taskbooks.
+Before substantial X2 coding, check whether that branch already contains a newer X2 taskbook/source map.
+- If a newer X2 taskbook exists, use the newer research/taskbook as guidance while keeping main as the construction base.
+- If it does not exist yet, proceed from the current main X2 taskbook; do not idle.
+
+Do not merge `sol/x-prep` wholesale into main during X2 construction.
 
 ## Execution
 
-Use subagents for independent backend/frontend fixes if useful.
-Use the maximum concurrency the runtime allows; no fixed worker cap.
+Use subagents aggressively for independent modules and fill the maximum concurrency the runtime currently allows.
+No fixed worker count.
+Reuse Hermes and mature upstream implementations; do not build a reduced duplicate runtime.
 
 ## Completion
 
-Append C6R evidence, set CURRENT to AWAITING_REVIEW, push main, verify remote HEAD, and stop.
-Do not start T1.
+Write the X2 result, set CURRENT to AWAITING_REVIEW, push main, verify remote HEAD, then stop.
+Do not start X4 automatically.
