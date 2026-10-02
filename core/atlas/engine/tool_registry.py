@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import json
 import math
+import os
 from pathlib import Path
 import threading
 import uuid
@@ -74,9 +75,9 @@ def _append_repetition_reminder(
     return result
 
 
-def _read_text_for_lsp(args: dict[str, Any], runtime: Any) -> str | None:
-    """Best-effort read of ``args['path']`` for the LSP delta (``None`` = missing/unreadable)."""
-    raw = str(args.get("path") or "")
+def _read_text_for_lsp(raw_path: Any, runtime: Any) -> str | None:
+    """Best-effort workspace-aware text read (``None`` = missing/unreadable)."""
+    raw = str(raw_path or "")
     if not raw:
         return None
     try:
@@ -92,12 +93,57 @@ def _read_text_for_lsp(args: dict[str, Any], runtime: Any) -> str | None:
     return None
 
 
+def _v4a_touched_paths(args: dict[str, Any], runtime: Any) -> list[str]:
+    """Path-less V4A patch → local files named in its headers, workspace-resolved.
+
+    Reuses Hermes' own V4A header collector (the same one its write-precheck uses);
+    returns ``[]`` for anything that is not a V4A patch or whose headers are invalid
+    (the native handler will surface that error itself).
+    """
+    if str(args.get("mode") or "") != "patch" or not str(args.get("patch") or ""):
+        return []
+    try:
+        from tools.file_tools import _collect_v4a_header_paths
+
+        collected = _collect_v4a_header_paths(str(args["patch"]))
+    except Exception:  # noqa: BLE001
+        return []
+    if isinstance(collected, str) or not collected:
+        return []
+    workspace = str(getattr(runtime, "workspace", "") or "")
+    resolved: list[str] = []
+    for raw in collected[0]:
+        path = Path(raw)
+        if not path.is_absolute() and workspace:
+            path = Path(workspace) / raw
+        resolved.append(str(path))
+    return resolved
+
+
 def _lsp_pre_write(args: dict[str, Any], runtime: Any) -> Any:
-    """C6 LSP seam (pre-write): capture current content + delta baseline.  Never raises."""
+    """C6 LSP seam (pre-write): capture current content + delta baseline.  Never raises.
+
+    Returns the single-file pre-content, a ``{normalized path: pre-content}`` dict for a
+    path-less V4A multi-file patch, or the ``_LSP_SKIP`` sentinel when the seam does not
+    apply (no path and no V4A headers).
+    """
     path = str(args.get("path") or "")
     if not path:
-        return _LSP_SKIP
-    pre = _read_text_for_lsp(args, runtime)
+        touched = _v4a_touched_paths(args, runtime)
+        if not touched:
+            return _LSP_SKIP
+        pre: dict[str, str | None] = {}
+        try:
+            from atlas.engine.lsp_bridge import snapshot_before_write
+
+            for resolved in touched:
+                key = os.path.normcase(os.path.abspath(resolved))
+                pre[key] = _read_text_for_lsp(resolved, runtime)
+                snapshot_before_write(resolved)
+        except Exception:  # noqa: BLE001
+            pass
+        return pre or _LSP_SKIP
+    pre = _read_text_for_lsp(path, runtime)
     try:
         from atlas.engine.lsp_bridge import snapshot_before_write
 
@@ -118,6 +164,8 @@ def _lsp_attach_report(
         details = json.loads(result)
         if not isinstance(details, dict) or details.get("error"):
             return result  # 失败/被拒的写不上报
+        if isinstance(pre_content, dict):
+            return _lsp_attach_v4a_report(runtime, loop, pre_content, result, details)
         path = str(args.get("path") or "")
         if not path:
             return result
@@ -125,13 +173,55 @@ def _lsp_attach_report(
 
         report = report_after_edit(
             runtime, path, None if pre_content is _LSP_SKIP else pre_content,
-            _read_text_for_lsp(args, runtime), loop=loop,
+            _read_text_for_lsp(args.get("path"), runtime), loop=loop,
         )
         if report:
             return result + "\n\n" + report
     except Exception:  # noqa: BLE001
         pass
     return result
+
+
+def _lsp_relative(path: str, workspace: str) -> str:
+    try:
+        rel = os.path.relpath(os.path.abspath(path), os.path.abspath(workspace)) if workspace else None
+    except ValueError:  # 不同盘符
+        rel = None
+    if not rel or rel == "." or rel.startswith(".."):
+        return str(path)
+    return rel.replace(os.sep, "/")
+
+
+def _lsp_attach_v4a_report(
+    runtime: Any, loop: asyncio.AbstractEventLoop | None,
+    pre_state: dict[str, str | None], result: str, details: dict[str, Any],
+) -> str:
+    """Path-less V4A patch: per-file delta over Hermes' own ``files_modified`` result metadata.
+
+    Emits the normal per-file ``lsp.diagnostics`` events; zero-new-diagnostics files stay
+    silent; unreadable (deleted/binary) files never crash the patch result.
+    """
+    modified = details.get("files_modified")
+    if not isinstance(modified, list):
+        return result
+    workspace = str(getattr(runtime, "workspace", "") or "")
+    from atlas.engine.lsp_bridge import report_after_edit
+
+    sections: list[str] = []
+    for touched in modified:
+        path = str(touched or "")
+        if not path:
+            continue
+        key = os.path.normcase(os.path.abspath(path))
+        pre = pre_state.get(key)
+        if pre is None and key not in pre_state:
+            continue  # 不在快照集合里的路径不报（防御：结果元数据异常扩张）
+        block = report_after_edit(runtime, path, pre, _read_text_for_lsp(path, runtime), loop=loop)
+        if block:
+            sections.append(f"[{_lsp_relative(path, workspace)}]\n{block}")
+    if not sections:
+        return result
+    return result + "\n\n本次 V4A 多文件补丁引入的诊断：\n\n" + "\n\n".join(sections)
 
 
 def _multimodal_image_result(data_url: str, path: str) -> dict[str, Any]:

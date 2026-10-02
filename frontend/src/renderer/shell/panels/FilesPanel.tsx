@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, Code2, Eye, ExternalLink, File, Folder, FolderOpen, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { WorkspaceEntry, WorkspaceFile } from '@atlas/backend-adapter';
-import { backend } from '../../store/useAtlasStore';
+import { backend, useAtlasStore } from '../../store/useAtlasStore';
 import { Button } from '../../ui/Button';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
@@ -21,6 +21,16 @@ const FRAME = /\.(html?|pdf)$/i;
 const OFFICE = /\.(docx|xlsx|pptx)$/i;
 const canPreview = (path: string) => MARKDOWN.test(path) || IMAGE.test(path) || FRAME.test(path) || OFFICE.test(path);
 
+/** 相对路径的全部祖先目录(不含文件本身),如 `a/b/c.ts` → `['a', 'a/b']`。 */
+export const ancestorPaths = (file: string): string[] => {
+  const segments = file.split('/').filter(Boolean);
+  segments.pop();
+  const out: string[] = [];
+  let current = '';
+  for (const segment of segments) { current = current ? `${current}/${segment}` : segment; out.push(current); }
+  return out;
+};
+
 export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, onPreview }: {
   workspace?: string | null; onChooseWorkspace: () => void; refreshKey: string; onPreview: (url: string) => void;
 }) {
@@ -33,6 +43,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   const [mode, setMode] = useState<'preview' | 'code'>('preview');
   const [version, setVersion] = useState<ViewedVersion | null>(null);
   const [reloads, setReloads] = useState(0);
+  // C6R: 订阅内部「打开文件」请求；highlightLine 是要定位的行，codeRef 用来滚动。
+  const openRequest = useAtlasStore((state) => state.fileOpenRequest);
+  const [highlightLine, setHighlightLine] = useState<number | null>(null);
+  const codeRef = useRef<HTMLPreElement | null>(null);
 
   const load = useCallback(async (path: string) => {
     if (!workspace) return;
@@ -53,7 +67,26 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     expanded.forEach((path) => void load(path));
   }, [workspace, refreshKey, load]);
   useEffect(() => { setExpanded([]); setSelected(''); setFile(null); }, [workspace]);
-  useEffect(() => { setMode('preview'); setVersion(null); }, [selected]);
+  // 手动浏览选中（树节点、关闭）时重置显示方式/版本/行定位；「打开文件」请求不经过这里，
+  // 否则它触发的 selected 变化会在下一个 commit 把刚设置的定位清掉。
+  const selectFile = (path: string) => { setSelected(path); setMode('preview'); setVersion(null); setHighlightLine(null); };
+  // C6R: 消费内部「打开文件」请求:展开父目录、选中文件、切源码视图并定位行。
+  useEffect(() => {
+    if (!openRequest || !workspace) return;
+    for (const dir of ancestorPaths(openRequest.file)) {
+      setExpanded((current) => current.includes(dir) ? current : [...current, dir]);
+      if (!dirs[dir]) void load(dir);
+    }
+    setSelected(openRequest.file);
+    setVersion(null);
+    setMode('code');
+    setHighlightLine(openRequest.line);
+  }, [openRequest]);
+  // 定位请求的行:文件内容渲染后滚动到目标行(居中)。
+  useEffect(() => {
+    if (!highlightLine) return;
+    codeRef.current?.querySelector<HTMLElement>(`[data-line="${highlightLine}"]`)?.scrollIntoView({ block: 'center' });
+  }, [file, highlightLine]);
 
   useEffect(() => {
     if (!workspace || !selected) { setFile(null); return; }
@@ -67,7 +100,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     icon={<FolderOpen size={22} />} action={<Button variant="primary" onClick={onChooseWorkspace}><FolderOpen />选择文件夹</Button>} />;
 
   const toggle = (entry: WorkspaceEntry) => {
-    if (entry.type === 'file') { setSelected(entry.path); return; }
+    if (entry.type === 'file') { selectFile(entry.path); return; }
     if (expanded.includes(entry.path)) { setExpanded((current) => current.filter((item) => item !== entry.path)); return; }
     setExpanded((current) => [...current, entry.path]);
     if (!dirs[entry.path]) void load(entry.path);
@@ -122,7 +155,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
           const full = `${workspace.replace(/[\\/]+$/, '')}\\${file.path.replace(/\//g, '\\')}`;
           void window.atlasDesktop!.openPath(full).then((result) => { if (result !== 'opened' && result !== 'revealed') setError(`打不开：${result}`); });
         }} className="grid size-6 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><ExternalLink size={13} /></button>}
-        <button onClick={() => setSelected('')} className="shrink-0 text-fg-3 hover:text-fg">关闭</button>
+        <button onClick={() => selectFile('')} className="shrink-0 text-fg-3 hover:text-fg">关闭</button>
       </div>
       {version && <div className="flex items-center gap-2 bg-brand-soft px-3 py-1.5 text-[12px] text-fg">
         <span className="min-w-0 flex-1 truncate">正在看 {version.label} 的版本</span>
@@ -140,6 +173,13 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
             // The raw endpoint already serves scriptable files sandboxed; the frame gets no same-origin access either way.
             : <iframe title={`预览 ${file.path}`} src={backend.rawFileUrl(workspace, file.path)} sandbox="allow-scripts" className="min-h-0 w-full flex-1 border-0 bg-white" />
         : shown?.binary ? <p className="m-0 p-4 text-[13px] text-fg-3">{version ? '这个版本是二进制文件，看不了内容；可以恢复后再预览。' : '这是二进制文件，不能直接预览。'}</p>
+        : highlightLine && shown?.content ? <pre ref={codeRef} className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono text-[11.5px] leading-[1.6] text-fg-2">
+          {shown.content.split('\n').map((text, index) => {
+            const line = index + 1;
+            return <span key={line} data-line={line} className={cn(line === highlightLine && 'bg-brand-soft text-fg shadow-[inset_2px_0_0_var(--brand)]')}>{`${text}\n`}</span>;
+          })}
+          {shown.truncated && '\n\n…文件太大，只显示了前 512 KB。'}
+        </pre>
         : <pre className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono text-[11.5px] leading-[1.6] text-fg-2">{shown?.content}{shown?.truncated && '\n\n…文件太大，只显示了前 512 KB。'}</pre>}
     </div>}
   </div>;

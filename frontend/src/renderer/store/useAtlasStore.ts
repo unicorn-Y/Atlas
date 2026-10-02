@@ -17,6 +17,8 @@ export interface QueuedMessage extends Outgoing { id: string }
 export type FollowUpMode = 'steer' | 'redirect' | 'queue';
 /** Command-parsed metadata (model, tool allow/deny) that applies to exactly one run, then is discarded. */
 export interface PendingRunOverrides { model?: string; tool_allow?: string[]; tool_deny?: string[] }
+/** 一次「在 Atlas 内打开工作区文件」的请求；nonce 递增，同一文件也能重复触发。 */
+export interface FileOpenRequest { file: string; line: number | null; nonce: number }
 
 export const backend = new BackendAdapter({ baseUrl: desktopApiBaseUrl || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8765' });
 
@@ -172,6 +174,9 @@ interface AtlasState {
   /** /init：写入提案内容。写入成功后关掉对话框并返回 true。 */
   applyInit: () => Promise<boolean>;
   closeInit: () => void;
+  /** C6R: 内部「打开工作区文件」请求;FilesPanel 订阅消费并定位行(/review 打开文件等)。 */
+  fileOpenRequest: FileOpenRequest | null;
+  requestFileOpen: (file: string, line?: number | null) => void;
 }
 
 const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
@@ -256,6 +261,9 @@ const errorPatch = (error: unknown, fallback: string): { error: string; errorDet
 /** 只要主文案的场合（如写进事件流的 run.failed 详情）。 */
 const errorText = (error: unknown, fallback: string) => errorPatch(error, fallback).error;
 
+// C6R: 「打开文件」请求的递增序号，保证同一文件重复打开也会触发订阅。
+let fileOpenNonce = 0;
+
 export const useAtlasStore = create<AtlasState>((set, get) => {
   /** Record a backend failure; network errors also flip the connection state. */
   const fail = (error: unknown, fallback: string) => set({ mode: backend.mode, connected: backend.mode === 'backend', ...errorPatch(error, fallback) });
@@ -275,6 +283,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     reasoningEffort: (['minimal', 'low', 'medium', 'high'].includes(storageGet(REASONING) ?? '') ? storageGet(REASONING) : '') as ReasoningEffort | '',
     worktreeRequests: {},
     initOpen: false, initBusy: false, initApplying: false, initError: null, initProposal: null,
+    fileOpenRequest: null,
 
     initialize: async () => {
       set({ conversationsLoading: true });
@@ -907,6 +916,13 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       }
     },
     closeInit: () => set({ initOpen: false, initBusy: false, initApplying: false, initError: null, initProposal: null }),
+
+    // -- C6R: 内部「打开文件」请求 ----------------------------------------
+
+    requestFileOpen: (file, line = null) => {
+      fileOpenNonce += 1;
+      useAtlasStore.setState({ fileOpenRequest: { file, line: line ?? null, nonce: fileOpenNonce } });
+    },
   };
 });
 

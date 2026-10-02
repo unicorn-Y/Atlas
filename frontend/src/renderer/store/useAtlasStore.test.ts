@@ -430,3 +430,25 @@ describe('/init flow', () => {
     expect(useAtlasStore.getState()).toMatchObject({ initOpen: false, initProposal: null, initError: null });
   });
 });
+
+describe('requestFileOpen', () => {
+  afterEach(() => { useAtlasStore.setState({ fileOpenRequest: null }); });
+
+  it('records the file with an increasing nonce and defaults line to null', () => {
+    useAtlasStore.setState({ fileOpenRequest: null });
+    useAtlasStore.getState().requestFileOpen('src/app.py', 12);
+    const first = useAtlasStore.getState().fileOpenRequest;
+    expect(first).toEqual({ file: 'src/app.py', line: 12, nonce: expect.any(Number) });
+    expect(first!.nonce).toBeGreaterThan(0);
+
+    useAtlasStore.getState().requestFileOpen('src/b.py');
+    const second = useAtlasStore.getState().fileOpenRequest;
+    expect(second).toEqual({ file: 'src/b.py', line: null, nonce: expect.any(Number) });
+    expect(second!.nonce).toBeGreaterThan(first!.nonce);
+
+    useAtlasStore.getState().requestFileOpen('src/c.py', null);
+    const third = useAtlasStore.getState().fileOpenRequest;
+    expect(third).toEqual({ file: 'src/c.py', line: null, nonce: expect.any(Number) });
+    expect(third!.nonce).toBeGreaterThan(second!.nonce);
+  });
+});

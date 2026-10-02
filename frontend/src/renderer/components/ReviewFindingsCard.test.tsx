@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ComponentProps } from 'react';
-import ReviewFindingsCard, { fixMessage, formatFinding, findingWhere } from './ReviewFindingsCard';
+import ReviewFindingsCard, { FindingRow, fixMessage, formatFinding, findingWhere } from './ReviewFindingsCard';
 import type { TimelineItem } from './timeline';
 
 type CardProps = ComponentProps<typeof ReviewFindingsCard>;
@@ -30,8 +30,17 @@ describe('ReviewFindingsCard', () => {
     expect(html).toContain('src/app.py:12');
     expect(html).toContain('空指针');
     expect(html).toContain('src/b.py');
-    // 打开文件按钮需要桌面通道，静态渲染（无 window.atlasDesktop）时不出现
+    // 行默认折叠，「打开文件」按钮在展开区里，静态整卡渲染看不到（见下方 FindingRow 用例）
     expect(html).not.toContain('打开文件');
+  });
+
+  it('offers the internal open-file action in an expanded row when a workspace is set', () => {
+    const row = (workspace: string) => renderToStaticMarkup(
+      <FindingRow finding={finding} store={store} workspace={workspace} defaultOpen />,
+    );
+    // 打开文件走 Atlas 内部文件面板并定位行，只依赖 workspace，不再需要桌面通道
+    expect(row('C:/ws')).toContain('打开文件');
+    expect(row('')).not.toContain('打开文件');
   });
 
   it('shows a success card when the findings array is empty', () => {

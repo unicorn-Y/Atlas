@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, ChevronRight, ClipboardCheck, ClipboardCopy, ExternalLink, Hammer, ListChecks, SearchCheck, ShieldCheck } from 'lucide-react';
+import { Check, ChevronRight, ClipboardCheck, ClipboardCopy, FileSearch, Hammer, ListChecks, SearchCheck, ShieldCheck } from 'lucide-react';
 import type { useAtlasStore } from '../store/useAtlasStore';
 import { cn } from '../ui/cn';
 import type { ReviewFinding, TimelineItem } from './timeline';
@@ -76,17 +76,15 @@ export default function ReviewFindingsCard({ item, store }: { item: Extract<Time
 }
 
 /** 一条发现：默认一行（严重级 + 位置 + 标题），点开看说明、证据和建议修法。 */
-function FindingRow({ finding, store, workspace }: { finding: ReviewFinding; store: Store; workspace: string }) {
-  const [open, setOpen] = useState(false);
+export function FindingRow({ finding, store, workspace, defaultOpen = false }: { finding: ReviewFinding; store: Store; workspace: string; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [sent, setSent] = useState(false);
   const [note, setNote] = useState('');
-  // 桌面端才能用默认程序打开文件；浏览器里没有这个通道就不显示按钮。
-  const canOpen = typeof window !== 'undefined' && Boolean(window.atlasDesktop?.openPath) && Boolean(workspace);
+  // 通过 Atlas 自己的文件面板打开;浏览器/dev 同样可用。
+  const canOpen = Boolean(workspace);
   const openFile = () => {
-    const full = `${workspace.replace(/[\\/]+$/, '')}\\${finding.file.replace(/\//g, '\\')}`;
-    void window.atlasDesktop!.openPath(full)
-      .then(() => setNote(finding.line ? `已打开文件，问题在第 ${finding.line} 行` : '已打开文件'))
-      .catch(() => setNote('没能打开文件'));
+    store.requestFileOpen(finding.file, finding.line);
+    setNote(finding.line ? `已在文件面板打开，定位到第 ${finding.line} 行` : '已在文件面板打开');
   };
   const fix = () => {
     if (sent) return;
@@ -106,7 +104,7 @@ function FindingRow({ finding, store, workspace }: { finding: ReviewFinding; sto
       {finding.evidence && <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-code p-2.5 font-mono text-[11.5px] leading-[1.6] text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">{finding.evidence}</pre>}
       {finding.suggested_fix && <p className="m-0 text-fg-2"><span className="text-fg-3">建议修法：</span>{finding.suggested_fix}</p>}
       <div className="flex flex-wrap items-center gap-4">
-        {canOpen && <button className="inline-flex items-center gap-1.5 text-fg-2 hover:text-fg" onClick={openFile}><ExternalLink size={13} />打开文件</button>}
+        {canOpen && <button className="inline-flex items-center gap-1.5 text-fg-2 hover:text-fg" onClick={openFile}><FileSearch size={13} />打开文件</button>}
         <button className={cn('inline-flex items-center gap-1.5 hover:text-fg', sent ? 'text-ok' : 'text-fg-2')} onClick={fix} disabled={sent}>
           {sent ? <Check size={13} className="text-ok" /> : <Hammer size={13} />}{sent ? '已发回对话' : '让 Atlas 修这一条'}
         </button>

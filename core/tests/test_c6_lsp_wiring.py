@@ -397,3 +397,128 @@ async def test_denied_write_reports_nothing(lsp_dir, monkeypatch):
             assert target.read_text(encoding="utf-8") == CLEAN  # 未被改动
             assert "本次编辑引入的诊断" not in result
             assert runtime.event_queue.empty()
+
+
+# ---- path-less V4A 多文件补丁（C6R） ---------------------------------------------
+#
+# V4A whole-repo patch 没有顶层 path：seam 必须复用 Hermes 自己的 V4A header 解析
+# 拿到 touched files，逐文件 baseline → 逐文件 delta，逐文件发 lsp.diagnostics 事件，
+# 结果尾部拼一段合并的中文诊断；零新增诊断的文件保持沉默；Delete/非文本文件不崩。
+
+
+def _v4a_patch(*ops: str) -> str:
+    return "*** Begin Patch\n" + "\n".join(ops) + "\n*** End Patch"
+
+
+_V4A_INTRODUCE = ("@@", " def main():", "-    return alpha", "+    return LSP_BUG")
+_V4A_FIX = ("@@", " def main():", "-    return LSP_BUG", "+    return alpha")
+
+
+def test_v4a_touched_paths_resolves_workspace_relative(lsp_dir):
+    """header 路径按 workspace 解析；非 V4A 参数与 traversal header 都返回空。"""
+    from atlas.engine.tool_registry import _v4a_touched_paths
+
+    runtime = _make_runtime(lsp_dir)
+    patch = _v4a_patch("*** Update File: rel.py", "*** Delete File: sub/gone.txt")
+    assert _v4a_touched_paths({"mode": "patch", "patch": patch}, runtime) == [
+        str(lsp_dir / "rel.py"), str(lsp_dir / "sub" / "gone.txt"),
+    ]
+    assert _v4a_touched_paths({"mode": "replace", "path": "x.py"}, runtime) == []
+    assert _v4a_touched_paths({"patch": "*** Begin Patch\n*** End Patch"}, runtime) == []
+    assert _v4a_touched_paths(
+        {"mode": "patch", "patch": "*** Begin Patch\n*** Update File: ../evil.py\n*** End Patch"},
+        runtime,
+    ) == []
+
+
+@pytest.mark.asyncio
+async def test_v4a_patch_handler_reports_and_emits(lsp_dir, monkeypatch):
+    state = lsp_dir / "fake_state.json"
+    target = lsp_dir / "v4a_one.py"
+    target.write_text(CLEAN, encoding="utf-8")
+    with managed_service(_fake_command(state)) as svc:
+        _install_singleton(monkeypatch, svc)
+        with bound_handler_context(lsp_dir, asyncio.get_running_loop()) as (registry, runtime):
+            handler = registry.get_entry("patch").handler
+            patch = _v4a_patch(f"*** Update File: {target.as_posix()}", *_V4A_INTRODUCE)
+            result = await asyncio.to_thread(
+                handler, {"mode": "patch", "patch": patch},
+                session_id=runtime.conversation_id,
+            )
+            details = _leading_json(result)
+            assert not details.get("error"), result
+            assert any("v4a_one.py" in str(p) for p in details.get("files_modified", []))
+            assert "本次 V4A 多文件补丁引入的诊断" in result
+            assert "[T999]" in result
+            assert "return LSP_BUG" in target.read_text(encoding="utf-8")
+            event = _drain_event(runtime.event_queue)
+            assert event is not None and event["type"] == "lsp.diagnostics"
+            assert event["data"]["count"] == 1
+            assert event["data"]["path"] == "v4a_one.py"
+
+
+@pytest.mark.asyncio
+async def test_v4a_multi_file_only_dirty_reports_and_delete_is_safe(lsp_dir, monkeypatch):
+    state = lsp_dir / "fake_state.json"
+    dirty = lsp_dir / "v4a_dirty.py"
+    quiet = lsp_dir / "v4a_quiet.py"
+    notes = lsp_dir / "v4a_notes.txt"
+    dirty.write_text(CLEAN, encoding="utf-8")
+    quiet.write_text(CLEAN, encoding="utf-8")
+    notes.write_text("scratch\n", encoding="utf-8")
+    with managed_service(_fake_command(state)) as svc:
+        _install_singleton(monkeypatch, svc)
+        with bound_handler_context(lsp_dir, asyncio.get_running_loop()) as (registry, runtime):
+            handler = registry.get_entry("patch").handler
+            patch = _v4a_patch(
+                f"*** Update File: {dirty.as_posix()}", *_V4A_INTRODUCE,
+                f"*** Update File: {quiet.as_posix()}", "@@", "-alpha = 1",
+                "+alpha = 1  # touched, still clean",
+                f"*** Delete File: {notes.as_posix()}",
+            )
+            result = await asyncio.to_thread(
+                handler, {"mode": "patch", "patch": patch},
+                session_id=runtime.conversation_id,
+            )
+            details = _leading_json(result)
+            assert not details.get("error"), result
+            section = result[result.find("本次 V4A 多文件补丁引入的诊断"):]
+            assert section.startswith("本次 V4A 多文件补丁引入的诊断")
+            assert "v4a_dirty.py" in section          # 脏文件报告
+            assert "v4a_quiet.py" not in section      # 零新增诊断保持沉默
+            assert "v4a_notes.txt" not in section     # 删除的文件不崩、不上报
+            assert not notes.exists()
+            assert "return LSP_BUG" in dirty.read_text(encoding="utf-8")
+            events = []
+            while not runtime.event_queue.empty():
+                events.append(runtime.event_queue.get_nowait())
+            assert len(events) == 1 and events[0]["type"] == "lsp.diagnostics"
+            assert events[0]["data"]["path"] == "v4a_dirty.py"
+
+
+@pytest.mark.asyncio
+async def test_v4a_fix_patch_is_silent(lsp_dir, monkeypatch):
+    state = lsp_dir / "fake_state.json"
+    target = lsp_dir / "v4a_fix.py"
+    target.write_text(CLEAN, encoding="utf-8")
+    with managed_service(_fake_command(state)) as svc:
+        _install_singleton(monkeypatch, svc)
+        with bound_handler_context(lsp_dir, asyncio.get_running_loop()) as (registry, runtime):
+            handler = registry.get_entry("patch").handler
+            introduce = await asyncio.to_thread(
+                handler,
+                {"mode": "patch", "patch": _v4a_patch(f"*** Update File: {target.as_posix()}", *_V4A_INTRODUCE)},
+                session_id=runtime.conversation_id,
+            )
+            assert "本次 V4A 多文件补丁引入的诊断" in introduce
+            assert _drain_event(runtime.event_queue) is not None
+            fix = await asyncio.to_thread(
+                handler,
+                {"mode": "patch", "patch": _v4a_patch(f"*** Update File: {target.as_posix()}", *_V4A_FIX)},
+                session_id=runtime.conversation_id,
+            )
+            details = _leading_json(fix)
+            assert not details.get("error"), fix
+            assert "本次 V4A 多文件补丁引入的诊断" not in fix
+            assert "return LSP_BUG" not in target.read_text(encoding="utf-8")
+            assert runtime.event_queue.empty()

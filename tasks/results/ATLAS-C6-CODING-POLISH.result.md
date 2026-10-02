@@ -131,3 +131,45 @@ backend-adapter vitest                                    → 17 passed
 ## 十一、CORE-PARITY 状态
 
 C6 负责行全部 ✔:T8(编辑后诊断)、P1(/init)、P2(/review)已按实测写入 `docs/plan/CORE-PARITY.md`(提交号齐全);I5 备注 `/init` `/review` 落地;`docs/PARITY.md` F118/F173 同步;VENDORED 登记 init_command/review_engine/lsp-seam 三个移植。
+
+## 十二、C6R 收口（两项 blocker 修复证据）
+
+> Taskbook：`tasks/taskbooks/ATLAS-C6R-FINISH.md`；只修 review 的两个 blocker，不重开其他 C6 内容。
+
+### C6R-1 V4A path-less patch → Atlas LSP baseline/delta 链
+
+- **Seam**（`core/atlas/engine/tool_registry.py`）：`_lsp_pre_write` 在无顶层 `path` 时走 V4A 分支——**复用 Hermes 自己的 V4A header 解析器** `tools.file_tools._collect_v4a_header_paths`（即其写前预检用的那一个，未新写 parser），header 路径按 workspace 解析为本地绝对路径；逐文件捕获可读的 pre-content 并调用现有 `atlas.lsp` `snapshot_before_write`。
+- **Post**：`_lsp_attach_v4a_report` 只用 Hermes patch 结果里现成的 `files_modified` 元数据逐文件取 delta（现有 `report_after_edit` 路径），逐文件发正常 `lsp.diagnostics` 事件；结果尾部拼**一段**合并中文诊断（`本次 V4A 多文件补丁引入的诊断：` + `[相对路径]` 分节）。零新增诊断的文件保持沉默；Delete/不可读文件不崩；SSH workspace 仍被现有 `ssh://` 门挡住。
+- **兼容**：单文件 `write_file` / 单 `path` patch 走原 `str` 分支，语义逐字节不变；被拒/失败的 patch 结果依旧不上报。
+- **集成期修复**：初版规格的 effect 时序 bug——请求触发的 `selected` 变化会在下一 commit 由 reset effect 清掉刚设置的定位；已改为重置只挂在显式 `selectFile`（手动浏览路径），请求路径不经过它。
+
+Focused 回归（`core/tests/test_c6_lsp_wiring.py`，**14 passed**，含原 10 条单路径/写路径用例全绿）：
+1. `test_v4a_touched_paths_resolves_workspace_relative`：header 路径按 workspace 解析；非 V4A 参数、traversal header → 空；
+2. `test_v4a_patch_handler_reports_and_emits`：单 Python 文件引入 fake LSP 错误 → 结果含新诊断 `[T999]` + 恰 1 个 `lsp.diagnostics` 事件；
+3. `test_v4a_multi_file_only_dirty_reports_and_delete_is_safe`：两文件 + `Delete File:` → 只有引入诊断的文件出现在诊断段与事件里（恰 1 个事件），删除的 `.txt` 不崩、不上报；
+4. `test_v4a_fix_patch_is_silent`：修复 patch 清掉诊断 → 无诊断段、0 事件。
+
+### C6R-2 /review finding → Atlas 内部文件视图定位行
+
+- **通道**：store 新增最小切片 `fileOpenRequest: { file, line, nonce }` + `requestFileOpen(file, line)`（`frontend/src/renderer/store/useAtlasStore.ts`）——不碰 IPC/preload/electron。
+- **FilesPanel**（复用现有面板，未加第二个编辑器）：订阅请求；消费时展开并加载父目录、选中文件、文本文件切源码视图；`finding.line` 非空时按行渲染（`data-line` span）滚动居中并高亮该行；`line` 为空只打开文件。普通浏览行为走原 `selectFile` 路径，不变。
+- **ReviewFindingsCard**：「打开文件」改调 `store.requestFileOpen(finding.file, finding.line)`，按钮只依赖 workspace——浏览器/dev 渲染同样可用，彻底移除 `shell.openPath` 当作"定位行"的做法（FilesPanel 的「用默认程序打开」小按钮按原样保留，与定位无关）。
+- **App**：收到请求自动切到「文件」页并展开 Inspector。
+
+Focused 回归（renderer **tsc 0 错**；`npx vitest run` **84 passed / 14 files**，较 C6 基线 78/13 新增 6 条）：
+- `useAtlasStore.test.ts`：`requestFileOpen` 记录 file/line/nonce，null line 保持 null，nonce 严格递增；
+- `ReviewFindingsCard.test.tsx`：展开态行有 workspace 时提供「打开文件」、无 workspace 不出现（`FindingRow` 加 `defaultOpen` prop 并导出以便静态测试；renderer 无 DOM 环境，点击级 dispatch 由 store 层契约覆盖）；
+- `FilesPanel.test.tsx`（新）：`ancestorPaths` 全边界 + 静态渲染冒烟。
+
+诚实边界：无 DOM 测试环境，「滚动并高亮第 N 行」由实现审查 + `data-line` 契约覆盖，未做挂载级断言；electron tsc 未跑（未触碰共享 IPC 类型，符合 taskbook「尽量不碰」）。
+
+### C6R 验证清单
+
+```
+core: pytest tests/test_c6_lsp_wiring.py   → 14 passed
+core: pytest tests/test_c1_tool_policy.py  → 7 passed
+core: pytest tests/test_c1_tool_workspace.py → 2 passed
+frontend: npx tsc --noEmit -p tsconfig.renderer.json → 0 错
+frontend: npx vitest run → 84 passed (14 files)
+backend full pytest：未重跑（改动未扩散出两个目标区域，符合 taskbook）
+```

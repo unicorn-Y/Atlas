@@ -102,7 +102,7 @@ export default function App() {
     followUpMode: state.followUpMode, nextRunMode: state.nextRunMode, unread: state.unread, pinned: state.pinned,
     archived: state.archived, runPrompts: state.runPrompts, profiles: state.profiles, recipes: state.recipes,
     customCommands: state.customCommands, profileId: state.profileId, reasoningEffort: state.reasoningEffort,
-    worktreeRequests: state.worktreeRequests,
+    worktreeRequests: state.worktreeRequests, fileOpenRequest: state.fileOpenRequest,
   })));
   const store = useMemo(() => ({ ...useAtlasStore.getState(), ...storeData }), [storeData]);
   const storeRef = useRef(store);
@@ -453,6 +453,8 @@ export default function App() {
   const toggleMini = () => setSideMini((current) => { setPref('sidebar-mini', String(!current)); return !current; });
   const toggleInspector = (open?: boolean) => setInspectorOpen((current) => { const next = open ?? !current; setPref('canvas', String(next)); return next; });
   const showInspectorTab = (tab: InspectorTab) => { setInspectorTab(tab); toggleInspector(true); };
+  // C6R: /review「打开文件」请求 → 切到文件面板;FilesPanel 自己消费请求并定位行。
+  useEffect(() => { if (storeData.fileOpenRequest) showInspectorTab('files'); }, [storeData.fileOpenRequest]);
   const openConversation = (conversation: (typeof store.conversations)[number]) => { go('chat'); void store.openConversation(conversation); };
   const draft = (text: string) => { go('chat'); setInput(text); void store.createConversation(); };
   const suggest = (suggestion: Suggestion) => { setInput(suggestion.text); setHomeMode(suggestion.mode ?? 'chat'); };
