@@ -1,123 +1,170 @@
-# ATLAS-C2：零件升级——工具与上下文
+# ATLAS-C2-TOOLS-CONTEXT：工具与上下文升级
 
-> 先读 `docs/plan/ROADMAP-TO-PRODUCT.md`、`docs/plan/CORE-PARITY.md`（所有标 C2 的行，以及第 11 节）、`docs/plan/EXECUTION-GUIDE.md`（第三点五、三点六、第五节）。
-> 前提：C1 验收通过。
+> **当前正式任务。执行模型：GPT-6 Luna，reasoning=high。**
+> 前提：C1R 已验收通过。不要回头重做 C1，不要开始 C3。
+> 目标是直接把 C2 需要的能力补到可用，不做大而空的重构，不做复杂测试工程。
 
-## 本波目标
+先读：
+- `docs/plan/ROADMAP-TO-PRODUCT.md`
+- `docs/plan/00-MASTER-PLAN.md`
+- `docs/plan/CORE-PARITY.md` 中 C2 对应行：L3、T3、T5、X1、X5、X10
+- `docs/plan/EXECUTION-GUIDE.md`
+- `tasks/reviews/ATLAS-C1R-FINISH.review.md`
 
-把内核里「工具」和「上下文」这两块，逐项换成各家最强的做法，同时删掉旧的 LangGraph 循环。
-做完以后，CORE-PARITY 里 L3、T3、T5、X1（打磨）、X5、X10 都是 ✔，旧循环不复存在。
+工作目录：`D:\Atlas`。Hermes fork：`D:\hermes-agent` 的 `atlas` 分支。开工前两边拉最新。
 
-**凡是 CORE-PARITY 里标了「初判」的，第一步都是逐行比较两家的源码，选强的那家**，比较结论写进结果文件。
+## 本波必须完成
 
-参考仓库都是浅克隆到系统临时目录里用：
-- OpenCode：`sst/opencode`
-- Pi：`badlogic/pi-mono`
-- Codex：`openai/codex`
-- Hermes 就是 `D:\hermes-agent`
+### 1. 删除 legacy LangGraph 循环和陈旧测试
 
-## 1. 删除旧循环（先做，单独一块）
+Atlas 默认内核已经是 Hermes，C2 把旧循环正式删掉。
 
-1. 把旧路径专属的代码找出来，用 grep 加覆盖率证明它们只在 `engine = "legacy"` 时才会被用到：
-   - `core/atlas/agent/__init__.py` 里的 LangGraph 图（`_build_graph`、`_think_node`、`_execute_tools_node`、`MAX_TOOL_ROUNDS`、`SYSTEM_PROMPT` 的旧用法）；
-   - `agent/enrichment.py` 的 `ContextMaintenance`；
-   - 旧的 `prompt_caching.py` 调用；
-   - 旧工具里已经被 Hermes 替代的部分。
-2. **注意**：C1 的提交 `1ec29f3` 让 Atlas 工具注册表复用了一部分 `tools/local_execution.py` 的旧语义。新内核还在用的函数要保留，只删真正只有旧路径才用的。
-3. 删除 `engine` 配置项和设置页里的内核切换（C1 那一波的临时设置），以及 LangGraph 依赖。
-4. 在 C1 里固定跑旧内核的那 6 个测试（`legacy_agent_engine` fixture）：能改成测新内核的就改；测的是旧内核专有行为的就删除，并在结果文件里逐个说明。
-5. 全量测试必须通过。
+删除/收口：
+- `core/atlas/agent/__init__.py` 里只服务 legacy 的 LangGraph graph、think/execute nodes、MAX_TOOL_ROUNDS、旧 prompt 路径；
+- legacy engine 配置和前端内核切换；
+- 不再使用的 LangGraph 依赖；
+- 只为 legacy 存在的测试。
 
-## 2. 防原地打转（L3）
+**不要误删** Hermes 仍复用的 Atlas 工具 handler、local execution、权限、checkpoint、事件桥接。
 
-- **来源**：LangChain 的 LoopDetectionMiddleware（同一个文件改了 N 次后，提醒模型换思路）；Hermes `agent/repetition_guard.py`（已有，负责检测重复的工具调用）。
-- **做法**：在 `core/atlas/engine/` 的插件里挂 `post_tool_call`，按「本轮、同一个文件」统计 `patch` 和 `write_file` 的次数，默认阈值 5，可在 `atlas.toml` 里配置。超过后，**把提醒追加在这次工具结果的末尾**，比如「这个文件本轮已经改了 6 次，先停下来想想是不是方向不对」。
-- **为什么写在工具结果里**：不能插入新的用户消息，也不能改系统提示词。这是 Hermes 的硬规则，否则缓存会失效、消息的角色交替也会被打乱，见 Hermes `AGENTS.md`。
-- **测试**：假模型连续改同一个文件 6 次，第 6 次的工具结果里出现提醒；换一个文件不触发；新的一轮重新计数。
+同时处理 C1R 验收记录里的 4 个陈旧失败：
+- legacy 流式模型名契约：随 legacy 测试删除/改成 Hermes 等价；
+- terminal 默认 PowerShell 的旧断言：按当前“Git Bash 优先，PowerShell 回退”行为改测试；
+- 新旧内核内部 tool name/args 必须完全相同的断言：删除，保留对外事件兼容测试；
+- 并行子 Agent fake responder：只修 fixture，让父轮拿到 tool result 后返回完成文本，不得为假测试改生产委派逻辑。
 
-## 3. 读图片（T3）
+这一步结束后，测试基线不能再因为这 4 个旧契约红。
 
-- **来源**：Claude Code 的 Read 工具能直接读图；Codex `codex-rs/core/src/tools/handlers/view_image.rs`；Hermes `tools/vision_tools.py`（C1 时关掉了）。
-- **做法**：
-  - `read_file` 读到图片（png/jpg/jpeg/gif/webp/bmp）时：
-    - 当前模型支持看图（看模型的元数据，或用户在模型设置里勾选的「支持图片」）→ 直接把图片作为内容返回给模型；
-    - 不支持看图 → 返回提示，并在配置了视觉模型时自动调用 `vision_analyze`。
-  - 图片太大就先缩小（参考 Hermes `vision_tools_image_prep.py`）。
-  - 在 Hermes fork 里改 `read_file`，或者在 Atlas 工具层包一层，选改动小的那种。
-- **前端**：时间线里「读文件」这一步如果读的是图片，显示缩略图。
-- **测试**：支持看图和不支持看图两条路径；超大图片会被缩小。
+### 2. L3：防原地打转
 
-## 4. 编辑容错取并集（T5）
+Hermes 已有 repetition guard；Atlas 只补“同一轮反复改同一个文件”的提醒。
 
-- **来源**：Hermes `tools/fuzzy_match.py`（9 种策略）；OpenCode `packages/opencode/src/tool/edit.ts`（9 种 Replacer：Simple、LineTrimmed、BlockAnchor、WhitespaceNormalized、IndentationFlexible、EscapeNormalized、MultiOccurrence、TrimmedBoundary、ContextAware），以及它的测试（`packages/opencode/test/` 下找 edit 相关的）。
-- **做法**：
-  1. 列一张对照表，逐项比较两家的策略，看哪些等价、哪些只有一家有，写进结果文件。
-  2. 把 OpenCode 独有的策略翻译成 Python，加进 fork 的 `fuzzy_match.py`，策略顺序参照 OpenCode。
-  3. 把 OpenCode 的编辑测试用例翻译过来，一起搬。
-- **测试**：OpenCode 的用例全部通过；Hermes 原有的用例不倒退。另外，匹配到多处时必须报错，不能乱改。
+直接做：
+- 对 `patch` / `write_file` 按当前 run + 文件路径计数；
+- 默认第 6 次开始，在工具结果末尾追加一句短提醒，让模型换思路；
+- 新 run 自动清零；
+- 阈值可配置，但只加一个简单整数配置，不建新子系统。
 
-## 5. 按模型分别写提示词（X5）
+不要阻止工具执行，不做自动回滚，不做复杂启发式。
 
-- **来源**：
-  - OpenCode `packages/opencode/src/session/prompt/`：anthropic、gpt、gemini、kimi、codex、beast、trinity 等十几份；
-  - Hermes `agent/prompt_builder.py` 里按模型族加的指引（`TOOL_USE_ENFORCEMENT_MODELS`、`GOOGLE_MODEL_OPERATIONAL_GUIDANCE` 等）；
-  - Pi 的经验：提示词要短，越短越好。
-- **做法**：
-  1. 在 `core/atlas/engine/prompts/` 下按模型族建文件：claude、gpt、gemini、deepseek、kimi、glm、qwen、minimax，外加一份默认。国产模型的内容参考 OpenCode `kimi.txt` 的写法，再结合各家官方文档里对 Agent 和工具调用的建议，查当月的资料。
-  2. 按模型名或服务商选用哪一份，放进 Hermes 三层提示词的**稳定层**，整个会话不变。
-  3. 每份控制在 600 token 以内，结果文件里写上每份的实际 token 数。
-- **测试**：不同的模型名选到正确的那一份；同一个会话里，系统提示词每次都逐字节相同。
+### 3. T3：read_file 直接读图片
 
-## 6. 压缩打磨（X1）
+优先复用 Hermes 的图片预处理/vision 能力和 Codex `view_image` 的做法。
 
-- **来源**：
-  - Hermes `agent/context_compressor.py`（现在在用的）；
-  - Pi `packages/coding-agent/src/core/compaction/compaction.ts`、`branch-summarization.ts`，以及 `docs/compaction.md`（结构化摘要的格式：目标、约束和偏好、进度（已完成 / 进行中 / 受阻）、关键决定、下一步、关键上下文；切分点的规则；文件累计跟踪）；
-  - OpenCode `packages/opencode/src/session/compaction.ts`（先修剪旧的工具输出）。
-- **做法**：
-  1. 先对比三家的摘要模板、切分规则、触发阈值，写进结果文件。
-  2. 把 Hermes 的摘要提示词换成 Pi 的结构化格式，或者两者合并，选更好的。
-  3. 摘要里保留「改过和读过的文件清单」，照 Pi 的累计文件跟踪。
-  4. 用 Hermes 的 `evals/compaction/`（如果有）或者自建假模型评测，比较改前改后：压缩后继续干活时，能不能答出关键事实（文件名、决定、待办）。
-- **测试**：压缩后的摘要包含六个部分和文件清单；连续压缩两次，信息不丢。
+要求：
+- `read_file` 遇到 png/jpg/jpeg/webp/gif/bmp：
+  - 当前模型支持视觉：把图片内容直接返回模型；
+  - 不支持视觉但配置了视觉模型：走已有 `vision_analyze`；
+  - 两者都没有：返回清楚提示。
+- 大图复用 Hermes 现有 resize/prep，不自造第二套。
+- 前端工具结果里图片显示缩略图。
 
-## 7. 换个干净的上下文（X10）
+### 4. T5：编辑容错取 Hermes + OpenCode 的并集
 
-- **来源**：Codex `codex-rs/core/src/tools/handlers/new_context_window.rs`、`new_context_window_spec.rs`。
-- **做法**：新增工具 `new_context_window`，模型在上下文快满或者任务阶段切换时可以调用。调用时：
-  1. 先写一份交接摘要，格式同第 6 节；
-  2. 开一个新的上下文，内容只有系统提示词、交接摘要和待办；
-  3. Atlas 的对话记录里留一个「已换新上下文」的标记，前端显示成一条分隔线。
-- **测试**：调用之后，下一次发给模型的请求只包含摘要；对话记录完整保留，可以回看。
+来源：
+- Hermes `tools/fuzzy_match.py`
+- OpenCode `packages/opencode/src/tool/edit.ts`
 
-## 8. C1 的遗留
+先读两边源码，只搬 Hermes 没有、OpenCode 确实更强的 matcher。不要为了“凑 9 种”重复实现等价策略。
 
-- 如果 C1 验收记录里还有转到 C2 的项，一起做。
-- 核实 Git Bash 的识别：已安装 Git Bash、但 PATH 里 WSL 的 bash 排在前面时，要选 Git Bash。
+硬要求：
+- 空白/缩进/边界等常见轻微差异能匹配；
+- 多处命中仍必须报错，不允许猜着改；
+- 保留 CRLF/LF/BOM 行为。
 
-## 9. 前端
+结果文件只需列：新增了哪几种、为什么值得搬。不要写长研究报告。
 
-- 读图片显示缩略图；「已换新上下文」显示分隔线；防打转的提醒在时间线里显示成一条提示。
-- 设置 → 模型：显示当前用的是哪一份提示词，只读。
-- 四项前端检查通过；无头 Edge 截图。
+### 5. X5：按模型族补短提示词
 
-## 10. 测试汇总（假模型，从 WebSocket 发起）
+基于 Hermes 现有 prompt builder，参考 OpenCode 各模型 prompt。
 
-第 1 到第 7 节各自的测试，加上一条端到端：一个任务里依次经历读图片 → 编辑（需要容错匹配）→ 连续改同一个文件触发提醒 → 自动压缩 → 换新上下文 → 完成。
+支持：
+- Claude
+- GPT/Codex
+- Gemini
+- DeepSeek
+- Kimi
+- GLM
+- Qwen
+- MiniMax
+- 默认
 
-## 11. 交付
+每份只放**这个模型族真正需要的工具调用/行为差异**，不要复制一大套通用 system prompt。稳定内容进入 Hermes 稳定层，同一会话不能每轮变化。
 
-- 结果文件 `tasks/results/ATLAS-C2-TOOLS-CONTEXT.result.md`，写清：
-  - 每节做了什么；
-  - 三张对比表（编辑策略、压缩方案、提示词 token 数）；
-  - 删掉了哪些旧代码；
-  - 全量测试汇总行。
-- 更新 CORE-PARITY（C2 各行改成 ✔，写上提交号）、`tasks/CURRENT.md`、`docs/plan/VENDORED.md`（登记 OpenCode、Pi、Codex 搬入的部分）、`THIRD_PARTY_NOTICES.md`（附上各项目的 LICENSE）。
+不要为了 token 数做复杂测量；只保证明显短小。
 
-## 验收清单
+### 6. X1：压缩摘要打磨
 
-1. 旧循环和 LangGraph 已删干净，没有误删新内核在用的东西；全量测试通过。
-2. 编辑策略的对照表里，每一项都有对应实现或者写明了不搬的理由；OpenCode 的用例全部搬过来并且通过。
-3. 提示词稳定，每份不超过 600 token。
-4. 压缩的评测有改前改后的对比数字。
-5. 已有功能不倒退。
+保留 Hermes `ContextCompressor` 主体，不重写。
+
+参考 Pi 的结构化摘要，把摘要固定包含：
+- 当前目标/约束
+- 已完成
+- 正在做/阻塞
+- 关键决定
+- 下一步
+- 关键文件
+
+已有 todo、文件跟踪、工具输出裁剪逻辑能复用就复用。连续压缩后这些字段仍在即可。
+
+不要做 benchmark、打分器或大规模 compaction eval。
+
+### 7. X10：换干净上下文
+
+参考 Codex `new_context_window`，在现有 Hermes 会话上实现最小版本：
+
+调用 `new_context_window` 后：
+1. 生成一份和第 6 节同格式的交接摘要；
+2. 下一模型上下文只带稳定 system prompt + 交接摘要 + 当前 todo；
+3. Atlas 对话历史仍完整保留；
+4. 前端时间线显示一条“已切换到新上下文”的分隔事件。
+
+不要创建第二套会话系统，不复制历史数据库。
+
+### 8. Git Bash 回退
+
+把 C1R 暴露的 shell 语义收口：
+- Windows 默认优先真实 Git Bash；
+- 找不到 Git Bash才用 PowerShell；
+- PATH 里如果先出现 WSL bash，不能误当 Git Bash；
+- 用户显式指定 powershell/cmd/bash 时尊重选择。
+
+## 最小验证
+
+禁止过度验收。只做：
+
+1. 每个本波功能 1–3 个最小聚焦测试；
+2. 一条假模型 WebSocket E2E，串起：读图片 → 容错编辑 → 同文件反复修改触发提醒 → 压缩 → new_context_window → 完成；
+3. legacy 删除后，后端全量 pytest **只跑一次**；
+4. 前端四项各一次：renderer tsc、electron tsc、Vitest、Vite build。
+
+不跑真实模型、不跑真实网络服务、不做截图矩阵、不重复全量。
+
+## 硬约束
+
+- **禁止过度防御编程**：不堆 fallback、兼容层、额外状态机、重复 try/catch、未来式抽象。
+- **禁止过度验收**：只验证本波真实行为，不为了数字重复跑测试。
+- 有成熟实现直接搬/改，不写缩水版。
+- Atlas 专属代码留 Atlas；只有确实属于 Hermes 内核能力的修改才进 fork。
+- 不放宽 `core/atlas/origin_guard.py`。
+- 不做安全审查功能，`core/atlas/safety/` 保持默认关闭。
+- 不碰真实用户数据和 `design/`。
+- 不开始 C3。
+
+## 交付
+
+完成后：
+1. 更新 `docs/plan/CORE-PARITY.md`：L3、T3、T5、X1、X5、X10；
+2. 必要的上游搬入登记 `docs/plan/VENDORED.md` / `THIRD_PARTY_NOTICES.md`；
+3. 写 `tasks/results/ATLAS-C2-TOOLS-CONTEXT.result.md`：
+   - 每项做了什么；
+   - Atlas/Hermes 提交号；
+   - 搬了哪些上游实现；
+   - 聚焦测试；
+   - 一次全量 pytest 汇总；
+   - 前端四项结果；
+   - 仍有的真实缺口。
+4. `tasks/CURRENT.md` 改成 `AWAITING_REVIEW`；
+5. pull --rebase → push → 核对远端 HEAD，然后停止。
+
+**完成后由 ZCode 通知上游规划者验收；不要自行进入 C3。**
