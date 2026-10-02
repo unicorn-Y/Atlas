@@ -1,7 +1,7 @@
 # Atlas ZCode Parallel Current
 
 CURRENT: ATLAS-C6A-LSP-CORE-PARALLEL
-STATUS: READY_FOR_EXECUTION
+STATUS: AWAITING_REVIEW
 OWNER: ZCode second construction lane
 ATLAS_BRANCH: zcode/c6a-lsp-parallel
 HERMES_BRANCH: none unless taskbook proves fork change is necessary
