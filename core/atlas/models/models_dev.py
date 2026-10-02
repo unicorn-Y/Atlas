@@ -35,6 +35,8 @@ import os
 
 import httpx
 
+from atlas.models.catalog import CLAUDE_DEFAULT_MODEL_FALLBACKS
+
 logger = logging.getLogger(__name__)
 MODELS_DEV_URL = "https://models.dev/api.json"
 _MODELS_DEV_CACHE_TTL = 4 * 3600  # 4 hours — ETag conditional GET makes refresh cheap
@@ -864,9 +866,16 @@ def _merge_catalog_entry_with_override(raw: Dict[str, Any], override: Dict[str, 
 def _builtin_model_metadata(
     provider: str, model: str, *, config: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Built-in metadata for a provider/model pair, if Hermes has a vendor-specific entry."""
+    """Built-in metadata for a provider/model pair, if Hermes has a vendor-specific entry.
+
+    Atlas addition (M1): the vendored table stays untouched — offline fallback rows for the
+    current Claude defaults live in the Atlas-owned provider catalog (``atlas.models.catalog``)
+    and are consulted here on a builtin miss, so catalog metadata survives models.dev being
+    unreachable. Keys match this table's convention (models.dev provider id, lowercased model id).
+    """
     provider_key = _models_dev_id(provider, config=config) or (provider or "").strip()
-    return _BUILTIN_MODEL_METADATA.get((provider_key, (model or "").strip().lower()))
+    key = (provider_key, (model or "").strip().lower())
+    return _BUILTIN_MODEL_METADATA.get(key) or CLAUDE_DEFAULT_MODEL_FALLBACKS.get(key)
 
 
 def _provider_model_capabilities(provider: str, model: str) -> Dict[str, Any]:

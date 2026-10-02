@@ -207,6 +207,46 @@ PROVIDERS: list[dict] = [
 _PROVIDER_INDEX: dict[str, dict] = {entry["id"]: entry for entry in PROVIDERS}
 
 
+# ---------------------------------------------------------------------------
+# 离线模型回退行（M1，2026-10-03 补）
+# ---------------------------------------------------------------------------
+# models.dev 不可达/尚未收录时的离线兜底：Claude Code 2.1.257–2.1.284 的三个新默认
+# 旗舰（docs/research/2026-10-03-mega-latest/02-claude-code.md，价格/上下文已核实）：
+# - claude-sonnet-5-5：1M 上下文，$2/$10 每百万 token，cache 读 $0.20（v2.1.284）
+# - claude-opus-5-5：1M 上下文，$4/$20 每百万 token（v2.1.280）
+# - claude-fable-5-1：1M 上下文，$10/$50 每百万 token（v2.1.257）
+# 行形状与 models_dev._BUILTIN_MODEL_METADATA 完全一致（models.dev 原始条目形状），
+# 由 models_dev._builtin_model_metadata 在内建表未命中时读取；只补元数据，不进
+# 模型选择器目录（在线时 models.dev 自动覆盖，行为不变）。未核实的字段（如 output
+# 上限、cache_write 价）刻意缺席，消费方按未知处理而不是拿到臆造值。
+CLAUDE_DEFAULT_MODEL_FALLBACKS: dict[tuple[str, str], dict] = {
+    ("anthropic", "claude-sonnet-5-5"): {
+        "limit": {"context": 1_000_000},
+        "cost": {"input": 2.0, "output": 10.0, "cache_read": 0.2},
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "tool_call": True,
+        "reasoning": True,
+        "family": "claude-sonnet-5-5",
+    },
+    ("anthropic", "claude-opus-5-5"): {
+        "limit": {"context": 1_000_000},
+        "cost": {"input": 4.0, "output": 20.0},
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "tool_call": True,
+        "reasoning": True,
+        "family": "claude-opus-5-5",
+    },
+    ("anthropic", "claude-fable-5-1"): {
+        "limit": {"context": 1_000_000},
+        "cost": {"input": 10.0, "output": 50.0},
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "tool_call": True,
+        "reasoning": True,
+        "family": "claude-fable-5-1",
+    },
+}
+
+
 def get_provider(pid: str) -> dict | None:
     """按 catalog id 取服务商条目（浅拷贝，防止调用方误改常量表），未知返回 None。"""
     entry = _PROVIDER_INDEX.get(str(pid or "").strip())

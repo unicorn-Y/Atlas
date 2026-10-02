@@ -46,7 +46,7 @@ from atlas.agent.enrichment import (
     TrajectoryReviewer,
 )
 from atlas.agent.todo_state import TodoStore
-from atlas.agent.results import externalize_tool_output
+from atlas.agent.results import externalize_tool_output, frame_delegate_result_data, frame_subagent_result
 from atlas.agent.error_classifier import classify_api_error
 from atlas.agent.fallback_cooldown import cool as cool_model
 from atlas.agent.fallback_cooldown import is_cooling
@@ -1680,8 +1680,10 @@ class AgentOrchestrator:
                     for usage_entry in result["data"].get("evidence", []):
                         if isinstance(usage_entry, dict) and usage_entry.get("input_tokens") is not None:
                             await ctx.event_queue.put({"type": "run_usage", "usage": usage_entry})
+                    # D2：模型可见文本给子代理结果加结构化头+缩进；result["data"] 保持原始
+                    # 结构化字段（usage 提取与前端 schema 不变）。
                     result["content"] = [{"type": "text", "text": json.dumps(
-                        result["data"], ensure_ascii=False,
+                        frame_delegate_result_data(result["data"]), ensure_ascii=False,
                     )}]
                     result["is_error"] = False
                 elif fn_name == "subtask_status":
@@ -1689,7 +1691,9 @@ class AgentOrchestrator:
                     if status is None:
                         raise ValueError("找不到这个子任务。")
                     result = {"data": status, "content": [{
-                        "type": "text", "text": json.dumps(status, ensure_ascii=False),
+                        "type": "text", "text": json.dumps(
+                            frame_delegate_result_data(status), ensure_ascii=False,
+                        ),
                     }], "is_error": False}
                 elif fn_name == "subtask_message":
                     subtask_id = str(fn_args["subtask_id"])
@@ -1763,7 +1767,11 @@ class AgentOrchestrator:
                         background=bool(fn_args.get("background", False)),
                     )
                     result = {"data": data,
-                              "content": [{"type": "text", "text": data["summary"]}],
+                              "content": [{"type": "text", "text": frame_subagent_result(
+                                  str(data.get("summary", "")),
+                                  subtask_id=str(data.get("group_id") or ""),
+                                  agent="parallel-workers",
+                              )}],
                               "is_error": False}
                 elif fn_name in {"create_document", "create_spreadsheet", "create_presentation"}:
                     if not workspace:
