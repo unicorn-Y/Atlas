@@ -1,4 +1,4 @@
-"""Atlas Agent Orchestrator — LangGraph state-machine with tool calling."""
+"""Atlas Agent Orchestrator with Hermes runtime tool adapters."""
 
 # W07 orchestration adapters are informed by NousResearch/hermes-agent at
 # 330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3 (MIT): delegation context,
@@ -20,7 +20,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any
 
 import structlog
 from langchain_core.messages import (
@@ -30,10 +30,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import add_messages
 from litellm import acompletion
-from typing_extensions import TypedDict
 
 from atlas.agent.capabilities import AgentCapabilityRegistry
 from atlas.agent.checkpoints import ShadowGitCheckpointStore
@@ -142,7 +139,6 @@ You have access to various tools through MCP servers. Use them proactively
 when they would help accomplish the user's goal.
 """
 
-MAX_TOOL_ROUNDS = 10
 _CACHE_UNSUPPORTED_MODELS: set[str] = set()
 # Gateways that reject stream_options; usage then stays unknown for that model in this process.
 _STREAM_USAGE_UNSUPPORTED: set[str] = set()
@@ -248,7 +244,6 @@ class AgentRunContext:
     ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None
     sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None
     sandbox_enabled: bool = False
-    max_tool_rounds: int = MAX_TOOL_ROUNDS
     reasoning_effort: str | None = None
     model: str | None = None
     truncated_tool_retries: int = 0
@@ -256,6 +251,8 @@ class AgentRunContext:
     failed_models: set[str] = field(default_factory=set)
     recovery_retries: int = 0
     context_compression_attempted: bool = False
+    file_edit_counts: dict[str, int] = field(default_factory=dict)
+    new_context_window_callback: Callable[[], Any] | None = None
     changed_paths: set[str] = field(default_factory=set)
     verification_passed: bool = False
     verify_nudge_sent: bool = False
@@ -277,18 +274,8 @@ class _RuntimeFailureError(Exception):
         self.category = category
 
 
-class AgentState(TypedDict):
-    """LangGraph state for the agent."""
-
-    messages: Annotated[list[BaseMessage], add_messages]
-    # Accumulates events to be yielded to the client
-    pending_events: list[dict[str, Any]]
-    # Tracks tool-call rounds to prevent infinite loops
-    tool_rounds: int
-    # Set when run is cancelled externally
-    cancelled: bool
-    # Per-run control hooks; never stored on the shared orchestrator.
-    runtime: AgentRunContext
+class ToolExecutionState(dict[str, Any]):
+    """Adapter state used by Atlas tool permission and execution handlers."""
 
 
 # ---------------------------------------------------------------------------
@@ -296,16 +283,7 @@ class AgentState(TypedDict):
 # ---------------------------------------------------------------------------
 
 class AgentOrchestrator:
-    """LangGraph-based agent with tool calling.
-
-    Graph structure::
-
-        START → think → (has tool_calls?) → execute_tools → think
-                     ↘ (no tool_calls)  → END
-
-    The orchestrator builds the graph once, then each ``run()`` call
-    invokes it with the conversation's messages.
-    """
+    """Atlas policy, lifecycle, and tool adapters for Hermes runs."""
 
     # Tools that require explicit user approval before execution
     APPROVAL_REQUIRED_TOOLS: set[str] = {
@@ -357,7 +335,6 @@ class AgentOrchestrator:
             AtlasToolBridge(local_execution, computer_use, mcp_client, self.checkpoints)
         )
         self._capabilities = capability_registry or AgentCapabilityRegistry()
-        self._graph = self._build_graph()
 
     @property
     def capabilities(self) -> AgentCapabilityRegistry:
@@ -549,7 +526,7 @@ class AgentOrchestrator:
                 subtask_progress=options.get("subtask_progress"),
                 subtask_completed=options.get("subtask_completed"),
                 subtask_group_completed=options.get("subtask_group_completed"),
-                run_id=subtask_id, max_tool_rounds=12, worker=True,
+                run_id=subtask_id, worker=True,
             ):
                 kind = event.get("type")
                 if kind == "chunk":
@@ -685,51 +662,10 @@ class AgentOrchestrator:
 
         return TrajectoryReviewer(review, backend=backend, model=model)
 
-    # -- graph construction --------------------------------------------------
-
-    def _build_graph(self) -> Any:
-        """Build and compile the LangGraph state machine."""
-        graph = StateGraph(AgentState)
-
-        graph.add_node("think", self._think_node)
-        graph.add_node("execute_tools", self._execute_tools_node)
-
-        graph.add_edge(START, "think")
-        graph.add_conditional_edges(
-            "think",
-            self._should_use_tools,
-            {
-                "execute_tools": "execute_tools",
-                "end": END,
-            },
-        )
-        graph.add_edge("execute_tools", "think")
-
-        return graph.compile()
-
-    # -- routing -------------------------------------------------------------
-
-    def _should_use_tools(self, state: AgentState) -> Literal["execute_tools", "end"]:
-        """Decide whether to execute tools or finish."""
-        messages = state["messages"]
-        if not messages:
-            return "end"
-
-        last = messages[-1]
-        if (
-            isinstance(last, AIMessage)
-            and last.tool_calls
-            and state["tool_rounds"] < getattr(
-                state.get("runtime"), "max_tool_rounds", MAX_TOOL_ROUNDS,
-            )
-        ):
-            return "execute_tools"
-        return "end"
-
-    # -- nodes ---------------------------------------------------------------
+    # -- model-facing tools and Atlas tool adapters -------------------------
 
     def _model_facing_tools(self) -> list[dict[str, Any]]:
-        """Assemble the model-facing tool surface (single source for _think_node)."""
+        """Assemble model-facing tool names for Atlas runtime telemetry."""
         tools = self._mcp.get_tools_for_llm() if self._mcp else []
         if self._custom_tools is not None:
             tools.extend(self._custom_tools.model_tools())
@@ -885,6 +821,16 @@ class AgentOrchestrator:
         ])
         tools.append({
             "type": "function", "function": {
+                "name": "new_context_window",
+                "description": (
+                    "Create a concise handoff summary of this task, then continue with a clean "
+                    "model context while preserving the conversation history."
+                ),
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        })
+        tools.append({
+            "type": "function", "function": {
                 "name": "run_checks",
                 "description": "Run project lint, typecheck, tests, or all available checks and return structured diagnostics.",
                 "parameters": {"type": "object", "properties": {
@@ -1033,418 +979,7 @@ class AgentOrchestrator:
         })
         return tools
 
-    async def _think_node(self, state: AgentState) -> dict[str, Any]:
-        """Call the LLM, possibly producing tool calls."""
-        runtime = state["runtime"]
-        selected_model = runtime.model or getattr(
-            self._model_mgr, "current_model", self._model_mgr.current_litellm_model,
-        )
-        list_models = getattr(self._model_mgr, "list_models", None)
-        models = list_models() if callable(list_models) else []
-        model_config = next(
-            (item for item in models if item["id"] == selected_model),
-            {"id": selected_model, "litellm_model": selected_model},
-        )
-        litellm_model = str(model_config.get("litellm_model", selected_model))
-        tools = self._model_facing_tools()
-
-        allowed = getattr(runtime, "tool_allow", None)
-        denied_tools = getattr(runtime, "tool_deny", [])
-        if allowed is not None:
-            tools = [item for item in tools if any(
-                fnmatch.fnmatchcase(item["function"]["name"], pattern) for pattern in allowed
-            )]
-        if denied_tools:
-            tools = [item for item in tools if item["function"]["name"] not in denied_tools]
-        if getattr(self, "_projects", None) is None or not getattr(runtime, "project_id", None):
-            tools = [item for item in tools
-                     if item["function"]["name"] != "project_sources_search"]
-        if runtime.steer_queue is not None:
-            while not runtime.steer_queue.empty():
-                steer = runtime.steer_queue.get_nowait()
-                state["messages"].append(HumanMessage(content=steer["content"]))
-                await runtime.event_queue.put({
-                    "type": "run_steered", "content": steer["content"],
-                    "event_id": steer["event_id"],
-                })
-        if runtime.mode == "plan":
-            tools = [json.loads(json.dumps(item)) for item in tools
-                     if item["function"]["name"] in {
-                "local_file", "web_fetch", "web_extract",
-            }]
-            for item in tools:
-                if item["function"]["name"] == "local_file":
-                    item["function"]["parameters"]["properties"]["action"]["enum"] = [
-                        "read", "list", "glob", "search", "stat",
-                    ]
-        tools.sort(key=lambda item: item["function"]["name"])
-        goal = str(getattr(runtime, "goal", None) or state["messages"][-1].content)[:240]
-        cfg = get_config()
-        if getattr(runtime, "maintenance_snapshot", None) is None:
-            compact_inputs = self._to_litellm_messages(state["messages"])
-            text_inputs = [str(item.get("content", "")) for item in compact_inputs]
-            if self.context_maintenance.should_compact(
-                text_inputs,
-                message_limit=cfg.context_maintenance_message_limit,
-                character_limit=cfg.context_maintenance_character_limit,
-            ):
-                recent = [
-                    f"{item.type}: {str(item.content)[:240]}"
-                    for item in state["messages"][-12:]
-                    if not isinstance(item, SystemMessage)
-                ]
-                context = {
-                    **getattr(runtime, "maintenance_context", {}),
-                    "goal": getattr(runtime, "goal", None) or goal,
-                    "session_summary": " | ".join(recent),
-                }
-                snapshot = await self.context_maintenance.compact(context)
-                runtime.maintenance_snapshot = snapshot
-                runtime.maintenance_summary = json.dumps(snapshot, ensure_ascii=False)
-                event = {
-                    "type": "context_compacted",
-                    "snapshot_id": snapshot["snapshot_id"],
-                    "summary": runtime.maintenance_summary,
-                }
-                if getattr(runtime, "event_queue", None) is not None:
-                    await runtime.event_queue.put(event)
-
-        if getattr(runtime, "maintenance_snapshot", None) is not None:
-            first_system = next(
-                (item for item in state["messages"] if isinstance(item, SystemMessage)),
-                SystemMessage(content=SYSTEM_PROMPT),
-            )
-            recent_messages = self._recent_provider_messages(state["messages"], limit=12)
-            reviewer_messages = [
-                item for item in state["messages"]
-                if isinstance(item, SystemMessage)
-                and str(item.content).startswith("Trajectory reviewer guidance ")
-            ]
-            compact_messages = [
-                first_system,
-                SystemMessage(content=(
-                    "Context maintenance summary (resume-critical, advisory): "
-                    + str(runtime.maintenance_summary)
-                )),
-                *reviewer_messages[-1:],
-                *recent_messages,
-            ]
-            preserved_todos = runtime.todo_store.format_for_injection()
-            if preserved_todos:
-                compact_messages.append(HumanMessage(content=preserved_todos))
-            lc_messages = self._to_litellm_messages(compact_messages)
-        else:
-            lc_messages = self._to_litellm_messages(state["messages"])
-        reminder = state["runtime"].reminders.at_turn(
-            state["tool_rounds"], goal=goal,
-            constraints=[
-                "Preserve FULL_ACCESS policy",
-                "Verify the task before reporting completion",
-            ],
-        )
-        if reminder:
-            lc_messages.append({"role": "system", "content": reminder})
-            await state["runtime"].event_queue.put({"type": "system_reminder", "content": reminder})
-
-        cfg = get_config()
-        provider = str(model_config.get("provider", ""))
-        is_claude = "claude" in (litellm_model + " " + provider).casefold()
-        cache_mode = str(model_config.get(
-            "prompt_cache", cfg.get("models.prompt_cache", "auto"),
-        )).lower()
-        cache_enabled = (
-            is_claude and cache_mode != "off"
-            and litellm_model not in _CACHE_UNSUPPORTED_MODELS
-        )
-        if cache_enabled:
-            base_url = str(model_config.get("base_url") or self._model_mgr.gateway_base_url)
-            ttl = str(model_config.get(
-                "prompt_cache_ttl", cfg.get("models.prompt_cache_ttl", "5m"),
-            ))
-            cache_plan = build_prompt_cache_plan(
-                lc_messages, tools, cache_ttl=ttl,
-                static_system_prefix=SYSTEM_PROMPT,
-                tool_part_markers=envelope_tool_part_cache_markers_supported(provider, base_url),
-            )
-            lc_messages = cache_plan.messages
-            tools = cache_plan.tools
-
-        canonical_messages = copy.deepcopy(lc_messages)
-        canonical_tools = copy.deepcopy(tools)
-
-        kwargs: dict[str, Any] = {
-            "model": litellm_model,
-            "messages": lc_messages,
-            "max_tokens": _positive_limit(
-                model_config.get("max_output_tokens", cfg.get("models.max_output_tokens", 16384)),
-                default=16384, maximum=200000,
-            ),
-        }
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
-        if getattr(runtime, "reasoning_effort", None):
-            kwargs["reasoning_effort"] = runtime.reasoning_effort
-        if runtime.moa_enabled:
-            reference_models = get_config().get("moa.reference_models", []) or []
-            max_references = _positive_limit(
-                get_config().get("moa.max_references", 3), default=3, maximum=8,
-            )
-            reference_models = [str(item) for item in reference_models[:max_references]
-                                if str(item) and str(item) != litellm_model]
-            if reference_models:
-                started = time.perf_counter()
-
-                async def consult(reference_model: str) -> tuple[str, str]:
-                    try:
-                        response = await acompletion(
-                            model=reference_model, messages=copy.deepcopy(lc_messages),
-                            max_tokens=1200, stream=False,
-                        )
-                        field = lambda value, key, default=None: (
-                            value.get(key, default) if isinstance(value, dict)
-                            else getattr(value, key, default)
-                        )
-                        choices = field(response, "choices", []) or []
-                        message = field(choices[0], "message", {}) if choices else {}
-                        content = field(message, "content", "") if message else ""
-                        return reference_model, str(content or "")[:6000]
-                    except Exception as exc:
-                        return reference_model, f"参考模型调用失败：{type(exc).__name__}"
-
-                references = await asyncio.gather(*(consult(name) for name in reference_models))
-                latency_ms = int((time.perf_counter() - started) * 1000)
-                reference_data = [{"model": name, "text": text} for name, text in references]
-                lc_messages.append({"role": "system", "content":
-                    "Reference model opinions (advisory; check them against evidence):\n" +
-                    "\n\n".join(f"[{name}]\n{text}" for name, text in references)})
-                await runtime.event_queue.put({"type": "moa_references",
-                    "models": reference_models, "references": reference_data,
-                    "latency_ms": latency_ms})
-        # OpenAI-compatible streams only report usage (incl. cached tokens) when asked to.
-        if litellm_model not in _STREAM_USAGE_UNSUPPORTED:
-            kwargs["stream_options"] = {"include_usage": True}
-
-        event_queue = getattr(runtime, "event_queue", None)
-        events: list[dict[str, Any]] = []
-        full_text = ""
-        tool_fragments: dict[int, dict[str, str]] = {}
-        usage = None
-        finish_reason = None
-
-        def get_value(value: Any, key: str, default: Any = None) -> Any:
-            if isinstance(value, dict):
-                return value.get(key, default)
-            return getattr(value, key, default)
-
-        try:
-            await self._emit_hook(
-                runtime, "before_model", model=litellm_model, messages=lc_messages,
-                tools=[item["function"]["name"] for item in tools],
-            )
-            response = await acompletion(**kwargs, stream=True)
-            async for chunk in response:
-                chunk_usage = get_value(chunk, "usage")
-                if chunk_usage is not None:
-                    usage = chunk_usage
-                choices = get_value(chunk, "choices", []) or []
-                if not choices:
-                    continue
-                finish_reason = get_value(choices[0], "finish_reason", finish_reason)
-                delta = get_value(choices[0], "delta")
-                content = get_value(delta, "content")
-                if content:
-                    full_text += content
-                    event = {"type": "chunk", "content": content}
-                    events.append(event)
-                    if event_queue is not None:
-                        await event_queue.put(event)
-
-                for position, fragment in enumerate(get_value(delta, "tool_calls", None) or []):
-                    index = get_value(fragment, "index", position)
-                    if index is None:
-                        index = position
-                    aggregate = tool_fragments.setdefault(
-                        index, {"id": "", "name": "", "arguments": ""}
-                    )
-                    aggregate["id"] = aggregate["id"] or get_value(fragment, "id", "") or ""
-                    function = get_value(fragment, "function", None)
-                    if function is not None:
-                        aggregate["name"] += get_value(function, "name", "") or ""
-                        aggregate["arguments"] += get_value(function, "arguments", "") or ""
-                # Continue consuming the stream so providers that send a final
-                # usage-only chunk are observed after finish_reason.
-            if event_queue is not None:
-                prompt_details = get_value(usage, "prompt_tokens_details")
-                cached_input_tokens = (
-                    get_value(prompt_details, "cached_tokens")
-                    or get_value(usage, "cache_read_input_tokens")
-                    # DeepSeek caches prefixes automatically and reports hits under its own name.
-                    or get_value(usage, "prompt_cache_hit_tokens")
-                )
-                cache_write_tokens = (
-                    get_value(prompt_details, "cache_write_tokens")
-                    or get_value(prompt_details, "cache_creation_input_tokens")
-                    or get_value(usage, "cache_creation_input_tokens")
-                    or get_value(usage, "cache_write_tokens")
-                )
-                input_tokens = get_value(usage, "prompt_tokens")
-                if input_tokens is None:
-                    input_tokens = (
-                        (get_value(usage, "input_tokens", 0) or 0)
-                        + (cached_input_tokens or 0) + (cache_write_tokens or 0)
-                    )
-                await event_queue.put({"type": "run_usage", "usage": {
-                    "input_tokens": input_tokens,
-                    "output_tokens": get_value(usage, "completion_tokens"),
-                    "cached_input_tokens": cached_input_tokens or 0,
-                    "cache_write_tokens": cache_write_tokens or 0,
-                    "context_tokens": get_value(usage, "total_tokens"),
-                    "context_limit": None, "model": litellm_model,
-                }})
-        except Exception as exc:
-            status = getattr(exc, "status_code", None)
-            if (status == 400 and "stream_options" in str(exc).lower()
-                    and litellm_model not in _STREAM_USAGE_UNSUPPORTED
-                    and not full_text and not tool_fragments):
-                _STREAM_USAGE_UNSUPPORTED.add(litellm_model)
-                log.warning("agent.stream_usage_unsupported", model=litellm_model)
-                return await self._think_node(state)
-            if (cache_enabled and status == 400 and "cache" in str(exc).lower()
-                    and not full_text and not tool_fragments):
-                _CACHE_UNSUPPORTED_MODELS.add(litellm_model)
-                log.warning("agent.prompt_cache_unsupported", model=litellm_model)
-                lc_messages = canonical_messages
-                tools = canonical_tools
-                return await self._think_node(state)
-            classified = classify_api_error(exc)
-            if classified.should_compress and not runtime.context_compression_attempted:
-                runtime.context_compression_attempted = True
-                recent = [message for message in state["messages"]
-                          if not isinstance(message, SystemMessage)][-8:]
-                preserved_system = [message for message in state["messages"]
-                                    if isinstance(message, SystemMessage)]
-                state["messages"] = preserved_system + recent
-                runtime.maintenance_snapshot = await self.context_maintenance.compact({
-                    **runtime.maintenance_context, "goal": runtime.goal or "",
-                    "session_summary": " | ".join(str(item.content)[:240] for item in recent),
-                })
-                state["messages"].append(SystemMessage(content=(
-                    "Earlier context was compacted after a provider context limit. "
-                    "Continue using the preserved goal and recent messages."
-                )))
-                return await self._think_node(state)
-            if (classified.retryable and runtime.recovery_retries < 1
-                    and classified.reason.value in {"rate_limit", "overloaded", "server_error", "timeout", "network"}):
-                runtime.recovery_retries += 1
-                await asyncio.sleep(min(jittered_backoff(runtime.recovery_retries), 0.25))
-                return await self._think_node(state)
-            if classified.should_fallback:
-                runtime.failed_models.add(selected_model)
-                cool_model(selected_model)
-                next_model = next((candidate for candidate in runtime.fallback_models
-                                   if candidate not in runtime.failed_models and not is_cooling(candidate)), None)
-                if next_model:
-                    runtime.model = next_model
-                    if event_queue is not None:
-                        await event_queue.put({"type": "run_model_switched", "data": {
-                            "from": selected_model, "to": next_model,
-                            "reason": {
-                                "rate_limit": "请求过于频繁", "billing": "额度不足",
-                                "overloaded": "服务繁忙", "server_error": "服务暂时不可用",
-                                "auth": "认证失败", "timeout": "请求超时",
-                                "network": "网络连接失败",
-                            }.get(classified.reason.value, "当前模型调用失败"),
-                        }})
-                    return await self._think_node(state)
-            await self._emit_hook(runtime, "after_model", model=litellm_model, error=str(exc))
-            has_image = any(
-                isinstance(message.content, list)
-                and any(
-                    isinstance(part, dict) and part.get("type") == "image_url"
-                    for part in message.content
-                )
-                for message in state["messages"]
-            )
-            if has_image:
-                raise _RuntimeFailureError(
-                    "model_capability",
-                    "The selected model could not process the desktop screenshot. "
-                    "Select a multimodal model and retry.",
-                ) from exc
-            raise _RuntimeFailureError("model", f"Model call failed: {exc}") from exc
-
-        tc_list: list[dict[str, Any]] = []
-        incomplete_tool_arguments = False
-        for index in sorted(tool_fragments):
-            fragment = tool_fragments[index]
-            try:
-                arguments = json.loads(fragment["arguments"] or "{}")
-            except (json.JSONDecodeError, TypeError) as exc:
-                if finish_reason == "length":
-                    incomplete_tool_arguments = True
-                    break
-                if runtime.truncated_tool_retries < 1:
-                    runtime.truncated_tool_retries += 1
-                    state["messages"].extend([
-                        AIMessage(content=full_text),
-                        HumanMessage(content=(
-                            "上一轮工具参数无法解析，Atlas 未执行该操作。请重新生成完整、合法的单个 JSON 对象作为工具参数。"
-                        )),
-                    ])
-                    return await self._think_node(state)
-                raise ValueError(
-                    f"Malformed arguments for streamed tool call {fragment['id'] or index}: {exc}"
-                ) from exc
-            if not isinstance(arguments, dict):
-                raise ValueError(
-                    f"Streamed tool call {fragment['id'] or index} arguments must be a JSON object"
-                )
-            tc = {
-                "name": fragment["name"],
-                "args": arguments,
-                "id": fragment["id"] or str(uuid.uuid4()),
-            }
-            if not tc["name"]:
-                raise ValueError(f"Streamed tool call {tc['id']} has no function name")
-            tc_list.append(tc)
-            event = {
-                "type": "tool_call", "id": tc["id"], "name": tc["name"],
-                "arguments": tc["args"],
-            }
-            events.append(event)
-            if event_queue is not None:
-                await event_queue.put(event)
-
-        if incomplete_tool_arguments:
-            if runtime.truncated_tool_retries >= 1:
-                raise _RuntimeFailureError(
-                    "model", "工具参数连续两次被输出长度截断，未执行不完整的操作。",
-                )
-            runtime.truncated_tool_retries += 1
-            state["messages"].extend([
-                AIMessage(content=full_text),
-                HumanMessage(content=(
-                    "刚才的工具参数被输出长度截断，Atlas 没有执行。请把操作拆成更小的多次工具调用。"
-                )),
-            ])
-            return await self._think_node(state)
-        ai_msg = (
-            AIMessage(content=full_text, tool_calls=tc_list)
-            if tc_list else AIMessage(content=full_text)
-        )
-
-        await self._emit_hook(
-            runtime, "after_model", model=litellm_model, text=full_text,
-            tool_calls=tc_list,
-        )
-
-        return {
-            "messages": [ai_msg],
-            "pending_events": state["pending_events"] + events,
-        }
-
-    async def _execute_tools_node(self, state: AgentState) -> dict[str, Any]:
+    async def _execute_tools_node(self, state: ToolExecutionState) -> dict[str, Any]:
         """Execute tool calls from the last AI message.
 
         For tools in APPROVAL_REQUIRED_TOOLS, emits an approval.required
@@ -2464,7 +1999,6 @@ class AgentOrchestrator:
         return {
             "messages": tool_messages,
             "pending_events": state["pending_events"] + events,
-            "tool_rounds": state["tool_rounds"] + 1,
         }
 
     # -- public API ----------------------------------------------------------
@@ -2506,7 +2040,6 @@ class AgentOrchestrator:
         ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None,
         sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None,
         sandbox_enabled: bool = False,
-        max_tool_rounds: int = MAX_TOOL_ROUNDS,
         project_id: str | None = None,
         reasoning_effort: str | None = None,
         subtask_started: Callable[..., Any] | None = None,
@@ -2564,7 +2097,6 @@ class AgentOrchestrator:
             ssh_checkpoint_callback=ssh_checkpoint_callback,
             sandbox_tool_callback=sandbox_tool_callback,
             sandbox_enabled=sandbox_enabled,
-            max_tool_rounds=max_tool_rounds,
             reasoning_effort=reasoning_effort,
             subtask_started=subtask_started, subtask_progress=subtask_progress,
             subtask_completed=subtask_completed,
@@ -2860,161 +2392,145 @@ class AgentOrchestrator:
             )
 
 
-        async def execute_graph() -> dict[str, Any]:
+        async def execute_hermes_turn() -> dict[str, Any]:
             try:
-                engine = str(get_config().get("agent.engine", "hermes")).strip().lower()
-                from atlas.config import load_user_settings
+                from atlas.config import DATA_ROOT
+                from atlas.engine import HermesRuntime
 
-                engine = str(load_user_settings().get(
-                    "agent_engine", engine,
-                )).strip().lower()
-                if engine not in {"hermes", "legacy"}:
-                    raise ValueError("agent.engine 必须是 hermes 或 legacy")
-                if engine == "hermes":
-                    from atlas.config import DATA_ROOT
-                    from atlas.engine import HermesRuntime
+                volatile_prefixes = (
+                    "Atlas Skill index ", "Project context ", "Active user context ",
+                    "Knowledge retrieval explanation ", "Historical failure reflections ",
+                    "Approved goal experiences ", "Consolidated goal knowledge ",
+                    "Approved consolidated knowledge insights ",
+                )
+                prompt_sections = [
+                    str(item.content) for item in initial_messages
+                    if isinstance(item, SystemMessage) and isinstance(item.content, str)
+                ]
+                volatile_context = [
+                    section for section in prompt_sections
+                    if section.startswith(volatile_prefixes)
+                ]
+                system_message = "\n\n".join(
+                    section for section in prompt_sections
+                    if not section.startswith(volatile_prefixes)
+                )
+                hermes_history = [
+                    {"role": item["role"], "content": item["content"]}
+                    for item in history
+                    if item.get("role") in {"user", "assistant", "tool"}
+                    and isinstance(item.get("content"), str)
+                ]
+                if (hermes_history and hermes_history[-1]["role"] == "user"
+                        and hermes_history[-1]["content"] == message):
+                    hermes_history.pop()
+                hermes = HermesRuntime(
+                    data_dir=DATA_ROOT,
+                    model_manager=self._model_mgr,
+                )
+                model_input = (
+                    self._multimodal_content(message, image_attachments)
+                    if image_attachments else None
+                )
+                last_automatic_title: str | None = None
+                automatic_title_candidates = {
+                    "", "New Conversation", "New conversation",
+                    message.strip()[:40],
+                }
+                final_result: dict[str, Any] = {}
 
-                    volatile_prefixes = (
-                        "Atlas Skill index ", "Project context ", "Active user context ",
-                        "Knowledge retrieval explanation ", "Historical failure reflections ",
-                        "Approved goal experiences ", "Consolidated goal knowledge ",
-                        "Approved consolidated knowledge insights ",
-                    )
-                    prompt_sections = [
-                        str(item.content) for item in initial_messages
-                        if isinstance(item, SystemMessage) and isinstance(item.content, str)
-                    ]
-                    volatile_context = [
-                        section for section in prompt_sections
-                        if section.startswith(volatile_prefixes)
-                    ]
-                    system_message = "\n\n".join(
-                        section for section in prompt_sections
-                        if not section.startswith(volatile_prefixes)
-                    )
-                    hermes_history = [
-                        {"role": item["role"], "content": item["content"]}
-                        for item in history
-                        if item.get("role") in {"user", "assistant", "tool"}
-                        and isinstance(item.get("content"), str)
-                    ]
-                    if (hermes_history and hermes_history[-1]["role"] == "user"
-                            and hermes_history[-1]["content"] == message):
-                        hermes_history.pop()
-                    hermes = HermesRuntime(
-                        data_dir=DATA_ROOT,
-                        model_manager=self._model_mgr,
-                    )
-                    model_input = (
-                        self._multimodal_content(message, image_attachments)
-                        if image_attachments else None
-                    )
-                    last_automatic_title: str | None = None
-                    automatic_title_candidates = {
-                        "", "New Conversation", "New conversation",
-                        message.strip()[:40],
-                    }
-                    final_result: dict[str, Any] = {}
-
-                    async def on_session_title(title: str, title_source: str) -> None:
-                        nonlocal last_automatic_title
-                        current = await self._memory.get_conversation(conversation_id)
-                        current_title = str((current or {}).get("title") or "")
-                        accepted = bool(
-                            title.strip()
-                            and not worker
-                            and (
-                                current_title in automatic_title_candidates
-                                or (last_automatic_title is not None
-                                    and current_title == last_automatic_title)
-                            )
+                async def on_session_title(title: str, title_source: str) -> None:
+                    nonlocal last_automatic_title
+                    current = await self._memory.get_conversation(conversation_id)
+                    current_title = str((current or {}).get("title") or "")
+                    accepted = bool(
+                        title.strip()
+                        and not worker
+                        and (
+                            current_title in automatic_title_candidates
+                            or (last_automatic_title is not None
+                                and current_title == last_automatic_title)
                         )
-                        if accepted:
-                            await self._memory.update_conversation_title(
-                                conversation_id, title.strip(),
-                            )
-                            last_automatic_title = title.strip()
-                        title_event = {
-                            "type": "session.title", "title": title.strip(),
-                            "title_source": title_source, "accepted": accepted,
-                        }
-                        if runtime_event_callback is not None:
-                            published = runtime_event_callback(title_event)
-                            if inspect.isawaitable(published):
-                                await published
-                        else:
-                            await runtime.event_queue.put(title_event)
-
-                    async for event in hermes.run_turn(
-                        message=message,
-                        user_content=model_input,
-                        conversation_id=conversation_id,
-                        workspace=workspace,
-                        history=hermes_history,
-                        system_message=system_message,
-                        volatile_context=volatile_context,
-                        cancel_event=cancel_event,
-                        input_callback=input_callback,
-                        steer_queue=steer_queue,
-                        atlas_agent=self,
-                        atlas_context=runtime,
-                        reasoning_effort=reasoning_effort,
-                        max_output_tokens=selected_config.get("max_output_tokens"),
-                        moa_enabled=runtime.moa_enabled,
-                        model_id=runtime.model,
-                        title_callback=on_session_title,
-                    ):
-                        if event.get("type") == "hermes.result":
-                            final_result = event.get("result", {})
-                            continue
-                        if event.get("type") == "run.status":
-                            await runtime.event_queue.put({
-                                "type": "run_status", "status": event.get("status"),
-                                "text": event.get("text", ""),
-                            })
-                            continue
-                        if event.get("type") == "session.title":
-                            await on_session_title(
-                                str(event.get("title") or ""),
-                                str(event.get("title_source") or ""),
-                            )
-                            continue
-                        if event.get("type") == "thinking":
-                            await runtime.event_queue.put({
-                                "type": "run_status", "status": "reasoning",
-                                "text": event.get("content", ""),
-                            })
-                            continue
-                        await runtime.event_queue.put(event)
-                    final_text = final_result.get("final_response", "")
-                    for usage in final_result.get("usage", []) if isinstance(
-                        final_result.get("usage"), list
-                    ) else []:
-                        await runtime.event_queue.put({"type": "run_usage", "usage": usage})
-                    return {
-                        "messages": [AIMessage(content=str(final_text or ""))],
-                        "pending_events": [],
-                        "tool_rounds": 0,
-                        "runtime": runtime,
+                    )
+                    if accepted:
+                        await self._memory.update_conversation_title(
+                            conversation_id, title.strip(),
+                        )
+                        last_automatic_title = title.strip()
+                    title_event = {
+                        "type": "session.title", "title": title.strip(),
+                        "title_source": title_source, "accepted": accepted,
                     }
-                return await self._graph.ainvoke({
-                    "messages": initial_messages,
+                    if runtime_event_callback is not None:
+                        published = runtime_event_callback(title_event)
+                        if inspect.isawaitable(published):
+                            await published
+                    else:
+                        await runtime.event_queue.put(title_event)
+
+                async for event in hermes.run_turn(
+                    message=message,
+                    user_content=model_input,
+                    conversation_id=conversation_id,
+                    workspace=workspace,
+                    history=hermes_history,
+                    system_message=system_message,
+                    volatile_context=volatile_context,
+                    cancel_event=cancel_event,
+                    input_callback=input_callback,
+                    steer_queue=steer_queue,
+                    atlas_agent=self,
+                    atlas_context=runtime,
+                    reasoning_effort=reasoning_effort,
+                    max_output_tokens=selected_config.get("max_output_tokens"),
+                    moa_enabled=runtime.moa_enabled,
+                    model_id=runtime.model,
+                    title_callback=on_session_title,
+                ):
+                    if event.get("type") == "hermes.result":
+                        final_result = event.get("result", {})
+                        continue
+                    if event.get("type") == "run.status":
+                        await runtime.event_queue.put({
+                            "type": "run_status", "status": event.get("status"),
+                            "text": event.get("text", ""),
+                        })
+                        continue
+                    if event.get("type") == "session.title":
+                        await on_session_title(
+                            str(event.get("title") or ""),
+                            str(event.get("title_source") or ""),
+                        )
+                        continue
+                    if event.get("type") == "thinking":
+                        await runtime.event_queue.put({
+                            "type": "run_status", "status": "reasoning",
+                            "text": event.get("content", ""),
+                        })
+                        continue
+                    await runtime.event_queue.put(event)
+                final_text = final_result.get("final_response", "")
+                for usage in final_result.get("usage", []) if isinstance(
+                    final_result.get("usage"), list
+                ) else []:
+                    await runtime.event_queue.put({"type": "run_usage", "usage": usage})
+                return {
+                    "messages": [AIMessage(content=str(final_text or ""))],
                     "pending_events": [],
-                    "tool_rounds": 0,
                     "runtime": runtime,
-                })
+                }
             finally:
                 runtime.event_queue.put_nowait(_EVENT_STREAM_DONE)
 
-        graph_task = asyncio.create_task(execute_graph())
+        hermes_task = asyncio.create_task(execute_hermes_turn())
         try:
             while True:
                 try:
                     event = await asyncio.wait_for(runtime.event_queue.get(), timeout=0.2)
                 except TimeoutError:
                     if cancel_event and cancel_event.is_set():
-                        graph_task.cancel()
-                        await asyncio.gather(graph_task, return_exceptions=True)
+                        hermes_task.cancel()
+                        await asyncio.gather(hermes_task, return_exceptions=True)
                         yield {"type": "cancelled"}
                         return
                     continue
@@ -3022,7 +2538,7 @@ class AgentOrchestrator:
                     break
                 yield event
 
-            result = await graph_task
+            result = await hermes_task
 
             # Extract and persist the final assistant text exactly once.
             full_response = ""
@@ -3145,9 +2661,9 @@ class AgentOrchestrator:
             }
         finally:
             await self._emit_hook(runtime, "agent_stop", conversation_id=conversation_id)
-            if not graph_task.done():
-                graph_task.cancel()
-            await asyncio.gather(graph_task, return_exceptions=True)
+            if not hermes_task.done():
+                hermes_task.cancel()
+            await asyncio.gather(hermes_task, return_exceptions=True)
             if self._local_execution and runtime.run_id:
                 await self._local_execution.cancel_run(runtime.run_id)
 

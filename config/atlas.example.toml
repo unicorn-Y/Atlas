@@ -76,6 +76,8 @@ toast_enabled = true
 # chat_id = "..."
 
 [tools]
+# Warn after this many same-file edits in one run.
+same_file_edit_reminder_threshold = 6
 # MCP servers are configured explicitly after first launch.
 auto_start = []
 

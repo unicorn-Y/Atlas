@@ -865,16 +865,8 @@ export default function App() {
         {sheet === 'models' && <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; setPref('username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} />}
         {sheet === 'advanced' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">高级设置</h3>
-          <p className="mt-1 mb-5 text-[13px] text-fg-3">选择执行对话任务的 Agent 内核。切换只影响新启动的任务。</p>
-          <label className="block max-w-[420px] text-[13px] text-fg-2">当前内核
-            <select aria-label="Agent 内核" value={store.agentEngine} disabled={store.settingsBusy}
-              onChange={(event) => void store.saveAgentEngine(event.target.value as 'hermes' | 'legacy')}
-              className="mt-2 block h-10 w-full rounded-lg border border-line bg-surface px-3 text-fg">
-              <option value="hermes">Hermes（推荐）</option>
-              <option value="legacy">旧内核（兼容模式）</option>
-            </select>
-          </label>
-          <label className="mt-5 block max-w-[420px] text-[13px] text-fg-2">压缩辅助模型
+          <p className="mt-1 mb-5 text-[13px] text-fg-3">配置会话压缩使用的辅助模型。</p>
+          <label className="block max-w-[420px] text-[13px] text-fg-2">压缩辅助模型
             <select aria-label="压缩辅助模型" value={store.compressionModel} disabled={store.settingsBusy}
               onChange={(event) => void store.saveCompressionModel(event.target.value)}
               className="mt-2 block h-10 w-full rounded-lg border border-line bg-surface px-3 text-fg">

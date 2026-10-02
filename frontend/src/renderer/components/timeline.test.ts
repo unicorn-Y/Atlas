@@ -39,6 +39,29 @@ describe('buildTimeline', () => {
     expect(steps.map((step) => [step.verb, step.state])).toEqual([['查看目录', 'done'], ['读取', 'failed']]);
   });
 
+  it('extracts the returned image for a read_file thumbnail', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('tool.started', { tool_call_id: 'image', name: 'read_file', arguments: { path: 'sample.png' } }),
+      ev('tool.completed', {
+        tool_call_id: 'image', name: 'read_file',
+        result: JSON.stringify({ _multimodal: true, content: [
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,AA==' } },
+        ] }),
+      }, 1),
+    ]);
+    const steps = items.find((item) => item.kind === 'steps');
+    expect(steps?.kind === 'steps' && steps.steps[0].imagePreview).toBe('data:image/png;base64,AA==');
+  });
+
+  it('shows the new-context divider in the timeline', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('context.window.switched' as AgentEvent['type'], {}, 1),
+    ]);
+    expect(items).toContainEqual(expect.objectContaining({ kind: 'notice', text: '已切换到新上下文' }));
+  });
+
   it('does not repeat text Atlas said before a tool call when the final message arrives', () => {
     seq = 0;
     const items = buildTimeline([

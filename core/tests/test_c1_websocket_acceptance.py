@@ -5,6 +5,7 @@ event protocol run in a separate process and never use the developer's port.
 """
 
 import asyncio
+import base64
 import json
 import os
 from pathlib import Path
@@ -238,6 +239,79 @@ async def test_websocket_compression_retains_real_todos_and_continues(backend):
     main_requests = [item for item in backend.fake.requests if item["kind"] == "main"]
     assert "preserve websocket requirement" in str(main_requests[-1]["body"]), "active todo must survive into the final post-compression request"
     assert any(item["event"] == "run.todos" for item in events)
+
+
+@pytest.mark.asyncio
+async def test_websocket_c2_tools_and_context_handoff_chain(backend):
+    workspace = backend.root / "workspace"
+    image = workspace / "fixture.png"
+    image.write_bytes(base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+    ))
+    target = workspace / "fuzzy.txt"
+    target.write_text("first line\nold middle\nlast line\n", encoding="utf-8")
+    config = backend.root / "atlas/engine/config.yaml"
+    config.write_text(config.read_text(encoding="utf-8").replace(
+        "  default: fake-model\n", "  default: fake-model\n  supports_vision: true\n",
+    ), encoding="utf-8")
+
+    script = [
+        ToolCall("read_file", {"path": str(image)}),
+        ToolCall("read_file", {"path": str(target)}),
+        ToolCall("patch", {"path": str(target), "old_string": "first line\nold middle\nlast line", "new_string": "first line\nnew middle\nlast line"}),
+        *[
+            call
+            for index in range(6)
+            for call in (
+                ToolCall("read_file", {"path": str(target)}),
+                ToolCall("write_file", {"path": str(target), "content": f"edited {index}"}),
+            )
+        ],
+        Text("file tools finished"),
+    ]
+    backend.fake._script = script
+    conversation, first = await backend.run(
+        "Read the image, patch the file, and revise that file repeatedly.",
+        permission_mode="full_access",
+    )
+    assert target.read_text(encoding="utf-8") == "edited 5"
+    assert any(item["event"] == "tool.completed" and item["data"].get("name") == "read_file"
+               for item in first)
+    image_result = next(
+        item["data"]["result"] for item in first
+        if item["event"] == "tool.completed"
+        and item["data"].get("name") == "read_file"
+    )
+    assert image_result.get("_multimodal") is True
+    assert any(
+        item["event"] == "tool.completed" and item["data"].get("name") == "write_file"
+        and "反复修改同一文件" in str(item["data"].get("result"))
+        for item in first
+    )
+    assert any("image_url" in str(request["messages"]) for request in backend.fake.main_requests())
+
+    compacted = await backend.http.post(
+        f"/api/conversations/{conversation}/compact", json={"focus_topic": "Continue the file edit"},
+    )
+    assert compacted.status_code == 200, compacted.text
+    assert compacted.json().get("compressed") is True, compacted.json()
+    backend.fake._aux = lambda _record: Text(
+        "当前目标/约束：完成文件修改\n已完成：读取图片并编辑\n正在做/阻塞：无\n"
+        "关键决定：保留目标文件\n下一步：结束任务\n关键文件：fuzzy.txt"
+    )
+    backend.fake.push(ToolCall("new_context_window", {}), Text("done after context handoff"))
+    _, second = await backend.run(
+        "Continue from the compressed session and finish.", conversation=conversation,
+        permission_mode="full_access",
+    )
+    switched = next(item for item in second if item["event"] == "context.window.switched")
+    assert all(label in str(switched["data"]) for label in (
+        "当前目标/约束", "已完成", "正在做/阻塞", "关键决定", "下一步", "关键文件",
+    ))
+    assert second[-1]["event"] == "run.completed"
+    assert any(item["event"] == "message.completed"
+               and item["data"].get("content") == "done after context handoff"
+               for item in second)
 
 
 @pytest.mark.asyncio
@@ -584,93 +658,8 @@ async def test_websocket_kanban_tools_keep_real_board_and_card_lifecycle(backend
     assert "KANBAN_REAL_FIXTURE" in str(events) and "KANBAN_OUTPUT_FIXTURE" in str(events)
 
 
-def _normalize_c1_parity_event(event, *, workspace):
-    """Drop protocol identity/time metadata and normalize the one legacy tool alias."""
-    volatile_fields = {
-        "run_id", "conversation_id", "event_id", "sequence", "timestamp",
-        "created_at", "updated_at", "started_at", "completed_at", "tool_call_id",
-        "_atlas_conversation_id", "execution_id", "pid", "duration_seconds",
-    }
-    tool_name_map = {"local_shell": "terminal", "shell": "terminal"}
-
-    def normalize(value):
-        if isinstance(value, dict):
-            result = {}
-            for key, item in value.items():
-                if key in volatile_fields:
-                    continue
-                if key == "name" and isinstance(item, str):
-                    item = tool_name_map.get(item, item)
-                if key == "arguments" and isinstance(item, dict) and "command" in item and "shell" in item:
-                    # These are the two documented Atlas terminal defaults added by the
-                    # Hermes adapter; legacy local_shell receives neither in its model args.
-                    item = dict(item)
-                    item.setdefault("cwd", workspace)
-                    item.setdefault("detached", False)
-                result[key] = normalize(item)
-            return result
-        if isinstance(value, list):
-            return [normalize(item) for item in value]
-        return value
-
-    data = normalize(event.get("data", {}))
-    if event["event"] == "message.completed" and isinstance(data.get("content"), str):
-        data["content"] = data["content"].strip("\n")
-    if event["event"] == "run.completed":
-        data.pop("usage", None)  # Legacy and Hermes intentionally expose different usage shapes.
-    if event["event"] == "tool.completed" and data.get("name") in {"local_shell", "terminal"}:
-        # The legacy tool exposes the process summary as repr text while Hermes also
-        # includes it as structured execution data. Compare the stable command evidence.
-        result_text = json.dumps(data.get("result", []), ensure_ascii=False)
-        data["result"] = {
-            "contains_fixture": "SAME_TOOL_FIXTURE" in result_text,
-            "is_error": data.get("is_error", False),
-            "state": (data.get("execution") or {}).get("state"),
-            "exit_code": (data.get("execution") or {}).get("exit_code"),
-        }
-    return {"event": event["event"], "data": data}
 
 
-@pytest.mark.asyncio
-async def test_websocket_legacy_and_hermes_frontend_event_parity(backend):
-    sequences = []
-    for engine in ("legacy", "hermes"):
-        response = await backend.http.put("/api/settings/configuration", json={
-            "gateway_base_url": backend.fake.base_url, "api_key": "sk-fake-e2e", "agent_engine": engine,
-        })
-        assert response.status_code == 200, response.text
-        count = 0
-        def responder(record):
-            nonlocal count
-            count += 1
-            return ToolCall("terminal", {"command": "Write-Output SAME_TOOL_FIXTURE", "shell": "powershell"}) if count == 1 else Text("SAME_FINAL_FIXTURE")
-        # The legacy tool name is the only transport adaptation; task and results match.
-        def legacy_responder(record):
-            response = responder(record)
-            if isinstance(response, ToolCall) and engine == "legacy":
-                response.name = "local_shell"
-                response.args["shell"] = "powershell"
-            return response
-        backend.fake._responder = legacy_responder
-        _, events = await backend.run("produce same tool and final evidence")
-        selected = [_normalize_c1_parity_event(item, workspace=str(backend.root / "workspace")) for item in events if item["event"] in {
-            "run.started", "tool.started", "tool.completed", "message.completed", "run.completed",
-        }]
-        sequences.append(selected)
-        tool_started = next(item["data"] for item in selected if item["event"] == "tool.started")
-        tool_completed = next(item["data"] for item in selected if item["event"] == "tool.completed")
-        message_completed = next(item["data"] for item in selected if item["event"] == "message.completed")
-        run_completed = next(item["data"] for item in selected if item["event"] == "run.completed")
-        assert tool_started["name"] == "terminal"
-        assert tool_started["arguments"]["command"] == "Write-Output SAME_TOOL_FIXTURE"
-        assert tool_started["arguments"]["shell"] == "powershell"
-        assert tool_completed["name"] == "terminal"
-        assert tool_completed["is_error"] is False
-        assert tool_completed["result"]["contains_fixture"] is True
-        assert "SAME_FINAL_FIXTURE" in message_completed["content"]
-        assert run_completed["result"] == "completed"
-        assert run_completed["model"] == "fake-model"
-    assert sequences[0] == sequences[1]
 
 
 @pytest.mark.asyncio

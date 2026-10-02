@@ -12,7 +12,6 @@ dependencies = [
     "websockets>=13.0",
     "sherpa-onnx>=1.12.20",
     "litellm>=1.50.0",
-    "langgraph>=0.2.0",
     "langchain-core>=0.3.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
@@ -45,7 +44,7 @@ dependencies = [
     "pypdf>=5.0",
     "trafilatura>=2.0",
     "youtube-transcript-api>=1.2",
-    "hermes-agent @ git+https://github.com/unicorn-Y/hermes-agent.git@b275599798fb89040a5a53981a5a409001af8774",
+    "hermes-agent @ git+https://github.com/unicorn-Y/hermes-agent.git@e287231d7906bcce5bc373d20fb2e3e1e6427220",
 ]
 
 [project.optional-dependencies]

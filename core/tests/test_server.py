@@ -1520,55 +1520,6 @@ class TestWebSocketProtocol:
 
 
 class TestBackendParityWave1:
-    async def test_steer_queues_for_next_model_turn_and_rejects_finished_run(self) -> None:
-        from types import SimpleNamespace
-        from unittest.mock import AsyncMock
-
-        from langchain_core.messages import HumanMessage
-        from atlas.agent import AgentOrchestrator, AgentRunContext
-
-        run = server.RunState("steer-run", "conv", "model")
-        assert server._queue_run_steer(run, "change direction", "event-1") is None
-        model_requests = []
-        class Stream:
-            def __aiter__(self):
-                async def chunks():
-                    yield SimpleNamespace(
-                        choices=[SimpleNamespace(
-                            delta=SimpleNamespace(content="ok", tool_calls=[]),
-                            finish_reason="stop",
-                        )], usage=None,
-                    )
-                return chunks()
-        async def completion(**kwargs):
-            model_requests.append(kwargs)
-            return Stream()
-        from atlas import agent as agent_module
-        original = agent_module.acompletion
-        agent_module.acompletion = completion
-        try:
-            agent = object.__new__(AgentOrchestrator)
-            agent._model_mgr = SimpleNamespace(current_litellm_model="test-model")
-            agent._model_facing_tools = lambda: []
-            agent._to_litellm_messages = lambda messages: [
-                {"role": "user", "content": item.content} for item in messages
-            ]
-            agent.context_maintenance = SimpleNamespace(should_compact=lambda *a, **k: False)
-            agent._emit_hook = AsyncMock()
-            context = AgentRunContext(
-                goal="original", steer_queue=run.steer_queue,
-                maintenance_snapshot=None, maintenance_context={},
-            )
-            await agent._think_node({
-                "messages": [HumanMessage(content="original")], "pending_events": [],
-                "tool_rounds": 1, "runtime": context,
-            })
-        finally:
-            agent_module.acompletion = original
-        assert model_requests[0]["messages"][-1]["content"] == "change direction"
-        assert (await context.event_queue.get())["type"] == "run_steered"
-        run.status = "completed"
-        assert server._queue_run_steer(run, "too late", "event-2") == "run_not_active"
 
     async def test_ask_user_event_waits_for_a_response(self, monkeypatch) -> None:
         from types import SimpleNamespace

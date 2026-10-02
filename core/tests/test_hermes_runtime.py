@@ -57,17 +57,21 @@ def test_hermes_tool_calls_translate_to_atlas_tools():
     assert _translate("terminal", {
         "command": "Get-Location", "workdir": "D:/Atlas", "background": True,
     }) == ("local_shell", {
-        "command": "Get-Location", "shell": "powershell", "cwd": "D:/Atlas",
-        "detached": True, "keep_stdin": True,
+        "command": "Get-Location", "shell": "auto", "cwd": "D:/Atlas",
+        "detached": True, "keep_stdin": True, "_atlas_conversation_id": "",
     })
     assert _translate("terminal", {
         "command": "python -i", "workdir": "D:/Atlas", "background": True, "pty": True,
     }) == ("local_shell", {
-        "command": "python -i", "shell": "powershell", "cwd": "D:/Atlas",
+        "command": "python -i", "shell": "auto", "cwd": "D:/Atlas",
         "detached": True, "keep_stdin": True, "pty": True,
+        "_atlas_conversation_id": "",
     })
     assert _translate("process_manage", {"action": "poll", "session_id": "proc-1"}) == (
-        "local_process", {"action": "status", "execution_id": "proc-1"},
+        "local_process", {
+            "action": "status", "execution_id": "proc-1", "_native_poll": True,
+            "_atlas_conversation_id": "",
+        },
     )
     for source, target in (
         ("list", "list"), ("log", "read"), ("wait", "wait"),
@@ -83,6 +87,9 @@ def test_hermes_tool_calls_translate_to_atlas_tools():
             expected["execution_id"] = ""
         if source in {"write", "submit", "handoff"}:
             args["data"] = expected["data"] = "answer"
+        if source == "log":
+            expected["_line_offsets"] = True
+        expected["_atlas_conversation_id"] = ""
         assert _translate("process_manage", {
             **args,
         }) == ("local_process", expected)

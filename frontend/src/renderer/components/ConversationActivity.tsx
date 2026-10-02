@@ -113,6 +113,7 @@ function StepRow({ step, live, onCancelSubtask }: { step: Step; live: boolean; o
       </span>
       {detail && <ChevronRight size={13} className={cn('shrink-0 self-center text-fg-3 transition-transform', open && 'rotate-90')} />}
     </button>
+    {step.imagePreview && <img src={step.imagePreview} alt={step.target || '读取的图片'} className="mt-2 max-h-32 max-w-48 rounded-lg border border-line object-contain" />}
     {running && step.subtaskId && <button onClick={() => onCancelSubtask(step.subtaskId!)} className="ml-0 text-[12px] text-fg-3 hover:text-danger">停止这个子任务</button>}
     {open && <pre className="anim-fade mt-1.5 mb-1 max-h-72 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">{detail}</pre>}
     {open && step.fullOutputPath && <p className="m-0 mb-1 text-[12px] text-fg-3">结果太长，只显示了开头和结尾。完整内容：

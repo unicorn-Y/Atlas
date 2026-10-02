@@ -53,6 +53,18 @@ def _find_git_bash() -> str | None:
     return None
 
 
+def _effective_shell(shell: str, git_bash: str | None, *, windows: bool) -> tuple[str, str | None]:
+    if shell == "auto":
+        if git_bash:
+            return "bash", git_bash
+        return ("powershell", None) if windows else ("bash", None)
+    if shell == "bash":
+        if windows and not git_bash:
+            raise ValueError("Git Bash is not installed; choose PowerShell or cmd explicitly.")
+        return "bash", git_bash
+    return shell, None
+
+
 def _tool(
     name: str, description: str, properties: dict[str, Any], required: list[str]
 ) -> dict[str, Any]:
@@ -75,7 +87,7 @@ LOCAL_TOOLS = [
     _tool(
         "local_shell",
         (
-            "Run a PowerShell or cmd.exe command locally. Set cwd for any accessible directory. "
+            "Run a command locally. Windows defaults to Git Bash, then PowerShell. Set cwd for any accessible directory. "
             "Nonzero exit codes are returned as results."
         ),
         {
@@ -409,7 +421,7 @@ class LocalExecutionRuntime:
                 raise ValueError(f"{key} must be a finite non-negative number")
         if (
             name in {"local_shell", "local_process"}
-            and args.get("shell") not in {None, "powershell", "cmd", "bash"}
+            and args.get("shell") not in {None, "auto", "powershell", "cmd", "bash"}
         ):
             raise ValueError(f"Unsupported shell: {args['shell']}")
         patterns = args.get("watch_patterns", [])
@@ -670,6 +682,9 @@ class LocalExecutionRuntime:
     ) -> LocalProcess:
         shell = args["shell"]
         command = str(args["command"])
+        shell, resolved_bash = _effective_shell(
+            shell, _find_git_bash(), windows=os.name == "nt",
+        )
         if shell == "powershell":
             executable = shutil.which("powershell.exe") or shutil.which("pwsh") or "powershell.exe"
             utf8 = (
@@ -693,23 +708,10 @@ class LocalExecutionRuntime:
                 f"chcp 65001>nul & {command}",
             ]
         elif shell == "bash":
-            executable = _find_git_bash()
-            if executable:
-                argv = [executable, "-lc", command]
-            elif os.name == "nt":
-                executable = (
-                    shutil.which("powershell.exe") or shutil.which("pwsh") or "powershell.exe"
-                )
-                utf8 = (
-                    "$utf8 = [Text.UTF8Encoding]::new(); "
-                    "[Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; "
-                )
-                argv = [
-                    executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-                    utf8 + command,
-                ]
-            else:
+            executable = resolved_bash or shutil.which("bash")
+            if not executable:
                 raise ValueError("bash executable was not found")
+            argv = [executable, "-lc", command]
         else:
             raise ValueError(f"Unsupported shell: {shell}")
         return await self._spawn(

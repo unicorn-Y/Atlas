@@ -22,11 +22,10 @@ async def _run_title_turn(
         db_path = tmp_path / "config.db"
 
     monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
-        "tools.servers": {}, "tools.auto_start": [], "agent.engine": "hermes",
+        "tools.servers": {}, "tools.auto_start": [],
         "agent.verify_before_stop": True,
     }))
     monkeypatch.setattr("atlas.config.DATA_ROOT", tmp_path / "atlas-data")
-    monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"agent_engine": "hermes"})
     monkeypatch.setenv("ATLAS_DATA_DIR", str(tmp_path / "atlas-data"))
     def title_response(_request):
         if delayed_title:

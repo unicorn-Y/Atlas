@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ast
 import json
 import sys
 from pathlib import Path
@@ -450,89 +451,6 @@ async def test_hermes_plan_mode_uses_plan_prompt_and_only_read_tools(tmp_path, m
         assert "[/plan — plan mode]" in prompt
 
 
-@pytest.mark.asyncio
-async def test_same_fake_model_script_keeps_legacy_and_hermes_event_sequence(tmp_path, monkeypatch):
-    _disable_external_mcp(monkeypatch)
-    fixture = tmp_path / "parity.txt"
-    fixture.write_text("shared fake fixture", encoding="utf-8")
-    with FakeLLMServer() as fake:
-        def responder(record):
-            body = record["body"]
-            names = {item["function"]["name"] for item in body.get("tools", [])}
-            if any(item.get("role") == "tool" for item in body.get("messages", [])):
-                return Text("same scripted answer")
-            if "read_file" in names:
-                return ToolCall("read_file", {"path": str(fixture)})
-            if "local_file" in names:
-                return ToolCall("local_file", {"action": "read", "path": str(fixture)})
-            return Text("same scripted answer")
-
-        fake._responder = responder
-        home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
-        monkeypatch.setenv("HERMES_HOME", str(home))
-        monkeypatch.setenv("OPENAI_API_BASE", fake.base_url)
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-fake-e2e")
-        models = SimpleNamespace(
-            current_model="fake-model", current_litellm_model="openai/fake-model",
-            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
-            list_models=lambda: [{"id": "fake-model", "litellm_model": "openai/fake-model",
-                                  "provider": "openai", "max_output_tokens": 256}],
-        )
-        memory = MagicMock()
-        for name in (
-            "apply_knowledge_consolidated_insights", "record_goal_knowledge_usage",
-            "extract_memories", "get_conversation_messages", "retrieve_agent_reflections",
-            "retrieve_approved_goal_experiences", "retrieve_approved_goal_knowledge",
-            "get_active_context", "get_agent_context",
-        ):
-            setattr(memory, name, AsyncMock(return_value=[]))
-        memory.get_agent_context_with_trace = AsyncMock(return_value={
-            "memories": [], "knowledge_trace": {"query_terms": [], "results": [], "decisions": []},
-        })
-        memory.save_message = AsyncMock(return_value="saved")
-        mcp = MagicMock()
-        mcp.get_tools_for_llm.return_value = []
-        mcp.list_tools.return_value = []
-        mcp.tool_count = 0
-        engines = {"value": "hermes"}
-        monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"agent_engine": engines["value"]})
-        sequences = {}
-        event_sequences = {}
-        for engine in ("hermes", "legacy"):
-            engines["value"] = engine
-            orchestrator = AgentOrchestrator(
-                models, memory, mcp_client=mcp, local_execution=LocalExecutionRuntime(),
-            )
-            events = [event async for event in orchestrator.run(
-                "read the fixture and summarize", f"parity-{engine}", workspace=str(tmp_path),
-            )]
-            sequences[engine] = [event["type"] for event in events
-                                 if event.get("type") in {"tool_call", "tool_result", "done", "error"}]
-            sequence = []
-            for event in events:
-                if event.get("type") not in {"chunk", "tool_call", "tool_result", "done", "error"}:
-                    continue
-                stable = {
-                    key: value for key, value in event.items()
-                    if key not in {
-                        "id", "event_id", "run_id", "conversation_id", "message_id",
-                        "created_at", "timestamp",
-                    }
-                }
-                if stable["type"] == "chunk" and sequence and sequence[-1]["type"] == "chunk":
-                    sequence[-1]["content"] += stable.get("content", "")
-                else:
-                    sequence.append(stable)
-            for event in sequence:
-                if event["type"] == "chunk":
-                    event["content"] = event.get("content", "").strip()
-            sequence = [event for event in sequence
-                        if event["type"] != "chunk" or event.get("content")]
-            event_sequences[engine] = sequence
-    assert sequences["hermes"] == sequences["legacy"], sequences
-    assert sequences["hermes"] == ["tool_call", "tool_result", "done"]
-    assert event_sequences["hermes"] == event_sequences["legacy"], event_sequences
 
 
 @pytest.mark.asyncio
@@ -680,12 +598,17 @@ async def test_real_hermes_parallel_child_agents_use_fake_model(tmp_path, monkey
     with FakeLLMServer() as fake:
         def responder(record):
             body = record["body"]
-            messages = json.dumps(body.get("messages", []), ensure_ascii=False)
-            if "delegate both summaries" in messages:
+            request_messages = body.get("messages", [])
+            messages = json.dumps(request_messages, ensure_ascii=False)
+            if "delegate both summaries" in messages and not any(
+                item.get("role") == "tool" for item in request_messages
+            ):
                 return ToolCall("delegate_task", {"tasks": [
                     {"goal": "summarize fixture alpha"},
                     {"goal": "summarize fixture beta"},
                 ]})
+            if "delegate both summaries" in messages:
+                return Text("both child summaries were dispatched")
             if "summarize fixture alpha" in messages:
                 return Text("alpha child complete")
             if "summarize fixture beta" in messages:
@@ -713,7 +636,7 @@ async def test_real_hermes_parallel_child_agents_use_fake_model(tmp_path, monkey
             item for item in events
             if item.get("type") == "tool_result" and item.get("name") == "delegate_task"
         )
-        payload = json.loads(dispatch["content"][0]["text"])
+        payload = ast.literal_eval(dispatch["content"][0]["text"])
         assert payload["status"] == "dispatched"
         delegation_id = payload["delegation_id"]
         from tools.async_delegation import get_durable_delegation

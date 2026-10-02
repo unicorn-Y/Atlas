@@ -49,11 +49,10 @@ async def test_real_hermes_request_includes_transient_image_content(tmp_path, mo
             db_path = tmp_path / "config.db"
 
         monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
-            "tools.servers": {}, "tools.auto_start": [], "agent.engine": "hermes",
+            "tools.servers": {}, "tools.auto_start": [],
             "agent.verify_before_stop": True,
         }))
         monkeypatch.setattr("atlas.config.DATA_ROOT", data_root)
-        monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"agent_engine": "hermes"})
         monkeypatch.setenv("ATLAS_DATA_DIR", str(data_root))
         model_config = [{
             "id": "parent-model", "litellm_model": "openai/parent-model",

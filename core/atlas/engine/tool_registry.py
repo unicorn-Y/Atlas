@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import json
 import math
+from pathlib import Path
 import threading
 import uuid
 from typing import Any
@@ -33,15 +34,16 @@ _ALIASES = {
     "execute_code": ("execute_code", None),
     "session_search": ("session_search", None),
     "delegate_task": ("delegate_task", None),
+    "new_context_window": ("new_context_window", None),
 }
 
 _HERMES_CORE_TOOLS = {
     "read_file", "write_file", "patch", "search_files", "terminal",
-    "process_manage", "todo_list", "clarify", "execute_code",
+    "process_manage", "todo_list", "clarify", "execute_code", "new_context_window",
     "session_search", "delegate_task",
 }
 _ATLAS_NATIVE_TOOLS = {
-    "todo_list", "execute_code", "session_search", "delegate_task",
+    "todo_list", "execute_code", "session_search", "delegate_task", "new_context_window",
 }
 
 
@@ -51,11 +53,96 @@ def _approval_fingerprint(name: str, arguments: dict[str, Any]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _append_repetition_reminder(
+    runtime: Any, name: str, arguments: dict[str, Any], result: str, *, threshold: int | None = None,
+) -> str:
+    if name not in {"patch", "write_file"} or not arguments.get("path"):
+        return result
+    if threshold is None:
+        from atlas.config import get_config
+
+        threshold = int(get_config().get("tools.same_file_edit_reminder_threshold", 6))
+    path = str(arguments["path"])
+    counts = runtime.file_edit_counts
+    counts[path] = counts.get(path, 0) + 1
+    if counts[path] >= threshold:
+        return result + (
+            "\n\n提醒：你已在本轮反复修改同一文件，请先重新读取并检查结果，再换一种思路继续。"
+        )
+    return result
+
+
+def _multimodal_image_result(data_url: str, path: str) -> dict[str, Any]:
+    return {
+        "_multimodal": True,
+        "content": [
+            {"type": "text", "text": f"图片已读取：{Path(path).name}"},
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ],
+        "text_summary": f"图片已读取：{Path(path).name}",
+    }
+
+
+def _read_file_result(agent: Any, arguments: dict[str, Any], result: str) -> str | dict[str, Any]:
+    path = str(arguments.get("path") or "")
+    if Path(path).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
+        return result
+    try:
+        details = json.loads(result)
+    except (TypeError, json.JSONDecodeError):
+        return result
+    image_path = Path(path).expanduser()
+    image_read_error = (
+        image_path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+        and isinstance(details, dict)
+        and bool(details.get("error"))
+    )
+    if not isinstance(details, dict) or not (details.get("is_image") or image_read_error):
+        return result
+    supports_vision = getattr(agent, "_model_supports_vision", None)
+    if callable(supports_vision) and supports_vision():
+        from tools.vision_tools import _resize_image_for_vision
+
+        if not image_path.is_absolute():
+            image_path = Path(getattr(agent, "cwd", None) or Path.cwd()) / image_path
+        if not image_path.is_file():
+            return f"图片文件不存在：{path}"
+        return _multimodal_image_result(
+            _resize_image_for_vision(
+                image_path.resolve(), max_base64_bytes=5 * 1024 * 1024,
+                max_dimension=2048, force_jpeg=True,
+            ),
+            path,
+        )
+    from tools.registry import registry
+
+    vision_entry = registry.get_entry("vision_analyze")
+    if vision_entry is not None and vision_entry.check_fn is not None and vision_entry.check_fn():
+        from model_tools import _run_async
+
+        return _run_async(vision_entry.handler(
+            {"image_url": path, "question": "请详细描述图片内容及其中可见的文字。"},
+            session_id=str(getattr(agent, "session_id", "") or ""),
+        ))
+    return "当前模型不支持视觉，且没有配置视觉模型，无法读取这张图片。"
+
+
 def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) -> None:
     """Expose Atlas tool schemas and bind sync Hermes handlers to this async Atlas run."""
     from tools.registry import registry
     from toolsets import TOOLSETS
 
+    if registry.get_entry("new_context_window") is None:
+        registry.register(
+            name="new_context_window", toolset="atlas",
+            schema={
+                "name": "new_context_window",
+                "description": "Summarize the current task and continue it in a clean model context while preserving the conversation history.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+            handler=lambda _args, **_kwargs: "Context handoff is only available during an Atlas run.",
+            is_async=False, override=True,
+        )
     schemas = agent._model_facing_tools()
     names: list[str] = []
     plan_mode = getattr(runtime, "mode", "act") == "plan"
@@ -127,12 +214,33 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     except (TypeError, ValueError):
                         accepted = {}
                     return fallback(args, **accepted)
+                if _name == "new_context_window":
+                    callback = getattr(bound_runtime, "new_context_window_callback", None)
+                    if callback is None:
+                        return "无法生成上下文交接摘要。"
+                    summary = asyncio.run_coroutine_threadsafe(callback(), bound_loop).result()
+                    hermes_agent = getattr(bound_runtime, "hermes_agent", None)
+                    if hermes_agent is None:
+                        return "无法切换上下文：当前会话没有可用的 Hermes Agent。"
+                    hermes_agent._atlas_context_handoff_summary = str(summary)
+                    event_queue = getattr(bound_runtime, "event_queue", None)
+                    if event_queue is not None:
+                        asyncio.run_coroutine_threadsafe(event_queue.put({
+                            "type": "context.window.switched",
+                            "data": {"summary": str(summary)},
+                        }), bound_loop).result()
+                    return "已整理交接摘要，正在切换到新上下文。"
                 if _name in NATIVE_FILE_TOOLS and not str(bound_runtime.workspace or "").startswith("ssh://"):
                     # Keep Hermes' complete file implementation: paging, ripgrep,
                     # stale-write guards, fuzzy/V4A patching and document readers.
                     native = _hermes_fallback_handlers[_name]
                     result = native(args, **_kwargs)
-                    return result
+                    if _name == "read_file":
+                        result = _read_file_result(
+                            getattr(bound_runtime, "hermes_agent", None) or bound_agent,
+                            args, str(result),
+                        )
+                    return _append_repetition_reminder(bound_runtime, _name, args, str(result)) if isinstance(result, str) else result
                 tool_name, tool_args = _translate(_name, args)
                 if tool_name in {"local_shell", "local_exec", "local_process"}:
                     starts_process = (
@@ -163,7 +271,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 future = asyncio.run_coroutine_threadsafe(
                     bound_agent._execute_tools_node({
                         "messages": [AIMessage(content="", tool_calls=[request])],
-                        "pending_events": [], "tool_rounds": 0, "runtime": bound_runtime,
+                        "pending_events": [], "runtime": bound_runtime,
                     }),
                     bound_loop,
                 )
@@ -174,7 +282,8 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                         {**item, "content": item["text"]}
                         for item in bound_runtime.todo_store.snapshot()["todos"]
                     ])
-                return str(messages[-1].content) if messages else "工具没有返回内容。"
+                result = str(messages[-1].content) if messages else "工具没有返回内容。"
+                return _append_repetition_reminder(bound_runtime, _name, args, result)
 
             native_entry = _hermes_entries.get(name)
             registry.register(
@@ -189,6 +298,8 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
 
         # `toolsets` is the shared resolver table; the schema source and handlers remain
         # registered through Hermes' canonical registry.
+        if not plan_mode:
+            registered.add("new_context_window")
         TOOLSETS[atlas_toolset] = {
             "description": "Atlas 工作区、项目和运行工具",
             "tools": sorted(registered),
@@ -252,7 +363,7 @@ def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any
         args["action"] = action
     elif tool_name == "local_shell":
         args["command"] = args.pop("command", args.pop("cmd", ""))
-        args["shell"] = str(args.get("shell") or "bash")
+        args["shell"] = str(args.get("shell") or "auto")
         args["cwd"] = args.pop("workdir", args.get("cwd", ""))
         background = bool(args.pop("background", False))
         args["detached"] = background

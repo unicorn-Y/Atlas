@@ -18,6 +18,7 @@ export interface Step {
   endedAt?: string;
   input?: string;
   result?: string;
+  imagePreview?: string;
   output: string;
   /** Set for delegated sub-agents, which can be cancelled on their own. */
   subtaskId?: string;
@@ -146,6 +147,19 @@ export function describeTool(name: string, args: unknown): { verb: string; targe
 
 const text = (value: unknown) => typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value, null, 2);
 
+function imageToolResult(value: unknown): { preview?: string; summary?: string } {
+  let result: any = value;
+  if (typeof result === 'string') {
+    try { result = JSON.parse(result); } catch { return {}; }
+  }
+  if (!result || typeof result !== 'object' || result._multimodal !== true) return {};
+  const content = Array.isArray(result.content) ? result.content : [];
+  const part = content.find((item: any) => item && typeof item === 'object' && item.type === 'image_url');
+  const url = part?.image_url?.url;
+  const preview = typeof url === 'string' && /^data:image\/(png|jpe?g|webp|gif|bmp);base64,/i.test(url) ? url : undefined;
+  return { preview, summary: typeof result.text_summary === 'string' ? result.text_summary : undefined };
+}
+
 export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
   const items: TimelineItem[] = [];
   const byExecution = new Map<string, Step>();
@@ -199,7 +213,9 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         }
         step.state = execution?.state === 'cancelled' ? 'cancelled' : data.is_error ? 'failed' : 'done';
         step.endedAt = event.timestamp;
-        step.result = text(data.result);
+        const image = imageToolResult(data.result);
+        step.imagePreview = image.preview;
+        step.result = image.summary || text(data.result);
         if (typeof data.full_output_path === 'string') step.fullOutputPath = data.full_output_path;
         if (execution) {
           const parts = [execution.stdout, execution.stderr].map(text).filter(Boolean);
@@ -304,6 +320,11 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         closeReply(); closeBlocks();
         items.push({ kind: 'notice', id: event.id, tone: 'verify',
           text: `正在整理对话上下文${typeof data.percent === 'number' ? `（${Math.max(0, Math.min(100, data.percent))}%）` : ''}` });
+        break;
+      }
+      case 'context.window.switched': {
+        closeReply(); closeBlocks();
+        items.push({ kind: 'notice', id: event.id, tone: 'switch', text: '已切换到新上下文' });
         break;
       }
       case 'run.recovery.notice': {

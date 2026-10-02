@@ -39,7 +39,6 @@ run(venvPython, [
   '--specpath', workDir,
   '--collect-all', 'atlas',
   '--collect-all', 'litellm',
-  '--collect-all', 'langgraph',
   '--collect-all', 'langchain_core',
   '--collect-all', 'uvicorn',
   '--collect-all', 'fastapi',

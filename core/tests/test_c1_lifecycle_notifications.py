@@ -22,11 +22,10 @@ async def test_durable_process_notice_is_visible_to_next_hermes_turn(tmp_path, m
         write_hermes_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
-            "tools.servers": {}, "tools.auto_start": [], "agent.engine": "hermes",
+            "tools.servers": {}, "tools.auto_start": [],
             "agent.verify_before_stop": True,
         }))
         monkeypatch.setattr("atlas.config.DATA_ROOT", data_root)
-        monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"agent_engine": "hermes"})
         monkeypatch.setenv("ATLAS_DATA_DIR", str(data_root))
         memory = MemoryStore(db_path=tmp_path / "memory.sqlite3")
         await memory.init()

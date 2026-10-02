@@ -961,7 +961,6 @@ class ModelSelectRequest(BaseModel):
 class ProviderSettingsRequest(BaseModel):
     gateway_base_url: str
     api_key: str | None = None
-    agent_engine: str | None = None
     compression_model: str | None = None
 
 
@@ -1127,9 +1126,6 @@ async def get_configuration() -> dict[str, Any]:
         "api_key_configured": model_mgr.api_key_configured,
         "models": model_mgr.list_models(),
         "current": model_mgr.current_model,
-        "agent_engine": str(settings.get(
-            "agent_engine", get_config().get("agent.engine", "hermes"),
-        )),
         "compression_model": str(settings.get("compression_model", "")),
     }
 
@@ -1188,21 +1184,17 @@ async def update_configuration(req: ProviderSettingsRequest) -> dict[str, Any]:
     base_url = req.gateway_base_url.strip()
     if not base_url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="服务地址必须以 http:// 或 https:// 开头")
-    if req.agent_engine is not None and req.agent_engine not in {"hermes", "legacy"}:
-        raise HTTPException(status_code=400, detail="agent_engine 只能是 hermes 或 legacy")
     if req.compression_model is not None and req.compression_model and not any(
         item.get("id") == req.compression_model for item in model_mgr.list_models()
     ):
         raise HTTPException(status_code=400, detail="压缩模型必须来自已配置的模型列表")
     api_key = req.api_key.strip() if req.api_key and req.api_key.strip() else None
     model_mgr.update_provider(base_url, api_key)
-    if req.agent_engine is not None or req.compression_model is not None:
+    if req.compression_model is not None:
         settings = load_user_settings()
-    if req.agent_engine is not None:
-        settings["agent_engine"] = req.agent_engine
     if req.compression_model is not None:
         settings["compression_model"] = req.compression_model
-    if req.agent_engine is not None or req.compression_model is not None:
+    if req.compression_model is not None:
         save_user_settings(settings)
     return await get_configuration()
 
@@ -1658,33 +1650,15 @@ async def compact_conversation(
     conv = await memory.get_conversation(conversation_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    messages = await memory.get_conversation_messages(conversation_id, limit=1000)
-    before = sum(max(1, len(item["content"]) // 4) for item in messages)
-    context = {
-        "goal": conv["title"],
-        "session_summary": "\n".join(
-            f"{item['role']}: {item['content'][:1000]}" for item in messages[-20:]
-        ),
-    }
-    from atlas.config import DATA_ROOT, load_user_settings
+    from atlas.config import DATA_ROOT
+    from atlas.engine import HermesRuntime
 
-    engine = str(load_user_settings().get(
-        "agent_engine", get_config().get("agent.engine", "hermes"),
-    )).strip().lower()
-    if engine == "hermes":
-        from atlas.engine import HermesRuntime
-
-        snapshot = await HermesRuntime(
-            data_dir=DATA_ROOT, model_manager=orchestrator._model_mgr,
-        ).compact_session(
-            conversation_id=conversation_id, workspace=conv.get("workspace"),
-            focus_topic=str((req or {}).get("focus_topic") or (req or {}).get("note") or "").strip() or None,
-        )
-        return snapshot
-    snapshot = await orchestrator.context_maintenance.compact(context)
-    summary = str(snapshot.get("session_summary", ""))
-    return {"before_tokens": before, "after_tokens": max(1, len(summary) // 4),
-            "summary": summary}
+    return await HermesRuntime(
+        data_dir=DATA_ROOT, model_manager=orchestrator._model_mgr,
+    ).compact_session(
+        conversation_id=conversation_id, workspace=conv.get("workspace"),
+        focus_topic=str((req or {}).get("focus_topic") or (req or {}).get("note") or "").strip() or None,
+    )
 
 
 @app.delete("/api/conversations/{conversation_id}")
@@ -7212,6 +7186,9 @@ async def _execute_run(
                             usage=usage, price=model_config.get("price"),
                         )
                 await emit("run.usage", usage)
+
+            elif etype == "context.window.switched":
+                await emit("context.window.switched", event.get("data", {}))
 
             elif etype == "approval_required":
                 # Already emitted by the approval_callback above;

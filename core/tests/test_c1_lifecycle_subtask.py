@@ -33,12 +33,11 @@ async def test_real_hermes_atlas_child_keeps_context_and_permissions_then_cleans
         db_path = tmp_path / "config.db"
 
     monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
-        "tools.servers": {}, "tools.auto_start": [], "agent.engine": "hermes",
+        "tools.servers": {}, "tools.auto_start": [],
         "agent.verify_before_stop": True,
     }))
     data_root = tmp_path / "atlas-data"
     monkeypatch.setattr("atlas.config.DATA_ROOT", data_root)
-    monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"agent_engine": "hermes"})
     monkeypatch.setenv("ATLAS_DATA_DIR", str(data_root))
 
     workspace = tmp_path / "workspace"

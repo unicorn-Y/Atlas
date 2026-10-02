@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from atlas.engine.tool_registry import _translate
-from atlas.tools.local_execution import LocalExecutionRuntime, _find_git_bash
+from atlas.tools.local_execution import LocalExecutionRuntime, _find_git_bash, _effective_shell
 
 
 def test_terminal_translation_keeps_shell_and_notification_parameters():
@@ -27,6 +27,24 @@ def test_terminal_translation_keeps_shell_and_notification_parameters():
     assert bash["heartbeat"] == 0.25
     with pytest.raises(ValueError, match="heartbeat"):
         _translate("terminal", {"command": "echo no", "heartbeat": float("nan")})
+
+
+def test_default_shell_uses_git_bash_then_powershell_but_explicit_bash_does_not_fallback():
+    assert _translate("terminal", {"command": "echo ok"})[1]["shell"] == "auto"
+    assert _effective_shell("auto", "C:/Program Files/Git/bin/bash.exe", windows=True) == (
+        "bash", "C:/Program Files/Git/bin/bash.exe",
+    )
+    assert _effective_shell("auto", None, windows=True) == ("powershell", None)
+    with pytest.raises(ValueError, match="Git Bash"):
+        _effective_shell("bash", None, windows=True)
+
+
+def test_wsl_bash_on_path_is_not_identified_as_git_bash(monkeypatch):
+    monkeypatch.setattr(
+        "atlas.tools.local_execution.shutil.which",
+        lambda name: "C:/Windows/System32/bash.exe" if name in {"bash.exe", "bash"} else None,
+    )
+    assert _find_git_bash() is None
 
 
 def test_process_translation_preserves_line_offsets_and_parallel_delegate():
