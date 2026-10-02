@@ -744,6 +744,15 @@ def register_review_tools() -> None:
     rebinds dispatch through bind_atlas_tools with override=True, so re-running
     this must never clobber that binding (hence the get_entry guard).
     """
+    # 审查工具必须常驻（ambient）：tool_search 的可延迟规则会把不在 hermes
+    # toolsets._HERMES_CORE_TOOLS 里的工具换成桥接桩，审查员直接调用会被
+    # "Tool '...' does not exist" 拒绝——与 clarify 刻意不延迟是同一个理由。
+    import toolsets as hermes_toolsets
+
+    for _ambient in ("submit_findings", "review_command"):
+        if _ambient not in hermes_toolsets._HERMES_CORE_TOOLS:
+            hermes_toolsets._HERMES_CORE_TOOLS.append(_ambient)
+
     from tools.registry import registry
 
     for name, schema in _REVIEW_TOOL_SCHEMAS:
