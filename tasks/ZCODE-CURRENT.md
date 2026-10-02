@@ -16,7 +16,3 @@ Only fix:
 2. prevent ghost key metadata when keyring persistence fails.
 
 No other C5 rework. Do not merge main.
-
-## Worker concurrency
-
-Observed account limit: keep **at most 3 subagents concurrently running**. If more work exists, dispatch in waves.
