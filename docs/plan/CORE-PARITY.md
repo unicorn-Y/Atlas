@@ -2,7 +2,7 @@
 
 **这张表决定 C1–C6 每一波做什么。** 范围只限「主体」：用户每天实际用的部分，包括对话干活、读改代码、跑命令、上下文、会话、交互、子 Agent、扩展、模型、编程。外部功能（渠道、连接器目录、跨设备、分享、电脑和浏览器操作扩展、自我进化）冻结，不在这张表里。
 
-> 2026-10-02 C1 状态更新：全量后端 pytest 已通过（`988 passed, 9 skipped, 1 warning`）。曾失败的 7 个 scheduler 用例在 `0d48720^ = 805110c` 上通过 stash 复现，根因是 Windows 的 `os.kill(pid, 0)` 返回 `WinError 87`；修复提交 `30f89f4`。C1 尚未整体验收，L2、L4、T10、T11、T19、S4、A1 行仍保留已知缺口或未完成覆盖。详情见 `tasks/results/ATLAS-C1-HERMES-CORE.result.md`。
+> 2026-10-02 C1 收尾复核：L2、L4、T10、T11、T19、S4、A1 的既有实现已由对应 Atlas 聚焦回归及 WebSocket 验收核实；暂停后模型调用闸门和 Kanban SQLite 锁争用另行修复。详见 `tasks/results/ATLAS-C1R-FINISH.result.md`。
 
 对标对象：Claude Code（CC）、Codex（CX）、ZCode（ZC）、Hermes（HM）、OpenClaw（OC）、Pi、OpenCode（OD）。
 - HM、OC、OD、Pi、CX 开源，下面的文件路径都对应各自仓库当前的 main。`HM@bafb42b` 是 2026-10-01 克隆时的提交号。
@@ -42,9 +42,9 @@
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
 | L1 | 不限轮数，靠预算和停止条件收尾 | HM：默认不限轮数，用 `agent/iteration_budget.py` 控预算，子 Agent 共享预算；CC 同样不限 | ✔ Hermes 超过 10 轮（`4357a86`） | ✔ | — | C1 |
-| L2 | 出错恢复（限流、超时、断流、空回复、输出被截断后续写、上下文超长） | HM：`agent/turn_recovery.py`、`turn_api_error.py`、`empty_response_guard.py`、`turn_truncation.py`、`turn_overflow.py`、`transcript_repair.py`（加起来几千行，各家里最全） | △ 有重试和切换模型，没有续写、超长恢复、记录修复（代码） | ✔ | — | C1 |
+| L2 | 出错恢复（限流、超时、断流、空回复、输出被截断后续写、上下文超长） | HM：`agent/turn_recovery.py`、`turn_api_error.py`、`empty_response_guard.py`、`turn_truncation.py`、`turn_overflow.py`、`transcript_repair.py`（加起来几千行，各家里最全） | ✔ 限流、服务端错误、超时、空回复、截断续写、上下文超长和 transcript 修复均由 `test_c1_recovery.py` 覆盖 | ✔ | — | C1 |
 | L3 | 防原地打转 | LangChain：同一文件改了 N 次就提醒换思路；HM：`agent/repetition_guard.py` | ✘ | ✔ 重复检测 | 按文件计数改动的提醒（照 LangChain 做法写进 HM 的 `turn_stop_gates.py`） | C2 |
-| L4 | 完成前自检 | LangChain 的完成前检查清单；HM：`agent/verification_stop.py`、`turn_stop_gates.py` | △ W06 搬过 `verification_stop`（代码），挂在旧循环上 | ✔ | — | C1 |
+| L4 | 完成前自检 | LangChain 的完成前检查清单；HM：`agent/verification_stop.py`、`turn_stop_gates.py` | ✔ Hermes 循环在完成前执行验证闸门；未验证完成会触发修正提示，见 `test_c1_stop_gate.py` | ✔ | — | C1 |
 | L5 | 并行工具调用 | CC：只读工具并行，写操作串行；HM：`agent/tool_executor.py` 加 `PARALLEL_TOOL_CALL_GUIDANCE` | ✔ Hermes 并行委派场景（`4357a86`） | ✔ | — | C1 |
 | L6 | 运行中插话（不打断当前工具） | CX 0.159 `instant_interrupt`：模型输出中途也能转向；Pi 的转向队列；HM `/steer` | ✔ 下一次调用模型前插入（代码 1051 行） | ✔ HM steer | CX 的中途转向（`codex-rs/core/src/tasks`，初判） | C3 |
 | L7 | 消息排队 | HM `/queue`；Pi 的后续消息 | ✔ Hermes steer/排队桥接（`805110c`） | ✔ | — | C1 |
@@ -65,8 +65,8 @@
 | T7 | 给 GPT 系模型用补丁格式 | CX `apply_patch`（`codex-rs/apply-patch`）；HM 只对 OpenAI 系模型显示 V4A 补丁模式 | ✔ Hermes patch tool 保留模型适配（`698b7bb`） | ✔ | — | C1 |
 | T8 | 编辑后诊断 | OD：改完跑 LSP 诊断回传；CC 的诊断工具；HM `agent/lsp`、`file_operations_lint.py` | △ `run_checks` 要单独调用 | ✔ 语法检查 | LSP 诊断：对比 OD `src/lsp` 和 HM `agent/lsp`，选强的 | C6 |
 | T9 | 搜索 | HM `search_files`：基于 ripgrep，正则、文件过滤、三种输出、上下文行、分页、按修改时间排序 | ✔ Hermes `search_files`（`698b7bb`） | ✔ | — | C1 |
-| T10 | 跑命令：前台、后台、结束通知 | HM `terminal`：后台进程加 `notify` 结束通知、按输出匹配通知、心跳汇报、真终端模式 | △ 前后台命令和完成事件已接；notify/watch/heartbeat 参数未接（`698b7bb`, `805110c`） | ✔ | — | C1 |
-| T11 | 真终端交互（REPL、交互式命令行） | CX `unified_exec`（真终端，可写入 stdin）；HM `pty` 加 `process_manage` 的写入 | △ stdin/write/submit/close、Windows PTY 和手动 handoff 已接入并覆盖；父级自动完成通知尚未接入 | ✔ | 接入父级完成通知 | C1 |
+| T10 | 跑命令：前台、后台、结束通知 | HM `terminal`：后台进程加 `notify` 结束通知、按输出匹配通知、心跳汇报、真终端模式 | ✔ 前后台、完成通知、notify/watch/heartbeat 参数映射由 `test_c1_process_notifications.py` 覆盖 | ✔ | — | C1 |
+| T11 | 真终端交互（REPL、交互式命令行） | CX `unified_exec`（真终端，可写入 stdin）；HM `pty` 加 `process_manage` 的写入 | ✔ stdin/write/submit/close、Windows PTY、handoff 和子进程结束后的父级通知由 `test_c1_tool_compat.py`、`test_c1_process_notifications.py` 覆盖 | ✔ | — | C1 |
 | T12 | Windows shell | CC：PowerShell 和 Bash 两个工具；Pi `powershell.ts` | ✔ Hermes terminal 在 Atlas 路由到 PowerShell；无 Git Bash 回退实测（`698b7bb`） | ✔ | — | C1 |
 | T13 | 网页搜索、抓取 | HM `web_search`/`web_extract`（多后端、缓存、截断）；CC WebFetch | ✔ Atlas 网络工具由 Atlas registry 提供；未做真实网络验收（`698b7bb`） | ✔ | 保留 Atlas 的内网防护 | C1 |
 | T14 | 待办清单 | CC 的任务列表；HM `todo_list`，压缩后自动重新注入 | ✔ Hermes todo 在压缩恢复场景保留（`35cd874`） | ✔ | — | C1 |
@@ -74,7 +74,7 @@
 | T16 | 跑代码片段 | HM `execute_code`（带内核、可远程） | ✔ Atlas handler 注册至 Hermes（`698b7bb`） | ✔ | — | C1 |
 | T17 | 工具按需加载 | CC ToolSearch；CX `tool_search`；HM `tools/tool_search.py` | ✔ Hermes tool search/toolset（`805110c`） | ✔ | — | C1 |
 | T18 | 工具输出过长时落盘 | HM `tool_result_storage.py`、`tool_output_truncate.py`；W06 已搬一部分 | ✔ 部分 | ✔ | — | C1 |
-| T19 | Atlas 自有工具 | — | △ Hermes registry 已接入 Atlas 工具；`process_manage` 九个动作映射已表驱动覆盖，其余旧工具动作尚未逐项独立核验 | — | 完成逐工具动作核对（`tools/registry.py`） | C1 |
+| T19 | Atlas 自有工具 | — | ✔ WebSocket 验收覆盖 Atlas 文件、终端、Git、Kanban、MCP、子任务和恢复工具路径；本地 fake MCP 验证仅调用本机服务 | — | — | C1 |
 
 ## 4. 上下文、提示词与成本
 
@@ -98,7 +98,7 @@
 | S1 | 恢复会话 | CC：中断在工具调用中途的，告诉模型「结果未知」；HM `transcript_repair.py` | ✔ Hermes SessionDB 恢复接入 Atlas（`15b1416`）；Windows 源测试仍有失败 | ✔ | — | C1 |
 | S2 | 分叉和会话树 | Pi：一个 JSONL 文件里存整棵树，`/tree` 切换，分支自动摘要（`docs/sessions.md`、`docs/compaction.md`「Branch Summarization」）；HM `/branch` | ✔ 界面有分叉树 | △ | 分支摘要照 Pi 补；底层改成存完整记录 | C3 |
 | S3 | 撤回（对话加文件） | CC rewind：可以只撤对话、只撤代码或一起撤；HM `/rollback`、`/snapshot`、`checkpoint_manager.py`；OD snapshot/undo | ✔ 有界面（W06 前做的） | ✔ | 两套检查点只留一套：对比后保留强的，界面不变 | C3 |
-| S4 | 自动起标题 | HM `title_generator.py` | △ Hermes 自动标题在 Atlas 新建会话链路未独立验收 | ✔ | — | C1 |
+| S4 | 自动起标题 | HM `title_generator.py` | ✔ 新会话生成标题、延迟标题升级且保留用户手动改名均由 `test_c1_lifecycle_titles.py` 覆盖 | ✔ | — | C1 |
 | S5 | 搜历史会话 | HM `session_search`（FTS） | ✔ Hermes `session_search` 接入（`698b7bb`） | ✔ | — | C1 |
 | S6 | 导出 | CX `/export`；HM `/export` | ✔ | ✔ | — | — |
 
@@ -119,7 +119,7 @@
 
 | # | 能力 | 最强做法 | Atlas 现状 | 骨架带来 | 还要补 | 波次 |
 | --- | --- | --- | --- | --- | --- | --- |
-| A1 | 委派单个子 Agent | CC Task 工具（独立上下文、可指定模型和工具）；HM `delegate_tool*.py`（同步和异步、运行中引导、实时日志） | △ Atlas delegate handler 在 Hermes registry 可调用并有并行假模型覆盖；子 Agent 全链路仍需核验（`4357a86`） | ✔ | — | C1 |
+| A1 | 委派单个子 Agent | CC Task 工具（独立上下文、可指定模型和工具）；HM `delegate_tool*.py`（同步和异步、运行中引导、实时日志） | ✔ Atlas 子 Agent 全链路、模型/上下文策略、只读路径限制、进度和清理由 `test_c1_lifecycle_subtask.py`、`test_c1_child_policy.py` 覆盖 | ✔ | — | C1 |
 | A2 | 并行和验收 | Factory Missions；HM 并行委派；W07 的验收 | △ W07 验收有误判（见 W07B 第一节） | ✔ | 验收逻辑在新内核上重写 | C3 |
 | A3 | 自定义子 Agent 定义 | CC `.claude/agents`、OD agents、CX `agent-roles` | ✔ W07 | — | 保留 | — |
 | A4 | 子 Agent 界面 | CC 的任务面板；CX `/agents` 指挥中心 | ✘ W07B 前端没做 | — | 原 W07B 第三节的前端 | C3 |

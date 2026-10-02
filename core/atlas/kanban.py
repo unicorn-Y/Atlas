@@ -14,6 +14,7 @@ from typing import Any
 
 STATUSES = {"todo", "running", "blocked", "review", "done"}
 _SCHEMA_LOCK = threading.Lock()
+_MIGRATION_LOCK = threading.Lock()
 _INITIALIZED_DATABASES: set[str] = set()
 
 
@@ -87,7 +88,6 @@ class KanbanStore:
                         str(value.get("assignee", "")), json.dumps(dependencies), status,
                         str(value.get("run_id", ""))))
         return next(task for task in self.tasks(board_id) if task["id"] == task_id)
-
     def update_task(self, board_id: str, task_id: str, changes: dict[str, Any]) -> dict[str, Any]:
         allowed = {"title", "description", "assignee", "dependencies", "status", "output", "run_id"}
         if set(changes) - allowed:
@@ -130,3 +130,42 @@ class KanbanStore:
                        (merged["title"], merged["description"], merged["assignee"], json.dumps(deps),
                         merged["status"], merged["output"], merged["run_id"], task_id, board_id))
         return next(task for task in self.tasks(board_id) if task["id"] == task_id)
+
+
+def atlas_kanban_store() -> KanbanStore:
+    """Use a dedicated SQLite file so live run/session writes cannot block board updates."""
+    from atlas.config import get_config
+
+    legacy_database = Path(get_config().db_path).resolve()
+    database = legacy_database.with_name("kanban.db")
+    store = KanbanStore(database)
+    if database == legacy_database:
+        return store
+    with _MIGRATION_LOCK, sqlite3.connect(database, timeout=15) as target:
+        target.execute("CREATE TABLE IF NOT EXISTS atlas_migrations (id TEXT PRIMARY KEY)")
+        migrated = target.execute(
+            "SELECT 1 FROM atlas_migrations WHERE id='kanban-from-atlas-db-v1'"
+        ).fetchone()
+        if migrated:
+            return store
+        if legacy_database.exists():
+            with sqlite3.connect(legacy_database, timeout=15) as source:
+                tables = {row[0] for row in source.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )}
+                if {"kanban_boards", "kanban_tasks"} <= tables:
+                    target.executemany(
+                        "INSERT OR IGNORE INTO kanban_boards(id,name,created_at) VALUES(?,?,?)",
+                        source.execute("SELECT id,name,created_at FROM kanban_boards"),
+                    )
+                    target.executemany(
+                        "INSERT OR IGNORE INTO kanban_tasks "
+                        "(id,board_id,title,description,assignee,dependencies,status,output,run_id,created_at,updated_at) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                        source.execute(
+                            "SELECT id,board_id,title,description,assignee,dependencies,status,output,run_id,created_at,updated_at "
+                            "FROM kanban_tasks"
+                        ),
+                    )
+        target.execute("INSERT INTO atlas_migrations(id) VALUES('kanban-from-atlas-db-v1')")
+    return store

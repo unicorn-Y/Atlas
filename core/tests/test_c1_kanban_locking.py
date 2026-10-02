@@ -2,16 +2,32 @@ import asyncio
 
 import pytest
 
-from atlas.kanban import KanbanStore
+from atlas.kanban import KanbanStore, atlas_kanban_store
 from atlas.memory import MemoryStore
 from tests.test_c1_review_e2e import run_script
 from tests.fakes.fake_llm_provider import Text, ToolCall
 
 
+def test_atlas_kanban_store_migrates_existing_boards_to_its_own_database(tmp_path, monkeypatch):
+    legacy = tmp_path / "atlas.db"
+    original = KanbanStore(legacy)
+    board = original.create_board("Existing board", "existing-board")
+    original.create_task(board["id"], {"title": "Existing task", "id": "existing-task"})
+
+    class FixtureConfig(dict):
+        db_path = legacy
+
+    monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig())
+    current = atlas_kanban_store()
+
+    assert current.database == tmp_path / "kanban.db"
+    assert current.boards() == original.boards()
+    assert current.tasks("existing-board")[0]["id"] == "existing-task"
+
+
 @pytest.mark.asyncio
 async def test_kanban_tool_keeps_event_loop_live_while_shared_database_is_locked(tmp_path, monkeypatch):
     database = tmp_path / "store.db"
-    kanban = KanbanStore(database)
     memory = MemoryStore(db_path=database)
     await memory.init()
     class FixtureConfig(dict):
@@ -26,6 +42,7 @@ async def test_kanban_tool_keeps_event_loop_live_while_shared_database_is_locked
     monkeypatch.setattr("atlas.agent.get_config", lambda: FixtureConfig({
         "tools.servers": {}, "tools.auto_start": [], "agent.verify_before_stop": True,
     }))
+    kanban = atlas_kanban_store()
 
     original_connect = KanbanStore._connect
 

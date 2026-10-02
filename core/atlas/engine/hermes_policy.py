@@ -104,6 +104,11 @@ async def _wait_if_paused(runtime: Any) -> bool:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
+def wait_before_model_request(runtime: Any, loop: asyncio.AbstractEventLoop) -> bool:
+    """Block Hermes' worker thread before a provider call while Atlas is paused."""
+    return bool(_call_async(loop, _wait_if_paused, runtime))
+
+
 def _blocked(
     runtime: Any,
     loop: asyncio.AbstractEventLoop,
@@ -161,7 +166,7 @@ def _pre_tool_call(
     agent, runtime, loop = active
     arguments = dict(args or {})
     name = str(tool_name)
-    if _call_async(loop, _wait_if_paused, runtime):
+    if getattr(runtime, "pause_event", None) is not None and _call_async(loop, _wait_if_paused, runtime):
         return _blocked(runtime, loop, name, kwargs, "运行已取消，工具未执行。")
     from atlas.engine.tool_permissions import tool_allowed
     if name != "tool_call" and not tool_allowed(

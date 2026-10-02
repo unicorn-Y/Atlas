@@ -167,9 +167,9 @@ def _task_store(kind: str) -> TomlRecordStore:
 
 
 def _kanban_store():
-    from atlas.kanban import KanbanStore
+    from atlas.kanban import atlas_kanban_store
 
-    return KanbanStore(get_config().db_path)
+    return atlas_kanban_store()
 
 
 def _profile_store() -> TomlRecordStore:

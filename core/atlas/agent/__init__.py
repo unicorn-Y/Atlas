@@ -1882,9 +1882,9 @@ class AgentOrchestrator:
                               "content": [{"type": "text", "text": "已追加项目记事。"}],
                               "is_error": False}
                 elif fn_name.startswith("kanban_"):
-                    from atlas.kanban import KanbanStore
+                    from atlas.kanban import atlas_kanban_store
 
-                    store = KanbanStore(get_config().db_path)
+                    store = atlas_kanban_store()
                     if fn_name == "kanban_create_board":
                         data = await asyncio.to_thread(
                             store.create_board, str(fn_args["name"]), fn_args.get("board_id"),

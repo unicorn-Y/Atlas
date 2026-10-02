@@ -518,6 +518,12 @@ class HermesRuntime:
                 status_callback=on_status,
                 event_callback=on_event,
             )
+            if atlas_context is not None:
+                from atlas.engine.hermes_policy import wait_before_model_request
+
+                agent._atlas_before_model_request = lambda: wait_before_model_request(
+                    atlas_context, loop,
+                )
             agent._on_session_title = on_session_title
             # Hermes' turn-context and iteration-prep hooks read these attributes
             # directly to inject its one-shot time-budget reminder.

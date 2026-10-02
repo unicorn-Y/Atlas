@@ -1,7 +1,7 @@
 # Atlas Current Task
 
 CURRENT: ATLAS-C1R-FINISH
-STATUS: READY_FOR_EXECUTION
+STATUS: AWAITING_REVIEW
 EXECUTOR: GPT-6 Luna / reasoning=high
 TASKBOOK: tasks/taskbooks/ATLAS-C1R-FINISH.md
 RESULT: tasks/results/ATLAS-C1R-FINISH.result.md
