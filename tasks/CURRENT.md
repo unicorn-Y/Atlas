@@ -2,7 +2,8 @@
 
 CURRENT: ATLAS-C3-SESSION-INTERACTION
 STATUS: READY_FOR_EXECUTION
-EXECUTOR: GPT-6 Luna / reasoning=high
+CONTROLLER: GPT-6.1 Sol / reasoning=medium
+WORKERS: GPT-6 Luna / reasoning=high (parallel)
 TASKBOOK: tasks/taskbooks/ATLAS-C3-SESSION-INTERACTION.md
 RESULT: tasks/results/ATLAS-C3-SESSION-INTERACTION.result.md
 REVIEW: tasks/reviews/ATLAS-C3-SESSION-INTERACTION.review.md
@@ -18,7 +19,7 @@ PREVIOUS_REVIEW: PASS — tasks/reviews/ATLAS-C2-TOOLS-CONTEXT.review.md
 ## 流程
 
 1. ZCode 把本文件和 TASKBOOK 路径交给 Codex。
-2. Codex 使用 GPT-6 Luna / high，从仓库完整读取任务书后施工。
+2. Codex 使用 GPT-6.1 Sol / medium 作为主控；Sol 读取完整任务书后，按文件/模块并行 spawn 多个 GPT-6 Luna / high 子代理施工。
 3. Codex 自行提交并 push；写 RESULT；把本文件改为 `AWAITING_REVIEW`。
 4. ZCode 通知上游规划者。
 5. 上游规划者验收：
@@ -28,7 +29,8 @@ PREVIOUS_REVIEW: PASS — tasks/reviews/ATLAS-C2-TOOLS-CONTEXT.review.md
 
 ## 执行原则
 
-- 速度优先，优先接 Hermes 和复用 wip/c3-frontend-from-laptop。
+- 速度优先：Sol 主控尽量并行派多个 Luna high；按文件/模块隔离，避免互相覆盖。
+- 优先接 Hermes 和复用 wip/c3-frontend-from-laptop。
 - 禁止过度防御编程。
 - 禁止过度验收；聚焦测试 + 两条 E2E + 一次全量。
 - 不用真实模型/真实外部服务。
