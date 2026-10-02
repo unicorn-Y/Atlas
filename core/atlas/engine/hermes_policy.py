@@ -62,6 +62,13 @@ def _write_tool(name: str, args: dict[str, Any]) -> bool:
         "write_file", "patch", "terminal", "execute_code", "delegate_task", "delegate_parallel",
     }:
         return True
+    try:
+        from atlas.tools.x2.permissions import is_x2_write_tool
+
+        if is_x2_write_tool(name):
+            return True
+    except ImportError:  # pragma: no cover - X2 module always ships with Atlas
+        pass
     if name == "process_manage":
         return args.get("action", "list") in {
             "start", "write_stdin", "terminate", "kill", "submit", "close", "handoff",

@@ -899,6 +899,19 @@ from atlas.models.routes import models_router  # noqa: E402  # C5 integration to
 
 app.include_router(models_router)
 
+# X2 / X4 / X5 routers — mounted before any `/api/skills/...` literal routes are
+# declared below so router paths (e.g. /api/skills/updates, /api/skills/market/*)
+# win over path-parameter routes. Each router carries its own OriginGuard dependency.
+from atlas.api.browser_router import router as browser_router  # noqa: E402
+from atlas.api.computer_router import router as computer_router  # noqa: E402
+from atlas.api.evolution_router import evolution_router  # noqa: E402
+from atlas.api.skills_market_router import router as skills_market_router  # noqa: E402
+
+app.include_router(computer_router)
+app.include_router(browser_router)
+app.include_router(skills_market_router)
+app.include_router(evolution_router)
+
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas

@@ -455,6 +455,17 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
         # registered through Hermes' canonical registry.
         if not plan_mode:
             registered.add("new_context_window")
+            # X2 computer/browser: one surface each, same approval/checkpoint
+            # gates as the rest of the Atlas toolset (hermes_policy classifies
+            # these names as writes via atlas.tools.x2.permissions).
+            from atlas.tools.x2.registration import bind_x2_tools
+
+            for x2_name in bind_x2_tools(
+                lambda **kwargs: registry.register(**kwargs),
+                registered.add,
+                lambda session_id: _active_contexts.get(session_id),
+            ):
+                pass
         TOOLSETS[atlas_toolset] = {
             "description": "Atlas 工作区、项目和运行工具",
             "tools": sorted(registered),
