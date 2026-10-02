@@ -220,3 +220,90 @@ describe('BackendAdapter availability and recovery', () => {
     expect(MockWebSocket.instances).toHaveLength(2);
   });
 });
+
+describe('BackendAdapter provider catalog and reasoning stages', () => {
+  it('reads providers and reasoning stages from the backend API', async () => {
+    const providers = [{ id: 'deepseek', label: '深度求索', hermes_provider: 'deepseek', api_mode: 'openai', default_base_url: 'https://api.deepseek.com/v1', configured: true, base_url: null, key_count: 1, keys: [{ id: 'k_ab12cd', label: '主密钥', cooldown_until: null, last_error: null, request_count: 3 }] }];
+    const stages = { enabled: false, planning: 'high', execution: 'medium', verification: 'high' };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => providers } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => stages } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+
+    await expect(adapter.getProviders()).resolves.toEqual(providers);
+    await expect(adapter.getReasoningStages()).resolves.toEqual(stages);
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8765/api/providers');
+    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8765/api/models/reasoning-stages');
+  });
+
+  it('saves provider configuration, keys and reasoning stages through the backend API', async () => {
+    const empty = { ok: true, status: 204, json: async () => { throw new SyntaxError('empty response'); } } as Response;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce(empty)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'k_ef23gh', label: '备用' }) } as Response)
+      .mockResolvedValueOnce(empty)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: true, planning: 'low', execution: 'medium', verification: 'high' }) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+
+    await expect(adapter.updateProviderConfig('deepseek', 'https://api.deepseek.com/v1')).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8765/api/providers/deepseek/config');
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ base_url: 'https://api.deepseek.com/v1' }) });
+
+    await expect(adapter.addProviderKey('deepseek', 'sk-secret', '备用')).resolves.toEqual({ id: 'k_ef23gh', label: '备用' });
+    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8765/api/providers/deepseek/keys');
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ secret: 'sk-secret', label: '备用' }) });
+    expect(String(fetchMock.mock.calls[2][1].body)).not.toContain('k_ab12cd');
+
+    await expect(adapter.removeProviderKey('deepseek', 'k_ab12cd')).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[3][0]).toBe('http://localhost:8765/api/providers/deepseek/keys/k_ab12cd');
+    expect(fetchMock.mock.calls[3][1]).toMatchObject({ method: 'DELETE' });
+
+    const stages = { enabled: true, planning: 'low', execution: 'medium', verification: 'high' } as const;
+    await expect(adapter.saveReasoningStages({ ...stages })).resolves.toEqual({ ...stages });
+    expect(fetchMock.mock.calls[4][0]).toBe('http://localhost:8765/api/models/reasoning-stages');
+    expect(fetchMock.mock.calls[4][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ ...stages }) });
+  });
+
+  it('edits, deletes and tests custom models through the backend API', async () => {
+    const updated = { id: 'deepseek/deepseek-chat', name: '深度求索', litellm_model: 'deepseek/deepseek-chat' };
+    const empty = { ok: true, status: 204, json: async () => { throw new SyntaxError('empty response'); } } as Response;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => updated } as Response)
+      .mockResolvedValueOnce(empty)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, latency_ms: 420 }) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+
+    const patch = { name: '深度求索', litellm_model: 'deepseek/deepseek-chat', native_model: 'deepseek-v4.1-flash', capabilities: { supports_tools: true } };
+    await expect(adapter.updateCustomModel('deepseek/deepseek-chat', patch)).resolves.toEqual(updated);
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8765/api/models/custom/deepseek%2Fdeepseek-chat');
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'PUT', body: JSON.stringify(patch) });
+
+    await expect(adapter.deleteCustomModel('deepseek/deepseek-chat')).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8765/api/models/custom/deepseek%2Fdeepseek-chat');
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'DELETE' });
+
+    await expect(adapter.testModelById('deepseek/deepseek-chat')).resolves.toEqual({ ok: true, latency_ms: 420 });
+    expect(fetchMock.mock.calls[3][0]).toBe('http://localhost:8765/api/models/test');
+    expect(fetchMock.mock.calls[3][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ model_id: 'deepseek/deepseek-chat' }) });
+  });
+
+  it('serves provider reads from mock data and refuses mock writes when the backend is away', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('offline')));
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+
+    await expect(adapter.getProviders()).resolves.toEqual([]);
+    await expect(adapter.getReasoningStages()).resolves.toEqual({ enabled: false, planning: 'high', execution: 'medium', verification: 'high' });
+    await expect(adapter.updateProviderConfig('deepseek', null)).rejects.toThrow('连接 Atlas 后端后才能保存服务商设置');
+    await expect(adapter.deleteCustomModel('deepseek/deepseek-chat')).rejects.toThrow('连接 Atlas 后端后才能删除自定义模型');
+  });
+});

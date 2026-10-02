@@ -1,5 +1,5 @@
-import { mockConversations, mockModels, mockTools, streamMockRun } from './mock';
-import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomTool, ExternalAgentInfo, Fact, ProjectSource, ProjectSources, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import { mockConversations, mockModels, mockProviders, mockReasoningStages, mockTools, streamMockRun } from './mock';
+import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomModelUpdateRequest, CustomTool, ExternalAgentInfo, Fact, KeySlotInfo, ModelInfo, ModelTestResponse, ProjectSource, ProjectSources, ProviderState, ReasoningStagesConfig, RewindResult, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -98,6 +98,45 @@ export class BackendAdapter {
   async addCustomModel(model: CustomModelRequest): Promise<ConfigurationResponse> {
     if (!this.live) throw new Error('连接 Atlas 后端后才能保存自定义模型');
     return this.request('/api/models/custom', { method: 'POST', body: JSON.stringify(model) });
+  }
+
+  // -- Provider catalog, provider keys and reasoning stages (C5) ------------
+
+  async getProviders(): Promise<ProviderState[]> { return this.live ? this.request('/api/providers') : mockProviders; }
+  async updateProviderConfig(providerId: string, baseUrl: string | null): Promise<void> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能保存服务商设置');
+    await this.request(`/api/providers/${encodeURIComponent(providerId)}/config`, { method: 'PUT', body: JSON.stringify({ base_url: baseUrl }) });
+  }
+  async addProviderKey(providerId: string, secret: string, label?: string): Promise<{ id: string; label?: string }> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能保存服务商密钥');
+    return this.request(`/api/providers/${encodeURIComponent(providerId)}/keys`, { method: 'POST', body: JSON.stringify({ secret, ...(label ? { label } : {}) }) });
+  }
+  async listProviderKeys(providerId: string): Promise<KeySlotInfo[]> {
+    if (!this.live) return mockProviders.find((provider) => provider.id === providerId)?.keys ?? [];
+    return (await this.request<{ keys: KeySlotInfo[] }>(`/api/providers/${encodeURIComponent(providerId)}/keys`)).keys;
+  }
+  async removeProviderKey(providerId: string, keyId: string): Promise<void> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能删除服务商密钥');
+    await this.request(`/api/providers/${encodeURIComponent(providerId)}/keys/${encodeURIComponent(keyId)}`, { method: 'DELETE' });
+  }
+  async updateCustomModel(modelId: string, patch: CustomModelUpdateRequest): Promise<ModelInfo> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能修改自定义模型');
+    return this.request(`/api/models/custom/${encodeURIComponent(modelId)}`, { method: 'PUT', body: JSON.stringify(patch) });
+  }
+  async deleteCustomModel(modelId: string): Promise<void> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能删除自定义模型');
+    await this.request(`/api/models/custom/${encodeURIComponent(modelId)}`, { method: 'DELETE' });
+  }
+  async getReasoningStages(): Promise<ReasoningStagesConfig> {
+    return this.live ? this.request('/api/models/reasoning-stages') : { ...mockReasoningStages };
+  }
+  async saveReasoningStages(config: ReasoningStagesConfig): Promise<ReasoningStagesConfig> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能保存思考量分配');
+    return this.request('/api/models/reasoning-stages', { method: 'PUT', body: JSON.stringify(config) });
+  }
+  async testModelById(modelId: string): Promise<ModelTestResponse> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能测试模型连接');
+    return this.request('/api/models/test', { method: 'POST', body: JSON.stringify({ model_id: modelId }) });
   }
   async testConnection(model?: string): Promise<ConnectionTestResponse> {
     if (!this.live) throw new Error('连接 Atlas 后端后才能测试模型连接');

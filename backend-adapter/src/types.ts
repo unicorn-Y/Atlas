@@ -7,7 +7,29 @@ export interface ModelInfo {
   id: string;
   name?: string;
   provider?: string;
+  litellm_model?: string;
+  /** Longest reply the model may write; the backend default is 16384. */
+  max_output_tokens?: number;
+  /** Per million tokens, in the currency the user thinks in; enables cost estimates. */
+  price?: { input?: number; output?: number; cached_input?: number };
+  /** Merged models.dev + hand-filled capability fields (all optional). */
+  capabilities?: ModelCapabilities;
+  /** Reasoning efforts this model accepts, e.g. ["minimal","low","medium","high"]. */
+  reasoning_efforts?: string[];
+  /** Catalog provider id this model runs through; absent = legacy gateway behaviour. */
+  hermes_provider?: string;
+  /** Native model id without the LiteLLM prefix. */
+  native_model?: string;
+  base_url?: string | null;
   [key: string]: unknown;
+}
+
+export interface ModelCapabilities {
+  context_window?: number;
+  max_output_tokens?: number;
+  supports_vision?: boolean;
+  supports_tools?: boolean;
+  supports_reasoning?: boolean;
 }
 
 export interface ModelListResponse {
@@ -30,6 +52,65 @@ export interface CustomModelRequest {
   max_output_tokens?: number;
   /** Per million tokens, in the currency the user thinks in; enables cost estimates. */
   price?: { input?: number; output?: number; cached_input?: number };
+  /** Catalog provider id this model runs through; absent = legacy gateway behaviour. */
+  hermes_provider?: string;
+  /** Native model id without the LiteLLM prefix. */
+  native_model?: string;
+  /** Per-model base URL override; null = follow the provider config or catalog default. */
+  base_url?: string | null;
+  capabilities?: ModelCapabilities;
+}
+
+/** PATCH-style edit of an existing custom model (PUT /api/models/custom/{id}); keys are managed elsewhere. */
+export interface CustomModelUpdateRequest {
+  name?: string;
+  base_url?: string | null;
+  litellm_model?: string;
+  native_model?: string | null;
+  hermes_provider?: string | null;
+  max_output_tokens?: number;
+  price?: { input?: number; output?: number; cached_input?: number };
+  capabilities?: ModelCapabilities;
+}
+
+/** One provider of the fixed catalog: what Atlas knows how to talk to. */
+export interface ProviderCatalogEntry {
+  id: string;
+  /** Chinese display name, e.g. 深度求索. */
+  label: string;
+  hermes_provider: string;
+  api_mode: 'openai' | 'anthropic_messages' | string;
+  default_base_url: string;
+  docs_url?: string | null;
+  notes?: string | null;
+}
+
+/** One key slot of a provider: metadata only, the secret never leaves the backend keyring. */
+export interface KeySlotInfo {
+  id: string;
+  label?: string;
+  /** Epoch seconds the key stays in cooldown; absent/past = usable. */
+  cooldown_until?: number | null;
+  last_error?: string | null;
+  request_count?: number;
+}
+
+/** GET /api/providers row: the catalog entry merged with this installation's state. */
+export interface ProviderState extends ProviderCatalogEntry {
+  /** True once at least one key is stored for this provider. */
+  configured: boolean;
+  /** Configured base URL override; null = use default_base_url. */
+  base_url?: string | null;
+  key_count: number;
+  keys: KeySlotInfo[];
+}
+
+/** How much the model may think per run phase; disabled = the previous single-effort behaviour. */
+export interface ReasoningStagesConfig {
+  enabled: boolean;
+  planning: ReasoningEffort;
+  execution: ReasoningEffort;
+  verification: ReasoningEffort;
 }
 
 export type UsageGroup = 'day' | 'conversation' | 'model';
@@ -45,7 +126,12 @@ export interface UsageTotals {
   est_cost: number | null;
 }
 
-export interface UsageRow extends UsageTotals { key: string; label: string }
+export interface UsageRow extends UsageTotals {
+  key: string;
+  label: string;
+  /** Why the prompt cache missed on the latest run in this group, as a ready-to-show Chinese sentence. */
+  cache_miss_reason?: string;
+}
 
 export interface UsageReport { rows: UsageRow[]; totals: UsageTotals }
 
@@ -53,6 +139,13 @@ export interface ConnectionTestResponse {
   ok: boolean;
   model: string;
   message: string;
+}
+
+/** POST /api/models/test: one tiny completion against a model's own provider endpoint. */
+export interface ModelTestResponse {
+  ok: boolean;
+  latency_ms?: number;
+  error?: string;
 }
 
 export interface ConversationSummary {

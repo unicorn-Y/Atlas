@@ -1,8 +1,17 @@
-import type { ConversationSummary, ModelListResponse, RunStartRequest, RuntimeEventEnvelope, ToolListResponse } from './types';
+import type { ConversationSummary, ModelListResponse, ProviderState, ReasoningStagesConfig, RunStartRequest, RuntimeEventEnvelope, ToolListResponse } from './types';
 
 export const mockModels: ModelListResponse = {
   models: [],
   current: '',
+};
+
+export const mockProviders: ProviderState[] = [];
+
+export const mockReasoningStages: ReasoningStagesConfig = {
+  enabled: false,
+  planning: 'high',
+  execution: 'medium',
+  verification: 'high',
 };
 
 export const mockConversations: ConversationSummary[] = [];
