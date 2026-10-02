@@ -72,10 +72,7 @@ class ScheduledTask:
     last_run_at: str = ""  # ISO 8601, empty if never
     next_run_at: str = ""  # computed from APScheduler
     run_count: int = 0
-    goal: str = ""
-    goal_status: str = "pending"
-    goal_progress: dict[str, Any] = field(default_factory=dict)
-    goal_events: list[dict[str, Any]] = field(default_factory=list)
+    legacy_goal: str = ""  # read-only import source for pre-C3R schedule files
     runs: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -94,10 +91,6 @@ class ScheduledTask:
             "last_run_at": self.last_run_at,
             "next_run_at": self.next_run_at,
             "run_count": self.run_count,
-            "goal": self.goal,
-            "goal_status": self.goal_status,
-            "goal_progress": self.goal_progress,
-            "goal_events": self.goal_events,
             "runs": self.runs,
         }
 
@@ -118,10 +111,7 @@ class ScheduledTask:
             last_run_at=d.get("last_run_at", ""),
             next_run_at=d.get("next_run_at", ""),
             run_count=d.get("run_count", 0),
-            goal=d.get("goal", ""),
-            goal_status=d.get("goal_status", "pending"),
-            goal_progress=d.get("goal_progress", {}),
-            goal_events=d.get("goal_events", []),
+            legacy_goal=d.get("goal", ""),
             runs=d.get("runs", []),
         )
 
@@ -188,14 +178,13 @@ def _load_tasks_from_toml(path: Path) -> dict[str, ScheduledTask]:
     tasks: dict[str, ScheduledTask] = {}
     for task_id, task_data in data.get("tasks", {}).items():
         task_data["id"] = task_id
-        for field_name in ("goal_progress", "goal_events"):
-            serialized = task_data.pop(f"{field_name}_json", None)
-            if serialized:
-                try:
-                    task_data[field_name] = json.loads(serialized)
-                except (TypeError, ValueError):
-                    log.warning("scheduler.goal_state_load_error", task_id=task_id,
-                                field=field_name)
+        # Old goal lifecycle fields are deliberately discarded. The server imports only
+        # the legacy objective into Hermes GoalManager, then rewrites this schedule.
+        task_data.pop("goal_status", None)
+        task_data.pop("goal_progress", None)
+        task_data.pop("goal_progress_json", None)
+        task_data.pop("goal_events", None)
+        task_data.pop("goal_events_json", None)
         for field_name in ("runs", "trigger_args"):
             serialized = task_data.pop(f"{field_name}_json", None)
             if serialized:
@@ -227,26 +216,16 @@ def _save_tasks_to_toml(path: Path, tasks: dict[str, ScheduledTask]) -> None:
         lines.append(f'description = "{_escape_toml(task.description)}"')
         lines.append(f'trigger_type = "{task.trigger_type.value}"')
         lines.append(f'action = "{_escape_toml(task.action)}"')
+        if task.legacy_goal:
+            # Preserve an unimported migration source across scheduler saves.
+            # Once GoalManager import succeeds, the adapter clears this field.
+            lines.append(f'goal = "{_escape_toml(task.legacy_goal)}"')
         lines.append(f'status = "{task.status.value}"')
         lines.append(f'created_at = "{task.created_at}"')
         lines.append(f'updated_at = "{task.updated_at}"')
         lines.append(f'last_run_at = "{task.last_run_at}"')
         lines.append(f'next_run_at = "{task.next_run_at}"')
         lines.append(f"run_count = {task.run_count}")
-        lines.append(f'goal = "{_escape_toml(task.goal)}"')
-        lines.append(f'goal_status = "{task.goal_status}"')
-        progress_json = _escape_toml(
-            json.dumps(task.goal_progress, ensure_ascii=False)
-        )
-        events_json = _escape_toml(
-            json.dumps(task.goal_events, ensure_ascii=False)
-        )
-        lines.append(
-            f'goal_progress_json = "{progress_json}"'
-        )
-        lines.append(
-            f'goal_events_json = "{events_json}"'
-        )
         lines.append(f'runs_json = "{_escape_toml(json.dumps(task.runs, ensure_ascii=False))}"')
         lines.append(f'trigger_args_json = "{_escape_toml(json.dumps(task.trigger_args, ensure_ascii=False))}"')
 
@@ -337,16 +316,12 @@ class AtlasScheduler:
         self._agent_callback = agent_callback
         self._role = role
         self._started = False
-        self._goal_heartbeat_task: asyncio.Task[None] | None = None
-        self._goal_locks: dict[str, asyncio.Lock] = {}
         self._event_debounce: dict[str, float] = {}
         self._lease_token = uuid.uuid4().hex
         self._lease_task: asyncio.Task[None] | None = None
         self._lease_ready: asyncio.Event | None = None
         self._watchdog_observer: Any = None
         self._store_mtime_ns = 0
-
-    GOAL_HEARTBEAT_SECONDS = 30
 
     @property
     def _path(self) -> Path:
@@ -365,17 +340,6 @@ class AtlasScheduler:
         if owns_lease:
             self._migrate_hub_tasks()
         self._tasks = _load_tasks_from_toml(self._path)
-        if owns_lease:
-            for task in self._tasks.values():
-                if task.goal and task.goal_status == "running":
-                    task.goal_status = "interrupted"
-                    trace = task.goal_progress.get("execution_trace", {})
-                    if not isinstance(trace, dict):
-                        trace = {}
-                    self._append_goal_event(task, "goal.interrupted", {
-                        "detail": "The service restarted during goal execution.",
-                    }, run_id=trace.get("run_id"), plan_id=trace.get("plan_id"))
-            self._persist()
         log.info("scheduler.loaded", count=len(self._tasks), path=str(self._path))
 
         self._lease_ready = asyncio.Event()
@@ -471,9 +435,6 @@ class AtlasScheduler:
         await self._ap_scheduler.start_in_background()
         self._started = True
         self._start_file_watchers()
-        self._goal_heartbeat_task = asyncio.create_task(
-            self._goal_heartbeat_loop(), name="atlas-goal-heartbeat",
-        )
 
     async def _lease_loop(self) -> None:
         try:
@@ -538,11 +499,6 @@ class AtlasScheduler:
             self._watchdog_observer.stop()
             await asyncio.to_thread(self._watchdog_observer.join, 5)
             self._watchdog_observer = None
-        if self._goal_heartbeat_task:
-            self._goal_heartbeat_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._goal_heartbeat_task
-            self._goal_heartbeat_task = None
         if self._ap_scheduler:
             await self._ap_scheduler.stop()
             await self._ap_scheduler.__aexit__(None, None, None)
@@ -606,55 +562,6 @@ class AtlasScheduler:
         self._tasks = _load_tasks_from_toml(self._path)
         self._store_mtime_ns = mtime
         return True
-
-    @staticmethod
-    def _append_goal_event(
-        task: ScheduledTask,
-        event: str,
-        data: dict[str, Any],
-        *,
-        run_id: str | None = None,
-        plan_id: str | None = None,
-        step_id: str | None = None,
-    ) -> None:
-        sequence = max(
-            (item.get("sequence", index)
-             for index, item in enumerate(task.goal_events)
-             if isinstance(item, dict)
-             and isinstance(item.get("sequence", index), int)),
-            default=-1,
-        ) + 1
-        record: dict[str, Any] = {
-            "event_id": f"{task.id}:{sequence}",
-            "sequence": sequence,
-            "event": event,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "data": data,
-        }
-        if run_id:
-            record["run_id"] = run_id
-        if plan_id:
-            record["plan_id"] = plan_id
-        if step_id:
-            record["step_id"] = step_id
-        task.goal_events.append(record)
-
-    async def update_goal_state(
-        self,
-        task_id: str,
-        *,
-        status: str | None = None,
-        progress: dict[str, Any] | None = None,
-    ) -> ScheduledTask | None:
-        task = self._tasks.get(task_id)
-        if task is None or not task.goal:
-            return None
-        if status is not None:
-            task.goal_status = status
-        if progress is not None:
-            task.goal_progress = progress
-        self._persist()
-        return task
 
     def _migrate_hub_tasks(self) -> None:
         """Merge the former Hub-only schedule store once into the canonical store."""
@@ -727,7 +634,10 @@ class AtlasScheduler:
         self._persist()
         try:
             action = task.action
-            if action.startswith("agent:") and self._agent_callback:
+            if action == "goal" and self._agent_callback:
+                await self._agent_callback(task.id, "")
+                run["status"] = "completed"
+            elif action.startswith("agent:") and self._agent_callback:
                 await self._agent_callback(task.id, action[len("agent:"):])
                 run["status"] = "completed"
             else:
@@ -737,89 +647,6 @@ class AtlasScheduler:
             log.exception("scheduler.task_run_error", task_id=task.id)
         finally:
             self._persist()
-
-    async def record_goal_event(
-        self,
-        task_id: str,
-        event: str,
-        data: dict[str, Any],
-        *,
-        run_id: str | None = None,
-        plan_id: str | None = None,
-        step_id: str | None = None,
-    ) -> ScheduledTask | None:
-        task = self._tasks.get(task_id)
-        if task is None or not task.goal:
-            return None
-        self._append_goal_event(
-            task, event, data, run_id=run_id, plan_id=plan_id, step_id=step_id,
-        )
-        self._persist()
-        return task
-
-    def goal_trace(
-        self, task_id: str, *, run_id: str | None = None,
-    ) -> dict[str, Any] | None:
-        """Return persisted goal audit events in stable append order."""
-        task = self._tasks.get(task_id)
-        if task is None or not task.goal:
-            return None
-        events = []
-        for index, event in enumerate(task.goal_events):
-            if not isinstance(event, dict):
-                continue
-            sequence = event.get("sequence", index)
-            if not isinstance(sequence, int):
-                sequence = index
-            if run_id is not None and event.get("run_id") != run_id:
-                continue
-            events.append({**event, "sequence": sequence})
-        events.sort(key=lambda event: (event["sequence"], event.get("event_id", "")))
-        return {
-            "goal_id": task.id,
-            "status": task.goal_status,
-            "events": events,
-        }
-
-    async def heartbeat_goals(self) -> int:
-        """Continue durable goals whose last run left work pending."""
-        if self._agent_callback is None:
-            return 0
-        candidates = [
-            task for task in self.list_tasks(status=TaskStatus.ACTIVE)
-            if task.goal and task.goal_status in {"pending", "interrupted"}
-        ]
-        started = 0
-        for task in candidates:
-            if await self._invoke_goal_callback(task.id, task.goal):
-                task.last_run_at = datetime.now(UTC).isoformat()
-                task.run_count += 1
-                self._persist()
-                started += 1
-        return started
-
-    async def _goal_heartbeat_loop(self) -> None:
-        while True:
-            await asyncio.sleep(self.GOAL_HEARTBEAT_SECONDS)
-            try:
-                await self.heartbeat_goals()
-            except Exception as exc:
-                log.error("scheduler.goal_heartbeat_error", error=str(exc))
-
-    async def _invoke_goal_callback(self, task_id: str, message: str) -> bool:
-        callback = self._agent_callback
-        if callback is None:
-            return False
-        lock = self._goal_locks.setdefault(task_id, asyncio.Lock())
-        async with lock:
-            task = self._tasks.get(task_id)
-            if (
-                task is None or not task.goal
-                or task.goal_status in {"running", "completed", "blocked", "awaiting_approval", "paused"}
-            ):
-                return False
-            await callback(task_id, message)
-            return True
 
     # -- executor factory ------------------------------------------------------
 
@@ -843,15 +670,21 @@ class AtlasScheduler:
 
             log.info("scheduler.task_fired", task_id=task_id, action=action)
 
-            if action.startswith("agent:"):
+            if action == "goal":
+                if self._agent_callback:
+                    try:
+                        await self._agent_callback(task_id, "")
+                        run["status"] = "completed"
+                    except Exception as e:
+                        run["status"] = "failed"
+                        log.error("scheduler.goal_callback_error", task_id=task_id, error=str(e))
+                else:
+                    run["status"] = "failed"
+            elif action.startswith("agent:"):
                 message = action[len("agent:"):]
                 if self._agent_callback:
                     try:
-                        t = self._tasks.get(task_id)
-                        if t and t.goal:
-                            await self._invoke_goal_callback(task_id, message)
-                        else:
-                            await self._agent_callback(task_id, message)
+                        await self._agent_callback(task_id, message)
                         run["status"] = "completed"
                     except Exception as e:
                         run["status"] = "failed"
@@ -1032,41 +865,47 @@ class AtlasScheduler:
                    if t.status == TaskStatus.ACTIVE)
 
     def observability_snapshot(self) -> dict[str, Any]:
-        """Return a deterministic, read-only summary of autonomous goal activity."""
-        goals = [task for task in self.list_tasks() if task.goal]
-        status_counts: dict[str, int] = {
-            status: 0 for status in (
-                "pending", "running", "interrupted", "completed", "blocked",
-                "awaiting_approval",
-            )
-        }
+        """Project canonical Hermes goal state beside schedule timing metadata."""
+        goals = [task for task in self.list_tasks()
+                 if task.action == "goal" or task.legacy_goal]
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import goal_events, goal_state
+
+        status_counts: dict[str, int] = {}
         event_counts: dict[str, int] = {}
         summaries: list[dict[str, Any]] = []
-
+        home = DATA_ROOT / "engine"
         for task in goals:
-            status = task.goal_status if isinstance(task.goal_status, str) else "unknown"
+            state = goal_state(home, f"scheduled-goal-{task.id}") or {}
+            status = state.get("status", "cleared")
+            if status == "active":
+                status = "pending"
+            elif status == "done":
+                status = "completed"
+            elif status == "paused" and (
+                state.get("last_verdict") == "blocked"
+                or state.get("paused_reason") not in {None, "", "user-paused"}
+            ):
+                status = "blocked"
             status_counts[status] = status_counts.get(status, 0) + 1
-            events = [event for event in task.goal_events if isinstance(event, dict)]
+            events = goal_events(home, f"scheduled-goal-{task.id}")
             for event in events:
                 name = event.get("event")
                 if isinstance(name, str) and name:
                     event_counts[name] = event_counts.get(name, 0) + 1
-
-            latest_event = None
-            if events:
-                event = events[-1]
-                latest_event = {
-                    "event": event.get("event", ""),
-                    "timestamp": event.get("timestamp", ""),
-                    "sequence": len(task.goal_events) - 1,
-                }
+            latest_event = events[-1] if events else None
             summaries.append({
                 "goal_id": task.id,
                 "status": status,
+                "schedule_status": task.status.value,
                 "last_run_at": task.last_run_at,
                 "run_count": task.run_count,
-                "event_count": len(task.goal_events),
-                "latest_event": latest_event,
+                "event_count": len(events),
+                "latest_event": ({
+                    "event": latest_event.get("event", ""),
+                    "timestamp": latest_event.get("timestamp", ""),
+                    "sequence": latest_event.get("sequence", 0),
+                } if latest_event else None),
             })
 
         return {

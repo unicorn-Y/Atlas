@@ -76,7 +76,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
     try {
       const body = await api<{ tasks: ScheduledTask[] }>(apiBaseUrl, '/api/schedules');
       // Goals live in the same store; they have their own tab.
-      const plain = body.tasks.filter((task) => !task.goal);
+      const plain = body.tasks.filter((task) => task.action !== 'goal' && !task.goal);
       setTasks(plain);
       setSelected((current) => current && plain.some((task) => task.id === current) ? current : plain[0]?.id ?? '');
       setError('');

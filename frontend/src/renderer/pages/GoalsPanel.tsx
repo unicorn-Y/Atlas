@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { CheckCircle2, CircleAlert, CircleDashed, LoaderCircle, Pause, Pencil, Play, Plus, RefreshCw, Target, X } from 'lucide-react';
+import { CircleDashed, LoaderCircle, Pause, Pencil, Play, Plus, RefreshCw, Target, X } from 'lucide-react';
 import { api, relativeTime } from '../services/api';
 import { describeSchedule } from './AutomationPage';
 
-interface GoalSubtask { id?: string; title?: string; status?: string }
 interface Goal {
   id: string;
   name: string;
@@ -11,7 +10,7 @@ interface Goal {
   trigger_type: string;
   trigger_args: Record<string, unknown>;
   goal_status?: string;
-  goal_progress?: { subtasks?: GoalSubtask[]; completed_steps?: string[]; replan_count?: number; blocked_reason?: string; last_evaluation?: { reason?: string } };
+  goal_progress?: { subgoals?: string[]; turns_used?: number; max_turns?: number; last_verdict?: string; last_reason?: string; paused_reason?: string; last_evaluation?: { reason?: string; verdict?: string } };
   last_run_at?: string | null;
   next_run_at?: string | null;
   run_count?: number;
@@ -19,13 +18,11 @@ interface Goal {
 interface GoalEvent { event_id: string; sequence: number; event: string; timestamp: string; data?: Record<string, unknown> }
 
 const STATUS: Record<string, { label: string; tone: string }> = {
-  pending: { label: '等待下一轮', tone: 'var(--ink3)' },
-  running: { label: '进行中', tone: 'var(--brand)' },
-  awaiting_approval: { label: '等你确认', tone: 'var(--brand)' },
+  active: { label: '进行中', tone: 'var(--brand)' },
   paused: { label: '已暂停', tone: 'var(--ink3)' },
-  completed: { label: '已达成', tone: 'var(--ok)' },
+  done: { label: '已达成', tone: 'var(--ok)' },
   blocked: { label: '卡住了', tone: 'var(--danger)' },
-  interrupted: { label: '被中断', tone: 'var(--danger)' },
+  cleared: { label: '已清除', tone: 'var(--ink3)' },
 };
 const EVENT: Record<string, string> = {
   'goal.created': '创建目标',
@@ -33,7 +30,7 @@ const EVENT: Record<string, string> = {
   'goal.paused': '暂停',
   'goal.resumed': '恢复',
   'goal.triggered': '开始一轮',
-  'goal.evaluated': '检查通过',
+  'goal.evaluated': '目标评价',
   'goal.evaluation_failed': '检查未通过',
   'goal.replanned': '重新规划',
   'goal.verified': '目标达成',
@@ -42,6 +39,8 @@ const EVENT: Record<string, string> = {
   'goal.retry_requested': '要求重试',
   'goal.continuation_pending': '等待继续',
   'goal.outcome_persist_failed': '结果保存失败',
+  'goal.cleared': '清除目标',
+  'execution.error': '推进失败',
 };
 const CRON_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
@@ -53,7 +52,7 @@ const eventDetail = (event: GoalEvent) => {
   return typeof text === 'string' ? text : '';
 };
 
-/** Goals keep running round after round until the agent verifies them, unlike one-shot scheduled tasks. */
+/** Goals use Hermes lifecycle state and advance when their schedule triggers. */
 export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void }) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [selected, setSelected] = useState('');
@@ -121,8 +120,9 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
   };
   const current = goals.find((goal) => goal.id === selected);
   const paused = current?.goal_status === 'paused';
-  const subtasks = current?.goal_progress?.subtasks ?? [];
-  const done = new Set(current?.goal_progress?.completed_steps ?? []);
+  const subgoals = current?.goal_progress?.subgoals ?? [];
+  const currentStatus = current?.goal_status === 'paused' && current.goal_progress?.last_verdict === 'blocked'
+    ? 'blocked' : current?.goal_status;
 
   return <>
     <div className="btns" style={{ justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -150,7 +150,9 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
     <div className="split">
       <div className="list glass" role="listbox" aria-label="持续目标">
         {goals.map((goal) => {
-          const status = STATUS[goal.goal_status ?? ''] ?? { label: goal.goal_status ?? '未开始', tone: 'var(--ink3)' };
+          const value = goal.goal_status === 'paused' && goal.goal_progress?.last_verdict === 'blocked'
+            ? 'blocked' : goal.goal_status;
+          const status = STATUS[value ?? ''] ?? { label: value ?? '未开始', tone: 'var(--ink3)' };
           return <button className="row" role="option" key={goal.id} aria-selected={goal.id === selected} onClick={() => setSelected(goal.id)}>
             <span className="ico ether"><Target size={17} /></span>
             <span style={{ minWidth: 0 }}><p>{goal.name}</p><small>{goal.goal}</small></span>
@@ -161,7 +163,7 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
       </div>
       {current ? <aside className="detail glass" aria-label="目标详情">
         <h2>{current.name}</h2>
-        <div className="sub">{STATUS[current.goal_status ?? '']?.label ?? '未开始'}，{describeSchedule(current)}推进一轮</div>
+        <div className="sub">{STATUS[currentStatus ?? '']?.label ?? '未开始'}，{describeSchedule(current)}推进一轮</div>
         <dl>
           <div><dt>目标</dt><dd>{editing
             ? <form onSubmit={(event) => { event.preventDefault(); const goal = editing.trim(); if (goal) void act(() => api(apiBaseUrl, `/api/goals/${encodeURIComponent(current.id)}`, { method: 'PUT', json: { goal } }), '目标已更新，会从头重新推进').then(() => setEditing('')); }}>
@@ -169,18 +171,17 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
               <div className="btns"><button className="btn primary" disabled={busy || !editing.trim()}>保存</button><button type="button" className="btn ghost" onClick={() => setEditing('')}>取消</button></div>
             </form>
             : current.goal}</dd></div>
-          {current.goal_progress?.last_evaluation?.reason && <div><dt>上次检查</dt><dd>{current.goal_progress.last_evaluation.reason}</dd></div>}
-          {current.goal_progress?.blocked_reason && <div><dt>卡住原因</dt><dd>{current.goal_progress.blocked_reason}</dd></div>}
+          {(current.goal_progress?.last_reason || (currentStatus === 'blocked' && current.goal_progress?.paused_reason)) && <div><dt>{currentStatus === 'blocked' ? '卡住原因' : '上次评价'}</dt><dd>{currentStatus === 'blocked' ? current.goal_progress?.paused_reason : current.goal_progress?.last_reason}</dd></div>}
+          {current.goal_progress && <div><dt>推进轮数</dt><dd>{current.goal_progress.turns_used ?? 0} / {current.goal_progress.max_turns ?? 20}</dd></div>}
           <div><dt>下一轮</dt><dd>{current.next_run_at ? `${new Date(current.next_run_at).toLocaleString()}（${relativeTime(current.next_run_at)}）` : '未排期'}</dd></div>
         </dl>
-        {subtasks.length > 0 && <>
-          <h3 style={{ fontSize: 13, margin: '14px 0 6px' }}>当前计划</h3>
+        {subgoals.length > 0 && <>
+          <h3 style={{ fontSize: 13, margin: '14px 0 6px' }}>检查条件</h3>
           <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6, fontSize: 13 }}>
-            {subtasks.map((step, index) => {
-              const finished = (step.id && done.has(step.id)) || step.status === 'completed';
-              return <li key={step.id ?? index} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                {finished ? <CheckCircle2 size={15} color="var(--ok)" /> : step.status === 'failed' ? <CircleAlert size={15} color="var(--danger)" /> : <CircleDashed size={15} color="var(--ink3)" />}
-                <span>{step.title ?? step.id}</span>
+            {subgoals.map((item, index) => {
+              return <li key={`${index}:${item}`} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <CircleDashed size={15} color="var(--ink3)" />
+                <span>{item}</span>
               </li>;
             })}
           </ol>
@@ -196,7 +197,7 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
           </ul>
         </>}
         <div className="btns">
-          <button className="btn primary" disabled={busy || paused} onClick={() => void runNow(current)}><Play size={14} />{current.goal_status === 'blocked' ? '重试' : '立即推进一轮'}</button>
+          <button className="btn primary" disabled={busy || paused || currentStatus === 'done' || currentStatus === 'cleared'} onClick={() => void runNow(current)}><Play size={14} />{currentStatus === 'blocked' ? '重试' : '立即推进一轮'}</button>
           <button className="btn ghost" disabled={busy} onClick={() => void act(() => api(apiBaseUrl, `/api/goals/${encodeURIComponent(current.id)}/${paused ? 'resume' : 'pause'}`, { method: 'POST' }), paused ? '已恢复' : '已暂停，不会再自动推进')}>{paused ? <Play size={14} /> : <Pause size={14} />}{paused ? '恢复' : '暂停'}</button>
           {!editing && <button className="btn ghost" disabled={busy} onClick={() => setEditing(current.goal)}><Pencil size={14} />改目标</button>}
         </div>

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -159,12 +160,25 @@ def list_branch_tree(home: str | Path, conversation_id: str) -> list[dict[str, A
 def goal_command(home: str | Path, conversation_id: str, command: str) -> dict[str, Any]:
     """Apply Hermes' canonical per-session /goal command and return its continuation prompt."""
     os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
-    from hermes_cli.goal_command import dispatch_goal_command
+    from hermes_cli.goal_command import dispatch_goal_command, is_goal_control
     from hermes_cli.goals import GoalManager
 
     manager = GoalManager(conversation_id)
+    previous = manager.state
     result = dispatch_goal_command(manager, command, authorize_gate=lambda: "Goal gates require explicit approval.")
     state = manager.state
+    normalized = command.strip().split(maxsplit=1)[0].casefold() if command.strip() else ""
+    event = None
+    if normalized in {"pause", "resume", "clear", "stop", "done"}:
+        event = "goal.paused" if normalized == "pause" else (
+            "goal.resumed" if normalized == "resume" else "goal.cleared"
+        )
+    elif not is_goal_control(command) and state and (previous is None or previous.status == "cleared"):
+        event = "goal.created"
+    elif not is_goal_control(command) and state and previous and previous.goal != state.goal:
+        event = "goal.replaced"
+    if event and not result.error:
+        record_goal_event(home, conversation_id, event, {"goal": state.goal if state else ""})
     return {
         "output": result.output, "prompt": result.prompt, "kickoff": result.kickoff,
         "error": result.error,
@@ -187,6 +201,85 @@ def evaluate_goal_after_turn(
                 "should_continue": False, "continuation_prompt": None,
                 "verdict": "inactive", "message": ""}
     return manager.evaluate_after_turn(response or "")
+
+
+def goal_state(home: str | Path, conversation_id: str) -> dict[str, Any] | None:
+    """Return the canonical Hermes GoalState for a conversation or automation session."""
+    os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
+    from hermes_cli.goals import GoalManager
+
+    state = GoalManager(conversation_id).state
+    return json.loads(state.to_json()) if state is not None else None
+
+
+def set_goal(home: str | Path, conversation_id: str, goal: str) -> dict[str, Any]:
+    """Create or replace a goal through Hermes' per-session manager."""
+    os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
+    from hermes_cli.goals import GoalManager
+
+    manager = GoalManager(conversation_id)
+    state = manager.set(goal)
+    return json.loads(state.to_json())
+
+
+def mutate_goal(
+    home: str | Path, conversation_id: str, action: str, reason: str = "user-paused",
+) -> dict[str, Any] | None:
+    """Apply a canonical Hermes pause, resume, or clear action."""
+    os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
+    from hermes_cli.goals import GoalManager
+
+    manager = GoalManager(conversation_id)
+    if action == "pause":
+        state = manager.pause(reason)
+    elif action == "resume":
+        state = manager.resume()
+    elif action == "clear":
+        manager.clear()
+        state = None
+    else:
+        raise ValueError(f"unsupported goal action: {action}")
+    return json.loads(state.to_json()) if state is not None else None
+
+
+def record_goal_event(
+    home: str | Path, conversation_id: str, event: str,
+    data: dict[str, Any] | None = None, run_id: str | None = None,
+) -> dict[str, Any]:
+    """Append audit-only goal history in Hermes SessionDB state metadata."""
+    with _open_db(home) as db:
+        key = f"goal-events:{conversation_id}"
+        events = json.loads(db.get_meta(key) or "[]")
+        if not isinstance(events, list):
+            events = []
+        sequence = max(
+            (int(item.get("sequence", -1)) for item in events if isinstance(item, dict)),
+            default=-1,
+        ) + 1
+        record = {
+            "event_id": f"{conversation_id}:{sequence}",
+            "sequence": sequence,
+            "event": event,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "data": data or {},
+        }
+        if run_id:
+            record["run_id"] = run_id
+        events.append(record)
+        db.set_meta(key, json.dumps(events[-200:], ensure_ascii=False))
+        return record
+
+
+def goal_events(
+    home: str | Path, conversation_id: str, run_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Read audit-only goal events from the same Hermes SessionDB as GoalManager."""
+    with _open_db(home) as db:
+        events = json.loads(db.get_meta(f"goal-events:{conversation_id}") or "[]")
+    if not isinstance(events, list):
+        return []
+    return [event for event in events if isinstance(event, dict)
+            and (run_id is None or event.get("run_id") == run_id)]
 
 
 def append_branch_summary(
