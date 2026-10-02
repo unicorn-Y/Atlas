@@ -17,6 +17,8 @@ export default function SidePane({ conversation, username, onClose, onSwitch }: 
   const store = useAtlasStore();
   const [messages, setMessages] = useState<Message[] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** 跟随滚动的开关：换会话重置为跟随；用户往上翻离底部超过 160px 就停，翻回来再恢复。 */
+  const followRef = useRef(true);
   const run = [...store.runs].reverse().find((item) => item.conversationId === conversation.id);
   const live = run && !TERMINAL.includes(run.status) ? run : null;
 
@@ -24,11 +26,18 @@ export default function SidePane({ conversation, username, onClose, onSwitch }: 
   useEffect(() => {
     let stale = false;
     setMessages(null);
+    followRef.current = true;
     backend.getMessages(conversation.id).then((result) => { if (!stale) setMessages(result.filter((item) => item.role === 'user' || item.role === 'assistant')); })
       .catch(() => { if (!stale) setMessages([]); });
     return () => { stale = true; };
   }, [conversation.id, run?.status]);
-  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [messages, live?.events.length]);
+  // 与主线程同样尊重用户上翻：停在底部附近才跟到底，翻上去看历史时不强拉。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (!followRef.current && el.scrollHeight - el.scrollTop - el.clientHeight > 160) return;
+    el.scrollTo({ top: el.scrollHeight });
+  }, [messages, live?.events.length]);
 
   const runPrompt = live ? String(live.events.find((event) => event.type === 'run.started')?.data.content ?? '') : '';
   const shown = messages && runPrompt ? messages.slice(0, Math.max(0, messages.map((item) => item.role === 'user' ? item.content : null).lastIndexOf(runPrompt))) : messages;
@@ -40,7 +49,7 @@ export default function SidePane({ conversation, username, onClose, onSwitch }: 
       <button onClick={onSwitch} title="切到这个对话" className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-2 text-[12.5px] text-fg-3 hover:bg-hover hover:text-fg"><ArrowLeftRight size={13} />切过去</button>
       <button aria-label="关闭旁边的对话" onClick={onClose} className="grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={15} /></button>
     </header>
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-6 pt-1 pb-8">
+    <div ref={scrollRef} onScroll={() => { const el = scrollRef.current; if (el) followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 160; }} className="min-h-0 flex-1 overflow-auto px-6 pt-1 pb-8">
       {shown === null ? <p className="py-6 text-center text-[13px] text-fg-3">正在载入…</p>
         : !shown.length && !live ? <p className="py-6 text-center text-[13px] text-fg-3">这个对话还是空的。</p>
         : shown.map((message) => <ConversationMessage key={message.id} role={message.role === 'user' ? 'user' : 'assistant'} content={message.content} username={username} />)}

@@ -71,6 +71,8 @@ const PERMISSION: Record<PermissionMode, { label: string; hint: string }> = {
   read_only: { label: '只读', hint: '只能查看，不能改任何东西' },
 };
 const EFFORT_LABEL: Record<string, string> = { minimal: '最低', low: '低', medium: '中', high: '高' };
+/** Shift+Tab 和 /permissions 共用的切换顺序；read_only 不在循环里，只能从菜单选。 */
+const PERMISSION_CYCLE: PermissionMode[] = ['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access'];
 const draftKey = (conversationId: string) => `atlas.draft.${conversationId || 'home'}`;
 const readDraft = (conversationId: string) => { try { return localStorage.getItem(draftKey(conversationId)) ?? ''; } catch { return ''; } };
 const writeDraft = (conversationId: string, text: string) => {
@@ -363,7 +365,7 @@ export default function App() {
     if (fromHome) {
       go('chat');
       // Home always starts something new, unless the open conversation is still empty.
-      if (store.activeConversationId && messages.length) await store.createConversation(text.trim().slice(0, 40) || 'New conversation');
+      if (store.activeConversationId && messages.length) await store.createConversation(text.trim().slice(0, 40) || '新对话');
     }
     const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: mentions.filter((item) => item.kind === 'conversation').map((item) => item.id).slice(0, 3) };
     setMentions([]);
@@ -573,7 +575,7 @@ export default function App() {
     { id: 'model', label: '/model', hint: '选择或切换模型', takesArgument: true, run: (query: string) => { const found = store.models.find((item) => item.id.toLowerCase() === query.trim().toLowerCase() || (item.name ?? '').toLowerCase() === query.trim().toLowerCase()); if (found) void store.selectModel(found.id); else setSheet('models'); } },
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
     { id: 'status', label: '/status', hint: '显示当前模型、推理强度和权限', run: () => setToast(`${modelName} · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
-    { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } const common: PermissionMode[] = ['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access']; const next = common[(common.indexOf(permission) + 1) % common.length]; cyclePermission(); setToast(`权限模式：${PERMISSION[next].label}`); } },
+    { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } setToast(`权限模式：${PERMISSION[cyclePermission()].label}`); } },
     { id: 'agents', label: '/agents', hint: '打开任务看板查看 Agent 状态', run: () => go('board') },
     { id: 'ps', label: '/ps', hint: '查看后台进程和最近输出', run: () => showInspectorTab('processes') },
     { id: 'stop', label: '/stop', hint: '停止后台进程；不带编号时停止当前运行', takesArgument: true, run: (id: string) => { if (!id.trim()) store.stopTask(); else void backend.killProcess(id.trim()).then(() => setToast('后台进程已停止')).catch((error) => setToast(String(error))); } },
@@ -622,11 +624,11 @@ export default function App() {
   useEffect(() => { void store.reloadCommands(workspacePath || undefined); }, [store.connected, workspacePath]);
   const permission: PermissionMode = (activeConversation?.permission_mode as PermissionMode | undefined) ?? 'full_access';
   const cyclePermission = () => {
-    const common: PermissionMode[] = ['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access'];
-    const next = common[(common.indexOf(permission) + 1) % common.length];
+    const next = PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(permission) + 1) % PERMISSION_CYCLE.length];
     const executor = activeConversation?.executor && activeConversation.executor !== 'atlas' && next !== 'full_access'
       ? { executor: 'atlas' } : {};
     store.setConversationSettings(store.activeConversationId, { permission_mode: next, ...executor });
+    return next;
   };
   const findMentions = async (trigger: '@' | '#', query: string): Promise<MentionItem[]> => {
     const taken = new Set(mentions.map((item) => `${item.kind}:${item.id}`));
@@ -744,9 +746,16 @@ export default function App() {
     status: composerStatus, autoFocus: true, commands: slashCommands,
     onCyclePermission: activeConversation ? cyclePermission : undefined,
   };
-  const errorNote = store.error && <div role="alert" className="anim-fade mt-3 flex items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-[13px] text-danger">
-    <span>{store.error}</span>
-    <button aria-label="关闭错误提示" onClick={store.dismissError} className="grid size-6 place-items-center rounded-md hover:bg-hover"><X size={14} /></button>
+  const errorNote = store.error && <div role="alert" className="anim-fade mt-3 flex items-start justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-[13px] text-danger">
+    <div className="min-w-0">
+      <span>{store.error}</span>
+      {/* 原始报错（多为英文）不直接糊给用户，收进可展开的详情。 */}
+      {store.errorDetail && <details className="mt-0.5">
+        <summary className="cursor-pointer select-none text-[12px] text-fg-3 hover:text-fg-2">详细信息</summary>
+        <pre className="mt-1 mb-0 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11.5px] text-fg-3">{store.errorDetail}</pre>
+      </details>}
+    </div>
+    <button aria-label="关闭错误提示" onClick={store.dismissError} className="grid size-6 shrink-0 place-items-center rounded-md hover:bg-hover"><X size={14} /></button>
   </div>;
 
   const latestUsage = [...activeEvents].reverse().find((event) => event.type === 'run.usage')?.data;

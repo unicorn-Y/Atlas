@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MessageSquare, Search } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Kbd } from '../ui/Kbd';
+import { fuzzyScore } from '../services/fuzzy';
 import { cn } from '../ui/cn';
 
 export interface PaletteItem {
@@ -23,9 +24,14 @@ export default function Palette({ items, open, onClose, search }: {
   const [found, setFound] = useState<PaletteItem[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const matched = q ? items.filter((item) => `${item.label} ${item.hint ?? ''}`.toLowerCase().includes(q)) : items;
-    return [...matched.slice(0, 40), ...found];
+    const q = query.trim();
+    // 与 `/` 菜单同一套模糊打分：前缀 > 子串 > 子序列，按分数排序。
+    const matched = q ? items.map((item, index) => ({ item, index, rank: fuzzyScore(q, `${item.label} ${item.hint ?? ''}`) }))
+        .filter((entry) => entry.rank >= 0)
+        .sort((a, b) => b.rank - a.rank || a.index - b.index)
+        .slice(0, 40).map((entry) => entry.item)
+      : items;
+    return [...matched, ...found];
   }, [items, query, found]);
   useEffect(() => {
     const q = query.trim();

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowUp, AtSign, ChevronDown, Code2, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
+import { fuzzyScore } from '../services/fuzzy';
 import { cn } from '../ui/cn';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/Menu';
 import { Tip } from '../ui/Tooltip';
@@ -44,19 +45,25 @@ export function matchCommands(value: string, commands: SlashCommand[]): SlashCom
   if (!match) return [];
   const [, word, rest] = match;
   if (rest !== undefined) return commands.filter((command) => command.takesArgument && command.label === `/${word}`);
-  const query = word.toLowerCase();
-  const score = (name: string) => {
-    const word = name.toLowerCase();
-    if (!query) return 0;
-    if (word.startsWith(query)) return 100 - word.length;
-    const at = word.indexOf(query);
-    if (at >= 0) return 70 - at;
-    let cursor = 0;
-    for (const char of query) { cursor = word.indexOf(char, cursor); if (cursor < 0) return -1; cursor += 1; }
-    return 30 - (cursor - query.length);
-  };
-  return commands.map((command, index) => ({ command, index, rank: score(command.label.slice(1)) }))
+  return commands.map((command, index) => ({ command, index, rank: fuzzyScore(word, command.label.slice(1)) }))
     .filter((item) => item.rank >= 0).sort((a, b) => b.rank - a.rank || a.index - b.index).slice(0, 12).map((item) => item.command);
+}
+
+/** 已发送消息的召回历史（像终端的 ↑ 一样）；全局共用一份，localStorage 持久化最近 50 条。 */
+const HISTORY_KEY = 'atlas.composer-history';
+const HISTORY_LIMIT = 50;
+function readHistory(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(-HISTORY_LIMIT) : [];
+  } catch { return []; }
+}
+function appendHistory(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return readHistory();
+  const next = [...readHistory().filter((item) => item !== trimmed), trimmed].slice(-HISTORY_LIMIT);
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+  return next;
 }
 
 interface ComposerProps {
@@ -104,7 +111,29 @@ export default function Composer(props: ComposerProps) {
   const intent = guessIntent(props.value);
   const current = props.models.find((item) => item.id === props.model);
   const canSend = Boolean(props.value.trim() || props.attachments.length || props.files?.length || props.mentions?.length);
-  const hint = props.listening ? '正在听你说…' : intent?.note ?? props.status;
+  // 连接状态这类重要提示优先显示；意图提示只在它后面补位，不把它挤掉。
+  const hint = props.listening ? '正在听你说…' : props.status || intent?.note || '';
+
+  // ↑ 召回已发送的消息：浏览时草稿先存起来，↓ 回到末尾或失焦时放回来。
+  const historyRef = useRef<string[]>([]);
+  const historyDraftRef = useRef('');
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  useEffect(() => { historyRef.current = readHistory(); }, []);
+  const recallHistory = (step: -1 | 1) => {
+    const history = historyRef.current;
+    if (!history.length) return;
+    if (historyIndex === null) {
+      if (step === 1 || props.value) return; // 只有输入框为空时 ↑ 才开始召回
+      historyDraftRef.current = props.value;
+      setHistoryIndex(history.length - 1);
+      props.onChange(history[history.length - 1]);
+      return;
+    }
+    const next = historyIndex + step;
+    if (next >= history.length) { setHistoryIndex(null); props.onChange(historyDraftRef.current); return; }
+    setHistoryIndex(Math.max(0, next));
+    props.onChange(history[Math.max(0, next)]);
+  };
 
   useLayoutEffect(() => {
     const el = textRef.current;
@@ -147,7 +176,11 @@ export default function Composer(props: ComposerProps) {
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
     if (matches.length) { choose(matches[Math.min(cursor, matches.length - 1)]); return; }
-    if (canSend) props.onSubmit();
+    if (canSend) {
+      historyRef.current = appendHistory(props.value);
+      setHistoryIndex(null);
+      props.onSubmit();
+    }
   };
   const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Tab' && event.shiftKey && props.onCyclePermission) {
@@ -165,6 +198,11 @@ export default function Composer(props: ComposerProps) {
         return;
       }
       if (event.key === 'Escape') { event.preventDefault(); props.onChange(mention ? props.value.slice(0, mention.start) : ''); return; }
+    }
+    // `/` 菜单打开时不抢方向键；空输入框按 ↑ 召回上一条已发送的消息，↓ 往回翻。
+    if (!event.nativeEvent.isComposing && !matches.length) {
+      if (event.key === 'ArrowUp') { recallHistory(-1); if (historyIndex !== null || !props.value) event.preventDefault(); return; }
+      if (event.key === 'ArrowDown') { const browsing = historyIndex !== null; if (browsing) event.preventDefault(); recallHistory(1); return; }
     }
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); }
   };
@@ -191,6 +229,12 @@ export default function Composer(props: ComposerProps) {
     {props.header}
     <textarea ref={textRef} value={props.value} rows={1} placeholder={props.placeholder} aria-label="消息内容"
       onChange={(event) => props.onChange(event.target.value)} onKeyDown={onKey}
+      onBlur={() => {
+        // 正在翻发送历史时点到别处：结束翻阅，把原来的草稿放回来。
+        if (historyIndex === null) return;
+        setHistoryIndex(null);
+        props.onChange(historyDraftRef.current);
+      }}
       onPaste={(event) => {
         if (event.clipboardData.files.length) { event.preventDefault(); props.onPickImages(event.clipboardData.files); return; }
         const text = event.clipboardData.getData('text');
@@ -199,7 +243,7 @@ export default function Composer(props: ComposerProps) {
       className={cn('block w-full resize-none border-0 bg-transparent p-0 text-fg outline-none placeholder:text-fg-3',
         hero ? 'min-h-[60px] text-[16px] leading-[1.65]' : 'min-h-[26px] text-[15px] leading-[1.6]')} />
     {props.attachments.length > 0 && <div className="mt-2.5 flex flex-wrap gap-2" aria-label="待发送图片">
-      {props.attachments.map((image, index) => <div key={`${index}-${image.length}`} className="relative size-14">
+      {props.attachments.map((image, index) => <div key={`${index}-${image.length}:${image.length > 72 ? `${image.slice(24, 56)}…${image.slice(-24)}` : image}`} className="relative size-14">
         <img src={image} alt={`待发送图片 ${index + 1}`} className="size-full rounded-[10px] object-cover shadow-[0_0_0_1px_var(--line)]" />
         <button type="button" aria-label="移除图片" onClick={() => props.onRemoveAttachment(index)}
           className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full bg-fg text-bg"><X size={12} /></button>
@@ -270,6 +314,7 @@ export default function Composer(props: ComposerProps) {
         </button>
       </Tip>
       <button type="submit" aria-label="发送消息" disabled={!canSend}
+        onMouseDown={(event) => event.preventDefault()}
         className="primary-fill grid size-9 shrink-0 place-items-center rounded-full transition-[filter,opacity] hover:brightness-110 disabled:opacity-30">
         <ArrowUp size={17} strokeWidth={2.2} />
       </button>

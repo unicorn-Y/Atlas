@@ -5,6 +5,19 @@ export interface BackendAdapterOptions {
   baseUrl: string;
 }
 
+/**
+ * 后端调用失败。`message` 是给用户看的主文案（中文白话）；`detail` 保留原始英文报错，
+ * 由界面收进「详细信息」里展开，不直接糊在错误横幅上。
+ */
+export class BackendError extends Error {
+  readonly detail?: string;
+  constructor(message: string, detail?: string) {
+    super(message);
+    this.name = 'BackendError';
+    this.detail = detail;
+  }
+}
+
 export class BackendAdapter {
   readonly baseUrl: string;
   private live = false;
@@ -30,10 +43,10 @@ export class BackendAdapter {
     try {
       const response = await fetch(`${this.baseUrl}/api/health`, { signal: controller.signal });
       this.live = response.ok;
-      this.availabilityError = response.ok ? null : `Backend health check failed (${response.status})`;
-    } catch (error) {
+      this.availabilityError = response.ok ? null : `Atlas 后端没有响应（HTTP ${response.status}）`;
+    } catch {
       this.live = false;
-      this.availabilityError = error instanceof Error ? error.message : 'Backend is unavailable';
+      this.availabilityError = '连不上 Atlas 后端，请确认它已经启动';
     } finally {
       clearTimeout(timeout);
     }
@@ -47,19 +60,21 @@ export class BackendAdapter {
         ...init,
         headers: { 'Content-Type': 'application/json', ...init?.headers },
       });
-    } catch (error) {
+    } catch {
       this.live = false;
-      this.availabilityError = error instanceof Error ? error.message : 'Backend request failed';
-      throw error;
+      this.availabilityError = '连不上 Atlas 后端，请确认它已经启动';
+      throw new BackendError('连不上 Atlas 后端，请确认它已经启动', 'network request failed');
     }
     if (!response.ok) {
       const body = await response.json().catch(() => ({})) as { detail?: string };
-      const message = body.detail ?? `Backend request failed (${response.status})`;
+      const detail = typeof body.detail === 'string' && body.detail ? body.detail : undefined;
+      // 后端给了 detail 就直接用它（后端消息多为中文）；否则用中文兜底，原始英文留在 detail。
+      const message = detail ?? `后端请求失败（HTTP ${response.status}）`;
       if (response.status >= 500) {
         this.live = false;
         this.availabilityError = message;
       }
-      throw new Error(message);
+      throw new BackendError(message, detail ? undefined : `Backend request failed (${response.status})`);
     }
     this.availabilityError = null;
     if (response.status === 204) return undefined as T;
@@ -151,7 +166,7 @@ export class BackendAdapter {
     else mockModels.current = model;
   }
   async getConversations(): Promise<ConversationSummary[]> { return this.live ? this.request('/api/conversations') : mockConversations; }
-  async createConversation(title = 'New conversation'): Promise<ConversationSummary> {
+  async createConversation(title = '新对话'): Promise<ConversationSummary> {
     const request: ConversationCreateRequest = { title };
     if (this.live) return this.request('/api/conversations', { method: 'POST', body: JSON.stringify(request) });
     const conversation = { id: crypto.randomUUID(), title };
@@ -507,7 +522,7 @@ export class BackendAdapter {
   }
 
   async startRun(request: RunStartRequest, onEvent: (event: RuntimeStreamEvent) => void, shouldPause: () => boolean = () => false, maxReconnectAttempts = 5): Promise<void> {
-    if (this.activeRuns.has(request.run_id)) throw new Error(`Run ${request.run_id} is already active`);
+    if (this.activeRuns.has(request.run_id)) throw new BackendError('这个任务已经在运行了，等它结束或先停止再发', `Run ${request.run_id} is already active`);
     this.activeRuns.add(request.run_id);
     try {
       await this.startRunInternal(request, onEvent, shouldPause, maxReconnectAttempts);
@@ -530,7 +545,7 @@ export class BackendAdapter {
     }
 
     const supportsReplay = await this.supportsRuntimeProtocol();
-    if (!supportsReplay) throw new Error('Backend Agent Runtime 1.2 is required for event runs and approvals');
+    if (!supportsReplay) throw new BackendError('这台电脑上的 Atlas 后端版本太旧，请把后端升级到 Agent Runtime 1.2 以上再试', 'Backend Agent Runtime 1.2 is required for event runs and approvals');
     const cursorKey = `atlas.runtime.cursor.${request.run_id}`;
     let lastSequence = Number(localStorage.getItem(cursorKey) ?? 0) || 0;
     let retries = 0;
@@ -571,15 +586,15 @@ export class BackendAdapter {
         return;
       });
       socket.addEventListener('error', () => {
-        if (!opened) finish(new Error('WebSocket connection failed'));
+        if (!opened) finish(new BackendError('连不上后端的任务通道', 'WebSocket connection failed'));
       });
       socket.addEventListener('close', () => {
         if (this.runSockets.get(request.run_id) === socket) this.runSockets.delete(request.run_id);
         if (settled) return;
         if (terminal || this.mockCancelled.has(request.run_id)) { finish(); return; }
-        if (!opened) { finish(new Error('WebSocket closed before the run started')); return; }
-        if (!supportsReplay) { finish(new Error('Connection lost; this backend does not support run event replay')); return; }
-        if (retries >= maxReconnectAttempts) { finish(new Error('Run disconnected; reconnect limit reached')); return; }
+        if (!opened) { finish(new BackendError('任务还没开始，连接就断开了', 'WebSocket closed before the run started')); return; }
+        if (!supportsReplay) { finish(new BackendError('连接中断，这个后端不支持断线续跑', 'Connection lost; this backend does not support run event replay')); return; }
+        if (retries >= maxReconnectAttempts) { finish(new BackendError('连接断了好几次都没能恢复，这次任务中断了', 'Run disconnected; reconnect limit reached')); return; }
         retries += 1;
         window.setTimeout(() => { void connect(true).then(() => finish(), (error: Error) => {
           if (retries < maxReconnectAttempts && !terminal && !this.mockCancelled.has(request.run_id)) {
@@ -590,9 +605,10 @@ export class BackendAdapter {
     });
     try { await connect(lastSequence > 0); }
     catch (error) {
-      const message = error instanceof Error ? error.message : 'Backend run connection failed';
-      this.availabilityError = message;
-      if (/WebSocket|Connection lost|Run disconnected/.test(message)) this.live = false;
+      // 英文原始报错留在 detail 里；这里用它判断连接类故障，主文案已是中文。
+      const raw = error instanceof BackendError ? (error.detail ?? error.message) : error instanceof Error ? error.message : 'Backend run connection failed';
+      this.availabilityError = error instanceof Error ? error.message : raw;
+      if (/WebSocket|Connection lost|Run disconnected/.test(raw)) this.live = false;
       throw error;
     }
     finally {
@@ -609,14 +625,14 @@ export class BackendAdapter {
       return;
     }
     const socket = this.runSockets.get(runId);
-    if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error('Agent Runtime socket is not connected');
+    if (!socket || socket.readyState !== WebSocket.OPEN) throw new BackendError('和后端的连接已断开，这条操作没能送达', 'Agent Runtime socket is not connected');
     socket.send(JSON.stringify(response));
   }
 
   /** Send a client message on the socket of a live run (protocol 1.3 steer, input and plan replies). */
   private sendOnRun(runId: string, message: Record<string, unknown>): void {
     const socket = this.runSockets.get(runId);
-    if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error('Agent Runtime socket is not connected');
+    if (!socket || socket.readyState !== WebSocket.OPEN) throw new BackendError('和后端的连接已断开，这条操作没能送达', 'Agent Runtime socket is not connected');
     socket.send(JSON.stringify(message));
   }
 
@@ -662,9 +678,9 @@ export class BackendAdapter {
       this.mockControls.get(runId)?.(type === 'run.pause' ? 'run.paused' : 'run.resumed');
       return;
     }
-    if (!this.hasEventProtocol()) throw new Error('This backend does not support Agent Run controls');
+    if (!this.hasEventProtocol()) throw new BackendError('这个后端版本不支持暂停/继续，请升级 Atlas 后端', 'This backend does not support Agent Run controls');
     const socket = this.runSockets.get(runId);
-    if (socket?.readyState !== WebSocket.OPEN) throw new Error('Agent Runtime socket is not connected');
+    if (socket?.readyState !== WebSocket.OPEN) throw new BackendError('和后端的连接已断开，这条操作没能送达', 'Agent Runtime socket is not connected');
     socket.send(JSON.stringify({ type, run_id: runId }));
   }
 }

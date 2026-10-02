@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { BackendAdapter } from '@atlas/backend-adapter';
+import { BackendAdapter, BackendError } from '@atlas/backend-adapter';
 import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, CustomModelUpdateRequest, InitProposal, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ProviderState, ReasoningEffort, ReasoningStagesConfig, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
@@ -36,6 +36,8 @@ interface AtlasState {
   busy: boolean;
   paused: boolean;
   error: string | null;
+  /** 原始报错（多为英文），错误横幅的「详细信息」里展开；没有原始报错时为 null。 */
+  errorDetail: string | null;
   model: string;
   models: ModelListResponse['models'];
   /** Supported model services (catalog + this installation's keys and endpoints). */
@@ -240,11 +242,23 @@ function notifyDesktop(title: string, body: string, onClick: () => void) {
   notification.onclick = () => { window.focus(); onClick(); notification.close(); };
 }
 const RUN_OUTCOME: Record<string, string> = { 'run.completed': '已完成', 'run.failed': '出错了', 'run.cancelled': '已停止' };
-const errorText = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
+/**
+ * 错误横幅的两行文案：`error` 是给用户看的中文主行，`errorDetail` 收原始报错（多为英文），
+ * 在横幅的「详细信息」里展开。适配器抛的 BackendError 自带这一对；其它 Error 中文原样显示，
+ * 英文的换成中文兜底、原文进详情。
+ */
+const errorPatch = (error: unknown, fallback: string): { error: string; errorDetail: string | null } => {
+  if (error instanceof BackendError) return { error: error.message, errorDetail: error.detail ?? null };
+  const raw = error instanceof Error ? error.message : '';
+  if (raw && /[\u4e00-\u9fff]/.test(raw)) return { error: raw, errorDetail: null };
+  return { error: fallback, errorDetail: raw || null };
+};
+/** 只要主文案的场合（如写进事件流的 run.failed 详情）。 */
+const errorText = (error: unknown, fallback: string) => errorPatch(error, fallback).error;
 
 export const useAtlasStore = create<AtlasState>((set, get) => {
   /** Record a backend failure; network errors also flip the connection state. */
-  const fail = (error: unknown, fallback: string) => set({ mode: backend.mode, connected: backend.mode === 'backend', error: errorText(error, fallback) });
+  const fail = (error: unknown, fallback: string) => set({ mode: backend.mode, connected: backend.mode === 'backend', ...errorPatch(error, fallback) });
   const patchConversation = (id: string, patch: Partial<ConversationSummary>) => set((state) => {
     const conversations = state.conversations.map((item) => item.id === id ? { ...item, ...patch } : item);
     return { conversations, ...flags(conversations) };
@@ -252,7 +266,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
 
   return {
     apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
-    mode: 'mock', connected: false, busy: false, paused: false, error: null,
+    mode: 'mock', connected: false, busy: false, paused: false, error: null, errorDetail: null,
     model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', pendingRunOverrides: null, answers: {},
@@ -265,7 +279,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     initialize: async () => {
       set({ conversationsLoading: true });
       const mode = await backend.initialize();
-      set({ mode, connected: mode === 'backend', error: mode === 'mock' ? backend.availabilityError : null });
+      set({ mode, connected: mode === 'backend', error: mode === 'mock' ? backend.availabilityError : null, errorDetail: null });
       try {
         const [configuration, loaded, toolList, skills, capabilities] = await Promise.all([backend.getConfiguration(), backend.getConversations(), backend.getTools(), backend.getSkills(), backend.getAgentCapabilities()]);
         const conversations = await migrateLegacyFlags(loaded);
@@ -292,7 +306,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         void backend.summarizeConversationBranch(previousId).catch(() => undefined);
       }
       const run = [...get().runs].reverse().find((item) => item.conversationId === conversation.id);
-      set((state) => ({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null, error: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id) }));
+      set((state) => ({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null, error: null, errorDetail: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id) }));
       if (run && !terminal.has(run.status)) return;
       // 缓存过的会话先立刻显示上次的内容，刷新在后台进行，不再闪「正在载入」。
       if (!get().conversationMessages[conversation.id]) set({ loadingMessagesConversationId: conversation.id });
@@ -333,7 +347,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       }
     },
 
-    createConversation: async (title = 'New conversation') => {
+    createConversation: async (title = '新对话') => {
       if (get().creatingConversation) return;
       set({ creatingConversation: true });
       try {
@@ -343,7 +357,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         set((state) => ({
           conversations: [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)],
           conversationMessages: { ...state.conversationMessages, [conversation.id]: [] },
-          activeConversationId: conversation.id, activeRunId: null, paused: false, error: null,
+          activeConversationId: conversation.id, activeRunId: null, paused: false, error: null, errorDetail: null,
         }));
       } catch (error) {
         fail(error, '无法创建新对话');
@@ -372,36 +386,36 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       set({ settingsBusy: true, connectionTest: null });
       try {
         const configuration: ConfigurationResponse = await backend.updateConfiguration(baseUrl, apiKey, get().compressionModel);
-        set({ providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, models: configuration.models, model: configuration.current, compressionModel: configuration.compression_model ?? '', error: null });
+        set({ providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, models: configuration.models, model: configuration.current, compressionModel: configuration.compression_model ?? '', error: null, errorDetail: null });
         return true;
       } catch (error) {
-        set({ error: errorText(error, '保存 API 配置失败') });
+        set(errorPatch(error, '保存 API 配置失败'));
         return false;
       } finally { set({ settingsBusy: false }); }
     },
 
     saveSubagentSettings: async (enabled, defaultModel) => {
-      set({ settingsBusy: true, error: null });
+      set({ settingsBusy: true, error: null, errorDetail: null });
       try {
         const configuration = await backend.updateSubagentSettings(enabled, defaultModel);
-        set({ subagentsEnabled: configuration.subagents_enabled ?? enabled, subagentDefaultModel: configuration.subagent_default_model ?? defaultModel, error: null });
+        set({ subagentsEnabled: configuration.subagents_enabled ?? enabled, subagentDefaultModel: configuration.subagent_default_model ?? defaultModel, error: null, errorDetail: null });
         return true;
       } catch (error) {
-        set({ error: errorText(error, '保存子 Agent 设置失败') });
+        set(errorPatch(error, '保存子 Agent 设置失败'));
         return false;
       } finally { set({ settingsBusy: false }); }
     },
 
     saveCompressionModel: async (compressionModel) => {
-      set({ settingsBusy: true, error: null });
+      set({ settingsBusy: true, error: null, errorDetail: null });
       try {
         const configuration = await backend.updateConfiguration(
           get().providerBaseUrl, '', compressionModel,
         );
-        set({ compressionModel: configuration.compression_model ?? '', error: null });
+        set({ compressionModel: configuration.compression_model ?? '', error: null, errorDetail: null });
         return true;
       } catch (error) {
-        set({ error: errorText(error, '无法保存压缩模型') });
+        set(errorPatch(error, '无法保存压缩模型'));
         return false;
       } finally { set({ settingsBusy: false }); }
     },
@@ -410,10 +424,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       set({ settingsBusy: true, connectionTest: null });
       try {
         const configuration = await backend.addCustomModel(model);
-        set({ models: configuration.models, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, model: configuration.current, error: null });
+        set({ models: configuration.models, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, model: configuration.current, error: null, errorDetail: null });
         return true;
       } catch (error) {
-        set({ error: errorText(error, '保存模型配置失败') });
+        set(errorPatch(error, '保存模型配置失败'));
         return false;
       } finally { set({ settingsBusy: false }); }
     },
@@ -431,7 +445,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         await get().loadProviders();
         return true;
       } catch (error) {
-        set({ error: errorText(error, '保存服务商设置失败') });
+        set(errorPatch(error, '保存服务商设置失败'));
         return false;
       }
     },
@@ -442,7 +456,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         await get().loadProviders();
         return true;
       } catch (error) {
-        set({ error: errorText(error, '添加密钥失败') });
+        set(errorPatch(error, '添加密钥失败'));
         return false;
       }
     },
@@ -451,7 +465,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       try {
         await backend.removeProviderKey(providerId, keyId);
         await get().loadProviders();
-      } catch (error) { set({ error: errorText(error, '删除密钥失败') }); }
+      } catch (error) { set(errorPatch(error, '删除密钥失败')); }
     },
 
     updateCustomModel: async (modelId, patch) => {
@@ -459,10 +473,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       try {
         await backend.updateCustomModel(modelId, patch);
         const list = await backend.getModels();
-        set({ models: list.models, model: list.current, error: null });
+        set({ models: list.models, model: list.current, error: null, errorDetail: null });
         return true;
       } catch (error) {
-        set({ error: errorText(error, '修改模型失败') });
+        set(errorPatch(error, '修改模型失败'));
         return false;
       } finally { set({ settingsBusy: false }); }
     },
@@ -473,10 +487,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         await backend.deleteCustomModel(modelId);
         const list = await backend.getModels();
         // Deleting the selected model makes the backend fall back to the first model in the list.
-        set((state) => ({ models: list.models, model: state.model === modelId ? list.current : state.model, error: null }));
+        set((state) => ({ models: list.models, model: state.model === modelId ? list.current : state.model, error: null, errorDetail: null }));
         return true;
       } catch (error) {
-        set({ error: errorText(error, '删除模型失败') });
+        set(errorPatch(error, '删除模型失败'));
         return false;
       } finally { set({ settingsBusy: false }); }
     },
@@ -484,7 +498,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     saveReasoningStages: async (config) => {
       set({ reasoningStages: config });
       try {
-        set({ reasoningStages: await backend.saveReasoningStages(config), error: null });
+        set({ reasoningStages: await backend.saveReasoningStages(config), error: null, errorDetail: null });
       } catch (error) { fail(error, '思考量分配没能保存'); }
     },
 
@@ -492,7 +506,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       set({ settingsBusy: true, connectionTest: null });
       try {
         const result = await backend.testConnection(model);
-        set({ connectionTest: { ok: result.ok, message: result.message }, error: null });
+        set({ connectionTest: { ok: result.ok, message: result.message }, error: null, errorDetail: null });
       } catch (error) {
         set({ connectionTest: { ok: false, message: errorText(error, '连接测试失败') } });
       } finally { set({ settingsBusy: false }); }
@@ -503,7 +517,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const run: AgentRun = { id: crypto.randomUUID(), conversationId, title, status: 'planning', phase: 'planning', startedAt: timestamp, updatedAt: timestamp, lastEventSequence: 0, events: [] };
       // A queued message can start in a conversation the user is not looking at; don't pull the view over to it.
       set((state) => state.activeConversationId === conversationId
-        ? { runs: [...state.runs, run], activeRunId: run.id, busy: true, paused: false, error: null }
+        ? { runs: [...state.runs, run], activeRunId: run.id, busy: true, paused: false, error: null, errorDetail: null }
         : { runs: [...state.runs, run], busy: true });
       return run;
     },
@@ -581,7 +595,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const message = content.trim() || (attachments.length || files.length ? '请查看附件。' : '');
       if (!message) return;
       if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().catch(() => undefined);
-      if (!get().activeConversationId) await get().createConversation(message.slice(0, 40) || 'New conversation');
+      if (!get().activeConversationId) await get().createConversation(message.slice(0, 40) || '新对话');
       const conversationId = get().activeConversationId;
       if (!conversationId) return;
       const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files, ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}), ...(profileId ? { profileId } : {}) };
@@ -601,24 +615,24 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       try {
         backend.respondToInput(runId, eventId, text);
         set((state) => ({ answers: { ...state.answers, [eventId]: text } }));
-      } catch (error) { set({ error: errorText(error, '回答没有送达') }); }
+      } catch (error) { set(errorPatch(error, '回答没有送达')); }
     },
     trustRules: (runId, eventId, trust) => {
       try {
         backend.trustRules(runId, eventId, trust);
         set((state) => ({ answers: { ...state.answers, [eventId]: trust ? 'trusted' : 'declined' } }));
-      } catch (error) { set({ error: errorText(error, '没能回复') }); }
+      } catch (error) { set(errorPatch(error, '没能回复')); }
     },
     setPermissionMode: (conversationId, mode) => get().setConversationSettings(conversationId, { permission_mode: mode }),
     setConversationSettings: (conversationId, patch) => {
       patchConversation(conversationId, patch);
-      void backend.updateConversation(conversationId, patch).catch((error) => set({ error: errorText(error, '对话设置没能保存') }));
+      void backend.updateConversation(conversationId, patch).catch((error) => set(errorPatch(error, '对话设置没能保存')));
     },
     approvePlan: (runId, eventId, edits = '') => {
       try {
         backend.approvePlan(runId, eventId, edits.trim());
         set((state) => ({ answers: { ...state.answers, [eventId]: edits.trim() || 'approved' } }));
-      } catch (error) { set({ error: errorText(error, '没能批准计划') }); }
+      } catch (error) { set(errorPatch(error, '没能批准计划')); }
     },
 
     togglePaused: () => {
@@ -626,7 +640,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const run = runId ? get().getRun(runId) : undefined;
       if (!run || terminal.has(run.status)) return;
       try { backend.controlRun(run.id, run.status === 'paused' ? 'run.resume' : 'run.pause'); }
-      catch (error) { set({ error: errorText(error, '运行控制请求失败') }); }
+      catch (error) { set(errorPatch(error, '运行控制请求失败')); }
     },
     stopTask: () => { if (get().activeRunId) get().stopRun(get().activeRunId!); },
     stopRun: (runId) => {
@@ -637,7 +651,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       }
       backend.cancelRun(run.id);
     },
-    dismissError: () => set({ error: null }),
+    dismissError: () => set({ error: null, errorDetail: null }),
     setFollowUpMode: (followUpMode) => { storageSet(FOLLOW_UP, followUpMode); set({ followUpMode }); },
     setNextRunMode: (nextRunMode) => set({ nextRunMode }),
     setPendingRunOverrides: (pendingRunOverrides) => set({ pendingRunOverrides }),
@@ -684,7 +698,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       try {
         await backend.renameConversation(id, next);
         patchConversation(id, { title: next });
-      } catch (error) { set({ error: errorText(error, '改名失败') }); }
+      } catch (error) { set(errorPatch(error, '改名失败')); }
     },
     deleteConversation: async (id) => {
       const running = activeRunFor(id);
@@ -704,19 +718,19 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
             activeConversationId: wasActive ? '' : state.activeConversationId, activeRunId: wasActive ? null : state.activeRunId,
           };
         });
-      } catch (error) { set({ error: errorText(error, '删除对话失败') }); }
+      } catch (error) { set(errorPatch(error, '删除对话失败')); }
     },
     togglePinned: (id) => {
       const pinned = !get().conversations.find((item) => item.id === id)?.pinned;
       patchConversation(id, { pinned });
-      void backend.updateConversation(id, { pinned }).catch((error) => { patchConversation(id, { pinned: !pinned }); set({ error: errorText(error, '置顶没有保存') }); });
+      void backend.updateConversation(id, { pinned }).catch((error) => { patchConversation(id, { pinned: !pinned }); set(errorPatch(error, '置顶没有保存')); });
     },
     toggleArchived: (id) => {
       const current = get().conversations.find((item) => item.id === id);
       const patch = current?.archived ? { archived: false } : { archived: true, pinned: false };
       const undo = { archived: Boolean(current?.archived), pinned: Boolean(current?.pinned) };
       patchConversation(id, patch);
-      void backend.updateConversation(id, patch).catch((error) => { patchConversation(id, undo); set({ error: errorText(error, '归档没有保存') }); });
+      void backend.updateConversation(id, patch).catch((error) => { patchConversation(id, undo); set(errorPatch(error, '归档没有保存')); });
     },
     exportConversation: async (id, format = 'json') => {
       const conversation = get().conversations.find((item) => item.id === id);
@@ -741,7 +755,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
           return;
         }
         downloadJson(`atlas-${safeTitle}.json`, { exported_at: new Date().toISOString(), conversation: conversation ?? { id }, messages });
-      } catch (error) { set({ error: errorText(error, '导出失败') }); }
+      } catch (error) { set(errorPatch(error, '导出失败')); }
     },
     // The backend remembers the directory once a run uses it; until then it rides along with run.start.
     setWorkspace: (conversationId, workspace) => {
@@ -760,7 +774,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
           return { conversationMessages: { ...state.conversationMessages, [conversationId]: cut >= 0 ? messages.slice(0, cut) : messages }, activeRunId: null };
         });
         await get().sendMessage(content);
-      } catch (error) { set({ error: errorText(error, '没能修改这条消息') }); }
+      } catch (error) { set(errorPatch(error, '没能修改这条消息')); }
     },
     rewindTo: async (messageId, files) => {
       const conversationId = get().activeConversationId;
@@ -770,14 +784,14 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         set({ activeRunId: null });
         await reloadMessages(conversationId);
         return result;
-      } catch (error) { set({ error: errorText(error, '没能回退') }); return null; }
+      } catch (error) { set(errorPatch(error, '没能回退')); return null; }
     },
     redoRewind: async (conversationId, rewindId) => {
       try {
         await backend.redoRewind(conversationId, rewindId);
         await reloadMessages(conversationId);
         return true;
-      } catch (error) { set({ error: errorText(error, '没能重做') }); return false; }
+      } catch (error) { set(errorPatch(error, '没能重做')); return false; }
     },
     forkFrom: async (messageId, summarize = false) => {
       const source = get().activeConversationId;
@@ -787,7 +801,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         const workspace = get().conversations.find((item) => item.id === source)?.workspace;
         set((state) => ({ conversations: [{ ...fork, workspace: fork.workspace ?? workspace }, ...state.conversations] }));
         await get().openConversation(fork);
-      } catch (error) { set({ error: errorText(error, '没能分叉') }); }
+      } catch (error) { set(errorPatch(error, '没能分叉')); }
     },
     setProfile: (profileId) => { storageSet(PROFILE, profileId); set({ profileId }); },
     reloadProfiles: async () => {
@@ -818,23 +832,23 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         const source = get().conversations.find((item) => item.id === id);
         set((state) => ({ conversations: [{ ...copy, workspace: copy.workspace ?? source?.workspace }, ...state.conversations] }));
         await get().openConversation(copy);
-      } catch (error) { set({ error: errorText(error, '没能复制对话') }); }
+      } catch (error) { set(errorPatch(error, '没能复制对话')); }
     },
-    cancelSubtask: (runId, subtaskId) => { void backend.cancelSubtask(runId, subtaskId).catch((error) => set({ error: errorText(error, '没能停止子任务') })); },
+    cancelSubtask: (runId, subtaskId) => { void backend.cancelSubtask(runId, subtaskId).catch((error) => set(errorPatch(error, '没能停止子任务'))); },
     steerSubtask: (runId, subtaskId, eventId, text) => {
       try { backend.steerSubtask(runId, subtaskId, text.trim(), eventId); return true; }
-      catch (error) { set({ error: errorText(error, '没能发送给子任务') }); return false; }
+      catch (error) { set(errorPatch(error, '没能发送给子任务')); return false; }
     },
     saveRecipe: async (runId, name) => {
       try {
         const recipe = await backend.recipeFromRun(runId, name.trim());
         set((state) => ({ recipes: [recipe, ...state.recipes.filter((item) => item.id !== recipe.id)] }));
         return true;
-      } catch (error) { set({ error: errorText(error, '没能保存配方') }); return false; }
+      } catch (error) { set(errorPatch(error, '没能保存配方')); return false; }
     },
     deleteRecipe: async (id) => {
       try { await backend.deleteRecipe(id); set((state) => ({ recipes: state.recipes.filter((item) => item.id !== id) })); }
-      catch (error) { set({ error: errorText(error, '没能删除配方') }); }
+      catch (error) { set(errorPatch(error, '没能删除配方')); }
     },
     runRecipe: async (id, params) => {
       try {
@@ -845,7 +859,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         const conversationId = get().activeConversationId;
         if (rendered.workspace && conversationId) get().setWorkspace(conversationId, rendered.workspace);
         await get().sendMessage(rendered.prompt);
-      } catch (error) { set({ error: errorText(error, '配方没能运行') }); }
+      } catch (error) { set(errorPatch(error, '配方没能运行')); }
     },
     reloadCommands: async (workspace) => {
       if (!get().connected) return;
@@ -858,7 +872,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       try {
         const result = await backend.compactConversation(id, note);
         return result.before_tokens && result.after_tokens ? `上下文从约 ${result.before_tokens} 压到 ${result.after_tokens} tokens` : '已压缩上下文';
-      } catch (error) { set({ error: errorText(error, '压缩失败') }); return null; }
+      } catch (error) { set(errorPatch(error, '压缩失败')); return null; }
     },
 
     // -- /init：AGENTS.md 提案 --------------------------------------------
@@ -867,7 +881,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       if (get().initBusy) return;
       const conversationId = get().activeConversationId;
       const workspace = get().conversations.find((item) => item.id === conversationId)?.workspace;
-      if (typeof workspace !== 'string' || !workspace) { set({ error: '请先选择工作目录' }); return; }
+      if (typeof workspace !== 'string' || !workspace) { set({ error: '请先选择工作目录', errorDetail: null }); return; }
       set({ initOpen: true, initBusy: true, initError: null });
       try {
         const proposal = await backend.initPreview(workspace);
@@ -916,7 +930,7 @@ function respondToApproval(eventId: string, choice: 'allow' | 'deny') {
   const run = get().runs.find((item) => item.events.some((event) => event.id === eventId && event.type === 'approval.required'));
   if (!run) return;
   try { backend.respondToApproval(run.id, { type: 'approval.response', event_id: eventId, choice }); }
-  catch (error) { set({ error: errorText(error, choice === 'allow' ? '批准请求失败' : '拒绝请求失败') }); }
+  catch (error) { set(errorPatch(error, choice === 'allow' ? '批准请求失败' : '拒绝请求失败')); }
 }
 
 /** Fold a message into a running run. Returns false when it can't be delivered, so the caller can queue it. */
@@ -930,14 +944,15 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const { getState: get, setState: set } = useAtlasStore;
   const { content, attachments, files } = item;
   let conversation = get().conversations.find((entry) => entry.id === conversationId);
-  if (conversation?.title === 'New conversation') {
-    const title = content.slice(0, 40) || 'New conversation';
+  // 旧版本建过英文占位标题，一并视为「还没命名」。
+  if (conversation?.title === '新对话' || conversation?.title === 'New conversation') {
+    const title = content.slice(0, 40) || '新对话';
     try {
       await backend.renameConversation(conversation.id, title);
       set((state) => ({ conversations: state.conversations.map((entry) => entry.id === conversationId ? { ...entry, title } : entry) }));
       conversation = { ...conversation, title };
     } catch (error) {
-      set({ error: errorText(error, '无法更新对话标题') });
+      set(errorPatch(error, '无法更新对话标题'));
     }
   }
   const mode = get().nextRunMode;
@@ -974,7 +989,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
     ...(item.refs?.conversations.length ? { context_conversations: item.refs.conversations } : {}),
   }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
     .catch((error) => {
-      set({ mode: backend.mode, connected: backend.mode === 'backend', error: errorText(error, '运行启动失败') });
+      set({ mode: backend.mode, connected: backend.mode === 'backend', ...errorPatch(error, '运行启动失败') });
       const current = get().getRun(run.id);
       if (current && !terminal.has(current.status)) get().appendEvent({ id: `${run.id}:transport-failure`, runId: run.id, sequence: current.lastEventSequence + 1, type: 'run.failed', timestamp: new Date().toISOString(), data: { detail: errorText(error, '运行启动失败') } });
     })
