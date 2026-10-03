@@ -1,27 +1,53 @@
 # Atlas Current Task
 
-CURRENT: ATLAS-MEGA-LATEST-DAILY-READY
-STATUS: ACCEPTED
+CURRENT: ATLAS-MEGA-PERSISTENT-ALWAYS-ON
+STATUS: READY_FOR_EXECUTION
 CONTROLLER: ZCodex
-TASKBOOK: tasks/taskbooks/ATLAS-MEGA-LATEST-DAILY-READY.md
-RESULT: tasks/results/ATLAS-MEGA-LATEST-DAILY-READY.result.md
-REVIEW: tasks/reviews/ATLAS-MEGA-LATEST-DAILY-READY.review.md
+TASKBOOK: tasks/taskbooks/ATLAS-MEGA-PERSISTENT-ALWAYS-ON.md
+RESULT: tasks/results/ATLAS-MEGA-PERSISTENT-ALWAYS-ON.result.md
+REVIEW: tasks/reviews/ATLAS-MEGA-PERSISTENT-ALWAYS-ON.review.md
 
 BASE_BRANCH: main
-FINAL_REVIEW: PASS
-FINAL_ATLAS_HEAD_REVIEWED: b0e96cb981a19672cf988ee6558031a04fb724de
-FINAL_HERMES_FORK: 7912500ffd4e3397772c4af42050a7687286e8fb
-FINAL_UPSTREAM_CHECKPOINT: eb7e8620324b32424c06218f6a28094df2e921f8
+PREVIOUS: ATLAS-MEGA-LATEST-DAILY-READY
+PREVIOUS_REVIEW: PASS
 
-## State
+## Goal
 
-C1-C6 + Latest-Best refresh + X2 Computer/Browser + X4 Skill Market + X5 Self-Evolution + K1 are accepted for the current scope.
+Turn Atlas from a daily-ready desktop agent into a persistent always-on personal agent by continuously integrating the latest strongest mature implementations.
 
-NEXT: USER_DAILY_USE
+Continuous scope:
+1. freeze latest OpenClaw / Hermes / DBOS sources;
+2. tail-sync Hermes fork;
+3. persistent agents + Bot Mode/group chat;
+4. Gateway + Telegram/Slack/Feishu/DingTalk/WeCom/Email/Webhook;
+5. OpenClaw-style Heartbeat/proactivity;
+6. durable Cron/Automation with existing DBOS + OpenClaw semantics + Hermes product surface;
+7. Atlas-owned Windows laptop / paired-device ownership + human handoff;
+8. Hermes managed local llama.cpp runtime + activation tool-call probe;
+9. Skill Workshop/curator upgrade;
+10. integration/dedup + deterministic acceptance.
 
-Use:
-- `start-atlas.bat` for source daily launch;
-- `docs/plan/USAGE-FEEDBACK.md` for the feedback loop.
+## SUBAGENT POLICY — HARD REQUIREMENT
 
-Real desktop/browser/account/model smoke now belongs to daily use.
-Do not automatically start X1/X3/X6/X7/full T1/R1.
+- Use subagents for the bulk of research, source comparison, porting, implementation, focused tests, and review.
+- Target the maximum concurrency the current runtime actually allows.
+- Do not hard-code a worker count.
+- Keep spawning independent lanes until the runtime refuses more concurrent workers.
+- If a spawn is rejected, shrink that batch; when slots free up, dispatch the rest.
+- A concurrency rejection is NOT a reason to disable subagents or work single-threaded.
+- Shared hot files have one integration owner.
+
+## Principles
+
+- Latest information first; strongest implementation wins.
+- Direct-port mature code when practical.
+- Cross-language high-coupling code: port the state machine/protocol, not a weak imitation.
+- Do not embed OpenClaw as a second Agent core.
+- Do not duplicate SessionDB / Scheduler / SkillRegistry / Computer / Browser.
+- Memory stays frozen.
+- Speed first; focused tests first.
+
+## Completion
+
+Write result, set CURRENT to AWAITING_REVIEW, push relevant repos, verify local/remote heads, and stop.
+Do not start X6 / full T1 / R1.
