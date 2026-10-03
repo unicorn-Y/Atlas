@@ -127,3 +127,79 @@
 **Atlas 当前主体 + Computer/Browser + Skills + Self-Evolution 已完成最新最强刷新和 K1 自动检查,可以开始日常使用。**
 
 主要提交:`3879e22`(M0/M1 freeze+sync)→ `3793347`(X2/X4/X5 主体)→ `9575be6`(browser+git-safety+checkpoint)→ `ba3c78b`/`97fbdd0`(接线)→ `546a664`(K1 harness+修复)。Hermes fork:`27c63095b0` 已推送。
+
+---
+
+# Mega-R closeout（三项最小收口,2026-10-03）
+
+按 `tasks/taskbooks/ATLAS-MEGA-R.md` 只修 review 的三个 blocker,未重做 Mega 主体。提交链:`97fc7e0`(R1)→ `1b4060c`(R3 seam)→ `86adff4`(R3 收口)→ `16e6078`(R2 pin)。
+
+## R1 — X5 watcher 大跨度回溯修复（`core/atlas/evolution/watcher.py`）
+
+**设计**
+- 新增 `BACKFILL_CEILING = 500`(env `ATLAS_EVOLUTION_BACKFILL_CEILING` / `run_check(backfill_ceiling=...)` 按次覆盖;`run_check` 把生效值注入来源副本传给 fetcher,取数与完整性判定永远用同一个上限)。`FETCH_LIMIT=30` 只保留为 GitHub REST 页大小。
+- 本地 git:`git log -n<ceiling>` 由 git 走满历史(等价分页到根),取代固定 `-n30`。
+- GitHub REST:commits 与 releases 同一套分页 `page=1..N`,停止条件 = 某页出现旧 checkpoint / 响应取尽(短页或空页)/ 跨页累计到 ceiling。
+- `run_check` 完整性三分支:
+  - 追平(last_id 在本次取到)→ `status="current"`,`last_id` 推进到真实最新 head;
+  - 没追平且 ceiling 取满 → **`status="backfill_incomplete"`:旧 `last_id` 原样保留(绝不跳过未读历史)**,已读条目照常缓存 + seen_ids 更新,下一轮继续回溯;结果行带 `backfill_incomplete: true` + `scanned`;
+  - 没追平但历史走到根(上游 force-push/rebase)→ `status="current"` + `checkpoint_reset: true`。
+- 离线路径逐字节不变(`UpstreamUnavailable` → 错误行,不动 status/checkpoint);tag 模式维持 seen_ids 兜底(排序不确定,设计如此)。
+
+**测试**(`core/tests/test_evolution.py`,22 → 29 passed;curator 15 passed 不受影响)
+- `test_local_git_backfills_large_gap`:120 commit 跨度,单轮全部浮出、各一次、last_id=head;
+- `test_github_pagination_surfaces_full_gap`:100+ commit 分页(page 1-4 实际请求断言);
+- `test_rerun_without_new_commits_is_noop`:第二轮 0 重复;
+- `test_ceiling_marks_backfill_incomplete_then_completes`:ceiling=10 vs 35 缺口 → `backfill_incomplete` + 旧 checkpoint 保留,放大 ceiling 后补完且不重复早前批次;
+- `test_backfill_ceiling_env_override`、`test_github_release_pagination_and_seen_safety`(release 分页 + seen 安全)、`test_history_rewrite_resets_checkpoint`(孤儿分支 force-push)。
+- Controller 复核:最终树重跑 `tests/test_evolution.py` → **29 passed**。
+
+## R2 — 最终 Hermes tail-sync
+
+**Moving-target 规则执行**:"最新" = 本次 tail-sync 开始时抓到的 upstream HEAD。合并开始时 `git fetch upstream` 抓到即冻结,此后 upstream 又前进的 commit 一律忽略。
+
+| 项 | 值 |
+|---|---|
+| 最终 upstream HEAD(checkpoint)| `eb7e8620324b32424c06218f6a28094df2e921f8`（`fix(pm): confine the read-only retry to Windows unlink/rmdir failures`，2026-10-03）|
+| fork 合并提交 | `7912500ffd4e3397772c4af42050a7687286e8fb`（`merge: upstream main eb7e862032 (383 commits) into atlas`）|
+| ahead/behind（atlas...upstream/main）| **10 / 0**（fork 领先 = 8 个 Atlas 补丁 + 2 个合并提交;behind 0）|
+| 已推送 | `27c63095b0..7912500ffd atlas -> atlas`，local atlas == origin/atlas 已核对 |
+| Atlas pin | `core/pyproject.toml` → `@7912500ffd4e3397772c4af42050a7687286e8fb` |
+
+- 冲突:**零**。唯一双侧改动文件 `tests/tools/test_file_operations.py` 由 ort 自动合并(纯新增、hunk 相距远),双侧内容均验证在场。
+- Atlas 补丁存活 8/8(openai==2.26.0、pydantic==2.13.5、MCP tree-kill 测试拆分、UTF-16/BOM/surrogate file ops、full-read baseline、pause gate、context handoff 全家、`new_context_window` 白名单)。
+- 逐补丁对照 upstream delta:无任何补丁被 upstream 等价实现取代,全部 KEEP。
+- Focused suites(fork 侧,代码解析证明运行在 `D:\hermes-agent` fork 树):file_operations 65 passed + 9 failed(**6 个在合并前 head `27c63095b0` 用临时 worktree 复现 → 既有 Windows umask/symlink 环境语义;3 个为 upstream 本次新增 `TestSearchFilesIncludesDirectories` 的 Windows 路径风格测试 bug——目录包含功能本身工作,非合并回归**);mcp_windows_orphan_fix 6 passed 1 skip(posix 项,Windows 正确跳过);known_file_write_baseline 18 passed;fuzzy_match 58 passed;atlas_context_handoff 1 passed;context_compressor 277 passed;tool_guardrails 25 passed;tools_config 46 passed 6 skip(legacy alias 语义抽查:`new_context_window` 仍是 core tool)。
+
+## R3 — K1 fake Computer 路径真实通过
+
+- `atlas/tools/x2/fake_computer.py`:`FakeComputerBackend` + `FakeHermesComputerTool`,全确定性、离线、零 OS 副作用(64×48 PNG 常量,PIL 解码验证通过)。
+- 接缝:`get_runtime()` 读 `ATLAS_X2_COMPUTER_FAKE` → 注入 fake backend + fake hermes tool;**生产 X2 桥全路径不变**(registration → call_tool → permission → translate → `_dispatch` → normalize → `computer.step`),只换驱动层;lazy import,生产不加载。
+- `k1_backend` fixture 仅对 K1 子进程设该变量(C1 不受影响);`computer_observe` 真实执行,`tool.completed` 非 error,携带 `data:image/png` 证据 + `K1_FAKE` 标记(证明来自 fake 驱动,绝非真桌面抓屏)。
+- `test_daily_computer_use_with_fake_driver`:**xfail 已删除**,真实 PASS。
+
+### K1 daily fake matrix 最终结果
+
+**17/17 items passed,0 failed,0 xfail**(`test_k1_daily_paths.py` 12 items + `test_k1_daily_paths_x2x4x5.py` 5 items;按逻辑场景计 15/15 —— 两个文件含 2 个 ×3 参数化场景。review 时的 "14/15" 口径即此 15 条)。一轮完整运行:252s。
+
+收口过程中发现并修复的 2 个既有失败(经 stash 基线 A/B 证明与 R1/R3 无关,属 K1 应抓的产品/脚本缺口):
+1. **review.findings 不上运行事件流**(日常场景 1):根因 = 引擎 truncated-stop 守卫对 ≥200 字符且无句读结尾的回复强制续跑,裸 JSON findings 让审查员子代理多跑一轮、抢走本该父代理执行的 `submit_findings`(子代理事件队列被委派循环按设计丢弃)。修复:K1/c6 场景 findings 加 ```json 围栏(守卫豁免 ``` 结尾,子代理一轮干净收尾);断言未削弱。
+2. **run.compaction.progress 缺失**(日常场景 2):压缩触发、配置键、summary 请求、Atlas 桥全部正常;根因在**用户本地 hermes 克隆的引擎 bug**(`1029dbd89e` 在 `conversation_compression.py:3561` 写反比较符,任何成功压缩都被判 no-op 并进入 300s 退避,`session:compress` 边界永不可达;只读安装,不在本任务书范围)。生产侧真实修复:`hermes_runtime.on_status` 识别引擎进行中压缩状态(`COMPACTION_STATUS_MARKER`,import-guarded)桥接为 `run.compaction.progress({"phase":"summarizing"})`——原先只映射完成边界,引擎侧断路器延迟边界时进行中压缩对运行流完全不可见。场景断言(aux 请求发生、压缩后真实 main turn 继续)原样通过。
+
+### Focused 测试汇总(controller 视角)
+
+| 套件 | 结果 |
+|---|---|
+| tests/test_evolution.py(watcher,controller 重跑)| **29 passed** |
+| tests/test_evolution_skill_curator.py | 15 passed |
+| K1 全矩阵(两文件一轮)| **17/17 passed,0 xfail** |
+| hermes_runtime + c6_review | 39 passed |
+| c6_main_chain(修复后)| 1 passed |
+| c6_server_routes + c1_review_e2e | 16 passed |
+| c4r_lifecycle + c4_hooks | 24 passed,2 errors(既有 venv 缺 openpyxl,与本轮无关)|
+| hermes_runtime_e2e / c1_websocket | 10/3、18/8 —— 全部失败经 stash A/B 证明既有,与 86adff4 无关 |
+| Hermes fork 7+1 focused 套件 | 见 R2 节;9 个 file_operations 失败均证明非合并回归 |
+
+## 结论
+
+三个 blocker 全部关闭:X5 watcher 在任意跨度下不再跳史(checkpoint 永不越过未读历史,incomplete 显式可见);Hermes fork 已追平最终 checkpoint `eb7e862032` 且 8 个 Atlas 补丁零损;K1 fake daily 矩阵全绿无 xfail。`CURRENT → AWAITING_REVIEW`。
