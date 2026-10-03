@@ -1,33 +1,27 @@
 # Atlas Current Task
 
-CURRENT: ATLAS-MEGA-R
-STATUS: AWAITING_REVIEW
+CURRENT: ATLAS-MEGA-LATEST-DAILY-READY
+STATUS: ACCEPTED
 CONTROLLER: ZCodex
-TASKBOOK: tasks/taskbooks/ATLAS-MEGA-R.md
+TASKBOOK: tasks/taskbooks/ATLAS-MEGA-LATEST-DAILY-READY.md
 RESULT: tasks/results/ATLAS-MEGA-LATEST-DAILY-READY.result.md
 REVIEW: tasks/reviews/ATLAS-MEGA-LATEST-DAILY-READY.review.md
 
 BASE_BRANCH: main
-PREVIOUS: ATLAS-MEGA-LATEST-DAILY-READY
-PREVIOUS_REVIEW: PARTIAL — three focused closeout blockers
-MEGA_R: ALL THREE BLOCKERS CLOSED (R1 watcher backfill / R2 tail-sync eb7e862032→7912500ffd / R3 K1 fake path 17/17 items 0 xfail)
+FINAL_REVIEW: PASS
+FINAL_ATLAS_HEAD_REVIEWED: b0e96cb981a19672cf988ee6558031a04fb724de
+FINAL_HERMES_FORK: 7912500ffd4e3397772c4af42050a7687286e8fb
+FINAL_UPSTREAM_CHECKPOINT: eb7e8620324b32424c06218f6a28094df2e921f8
 
-## Goal
+## State
 
-Close only:
-1. X5 watcher backfill/pagination correctness;
-2. final Hermes upstream tail-sync to a frozen final checkpoint;
-3. K1 fake Computer Use path from xfail to real pass.
+C1-C6 + Latest-Best refresh + X2 Computer/Browser + X4 Skill Market + X5 Self-Evolution + K1 are accepted for the current scope.
 
-Everything else in the Mega wave is accepted and must not be reopened.
+NEXT: USER_DAILY_USE
 
-## SUBAGENT POLICY
+Use:
+- `start-atlas.bat` for source daily launch;
+- `docs/plan/USAGE-FEEDBACK.md` for the feedback loop.
 
-Use the maximum subagent concurrency the runtime allows.
-Do not hard-code worker counts.
-If spawn hits concurrency/quota, shrink the batch and continue; when slots free, keep dispatching.
-Do not fall back to single-threaded work because of a spawn rejection.
-
-## Completion
-
-Append Mega-R evidence, set CURRENT to AWAITING_REVIEW, push both repos, verify heads, and stop.
+Real desktop/browser/account/model smoke now belongs to daily use.
+Do not automatically start X1/X3/X6/X7/full T1/R1.
