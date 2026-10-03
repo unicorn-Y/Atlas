@@ -12,9 +12,13 @@
 
     {
       "sources":  [{id, repo, kind, mirror_path?, remote, ref}, ...],
-      "state":    {"<source_id>": {last_id?, seen_ids?: [...], last_checked_at?, last_ok_at?}},
+      "state":    {"<source_id>": {last_id?, seen_ids?: [...], status?, checkpoint_reset?,
+                                   last_checked_at?, last_ok_at?}},
       "entries":  {"<source_id>": [entry, ...]}   # 最新在前，每来源封顶 MAX_ENTRIES
     }
+
+``state["status"]``：``"current"``（已追平）| ``"backfill_incomplete"``（回溯上限内没追到
+旧 checkpoint，中间历史未读，旧 ``last_id`` 保留）；离线轮次不改写 status。
 
 entry 结构（纯 dict，方便测试与序列化）::
 
@@ -36,8 +40,12 @@ import structlog
 
 log = structlog.get_logger()
 
-# 每来源单次最多读取的条数与缓存封顶。
+# GitHub REST 每页条数（分页回溯时的页大小）。
 FETCH_LIMIT = 30
+# 单次检查的最大回溯条数（commit / release 通用）：取满仍未追到上次 checkpoint 时
+# 标记 backfill_incomplete 并保留旧 last_id，绝不静默跳过中间历史。
+# 可用环境变量 ATLAS_EVOLUTION_BACKFILL_CEILING 覆盖，也可在 run_check 按次覆盖。
+BACKFILL_CEILING = 500
 MAX_ENTRIES = 200
 # seen_ids 集合封顶（防止 sources.json 无限膨胀；超出部分丢弃最旧的 id）。
 MAX_SEEN_IDS = 500
@@ -67,6 +75,28 @@ def _now_iso() -> str:
 def _slug(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return slug or "src"
+
+
+def _backfill_ceiling(override: int | None = None) -> int:
+    """生效的回溯上限：显式覆盖 > 环境变量 > 默认值（非法 / 非正值一律忽略）。"""
+    if override is not None:
+        try:
+            value = int(override)
+        except (TypeError, ValueError):
+            value = 0
+        if value > 0:
+            return value
+    raw = os.environ.get("ATLAS_EVOLUTION_BACKFILL_CEILING", "")
+    try:
+        env_value = int(raw)
+    except ValueError:
+        env_value = 0
+    return env_value if env_value > 0 else BACKFILL_CEILING
+
+
+def _source_ceiling(source: dict[str, Any]) -> int:
+    """fetcher 侧读取 ``run_check`` 注入的每调用上限；未注入则回退全局解析。"""
+    return _backfill_ceiling(source.get("backfill_ceiling"))
 
 
 # ---------------------------------------------------------------------------
@@ -269,12 +299,18 @@ def _entry_from_commit(
 
 
 def _read_local_commits(source: dict[str, Any], last_id: str | None) -> list[dict[str, Any]]:
-    """读取镜像里 ``<remote>/<ref>`` 的最近提交；遇到上次见过的 sha 即停。"""
+    """读取镜像里 ``<remote>/<ref>`` 的最近提交；遇到上次见过的 sha 即停。
+
+    回溯上限（``backfill_ceiling``）取代旧的固定 ``-n30``：单次 ``git log -n<上限>``
+    由 git 自己走历史（相当于分页到根）。上限内没遇到 checkpoint 时照常返回读到的
+    条目，由 :func:`run_check` 判定 ``backfill_incomplete`` 并保留旧 checkpoint。
+    """
     mirror = Path(str(source["mirror_path"]))
     remote = str(source.get("remote") or "origin")
     ref = str(source.get("ref") or "main")
+    ceiling = _source_ceiling(source)
     output = _git(
-        ["log", f"-n{FETCH_LIMIT}", "--date=iso-strict",
+        ["log", f"-n{ceiling}", "--date=iso-strict",
          "--format=%H%x1f%s%x1f%b%x1f%cI", "--name-status", f"{remote}/{ref}"],
         cwd=mirror,
     )
@@ -366,68 +402,95 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
+def _github_entry(source: dict[str, Any], repo: str, item: dict[str, Any]) -> dict[str, Any] | None:
+    """把一条 REST 载荷转成 entry；缺少可用 id（tag/sha）时返回 None 跳过。"""
+    if source.get("kind") == "release":
+        tag = str(item.get("tag_name") or "")
+        if not tag:
+            return None
+        return {
+            "id": tag,
+            "kind": "release",
+            "repo": repo,
+            "ref": tag,
+            "title": str(item.get("name") or tag),
+            "subject": str(item.get("name") or tag),
+            "body": str(item.get("body") or ""),
+            "files": [],
+            "published_at": item.get("published_at") or "",
+            "url": str(item.get("html_url") or f"https://github.com/{repo}/releases/tag/{tag}"),
+        }
+    sha = str(item.get("sha") or "")
+    if not sha:
+        return None
+    commit = item.get("commit") or {}
+    message = str(commit.get("message") or "")
+    subject, _, body = message.partition("\n")
+    return {
+        "id": sha,
+        "kind": "commit",
+        "repo": repo,
+        "ref": str(source.get("ref") or "main"),
+        "title": subject.strip(),
+        "subject": subject.strip(),
+        "body": body.strip(),
+        "files": [],
+        "published_at": str((commit.get("author") or {}).get("date") or ""),
+        "url": f"https://github.com/{repo}/commit/{sha}",
+    }
+
+
 def _fetch_github(source: dict[str, Any], last_id: str | None) -> list[dict[str, Any]]:
+    """GitHub REST 分页读取（commit 与 release 同一套规则），直到：
+
+    - 某页里出现旧 checkpoint（``last_id``）——含 release：id == last_id 即停；
+    - 响应取尽（某页条数少于 ``FETCH_LIMIT`` 或为空页）；
+    - 回溯上限（``backfill_ceiling``，跨页累计）取满。
+
+    上限内没遇到 checkpoint 时照常返回读到的条目，由 :func:`run_check` 判定
+    ``backfill_incomplete`` 并保留旧 checkpoint。
+    """
     import httpx
 
     repo = source["repo"]
-    if source.get("kind") == "release":
-        url = f"https://api.github.com/repos/{repo}/releases"
-        params = {"per_page": FETCH_LIMIT}
-    else:
-        url = f"https://api.github.com/repos/{repo}/commits"
-        params = {"per_page": FETCH_LIMIT, "sha": str(source.get("ref") or "main")}
-    try:
-        resp = httpx.get(
-            url, params=params, headers=_github_headers(),
-            timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=True,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-    except Exception as exc:  # noqa: BLE001 —— 网络层一切失败都转成统一的中文离线错误
-        raise UpstreamUnavailable(
-            f"上游 {repo} 暂不可达（离线或网络超时），本次使用缓存数据"
-        ) from exc
-    if not isinstance(payload, list):
-        raise UpstreamUnavailable(f"上游 {repo} 返回了意外格式，本次使用缓存数据")
-
+    ceiling = _source_ceiling(source)
     entries: list[dict[str, Any]] = []
-    for item in payload:
+    page = 1
+    while True:
         if source.get("kind") == "release":
-            tag = str(item.get("tag_name") or "")
-            if not tag:
-                continue
-            entries.append({
-                "id": tag,
-                "kind": "release",
-                "repo": repo,
-                "ref": tag,
-                "title": str(item.get("name") or tag),
-                "subject": str(item.get("name") or tag),
-                "body": str(item.get("body") or ""),
-                "files": [],
-                "published_at": item.get("published_at") or "",
-                "url": str(item.get("html_url") or f"https://github.com/{repo}/releases/tag/{tag}"),
-            })
+            url = f"https://api.github.com/repos/{repo}/releases"
+            params: dict[str, Any] = {"per_page": FETCH_LIMIT, "page": page}
         else:
-            sha = str(item.get("sha") or "")
-            commit = item.get("commit") or {}
-            message = str(commit.get("message") or "")
-            subject, _, body = message.partition("\n")
-            entries.append({
-                "id": sha,
-                "kind": "commit",
-                "repo": repo,
-                "ref": str(source.get("ref") or "main"),
-                "title": subject.strip(),
-                "subject": subject.strip(),
-                "body": body.strip(),
-                "files": [],
-                "published_at": str((commit.get("author") or {}).get("date") or ""),
-                "url": f"https://github.com/{repo}/commit/{sha}",
-            })
-        if last_id and entries[-1]["id"] == last_id:
-            break
-    return entries
+            url = f"https://api.github.com/repos/{repo}/commits"
+            params = {"per_page": FETCH_LIMIT, "page": page,
+                      "sha": str(source.get("ref") or "main")}
+        try:
+            resp = httpx.get(
+                url, params=params, headers=_github_headers(),
+                timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=True,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception as exc:  # noqa: BLE001 —— 网络层一切失败都转成统一的中文离线错误
+            raise UpstreamUnavailable(
+                f"上游 {repo} 暂不可达（离线或网络超时），本次使用缓存数据"
+            ) from exc
+        if not isinstance(payload, list):
+            raise UpstreamUnavailable(f"上游 {repo} 返回了意外格式，本次使用缓存数据")
+        found_checkpoint = False
+        for item in payload:
+            entry = _github_entry(source, repo, item)
+            if entry is None:
+                continue
+            entries.append(entry)
+            if last_id and entry["id"] == last_id:
+                found_checkpoint = True
+                break
+            if len(entries) >= ceiling:
+                break
+        if found_checkpoint or len(entries) >= ceiling or len(payload) < FETCH_LIMIT:
+            return entries
+        page += 1
 
 
 #: 取数函数签名：(source, last_id) -> entries（最新在前）。测试注入 fake。
@@ -449,15 +512,30 @@ def run_check(
     store: EvolutionStore | None = None,
     fetcher: Fetcher | None = None,
     now: datetime | None = None,
+    backfill_ceiling: int | None = None,
 ) -> dict[str, Any]:
     """对所有来源跑一轮监视；单来源失败不影响其它来源，也绝不抛出。
 
     “新条目”的判定用 ``seen_ids`` 集合（而不是只比最新 id）：标签/发布可能同秒
     创建导致排序不稳，集合兜底才确定。fetcher 仍收到 ``last_id`` 供提前截断。
+
+    完整性判定：本次取到的条目里必须包含旧 checkpoint（``last_id``）才算追平
+    （没有旧 checkpoint 视为天然追平）。
+
+    - 追平 → ``status="current"``，``last_id`` 推进到本次最新（``fetched[0]``）。
+    - 没追平且回溯上限取满 → ``status="backfill_incomplete"``：保留旧 checkpoint
+      （绝不跳过未读的中间历史），仍缓存已读到的条目并更新 seen_ids，下一轮继续回溯。
+    - 没追平但历史已走到根（上游 force-push / rebase，旧 checkpoint 消失）→ 视为追平，
+      checkpoint 重置到真实最新 head，state 记 ``checkpoint_reset=True``。
+
+    ``backfill_ceiling`` 可按次覆盖回溯上限（默认 ``BACKFILL_CEILING``，环境变量
+    ``ATLAS_EVOLUTION_BACKFILL_CEILING``）；该值同时注入来源副本传给 fetcher，
+    保证取数与完整性判定使用同一个上限。
     """
     store = store or EvolutionStore()
     store.ensure_defaults()
     fetch = fetcher or default_fetcher
+    ceiling = _backfill_ceiling(backfill_ceiling)
     checked_at = (now or datetime.now(UTC)).isoformat(timespec="seconds")
     results: list[dict[str, Any]] = []
     for source in store.list_sources():
@@ -465,7 +543,7 @@ def run_check(
         state = store.get_state(sid)
         store.set_state(sid, last_checked_at=checked_at)
         try:
-            fetched = fetch(source, state.get("last_id"))
+            fetched = fetch({**source, "backfill_ceiling": ceiling}, state.get("last_id"))
         except UpstreamUnavailable as exc:
             results.append({"id": sid, "repo": source["repo"], "ok": False, "error": str(exc)})
             continue
@@ -480,13 +558,43 @@ def run_check(
         new_entries = [e for e in fetched if e.get("id") and str(e["id"]) not in seen]
         seen.update(str(e["id"]) for e in fetched if e.get("id"))
         store.append_entries(sid, new_entries)
-        newest = new_entries[0]["id"] if new_entries else state.get("last_id")
-        store.set_state(sid, last_id=newest, last_ok_at=checked_at,
-                        seen_ids=sorted(seen)[-MAX_SEEN_IDS:])
-        results.append({
-            "id": sid, "repo": source["repo"], "ok": True,
-            "new_entries": len(new_entries), "total_entries": len(store.cached_entries(sid)),
-        })
+        prior_last = state.get("last_id")
+        fetched_ids = {str(e["id"]) for e in fetched if e.get("id")}
+        checkpoint_found = not prior_last or prior_last in fetched_ids
+        row: dict[str, Any]
+        if checkpoint_found:
+            newest = str(fetched[0]["id"]) if fetched else prior_last
+            store.set_state(sid, last_id=newest, status="current", last_ok_at=checked_at,
+                            seen_ids=sorted(seen)[-MAX_SEEN_IDS:])
+            row = {
+                "id": sid, "repo": source["repo"], "ok": True, "status": "current",
+                "new_entries": len(new_entries),
+                "total_entries": len(store.cached_entries(sid)),
+            }
+        elif len(fetched) >= ceiling:
+            # 上限内没追到旧 checkpoint：保留旧 checkpoint，绝不静默跳过中间历史。
+            store.set_state(sid, status="backfill_incomplete", last_ok_at=checked_at,
+                            seen_ids=sorted(seen)[-MAX_SEEN_IDS:])
+            row = {
+                "id": sid, "repo": source["repo"], "ok": True,
+                "status": "backfill_incomplete", "backfill_incomplete": True,
+                "scanned": len(fetched),
+                "new_entries": len(new_entries),
+                "total_entries": len(store.cached_entries(sid)),
+            }
+        else:
+            # 历史走到根也没遇到 checkpoint：旧 checkpoint 已失效（上游改写历史），
+            # 视为追平并重置到真实最新 head。
+            newest = str(fetched[0]["id"]) if fetched else prior_last
+            store.set_state(sid, last_id=newest, status="current", checkpoint_reset=True,
+                            last_ok_at=checked_at, seen_ids=sorted(seen)[-MAX_SEEN_IDS:])
+            row = {
+                "id": sid, "repo": source["repo"], "ok": True, "status": "current",
+                "checkpoint_reset": True,
+                "new_entries": len(new_entries),
+                "total_entries": len(store.cached_entries(sid)),
+            }
+        results.append(row)
     store.save()
     errors = [r for r in results if not r["ok"]]
     return {

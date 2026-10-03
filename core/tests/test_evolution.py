@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from atlas.evolution import branch_flow, capability_diff, parity_mapper, taskbook_draft
+from atlas.evolution import branch_flow, capability_diff, parity_mapper, taskbook_draft, watcher
 from atlas.evolution.watcher import (
     EvolutionStore,
     UpstreamUnavailable,
@@ -45,6 +45,47 @@ def _commit(repo: Path, message: str, file_name: str = "a.txt") -> str:
     _git("add", ".", cwd=repo)
     _git("commit", "-m", message, cwd=repo)
     return _git("rev-parse", "HEAD", cwd=repo)
+
+
+def _commit_n(repo: Path, count: int, prefix: str = "batch") -> list[str]:
+    """连续造 count 个提交，返回从旧到新的 sha 列表。"""
+    return [
+        _commit(repo, f"feat({prefix}): commit {i + 1}", file_name=f"{prefix}-{i}.txt")
+        for i in range(count)
+    ]
+
+
+def _gh_commit(sha: str) -> dict:
+    return {"sha": sha,
+            "commit": {"message": f"feat: fake {sha}",
+                       "author": {"date": "2026-10-01T00:00:00Z"}}}
+
+
+def _gh_release(tag: str) -> dict:
+    return {"tag_name": tag, "name": f"release {tag}", "body": "notes",
+            "published_at": "2026-10-01T00:00:00Z",
+            "html_url": f"https://github.com/fake/upstream/releases/tag/{tag}"}
+
+
+def _fake_github(monkeypatch, holder: dict, calls: list) -> None:
+    """把 httpx.get 换成分页假上游：holder["items"] 最新在前，每页 30 条。"""
+    import httpx
+
+    def fake_get(url, params=None, headers=None, timeout=None, follow_redirects=False):
+        page = int((params or {}).get("page", 1))
+        calls.append(page)
+        items = holder["items"][(page - 1) * 30: page * 30]
+        return httpx.Response(200, json=items, request=httpx.Request("GET", str(url)))
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+
+def _remote_store(evo_root: Path, **extra: str) -> EvolutionStore:
+    """无镜像、走 GitHub REST 的假来源。"""
+    store = EvolutionStore(root=evo_root)
+    store.add_source({"id": "gh-up", "repo": "fake/upstream", "kind": "commit",
+                      "remote": "origin", "ref": "main", **extra})
+    return store
 
 
 @pytest.fixture()
@@ -158,6 +199,168 @@ class TestWatcher:
         summary = run_check(store, now=NOW)
         assert summary["ok"] is False
         assert "本地镜像不存在" in summary["errors"][0]
+
+    # -- X5 回归：上游大幅前进（> 旧 FETCH_LIMIT）绝不静默跳过历史 --
+
+    def test_local_git_backfills_large_gap(self, evo_root, upstream, mirror) -> None:
+        """checkpoint 落后 120 个提交 → 一轮补齐全部、无重复、checkpoint 到真实 head。"""
+        store = _store(evo_root, mirror_path=mirror)
+        first = run_check(store, now=NOW)
+        assert first["results"][0]["status"] == "current"
+        old_checkpoint = store.get_state("fake-up")["last_id"]
+
+        shas = _commit_n(upstream, 120)
+        second = run_check(store, now=NOW)
+        row = second["results"][0]
+        assert row["ok"] is True and row["status"] == "current"
+        assert row["new_entries"] == 120
+        state = store.get_state("fake-up")
+        newest = _git("rev-parse", "HEAD", cwd=upstream)
+        assert state["last_id"] == newest and state["status"] == "current"
+        ids = [e["id"] for e in store.cached_entries("fake-up")]
+        assert len(ids) == len(set(ids)) == 122, "一轮补齐且无重复"
+        assert ids[0] == newest and old_checkpoint in ids
+        assert shas[0] in ids and shas[-1] in ids, "旧 checkpoint 到 head 一个不缺"
+
+    def test_rerun_without_new_commits_is_noop(self, evo_root, upstream, mirror) -> None:
+        """大幅回溯后立刻重跑：零新条目、无重复、status 保持 current。"""
+        store = _store(evo_root, mirror_path=mirror)
+        run_check(store, now=NOW)
+        _commit_n(upstream, 110)
+        run_check(store, now=NOW)
+        before_state = store.get_state("fake-up")
+        before_entries = store.cached_entries("fake-up")
+        again = run_check(store, now=NOW)
+        row = again["results"][0]
+        assert row["new_entries"] == 0 and row["status"] == "current"
+        assert store.get_state("fake-up")["last_id"] == before_state["last_id"]
+        assert store.cached_entries("fake-up") == before_entries
+
+    def test_ceiling_marks_backfill_incomplete_then_completes(
+            self, evo_root, upstream, mirror) -> None:
+        """上限内没追到旧 checkpoint → backfill_incomplete 且 checkpoint 不动；
+        放宽上限后一轮补齐，早前那批不重复。"""
+        store = _store(evo_root, mirror_path=mirror)
+        run_check(store, now=NOW)
+        old_checkpoint = store.get_state("fake-up")["last_id"]
+        newest = _commit_n(upstream, 35)[-1]
+
+        partial = run_check(store, now=NOW, backfill_ceiling=10)
+        row = partial["results"][0]
+        assert row["ok"] is True
+        assert row["status"] == "backfill_incomplete"
+        assert row["backfill_incomplete"] is True and row["scanned"] == 10
+        state = store.get_state("fake-up")
+        assert state["last_id"] == old_checkpoint, "checkpoint 不得跳过未读空档"
+        assert state["status"] == "backfill_incomplete"
+        cached_ids = [e["id"] for e in store.cached_entries("fake-up")]
+        assert cached_ids[0] == newest, "最新一批仍要进缓存"
+        assert len(cached_ids) == len(set(cached_ids)) == 12
+
+        done = run_check(store, now=NOW, backfill_ceiling=100)
+        row2 = done["results"][0]
+        assert row2["status"] == "current"
+        assert row2["new_entries"] == 25, "只补早前没读到的 25 条，已读 10 条不重复"
+        state2 = store.get_state("fake-up")
+        assert state2["last_id"] == newest and state2["status"] == "current"
+        all_ids = [e["id"] for e in store.cached_entries("fake-up")]
+        assert len(all_ids) == len(set(all_ids)) == 37
+        assert old_checkpoint in all_ids
+
+    def test_backfill_ceiling_env_override(self, evo_root, upstream, mirror,
+                                           monkeypatch) -> None:
+        assert watcher.BACKFILL_CEILING == 500
+        store = _store(evo_root, mirror_path=mirror)
+        run_check(store, now=NOW)
+        old_checkpoint = store.get_state("fake-up")["last_id"]
+        _commit_n(upstream, 20)
+
+        monkeypatch.setenv("ATLAS_EVOLUTION_BACKFILL_CEILING", "5")
+        partial = run_check(store, now=NOW)
+        assert partial["results"][0]["status"] == "backfill_incomplete"
+        assert partial["results"][0]["scanned"] == 5
+        assert store.get_state("fake-up")["last_id"] == old_checkpoint
+
+        monkeypatch.setenv("ATLAS_EVOLUTION_BACKFILL_CEILING", "100")
+        done = run_check(store, now=NOW)
+        assert done["results"][0]["status"] == "current"
+        assert store.get_state("fake-up")["last_id"] == _git("rev-parse", "HEAD", cwd=upstream)
+
+    def test_github_pagination_surfaces_full_gap(self, evo_root, monkeypatch) -> None:
+        """GitHub REST：checkpoint 落后 100 个提交（跨多页）→ 分页取齐、不重不漏。"""
+        shas = ["sha001", "sha002"]
+        holder = {"items": [_gh_commit(s) for s in reversed(shas)]}  # 最新在前
+        calls: list[int] = []
+        _fake_github(monkeypatch, holder, calls)
+        store = _remote_store(evo_root)
+
+        first = run_check(store, now=NOW)
+        assert first["results"][0]["new_entries"] == 2
+        assert store.get_state("gh-up")["last_id"] == "sha002"
+
+        # 上游前进 100 个提交；checkpoint 落到第 4 页。
+        shas = [f"sha{i:03d}" for i in range(1, 103)]
+        holder["items"] = [_gh_commit(s) for s in reversed(shas)]
+        calls.clear()
+        second = run_check(store, now=NOW)
+        row = second["results"][0]
+        assert calls == [1, 2, 3, 4], "必须真的分页"
+        assert row["status"] == "current" and row["new_entries"] == 100
+        state = store.get_state("gh-up")
+        assert state["last_id"] == "sha102" and state["status"] == "current"
+        ids = [e["id"] for e in store.cached_entries("gh-up")]
+        assert len(ids) == len(set(ids)) == 102
+        assert all(f"sha{i:03d}" in ids for i in range(3, 103))
+
+    def test_github_release_pagination_and_seen_safety(self, evo_root, monkeypatch) -> None:
+        """release 类同样分页回溯；id == last_id 的发布即刻停页，seen 集合兜底。"""
+        tags = ["v1.0.0", "v1.1.0"]
+        holder = {"items": [_gh_release(t) for t in reversed(tags)]}
+        calls: list[int] = []
+        _fake_github(monkeypatch, holder, calls)
+        store = _remote_store(evo_root, kind="release")
+
+        first = run_check(store, now=NOW)
+        assert first["results"][0]["new_entries"] == 2
+        assert store.get_state("gh-up")["last_id"] == "v1.1.0"
+
+        # 上游多发 40 个 release；checkpoint（v1.1.0）落到第 2 页。
+        tags = [f"v1.{i}.0" for i in range(42)]
+        holder["items"] = [_gh_release(t) for t in reversed(tags)]
+        calls.clear()
+        second = run_check(store, now=NOW)
+        row = second["results"][0]
+        assert calls == [1, 2]
+        assert row["status"] == "current" and row["new_entries"] == 40
+        assert store.get_state("gh-up")["last_id"] == "v1.41.0"
+        ids = [e["id"] for e in store.cached_entries("gh-up")]
+        assert len(ids) == len(set(ids)) == 42
+
+        # 立即重跑：第一条就命中 last_id → 只请求 1 页、0 新条目（seen 安全）。
+        calls.clear()
+        third = run_check(store, now=NOW)
+        assert calls == [1]
+        assert third["results"][0]["new_entries"] == 0
+        assert third["results"][0]["status"] == "current"
+
+    def test_history_rewrite_resets_checkpoint(self, evo_root, upstream, mirror) -> None:
+        """上游 force-push 改写历史：旧 checkpoint 从历史里消失 → 视为追平并重置。"""
+        store = _store(evo_root, mirror_path=mirror)
+        run_check(store, now=NOW)
+        old_checkpoint = store.get_state("fake-up")["last_id"]
+
+        _git("checkout", "--orphan", "reborn", cwd=upstream)
+        new_head = _commit(upstream, "feat(reborn): fresh root", file_name="reborn.txt")
+        _git("branch", "-D", "main", cwd=upstream)
+        _git("branch", "-m", "reborn", "main", cwd=upstream)
+
+        summary = run_check(store, now=NOW)
+        row = summary["results"][0]
+        assert row["ok"] is True and row["status"] == "current"
+        assert row["checkpoint_reset"] is True
+        state = store.get_state("fake-up")
+        assert state["last_id"] == new_head and state["checkpoint_reset"] is True
+        assert old_checkpoint != new_head
 
 
 # ---------------------------------------------------------------------------
