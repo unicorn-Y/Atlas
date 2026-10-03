@@ -37,7 +37,9 @@ pytest.importorskip("dbos")
 # the whole module shares one event loop.
 pytestmark = pytest.mark.asyncio(loop_scope="module")
 
-REPLY_WAIT = 30.0  # run + queue drain + delivery interval (0.5s) headroom
+# Ceiling, not a sleep: a healthy inbound→reply chain lands in single-digit
+# seconds; the ceiling only bounds how long a broken chain takes to fail.
+REPLY_WAIT = 30.0
 
 
 class FakeAdapter(ChannelAdapter):
@@ -272,11 +274,15 @@ async def test_run_failure_answers_with_one_failure_summary(app_client) -> None:
     bundle.fake_llm._responder = lambda _record: Error(status=500, message="scripted failure")
 
     await bundle.adapter.emit(make_event("evt-f1", chat_id="400", text="会失败的请求"))
-    assert await wait_for(lambda: bool(bundle.adapter.sent), timeout=REPLY_WAIT)
-    assert len(bundle.adapter.sent) == 1  # failure answers once, no retry spam
+    # Scope to this test's own peer: the module-scoped app shares one transport
+    # across tests and earlier tests' replies may still drain into `sent`, so a
+    # global sent[0] index would read whatever landed last, not this reply.
+    mine = lambda: [m for m in bundle.adapter.sent if m["chat_id"] == "400"]
+    assert await wait_for(lambda: bool(mine()), timeout=REPLY_WAIT)
+    assert len(mine()) == 1  # failure answers once, no retry spam
     # The engine's give-up notice is the in-band failure answer (the turn ends
     # completed-with-error-text, so the bridge relays it verbatim).
-    assert "HTTP 500" in bundle.adapter.sent[0]["content"]
+    assert "HTTP 500" in mine()[0]["content"]
 
 
 async def test_heartbeat_tick_and_automation_reconcile_over_live_app(app_client) -> None:
@@ -370,7 +376,8 @@ async def test_channel_conversation_visible_on_desktop(app_client) -> None:
     bundle.fake_llm._responder = lambda _record: Text("桌面同源检查完成。")
 
     await bundle.adapter.emit(make_event("evt-d1", chat_id="500", text="桌面能看到这段对话吗"))
-    assert await wait_for(lambda: bool(bundle.adapter.sent), timeout=REPLY_WAIT)
+    assert await wait_for(
+        lambda: any(m["chat_id"] == "500" for m in bundle.adapter.sent), timeout=REPLY_WAIT)
 
     conv_id = bridge.sessions.get(session_key("main", channel="fake", account="", peer="500"))
     assert conv_id, "channel inbound must map to a conversation"
@@ -416,8 +423,9 @@ async def test_automation_delivery_reaches_channel_target(app_client) -> None:
         timeout=REPLY_WAIT,
     )
 
-    # Owner-targeted delivery must NOT go through the channel adapter.
-    before = len(bundle.adapter.sent)
+    # Owner-targeted delivery must NOT go through the channel adapter. Assert
+    # on content, not list length: earlier tests' replies may still drain into
+    # the shared transport while this runs.
     engine.store.put(normalize_record({
         "id": "deliver-owner", "name": "owner delivery",
         "trigger": {"kind": "interval", "every_seconds": 3600},
@@ -425,7 +433,7 @@ async def test_automation_delivery_reaches_channel_target(app_client) -> None:
         "delivery": {"mode": "channel", "channel": "owner"},
     }))
     await engine.run_now("deliver-owner", wait=REPLY_WAIT)
-    assert len(bundle.adapter.sent) == before
+    assert not any("deliver-owner-ok" in item["content"] for item in bundle.adapter.sent)
     engine.store.delete("deliver-fake")
     engine.store.delete("deliver-owner")
 
