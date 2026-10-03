@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Archive, ArchiveRestore, ArrowUpDown, BookOpen, Check, Columns2, ChevronRight, Code2, CopyPlus, Download, Home, KanbanSquare, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Wand2, type LucideIcon } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowUpDown, BookOpen, Bot, Check, Columns2, ChevronRight, Code2, CopyPlus, Download, Home, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Users, Wand2, type LucideIcon } from 'lucide-react';
 import { nextTheme, themeInfo, type Theme } from './themes';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import Mark from '../components/Mark';
@@ -8,17 +8,26 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } fr
 import { Tip } from '../ui/Tooltip';
 import { cn } from '../ui/cn';
 
-export type View = 'home' | 'chat' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'evolution';
+export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution';
 
+/** P9 收口后的六个一级入口；旧入口不删，挂在「更多」菜单（MORE_NAV）。 */
 export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
+  { view: 'chat', label: '聊天', icon: MessageSquare },
+  { view: 'agents', label: 'Agents', icon: Bot },
+  { view: 'auto', label: '自动化', icon: Repeat },
+  { view: 'skills', label: '技能', icon: Puzzle },
+  { view: 'devices', label: '设备', icon: MonitorSmartphone },
+  { view: 'evolution', label: '自动追新', icon: Sparkles },
+];
+
+/** 收口前的功能页（含首页），全部保留可达：收进侧栏底部的「更多」。 */
+export const MORE_NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
+  { view: 'groups', label: '群聊', icon: Users },
   { view: 'home', label: '首页', icon: Home },
   { view: 'board', label: '看板', icon: KanbanSquare },
   { view: 'code', label: '项目', icon: Code2 },
   { view: 'create', label: '创作', icon: Wand2 },
-  { view: 'auto', label: '自动化', icon: Repeat },
   { view: 'memory', label: '记忆', icon: BookOpen },
-  { view: 'skills', label: '技能', icon: Puzzle },
-  { view: 'evolution', label: '自动追新', icon: Sparkles },
 ];
 
 function groupByDay(conversations: ConversationSummary[]) {
@@ -201,6 +210,24 @@ export default function Sidebar(props: SidebarProps) {
           </button>
         </Tip>;
       })}
+      <Menu>
+        <MenuTrigger asChild>
+          <button aria-label="更多页面"
+            className={cn('relative flex h-[34px] items-center gap-2.5 rounded-[9px] text-[13.5px] transition-colors',
+              mini ? 'w-10 justify-center' : 'px-2.5',
+              MORE_NAV.some(({ view }) => view === props.view) ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
+            <MoreHorizontal size={17} className={MORE_NAV.some(({ view }) => view === props.view) ? 'text-brand' : undefined} />
+            {!mini && <span>更多</span>}
+            {props.view === 'memory' && props.pendingMemories > 0 && (mini
+              ? <span className="absolute top-1 right-1 size-2 rounded-full bg-brand" />
+              : <span className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-on-primary">{props.pendingMemories}</span>)}
+          </button>
+        </MenuTrigger>
+        <MenuContent align="start" className="min-w-[150px]">
+          <MenuLabel>所有页面</MenuLabel>
+          {MORE_NAV.map(({ view, label, icon: Icon }) => <MenuItem key={view} checked={props.view === view} onSelect={() => props.onGo(view)}><Icon size={15} />{label}</MenuItem>)}
+        </MenuContent>
+      </Menu>
     </nav>
 
     {!mini && <div className="mt-5 min-h-0 flex-1 overflow-auto pr-0.5" aria-label="历史任务">

@@ -1,4 +1,13 @@
-"""Telegram outbound polling channel. Secrets are stored only by the OS credential store."""
+"""Telegram outbound polling channel. Secrets are stored only by the OS credential store.
+
+DEPRECATED for inbound task flow (W10 persistent-always-on): new channel traffic
+rides the gateway stack instead — ``atlas.channels.adapters.telegram`` +
+``ChannelManager`` + the ``atlas.gateway_service.GatewayBridge`` dispatcher. This
+legacy service stays only because ``/api/telegram`` settings/test_token and the
+run approval keyboards depend on it; the server starts its getUpdates poll ONLY
+when the gateway's telegram channel is not enabled, so the two stacks never
+double-poll the same bot token.
+"""
 
 from __future__ import annotations
 

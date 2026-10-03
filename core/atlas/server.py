@@ -14,6 +14,7 @@ import secrets
 import shlex
 import subprocess
 import sys
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -58,6 +59,12 @@ from atlas.agent.enrichment import (
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.agent.planning import TaskPlan
 from atlas.asr import ASRManager
+from atlas.automation import (
+    AutomationEngine,
+    AutomationStore,
+    get_automation_engine,
+    set_automation_engine,
+)
 from atlas.capabilities.browser.browser_use import BrowserUseAdapter
 from atlas.capabilities.coding import ast_grep as ast_grep_capability
 from atlas.capabilities.coding.repo_map import repo_map
@@ -65,12 +72,19 @@ from atlas.capabilities.computer.cua_backend import CuaBackend
 from atlas.capabilities.computer.uia_backend import list_windows as list_uia_windows
 from atlas.capabilities.durable.dbos_backend import DurableBackend
 from atlas.capabilities.durable.dbos_backend import status as dbos_status
+from atlas.channels import ChannelManager
+from atlas.channels.adapters import register_builtin_channels
 from atlas.config import get_config, load_user_settings, save_user_settings
+from atlas.devices import DeviceRegistry
+from atlas.devices.takeover import TakeoverStateMachine
+from atlas.gateway_service import GatewayBridge
+from atlas.heartbeat import HeartbeatService
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
 from atlas.office import MAX_PREVIEW_BYTES, render_office
 from atlas.notifications import NotificationBus
 from atlas.origin_guard import DEV_ORIGINS, OriginGuard
+from atlas.persistent_agents import PersistentAgentService
 from atlas.plugins import PluginRuntime
 from atlas.projects import ProjectStore
 from atlas.runtime import hub_control
@@ -173,6 +187,10 @@ external_agent_status_cache: dict[str, Any] = {}
 external_conversation_sessions: dict[tuple[str, str], str] = {}
 usage_ledger: UsageLedger | None = None
 asr_manager: ASRManager | None = None
+# W10 persistent-always-on singletons (populated by lifespan).
+channel_manager: ChannelManager | None = None
+gateway_bridge: GatewayBridge | None = None
+heartbeat_service: HeartbeatService | None = None
 
 
 def _task_store(kind: str) -> TomlRecordStore:
@@ -547,6 +565,251 @@ async def _record_goal_failure(
 
 
 # ---------------------------------------------------------------------------
+# W10 persistent-always-on seams (heartbeat host / automation / channel bridge)
+# ---------------------------------------------------------------------------
+
+
+def _agent_service() -> PersistentAgentService:
+    """The lifespan-injected persistent-agent singleton (router accessor)."""
+    from atlas.api.agent_router import get_agent_service
+
+    return get_agent_service()
+
+
+def _resolve_agent_for_run(agent_id: str) -> dict[str, Any] | None:
+    """agent_id → run-start merge config; ``None`` = unknown / not persistent."""
+    try:
+        return _agent_service().resolve_agent_run_config(agent_id)
+    except KeyError:
+        return None
+
+
+def _set_agent_status_quiet(agent_id: str, status: str, error: str = "") -> None:
+    """Persistent-agent status projection that never breaks a run."""
+    try:
+        _agent_service().set_status(agent_id, status, error)
+    except Exception as exc:  # noqa: BLE001 — projection is best-effort
+        log.debug("agent.status_projection_failed", agent_id=agent_id, error=str(exc))
+
+
+def _sync_channel_routing(agents_service: PersistentAgentService, manager: ChannelManager) -> None:
+    """Project per-agent channel bindings onto the gateway routing table."""
+    roster = agents_service.list_agents(include_roles=False)
+    bindings: list[dict[str, Any]] = []
+    for record in roster:
+        for row in (record.get("agent") or {}).get("channels") or []:
+            bindings.append({
+                "agent_id": str(record["id"]),
+                "channel": str(row.get("channel", "")),
+                "account": str(row.get("account", "")),
+                "peer_id": str(row.get("target", "")),
+            })
+    manager.set_bindings(bindings)
+    manager.set_agent_ids([str(record["id"]) for record in roster])
+
+
+class _AtlasHeartbeatHost:
+    """HeartbeatHost port backed by live Atlas services (W10 wiring)."""
+
+    def get_heartbeat_config(self, agent_id: str) -> dict:
+        try:
+            return _agent_service().get_heartbeat(agent_id)
+        except KeyError:
+            return {}  # unknown agent → disabled default (HeartbeatService merges)
+
+    def is_agent_busy(self, agent_id: str) -> bool:
+        try:
+            return _agent_service().get_status(agent_id)["status"] == "working"
+        except KeyError:
+            return False
+
+    async def dispatch_heartbeat_turn(self, agent_id: str, prompt: str, session: str) -> str:
+        return await _collect_orchestrator_text(prompt, session)
+
+    def deliver(self, agent_id: str, text: str, target: str) -> None:
+        del agent_id
+        asyncio.get_running_loop().create_task(_deliver_agent_notification(text, target))
+
+    @staticmethod
+    def now() -> float:
+        return time.time()
+
+
+async def _deliver_agent_notification(text: str, target: str) -> None:
+    """Heartbeat delivery: ``owner`` → apprise, ``<channel:target>`` → gateway."""
+    target = (target or "").strip()
+    if not text:
+        return
+    if target == "owner" or ":" not in target:
+        if notifications is not None:
+            await notifications.notify("Atlas heartbeat", text)
+        return
+    channel, _, chat_id = target.partition(":")
+    if channel_manager is None:
+        return
+    try:
+        await channel_manager.send(channel, chat_id, text)
+    except Exception as exc:  # noqa: BLE001 — delivery failure must not crash the tick
+        log.warning("heartbeat.channel_delivery_failed", channel=channel, error=str(exc))
+
+
+async def _collect_orchestrator_text(message: str, conversation_id: str) -> str:
+    """One unattended orchestrator turn (heartbeat / automation); assistant text."""
+    if orchestrator is None:
+        raise RuntimeError("Agent orchestrator 尚未就绪")
+
+    async def deny_unapproved(_event_id: str, _tool_name: str, _payload: dict[str, Any]) -> str:
+        return "deny"
+
+    response: list[str] = []
+    message_id = ""
+    async for event in orchestrator.run(
+        message=message,
+        conversation_id=conversation_id,
+        approval_callback=deny_unapproved,
+        source_run_id=uuid.uuid4().hex,
+    ):
+        event_type = event.get("type")
+        if event_type == "error":
+            raise RuntimeError(str(event.get("detail") or "orchestrator turn failed"))
+        if event_type == "chunk":
+            piece = event.get("content", "")
+            if isinstance(piece, str):
+                response.append(piece)
+        elif event_type in {"token", "text", "response_delta"}:
+            piece = event.get("content", event.get("text", event.get("delta", "")))
+            if isinstance(piece, str):
+                response.append(piece)
+        elif event_type == "done":
+            message_id = str(event.get("message_id") or "")
+    if not response and message_id and memory is not None:
+        # Same fallback as _run_scheduled_goal: a turn that produced no streamed
+        # chunks still has its saved assistant message (heartbeat/automation
+        # outcomes depend on the model text, not on streaming behaviour).
+        messages = await memory.get_conversation_messages(conversation_id, limit=1000)
+        saved = next((item.get("content", "") for item in reversed(messages)
+                      if item.get("id") == message_id and item.get("role") == "assistant"), "")
+        if isinstance(saved, str):
+            response.append(saved)
+    return "".join(response)
+
+
+async def _automation_heartbeat_tick(agent_id: str, reason: str) -> Any:
+    """Automation ``payload.kind=heartbeat`` → HeartbeatService.tick (W3↔W4 seam)."""
+    if heartbeat_service is None:
+        raise RuntimeError("heartbeat service 尚未就绪")
+    return await heartbeat_service.tick(agent_id, reason)
+
+
+async def _automation_dispatch_turn(payload: dict[str, Any]) -> str:
+    """Automation ``payload.kind=agent_turn`` → orchestrator turn in an isolated session."""
+    automation_id = str(payload.get("automation_id") or "adhoc")
+    return await _collect_orchestrator_text(
+        str(payload.get("message") or ""), f"automation-{automation_id}",
+    )
+
+
+async def _automation_deliver(record: dict[str, Any], outcome: dict[str, Any]) -> bool:
+    """Automation delivery: owner → apprise, channel → gateway (§4 delivery spec)."""
+    text = str(outcome.get("result") or "").strip()
+    if not text:
+        return False
+    delivery = record.get("delivery") or {}
+    channel = str(delivery.get("channel") or "").strip()
+    target = str(delivery.get("target") or "").strip()
+    if channel in ("", "owner", "notification"):
+        if notifications is None:
+            return False
+        await notifications.notify("Atlas automation", text)
+        return True
+    if channel_manager is None or not target:
+        return False
+    await channel_manager.send(channel, target, text)
+    return True
+
+
+def _heartbeat_automation_current(existing: dict[str, Any], desired: dict[str, Any]) -> bool:
+    """True when the stored heartbeat automation already matches the desired shape."""
+    return (
+        bool(existing.get("enabled"))
+        and existing.get("owner_agent_id") == desired["owner_agent_id"]
+        and (existing.get("trigger") or {}).get("kind") == "interval"
+        and abs(float((existing.get("trigger") or {}).get("every_seconds") or 0)
+                - float(desired["trigger"]["every_seconds"])) < 0.5
+        and (existing.get("payload") or {}).get("kind") == "heartbeat"
+        and (existing.get("payload") or {}).get("agent_id") == desired["payload"]["agent_id"]
+        and (existing.get("delivery") or {}).get("mode") == "none"
+    )
+
+
+async def _reconcile_agent_heartbeats(
+    agents_service: PersistentAgentService, engine: AutomationEngine,
+) -> None:
+    """Idempotent W1↔W4 reconcile: one ``heartbeat-<agent_id>`` automation per agent.
+
+    heartbeat.enabled → upsert (interval = interval_minutes·60s, payload
+    kind=heartbeat, delivery=none — the heartbeat sends its own notifications);
+    heartbeat off → delete the automation when present.
+    """
+    for record in agents_service.list_agents(include_roles=False):
+        agent_id = str(record.get("id") or "")
+        if not agent_id:
+            continue
+        automation_id = f"heartbeat-{agent_id}"
+        heartbeat = (record.get("agent") or {}).get("heartbeat") or {}
+        try:
+            if not heartbeat.get("enabled"):
+                if engine.store.get(automation_id) is not None:
+                    await engine.remove(automation_id)
+                    engine.store.delete(automation_id)
+                continue
+            interval_minutes = float(heartbeat.get("interval_minutes") or 30)
+            every_seconds = interval_minutes * 60.0
+            if every_seconds <= 0:
+                every_seconds = 1800.0
+            desired = {
+                "id": automation_id,
+                "name": f"heartbeat:{record.get('name') or agent_id}",
+                "enabled": True,
+                "owner_agent_id": agent_id,
+                "trigger": {"kind": "interval", "every_seconds": every_seconds},
+                "payload": {"kind": "heartbeat", "agent_id": agent_id},
+                "delivery": {"mode": "none"},
+            }
+            existing = engine.store.get(automation_id)
+            if existing is not None and _heartbeat_automation_current(existing, desired):
+                continue
+            saved = engine.store.put(desired)
+            await engine.sync_automation(saved)
+            log.info("heartbeat.automation_reconciled", agent_id=agent_id,
+                     every_seconds=every_seconds)
+        except Exception as exc:  # noqa: BLE001 — one bad agent never blocks startup
+            log.warning("heartbeat.reconcile_failed", agent_id=agent_id, error=str(exc))
+
+
+async def _create_channel_conversation(session: str, event: Any) -> str:
+    """Create the memory conversation backing a new channel session key."""
+    if memory is None:
+        raise RuntimeError("memory service unavailable")
+    label = f"{event.channel}:{event.chat_id}" if event is not None else session
+    conversation_id = await memory.create_conversation(f"渠道会话 {label}")
+    workspace = _default_workspace()
+    await memory.update_conversation(conversation_id,
+                                     workspace=str(workspace) if workspace else None,
+                                     source="channel")
+    return conversation_id
+
+
+async def _read_conversation_answer(conversation_id: str) -> str:
+    """Last assistant message of a conversation (channel reply payload)."""
+    if memory is None:
+        return ""
+    messages = await memory.get_conversation_messages(conversation_id, limit=1000)
+    return next((item["content"] for item in reversed(messages)
+                 if item.get("role") == "assistant"), "")
+
+
+# ---------------------------------------------------------------------------
 # Lifespan (replaces deprecated @app.on_event)
 # ---------------------------------------------------------------------------
 
@@ -558,6 +821,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global capability_bus, cua_backend, browser_use, agent_backend_host
     global projects, durable, plugin_runtime, notifications, web_runtime, custom_tools, telegram_service
     global usage_ledger
+    # W10 persistent-always-on singletons (module-level, reset per lifespan).
+    global channel_manager, gateway_bridge, heartbeat_service
 
     model_mgr = ModelManager()
     memory = MemoryStore()
@@ -569,6 +834,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     durable = DurableBackend(get_config().db_path.parent / "dbos.sqlite")
     durable.set_dispatcher(_durable_dispatcher, asyncio.get_running_loop())
     durable.start()
+    # W10: durable.start() constructed + launched the process-global DBOS
+    # singleton; the automation engine reuses that same instance (never a second
+    # DBOS per process). NOTE: _dbos_global_instance lives on the dbos._dbos
+    # MODULE, not on the DBOS class — a class-level getattr always misses.
+    from dbos import _dbos as _dbos_module
+
+    dbos_instance = getattr(_dbos_module, "_dbos_global_instance", None)
+
+    # W6: pin HERMES_HOME before the hermes engine initializes — importing this
+    # module pins the machine-level local-runtime home exactly once (setdefault).
+    import atlas.engine.local_runtime_adapter  # noqa: F401  # W6 integration touchpoint
 
     await runtime_mgr.init(get_config().db_path)
 
@@ -808,17 +1084,87 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if plugin_load_report.get("errors"):
         log.warning("plugins.load_errors", errors=plugin_load_report["errors"])
 
+    # -- W10 persistent-always-on wiring (agents / channels / heartbeat / automation) --
+    agents_service = PersistentAgentService()
+    from atlas.api.agent_router import set_agent_service
+
+    set_agent_service(agents_service)
+
+    channel_manager = ChannelManager(
+        db_path=cfg.db_path.parent / "channels.sqlite",
+        config_path=cfg.db_path.parent / "channel-configs.json",
+    )
+    register_builtin_channels(channel_manager.register_channel)
+    channel_workspace = _default_workspace()
+    gateway_bridge = GatewayBridge(
+        manager=channel_manager,
+        db_path=cfg.db_path.parent / "channels.sqlite",
+        submit_run=_handle_run_start,
+        get_run=runtime_mgr.runs.get,
+        read_answer=_read_conversation_answer,
+        create_conversation=_create_channel_conversation,
+        default_workspace=str(channel_workspace) if channel_workspace else None,
+        set_agent_status=_set_agent_status_quiet,
+    )
+    channel_manager.set_dispatcher(gateway_bridge.dispatch)
+    _sync_channel_routing(agents_service, channel_manager)
+    from atlas.api.channel_router import set_channel_manager
+
+    set_channel_manager(channel_manager)
+
+    heartbeat_service = HeartbeatService(_AtlasHeartbeatHost(), root=cfg.db_path.parent / "heartbeat")
+
+    automation_engine = AutomationEngine(
+        AutomationStore(cfg.db_path.parent / "automations.toml"),
+        heartbeat_tick=_automation_heartbeat_tick,
+        dispatch_turn=_automation_dispatch_turn,
+        deliver=_automation_deliver,
+    )
+    set_automation_engine(automation_engine)
+    if dbos_instance is not None:
+        await automation_engine.start_async(dbos_instance)
+        await _reconcile_agent_heartbeats(agents_service, automation_engine)
+    else:
+        # durable.start() failed: automation CRUD keeps working (store only),
+        # but triggers/runs report 503 until the next restart.
+        log.warning("automation.engine_not_started", reason="dbos_instance_unavailable")
+
+    from atlas.api import agent_skills_router, device_router, local_models_router
+    from atlas.engine.local_runtime_adapter import LocalRuntimeAdapter
+    from atlas.skills.agent_collections import AgentSkillCollections
+    from atlas.skills.proposals import SkillProposalStore
+
+    local_models_router.set_adapter(LocalRuntimeAdapter(cfg.get("local_runtime", {})))
+    device_registry = DeviceRegistry(cfg.db_path.parent / "devices" / "devices.json")
+    device_registry.register_self()
+    device_router.set_registry(device_registry)
+    device_router.set_takeover(TakeoverStateMachine())
+    agent_skills_router.set_collections(AgentSkillCollections(skill_registry))
+    agent_skills_router.set_proposals(SkillProposalStore(
+        skill_registry, collections=agent_skills_router.get_collections(),
+    ))
+    # -- end W10 wiring --
+
     if cfg.scheduler_enabled:
         scheduler = AtlasScheduler(agent_callback=_scheduled_goal)
         await scheduler.start()
 
+    # DEPRECATED (W10): the legacy TelegramService polling loop is retired in
+    # favour of the channel gateway's telegram adapter (atlas.channels.adapters
+    # .telegram + ChannelManager + gateway bridge). The service object stays —
+    # /api/telegram settings/test_token and run approval keyboards depend on it —
+    # but its getUpdates poll only starts when the gateway's telegram channel is
+    # NOT enabled, so the two stacks never double-poll the same bot token.
     telegram_service = TelegramService(
         cfg.db_path.parent / "telegram.json",
         owns_lease=_owns_scheduler_lease,
         submit_task=_telegram_submit_task,
         command_handler=_telegram_command,
     )
-    telegram_service.start()
+    if not (channel_manager.configs.get("telegram") or {}).get("enabled"):
+        telegram_service.start()
+
+    await channel_manager.start()
 
     # C6:注册 /init 与 /review 的路由和工具。这些模块由独立子模块提供,可能晚于
     # 服务启动落地——注册失败只降级告警,绝不能拖垮 Atlas 本体启动。
@@ -848,6 +1194,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await telegram_service.stop()
     if scheduler:
         await scheduler.stop()
+    # W10 reverse order: gateway → automation engine → heartbeat, all before
+    # durable.stop() (the engine owns DBOS objects, not the DBOS instance).
+    if channel_manager is not None:
+        await channel_manager.stop()
+        channel_manager.close()
+    if gateway_bridge is not None:
+        gateway_bridge.sessions.close()
+    automation_engine = get_automation_engine()
+    if automation_engine is not None:
+        automation_engine.shutdown()
+    if heartbeat_service is not None:
+        await heartbeat_service.aclose()
     if mcp_client:
         await mcp_client.stop()
     if local_execution:
@@ -918,6 +1276,30 @@ app.include_router(computer_router)
 app.include_router(browser_router)
 app.include_router(skills_market_router)
 app.include_router(evolution_router)
+
+# W10 persistent-always-on routers (singletons injected by the lifespan):
+#   agent_router         → /api/agents/*          (persistent agents CRUD/status/heartbeat)
+#   channel_router       → /api/channels/*        (channel gateway status/config/webhook)
+#   automation_router    → /api/automations/*     (cron agents over DBOS)
+#   device_router        → /api/devices/*         (device registry + desktop takeover)
+#   local_models_router  → /api/local/models/*    (managed local runtime)
+#   agent_skills_router  → /api/agents/{id}/skills, /api/skill-proposals/*,
+#                          /api/skills/{name}/usage (skill workshop)
+from atlas.api.agent_skills_router import router as agent_skills_router  # noqa: E402
+from atlas.api.automation_router import automation_router  # noqa: E402
+from atlas.api.channel_router import router as channel_router  # noqa: E402
+from atlas.api.device_router import router as device_router  # noqa: E402
+from atlas.api.local_models_router import router as local_models_router  # noqa: E402
+
+app.include_router(channel_router)
+app.include_router(automation_router)
+app.include_router(device_router)
+app.include_router(local_models_router)
+app.include_router(agent_skills_router)
+
+# GROUP_CHAT_MOUNT: W8 groups router mounts here (group chat wiring pending —
+# the controller adds the include_router once W8 lands; see _handle_run_start's
+# group_id gate).
 
 
 # ---------------------------------------------------------------------------
@@ -6511,6 +6893,30 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     if not isinstance(content, str):
         content = str(content)
     requested_workspace = data.get("workspace")
+    # W10: resolve the persistent agent first — an empty workspace falls back to
+    # the agent's workspace, and its profile merges in at the profile_id block
+    # below, so the rest of the run assembly is untouched.
+    agent_profile: dict[str, Any] | None = None
+    agent_key = ""
+    if data.get("agent_id"):
+        agent_key = str(data["agent_id"])
+        agent_profile = _resolve_agent_for_run(agent_key)
+        if agent_profile is None:
+            invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+            await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+                "category": "validation", "detail": f"persistent agent not found: {agent_key}",
+            }))
+            return
+        if not requested_workspace:
+            requested_workspace = agent_profile.get("workspace")
+    if data.get("group_id"):
+        # W8 group chat wiring is pending; the controller mounts the groups
+        # router post-wave (see GROUP_CHAT_MOUNT).
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "group chat wiring pending",
+        }))
+        return
     ssh_requested = isinstance(requested_workspace, str) and requested_workspace.startswith("ssh://")
     try:
         if ssh_requested:
@@ -6554,6 +6960,22 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             "category": "validation", "detail": f"profile not found: {profile_id}",
         }))
         return
+    if agent_profile is not None:
+        # W10: a persistent agent runs on its own record as the profile — the
+        # synthetic dict mirrors the profile shape, so the effective_skills /
+        # effective_mode / model / instructions / tools chain below is unchanged.
+        profile_id = agent_profile["profile_id"]
+        profile = {
+            "active_skills": agent_profile.get("active_skills", []),
+            "mode": agent_profile.get("mode", "act"),
+            "model": agent_profile.get("model"),
+            "reasoning_effort": agent_profile.get("reasoning_effort"),
+            "instructions": agent_profile.get("instructions", ""),
+            "tools": {
+                "allow": (agent_profile.get("tools") or {}).get("allow"),
+                "deny": (agent_profile.get("tools") or {}).get("deny", []),
+            },
+        }
     effective_skills = data.get("active_skills", (profile or {}).get("active_skills", []))
     effective_mode = data.get("mode", (profile or {}).get("mode", "act"))
     model_id = data.get("model", (profile or {}).get("model"))
@@ -7054,9 +7476,30 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             workspace_rules=run.workspace_rules,
             mode=run.mode,
         )
-    run.task = asyncio.create_task(
-        _execute_after_rule_trust(run, execute) if run.trust_future else execute
-    )
+    execution = _execute_after_rule_trust(run, execute) if run.trust_future else execute
+    if agent_profile is not None:
+        # W10: project the persistent agent's runtime status around the run
+        # (working while it lives → idle/waiting_user once it settles).
+        _set_agent_status_quiet(agent_key, "working")
+        run.task = asyncio.create_task(
+            _project_agent_run_status(run, agent_key, execution))
+    else:
+        run.task = asyncio.create_task(execution)
+
+
+async def _project_agent_run_status(run: RunState, agent_id: str, execution: Any) -> None:
+    """Persistent-agent status projection wrapper (W10): working → idle/waiting_user."""
+    try:
+        await execution
+    finally:
+        status = "waiting_user" if run.status == "waiting" else "idle"
+        detail = ""
+        if run.status == "failed":
+            for envelope in reversed(run.events):
+                if envelope.get("event") == "run.failed":
+                    detail = str((envelope.get("data") or {}).get("detail") or "")
+                    break
+        _set_agent_status_quiet(agent_id, status, detail)
 
 
 async def _execute_after_rule_trust(run: RunState, execution: Any) -> None:
@@ -7923,3 +8366,12 @@ async def _execute_run(
         if run.ephemeral and run.ephemeral_source and memory is not None:
             with suppress(Exception):
                 await memory.delete_conversation(run.ephemeral_source)
+
+
+# W10: agent_router must mount AFTER the literal /api/agents/... routes above
+# (/api/agents/external, /api/agents/types): its GET /api/agents/{agent_id}
+# would otherwise shadow them, because FastAPI matches routes in registration
+# order and the mount block above runs before those literals are declared.
+from atlas.api.agent_router import router as agent_router  # noqa: E402
+
+app.include_router(agent_router)

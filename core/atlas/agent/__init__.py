@@ -2482,7 +2482,9 @@ class AgentOrchestrator:
             )))
         for skill in active_skill_instructions or []:
             initial_messages.append(SystemMessage(content=(
-                f"Activated Atlas Skill: {skill['name']}@{skill['version']}. "
+                # Non-skill entries (profile instructions, 项目指令, 附加工作目录)
+                # carry no version — never KeyError on them (W10 integration fix).
+                f"Activated Atlas Skill: {skill['name']}@{skill.get('version', '')}. "
                 "Apply its instructions to this run.\n\n"
                 + skill["content"]
             )))

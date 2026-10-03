@@ -5,13 +5,15 @@ import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
 import { createEventBuffer } from '../services/eventBuffer';
+import { createPersistentSlice, type PersistentSlice } from './persistentSlice';
+type SetPersistent = (partial: Partial<PersistentSlice> | ((state: PersistentSlice) => Partial<PersistentSlice>)) => void;
 
 const desktopApiBaseUrl = typeof window === 'undefined' ? undefined : window.atlasDesktop?.apiBaseUrl;
 
 /** Extra context picked in the composer: @files from the workspace and #conversations. */
 export interface ContextRefs { files: string[]; conversations: string[] }
 /** What the user sends: text, images (data URLs), other files, and referenced context. */
-export interface Outgoing { content: string; attachments: string[]; files: RunFile[]; refs?: ContextRefs; /** One-off role for this message only. */ profileId?: string }
+export interface Outgoing { content: string; attachments: string[]; files: RunFile[]; refs?: ContextRefs; /** One-off role for this message only. */ profileId?: string; /** Persistent agent that owns this run (run.start carries agent_id). */ agentId?: string }
 export interface QueuedMessage extends Outgoing { id: string }
 /** How a message typed while a run is working is delivered: folded into the run now, or run afterwards. */
 export type FollowUpMode = 'steer' | 'redirect' | 'queue';
@@ -22,7 +24,7 @@ export interface FileOpenRequest { file: string; line: number | null; nonce: num
 
 export const backend = new BackendAdapter({ baseUrl: desktopApiBaseUrl || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8765' });
 
-interface AtlasState {
+interface AtlasState extends PersistentSlice {
   apiBaseUrl: string;
   providerBaseUrl: string;
   apiKeyConfigured: boolean;
@@ -116,7 +118,7 @@ interface AtlasState {
   deleteCustomModel: (modelId: string) => Promise<boolean>;
   saveReasoningStages: (config: ReasoningStagesConfig) => Promise<void>;
   testModelConnection: (model?: string) => Promise<void>;
-  sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs, profileId?: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs, profileId?: string, agentId?: string) => Promise<void>;
   createRun: (conversationId: string, title: string) => AgentRun;
   appendEvent: (event: AgentEvent) => void;
   getRun: (runId: string) => AgentRun | undefined;
@@ -273,6 +275,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
   });
 
   return {
+    // Persistent-Atlas slices (agents/groups/channels/devices/localModels/automations).
+    ...createPersistentSlice(set as unknown as SetPersistent, get as () => AtlasState),
     apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, busy: false, paused: false, error: null, errorDetail: null,
     model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '',
@@ -600,14 +604,14 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       return { runs, artifacts: state.artifacts.filter((artifact) => artifact.runId !== runId), activeRunId, busy: runs.some((run) => !terminal.has(run.status)), paused: active?.status === 'paused' };
     }),
 
-    sendMessage: async (content, attachments = [], files = [], refs, profileId) => {
+    sendMessage: async (content, attachments = [], files = [], refs, profileId, agentId) => {
       const message = content.trim() || (attachments.length || files.length ? '请查看附件。' : '');
       if (!message) return;
       if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().catch(() => undefined);
       if (!get().activeConversationId) await get().createConversation(message.slice(0, 40) || '新对话');
       const conversationId = get().activeConversationId;
       if (!conversationId) return;
-      const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files, ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}), ...(profileId ? { profileId } : {}) };
+      const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files, ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}), ...(profileId ? { profileId } : {}), ...(agentId ? { agentId } : {}) };
       const running = activeRunFor(conversationId);
       if (running) {
         // Attachments can't join a run in flight, so those always wait for the next run.
@@ -974,7 +978,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const mode = get().nextRunMode;
   const overrides = get().pendingRunOverrides;
   const run = get().createRun(conversationId, conversation?.title ?? content.slice(0, 80));
-  set((current) => ({ runPrompts: { ...current.runPrompts, [run.id]: { content, attachments, files, refs: item.refs } }, nextRunMode: 'act', pendingRunOverrides: null }));
+  set((current) => ({ runPrompts: { ...current.runPrompts, [run.id]: { content, attachments, files, refs: item.refs, ...(item.agentId ? { agentId: item.agentId } : {}) } }, nextRunMode: 'act', pendingRunOverrides: null }));
   // 流式 delta 按 ~12.5Hz 合并进 store；其余事件先冲出攒着的 delta 再立即透传，顺序不变。
   const buffer = createEventBuffer((events) => { for (const event of events) get().appendEvent(event); });
   const handleEvent = (envelope: RuntimeEventEnvelope) => {
@@ -987,10 +991,14 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const worktree = state.worktreeRequests[conversationId];
   const supportsEffort = Boolean(state.models.find((model) => model.id === state.model)?.supports_reasoning_effort);
   if (worktree) useAtlasStore.getState().requestWorktree(conversationId, null);
-  void backend.startRun({
+  // agent_id rides along for persistent-agent runs (integration-map §5: WS run.start
+  // gains an optional agent_id/group_id). The adapter's RunStartRequest type predates
+  // W1, so the extra field is attached via an assertion at this one call site.
+  const request = {
     type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: overrides?.model ?? state.model, attachments, active_skills: state.activeSkills,
     ...(files.length ? { files } : {}), ...(mode === 'plan' ? { mode } : {}), ...(workspace ? { workspace } : {}),
     ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),
+    ...(item.agentId ? { agent_id: item.agentId } : {}),
     ...(state.reasoningEffort && supportsEffort ? { reasoning_effort: state.reasoningEffort } : {}),
     ...(worktree && !conversation?.worktree_path ? { worktree } : {}),
     ...(overrides?.tool_allow ? { tool_allow: overrides.tool_allow } : {}),
@@ -1003,7 +1011,8 @@ async function startRun(conversationId: string, item: QueuedMessage) {
     extra_roots: conversation?.extra_roots ?? [],
     ...(item.refs?.files.length ? { context_files: item.refs.files } : {}),
     ...(item.refs?.conversations.length ? { context_conversations: item.refs.conversations } : {}),
-  }, handleEvent, () => get().getRun(run.id)?.status === 'paused')
+  } as Parameters<typeof backend.startRun>[0];
+  void backend.startRun(request, handleEvent, () => get().getRun(run.id)?.status === 'paused')
     .catch((error) => {
       set({ mode: backend.mode, connected: backend.mode === 'backend', ...errorPatch(error, '运行启动失败') });
       const current = get().getRun(run.id);

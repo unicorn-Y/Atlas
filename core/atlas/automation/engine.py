@@ -76,8 +76,11 @@ def _iso(ms: int | float | None) -> str:
 def _ensure_launched() -> None:
     """Defensively launch the process-global DBOS (no-op when already launched)."""
     from dbos import DBOS
+    from dbos import _dbos as _dbos_module
 
-    instance = getattr(DBOS, "_dbos_global_instance", None)
+    # _dbos_global_instance lives on the dbos._dbos MODULE, not on the DBOS
+    # class — a class-level getattr always misses (W10 integration fix).
+    instance = getattr(_dbos_module, "_dbos_global_instance", None)
     if instance is not None and not getattr(instance, "_launched", False):
         DBOS.launch()
 

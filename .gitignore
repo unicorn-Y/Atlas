@@ -107,3 +107,6 @@ desktop.ini
 
 # Hermes engine runtime home (X2/U0 sync writes here)
 data/engine/
+.tmp/
+data/*.sqlite
+data/devices/
