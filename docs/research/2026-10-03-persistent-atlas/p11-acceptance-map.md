@@ -128,3 +128,24 @@ P11 补测（建议按 §2 顺序落地后再纳入验收）：场景 3 桌面�
 | 打包安装器/开机自启（`test_release_acceptance.py::test_nsis_install_uninstall_reinstall_acceptance`、`::test_clean_packaged_daily_usability_twice`） | 需要真安装环境 | 这两个测试本身即真机 smoke，标 REQUIRES_USER_DAILY_SMOKE |
 
 以上均不阻塞代码交付（任务书 §12 原文）。
+
+---
+
+## 5. 终态附录（2026-10-04，CLOSEOUT 收口后）
+
+§2 全部缺口已闭合，16 项不再有真实 MISSING：
+
+| # | 场景 | 终态 | 闭合证据 |
+|---|------|------|---------|
+| 1 | Agent 重启持久 | **COVERED** | `test_persistent_agents.py::test_agent_identity_survives_service_restart`、`::test_session_mapper_mapping_survives_restart`；`/api/agents/{id}/sessions` 已接线（真 `channel_sessions` 查询 + conversation 元数据，`agent_router.py::list_agent_sessions`） |
+| 2 | 渠道 inbound→回复 | COVERED（原判）+具名缝不变 | 无变化 |
+| 3 | channel+desktop 同一会话 | **COVERED** | `test_gateway_integration.py::test_channel_conversation_visible_on_desktop` |
+| 4 | 无变化不通知 | COVERED（原判） | 无变化 |
+| 5 | 事件→通知 | **COVERED（全链）** | 渠道 target 半缝闭合：`test_gateway_integration.py::test_heartbeat_event_notifies_channel_target`（event wake→notify→`fake:777`→真网关外发队列→FakeAdapter） |
+| 6/7/8/9 | cron/恢复/脚本 | COVERED（原判） | 无变化 |
+| 10 | automation 回渠道 | **COVERED** | `test_gateway_integration.py::test_automation_delivery_reaches_channel_target`（真 `_automation_deliver`→`channel_manager.send`→FakeAdapter；owner 模式不落渠道） |
+| 11 | 双 Agent 群 handoff | **COVERED** | `test_gateway_integration.py::test_group_handoff_between_persistent_agents`（3 真 persistent agent、@mention handoff 插队、bob 零发言、成员 group session 归属）；接线本体 `test_server_agents_wiring.py::test_run_start_group_id_drives_room_and_records_timeline` |
+| 12 | 设备离线→工作继续 | **COVERED（选项 1 语义）** | `test_devices_registry.py::test_device_offline_window_does_not_block_local_automation_and_presence_recovers`；远程 ingress 队列不在本波语义（结果文档注明） |
+| 13 | takeover→X2→原任务继续 | **COVERED** | `test_takeover_x2_bridge.py`（blocked→REST 交接卡 done→`x2_pending.resolve`→阻塞 run 恢复；give_up→GIVE_UP；409/无 waiter/pending 异常不 500） |
+| 14/15 | 本地模型/probe | COVERED（原判） | 无变化 |
+| 16 | learned skill 进 run | **COVERED** | `test_server_agents_wiring.py` 场景 16 测试（proposal→approve→run.start→fake LLM 请求含技能正文）；桥接 `server.py::_merge_agent_collection_skills`（显式 per-agent 行决定；decision=global 不注入——注册表已将全目录标 active，全局注入会破 8 技能激活上限，权衡记录在 CLOSEOUT result） |

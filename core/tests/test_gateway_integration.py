@@ -488,3 +488,33 @@ async def test_group_handoff_between_persistent_agents(app_client) -> None:
         assert f"agent:{aid}:group:team-g11" in keys, keys
     bob = (await bundle.client.get("/api/agents/bob-g11/sessions")).json()
     assert bob["sessions"] == []
+
+
+async def test_heartbeat_event_notifies_channel_target(app_client) -> None:
+    """P11 CLOSEOUT-4: event wake → agent → notify=true → <channel:target> → gateway."""
+    bundle = app_client
+    server = bundle.server
+    from atlas.api.agent_router import get_agent_service
+
+    agents = get_agent_service()
+    agents.create({
+        "id": "agent-notify", "name": "Notify Agent", "model": "fake-model",
+        "agent": {"workspace": "", "enabled": True},
+    })
+    agents.set_heartbeat("agent-notify", {"enabled": True, "delivery": "fake:777"})
+    bundle.fake_llm._responder = lambda _record: Text("发现新版本，需要关注。")
+
+    server.heartbeat_service.push_event("agent-notify", "new release")
+    result = await server.heartbeat_service.tick("agent-notify", "event")
+    assert result.status == "ran"
+    assert result.delivered is True
+
+    # The notification lands on the channel target through the real gateway
+    # outbound queue (owner/NO_REPLY stay silent — covered by the service tests).
+    assert await wait_for(
+        lambda: any(
+            item["chat_id"] == "777" and "发现新版本" in item["content"]
+            for item in bundle.adapter.sent
+        ),
+        timeout=REPLY_WAIT,
+    )

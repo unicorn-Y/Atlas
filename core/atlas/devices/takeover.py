@@ -215,12 +215,20 @@ class TakeoverStateMachine:
             self._record(actor, f"{_ACTION}:{action}", detail)
 
     # ------------------------------------------------------------- handoff
-    def open_handoff(self, note: str = "", *, actor: str = HUMAN_ACTOR) -> dict[str, Any]:
-        """Open a pending handoff card (PENDING until done / give_up)."""
+    def open_handoff(
+        self, note: str = "", *, actor: str = HUMAN_ACTOR, run_id: str = "",
+    ) -> dict[str, Any]:
+        """Open a pending handoff card (PENDING until done / give_up).
+
+        ``run_id`` optionally links the card to a blocked X2 run so the REST
+        resolution can wake that run's pending waiters (CLOSEOUT-6 bridge);
+        plain cards keep ``run_id=""`` and behave exactly as before.
+        """
         with self._lock:
             card = {
                 "card_id": f"handoff-{next(self._handoff_seq):04d}-{uuid.uuid4().hex[:8]}",
                 "note": str(note or ""),
+                "run_id": str(run_id or ""),
                 "status": "PENDING",
                 "created_ts": self._now(),
                 "created_by": actor,

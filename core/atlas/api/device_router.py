@@ -12,7 +12,13 @@ W5 of ATLAS-MEGA-PERSISTENT-ALWAYS-ON.  Endpoints:
 - ``POST   /api/devices/takeover``        — {action: human_take|agent_take|release, agent_id?, note?}
 - ``GET    /api/devices/activity``        — takeover activity ring buffer (newest last)
 - ``GET    /api/devices/handoff``         — handoff cards
-- ``POST   /api/devices/handoff``         — {action: open|done|give_up, card_id?, note?, actor?}
+- ``POST   /api/devices/handoff``         — {action: open|done|give_up, card_id?, note?, actor?, run_id?}
+
+CLOSEOUT-6: a handoff card opened with a non-empty ``run_id`` is linked to a
+blocked X2 run (``atlas.tools.x2.pending``); resolving the card ``done`` wakes
+that run's waiters with ``"done"``, ``give_up`` cancels the run (waiters
+receive ``GIVE_UP``).  The bridge is lazily imported and failure-isolated —
+a pending-side error can never turn an already-settled card into a 500.
 
 Static segments (``takeover``/``activity``/``handoff``) are declared before the
 ``{device_id}`` routes so they never resolve as a device id.
@@ -31,6 +37,7 @@ Integration note for the owner of ``atlas/server.py``::
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -51,6 +58,8 @@ from atlas.devices.takeover import (
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
+
+logger = logging.getLogger("atlas.device_router")
 
 # Injectable singletons (tests install tmp_path-isolated instances; production
 # lazily builds the default registry and self-registers the local laptop).
@@ -199,21 +208,51 @@ class HandoffRequest(BaseModel):
     card_id: str | None = None
     note: str = ""
     actor: str = HUMAN_ACTOR
+    run_id: str | None = None  # links the card to a blocked X2 run (CLOSEOUT-6)
+
+
+def _bridge_x2_pending(resolution: str, card: dict[str, Any]) -> None:
+    """Wake the blocked X2 run a settled handoff card was opened for.
+
+    ``done`` → ``x2_pending.resolve(run_id, "done")``; ``give_up`` →
+    ``x2_pending.cancel_run(run_id)`` (waiters receive ``GIVE_UP``).  Lazy
+    import keeps the router light and cycle-free; any pending-side failure is
+    logged and swallowed — the card is already settled and must still 200.
+    """
+    run_id = str(card.get("run_id") or "")
+    if not run_id:
+        return  # plain card: X2 is never touched
+    try:
+        from atlas.tools.x2 import pending as x2_pending
+
+        if resolution == RESOLUTION_DONE:
+            delivered = x2_pending.resolve(run_id, RESOLUTION_DONE)
+        else:
+            x2_pending.cancel_run(run_id)
+            delivered = True
+        logger.info("交接卡片 %s → x2 run %s（%s，delivered=%s）",
+                    card.get("card_id"), run_id, resolution, delivered)
+    except Exception:
+        logger.exception("x2 pending 桥接失败（卡片 %s 已结算，不影响响应）: run=%s",
+                         card.get("card_id"), run_id)
 
 
 @router.post("/handoff", dependencies=[Depends(_require_trusted_origin)])
 async def handoff_action(req: HandoffRequest) -> dict[str, Any]:
     machine = get_takeover()
     if req.action == "open":
-        return await asyncio.to_thread(machine.open_handoff, req.note, actor=req.actor)
+        return await asyncio.to_thread(
+            machine.open_handoff, req.note, actor=req.actor, run_id=req.run_id or "")
     if req.action in (RESOLUTION_DONE, RESOLUTION_GIVE_UP):
         if not (req.card_id or "").strip():
             raise HTTPException(status_code=422, detail=f"{req.action} 需要 card_id")
         try:
-            return await asyncio.to_thread(
+            card = await asyncio.to_thread(
                 machine.resolve_handoff, req.card_id.strip(), req.action, actor=req.actor)
         except TakeoverError as exc:
             raise _takeover_error(exc) from exc
+        _bridge_x2_pending(req.action, card)  # quick in-memory call, no to_thread
+        return card
     raise HTTPException(status_code=422, detail="action 必须是 open / done / give_up")
 
 
