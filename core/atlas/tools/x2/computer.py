@@ -587,11 +587,27 @@ async def _wait_if_paused(key: str, timeout: float = 120.0) -> None:
 
 
 def get_runtime() -> X2ComputerRuntime:
-    """Process-wide runtime (lazy; tests may replace it via :func:`set_runtime`)."""
+    """Process-wide runtime (lazy; tests may replace it via :func:`set_runtime`).
+
+    When ``ATLAS_X2_COMPUTER_FAKE`` is set, the runtime is built on the
+    deterministic fake backend + Hermes tool (:mod:`atlas.tools.x2.fake_computer`,
+    imported lazily so production never loads it) — the whole production path
+    above the driver stays identical. Subprocess harnesses set the variable
+    before spawning the server; it only matters at first construction here.
+    """
     global _runtime
     with _runtime_lock:
         if _runtime is None:
-            _runtime = X2ComputerRuntime()
+            if os.environ.get("ATLAS_X2_COMPUTER_FAKE"):
+                from atlas.tools.x2.fake_computer import (
+                    FakeComputerBackend,
+                    FakeHermesComputerTool,
+                )
+
+                _runtime = X2ComputerRuntime(
+                    backend=FakeComputerBackend(), hermes_tool=FakeHermesComputerTool())
+            else:
+                _runtime = X2ComputerRuntime()
         return _runtime
 
 

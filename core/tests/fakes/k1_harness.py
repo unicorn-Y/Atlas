@@ -30,25 +30,68 @@ TERMINAL_EVENTS = {"run.completed", "run.failed", "run.cancelled"}
 @pytest_asyncio.fixture
 async def k1_backend(tmp_path):
     (tmp_path / "workspace").mkdir()
-    with FakeLLMServer() as fake:
-        server = IsolatedBackend(tmp_path, fake)
-        try:
-            await server.ready()
-            # Auxiliary calls (task planner, compression summaries, judges) must
-            # never eat a scripted main turn; answer the planner with a valid
-            # plan object and everything else with a generic summary.
-            def default_aux(record):
-                body = json.dumps(record, ensure_ascii=False)
-                if "goal and subtasks" in body:
-                    return Text('{"goal":"finish the requested task","subtasks":'
-                                '[{"id":"step-1","title":"complete the requested task",'
-                                '"verification":"the requested task is done"}]}')
-                return Text("Fake summary of the earlier conversation.")
+    # Computer-use runs on the deterministic fake driver inside the spawned
+    # server process: IsolatedBackend builds the subprocess env from os.environ
+    # (and this variable survives its secret scrubbing), so setting it here —
+    # and only here, cleaned up in the finally below — selects the fake in
+    # atlas.tools.x2.computer.get_runtime without touching the C1 backends.
+    os.environ["ATLAS_X2_COMPUTER_FAKE"] = "1"
+    # IsolatedBackend also redirects LOCALAPPDATA/USERPROFILE into the tmp root,
+    # which hides the machine's Playwright browser cache from the browser stack
+    # (agent-browser probes LOCALAPPDATA\ms-playwright and would report
+    # "Chromium browser is missing"). Pin the real cache for this subprocess
+    # only; when no Playwright cache exists on the machine this is a no-op.
+    # conftest.py already rewrote LOCALAPPDATA/USERPROFILE/HOME in THIS process,
+    # so the real cache is located via the untouched USERNAME/SystemDrive.
+    browsers_path = None
+    user = os.environ.get("USERNAME", "")
+    if os.name == "nt" and user:
+        # NOTE: Path("C:") / "Users" / ... would yield a drive-relative
+        # "C:Users\\..." (no separator after the drive), so build the string.
+        candidate = Path(f"{os.environ.get('SystemDrive', 'C:')}/Users/{user}/AppData/Local/ms-playwright")
+        browsers_path = str(candidate) if candidate.is_dir() else None
+    pinned_browsers = browsers_path is not None and "PLAYWRIGHT_BROWSERS_PATH" not in os.environ
+    if pinned_browsers:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
+    try:
+        with FakeLLMServer() as fake:
+            server = IsolatedBackend(tmp_path, fake)
+            # The scripted fake model cannot navigate hermes' tool_search
+            # progressive-disclosure bridge (non-core tools such as computer_* are
+            # deferred behind tool_search/tool_call), so every tool a scenario
+            # scripts must be model-facing directly. The block is inserted before
+            # the trailing auxiliary section — NOT appended — so scenarios that
+            # rewrite this file with string ops (the compaction scenario appends
+            # an indented compression block) keep their exact baseline nesting.
+            engine_config = tmp_path / "atlas" / "engine" / "config.yaml"
+            original = engine_config.read_text(encoding="utf-8")
+            patched = original.replace(
+                "auxiliary:\n",
+                "tools:\n  tool_search:\n    enabled: off\nauxiliary:\n", 1)
+            if patched == original:  # different template: fall back to appending
+                patched = original + "tools:\n  tool_search:\n    enabled: off\n"
+            engine_config.write_text(patched, encoding="utf-8")
+            try:
+                await server.ready()
+                # Auxiliary calls (task planner, compression summaries, judges) must
+                # never eat a scripted main turn; answer the planner with a valid
+                # plan object and everything else with a generic summary.
+                def default_aux(record):
+                    body = json.dumps(record, ensure_ascii=False)
+                    if "goal and subtasks" in body:
+                        return Text('{"goal":"finish the requested task","subtasks":'
+                                    '[{"id":"step-1","title":"complete the requested task",'
+                                    '"verification":"the requested task is done"}]}')
+                    return Text("Fake summary of the earlier conversation.")
 
-            fake._aux = default_aux
-            yield server
-        finally:
-            await server.close()
+                fake._aux = default_aux
+                yield server
+            finally:
+                await server.close()
+    finally:
+        os.environ.pop("ATLAS_X2_COMPUTER_FAKE", None)
+        if pinned_browsers:
+            os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
 
 
 class RestartableBackend(IsolatedBackend):

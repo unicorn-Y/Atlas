@@ -15,9 +15,6 @@ import pytest
 from tests.fakes.fake_llm_provider import Text, ToolCall
 from tests.fakes.k1_harness import k1_backend  # noqa: F401  (fixture)
 
-XFAIL_NO_FAKE_DRIVER = pytest.mark.xfail(
-    reason="computer-use needs a Cua driver; no fake driver is wired into the harness yet",
-    strict=False)
 # The SKILLS_DIR real bug (atlas.config lacked the symbol; market routes 500'd)
 # was fixed 2026-10-03 — market fallback root is now derived from db_path.parent.
 # Scenarios 9/10/11 run as real tests again.
@@ -68,7 +65,6 @@ async def test_daily_browser_multistep(k1_backend):  # noqa: F811
 # ---------------------------------------------------------------------------
 
 
-@XFAIL_NO_FAKE_DRIVER
 @pytest.mark.asyncio
 async def test_daily_computer_use_with_fake_driver(k1_backend):  # noqa: F811
     backend = k1_backend
@@ -82,6 +78,7 @@ async def test_daily_computer_use_with_fake_driver(k1_backend):  # noqa: F811
 
     backend.fake._responder = responder
     _, events = await backend.run("observe the desktop through the fake Cua driver", timeout=180)
+    # The observation must really execute through the X2 bridge and complete.
     observes = [e for e in events if e["event"] == "tool.completed"
                 and str(e["data"].get("name", "")).startswith("computer")]
     assert observes, [e["event"] for e in events]
@@ -91,6 +88,10 @@ async def test_daily_computer_use_with_fake_driver(k1_backend):  # noqa: F811
     carries_evidence = ("_multimodal" in result or "screenshot" in observed.lower()
                         or "image" in observed.lower())
     assert carries_evidence, "the observation must carry screen evidence"
+    # The evidence must be a real image payload...
+    assert "data:image/png" in observed, observed[:300]
+    # ...produced by the FAKE driver (never a real desktop grab).
+    assert "K1_FAKE" in observed, observed[:300]
     assert any(e["event"] == "message.completed"
                and "K1_COMPUTER_DONE" in str(e["data"].get("content")) for e in events)
 
