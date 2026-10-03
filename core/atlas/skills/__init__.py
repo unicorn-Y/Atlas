@@ -6,6 +6,7 @@ builds an in-memory index, and provides trigger matching + activation.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -600,7 +601,13 @@ def default_skill_sources(
     - ``claude-project``: ``<workspace>/.claude/skills`` (priority 30).
     - ``plugin:*``: caller-provided plugin skill dirs (priority 60).
     """
-    atlas_root = Path(atlas_home).expanduser() / "skills" if atlas_home else SKILLS_DIR
+    if atlas_home:
+        atlas_root = Path(atlas_home).expanduser() / "skills"
+    else:
+        # Test/isolation seam: point the writable atlas source at a temp root
+        # (conftest sets ATLAS_SKILLS_HOME so suites never touch the repo).
+        env_home = os.environ.get("ATLAS_SKILLS_HOME", "").strip()
+        atlas_root = Path(env_home) if env_home else SKILLS_DIR
     sources = [SkillSource("atlas", atlas_root, SKILL_SOURCE_PRIORITY["atlas"], layout="category")]
     if hermes_skills_dir:
         sources.append(SkillSource(

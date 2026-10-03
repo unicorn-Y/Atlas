@@ -6,6 +6,7 @@ Endpoints (shapes fixed by the frontend ``services/x2Api.ts`` client):
 - ``GET/POST /settings``       — browser takeover mode (standalone / copied-profile / cdp / extension)
 - ``POST /recordings``         — start/stop a learned-workflow recording
 - ``GET  /recordings/{id}``    — full recording document (steps)
+- ``DELETE /recordings/{id}``  — delete one recording
 - ``POST /recordings/{id}/to-skill`` — SKILL.md preview (dry_run) or save
 - ``GET/POST/DELETE /vault``   — credential vault; entries carry handles only,
   the password appears once in the POST body and is never echoed back.
@@ -76,11 +77,16 @@ class HandoffResolution(BaseModel):
 @router.post("/handoff", dependencies=[Depends(_require_trusted_origin)])
 async def resolve_handoff_endpoint(req: HandoffResolution) -> dict[str, Any]:
     """Resolve a pending browser handoff card (browser.handoff_required)."""
+    from atlas.tools.x2 import pending as x2pending
     from atlas.tools.x2.browser import resolve_handoff
 
     if req.resolution not in {"open_panel", "done", "give_up"}:
         raise HTTPException(status_code=422, detail="resolution 必须是 open_panel / done / give_up")
-    if not resolve_handoff(req.run_id, req.resolution):
+    broker_resolved = resolve_handoff(req.run_id, req.resolution)
+    # The run-scoped X2Context blocks on the pending registry, not the broker:
+    # both channels are resolved so either wiring resumes the blocked tool call.
+    pending_resolved = x2pending.resolve(req.run_id, req.resolution)
+    if not (broker_resolved or pending_resolved):
         raise HTTPException(status_code=404, detail="该运行没有等待中的人工交接")
     return {"status": "ok", "run_id": req.run_id, "resolution": req.resolution}
 
@@ -152,6 +158,15 @@ async def get_recording(recording_id: str) -> dict[str, Any]:
     if doc is None:
         raise HTTPException(status_code=404, detail=f"没有 id 为 {recording_id!r} 的浏览器录制")
     return {**doc, "step_count": len(doc.get("steps") or [])}
+
+
+@router.delete("/recordings/{recording_id}", dependencies=[Depends(_require_trusted_origin)])
+async def delete_recording(recording_id: str) -> dict[str, Any]:
+    from atlas.tools.x2.browser import get_runtime
+
+    if not get_runtime().recordings.delete(recording_id):
+        raise HTTPException(status_code=404, detail=f"没有 id 为 {recording_id!r} 的浏览器录制")
+    return {"status": "ok"}
 
 
 class ToSkillRequest(BaseModel):

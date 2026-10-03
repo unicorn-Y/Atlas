@@ -446,7 +446,8 @@ class LocalExecutionRuntime:
         if isinstance(notify, bool):
             record.notify_on_complete = notify
         elif isinstance(notify, list):
-            record.watch_patterns = [str(item) for item in notify]
+            # Extend (not clobber): explicit watch_patterns and notify:[...] compose.
+            record.watch_patterns = record.watch_patterns + [str(item) for item in notify]
         heartbeat = float(args.get("heartbeat") or 0)
         if heartbeat > 0 and (callback is not None or conversation_id):
             record.notify_on_complete = True

@@ -28,11 +28,13 @@ without any real UI automation.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
 import sys
 import threading
+from io import BytesIO
 from typing import Any, Awaitable, Callable
 
 from atlas.config import get_config
@@ -57,6 +59,12 @@ _STALE_WINDOW_CODES = frozenset({
 _BACKGROUND_UNAVAILABLE_CODES = frozenset({"background_unavailable"})
 
 _SUMMARY_LIMIT = 400
+
+# Replay-trail thumbnails are event-payload, not model input: cap them so a
+# churning desktop loop cannot flood the runtime-events queue.
+_THUMBNAIL_MAX_SIDE = 256
+_THUMBNAIL_JPEG_QUALITY = 50
+_THUMBNAIL_FALLBACK_BYTES = 8192
 
 # Sentinel: distinguishes "no backend injected" (lazy Hermes acquisition) from
 # an explicit ``backend=None`` ("Hermes unavailable" — straight to legacy).
@@ -215,6 +223,38 @@ def _thumbnail_from(result: dict[str, Any]) -> str | None:
     return None
 
 
+def _truncate_thumbnail(data_url: str) -> str:
+    if len(data_url) <= _THUMBNAIL_FALLBACK_BYTES:
+        return data_url
+    return f"{data_url[:_THUMBNAIL_FALLBACK_BYTES]}…[缩略图已截断]"
+
+
+def _cap_thumbnail(data_url: str) -> str:
+    """Downscale a step thumbnail to a small replay-trail preview.
+
+    ≤256px longest side at JPEG q50 keeps every ``computer.step`` event light.
+    If Pillow or the payload is unusable, fall back to truncating the data-URL
+    with an explicit marker so the event stream stays bounded either way.
+    """
+    _, sep, payload = str(data_url).partition(",")
+    if not sep:
+        return data_url
+    try:
+        from PIL import Image
+    except Exception:  # noqa: BLE001 - Pillow absent: truncate instead
+        return _truncate_thumbnail(data_url)
+    try:
+        image = Image.open(BytesIO(base64.b64decode(payload)))
+        image.thumbnail((_THUMBNAIL_MAX_SIDE, _THUMBNAIL_MAX_SIDE))
+        if image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        out = BytesIO()
+        image.save(out, format="JPEG", quality=_THUMBNAIL_JPEG_QUALITY)
+        return f"data:image/jpeg;base64,{base64.b64encode(out.getvalue()).decode('ascii')}"
+    except Exception:  # noqa: BLE001 - undecodable payload: truncate instead
+        return _truncate_thumbnail(data_url)
+
+
 def _summary_from(result: dict[str, Any]) -> str:
     data = result.get("data") or {}
     text = str(data.get("message") or data.get("summary") or data.get("error") or "")
@@ -328,6 +368,7 @@ class X2ComputerRuntime:
                 return _error(f"Computer Use 已被 permission_mode={permission_mode!r} 禁用。")
             self.ensure_configured()
             ctx = current_context()
+            await _wait_if_paused(_run_key(ctx.run_id, ctx.session_id))
             translated = translate_legacy_tool(name, args)
             if translated is not None:
                 result = await self._call_hermes(translated[0], translated[1], legacy_name=name, ctx=ctx)
@@ -444,15 +485,20 @@ class X2ComputerRuntime:
         return result
 
     async def _emit_step(self, ctx: X2Context, name: str, result: dict[str, Any]) -> None:
-        """Append one replay-trail event (action + thumbnail) for the frontend."""
-        await ctx.emit_event(EVENT_COMPUTER_STEP, {
+        """Append one replay-trail event (action + capped thumbnail) for the frontend."""
+        thumbnail = _thumbnail_from(result)
+        if thumbnail:
+            thumbnail = _cap_thumbnail(thumbnail)
+        step = {
             "tool": name,
             "ok": not bool(result.get("is_error")),
             "summary": _summary_from(result),
-            "thumbnail": _thumbnail_from(result),
+            "thumbnail": thumbnail,
             "run_id": ctx.run_id,
             "session_id": ctx.session_id,
-        })
+        }
+        _record_step(ctx.run_id or ctx.session_id or "", step)
+        await ctx.emit_event(EVENT_COMPUTER_STEP, step)
 
     async def shutdown(self) -> None:
         """Release the Hermes session backend and stop the legacy runtime, best-effort."""
@@ -477,6 +523,67 @@ class X2ComputerRuntime:
 # ---------------------------------------------------------------------------
 _runtime: X2ComputerRuntime | None = None
 _runtime_lock = threading.Lock()
+
+# Replay trail (run key → last N steps) and pause gates (run key → Event that
+# is SET while running, CLEARed while paused). Bounded: 40 steps per run,
+# 20 runs FIFO.
+_STEP_LOCK = threading.Lock()
+_RUN_STEPS: dict[str, list[dict[str, Any]]] = {}
+_RUN_ORDER: list[str] = []
+_PAUSE_EVENTS: dict[str, threading.Event] = {}
+_STEP_LIMIT = 40
+_RUN_LIMIT = 20
+
+
+def _run_key(run_id: str | None, session_id: str | None) -> str:
+    return str(run_id or session_id or "")
+
+
+def _record_step(key: str, step: dict[str, Any]) -> None:
+    if not key:
+        return
+    with _STEP_LOCK:
+        trail = _RUN_STEPS.setdefault(key, [])
+        trail.append(dict(step))
+        del trail[:-_STEP_LIMIT]
+        if key not in _RUN_ORDER:
+            _RUN_ORDER.append(key)
+            del _RUN_ORDER[:-_RUN_LIMIT]
+            for stale in list(_RUN_STEPS):
+                if stale not in _RUN_ORDER:
+                    _RUN_STEPS.pop(stale, None)
+                    _PAUSE_EVENTS.pop(stale, None)
+
+
+def run_steps(run_id: str) -> list[dict[str, Any]]:
+    """Replay trail for one run (newest last); empty when unknown."""
+    with _STEP_LOCK:
+        return [dict(item) for item in _RUN_STEPS.get(str(run_id or ""), [])]
+
+
+def set_paused(run_id: str, paused: bool) -> bool:
+    """Pause/resume the next action of a run's computer sequence. True when known."""
+    key = str(run_id or "")
+    with _STEP_LOCK:
+        if key not in _RUN_STEPS:
+            return False
+        gate = _PAUSE_EVENTS.setdefault(key, threading.Event())
+    if paused:
+        gate.clear()
+    else:
+        gate.set()
+    return True
+
+
+async def _wait_if_paused(key: str, timeout: float = 120.0) -> None:
+    with _STEP_LOCK:
+        gate = _PAUSE_EVENTS.get(key)
+    if gate is not None and not gate.is_set():
+        # The edge bar flips this when the user touches the mouse; wait bounded.
+        def _wait() -> None:
+            gate.wait(timeout)
+
+        await asyncio.to_thread(_wait)
 
 
 def get_runtime() -> X2ComputerRuntime:
@@ -581,10 +688,18 @@ def status_snapshot() -> dict[str, Any]:
 
 
 async def shutdown() -> None:
-    """Process-wide shutdown hook."""
+    """Process-wide shutdown hook: cancel pending human waits, release backends."""
+    from atlas.tools.x2 import pending as x2pending
+
+    for run_id in x2pending.pending_runs():
+        x2pending.cancel_run(run_id)
     global _runtime
     with _runtime_lock:
         runtime, _runtime = _runtime, None
+    with _STEP_LOCK:
+        _RUN_STEPS.clear()
+        _RUN_ORDER.clear()
+        _PAUSE_EVENTS.clear()
     if runtime is not None:
         await runtime.shutdown()
 
@@ -596,6 +711,8 @@ __all__ = [
     "get_computer_tool_schemas",
     "get_runtime",
     "register_computer_tools",
+    "run_steps",
+    "set_paused",
     "set_runtime",
     "status_snapshot",
     "shutdown",

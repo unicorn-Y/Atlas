@@ -41,6 +41,9 @@ _SENSITIVE_PARAM_KEYS = frozenset({"password", "secret", "otp_secret", "cvc", "c
 
 _DEFAULT_DESCRIPTION = "步骤"
 
+# Replay-trail bound: recordings are pruned to the newest N when one starts.
+RECORDINGS_KEEP = 50
+
 
 def recordings_dir() -> Path:
     """Storage root for learned recordings: ``<Atlas data>/browser-cache/recordings``."""
@@ -140,6 +143,34 @@ class RecordingStore:
         except (OSError, json.JSONDecodeError):
             return None
         return doc if isinstance(doc, dict) else None
+
+    def delete(self, recording_id: str) -> bool:
+        """Remove one recording document; ``False`` when it does not exist."""
+        path = self._path(recording_id)
+        if not path.exists():
+            return False
+        try:
+            path.unlink()
+        except OSError:
+            return False
+        return True
+
+    def prune(self, keep: int = RECORDINGS_KEEP) -> list[str]:
+        """Keep only the newest ``keep`` recordings (by file mtime); return removed ids."""
+        entries: list[tuple[float, Path]] = []
+        for path in self._dir().glob("*.json"):
+            try:
+                entries.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+        removed: list[str] = []
+        for _, path in sorted(entries, reverse=True)[keep:]:
+            try:
+                path.unlink()
+                removed.append(path.stem)
+            except OSError:
+                continue
+        return removed
 
     def list(self) -> list[dict[str, Any]]:
         summaries: list[dict[str, Any]] = []
@@ -419,6 +450,7 @@ def _default_skills_dir() -> Path:
 
 
 __all__ = [
+    "RECORDINGS_KEEP",
     "Recorder",
     "RecordingStore",
     "ReplayEngine",

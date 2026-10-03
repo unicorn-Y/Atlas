@@ -307,6 +307,73 @@ def test_store_roundtrip_and_listing(tmp_path) -> None:
     assert store.load("../../etc/passwd") is None
 
 
+def test_store_delete_removes_one_document(tmp_path) -> None:
+    store = RecordingStore(tmp_path / "recs")
+    one = store.create(site="https://one.example.com")
+    two = store.create(site="https://two.example.com")
+    assert store.delete(one["recording_id"]) is True
+    assert store.load(one["recording_id"]) is None
+    assert store.load(two["recording_id"]) is not None  # siblings survive
+    assert store.delete(one["recording_id"]) is False  # idempotent
+    assert store.delete("../../etc/passwd") is False  # traversal stays inside the dir
+
+
+def test_prune_keeps_only_newest_fifty(tmp_path) -> None:
+    import os
+
+    store = RecordingStore(tmp_path / "recs")
+    docs = [store.create(site=f"https://n{i}.example.com") for i in range(55)]
+    for i, doc in enumerate(docs):  # deterministic age ordering (mtime granularity)
+        os.utime(store._path(doc["recording_id"]), (1_000_000 + i, 1_000_000 + i))
+
+    removed = store.prune()
+
+    assert len(removed) == 5
+    assert store.list() and len(store.list()) == 50
+    surviving = {s["recording_id"] for s in store.list()}
+    assert {doc["recording_id"] for doc in docs[:5]}.isdisjoint(surviving)  # oldest pruned
+    assert docs[-1]["recording_id"] in surviving  # newest kept
+    assert store.prune() == []  # at the bound: no-op
+
+
+async def test_start_recording_prunes_directory_to_bound(tmp_path) -> None:
+    store = RecordingStore(tmp_path / "recs")
+    for _ in range(52):
+        store.create(site="https://bulk.example.com")
+    rt = x2browser.X2BrowserRuntime(backend=FakeBrowser(), store=store)
+    x2browser.set_runtime(rt)
+    token = set_context(make_ctx())
+    try:
+        doc = rt.start_recording()
+    finally:
+        reset_context(token)
+    summaries = store.list()
+    assert len(summaries) == 51  # 50 newest kept + the fresh recording
+    assert doc["recording_id"] in {s["recording_id"] for s in summaries}
+
+
+def test_recordings_delete_endpoint(tmp_path) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from atlas.api.browser_router import router as browser_router
+
+    store = RecordingStore(tmp_path / "recs")
+    doc = store.create(site="https://one.example.com")
+    x2browser.set_runtime(
+        x2browser.X2BrowserRuntime(backend=FakeBrowser(), store=store))
+    try:
+        client = TestClient(FastAPI())
+        client.app.include_router(browser_router)
+        gone = client.delete(f"/api/browser/recordings/{doc['recording_id']}")
+        assert gone.status_code == 200 and gone.json() == {"status": "ok"}
+        assert store.load(doc["recording_id"]) is None
+        missing = client.delete(f"/api/browser/recordings/{doc['recording_id']}")
+        assert missing.status_code == 404
+    finally:
+        x2browser.set_runtime(None)
+
+
 def test_recorder_observe_updates_fingerprint_and_site() -> None:
     doc = {"recording_id": new_recording_id(), "site": "", "status": "recording", "steps": []}
     recorder = Recorder(doc, RecordingStore())

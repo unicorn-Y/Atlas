@@ -522,6 +522,10 @@ class X2BrowserRuntime:
         """Arm capture; returns the recording document."""
         if self.recorder is not None and self.recorder.active:
             return self.recorder.doc
+        try:
+            self.recordings.prune()  # bound the replays: keep the newest 50
+        except Exception as exc:  # noqa: BLE001 - pruning is best-effort
+            log.debug("x2.recordings_prune_failed", extra={"error": str(exc)})
         site = origin_of(self.last_url)
         doc = self.recordings.create(site=site)
         self.recorder = Recorder(doc, self.recordings)
@@ -535,6 +539,21 @@ class X2BrowserRuntime:
         doc = self.recorder.stop()
         self.recorder = None
         return doc
+
+    # -- shutdown ----------------------------------------------------------
+    async def shutdown(self) -> None:
+        """Close Hermes browser sessions at process exit; best-effort, never raises."""
+        if self._backend_injected or self._backend_factory is not None:
+            return  # injected test / direct-mode runtime owns no Hermes sessions
+        try:
+            from tools.browser_tool_lifecycle import cleanup_all_browsers
+        except Exception as exc:  # noqa: BLE001 - stack absent offline
+            log.debug("x2.browser_cleanup_import_failed", extra={"error": str(exc)})
+            return
+        try:
+            await asyncio.to_thread(cleanup_all_browsers)
+        except Exception as exc:  # noqa: BLE001 - shutdown must never raise
+            log.debug("x2.browser_cleanup_failed", extra={"error": str(exc)})
 
     # -- dispatch ----------------------------------------------------------
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -744,6 +763,15 @@ async def call_tool(name: str, arguments: dict[str, Any] | None = None) -> dict[
     return await get_runtime().call_tool(name, arguments)
 
 
+async def shutdown() -> None:
+    """Process-wide shutdown hook (server lifespan): close Hermes browser sessions."""
+    global _runtime
+    with _runtime_lock:
+        runtime, _runtime = _runtime, None
+    if runtime is not None:
+        await runtime.shutdown()
+
+
 def get_browser_tool_schemas() -> list[dict[str, Any]]:
     """The single model-facing browser surface."""
     return [json.loads(json.dumps(schema)) for schema in BROWSER_TOOL_SCHEMAS]
@@ -790,6 +818,7 @@ __all__ = [
     "resolve_handoff",
     "scrub_secrets",
     "set_runtime",
+    "shutdown",
     "start_recording",
     "stop_recording",
     "to_frontend_mode",

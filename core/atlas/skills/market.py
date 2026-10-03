@@ -287,14 +287,26 @@ class SkillMarket:
         self._hub_forced = True
 
     def _import_hermes(self) -> dict[str, Any]:
+        # 1) The pinned fork is usually importable directly (core/.venv installs
+        #    hermes-agent editable from the checkout).
+        try:
+            hub_mod = __import__("tools.skills_hub", fromlist=["skills_hub"])
+            search_mod = __import__("tools.skills_hub_search", fromlist=["skills_hub_search"])
+            self._force_hub_state(hub_mod)
+            return {"hub": hub_mod, "search": search_mod}
+        except ImportError:
+            pass
         root = self.hermes_root
         if root is None:
             env = os.environ.get("ATLAS_HERMES_ROOT", "").strip()
             if env:
                 root = Path(env)
             else:
-                sibling = Path(__file__).resolve().parents[3] / "hermes-agent"
-                root = sibling if sibling.is_dir() else None
+                here = Path(__file__).resolve()
+                for candidate in (here.parents[3] / "hermes-agent", here.parents[3].parent / "hermes-agent"):
+                    if candidate.is_dir():
+                        root = candidate
+                        break
         if root is None or not Path(root).is_dir():
             raise MarketError(
                 "本地技能市场客户端（Hermes Skills Hub）不可用，无法访问在线技能源。",
@@ -337,10 +349,22 @@ class SkillMarket:
         if self._injected_adapters is not None:
             adapters: list[Any] = list(self._injected_adapters)
         else:
-            mods = self._import_hermes()
-            adapters = list(mods["search"].create_source_router())
-        for tap in self._directory_taps():
-            adapters.append(_DirectoryTapSource(tap["name"], Path(tap["path"])))
+            try:
+                mods = self._import_hermes()
+                adapters = list(mods["search"].create_source_router())
+            except MarketError:
+                # Hub unavailable (fork missing): online sources degrade to
+                # "unavailable" but local directory taps stay searchable.
+                adapters = []
+        # Local, offline taps first: search merges round-robin and a local hit
+        # must never be crowded out by chatty online sources.
+        for tap in reversed(self._directory_taps()):
+            adapters.insert(0, _DirectoryTapSource(tap["name"], Path(tap["path"])))
+        if not adapters:
+            raise MarketError(
+                "本地技能市场客户端（Hermes Skills Hub）不可用，且没有配置本地技能源。",
+                code="hub_unavailable",
+            )
         if source and source != "all":
             wanted = SOURCE_ALIASES.get(source, source)
             adapters = [item for item in adapters if item.source_id() == wanted]
@@ -619,14 +643,24 @@ class SkillMarket:
                 return []
 
         batches = await asyncio.gather(*(run_one(adapter) for adapter in adapters))
+        # Fair merge: round-robin across sources so one chatty online source
+        # cannot crowd out (offline) local taps — local taps are listed first.
         results: list[dict[str, Any]] = []
         seen: set[str] = set()
         errors: list[str] = []
-        for adapter, batch in zip(adapters, batches):
-            if not batch:
-                errors.append(adapter.source_id())
-            for meta in batch:
-                data = meta if isinstance(meta, dict) else vars(meta)
+        cursors = [0] * len(adapters)
+        while len(results) < limit + 40 and any(
+            cursors[i] < len(batches[i]) for i in range(len(adapters))
+        ):
+            for i, adapter in enumerate(adapters):
+                if cursors[i] >= len(batches[i]):
+                    continue
+                data = batches[i][cursors[i]]
+                cursors[i] += 1
+                if isinstance(data, dict):
+                    pass
+                else:
+                    data = vars(data)
                 identifier = str(data.get("identifier") or "")
                 if not identifier or identifier in seen:
                     continue
@@ -643,8 +677,13 @@ class SkillMarket:
                     "author": extra.get("author"),
                     "installed": identifier in installed_ids,
                 })
+                if len(results) >= limit:
+                    break
             if len(results) >= limit:
                 break
+        for i, adapter in enumerate(adapters):
+            if not batches[i]:
+                errors.append(adapter.source_id())
         return {
             "query": query, "source": source or "all", "count": len(results[:limit]),
             "results": results[:limit], "sources_queried": source_names,
@@ -1215,13 +1254,16 @@ def default_market(
     shared index is supplied, so anything the market installs surfaces in the
     ordinary ``GET /api/skills`` index immediately.
     """
-    from atlas.config import SKILLS_DIR, get_config, load_user_settings
+    from atlas.config import get_config, load_user_settings
+    from atlas.skills import SKILLS_DIR
 
     cfg = get_config()
     atlas_root = None
     if skill_manager is not None:
         source = getattr(skill_manager, "_sources", {}).get("atlas")
         atlas_root = Path(source.root) if source is not None else None
+    # Canonical atlas source root (same symbol default_skill_sources uses).
+    skills_dir = atlas_root or SKILLS_DIR
     workspace_value = load_user_settings().get("default_workspace")
     project_dir = (
         Path(str(workspace_value)).expanduser() / ".claude" / "skills"
@@ -1230,7 +1272,7 @@ def default_market(
     return SkillMarket(
         registry,
         data_dir=cfg.db_path.parent,
-        user_skills_dir=atlas_root or SKILLS_DIR,
+        user_skills_dir=atlas_root or skills_dir,
         project_skills_dir=project_dir,
         skill_manager=skill_manager,
     )

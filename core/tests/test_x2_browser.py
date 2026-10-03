@@ -461,6 +461,14 @@ def test_scrub_secrets_recurses() -> None:
     assert x2browser.scrub_secrets(dirty) == {"a": 1, "nested": {"keep": 2}, "list": [{}]}
 
 
+async def test_shutdown_closes_runtime_without_raising() -> None:
+    rt = runtime_with(FakeBrowser())  # injected backend owns no Hermes sessions
+    await x2browser.shutdown()
+    assert x2browser.get_runtime() is not rt  # module hook drops the runtime
+    x2browser.set_runtime(None)
+    await x2browser.shutdown()  # no runtime installed: still a safe no-op
+
+
 # ---------------------------------------------------------------------------
 # Router (/api/browser/*)
 # ---------------------------------------------------------------------------
@@ -511,20 +519,39 @@ async def test_router_recordings_start_get_stop_and_to_skill(
         assert {"name", "description", "skill_md", "steps"} <= set(preview)
         assert preview["skill_md"].startswith("---\nname:")
 
-        from atlas.tools.x2 import recording as recording_module
+        # 保存走统一技能注册表：像生产环境一样由 server 提供唯一 SkillMarket
+        # （router 在 server lifespan 之外拿不到 atlas.server 全局，测试用
+        # set_market_supplier 接缝注入同一套真实持久化路径）。
+        from atlas.api import skills_market_router as market_router_module
+        from atlas.skills import SkillManager, default_skill_sources
+        from atlas.skills.market import SkillMarket
+        from atlas.skills.registry import SkillRegistry
 
-        def fake_save(bundle: dict[str, Any], skills_dir: Path | None = None) -> Path:
-            target = tmp_path / str(bundle["name"]) / "SKILL.md"
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(str(bundle["skill_md"]), encoding="utf-8")
-            return target
-
-        monkeypatch.setattr(recording_module, "save_skill", fake_save)
-        saved = (await client.post(
-            f"/api/browser/recordings/{started['recording_id']}/to-skill",
-            json={"dry_run": False, "name": "example-login"})).json()
+        user_skills = tmp_path / "skills"
+        workspace = tmp_path / "ws"
+        registry = SkillRegistry(tmp_path / "skill-registry.db")
+        manager = SkillManager(skills_dir=user_skills)
+        for source in default_skill_sources(workspace=workspace, atlas_home=tmp_path):
+            manager.register_skill_source(source)
+        manager.scan_skills_sync()
+        market = SkillMarket(
+            registry, data_dir=tmp_path, user_skills_dir=user_skills,
+            project_skills_dir=workspace / ".claude" / "skills", skill_manager=manager,
+        )
+        market_router_module.set_market_supplier(lambda: market)
+        try:
+            saved = (await client.post(
+                f"/api/browser/recordings/{started['recording_id']}/to-skill",
+                json={"dry_run": False, "name": "example-login"})).json()
+        finally:
+            market_router_module.set_market_supplier(None)
         assert saved["skill_id"] == "example-login"
-        assert Path(saved["path"]).read_text(encoding="utf-8") == saved["skill_md"]
+        saved_dir = Path(saved["path"])
+        saved_path = saved_dir / "SKILL.md"
+        assert saved_dir == user_skills / "community" / "example-login"
+        assert saved_path.read_text(encoding="utf-8") == saved["skill_md"]
+        rows = [row for row in registry.list() if row["name"] == "example-login"]
+        assert rows and (rows[0].get("provenance") or {}).get("origin_kind") == "local_recorded"
 
         missing = await client.get("/api/browser/recordings/rec-nope")
         assert missing.status_code == 404

@@ -341,7 +341,39 @@ async def test_multimodal_envelope_when_main_model_sees_images() -> None:
     image_blocks = [b for b in result["content"] if b.get("type") == "image_url"]
     assert image_blocks and image_blocks[0]["image_url"]["url"].endswith(PNG_B64)
     step = next(e for e in events if e[0] == EVENT_COMPUTER_STEP)
-    assert step[1]["thumbnail"] and step[1]["thumbnail"].endswith(PNG_B64)
+    # Step thumbnails are capped for the replay trail: re-encoded small JPEG.
+    thumbnail = step[1]["thumbnail"]
+    assert thumbnail.startswith("data:image/jpeg;base64,")
+    assert max(Image.open(BytesIO(base64.b64decode(thumbnail.partition(",")[2]))).size) <= 256
+
+
+async def test_step_thumbnail_is_capped_for_large_captures() -> None:
+    events: list[tuple[str, dict[str, Any]]] = []
+    big = BytesIO()
+    Image.new("RGB", (1024, 768), (255, 0, 0)).save(big, format="PNG")
+    backend = FakeBackend()
+    backend.captures = [CaptureResult(
+        mode="som", width=1024, height=768,
+        png_b64=base64.b64encode(big.getvalue()).decode("ascii"),
+        elements=[], app="desktop", window_title="记事本")]
+    runtime = x2computer.X2ComputerRuntime(backend=backend, legacy=FakeLegacy())
+    async with installed_ctx(events, []):
+        result = await runtime.call_tool("computer_observe", {"target": "desktop"})
+
+    assert result["is_error"] is False
+    step = next(e for e in events if e[0] == EVENT_COMPUTER_STEP)
+    thumbnail = step[1]["thumbnail"]
+    assert thumbnail.startswith("data:image/jpeg;base64,")
+    assert max(Image.open(BytesIO(base64.b64decode(thumbnail.partition(",")[2]))).size) <= 256
+    assert len(thumbnail) < 8192 * 2  # tiny event payload, unlike the raw 1024x768 grab
+
+
+def test_cap_thumbnail_truncates_undecodable_payload() -> None:
+    garbage = "data:image/png;base64,%%%" + "x" * 20000
+    capped = x2computer._cap_thumbnail(garbage)
+    assert "缩略图已截断" in capped
+    assert len(capped) < 20000  # bounded even on the fallback path
+    assert x2computer._cap_thumbnail(PNG_B64) == PNG_B64  # non data-URL passthrough
 
 
 async def test_legacy_fallback_for_legacy_only_actions() -> None:

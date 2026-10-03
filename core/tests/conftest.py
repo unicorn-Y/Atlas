@@ -10,7 +10,7 @@ _TEST_ROOT = Path(tempfile.mkdtemp(prefix="atlas-tests-"))
 for _key, _folder in {
     "HOME": "home", "USERPROFILE": "home", "APPDATA": "home/appdata",
     "LOCALAPPDATA": "home/localappdata", "HERMES_HOME": "hermes",
-    "ATLAS_DATA_DIR": "atlas",
+    "ATLAS_DATA_DIR": "atlas", "ATLAS_SKILLS_HOME": "atlas/skills-home",
 }.items():
     _path = _TEST_ROOT / _folder
     _path.mkdir(parents=True, exist_ok=True)

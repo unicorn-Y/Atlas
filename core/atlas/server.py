@@ -854,6 +854,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await local_execution.shutdown()
     if computer_use:
         await computer_use.shutdown()
+    # X2 bridges: cancel pending human cards + release Hermes desktop/browser sessions.
+    from atlas.tools.x2 import browser as x2browser
+    from atlas.tools.x2 import computer as x2computer
+
+    await x2computer.shutdown()
+    await x2browser.shutdown()
     if cua_backend:
         await cua_backend.close()
     if browser_use:

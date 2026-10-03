@@ -3,23 +3,34 @@
 One model-facing surface per domain: computer keeps the legacy Atlas alias
 names (one shared handler), browser exposes its single 13-action surface.
 Handlers run on Hermes' sync tool thread; each call sets the run-scoped
-:class:`X2Context` (events → the run's event queue, human prompts → the run's
-async input callback, approvals → the run's approval callback), awaits the
-bridge on the Atlas loop, then restores.
+:class:`X2Context` (events → the run's event queue, human prompts → the
+run-scoped pending registry that the frontend cards resolve through
+``/api/computer/foreground`` and ``/api/browser/handoff``, approvals → the
+run's approval callback), awaits the bridge on the Atlas loop with a 310 s
+deadline, then restores.
 """
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
+import logging
 import uuid
 from typing import Any, Callable
 
+from atlas.tools.x2 import pending as x2pending
 from atlas.tools.x2.context import (
     X2Context,
     current_context,
     reset_context,
     set_context,
 )
+
+log = logging.getLogger(__name__)
+
+# Mirrors the engine's tool-call deadline (hermes_policy._call_async): a bridge
+# call stuck on a human card / desktop backend must not hang the tool thread.
+_TOOL_CALL_TIMEOUT_SECONDS = 310
 
 _REGISTERED = False
 _X2_TOOL_NAMES: list[str] = []
@@ -29,9 +40,22 @@ _LOCK = None
 def build_x2_context(bound_context: Any) -> X2Context:
     """Build the run-scoped X2Context from the bound Atlas AgentContext."""
     input_callback = getattr(bound_context, "input_callback", None)
+    run_id = str(getattr(bound_context, "run_id", "") or "") or None
+    cancel_event = (
+        getattr(bound_context, "cancel_event", None)
+        or getattr(bound_context, "_cancel_event", None)
+    )
 
     async def wait_input(prompt: str, options: list[str] | None = None) -> str:
-        if input_callback is None:
+        if run_id:
+            # Single resolution channel: the run's cards POST
+            # /api/computer/foreground and /api/browser/handoff, which resolve
+            # the pending registry for this run (input.response never carries
+            # X2 card answers).
+            return await x2pending.wait_for_resolution(
+                run_id, prompt, options, cancel_event=cancel_event,
+            )
+        if input_callback is None:  # detached runs (tests / direct mode) only
             return "give_up"
         call_id = f"x2:{uuid.uuid4().hex}"
         answer = input_callback(call_id, prompt, options)
@@ -40,7 +64,7 @@ def build_x2_context(bound_context: Any) -> X2Context:
         return str(answer or "")
 
     return X2Context(
-        run_id=str(getattr(bound_context, "run_id", "") or "") or None,
+        run_id=run_id,
         session_id=str(getattr(bound_context, "conversation_id", "") or "") or None,
         emit=_make_emit(bound_context),
         approval_callback=getattr(bound_context, "approval_callback", None),
@@ -73,9 +97,17 @@ def _make_sync_handler(
         _agent, bound_context, loop = bound
         token = set_context(build_x2_context(bound_context))
         try:
-            result = asyncio.run_coroutine_threadsafe(
-                bridge_call(name, dict(args or {})), loop,
-            ).result()
+            try:
+                result = asyncio.run_coroutine_threadsafe(
+                    bridge_call(name, dict(args or {})), loop,
+                ).result(timeout=_TOOL_CALL_TIMEOUT_SECONDS)
+            except concurrent.futures.TimeoutError:
+                log.warning("x2.tool_call_timeout", extra={"tool": name})
+                return json.dumps(
+                    {"error": f"X2 工具 {name} 执行超时：{_TOOL_CALL_TIMEOUT_SECONDS} 秒内未完成，"
+                              "已中止等待。请检查目标应用/浏览器是否在等待人工处理，并告知用户。"},
+                    ensure_ascii=False,
+                )
         finally:
             reset_context(token)
         if isinstance(result, str):

@@ -411,14 +411,14 @@ class HermesRuntime:
             tool_call_id: str, name: str, arguments: dict[str, Any],
         ) -> None:
             from atlas.engine.tool_registry import NATIVE_FILE_TOOLS
-            if atlas_agent is None or name.startswith("mcp__") or name in NATIVE_FILE_TOOLS or name in {"todo_list", "session_search", "clarify"}:
+            if atlas_agent is None or name.startswith("mcp__") or name in NATIVE_FILE_TOOLS or name in {"todo_list", "session_search", "clarify"} or name.startswith(("computer_", "browser_")):
                 on_tool_start(tool_call_id, name, arguments)
 
         def atlas_or_native_mcp_tool_complete(
             tool_call_id: str, name: str, arguments: dict[str, Any], result: Any,
         ) -> None:
             from atlas.engine.tool_registry import NATIVE_FILE_TOOLS
-            if atlas_agent is None or name.startswith("mcp__") or name in NATIVE_FILE_TOOLS or name in {"todo_list", "session_search", "clarify"}:
+            if atlas_agent is None or name.startswith("mcp__") or name in NATIVE_FILE_TOOLS or name in {"todo_list", "session_search", "clarify"} or name.startswith(("computer_", "browser_")):
                 on_tool_complete(tool_call_id, name, arguments, result)
 
         def on_event(name: str, data: dict[str, Any]) -> None:
