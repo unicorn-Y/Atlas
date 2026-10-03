@@ -105,7 +105,12 @@ async def test_edit_review_fix_main_chain(chain_backend, chain_root):
                 "permission_mode": "read_only",
             })
         if turns == 5:  # 审查员子代理（真实 delegate 链路里它的模型请求打同一个假服务）
-            return Text(FINDINGS_JSON)
+            # JSON 用代码围栏包住：引擎的 truncated-stop 守卫会对“≥200 字符且结尾
+            # 没有句读”的回复强制续跑一轮，裸 JSON 数组正好命中；那轮续跑会在
+            # 子代理上下文里抢走下一轮的 submit_findings（子代理的事件队列会被
+            # 委派循环丢弃，review.findings 就到不了运行事件流）。围栏结尾的 ```
+            # 在守卫的豁免名单里，子代理一轮回合即干净收尾。
+            return Text("```json\n" + FINDINGS_JSON + "\n```")
         if turns == 6:  # 父运行原样提交 findings
             return ToolCall("submit_findings", {
                 "findings_json": FINDINGS_JSON,

@@ -97,8 +97,15 @@ async def test_daily_edit_diff_review_then_fix(k1_backend):  # noqa: F811
     def review_responder(record):
         text = last_user_text(record)
         if "独立代码审查" in text and "用户请求审查" not in text:
-            # reviewer child: the goal is exactly the reviewer brief
-            return Text(findings)
+            # reviewer child: the goal is exactly the reviewer brief. The JSON is
+            # fenced because the pinned engine's truncated-stop guard re-prompts
+            # any >=200-char reply that ends without sentence punctuation — a
+            # bare JSON array would trigger a child continuation turn, and that
+            # turn would steal the parent's scripted submit_findings call below
+            # (a child-side submit_findings lands on the child's event queue,
+            # which the delegation loop drops, so review.findings never reaches
+            # the run stream).
+            return Text("```json\n" + findings + "\n```")
         if "用户请求审查" in text and not review["dispatched"]:
             review["dispatched"] = True
             return ToolCall("delegate_task", {"tasks": [{"title": "review working tree",

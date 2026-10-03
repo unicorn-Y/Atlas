@@ -464,8 +464,35 @@ class HermesRuntime:
                 answers.append(response)
             return answers
 
+        def _is_compaction_status(text: str) -> bool:
+            """True for the engine's in-flight auto-compaction lifecycle statuses.
+
+            Hermes announces compression start (and heartbeats it while the
+            summary blocks) on the lifecycle status rail behind a stable marker
+            constant. run_turn previously mapped only the completion boundary
+            (``session:compress``), so an in-flight auto-compaction degraded to
+            a generic ``run.status`` line and ``run.compaction.progress`` never
+            surfaced while the summary request was in flight — or at all when
+            an engine-side breaker (cooldown / structural backoff) defers the
+            boundary beyond the run.
+            """
+            if not text:
+                return False
+            try:
+                from agent.conversation_compression import COMPACTION_STATUS_MARKER
+            except Exception:  # noqa: BLE001 — marker constant unavailable in odd engine builds
+                marker = "Compacting context"
+            else:
+                marker = str(COMPACTION_STATUS_MARKER)
+            return marker in text
+
         def on_status(kind: str, text: str | None = None) -> None:
             from gateway.warning_notifications import DiagnosticText
+            detail = text if isinstance(text, str) else str(text or "")
+            if _is_compaction_status(detail):
+                emit({"type": "run.compaction.progress",
+                      "data": {"phase": "summarizing", "detail": detail}})
+                return
             if str(kind) in {"recovery", "retry", "fallback"} or isinstance(text, DiagnosticText):
                 emit({"type": "run.recovery.notice", "data": {"message": text or str(kind)}})
             else:
