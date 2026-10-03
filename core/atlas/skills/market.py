@@ -59,8 +59,11 @@ SKILL_SOURCE_PRIORITY = {
 SCOPE_SOURCES = {"user": "atlas-user", "project": "claude-project"}
 
 # Origin kinds recorded per installed skill in Registry provenance.
+# "agent_learned" marks skills applied through the W7 Skill Workshop proposal
+# flow (atlas.skills.proposals): agent-authored drafts, approved by a reviewer.
 ORIGIN_KINDS = (
     "marketplace", "plugin", "project", "user", "local_recorded", "local_evolved",
+    "agent_learned",
 )
 DEFAULT_ORIGIN_KIND = "marketplace"
 
