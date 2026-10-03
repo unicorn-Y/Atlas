@@ -1,0 +1,131 @@
+"""REST surface for the channel gateway (``/api/channels/*``, integration-map §5).
+
+- ``GET  /api/channels``            — per-channel status (enabled/running/errors/counts)
+- ``PUT  /api/channels/accounts``   — write non-secret channel config (persisted JSON;
+                                       secrets never appear here — use ``POST /credential``)
+- ``POST /api/channels/credential`` — store one channel credential via the OS keyring
+- ``POST /api/channels/test``       — enqueue a test message through the delivery queue
+- ``POST /api/channels/{channel}/inbound`` — webhook ingress (HMAC verified by the manager)
+
+The manager instance is injected at startup by the integration owner via
+:func:`set_channel_manager`; until then the router reports a 503 degraded state.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+
+from atlas.channels import ChannelManager, WebhookError
+from atlas.origin_guard import TOKEN_HEADER, is_trusted
+
+router = APIRouter(prefix="/api/channels", tags=["channels"])
+
+_manager: ChannelManager | None = None
+
+
+def set_channel_manager(manager: ChannelManager | None) -> None:
+    """Wire the gateway instance (called once from the server lifespan)."""
+    global _manager
+    _manager = manager
+
+
+def get_channel_manager() -> ChannelManager:
+    if _manager is None:
+        raise HTTPException(status_code=503, detail="渠道网关尚未启动")
+    return _manager
+
+
+def _require_trusted_origin(request: Request) -> None:
+    """Mirror of the app-level OriginGuard rule for standalone mounts."""
+    trusted = is_trusted(
+        request.headers.get("origin"),
+        request.headers.get(TOKEN_HEADER),
+        fetch_site=request.headers.get("sec-fetch-site"),
+    )
+    if not trusted:
+        raise HTTPException(status_code=403, detail="Requests from this origin are not allowed")
+
+
+@router.get("")
+@router.get("/status")
+async def channel_status() -> dict[str, Any]:
+    """Aggregate channel gateway status."""
+    return get_channel_manager().status()
+
+
+class AccountsPayload(BaseModel):
+    configs: dict[str, dict[str, Any]]
+
+
+@router.put("/accounts", dependencies=[Depends(_require_trusted_origin)])
+async def put_accounts(payload: AccountsPayload) -> dict[str, Any]:
+    """Persist non-secret channel configuration (enabled/account/settings)."""
+    manager = get_channel_manager()
+    saved: dict[str, dict[str, Any]] = {}
+    for name, config in (payload.configs or {}).items():
+        if name not in manager.registry:
+            raise HTTPException(status_code=404, detail=f"未注册的渠道：{name}")
+        cleaned = {k: v for k, v in config.items() if k not in ("secret", "password", "bot_token")}
+        saved[name] = manager.configure(name, cleaned)
+    return {"ok": True, "configs": saved, **_without_channels(manager.status())}
+
+
+class CredentialPayload(BaseModel):
+    channel: str
+    field: str
+    value: str = ""
+
+
+@router.post("/credential", dependencies=[Depends(_require_trusted_origin)])
+async def set_credential(payload: CredentialPayload) -> dict[str, Any]:
+    """Store (or clear, when ``value`` is empty) one channel credential."""
+    manager = get_channel_manager()
+    channel, field_name = payload.channel.strip(), payload.field.strip()
+    if not channel or not field_name:
+        raise HTTPException(status_code=422, detail="channel/field 不能为空")
+    store = manager.credentials
+    try:
+        if payload.value.strip():
+            store.set(channel, field_name, payload.value.strip())
+        else:
+            store.delete(channel, field_name)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"ok": True, "channel": channel, "field": field_name, "set": bool(payload.value.strip())}
+
+
+class TestPayload(BaseModel):
+    channel: str
+    chat_id: str
+    text: str = ""
+
+
+@router.post("/test", dependencies=[Depends(_require_trusted_origin)])
+async def send_test(payload: TestPayload) -> dict[str, Any]:
+    """Send a test message through the durable delivery queue."""
+    manager = get_channel_manager()
+    if payload.channel not in manager.registry:
+        raise HTTPException(status_code=404, detail=f"未注册的渠道：{payload.channel}")
+    key = await manager.send_test(payload.channel, payload.chat_id, payload.text)
+    return {"ok": True, "idempotency_key": key}
+
+
+@router.post("/{channel}/inbound")
+async def channel_inbound(channel: str, request: Request) -> dict[str, Any]:
+    """Webhook ingress — HMAC verified and queued by the gateway."""
+    manager = get_channel_manager()
+    body = await request.body()
+    try:
+        return await manager.handle_webhook(channel, dict(request.headers), body)
+    except WebhookError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+def _without_channels(status: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in status.items() if k != "channels"}
+
+
+__all__ = ["router", "set_channel_manager", "get_channel_manager"]
