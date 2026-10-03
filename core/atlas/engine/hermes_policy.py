@@ -23,8 +23,9 @@ _ATLAS_WRITE_TOOLS = {
     "kanban_create_board", "kanban_create_task", "kanban_update_task",
     "create_document", "create_spreadsheet", "create_presentation", "run_checks",
     "delegate_task", "delegate_parallel", "subtask_message",
-    "computer_click", "computer_type", "computer_key", "computer_scroll",
-    "computer_drag", "computer_hotkey", "computer_use",
+    # X2 computer surface (legacy alias names); observe is read-only and
+    # browser_*/clipboard-style names are classified via is_x2_write_tool.
+    "computer_window", "computer_mouse", "computer_keyboard", "computer_clipboard",
 }
 
 

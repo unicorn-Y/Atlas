@@ -322,4 +322,25 @@ async def uninstall_skill_route(name: str) -> dict[str, Any]:
         raise _http_error(exc) from None
 
 
+@router.delete("/api/skills/market/{name}", dependencies=[Depends(_require_trusted_origin)])
+async def uninstall_skill_market_route(name: str) -> dict[str, Any]:
+    """Alias of the DELETE /api/skills/{name} contract at the market prefix —
+    the frontend's uninstall call targets this path (skillsMarketApi.ts)."""
+    try:
+        return get_market().uninstall(name)
+    except MarketError as exc:
+        raise _http_error(exc) from None
+
+
+@router.patch("/api/skills/market/{name}/enabled", dependencies=[Depends(_require_trusted_origin)])
+async def set_skill_enabled(name: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """PATCH {enabled: bool} — frontend enable/disable toggle (skillsMarketApi.ts)."""
+    enabled = bool((payload or {}).get("enabled", True))
+    try:
+        market = get_market()
+        return market.enable(name) if enabled else market.disable(name)
+    except MarketError as exc:
+        raise _http_error(exc) from None
+
+
 __all__ = ["router", "set_market_supplier", "get_market", "save_local_skill_bundle"]

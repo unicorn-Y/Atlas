@@ -901,7 +901,8 @@ app.include_router(models_router)
 
 # X2 / X4 / X5 routers — mounted before any `/api/skills/...` literal routes are
 # declared below so router paths (e.g. /api/skills/updates, /api/skills/market/*)
-# win over path-parameter routes. Each router carries its own OriginGuard dependency.
+# win over path-parameter routes. browser/skills-market routers re-apply the
+# origin check per route; computer/evolution rely on the app-level OriginGuard.
 from atlas.api.browser_router import router as browser_router  # noqa: E402
 from atlas.api.computer_router import router as computer_router  # noqa: E402
 from atlas.api.evolution_router import evolution_router  # noqa: E402

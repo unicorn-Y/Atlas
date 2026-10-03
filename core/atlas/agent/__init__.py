@@ -1250,8 +1250,9 @@ class AgentOrchestrator:
                                     "remember", "project_note", "create_checkpoint", "restore_checkpoint",
                                     "kanban_create_board", "kanban_create_task", "kanban_update_task",
                                     "subtask_message",
-                                    "computer_click", "computer_type", "computer_key",
-                                    "computer_scroll", "computer_drag", "computer_hotkey", "computer_use"}
+                                    # X2 computer surface (legacy alias names); observe is read-only.
+                                    "computer_window", "computer_mouse", "computer_keyboard",
+                                    "computer_clipboard"}
                         or (fn_name == "local_file" and fn_args.get("action") in {
                             "write", "append", "mkdir", "copy", "move", "delete",
                         })
