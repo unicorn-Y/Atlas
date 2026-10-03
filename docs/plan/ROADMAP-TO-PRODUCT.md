@@ -77,16 +77,15 @@ Atlas 做到下面全部，才算「成品」：
 - **接口**：所有 HTTP / WS 都过 OriginGuard，不能放宽。
 - **语言**：界面和回复用中文。
 
-## 三、现在在哪（2026-10-02）
+## 三、现在在哪（2026-10-03）
 
 | 波 | 状态 |
 | --- | --- |
-| W06、W07 | 完成；W07B 作废，内容已分进 C1、C3、C5 |
-| **C1 换内核** | 施工完成；独立验收收尾中，Codex 额度用完暂停。剩下的见任务书 `ATLAS-C1R-FINISH.md` |
-| C2–C6 | 任务书已写好，按顺序做 |
-| T1、X1–X6、R1、R2 | 任务书已写好 |
-
-有一个分支 `wip/c3-frontend-from-laptop`，是旧会话按旧内核写的 C3 界面草稿。C3 时作为参考，**不要直接合并**。
+| W06–W08、C1–C6 | 完成（C1R 收口，见各 result 文件） |
+| **ATLAS-MEGA-LATEST-DAILY-READY** | **完成**（2026-10-03）：来源冻结、Hermes upstream 同步（fork `27c63095b0`）、C1–C6 latest-best 刷新、X2 Computer/Browser、X4 Skill Market、X5 Self-Evolution、集成去重、K1 检查修复。结果：`tasks/results/ATLAS-MEGA-LATEST-DAILY-READY.result.md` |
+| T1（真实模型横向） | 下一步，需要用户参与 |
+| X1、X3、X6、X7 | 任务书在 `tasks/taskbooks/`（X-EXTERNAL-PHASE 大框架）；X2/X4/X5 已随 Mega 完成，其余按需重写任务书后做 |
+| R1、R2 | 待 T1 后 |
 
 ## 四、全部波次和顺序
 

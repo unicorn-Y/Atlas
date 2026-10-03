@@ -53,9 +53,10 @@ FETCH_TIMEOUT_SECONDS = 60.0
 
 # Stable discovery priority for duplicate skill names (atlas.skills.__init__).
 SKILL_SOURCE_PRIORITY = {
-    "atlas": 10, "hermes": 15, "claude-user": 20, "claude-project": 30, "plugin": 60,
+    "atlas": 10, "atlas-user": 12, "hermes": 15, "claude-user": 20,
+    "claude-project": 30, "plugin": 60,
 }
-SCOPE_SOURCES = {"user": "atlas", "project": "claude-project"}
+SCOPE_SOURCES = {"user": "atlas-user", "project": "claude-project"}
 
 # Origin kinds recorded per installed skill in Registry provenance.
 ORIGIN_KINDS = (
@@ -1260,8 +1261,11 @@ def default_market(
     cfg = get_config()
     atlas_root = None
     if skill_manager is not None:
-        source = getattr(skill_manager, "_sources", {}).get("atlas")
-        atlas_root = Path(source.root) if source is not None else None
+        sources = getattr(skill_manager, "_sources", {})
+        # User-scope installs land in the writable atlas-user source when the
+        # isolation seam split it from the read-only builtin "atlas" root.
+        writable = sources.get("atlas-user") or sources.get("atlas")
+        atlas_root = Path(writable.root) if writable is not None else None
     # Canonical atlas source root (same symbol default_skill_sources uses).
     skills_dir = atlas_root or SKILLS_DIR
     workspace_value = load_user_settings().get("default_workspace")

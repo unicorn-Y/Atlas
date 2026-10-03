@@ -171,6 +171,25 @@
 - 用量统计、提示缓存、输出上限、出错切换模型
 - 外部 Agent 执行（Claude Code、Codex 作为可切换选项，走 `runtime/backends.py`，不经过新内核）
 
+## 11.5 外部功能（2026-10-03，ATLAS-MEGA-LATEST-DAILY-READY 交付）
+
+对标与实施记录见 `docs/research/2026-10-03-mega-latest/`；完整结果见 `tasks/results/ATLAS-MEGA-LATEST-DAILY-READY.result.md`。
+
+| # | 能力 | 最强做法 | Atlas 现状（提交见 result） | 波次 |
+| --- | --- | --- | --- | --- |
+| X2-1 | 后台电脑操作（不抢鼠标） | Hermes computer_use + cua-driver 后台调度 | ✔ `core/atlas/tools/x2/computer.py`:后台优先，需前台经确认卡（pending 单通道），vision 路由，PID/标题重寻，步进回放（缩略图有界） | X2 |
+| X2-2 | 旧工具名兼容 | — | ✔ 5 个旧名别名到单一 runtime；hermes_policy 写分类覆盖全部 x2 名（观察类豁免） | X2 |
+| X2-3 | 浏览器四模式 + 单一模型面 | Hermes browser stack（a11y `@eN`、real-profile 复制、CDP、扩展路由、vault 句柄化填表） | ✔ `core/atlas/tools/x2/browser.py`:13 工具单 handler；handoff 三键原点续跑；密钥全链不落结果/事件/日志（测试断言） | X2 |
+| X2-4 | 演示→技能、重放、单步自愈 | Stagehand/Browser Use 逻辑（本地 OSS 无 turnkey） | ✔ `recording.py`:自动捕获（站点/指纹/@eN/参数）→ 零模型重放 → 单步模型接管 → to-skill 落统一 registry；删除+修剪 | X2 |
+| X4-1 | 技能市场多源 | Hermes Skills Hub 8 源；skills.sh API v1；ClawHub | ✔ `core/atlas/skills/market.py`:单 registry（skill-registry.db provenance），hub 状态强制迁 data 目录；逐源代理/超时/中文降级；公平轮询合并（本地 tap 优先） | X4 |
+| X4-2 | 安装/更新/卸载/启停/预览 | 同上 + CC 插件市场体验 | ✔ search/detail/install(409 冲突+overwrite)/updates/update/update-all/uninstall/PATCH enabled/sources；渐进加载保持 | X4 |
+| X4-3 | 本机生成技能标注 | — | ✔ origin_kind: marketplace/plugin/project/user/local_recorded/local_evolved，前端徽章 | X4 |
+| X5-1 | 上游 watcher | — | ✔ `core/atlas/evolution/watcher.py`:本地 git 镜像优先 + GitHub REST 兜底，缓存离线可读 | X5 |
+| X5-2 | 能力 diff 分级 | — | ✔ NEW/BETTER/ALREADY/REGRESSION_REMOVED/IRRELEVANT；来源删功能不自动建议删（advisory=false） | X5 |
+| X5-3 | parity 建议 + 任务书草稿 + 批准分支 | — | ✔ parity 文本 proposal（不写 docs/plan）；ATLAS-AUTO-*.draft.md；批准→隔离 worktree+merge proposal，永不自动 merge | X5 |
+| X5-4 | 技能自学/curator | Hermes curator/background_review | ✔ 重复成功/显式保存/录制束 → 候选 → 预览批准 → 统一 SkillManager（local_evolved，幂等版本递增）；去重/合并/过时维护；Memory 未动 | X5 |
+| X5-5 | 自我进化 UI | — | ✔ 侧栏「自动追新」页：源/diff/parity/草稿/分支/候选 六区 | X5 |
+
 ## 12. 不在本表（冻结，等主体实测通过后再排）
 
 原 W08（MCP Apps、连接器目录、飞书/钉钉/邮件渠道、Webhook 等触发器）、W09（cua 后台电脑操作、浏览器全套、扩展）、W10（局域网网页版、设备互联、分享链接、Univer、仪表盘）、W12（上游自动跟踪、产品动态、技能自学）、W13（语音前端、统一入口、A2A、协作、创作、无界面运行）。任务书保留在 `tasks/taskbooks/`，文件头已标「冻结」。

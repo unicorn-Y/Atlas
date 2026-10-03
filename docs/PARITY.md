@@ -398,3 +398,13 @@
 2. 竞品情报（标杆 release/changelog）出现新能力时：已在目录里的，更新「参考」列；目录里没有的，追加 F211 起的新编号，标上来源和日期。
 3. 标 🟡 → ✅ 的判断标准：用户不看文档、不敲命令，能在界面里用到。
 4. ⚖️ 项由你决定后改成具体状态，并把决定写进 `PLAN.md`。
+
+---
+
+## 2026-10-03 X2 / X4 / X5(外部功能刷新,ATLAS-MEGA-LATEST-DAILY-READY)
+
+- **技能市场页**(侧栏「技能」):市场/已安装/更新三标签;来源徽章(市场/插件/项目/用户/本机录制/自学候选);同名冲突中文对话框 + 覆盖安装;SKILL.md 预览;断网/代理失败中文提示不阻塞;源管理(目录 tap + GitHub 仓库,逐源代理)。
+- **自动追新页**(侧栏「自动追新」):上游源管理、能力 diff 徽章(NEW/上游更强/已具备/上游移除/无关)、KEEP/UPGRADE/REPLACE 建议、任务书草稿批准、隔离分支状态、merge proposal、技能候选预览批准。
+- **电脑操作**:前台确认卡(时间线)、顶部前台边缘条(移动鼠标即暂停,`/api/computer/pause`)、操作回放面板(`/api/computer/runs/{id}/steps`,缩略图 256px 封顶)、设置页电脑状态(doctor 就绪/驱动/诊断)。
+- **浏览器**:handoff 三键卡(在面板打开/我弄好了/做不了)、浏览器面板内置「操作录制(可存成技能)」步骤列表 + SKILL.md 预览保存、设置页四模式(独立/复制配置/CDP/扩展)+ 凭据库管理(密码只写不显)。
+- **事件**:runtimeEvents 新增 computer.foreground_required/resumed/denied/step、browser.handoff_required/resolved/panel.sync/step、browser.vault_fill_denied。

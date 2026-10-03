@@ -558,7 +558,7 @@ class SkillManager:
 # Higher priority wins duplicate skill names. The ladder mirrors the custom
 # command sources (atlas/runtime/commands.py): bundled Atlas lowest, then
 # opt-in Hermes, user-level Claude, project-level Claude, plugins on top.
-SKILL_SOURCE_PRIORITY = {"atlas": 10, "hermes": 15, "claude-user": 20, "claude-project": 30, "plugin": 60}
+SKILL_SOURCE_PRIORITY = {"atlas": 10, "atlas-user": 12, "hermes": 15, "claude-user": 20, "claude-project": 30, "plugin": 60}
 
 
 def plugin_skill_sources(
@@ -601,14 +601,19 @@ def default_skill_sources(
     - ``claude-project``: ``<workspace>/.claude/skills`` (priority 30).
     - ``plugin:*``: caller-provided plugin skill dirs (priority 60).
     """
-    if atlas_home:
-        atlas_root = Path(atlas_home).expanduser() / "skills"
-    else:
-        # Test/isolation seam: point the writable atlas source at a temp root
-        # (conftest sets ATLAS_SKILLS_HOME so suites never touch the repo).
-        env_home = os.environ.get("ATLAS_SKILLS_HOME", "").strip()
-        atlas_root = Path(env_home) if env_home else SKILLS_DIR
+    atlas_root = Path(atlas_home).expanduser() / "skills" if atlas_home else SKILLS_DIR
     sources = [SkillSource("atlas", atlas_root, SKILL_SOURCE_PRIORITY["atlas"], layout="category")]
+    # Test/isolation seam: when ATLAS_SKILLS_HOME is set, BUILTIN skills keep
+    # loading from the repository root (read-only) while user-acquired skills
+    # (market installs, X2 recordings, X5 candidates) land in the temp root —
+    # suites never write the repo. Priority sits just below the builtins so a
+    # same-name builtin still wins.
+    env_home = os.environ.get("ATLAS_SKILLS_HOME", "").strip()
+    if env_home and not atlas_home:
+        sources.append(SkillSource(
+            "atlas-user", Path(env_home), SKILL_SOURCE_PRIORITY["atlas-user"],
+            layout="category",
+        ))
     if hermes_skills_dir:
         sources.append(SkillSource(
             "hermes", Path(hermes_skills_dir).expanduser(),
