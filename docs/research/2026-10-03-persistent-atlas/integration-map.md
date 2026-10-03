@@ -35,7 +35,7 @@ core/atlas/groups/                   # W8（二波）
 core/atlas/channels/                 # W2a: contract/routing/ingress/delivery/gating/credentials/manager + telegram/webhook/email
                                      # W2b: slack/feishu/dingtalk/wecom
   __init__.py        ChannelManager（gateway 唯一 owner：连接注册表/生命周期/reconnect backoff/liveness）
-  contract.py        ChannelAdapter ABC + MessageEvent/MessageType 归一化（port Hermes 形状）
+  contract.py        ChannelAdapter ABC + MessageEvent/MessageType 归一化（**controller 已写定并冻结，W2a/W2b 直接 import，不得改**）
   routing.py         bindings + resolve_route（port OpenClaw peer→parentPeer→wildcard→…→唯一兜底）
   ingress.py         SQLite durable ingress 队列 + claim + 墓碑去重（port OpenClaw dedupe 语义）
   delivery.py        出站投递队列 + 重试退避 + 幂等键
