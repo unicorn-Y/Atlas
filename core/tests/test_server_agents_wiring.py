@@ -5,12 +5,14 @@ isolated-backend idea (scripted provider, everything else real) but the app runs
 via TestClient so the lifespan wiring (agent router mount, channel gateway,
 heartbeat service, automation engine, telegram gating) is exercised as shipped.
 
-Covers (controller spec §7):
+Covers (controller spec §7 + W8/W7 integration):
 - ws run.start with ``agent_id`` runs the full chain and projects the agent's
   runtime status (working while the run lives → idle once it settles);
 - run.start without ``agent_id`` keeps the legacy behaviour;
-- unknown agent / W8 group_id → run.failed validation;
-- /api/agents CRUD over the real mounted router.
+- unknown agent → run.failed validation; W8 group_id → real room drive
+  (validated group/membership, orchestrated rounds, shared timeline);
+- W7→W10 bridge: a learned+approved skill reaches the agent run's system prompt;
+- /api/agents CRUD + session lineage over the real mounted router.
 """
 
 from __future__ import annotations
@@ -96,17 +98,26 @@ def _wait_status(client: TestClient, agent_id: str, status: str, timeout: float 
 
 
 def test_new_w10_routers_are_mounted(client: TestClient) -> None:
-    import inspect
-
-    import atlas.server as server
-
     # New FastAPI wraps included routers lazily (_IncludedRouter), so probe the
     # live endpoints instead of scanning app.routes.
     for path in ("/api/channels", "/api/automations", "/api/devices",
-                 "/api/local/models/status", "/api/agents"):
+                 "/api/local/models/status", "/api/agents", "/api/groups"):
         assert client.get(path).status_code == 200, path
-    # W8 groups mount point: the gate in _handle_run_start must exist.
-    assert "group chat wiring pending" in inspect.getsource(server._handle_run_start)
+
+
+def test_group_singletons_are_bound_with_real_dispatcher(client: TestClient) -> None:
+    """Lifespan binds GroupService + GroupOrchestrator with the real dispatcher."""
+    from atlas.api.group_router import get_group_orchestrator, get_group_service
+    from atlas.groups import unbound_dispatcher
+
+    import atlas.server as server
+
+    service = get_group_service()
+    orchestrator = get_group_orchestrator()
+    assert service is not None and orchestrator is not None
+    assert orchestrator._service is service
+    assert orchestrator._dispatcher is not unbound_dispatcher
+    assert server.gateway_bridge is not None  # dispatcher's session-map dependency
 
 
 def test_run_start_with_agent_id_full_chain_and_status_projection(
@@ -200,10 +211,96 @@ def test_run_start_unknown_agent_fails_validation(client: TestClient, tmp_path: 
     assert "persistent agent not found" in failed["detail"]
 
 
-def test_run_start_group_id_is_gated_until_w8(client: TestClient, tmp_path: Path) -> None:
-    failed = _run_until_failed(client, tmp_path, {"group_id": "room-1"})
-    assert failed["category"] == "validation"
-    assert "group chat wiring pending" in failed["detail"]
+def test_run_start_group_id_drives_room_and_records_timeline(
+    client: TestClient, tmp_path: Path, fake_llm: FakeLLMServer,
+) -> None:
+    """W8 acceptance: one inbound group message → rounds → shared timeline.
+
+    Two persistent agents form the room; run.start with group_id (from the user)
+    must drive the members through the REAL dispatcher (fake LLM sees the group
+    prompts) and append both the user message and the member reply to the room
+    log. round_caps max_rounds=1 keeps the drive to a single round.
+    """
+    _create_agent(client, tmp_path, "alice")
+    _create_agent(client, tmp_path, "bob")
+    created = client.post("/api/groups", json={
+        "id": "team", "name": "Team",
+        "member_agent_ids": ["alice", "bob"],
+        "round_caps": {"max_rounds": 1},
+    })
+    assert created.status_code == 201, created.text
+
+    def group_responder(record: dict) -> Text:
+        messages = json.dumps((record.get("body") or {}).get("messages") or [])
+        # "You are @alice" — the addressee line, not the participant roster.
+        return Text("hi from alice") if "You are @alice" in messages else Text("(pass)")
+
+    fake_llm._responder = group_responder
+
+    run_id = uuid.uuid4().hex
+    with client.websocket_connect("/ws/chat") as ws:
+        ws.send_text(json.dumps({
+            "type": "run.start", "run_id": run_id, "content": "hello group",
+            "group_id": "team",
+        }))
+        fake_llm.wait_for_requests(1, timeout=30)
+        final = None
+        for _ in range(200):
+            event = json.loads(ws.receive_text())
+            if event.get("run_id") != run_id:
+                continue
+            if event["event"] == "run.completed":
+                final = event
+                break
+            if event["event"] == "run.failed":
+                pytest.fail(f"run failed: {event['data']}")
+    assert final is not None
+    report = final["data"]["group_turn"]
+    assert report["status"] in {"capped", "settled"}
+    timeline = client.get("/api/groups/team/timeline").json()
+    entries = timeline["entries"]
+    assert [entry["kind"] for entry in entries] == ["user", "member"], entries
+    assert report["messages"] >= 1 and "alice" in report["speakers"], report
+
+    assert entries[0]["actor"] == "user" and entries[0]["text"] == "hello group"
+    assert entries[1]["actor"] == "alice" and entries[1]["text"] == "hi from alice"
+
+    # The member turns went through the real dispatcher: the fake LLM saw the
+    # orchestrator's group-round prompt for alice.
+    group_requests = [
+        request for request in fake_llm.main_requests()
+        if "[Group chat:" in json.dumps(request.get("messages") or [])
+    ]
+    assert group_requests
+    assert any("@alice" in json.dumps(request["messages"]) for request in group_requests)
+
+    # The member's group session key landed in the agent's session lineage.
+    sessions = client.get("/api/agents/alice/sessions").json()["sessions"]
+    assert any(item["session_key"] == "agent:alice:group:team" for item in sessions)
+    assert any(
+        (item.get("conversation") or {}).get("title") == "群聊会话 team"
+        for item in sessions
+    )
+
+
+def test_run_start_group_id_validates_group_and_membership(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    _create_agent(client, tmp_path, "agent-insider")
+    _create_agent(client, tmp_path, "agent-outsider")
+    created = client.post("/api/groups", json={
+        "id": "room-2", "name": "Room", "member_agent_ids": ["agent-insider"],
+    })
+    assert created.status_code == 201, created.text
+
+    missing = _run_until_failed(client, tmp_path, {"group_id": "ghost-room"})
+    assert missing["category"] == "validation"
+    assert "group not found" in missing["detail"]
+
+    outsider = _run_until_failed(
+        client, tmp_path, {"group_id": "room-2", "agent_id": "agent-outsider"})
+    assert outsider["category"] == "validation"
+    assert "not a member" in outsider["detail"]
 
 
 def test_agents_crud_over_real_app(client: TestClient, tmp_path: Path) -> None:
@@ -261,3 +358,105 @@ def test_gateway_singletons_and_legacy_telegram_gating(client: TestClient) -> No
     # versa) — the two stacks must never double-poll. Here both starts are
     # inert; assert the gating math the lifespan applies.
     assert not (server.channel_manager.configs.get("telegram") or {}).get("enabled")
+
+
+# ---------------------------------------------------------------------------
+# W7 skill-workshop bridge (scenario 16) + agent session lineage
+# ---------------------------------------------------------------------------
+
+LEARNED_SKILL_BODY = "SCENARIO16-MARKER learned handoff instructions 9f3a"
+
+
+def _skill_md(name: str, version: str = "1.0.0") -> str:
+    return (
+        "---\n"
+        f"name: {name}\n"
+        f"version: {version}\n"
+        "description: Learned by an agent run\n"
+        "---\n"
+        f"# {name}\n\n{LEARNED_SKILL_BODY}\n"
+    )
+
+
+def test_learned_skill_reaches_agent_run_system_prompt(
+    client: TestClient, tmp_path: Path, fake_llm: FakeLLMServer,
+) -> None:
+    """Scenario 16: proposal → approve → the learned skill joins the agent's run."""
+    _create_agent(client, tmp_path, "agent-learn")
+
+    proposal = client.post("/api/skill-proposals", json={
+        "skill_name": "learned-handoff",
+        "files": {"SKILL.md": _skill_md("learned-handoff")},
+        "origin": {"agent_id": "agent-learn"},
+        "goal": "agent kept repeating a fix-up flow",
+        "evidence": "3 successful runs",
+    })
+    assert proposal.status_code == 201, proposal.text
+    proposal_id = proposal.json()["proposal_id"]
+
+    approved = client.post(
+        f"/api/skill-proposals/{proposal_id}/approve", json={"reviewer_note": "safe"})
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "applied"
+
+    # The learned relation is default-enabled for the origin agent (W7 store).
+    skills = client.get("/api/agents/agent-learn/skills").json()["skills"]
+    row = next(item for item in skills if item["skill_name"] == "learned-handoff")
+    assert row["relation"] == "learned" and row["effective"] is True
+
+    conversation = client.post("/api/conversations", json={"title": "w10-learned"}).json()["id"]
+    run_id = uuid.uuid4().hex
+    with client.websocket_connect("/ws/chat") as ws:
+        ws.send_text(json.dumps({
+            "type": "run.start", "run_id": run_id, "content": "continue the flow",
+            "conversation_id": conversation, "agent_id": "agent-learn",
+        }))
+        fake_llm.wait_for_requests(1, timeout=30)
+        final = None
+        for _ in range(200):
+            event = json.loads(ws.receive_text())
+            if event.get("run_id") != run_id:
+                continue
+            if event["event"] == "run.completed":
+                final = event
+                break
+            if event["event"] == "run.failed":
+                pytest.fail(f"run failed: {event['data']}")
+    assert final is not None
+    # The skill body rode the run's system prompt to the model.
+    assert any(
+        LEARNED_SKILL_BODY in json.dumps(request.get("messages") or [])
+        for request in fake_llm.main_requests()
+    )
+
+
+def test_agent_sessions_lists_gateway_lineage_with_conversation_metadata(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    """``/api/agents/{id}/sessions`` reads the gateway session map + conversations."""
+    import atlas.server as server
+
+    _create_agent(client, tmp_path, "agent-sess")
+    assert client.get("/api/agents/agent-sess/sessions").json()["sessions"] == []
+
+    conversation = client.post(
+        "/api/conversations", json={"title": "lineage conversation"}).json()
+    key = "agent:agent-sess:telegram:direct:1001"
+    server.gateway_bridge.sessions.put(key, conversation["id"])
+
+    listing = client.get("/api/agents/agent-sess/sessions").json()
+    assert [item["session_key"] for item in listing["sessions"]] == [key]
+    row = listing["sessions"][0]
+    assert row["conversation_id"] == conversation["id"]
+    assert row["conversation"]["id"] == conversation["id"]
+    assert row["conversation"]["title"] == "lineage conversation"
+
+    # Another agent's lineage never leaks across the prefix filter.
+    server.gateway_bridge.sessions.put("agent:someone-else:main", conversation["id"])
+    assert [
+        item["session_key"]
+        for item in client.get("/api/agents/agent-sess/sessions").json()["sessions"]
+    ] == [key]
+
+    # Unknown agents still 404 before any lineage is read.
+    assert client.get("/api/agents/ghost-agent/sessions").status_code == 404

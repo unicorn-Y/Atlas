@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from atlas.api import agent_router
+from atlas.gateway_service import SessionMapper
 from atlas.persistent_agents import PersistentAgentService, session_key
 from atlas.persistent_agents.store import (
     BUILTIN_ROLE_IDS,
@@ -360,7 +362,9 @@ def test_api_full_flow(client: TestClient) -> None:
     assert removed.status_code == 200 and removed.json()["channels"] == []
 
     sessions = client.get(f"/api/agents/{agent_id}/sessions").json()
-    assert sessions == {"agent_id": agent_id, "sessions": [], "note": "wired by integration"}
+    # Wired in W8: reads the gateway session mapper (no sessions for a fresh agent).
+    assert sessions["agent_id"] == agent_id
+    assert sessions["sessions"] == []
 
     assert client.delete(f"/api/agents/{agent_id}").json() == {"status": "deleted"}
     assert client.get(f"/api/agents/{agent_id}").status_code == 404
@@ -382,3 +386,55 @@ def test_api_builtin_protection_and_errors(client: TestClient) -> None:
     })
     assert bad.status_code == 422
     assert "interval_minutes" in bad.json()["detail"]
+
+
+# -- restart survival (P11 acceptance map §2.1, scenario 1) -------------------
+
+
+def test_agent_identity_survives_service_restart(tmp_path: Path) -> None:
+    root = tmp_path / "profiles-root"
+    first = PersistentAgentService(store=PersistentAgentStore(root))
+    record = make_agent(first)
+    first.set_heartbeat(record["id"], {
+        "enabled": True, "interval_minutes": 15,
+        "active_hours": "09:00-23:00", "prompt": "巡检并汇报",
+        "delivery": "telegram:12345",
+    })
+    first.add_channel(record["id"], "telegram", "42")
+    first.set_status(record["id"], "working")
+    first.set_status(record["id"], "idle", error="巡检完成，无异常")
+
+    # A SECOND service over the SAME store root must see the identical agent.
+    second = PersistentAgentService(store=PersistentAgentStore(root))
+    revived = second.get(record["id"])
+    assert revived is not None
+    assert revived["id"] == record["id"]
+    assert revived["name"] == "值班助手"
+    assert revived["model"] == "claude-sonnet-4"
+    assert revived["created_at"] == record["created_at"]
+    assert second.get_heartbeat(record["id"]) == {
+        "enabled": True, "interval_minutes": 15, "active_hours": "09:00-23:00",
+        "prompt": "巡检并汇报", "delivery": "telegram:12345", "isolated_session": True,
+    }
+    assert second.list_channels(record["id"]) == [
+        {"channel": "telegram", "target": "42", "account": ""},
+    ]
+    status = second.get_status(record["id"])
+    assert status["status"] == "idle"
+    assert status["error"] == "巡检完成，无异常"
+
+
+def test_session_mapper_mapping_survives_restart(tmp_path: Path) -> None:
+    db_path = tmp_path / "channels.sqlite"
+    mapper = SessionMapper(db_path)
+    mapper.put("agent:alice:telegram:123", "conv-1")
+    mapper.close()
+
+    reopened = SessionMapper(db_path)
+    try:
+        assert reopened.get("agent:alice:telegram:123") == "conv-1"
+        # Idempotent mapping: the first conversation id wins on conflict.
+        reopened.put("agent:alice:telegram:123", "conv-2")
+        assert reopened.get("agent:alice:telegram:123") == "conv-1"
+    finally:
+        reopened.close()

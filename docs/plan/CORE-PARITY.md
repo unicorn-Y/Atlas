@@ -190,6 +190,24 @@
 | X5-4 | 技能自学/curator | Hermes curator/background_review | ✔ 重复成功/显式保存/录制束 → 候选 → 预览批准 → 统一 SkillManager（local_evolved，幂等版本递增）；去重/合并/过时维护；Memory 未动 | X5 |
 | X5-5 | 自我进化 UI | — | ✔ 侧栏「自动追新」页：源/diff/parity/草稿/分支/候选 六区 | X5 |
 
+## 11.6 常驻个人 Agent（2026-10-04，ATLAS-MEGA-PERSISTENT-ALWAYS-ON 交付）
+
+对标与实施记录见 `docs/research/2026-10-03-persistent-atlas/`；完整结果见 `tasks/results/ATLAS-MEGA-PERSISTENT-ALWAYS-ON.result.md`。
+
+| # | 能力 | 最强做法 | Atlas 现状（提交见 result） | 波次 |
+| --- | --- | --- | --- | --- |
+| P2-1 | Persistent Agent（长期 Agent 身份） | OC config-agents/agents 语义 + HM hermes-bots 产品面 | ✔ `core/atlas/persistent_agents/`：stable agent_id、模型/指令/技能/工具门/permission/workspace、session lineage（`agent:<id>:…` 键语法）、heartbeat 配置、channel bindings、状态投影；`/api/agents` 全套 + 重启持久 | W1 |
+| P2-2 | 多 Agent 群聊（建群/@指定/轮转/handoff） | HM group-chat 产品面（canonical chat、roster、cron） | ✔ `core/atlas/groups/`：GroupOrchestrator（轮转队列 + handoff 插队 + round caps + epoch stop）、timeline 持久、REST 群面；server 接线真 dispatcher（复用引擎，无第二模型循环） | W8 |
+| P3-1 | Gateway（常驻 ingress/routing） | OC gateway 状态机 + gateway-protocol | ✔ `core/atlas/channels/`（manager/routing/gating/ingress/delivery 凭据）+ `core/atlas/gateway_service.py`（SessionMapper 渠道↔会话同源、失败/停止单条回执）；channel session 与桌面同一 conversation | W2/W8 |
+| P3-2 | 7 类渠道适配器 | HM plugins/platforms Python 直搬 | ✔ telegram/webhook/email 原生，slack/feishu/dingtalk/wecom 移植 hermes `c8301ea6c9`；统一 plugin contract，其余渠道即插件 | W2 |
+| P4 | Heartbeat 主动性 | OC heartbeat-runner/guard 链 | ✔ `core/atlas/heartbeat/`：guard 链（disabled→quiet-hours→preflight→busy→cooldown）、wake bus、outcome 契约（无变化=零投递零模型）、重启续跑、per-agent 稳定 session；与 W4 reconcile 成 heartbeat-<id> 自动化 | W3 |
+| P5 | 可靠 Cron/自动化 | DBOS durable + OC cron 语义 + HM cron 产品面 | ✔ `core/atlas/automation/`：one-shot/recurring/interval/cron（DBOS create_schedule）、幂等 sync、no-duplicate fire、run history、delivery outcome、no-agent script、channel 回投；legacy scheduler 默认关 + 导入后暂停（P10 去双触发） | W4/P10 |
+| P6 | 设备注册/接管 | OC node/pairing/placement + HM Bot Screen takeover | ✔ `core/atlas/devices/`：device registry（presence 投影/last_seen/Atlas-owned）、TakeoverStateMachine、handoff 卡全生命周期 REST | W5 |
+| P7 | 托管本地模型 | HM hermes_cli/local_runtime 直用 + OC 激活 probe | ✔ `core/atlas/engine/local_runtime_adapter.py`：thin adapter（pinned fork `ef4571dec5` 进程内 import）、安装/下载/导入/启停/诊断；激活闸门 = health + 真实 tool-call probe（nonce 回环），失败不升默认 | W6 |
+| P8 | Skill Workshop 升级 | OC skill workshop + HM curator | ✔ `core/atlas/skills/`：proposal/pending/diff/approve/rollback（revisionHash）、per-agent collections（marketplace/plugin/project/user/local_recorded/local_evolved/agent_learned）、批准后 learned 技能进 run（W8 桥接） | W7/W8 |
+| P9 | UI 一次收口 | HM hermes-bots 信息架构 | ✔ Agents 页（详情 8 tabs）、群聊、设备/接管卡、渠道/本地模型设置、自动化页重做；左栏单组入口，浅色主题组件复用 | W8 |
+| P10 | 集成去重（单一 owner） | — | ✔ 审计 11 项：9 CLEAN；修复 legacy scheduler 双触发（默认关+导入暂停）、telegram 网关/旧轮询互斥补运行时半边 | P10 |
+
 ## 12. 不在本表（冻结，等主体实测通过后再排）
 
 原 W08（MCP Apps、连接器目录、飞书/钉钉/邮件渠道、Webhook 等触发器）、W09（cua 后台电脑操作、浏览器全套、扩展）、W10（局域网网页版、设备互联、分享链接、Univer、仪表盘）、W12（上游自动跟踪、产品动态、技能自学）、W13（语音前端、统一入口、A2A、协作、创作、无界面运行）。任务书保留在 `tasks/taskbooks/`，文件头已标「冻结」。

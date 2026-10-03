@@ -20,7 +20,8 @@ class TestAtlasConfigDefaults:
         assert cfg.default_model == "claude-sonnet-4"
         assert cfg.max_context_messages == 50
         assert cfg.log_level == "INFO"
-        assert cfg.scheduler_enabled is True
+        # P10: legacy APScheduler is opt-in; DBOS automation is the default owner.
+        assert cfg.scheduler_enabled is False
         assert cfg.scheduler_timezone == "Asia/Shanghai"
         assert cfg.context_maintenance_message_limit == 80
         assert cfg.context_maintenance_character_limit == 80000

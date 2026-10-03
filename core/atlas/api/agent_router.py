@@ -1,18 +1,23 @@
 """REST surface for persistent agents (``/api/agents/*``).
 
 Contract: integration-map §5 — list/create/get/patch/delete, heartbeat config,
-session lineage placeholder, plus status projection and channel bindings.
+session lineage, status projection and channel bindings.
 The service singleton is module-level; server wiring (``app.state``) happens
-during integration via :func:`set_agent_service`.
+during integration via :func:`set_agent_service`. The conversations-store reader
+for session lineage is bound via :func:`set_conversation_lookup` (server
+lifespan; tests may stub it).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import sqlite3
+from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from atlas.config import get_config
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 from atlas.persistent_agents import PersistentAgentService
 from atlas.persistent_agents.store import BUILTIN_ROLE_IDS
@@ -20,6 +25,8 @@ from atlas.persistent_agents.store import BUILTIN_ROLE_IDS
 T = TypeVar("T")
 
 _service: PersistentAgentService | None = None
+#: async conversation_id → metadata dict | None (bound by the server lifespan)
+_conversation_lookup: Callable[[str], Awaitable[dict[str, Any] | None]] | None = None
 
 
 def _require_trusted_origin(request: Request) -> None:
@@ -49,6 +56,14 @@ def set_agent_service(service: PersistentAgentService | None) -> None:
     """Swap the singleton (app.state injection at integration; test isolation)."""
     global _service
     _service = service
+
+
+def set_conversation_lookup(
+    lookup: Callable[[str], Awaitable[dict[str, Any] | None]] | None,
+) -> None:
+    """Bind the conversations-store reader for session lineage metadata."""
+    global _conversation_lookup
+    _conversation_lookup = lookup
 
 
 def _call(fn: Callable[[], T]) -> T:
@@ -108,10 +123,52 @@ async def put_heartbeat(agent_id: str, req: dict[str, Any]) -> dict[str, Any]:
     return {"agent_id": agent_id, "heartbeat": record["agent"]["heartbeat"]}
 
 
+def _gateway_session_rows(agent_id: str) -> list[dict[str, Any]]:
+    """Agent-scoped rows from the gateway session map (read-only).
+
+    The ``channel_sessions`` sqlite table (``atlas.gateway_service.SessionMapper``)
+    is the durable ``session_key → conversation_id`` lineage every inbound
+    session writes (``agent:<id>:...`` grammar from
+    :func:`atlas.persistent_agents.session_key`). Read here directly from the
+    same sqlite path — no second map, no write path.
+    """
+    db_path = Path(get_config().db_path).parent / "channels.sqlite"
+    if not db_path.is_file():
+        return []
+    prefix = f"agent:{agent_id}:"
+    try:
+        db = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return []
+    try:
+        rows = db.execute(
+            "SELECT session_key, conversation_id, created_at FROM channel_sessions",
+        ).fetchall()
+    except sqlite3.Error:
+        return []  # table not created yet (gateway never started)
+    finally:
+        db.close()
+    return [
+        {"session_key": row[0], "conversation_id": row[1], "created_at": row[2]}
+        for row in rows
+        if str(row[0]).startswith(prefix)
+    ]
+
+
 @router.get("/{agent_id}/sessions")
 async def list_agent_sessions(agent_id: str) -> dict[str, Any]:
+    """Conversation lineage for one agent (``agent:<id>:*`` session keys)."""
     _call(lambda: get_agent_service().get_status(agent_id))  # 404 unless persistent agent
-    return {"agent_id": agent_id, "sessions": [], "note": "wired by integration"}
+    sessions: list[dict[str, Any]] = []
+    for row in _gateway_session_rows(agent_id):
+        conversation = None
+        if _conversation_lookup is not None:
+            try:
+                conversation = await _conversation_lookup(str(row["conversation_id"]))
+            except Exception:  # noqa: BLE001 — metadata is best-effort in a listing
+                conversation = None
+        sessions.append({**row, "conversation": conversation})
+    return {"agent_id": agent_id, "sessions": sessions}
 
 
 @router.get("/{agent_id}/status")
@@ -155,4 +212,9 @@ async def remove_agent_channel(
     return {"agent_id": agent_id, "channels": channels}
 
 
-__all__ = ["get_agent_service", "router", "set_agent_service"]
+__all__ = [
+    "get_agent_service",
+    "router",
+    "set_agent_service",
+    "set_conversation_lookup",
+]

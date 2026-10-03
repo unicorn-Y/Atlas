@@ -1,57 +1,53 @@
 # Atlas Current Task
 
-CURRENT: ATLAS-MEGA-PERSISTENT-CLOSEOUT
-STATUS: READY_FOR_EXECUTION
+CURRENT: ATLAS-MEGA-PERSISTENT-ALWAYS-ON
+STATUS: AWAITING_REVIEW
 CONTROLLER: ZCodex
-TASKBOOK: tasks/taskbooks/ATLAS-MEGA-PERSISTENT-CLOSEOUT.md
-RESULT: tasks/results/ATLAS-MEGA-PERSISTENT-CLOSEOUT.result.md
-REVIEW: tasks/reviews/ATLAS-MEGA-PERSISTENT-CLOSEOUT.review.md
+TASKBOOK: tasks/taskbooks/ATLAS-MEGA-PERSISTENT-ALWAYS-ON.md
+RESULT: tasks/results/ATLAS-MEGA-PERSISTENT-ALWAYS-ON.result.md
+REVIEW: tasks/reviews/ATLAS-MEGA-PERSISTENT-ALWAYS-ON.review.md
 
 BASE_BRANCH: main
-BASE_COMMIT: 631b5f6ad030e283bebe5fc64833ca68a55641fc
-PARENT: ATLAS-MEGA-PERSISTENT-ALWAYS-ON
-PREVIOUS: ATLAS-MEGA-PERSISTENT-ALWAYS-ON
-PREVIOUS_STATUS: PAUSED_AFTER_SYNC
+PREVIOUS: ATLAS-MEGA-LATEST-DAILY-READY
+PREVIOUS_REVIEW: PASS
 
 ## Goal
 
-Resume directly from the synced integration checkpoint and finish the Persistent / Always-On closeout.
+Turn Atlas from a daily-ready desktop agent into a persistent always-on personal agent by continuously integrating the latest strongest mature implementations.
 
-Do not redo W1-W7 and do not restart broad research.
-
-Close only the remaining integration gaps:
-1. Group Chat -> real persistent-agent runtime;
-2. persistent Agent session restart + real sessions API;
-3. desktop/channel same conversation;
-4. Automation/Heartbeat -> real channel delivery;
-5. Atlas-owned laptop offline/restart durable continuation;
-6. Device takeover -> X2 pending/resume bridge;
-7. learned skill -> actual next Agent run;
-8. current backend wiring failures;
-9. P11 16 fake-E2E acceptance with no real MISSING items.
-
-## Known checkpoint
-
-Latest synced implementation checkpoint before this closeout:
-- `631b5f6`
-- frontend batch: 155/155 green
-- backend focused batch: 26/38, wiring errors remain
-- P11 map: 9 COVERED / 5 PARTIAL / 2 MISSING
+Continuous scope:
+1. freeze latest OpenClaw / Hermes / DBOS sources;
+2. tail-sync Hermes fork;
+3. persistent agents + Bot Mode/group chat;
+4. Gateway + Telegram/Slack/Feishu/DingTalk/WeCom/Email/Webhook;
+5. OpenClaw-style Heartbeat/proactivity;
+6. durable Cron/Automation with existing DBOS + OpenClaw semantics + Hermes product surface;
+7. Atlas-owned Windows laptop / paired-device ownership + human handoff;
+8. Hermes managed local llama.cpp runtime + activation tool-call probe;
+9. Skill Workshop/curator upgrade;
+10. integration/dedup + deterministic acceptance.
 
 ## SUBAGENT POLICY — HARD REQUIREMENT
 
-- Use subagents for the bulk of implementation, focused tests, and review.
-- Target the maximum concurrency the runtime actually allows.
+- Use subagents for the bulk of research, source comparison, porting, implementation, focused tests, and review.
+- Target the maximum concurrency the current runtime actually allows.
 - Do not hard-code a worker count.
-- If a spawn is rejected, shrink the batch and continue when slots free up.
-- Do not fall back to single-threaded work because of one concurrency rejection.
-- `core/atlas/server.py` has one integration owner.
+- Keep spawning independent lanes until the runtime refuses more concurrent workers.
+- If a spawn is rejected, shrink that batch; when slots free up, dispatch the rest.
+- A concurrency rejection is NOT a reason to disable subagents or work single-threaded.
+- Shared hot files have one integration owner.
+
+## Principles
+
+- Latest information first; strongest implementation wins.
+- Direct-port mature code when practical.
+- Cross-language high-coupling code: port the state machine/protocol, not a weak imitation.
+- Do not embed OpenClaw as a second Agent core.
+- Do not duplicate SessionDB / Scheduler / SkillRegistry / Computer / Browser.
+- Memory stays frozen.
+- Speed first; focused tests first.
 
 ## Completion
 
-Write:
-- `tasks/results/ATLAS-MEGA-PERSISTENT-CLOSEOUT.result.md`
-
-Then set CURRENT to `AWAITING_REVIEW`, push main, verify local/remote heads, and stop.
-
-Do not start X6 / T1 / R1 / MemoryOS / new UI redesign / new upstream research.
+Write result, set CURRENT to AWAITING_REVIEW, push relevant repos, verify local/remote heads, and stop.
+Do not start X6 / full T1 / R1.

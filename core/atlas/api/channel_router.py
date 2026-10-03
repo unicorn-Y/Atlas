@@ -13,15 +13,18 @@ The manager instance is injected at startup by the integration owner via
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from structlog import get_logger
 
 from atlas.channels import ChannelManager, WebhookError
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 
 router = APIRouter(prefix="/api/channels", tags=["channels"])
+log = get_logger()
 
 _manager: ChannelManager | None = None
 
@@ -60,6 +63,47 @@ class AccountsPayload(BaseModel):
     configs: dict[str, dict[str, Any]]
 
 
+def _resolve_legacy_telegram_service() -> Any:
+    """Return the legacy ``TelegramService`` singleton held by ``atlas.server``.
+
+    Local import on purpose: ``atlas.server`` imports this router at boot, so a
+    module-level import would be circular. Returns None when the server module
+    is unavailable (standalone router mounts) or the service was never built.
+    """
+    try:
+        from atlas import server as atlas_server  # noqa: PLC0415 — 避免循环导入
+    except Exception:  # pragma: no cover - server module not importable here
+        return None
+    return getattr(atlas_server, "telegram_service", None)
+
+
+async def _stop_legacy_telegram_poller() -> bool:
+    """Best-effort stop of the legacy ``TelegramService`` getUpdates poller.
+
+    The gateway telegram adapter and the legacy poller drive the same bot
+    token with competing update offsets, so enabling the gateway at runtime
+    must retire the poller immediately (server.py only decides at boot).
+    Never raises: the service may be None / already stopped, and channel
+    configuration must not fail because of the legacy half. Returns whether a
+    stop was actually invoked.
+    """
+    service = _resolve_legacy_telegram_service()
+    if service is None:
+        return False
+    stop = getattr(service, "stop", None)
+    if not callable(stop):
+        return False
+    try:
+        result = stop()
+        if inspect.isawaitable(result):
+            await result
+    except Exception as exc:
+        log.warning("channels.legacy_telegram_stop_failed", error=str(exc))
+        return False
+    log.info("channels.legacy_telegram_poller_stopped")
+    return True
+
+
 @router.put("/accounts", dependencies=[Depends(_require_trusted_origin)])
 async def put_accounts(payload: AccountsPayload) -> dict[str, Any]:
     """Persist non-secret channel configuration (enabled/account/settings)."""
@@ -70,6 +114,10 @@ async def put_accounts(payload: AccountsPayload) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=f"未注册的渠道：{name}")
         cleaned = {k: v for k, v in config.items() if k not in ("secret", "password", "bot_token")}
         saved[name] = manager.configure(name, cleaned)
+        if name == "telegram" and cleaned.get("enabled"):
+            # P10: enabling the gateway telegram adapter at runtime must stop
+            # the legacy getUpdates poller — otherwise both poll one bot token.
+            await _stop_legacy_telegram_poller()
     return {"ok": True, "configs": saved, **_without_channels(manager.status())}
 
 

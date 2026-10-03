@@ -436,6 +436,9 @@ def write_hermes_home(
         f"  context_length: {context_length}\n"
         "agent:\n"
         "  api_max_retries: 1\n"
+        # A scripted Error() must reach run-failed in seconds, not after the
+        # 15/30/60s availability ladder (5 cycles by default).
+        "  auto_recovery_cycles: 0\n"
         # Answered, so an interactive chat never stops on the one-time shared-metrics offer.
         "telemetry:\n"
         "  shared_metrics:\n"

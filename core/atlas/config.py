@@ -164,7 +164,10 @@ class AtlasConfig:
         env = os.environ.get("ATLAS_SCHEDULER_ENABLED")
         if env is not None:
             return env.lower() in ("1", "true", "yes")
-        return bool(self.get("scheduler.enabled", True))
+        # Defaults OFF (P10): jobs imported into the automation engine
+        # (atlas.automation.migrate) must not double-fire from the legacy
+        # APScheduler. Opt back in explicitly with [scheduler] enabled=true.
+        return bool(self.get("scheduler.enabled", False))
 
     @property
     def scheduler_timezone(self) -> str:

@@ -115,6 +115,15 @@ async def app_client(tmp_path_factory: pytest.TempPathFactory, fake_llm: FakeLLM
     tmp_path = tmp_path_factory.mktemp("gateway-int")
     (tmp_path / "workspace").mkdir()
     data_root = tmp_path / "atlas-data"
+    # The engine home (HermesRuntime pins HERMES_HOME to <data>/engine) must
+    # cap its retry ladder, or a scripted model failure burns minutes in the
+    # 15/30/60s availability cycles before the run ever reaches run.failed.
+    engine_home = data_root / "engine"
+    engine_home.mkdir(parents=True)
+    (engine_home / "config.yaml").write_text(
+        "agent:\n  api_max_retries: 1\n  auto_recovery_cycles: 0\n",
+        encoding="utf-8",
+    )
     config_path = tmp_path / "config" / "atlas.toml"
     config_path.parent.mkdir(parents=True)
     config_path.write_text(
@@ -265,7 +274,9 @@ async def test_run_failure_answers_with_one_failure_summary(app_client) -> None:
     await bundle.adapter.emit(make_event("evt-f1", chat_id="400", text="会失败的请求"))
     assert await wait_for(lambda: bool(bundle.adapter.sent), timeout=REPLY_WAIT)
     assert len(bundle.adapter.sent) == 1  # failure answers once, no retry spam
-    assert "任务执行失败" in bundle.adapter.sent[0]["content"]
+    # The engine's give-up notice is the in-band failure answer (the turn ends
+    # completed-with-error-text, so the bridge relays it verbatim).
+    assert "HTTP 500" in bundle.adapter.sent[0]["content"]
 
 
 async def test_heartbeat_tick_and_automation_reconcile_over_live_app(app_client) -> None:
@@ -286,6 +297,9 @@ async def test_heartbeat_tick_and_automation_reconcile_over_live_app(app_client)
 
     # HeartbeatService.tick through the real host seams (config from the agent
     # registry, turn through the orchestrator, delivery skipped on NO_REPLY).
+    # An event wake only runs with a pending event (preflight guard), so push
+    # one first — exactly what a channel/gateway wake does.
+    server.heartbeat_service.push_event("agent-hb", "channels changed")
     result = await server.heartbeat_service.tick("agent-hb", "event")
     assert isinstance(result, TickResult)
     assert result.status == "ran"
@@ -347,3 +361,130 @@ async def test_automation_dispatch_turn_injection_reaches_model(app_client) -> N
     prompts = "".join(str(item.get("messages", [{}])[-1].get("content", ""))
                       for item in bundle.fake_llm.main_requests())
     assert "自动化问候" in prompts
+
+
+async def test_channel_conversation_visible_on_desktop(app_client) -> None:
+    """P11 scenario 3: the channel session IS the desktop session (no copy)."""
+    bundle = app_client
+    bridge = bundle.server.gateway_bridge
+    bundle.fake_llm._responder = lambda _record: Text("桌面同源检查完成。")
+
+    await bundle.adapter.emit(make_event("evt-d1", chat_id="500", text="桌面能看到这段对话吗"))
+    assert await wait_for(lambda: bool(bundle.adapter.sent), timeout=REPLY_WAIT)
+
+    conv_id = bridge.sessions.get(session_key("main", channel="fake", account="", peer="500"))
+    assert conv_id, "channel inbound must map to a conversation"
+
+    listed = await bundle.client.get("/api/conversations")
+    assert listed.status_code == 200
+    assert conv_id in [item["id"] for item in listed.json()]
+
+    history = await bundle.client.get(f"/api/conversations/{conv_id}/messages")
+    assert history.status_code == 200
+    blob = "".join(
+        str(item.get("content") or "") for item in history.json()
+    )
+    assert "桌面能看到这段对话吗" in blob  # the user's inbound text
+    assert "桌面同源检查完成。" in blob  # the assistant reply
+
+
+async def test_automation_delivery_reaches_channel_target(app_client) -> None:
+    """P11 scenario 10: automation outcome delivered back on the channel target."""
+    bundle = app_client
+    from atlas.automation import get_automation_engine
+    from atlas.automation.store import normalize_record
+
+    engine = get_automation_engine()
+    saved = engine.store.put(normalize_record({
+        "id": "deliver-fake", "name": "channel delivery",
+        "trigger": {"kind": "interval", "every_seconds": 3600},
+        "payload": {"kind": "script", "script": "echo deliver-fake-ok"},
+        "delivery": {"mode": "channel", "channel": "fake", "target": "100"},
+    }))
+    await engine.sync_automation(saved)
+
+    assert await wait_for(
+        lambda: (engine.store.get("deliver-fake") or {}).get("state", {}).get("last_status")
+        == "ok",
+        timeout=REPLY_WAIT,
+    )
+    assert await wait_for(
+        lambda: any(
+            item["chat_id"] == "100" and "deliver-fake-ok" in item["content"]
+            for item in bundle.adapter.sent
+        ),
+        timeout=REPLY_WAIT,
+    )
+
+    # Owner-targeted delivery must NOT go through the channel adapter.
+    before = len(bundle.adapter.sent)
+    engine.store.put(normalize_record({
+        "id": "deliver-owner", "name": "owner delivery",
+        "trigger": {"kind": "interval", "every_seconds": 3600},
+        "payload": {"kind": "script", "script": "echo deliver-owner-ok"},
+        "delivery": {"mode": "channel", "channel": "owner"},
+    }))
+    await engine.run_now("deliver-owner", wait=REPLY_WAIT)
+    assert len(bundle.adapter.sent) == before
+    engine.store.delete("deliver-fake")
+    engine.store.delete("deliver-owner")
+
+
+async def test_group_handoff_between_persistent_agents(app_client) -> None:
+    """P11 scenario 11: a member @mention hands the immediate next slot to the
+    named teammate over the live app — bob never speaks, carl speaks only via
+    the handoff (rotation had no slot for him)."""
+    bundle = app_client
+    markers = {
+        "alice-g11": "ALICE-G11-MARK",
+        "bob-g11": "BOB-G11-MARK",
+        "carl-g11": "CARL-G11-MARK",
+    }
+    for aid, name in (("alice-g11", "Alice"), ("bob-g11", "Bob"), ("carl-g11", "Carl")):
+        made = await bundle.client.post("/api/agents", json={
+            "id": aid, "name": name, "model": "fake-model",
+            "instructions": markers[aid], "mode": "act",
+            "agent": {"workspace": "", "enabled": True},
+        })
+        assert made.status_code == 201, made.text
+
+    alice_turns = {"n": 0}
+
+    def responder(record):
+        blob = "".join(str(m.get("content") or "") for m in record["body"]["messages"])
+        if markers["alice-g11"] in blob:
+            alice_turns["n"] += 1
+            if alice_turns["n"] == 1:
+                return Text("@carl-g11 请继续")
+            return Text("(pass)")  # the handoff settled; alice goes quiet
+        if markers["carl-g11"] in blob:
+            return Text("carl 完成")
+        return Text("(pass)")
+
+    bundle.fake_llm._responder = responder
+
+    group = await bundle.client.post("/api/groups", json={
+        "id": "team-g11", "name": "Handoff Team",
+        "member_agent_ids": list(markers),
+    })
+    assert group.status_code == 201, group.text
+
+    report = await bundle.client.post("/api/groups/team-g11/turns", json={
+        "from_actor": "user", "text": "@alice-g11 开始",
+    })
+    assert report.status_code == 200, report.text
+
+    timeline = (await bundle.client.get("/api/groups/team-g11/timeline")).json()
+    entries = timeline["entries"]
+    actors = [e["actor"] for e in entries]
+    assert actors == ["user", "alice-g11", "carl-g11"], actors
+    assert "@carl-g11" in entries[1]["text"]  # the handoff signal
+    assert "carl 完成" in entries[2]["text"]
+
+    # Each speaking member owns its group session; silent bob owns none.
+    for aid in ("alice-g11", "carl-g11"):
+        sessions = (await bundle.client.get(f"/api/agents/{aid}/sessions")).json()
+        keys = [row["session_key"] for row in sessions["sessions"]]
+        assert f"agent:{aid}:group:team-g11" in keys, keys
+    bob = (await bundle.client.get("/api/agents/bob-g11/sessions")).json()
+    assert bob["sessions"] == []

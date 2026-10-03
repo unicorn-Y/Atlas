@@ -4,12 +4,15 @@ No real X2 probes: a fake probe and an injectable clock keep everything hermetic
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from atlas.automation.engine import AutomationEngine
+from atlas.automation.store import AutomationStore, normalize_record
 from atlas.devices import (
     SELF_DEVICE_ID,
     DeviceError,
@@ -219,3 +222,80 @@ def test_corrupt_store_starts_empty(tmp_path: Path, clock: FakeClock, probe: dic
     assert registry.register_self()["device_id"] == SELF_DEVICE_ID
     on_disk = json.loads(path.read_text(encoding="utf-8"))
     assert set(on_disk["devices"]) == {SELF_DEVICE_ID}
+
+
+# ---------------------------------------------------------------------------
+# Scenario 12 (P11 acceptance map §2.5, option 1): offline window ≠ work stoppage
+# ---------------------------------------------------------------------------
+def test_device_offline_window_does_not_block_local_automation_and_presence_recovers(
+    tmp_path: Path, clock: FakeClock, probe: dict[str, Any]
+) -> None:
+    """One combo proving both halves over real modules:
+
+    (a) an ingress device recovers presence after the 90s offline window;
+    (b) durable local work (automation engine, the self-hosted laptop half)
+        keeps firing and recording while the device projects offline — the
+        engine never gates on device presence.
+    """
+    registry = make_registry(tmp_path / "devices.json", clock, probe)
+    registry.register_self()
+    registry.add("phone-1", "手机")
+
+    # -- (a) presence: online → offline window → ingress beat → online -------
+    registry.set_presence("phone-1", activity="打开应用")
+    assert registry.online("phone-1") is True
+    clock.advance(91)  # past the default 90s online window
+    assert registry.online("phone-1") is False
+    live = registry.get("phone-1")
+    assert live is not None
+    assert live["presence"]["state"] == "offline"
+    assert live["presence"]["activity"] == "打开应用"  # last-known survives offline
+    assert registry.online(SELF_DEVICE_ID) is True  # the laptop itself never drops
+
+    # -- (b) durable work continues inside the offline window ----------------
+    ticks: list[tuple[str, str]] = []
+
+    async def tick(agent_id: str, reason: str) -> dict[str, Any]:
+        ticks.append((agent_id, reason))
+        return {"tick": agent_id, "reason": reason}
+
+    # Same shape server._reconcile_agent_heartbeats upserts (interval +
+    # heartbeat payload, delivery none) — asserted engine-side only here.
+    automation_id = "heartbeat-agent-on-call"
+    store = AutomationStore(tmp_path / "automations.toml")
+    store.put(normalize_record({
+        "id": automation_id,
+        "name": "heartbeat:值班助手",
+        "enabled": True,
+        "owner_agent_id": "agent-on-call",
+        "trigger": {"kind": "interval", "every_seconds": 1800.0},
+        "payload": {"kind": "heartbeat", "agent_id": "agent-on-call"},
+        "delivery": {"mode": "none"},
+    }))
+    engine = AutomationEngine(store, heartbeat_tick=tick)  # local engine, no DBOS
+
+    run = asyncio.run(engine.execute_payload(automation_id, "schedule"))
+    assert run["status"] == "ok"
+    assert ticks == [("agent-on-call", "schedule")]
+    engine.apply_outcome(automation_id, {**run, "trigger": "schedule"})
+    state = store.get(automation_id)["state"]
+    assert state["last_status"] == "ok"
+    assert state["last_run_at"]
+    assert state["consecutive_errors"] == 0
+
+    # The phone is still offline here — presence never gated the engine.
+    assert registry.online("phone-1") is False
+
+    # -- reconcile after recovery: beat re-attaches presence; the run recorded
+    #    during the offline window is still visible and firing still works ----
+    registry.set_presence("phone-1", last_seen=clock.now)
+    assert registry.online("phone-1") is True
+
+    asyncio.run(engine.reconcile_async())  # engine-side reconcile: never raises
+    recovered = store.get(automation_id)
+    assert recovered is not None
+    assert recovered["enabled"] is True
+    assert recovered["state"]["last_status"] == "ok"  # offline-window run survives
+    run_after = asyncio.run(engine.execute_payload(automation_id, "schedule"))
+    assert run_after["status"] == "ok"
+    assert ticks == [("agent-on-call", "schedule"), ("agent-on-call", "schedule")]

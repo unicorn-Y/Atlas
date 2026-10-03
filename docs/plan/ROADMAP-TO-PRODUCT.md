@@ -85,14 +85,15 @@ Atlas 做到下面全部，才算「成品」：
 - **接口**：所有 HTTP / WS 都过 OriginGuard，不能放宽。
 - **语言**：界面和回复用中文。
 
-## 三、现在在哪（2026-10-03）
+## 三、现在在哪（2026-10-04）
 
 | 波 | 状态 |
 | --- | --- |
 | W06–W08、C1–C6 | 完成（C1R 收口，见各 result 文件） |
 | **ATLAS-MEGA-LATEST-DAILY-READY** | **完成**（2026-10-03）：来源冻结、Hermes upstream 同步（fork `27c63095b0`）、C1–C6 latest-best 刷新、X2 Computer/Browser、X4 Skill Market、X5 Self-Evolution、集成去重、K1 检查修复。结果：`tasks/results/ATLAS-MEGA-LATEST-DAILY-READY.result.md` |
+| **ATLAS-MEGA-PERSISTENT-ALWAYS-ON** | **完成，AWAITING_REVIEW**（2026-10-04）：Atlas 升级为常驻个人 Agent——persistent agent + 群聊/handoff、七渠道 Gateway、OpenClaw 语义 Heartbeat、DBOS 可靠自动化、设备注册/接管、Hermes 本地模型托管（激活 probe 闸门）、Skill Workshop 学习闭环；fork tail-sync 至 `ef4571dec5`。结果：`tasks/results/ATLAS-MEGA-PERSISTENT-ALWAYS-ON.result.md` |
 | T1（真实模型横向） | 下一步，需要用户参与 |
-| X1、X3、X6、X7 | 任务书在 `tasks/taskbooks/`（X-EXTERNAL-PHASE 大框架）；X2/X4/X5 已随 Mega 完成，其余按需重写任务书后做 |
+| X1、X3、X6 | 任务书在 `tasks/taskbooks/`（X-EXTERNAL-PHASE 大框架）；X2/X4/X5/X7 常驻形态已随两次 Mega 完成，其余按需重写任务书后做 |
 | R1、R2 | 待 T1 后 |
 
 ## 四、全部波次和顺序

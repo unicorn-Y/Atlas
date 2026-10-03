@@ -22,15 +22,25 @@
 - 同 id 已存在于 automations.toml → skip("already-exists")。
 
 **不删旧文件、不改旧 scheduler**；导入幂等（重复执行产生 skipped 而非重复记录）。
+
+防双触发（P10）：已导入的任务同时存在于新旧两个引擎时，若旧 APScheduler 仍在
+运行会重复触发。``pause_legacy=True`` 时，导入成功后把 *本次导入* 的任务在旧
+文件中置为 ``status = "paused"``（旧 scheduler 自身的暂停语义，见
+``atlas.scheduler.TaskStatus``）——文件保留、仅翻转目标任务的状态行，其余内容
+逐字不动。默认 *零改动*（历史契约：tests/test_automation_migrate.py 断言旧文件
+原样保留）；调用方（/api/automations/import-legacy）应显式传 ``pause_legacy=True``。
+另一道闸是 ``scheduler.enabled`` 现默认 False（``atlas.config.AtlasConfig.scheduler_enabled``），
+旧 scheduler 不再随服务自启，显式 ``[scheduler] enabled=true`` 仍可启用。
 """
 
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import structlog
 
@@ -46,14 +56,17 @@ class MigrationReport:
     source: str
     imported: list[dict[str, Any]] = field(default_factory=list)
     skipped: list[dict[str, Any]] = field(default_factory=list)
+    paused: list[str] = field(default_factory=list)  # 已在旧文件中置为 paused 的任务 id
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "source": self.source,
             "imported_count": len(self.imported),
             "skipped_count": len(self.skipped),
+            "paused_count": len(self.paused),
             "imported": self.imported,
             "skipped": self.skipped,
+            "paused": self.paused,
         }
 
 
@@ -176,12 +189,81 @@ def _trigger_from_legacy(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, st
     return None, f"unknown-trigger:{trigger_type}"
 
 
+def _pause_imported_tasks(path: Path, task_ids: Iterable[str]) -> list[str]:
+    """把 *task_ids* 在旧 ``schedules.toml`` 中置为 ``status = "paused"``.
+
+    使用旧 scheduler 自身的暂停语义（``status = active|paused``，paused 任务不会被
+    ``AtlasScheduler`` 注册触发）。只翻转目标任务的状态行，其余内容逐字保留
+    （不删旧文件）。返回实际处于 paused 的任务 id；读写失败时记日志并返回 []，
+    绝不让暂停失败影响已完成的导入。
+    """
+    wanted = list(dict.fromkeys(str(task_id) for task_id in task_ids))
+    if not wanted:
+        return []
+    wanted_set = set(wanted)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        log.warning("automation.migrate_pause_read_failed", path=str(path), error=str(exc))
+        return []
+
+    # [tasks.<id>] 精确段头（带子表的 [tasks.<id>.trigger_args] 捕获值含 "."，
+    # 不会与裸 id 相等，因此不会误伤）。TOML 裸键不含引号包裹的 id，此处按
+    # 常规 slug 处理即可。
+    section_re = re.compile(r"^\[tasks\.([^\]]+)\]\s*(?:#.*)?$")
+    status_re = re.compile(r"^(\s*)status\s*=.*$")
+
+    def _eol(line: str) -> str:
+        if line.endswith("\r\n"):
+            return "\r\n"
+        if line.endswith("\n") or not line:
+            return "\n"
+        return line[-1]  # 孤立 \r
+
+    lines = text.splitlines(keepends=True)
+    headers = [(i, m.group(1)) for i, line in enumerate(lines) if (m := section_re.match(line.strip()))]
+    result = list(lines)
+    paused: list[str] = []
+    for pos, (header_idx, section_id) in enumerate(headers):
+        if section_id not in wanted_set:
+            continue
+        end_idx = headers[pos + 1][0] if pos + 1 < len(headers) else len(result)
+        replaced = False
+        for j in range(header_idx + 1, end_idx):
+            match = status_re.match(result[j])
+            if match:
+                result[j] = f'{match.group(1)}status = "paused"{_eol(result[j])}'
+                replaced = True
+                break
+        if not replaced:
+            # 旧格式缺省 status 视为 active（ScheduledTask.from_dict 默认），补一行
+            result.insert(header_idx + 1, f'status = "paused"{_eol(lines[header_idx])}')
+        paused.append(section_id)
+
+    new_text = "".join(result)
+    if new_text == text:
+        return paused  # 全部本就是 paused，无需写盘
+    try:
+        tmp = path.with_name(path.name + ".pause.tmp")
+        tmp.write_text(new_text, encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        log.warning("automation.migrate_pause_write_failed", path=str(path), error=str(exc))
+        return []
+    return paused
+
+
 def import_legacy_schedules(
     *,
     toml_path: str | Path | None = None,
     store: AutomationStore | None = None,
+    pause_legacy: bool = False,
 ) -> MigrationReport:
-    """Import every convertible legacy task; returns a per-task report."""
+    """Import every convertible legacy task; returns a per-task report.
+
+    ``pause_legacy=True`` 在导入成功后把本次导入的任务在旧文件中置为 paused
+    （防双触发，见模块 docstring）；默认 False 保持旧文件零改动。
+    """
     path = Path(toml_path) if toml_path is not None else default_legacy_path()
     target = store if store is not None else AutomationStore()
     report = MigrationReport(source=str(path))
@@ -232,4 +314,10 @@ def import_legacy_schedules(
         imported=len(report.imported),
         skipped=len(report.skipped),
     )
+
+    if pause_legacy and report.imported:
+        report.paused = _pause_imported_tasks(path, [item["id"] for item in report.imported])
+        if report.paused:
+            log.info("automation.migrate_legacy_paused", tasks=report.paused)
+
     return report

@@ -78,6 +78,8 @@ from atlas.config import get_config, load_user_settings, save_user_settings
 from atlas.devices import DeviceRegistry
 from atlas.devices.takeover import TakeoverStateMachine
 from atlas.gateway_service import GatewayBridge
+from atlas.groups import DispatcherNotBound, GroupOrchestrator, TurnConflict
+from atlas.groups.store import GroupService, GroupStore
 from atlas.heartbeat import HeartbeatService
 from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
@@ -653,8 +655,12 @@ async def _deliver_agent_notification(text: str, target: str) -> None:
         log.warning("heartbeat.channel_delivery_failed", channel=channel, error=str(exc))
 
 
-async def _collect_orchestrator_text(message: str, conversation_id: str) -> str:
-    """One unattended orchestrator turn (heartbeat / automation); assistant text."""
+async def _collect_orchestrator_text(
+    message: str, conversation_id: str, *,
+    model: str | None = None,
+    active_skill_instructions: list[dict[str, str]] | None = None,
+) -> str:
+    """One unattended orchestrator turn (heartbeat / automation / group); assistant text."""
     if orchestrator is None:
         raise RuntimeError("Agent orchestrator 尚未就绪")
 
@@ -666,8 +672,10 @@ async def _collect_orchestrator_text(message: str, conversation_id: str) -> str:
     async for event in orchestrator.run(
         message=message,
         conversation_id=conversation_id,
+        model=model,
         approval_callback=deny_unapproved,
         source_run_id=uuid.uuid4().hex,
+        active_skill_instructions=active_skill_instructions,
     ):
         event_type = event.get("type")
         if event_type == "error":
@@ -807,6 +815,201 @@ async def _read_conversation_answer(conversation_id: str) -> str:
     messages = await memory.get_conversation_messages(conversation_id, limit=1000)
     return next((item["content"] for item in reversed(messages)
                  if item.get("role") == "assistant"), "")
+
+
+async def _conversation_summary(conversation_id: str) -> dict[str, Any] | None:
+    """Conversation metadata for agent-scoped session lineage (W10 sessions view)."""
+    if memory is None or getattr(memory, "_db", None) is None:
+        return None
+    try:
+        return await memory.get_conversation(conversation_id)
+    except Exception as exc:  # noqa: BLE001 — metadata is best-effort in a listing
+        log.debug("agent.conversation_summary_failed", conversation_id=conversation_id,
+                  error=str(exc))
+        return None
+
+
+def _merge_agent_collection_skills(agent_id: str, base: Any) -> Any:
+    """W7 skill-workshop bridge (scenario 16): per-agent collections reach the run.
+
+    Explicit relation rows decide (frozen semantics in
+    ``atlas.skills.agent_collections``): a per-agent ``enabled=1`` row — e.g. the
+    ``learned`` row a proposal approval writes — joins the run's active set; an
+    explicit ``enabled=0`` row wins over the profile (opt-out). Rows the
+    collections only project from the global registry (``decision="global"``)
+    never inject or evict: the repo registers every discovered skill as
+    globally active, and force-activating all of them would blow the run's
+    eight-skill cap — global activation stays the activation gate's business.
+    Stable order, no duplicates; non-list input passes through so the
+    activation gate below reports it unchanged.
+    """
+    if not isinstance(base, list):
+        return base
+    from atlas.api.agent_skills_router import get_collections
+
+    try:
+        rows = get_collections().effective_skills(agent_id)
+    except Exception as exc:  # noqa: BLE001 — the bridge must never fail a run
+        log.warning("agent.skills_bridge_unavailable", agent_id=agent_id, error=str(exc))
+        return list(dict.fromkeys(str(item) for item in base))
+    merged = [str(item) for item in base]
+    for row in rows:
+        name = str(row.get("skill_name") or "")
+        if not name or row.get("decision") != "per_agent":
+            continue
+        if row.get("enabled"):
+            merged.append(name)
+        else:
+            merged = [item for item in merged if item != name]
+    return list(dict.fromkeys(merged))
+
+
+# ---------------------------------------------------------------------------
+# W8 group chat dispatch (room engine ⇄ engine seam)
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_group_member_conversation(session: str, context: dict[str, Any]) -> str:
+    """Create/reuse the conversation backing one group member session key.
+
+    Same SessionMapper the gateway uses (``agent:<id>:group:<room>`` lineage), so
+    a member's group thread survives restarts and shows up in the agent's
+    /sessions lineage.
+    """
+    if gateway_bridge is None:
+        raise RuntimeError("gateway session map 尚未就绪")
+    known = gateway_bridge.sessions.get(session)
+    if known:
+        return known
+    if memory is None:
+        raise RuntimeError("memory service 尚未就绪")
+    label = str(context.get("group_id") or session)
+    conversation_id = await memory.create_conversation(f"群聊会话 {label}")
+    workspace = _default_workspace()
+    await memory.update_conversation(
+        conversation_id, workspace=str(workspace) if workspace else None, source="channel",
+    )
+    gateway_bridge.sessions.put(session, conversation_id)
+    return conversation_id
+
+
+async def _dispatch_group_member_turn(
+    agent_id: str, prompt: str, session: str, context: dict[str, Any],
+) -> str:
+    """GroupOrchestrator TurnDispatcher (W8): one member model turn.
+
+    Reuses the heartbeat/automation engine seam (``_collect_orchestrator_text``)
+    — the member's own model, instructions and skills resolve from its
+    persistent-agent record and the reply lands in the member's per-group
+    conversation. Never a second agent core.
+    """
+    conversation_id = await _resolve_group_member_conversation(session, context)
+    profile = _resolve_agent_for_run(agent_id)
+    skills = list((profile or {}).get("active_skills") or [])
+    if profile is not None:
+        skills = _merge_agent_collection_skills(agent_id, skills)
+    skill_instructions = await _resolve_active_skill_instructions(skills)
+    instructions = str((profile or {}).get("instructions") or "")
+    if instructions:
+        skill_instructions = [*skill_instructions,
+            {"name": f"profile:{agent_id}", "content": instructions}]
+    return await _collect_orchestrator_text(
+        prompt, conversation_id,
+        model=(profile or {}).get("model"),
+        active_skill_instructions=skill_instructions,
+    )
+
+
+async def _start_group_turn_run(
+    conn_id: str, run_id: str, data: dict[str, Any], group_id: str, agent_key: str,
+) -> None:
+    """W8 group turn as a run: one inbound message → orchestrated rounds.
+
+    Validation failures report ``run.failed(category=validation)``; the drive
+    runs in a tracked background task like any other run and its
+    ``GroupTurnReport`` rides the run.completed envelope (no per-member
+    websocket streaming — the room log is the shared timeline).
+    """
+    from atlas.api.group_router import get_group_orchestrator, get_group_service
+
+    invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+    group = get_group_service().get(group_id)
+    if group is None:
+        invalid.status = "failed"
+        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": f"group not found: {group_id}",
+        }))
+        return
+    from_actor = agent_key or "user"
+    if agent_key and agent_key not in (group.get("member_agent_ids") or []):
+        invalid.status = "failed"
+        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation",
+            "detail": f"agent {agent_key} is not a member of group {group_id}",
+        }))
+        return
+    content = data.get("content", "")
+    if not isinstance(content, str) or not content.strip():
+        invalid.status = "failed"
+        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "group turn requires non-empty text",
+        }))
+        return
+    thread_id = data.get("thread_id")
+    group_orch = get_group_orchestrator()
+    model_id = data.get("model")
+    run = RunState(
+        run_id, str(data.get("conversation_id") or uuid.uuid4()),
+        str(model_id) if model_id else (model_mgr.current_model if model_mgr else ""),
+    )
+    run.user_input = content
+    runtime_mgr.runs[run_id] = run
+    runtime_mgr.conn_runs[conn_id] = run_id
+    await runtime_mgr.persist_run(run)
+
+    async def _drive() -> None:
+        try:
+            report = await group_orch.run_turn(group_id, {
+                "from_actor": from_actor,
+                "text": content,
+                **({"thread_id": thread_id} if thread_id else {}),
+            })
+        except asyncio.CancelledError:
+            run.status = "cancelled"
+            await runtime_mgr.send_run(run, run.next_envelope("run.cancelled", {}), conn_id)
+        except DispatcherNotBound as exc:
+            run.status = "failed"
+            await runtime_mgr.send_run(run, run.next_envelope("run.failed", {
+                "category": "backend", "detail": str(exc),
+            }), conn_id)
+        except TurnConflict as exc:
+            run.status = "failed"
+            await runtime_mgr.send_run(run, run.next_envelope("run.failed", {
+                "category": "conflict", "detail": str(exc),
+            }), conn_id)
+        except KeyError as exc:
+            run.status = "failed"
+            await runtime_mgr.send_run(run, run.next_envelope("run.failed", {
+                "category": "validation", "detail": str(exc).strip("'"),
+            }), conn_id)
+        except ValueError as exc:
+            run.status = "failed"
+            await runtime_mgr.send_run(run, run.next_envelope("run.failed", {
+                "category": "validation", "detail": str(exc),
+            }), conn_id)
+        except Exception as exc:  # noqa: BLE001 — drive failure reports in-band
+            run.status = "failed"
+            await runtime_mgr.send_run(run, run.next_envelope("run.failed", {
+                "category": "backend", "detail": str(exc),
+            }), conn_id)
+        else:
+            run.status = "completed"
+            await runtime_mgr.send_run(run, run.next_envelope("run.completed", {
+                "result": "completed", "model": run.model,
+                "group_turn": report.to_dict(),
+            }), conn_id)
+
+    run.task = asyncio.create_task(_drive())
 
 
 # ---------------------------------------------------------------------------
@@ -1086,9 +1289,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # -- W10 persistent-always-on wiring (agents / channels / heartbeat / automation) --
     agents_service = PersistentAgentService()
-    from atlas.api.agent_router import set_agent_service
+    from atlas.api.agent_router import set_agent_service, set_conversation_lookup
 
     set_agent_service(agents_service)
+    set_conversation_lookup(_conversation_summary)
 
     channel_manager = ChannelManager(
         db_path=cfg.db_path.parent / "channels.sqlite",
@@ -1113,6 +1317,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     set_channel_manager(channel_manager)
 
     heartbeat_service = HeartbeatService(_AtlasHeartbeatHost(), root=cfg.db_path.parent / "heartbeat")
+
+    # W8 group chat: singletons bound in order (service → orchestrator). The real
+    # dispatcher drives member turns through the same engine seam as
+    # heartbeat/automation — never a second agent core. Room log + watermarks
+    # live under data/groups/<group_id>/ (the orchestrator's store.root).
+    group_service = GroupService(GroupStore(cfg.db_path.parent), lookup=agents_service)
+    from atlas.api.group_router import set_group_orchestrator, set_group_service
+
+    set_group_service(group_service)
+    set_group_orchestrator(GroupOrchestrator(
+        group_service, dispatcher=_dispatch_group_member_turn,
+    ))
 
     automation_engine = AutomationEngine(
         AutomationStore(cfg.db_path.parent / "automations.toml"),
@@ -1140,8 +1356,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     device_router.set_registry(device_registry)
     device_router.set_takeover(TakeoverStateMachine())
     agent_skills_router.set_collections(AgentSkillCollections(skill_registry))
+    # The proposal apply path writes skill payloads through the ONE market save
+    # path (register_local + rescan) — without it approve() reports 503 market_unwired.
+    from atlas.api.skills_market_router import get_market
+
     agent_skills_router.set_proposals(SkillProposalStore(
-        skill_registry, collections=agent_skills_router.get_collections(),
+        skill_registry, market=get_market(),
+        collections=agent_skills_router.get_collections(),
     ))
     # -- end W10 wiring --
 
@@ -1206,6 +1427,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         automation_engine.shutdown()
     if heartbeat_service is not None:
         await heartbeat_service.aclose()
+    # W8 group chat singletons: reset so a stale orchestrator (and its bound
+    # dispatcher over this lifespan's services) never leaks into a restart.
+    from atlas.api import group_router as _group_router
+
+    _group_router.set_group_orchestrator(None)
+    _group_router.set_group_service(None)
     if mcp_client:
         await mcp_client.stop()
     if local_execution:
@@ -1297,9 +1524,13 @@ app.include_router(device_router)
 app.include_router(local_models_router)
 app.include_router(agent_skills_router)
 
-# GROUP_CHAT_MOUNT: W8 groups router mounts here (group chat wiring pending —
-# the controller adds the include_router once W8 lands; see _handle_run_start's
-# group_id gate).
+# GROUP_CHAT_MOUNT: W8 groups router (group CRUD, members, timeline, stop,
+# manual turns). The lifespan binds the service/orchestrator singletons and the
+# real turn dispatcher; _handle_run_start routes group_id runs through the
+# orchestrator.
+from atlas.api.group_router import router as group_router  # noqa: E402
+
+app.include_router(group_router)
 
 
 # ---------------------------------------------------------------------------
@@ -6910,12 +7141,9 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         if not requested_workspace:
             requested_workspace = agent_profile.get("workspace")
     if data.get("group_id"):
-        # W8 group chat wiring is pending; the controller mounts the groups
-        # router post-wave (see GROUP_CHAT_MOUNT).
-        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
-        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
-            "category": "validation", "detail": "group chat wiring pending",
-        }))
+        # W8: real group-chat dispatch — validate group/membership, then drive
+        # the orchestrated rounds (timeline = the shared group room log).
+        await _start_group_turn_run(conn_id, run_id, data, str(data["group_id"]), agent_key)
         return
     ssh_requested = isinstance(requested_workspace, str) and requested_workspace.startswith("ssh://")
     try:
@@ -6977,6 +7205,10 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             },
         }
     effective_skills = data.get("active_skills", (profile or {}).get("active_skills", []))
+    if agent_profile is not None:
+        # W7→W10 bridge (scenario 16): learned/approved per-agent skills join the
+        # run's active set; an explicit per-agent opt-out wins over the profile.
+        effective_skills = _merge_agent_collection_skills(agent_key, effective_skills)
     effective_mode = data.get("mode", (profile or {}).get("mode", "act"))
     model_id = data.get("model", (profile or {}).get("model"))
     reasoning_effort = data.get("reasoning_effort", (profile or {}).get("reasoning_effort"))

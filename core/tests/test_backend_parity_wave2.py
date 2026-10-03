@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -269,15 +270,19 @@ async def test_workspace_search_respects_gitignore_and_fuzzy_filename(tmp_path: 
     assert result["files"] == [{"path": "src/AgentConfig.py", "name": "AgentConfig.py", "type": "file"}]
 
 
-async def test_workspace_search_honors_gitignore_without_repository(tmp_path: Path) -> None:
-    root = tmp_path / "plain"
-    (root / "secret").mkdir(parents=True)
-    (root / "secret" / "Token.txt").write_text("x", encoding="utf-8")
-    (root / "visible").mkdir()
-    (root / "visible" / "Token.txt").write_text("x", encoding="utf-8")
-    (root / ".gitignore").write_text("secret/\n", encoding="utf-8")
-    results = await server.workspace_search(str(root), "token")
-    assert [item["path"] for item in results["files"]] == ["visible/Token.txt"]
+async def test_workspace_search_honors_gitignore_without_repository() -> None:
+    # tempfile, not tmp_path: the search treats an *untracked* dir inside the
+    # Atlas repo as git-listed (empty output, exit 0) and skips the manual
+    # gitignore fallback — the scenario must live outside any repository.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td) / "plain"
+        (root / "secret").mkdir(parents=True)
+        (root / "secret" / "Token.txt").write_text("x", encoding="utf-8")
+        (root / "visible").mkdir()
+        (root / "visible" / "Token.txt").write_text("x", encoding="utf-8")
+        (root / ".gitignore").write_text("secret/\n", encoding="utf-8")
+        results = await server.workspace_search(str(root), "token")
+        assert [item["path"] for item in results["files"]] == ["visible/Token.txt"]
 
 
 def test_context_file_injection_is_bounded_and_rejects_escape(tmp_path: Path) -> None:

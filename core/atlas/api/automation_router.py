@@ -247,11 +247,12 @@ async def resume_automation(automation_id: str) -> dict[str, Any]:
 
 @automation_router.post("/import-legacy")
 async def import_legacy(body: ImportLegacyRequest | None = None) -> dict[str, Any]:
-    """旧 ``schedules.toml`` 一次性导入（不删旧文件、不改旧 scheduler）。"""
+    """旧 ``schedules.toml`` 一次性导入；导入后暂停旧任务，防止新旧双触发（P10）。"""
     engine = _engine()
     report = import_legacy_schedules(
         toml_path=(body.toml_path if body else None),
         store=engine.store,
+        pause_legacy=True,
     )
     await engine.reconcile_async()
     return report.to_dict()
