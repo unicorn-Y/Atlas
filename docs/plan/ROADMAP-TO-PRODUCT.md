@@ -12,42 +12,50 @@
 
 ## 〇、当前顺序（用户 2026-10-03 最新决定，优先于后文旧表）
 
-当前只派发 **一个连续大任务**：
+当前唯一施工任务：
 
-### ATLAS-MEGA-LATEST-DAILY-READY
+### ATLAS-MEGA-PERSISTENT-ALWAYS-ON
 
 任务书：
-`tasks/taskbooks/ATLAS-MEGA-LATEST-DAILY-READY.md`
+`tasks/taskbooks/ATLAS-MEGA-PERSISTENT-ALWAYS-ON.md`
 
-它一次连续完成：
+研究依据：
+`docs/research/2026-10-03-persistent-atlas/00-source-selection.md`
 
-1. 当前最新来源冻结；
-2. Hermes upstream 最新同步；
-3. 已完成 C1–C6 的 Latest-Best 全局刷新；
-4. X2 Computer / Browser；
-5. X4 Skill Market；
-6. X5 Self-Evolution；
-7. 跨模块集成；
-8. K1 上线前检查 + 发现问题立即修复；
-9. 交付“可以开始用户日常实测”的版本。
+目标：在已经 ACCEPTED 的 Latest-Daily-Ready Atlas 上继续一次性补齐当前最强的“常驻个人 Agent”能力。
 
-**中间不再按 U0/U1/X2/X4/X5/K1 分波停下来等待人工验收。**
-这些旧任务书仍作为细节参考，但主控以 Mega taskbook 为唯一施工契约。
+连续完成：
 
-### 并行原则
+1. 开工重新冻结 OpenClaw / Hermes / DBOS 最新 HEAD；
+2. Hermes fork tail-sync；
+3. Persistent Agent / Bot Mode / 多 Agent 群聊；
+4. Gateway + Telegram / Slack / 飞书 / 钉钉 / 企业微信 / Email / Webhook；
+5. Heartbeat / 主动性；
+6. DBOS durable execution + OpenClaw cron 语义 + Hermes cron 产品面；
+7. Atlas-owned Windows 笔记本 / paired device / takeover；
+8. Hermes managed llama.cpp 本地模型 runtime；
+9. OpenClaw Skill Workshop + Hermes curator；
+10. 集成去重与 deterministic acceptance。
+
+### 逐块来源
+
+- Persistent-agent / Gateway / Heartbeat / Node / cron state machine：优先 OpenClaw；
+- Bot UI / group chat / Bot Screen UX / 中国渠道 adapters / managed local runtime：优先 Hermes；
+- durable execution：现有 DBOS；
+- Computer / Browser：继续用已验收 Atlas X2；
+- Skills：继续用已验收 Atlas X4/X5 单 registry。
+
+### 并发原则
 
 ZCodex 主控必须：
-- 能拆开的工作尽量全部交子代理并行；
-- 使用当前运行环境允许的最大子代理并发；
+- 能拆开的工作尽量全部交子代理；
+- 使用当前 runtime 允许的最大子代理并发；
 - 不写死 worker 数量；
-- spawn 撞并发/配额上限时自动缩 batch，槽位释放后继续派；
-- 不能因为一次 spawn 失败就停用子代理或退回单线程；
-- 共享热文件由单一 owner / integration owner 串行收口。
+- spawn 撞上限就缩 batch，槽位释放后继续派；
+- 不能因为一次 spawn 失败退回单线程；
+- 热文件单 owner / integration owner。
 
-完成 Mega 后：
-- 用户开始自己日常使用；
-- 按 `docs/plan/USAGE-FEEDBACK.md` 持续优化；
-- X1/X3/X6/X7/full T1/R1 由用户后续决定何时启动。
+本波结束后再进入真实日常使用/反馈；X6 实时语音、full T1、R1 继续后放。
 
 ## 一、成品的标准
 
