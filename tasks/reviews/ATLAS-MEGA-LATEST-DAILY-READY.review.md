@@ -1,96 +1,111 @@
 # ATLAS-MEGA-LATEST-DAILY-READY Review
 
-Verdict: **PARTIAL — implementation is substantial, but three closeout blockers remain before “latest + daily-ready” can be accepted.**
+Verdict: **PASS — Mega + Mega-R are accepted. Atlas is ready for the user's daily-use phase.**
 
 Reviewed Atlas head:
-- `bc377787d00a8852e8d2f5cea891b67cea351ca4`
+- `b0e96cb981a19672cf988ee6558031a04fb724de`
 
 Reviewed Hermes fork:
-- `unicorn-Y/hermes-agent:atlas @ 27c63095b002b531b07bd6ad31da88bfe821f55f`
+- `unicorn-Y/hermes-agent:atlas @ 7912500ffd4e3397772c4af42050a7687286e8fb`
 
-Current upstream observed during independent review:
-- `NousResearch/hermes-agent:main @ ab86a20aeceeead429f3c3b50dd1d33fc26dfcb4`
+Final frozen upstream checkpoint for the moving-target closeout:
+- `NousResearch/hermes-agent @ eb7e8620324b32424c06218f6a28094df2e921f8`
 
-## Accepted and must not be reopened
+## Mega-R blocker closure
 
-The following are real production implementations and are accepted:
+### 1. X5 watcher backfill — PASS
 
-- U1 core refresh work that landed in production;
-- X2 Computer/Browser bridge, single model-facing surface, permission classification, browser handoff/vault/recording pipeline;
-- X4 Skill Market single-registry integration and source/install/update surface;
-- X5 evolution modules: watcher, capability diff, parity mapper, taskbook drafting, isolated branch proposal flow, curator;
-- X2/X4/X5 integration into Atlas server/runtime/frontend;
-- K1 parity/fake-path harness and the product bugs it already discovered and fixed;
-- frontend validation evidence;
-- focused regressions after the final skill-source fix.
+Verified in `core/atlas/evolution/watcher.py`:
 
-Do **not** redo the Mega wave.
+- `FETCH_LIMIT=30` is now only the REST page size;
+- `BACKFILL_CEILING=500` is independently configurable by env or per run;
+- local git reads up to the effective backfill ceiling rather than a fixed 30 commits;
+- GitHub commit/release fetches paginate until the prior checkpoint is reached, history is exhausted, or the ceiling is hit;
+- when the ceiling is reached before the old checkpoint, state becomes `backfill_incomplete` and the old `last_id` is preserved;
+- history rewrite/exhaustion is represented explicitly through checkpoint-reset behavior;
+- offline/cache behavior remains non-destructive.
 
-## Blocker 1 — X5 watcher skips history when upstream advances by more than FETCH_LIMIT
+Reported and code-reviewed focused evidence:
+- `tests/test_evolution.py`: **29 passed**
+- includes 120-commit local backfill, 100+ REST pagination, no-duplicate rerun, incomplete-then-complete backfill, release pagination/seen safety, and checkpoint reset.
 
-`core/atlas/evolution/watcher.py` currently uses:
-- `FETCH_LIMIT = 30`;
-- local git: `git log -n30`;
-- GitHub REST: `per_page=30`;
-- after a successful check, `last_id` is set to the newest fetched entry.
+The original “skip unseen history when >30 commits behind” blocker is closed.
 
-If the previous `last_id` is more than 30 commits behind:
-1. the first run sees only the newest 30 and never reaches the old checkpoint;
-2. it sets `last_id` directly to the newest commit;
-3. the next run stops at that newest commit;
-4. the older unseen gap is permanently skipped.
+### 2. Final Hermes tail sync — PASS
 
-This is not theoretical: during this Mega run Hermes advanced from the frozen `a6e75acb...` to current `ab86a20...`, a **320-commit** delta.
+Independent GitHub comparison of the frozen final checkpoint against the fork confirms:
 
-Required:
-- fetch/paginate until the previous checkpoint is found, or until a bounded explicit backfill ceiling is reached;
-- never advance the checkpoint past unseen history;
-- support both local git and GitHub REST sources;
-- preserve offline/cache behavior;
-- if a configured ceiling is reached before the old checkpoint, report a visible `backfill_incomplete` state instead of silently declaring current;
-- add regression: previous checkpoint 100+ commits behind → all commits are eventually surfaced exactly once across the check.
+- base/checkpoint: `eb7e8620324b32424c06218f6a28094df2e921f8`
+- fork: `7912500ffd4e3397772c4af42050a7687286e8fb`
+- **behind: 0**
+- **ahead: 10**
+- merge base is exactly the frozen checkpoint.
 
-## Blocker 2 — Hermes fork is no longer current at final delivery
+This satisfies the agreed moving-target rule: “latest” is the upstream HEAD frozen at the start of the final tail-sync; later upstream commits do not reopen the completed acceptance run.
 
-The Mega source freeze correctly captured an earlier upstream head and synced to it, but upstream moved during execution.
+Atlas `core/pyproject.toml` pins the final fork commit.
 
-Independent compare now shows the Atlas fork is:
-- ahead by Atlas-specific commits;
-- **behind current upstream by 320 commits**;
-- merge-base is the frozen `a6e75acb...`.
+Focused fork regressions were run over the Atlas patch areas; the remaining Windows/path-style failures were shown to be pre-existing/environment/upstream-test issues rather than merge regressions.
 
-This does not invalidate the Mega implementation, but it invalidates the final wording “current latest Hermes” under the user's explicit latest-first requirement.
+### 3. K1 fake Computer daily path — PASS
 
-Required:
-- after fixing Blocker 1, fetch current upstream again;
-- semantic tail-sync current `NousResearch/hermes-agent:main` into `unicorn-Y/hermes-agent:atlas`;
-- preserve Atlas fork patches;
-- update Atlas `core/pyproject.toml` pin;
-- only review conflicts/changed capability areas since the previous freeze; do not rerun U1 from scratch;
-- run focused tests for touched upstream conflict areas + Atlas fork patches;
-- record the exact final upstream/fork heads.
+Verified:
 
-Because upstream is a moving target, “latest” is defined as the upstream HEAD fetched at the final tail-sync checkpoint. Do not chase commits that appear after that checkpoint during the test run.
+- deterministic `core/atlas/tools/x2/fake_computer.py` exists;
+- the fake backend is selected only behind `ATLAS_X2_COMPUTER_FAKE`;
+- production X2 registration/dispatch/policy path remains the same; only the driver layer is substituted in K1;
+- `test_daily_computer_use_with_fake_driver` no longer has an xfail marker;
+- the test requires a real `computer_observe` tool completion, non-error result, and screenshot/image evidence.
 
-## Blocker 3 — K1 fake daily-path matrix is 14/15, not complete
+Final K1 result:
+- **17/17 test items passed**
+- **15/15 logical daily scenarios passed**
+- **0 xfail**
 
-`core/tests/test_k1_daily_paths_x2x4x5.py::test_daily_computer_use_with_fake_driver` is still marked `xfail` because no fake CUA driver is wired into the harness.
+The original 14/15 blocker is closed.
 
-The Mega taskbook explicitly required a fake Computer Use daily path. A real-device smoke later is separate and cannot replace this deterministic fake acceptance.
+## Accepted Mega scope
 
-Required:
-- wire a minimal fake driver/backend seam into the K1 harness using the same production Computer bridge;
-- the test must actually execute `computer_observe`;
-- assert tool.completed is non-error and carries screenshot/image evidence;
-- remove the xfail;
-- K1 daily fake matrix must be **15/15 real pass**.
+The following are accepted as delivered:
 
-## Non-blockers
+- current-source freeze and Latest-Best decision map;
+- Hermes fork synchronization through the frozen final checkpoint;
+- C1–C6 refresh with KEEP / UPGRADE / REPLACE decisions and implemented upgrades;
+- X2 Computer + Browser;
+- X4 Skill Market with one Atlas SkillRegistry;
+- X5 watcher / capability diff / parity mapper / taskbook draft / isolated implementation proposal / skill curator;
+- X2/X4/X5 integration and duplicate-runtime/registry cleanup;
+- K1 parity and fake daily-path checks;
+- frontend build/typecheck/Vitest evidence;
+- focused post-fix regressions.
 
-- real X2 desktop/login/CAPTCHA/vault/market-network checks remain `REQUIRES_USER_DAILY_SMOKE`;
-- a full backend suite does not need to be rerun merely because focused post-fix coverage was used after the one permitted full-suite run;
-- X1/X3/X6/X7/full T1/R1 remain intentionally deferred.
+## Daily-use runtime check
 
-## Closeout
+An execution-log observation showed a shell Python importing a separate editable Hermes clone under AppData. This does **not** block the normal Atlas daily-use entry:
 
-Fix only the three blockers above, append evidence to the existing Mega result, and return for final review.
+- `start-atlas.bat` explicitly sets `ATLAS_PYTHON=%CD%\core\.venv\Scripts\python.exe` before starting Electron;
+- the Windows packaged path uses the bundled backend executable built from `core/.venv`.
+
+Therefore the normal source launcher and packaged launcher do not depend on the incidental shell Python that exposed the AppData clone.
+
+Directly running `npm run dev` from an arbitrary shell without `ATLAS_PYTHON` can still pick PATH Python; use `start-atlas.bat` for source daily use until release packaging is the normal path.
+
+## Remaining by design
+
+These are not blockers for the current daily-use phase:
+
+- real X2 desktop/login/CAPTCHA/vault/browser smoke;
+- real skills.sh/GitHub market smoke;
+- real-model subjective/T1 comparison;
+- X1 / X3 / X6 / X7;
+- R1 release engineering.
+
+These should now be discovered or scheduled from real use rather than reopening the accepted Mega implementation.
+
+## Final verdict
+
+**PASS.**
+
+Atlas core + latest-best refresh + Computer/Browser + Skills + Self-Evolution + K1 deterministic acceptance are complete for the current scope.
+
+**The user can begin daily use now.**
