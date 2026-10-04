@@ -26,14 +26,14 @@ core/.venv/Scripts/python.exe -m uvicorn atlas.server:app --host 127.0.0.1 --por
 cd frontend && npx vite --host 127.0.0.1
 cd frontend && npx tsc -p tsconfig.electron.json && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 ATLAS_PYTHON=../core/.venv/Scripts/python.exe ../node_modules/electron/dist/electron.exe . --remote-debugging-port=9335
 
-# 后端全量测试（约 3 分钟；一定放后台跑完，终端会中断长命令）
-cd core && .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider --basetemp "$TEMP/pt-x" --ignore=tests/test_computer_use.py
+# 后端默认快测（unit；H10.1 分层后）
+cd core && .venv/Scripts/python.exe -m pytest -q -n auto --dist loadscope
 
 # 前端检查
 cd frontend && npx tsc -p tsconfig.renderer.json --noEmit && npx tsc -p tsconfig.electron.json --noEmit && npx vitest run && npx vite build
 ```
 
-- `tests/test_computer_use.py` 会动真实鼠标，**永远跳过**。
+- `tests/test_computer_use.py::test_real_desktop_observe_input_clipboard_and_window_management` 会操作真实桌面，只在交互式 Windows 桌面通过 `-m desktop` 单独运行。
 - 重启后端前先按端口找到进程（`Get-NetTCPConnection -LocalPort 8765`），确认是 uvicorn 再停。
 
 ## 二、代码地图（改之前先读对应文件）
@@ -181,3 +181,60 @@ git -C D:\hermes-agent merge upstream/main
 4. 开发版运行时不要 `npm ci`（会删掉正在用的依赖）。
 5. 主机上 `package-lock.json` 常显示改动（只是换行符），拉代码前 `git checkout -- package-lock.json`。
 6. Electron 首次启动后端要 20 秒左右，超过它 15 秒的等待时间：先手动起后端，再起 Electron。
+
+## 八、后端测试分层（H10.1）
+
+在 `D:\Atlas\core` 的 PowerShell 中运行。一次性安装开发测试依赖：
+
+```powershell
+uv sync --extra dev
+```
+
+pytest 默认选择 `unit`。未显式标注的测试按 unit 收集；跨 Atlas 服务、持久化、进程、协议或打包边界的模块在 `tests/conftest.py` 显式列为 integration。真实桌面用例归 `desktop`，真实模型调用归 `live`。新写的跨边界测试应显式添加 `@pytest.mark.integration`；真实模型测试必须添加 `@pytest.mark.live`，并且只有 `ATLAS_LIVE=1` 时才会执行。
+
+以下选择均保留对应分组内的全部测试。`-n auto --dist loadscope` 在不同模块间并行，同一模块留在同一 worker；保存 junit 结果并用墙钟计时，墙钟包括收集、worker 启动和 teardown。
+
+```powershell
+$run = Get-Date -Format 'yyyyMMdd-HHmmss'
+$out = "..\artifacts\test-runs\$run"
+New-Item -ItemType Directory -Force $out | Out-Null
+$timer = [Diagnostics.Stopwatch]::StartNew()
+python -m pytest -q -n auto --dist loadscope --durations=25 `
+  --junitxml="$out\unit.xml" 2>&1 | Tee-Object "$out\unit.log"
+$exitCode = $LASTEXITCODE
+$timer.Stop()
+"exit=$exitCode wall_seconds=$([math]::Round($timer.Elapsed.TotalSeconds, 1))"
+```
+
+`unit` 的目标墙钟时间不超过 180 秒：
+
+```powershell
+python -m pytest -q -n auto --dist loadscope -m unit --durations=25 `
+  --junitxml="$out\unit.xml" 2>&1 | Tee-Object "$out\unit.log"
+```
+
+`unit + integration` 的目标墙钟时间不超过 600 秒。超时或失败时保留相同选择的完整日志，先检查 `--durations=25` 和失败根因，再优化 setup、共享状态或串行瓶颈；不能通过排除测试缩短数字。
+
+```powershell
+python -m pytest -q -n auto --dist loadscope -m "unit or integration" `
+  --durations=25 --junitxml="$out\unit-integration.xml" `
+  2>&1 | Tee-Object "$out\unit-integration.log"
+```
+
+桌面 lane 只在用户可见的交互式 Windows 会话运行。目标桌面用例失败时只自动重试一次；其他测试不重试。
+
+```powershell
+python -m pytest -q -n 1 -m desktop --durations=25 `
+  --junitxml="$out\desktop.xml" 2>&1 | Tee-Object "$out\desktop.log"
+```
+
+真实模型 lane 必须显式启用。API 密钥只从本机环境/凭据读取，日志不得包含密钥或原始 provider 请求。
+
+```powershell
+$env:ATLAS_LIVE = '1'
+python -m pytest -q -n 1 -m live --durations=25 `
+  --junitxml="$out\live.xml" 2>&1 | Tee-Object "$out\live.log"
+$exitCode = $LASTEXITCODE
+Remove-Item Env:ATLAS_LIVE
+"exit=$exitCode"
+```

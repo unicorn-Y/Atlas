@@ -51,6 +51,8 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-rerunfailures>=14.0",
+    "pytest-xdist>=3.6",
     "ruff>=0.7.0",
 ]
 terminal = ["pywinpty>=2.0.13; platform_system == 'Windows'"]
@@ -89,3 +91,11 @@ select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+addopts = "-m unit"
+markers = [
+    "unit: isolated tests using fakes or in-process components (default)",
+    "integration: tests crossing Atlas component, persistence, or process boundaries",
+    "desktop: tests that interact with the real Windows desktop",
+    "live: tests that call a real model provider; requires ATLAS_LIVE=1",
+    "flaky: retry policy supplied by pytest-rerunfailures",
+]
