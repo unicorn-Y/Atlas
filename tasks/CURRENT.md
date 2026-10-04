@@ -1,57 +1,37 @@
 # Atlas Current Task
 
-CURRENT: ATLAS-MEGA-PERSISTENT-CLOSEOUT
-STATUS: REVIEW_PASSED
+CURRENT: ATLAS-H1-CORE-HARDENING
+STATUS: READY
 CONTROLLER: ZCodex
-TASKBOOK: tasks/taskbooks/ATLAS-MEGA-PERSISTENT-CLOSEOUT.md
-RESULT: tasks/results/ATLAS-MEGA-PERSISTENT-CLOSEOUT.result.md
-REVIEW: tasks/reviews/ATLAS-MEGA-PERSISTENT-CLOSEOUT.review.md
+TASKBOOK: tasks/taskbooks/ATLAS-H1-CORE-HARDENING.md
+RESULT: tasks/results/ATLAS-H1-CORE-HARDENING.result.md
+REVIEW: tasks/reviews/ATLAS-H1-CORE-HARDENING.review.md
 
 BASE_BRANCH: main
-BASE_COMMIT: 631b5f6ad030e283bebe5fc64833ca68a55641fc
-PARENT: ATLAS-MEGA-PERSISTENT-ALWAYS-ON
-PREVIOUS: ATLAS-MEGA-PERSISTENT-ALWAYS-ON
-PREVIOUS_STATUS: PAUSED_AFTER_SYNC
+BASE_COMMIT: 574db83
+PREVIOUS: ATLAS-MEGA-PERSISTENT-CLOSEOUT
+PREVIOUS_STATUS: REVIEW_PASSED
 
 ## Goal
 
-Resume directly from the synced integration checkpoint and finish the Persistent / Always-On closeout.
+主体加固一次到位：内核接口化、单一会话数据源、并发与资源、模型路由与原生通道、
+server.py 拆分、错误处理、渠道默认权限、启动速度、无头 CLI、测试分层，
+最后用真实模型做 Atlas 冒烟实测。不加新功能，行为默认不变，每项修复带测试。
 
-Do not redo W1-W7 and do not restart broad research.
+## First steps
 
-Close only the remaining integration gaps:
-1. Group Chat -> real persistent-agent runtime;
-2. persistent Agent session restart + real sessions API;
-3. desktop/channel same conversation;
-4. Automation/Heartbeat -> real channel delivery;
-5. Atlas-owned laptop offline/restart durable continuation;
-6. Device takeover -> X2 pending/resume bridge;
-7. learned skill -> actual next Agent run;
-8. current backend wiring failures;
-9. P11 16 fake-E2E acceptance with no real MISSING items.
-
-## Known checkpoint
-
-Latest synced implementation checkpoint before this closeout:
-- `631b5f6`
-- frontend batch: 155/155 green
-- backend focused batch: 26/38, wiring errors remain
-- P11 map: 9 COVERED / 5 PARTIAL / 2 MISSING
+1. H0.1：主机未提交改动原样存到 `wip/host-uncommitted-2026-10-04` 并 push，再从干净 main 开工。
+2. H0.2：跑基线脚本。
+3. H5 server 拆分先做，然后按任务书第 14 节并行。
 
 ## SUBAGENT POLICY — HARD REQUIREMENT
 
-- Use subagents for the bulk of implementation, focused tests, and review.
-- Target the maximum concurrency the runtime actually allows.
-- Do not hard-code a worker count.
-- If a spawn is rejected, shrink the batch and continue when slots free up.
-- Do not fall back to single-threaded work because of one concurrency rejection.
-- `core/atlas/server.py` has one integration owner.
+- 用当前 runtime 允许的最大子代理并发，不写死数量；被拒就缩 batch，不退回单线程。
+- 热文件单 owner：`server.py`、`engine/hermes_runtime.py`、`agent/__init__.py`、Hermes fork、`backendProcess.ts`。
 
 ## Completion
 
-Write:
-- `tasks/results/ATLAS-MEGA-PERSISTENT-CLOSEOUT.result.md`
+写 `tasks/results/ATLAS-H1-CORE-HARDENING.result.md`，CURRENT 改为 `AWAITING_REVIEW`，
+push main，核对本地/远端 head，停。
 
-Then set CURRENT to `AWAITING_REVIEW`, push main, verify local/remote heads, and stop.
-
-Do not start X6 / T1 / R1 / MemoryOS / new UI redesign / new upstream research.
+不得启动 T1 / X6 / R1 / MemoryOS / UI 改版 / 安全审查 / 新上游调研。
