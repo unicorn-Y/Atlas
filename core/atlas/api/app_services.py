@@ -19,6 +19,7 @@ class AppServices:
 
     config: Any = None
     model_mgr: Any = None
+    asr_manager: Any = None
     memory: Any = None
     orchestrator: Any = None
     mcp_client: Any = None

@@ -50,7 +50,13 @@ async def health(
     startup = getattr(services, "startup", None)
     components: dict[str, str] = startup.snapshot() if startup is not None else {}
     status = "ok" if all(state == "ready" for state in components.values()) else "starting"
-    return {"status": status, "version": "0.1.0", "components": components}
+    errors = startup.error_snapshot() if startup is not None else {}
+    return {
+        "status": status,
+        "version": "0.1.0",
+        "components": components,
+        "component_errors": errors,
+    }
 
 
 @router.get("/api/sandbox/status")

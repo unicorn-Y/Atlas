@@ -24,15 +24,91 @@ from atlas.api.startup_components import StartupComponents
 
 log = structlog.get_logger()
 
-# Background mcp warmups (no-configured-servers fast path); shutdown awaits
-# them so a lifespan restart never leaks an import task across loops.
-_MCP_WARMUP_TASKS: set[asyncio.Task] = set()
+
+def restore_lifespan_routes(app: Any, route_count: int) -> None:
+    """Drop routes registered by a deferred extension when its app closes."""
+    del app.router.routes[route_count:]
+    app.openapi_schema = None
 
 
-async def await_mcp_warmups(timeout: float = 10.0) -> None:
-    """Wait for pending mcp warmups (bounded; used by server shutdown)."""
-    if _MCP_WARMUP_TASKS:
-        await asyncio.wait(_MCP_WARMUP_TASKS, timeout=timeout)
+async def shutdown_lifespan_components(app: Any, state: dict[str, Any], route_count: int) -> None:
+    """Release lifespan-owned services after startup settles or is cancelled."""
+    import atlas.server as server_module
+    from atlas.api import group_router
+    from atlas.server import _DeferredMCPClient, get_automation_engine
+    from atlas.tools.x2 import browser as x2browser
+    from atlas.tools.x2 import computer as x2computer
+
+    def resource(name: str) -> Any:
+        return state[name] if name in state else getattr(server_module, name, None)
+
+    for name in ("telegram_service", "scheduler"):
+        service = resource(name)
+        if service:
+            await service.stop()
+    channel_manager = resource("channel_manager")
+    if channel_manager is not None:
+        await channel_manager.stop()
+        channel_manager.close()
+    gateway_bridge = resource("gateway_bridge")
+    if gateway_bridge is not None:
+        gateway_bridge.sessions.close()
+    automation_engine = get_automation_engine()
+    if automation_engine is not None:
+        automation_engine.shutdown()
+    heartbeat_service = resource("heartbeat_service")
+    if heartbeat_service is not None:
+        await heartbeat_service.aclose()
+    group_router.set_group_orchestrator(None)
+    group_router.set_group_service(None)
+    mcp_client = resource("mcp_client")
+    if isinstance(mcp_client, _DeferredMCPClient):
+        mcp_client = server_module.mcp_client
+    if mcp_client is not None and not isinstance(mcp_client, _DeferredMCPClient):
+        await mcp_client.stop()
+    for name in ("local_execution", "computer_use"):
+        service = resource(name)
+        if service:
+            await service.shutdown()
+    await x2computer.shutdown()
+    await x2browser.shutdown()
+    cua_backend = resource("cua_backend")
+    if cua_backend:
+        await cua_backend.close()
+    browser_use = resource("browser_use")
+    if browser_use:
+        for session_id in list(browser_use._sessions):
+            await browser_use.close(session_id)
+    ssh_workspaces = resource("ssh_workspaces")
+    if ssh_workspaces is not None:
+        await ssh_workspaces.close()
+    agent_backend_host = resource("agent_backend_host")
+    if agent_backend_host:
+        await agent_backend_host.shutdown()
+    durable = resource("durable")
+    if durable:
+        durable.stop()
+    for name in ("projects", "usage_ledger", "memory", "manager"):
+        service = resource(name)
+        if service:
+            await service.close()
+    restore_lifespan_routes(app, route_count)
+
+
+def start_lifespan_components(
+    app: Any, services: Any, components: StartupComponents,
+) -> tuple[asyncio.Task[None], int]:
+    """Open the migration barrier before scheduling any request-visible startup work."""
+    from atlas.config import DATA_ROOT
+    from atlas.session_migration_gate import begin_session_migration
+
+    begin_session_migration(DATA_ROOT / "engine")
+    route_count = len(app.routes)
+    task = asyncio.create_task(
+        run_deferred_startup(app, services, components),
+        name="atlas-deferred-startup",
+    )
+    return task, route_count
 
 
 async def _component(
@@ -43,8 +119,8 @@ async def _component(
         await step()
     except asyncio.CancelledError:
         raise
-    except Exception:
-        components.mark(name, "failed")
+    except Exception as exc:
+        components.mark(name, "failed", error=str(exc))
         log.exception("startup.component_failed", component=name)
     else:
         components.mark(name, "ready")
@@ -92,6 +168,11 @@ async def run_deferred_startup(app: Any, services: Any, components: StartupCompo
                        lambda: _register_extensions(app)),
             name="startup-extensions",
         ),
+        asyncio.create_task(
+            _component(components, "session_migration",
+                       lambda: _migrate_legacy_sessions(services)),
+            name="startup-session-migration",
+        ),
     ]
     results = await asyncio.gather(*branches, return_exceptions=True)
     for result in results:
@@ -99,10 +180,6 @@ async def run_deferred_startup(app: Any, services: Any, components: StartupCompo
             # _component already logged per-component; this only guards the
             # wrapper itself (e.g. an internal bug) so shutdown stays clean.
             log.error("startup.deferred_branch_error", error=str(result))
-    # The fast-path mcp warmup is not a component (health flipped ready when
-    # the branch returned); still settle it here so a lifespan restart never
-    # leaks an import task across event loops.
-    await await_mcp_warmups(timeout=10.0)
 
 
 async def _start_dbos(services: Any) -> None:
@@ -118,9 +195,20 @@ async def _start_dbos(services: Any) -> None:
     durable = services.durable
     data_dir = get_config().db_path.parent
     skip_migrations = migrations_current(data_dir)
-    status = await asyncio.to_thread(
-        lambda: durable.start(run_migrations=not skip_migrations),
+    start_task = asyncio.create_task(
+        asyncio.to_thread(lambda: durable.start(run_migrations=not skip_migrations)),
+        name="startup-dbos-worker",
     )
+    try:
+        status = await asyncio.shield(start_task)
+    except asyncio.CancelledError:
+        cancel_start = getattr(durable, "cancel_pending_start", None)
+        if callable(cancel_start):
+            cancel_start()
+        start_task.add_done_callback(
+            lambda task: task.exception() if not task.cancelled() else None,
+        )
+        raise
     record_started(data_dir, started=bool(status.get("started")))
     if not status.get("started"):
         raise RuntimeError(f"dbos start failed: {status.get('start_error')}")
@@ -140,74 +228,68 @@ def _fetch_dbos_instance() -> None:
     getattr(_dbos_module, "_dbos_global_instance", None)
 
 
-def _mcp_servers_configured() -> bool:
-    """Mirror ``mcp_client._parse_server_configs``' enabled-server decision.
-
-    Deliberately config-only: importing the module would pull the mcp chain —
-    the exact cost the fast path below avoids. The background warmup still
-    calls the real parser (and connects anything this mirror could ever miss),
-    so a divergence self-heals within seconds.
-    """
-    from atlas.config import get_config
-
-    cfg = get_config()
-    servers_raw: dict[str, Any] = cfg.get("tools.servers", {}) or {}
-    auto_start: list[str] = cfg.get("tools.auto_start", []) or []
-    for name, data in servers_raw.items():
-        if not isinstance(data, dict):
-            continue
-        if not data.get("enabled", True):
-            continue
-        if auto_start and name not in auto_start:
-            continue
-        return True
-    return False
-
-
 def _construct_mcp_client() -> Any:
     from atlas.tools.mcp_client import MCPClient
 
     return MCPClient()
 
 
-async def _warm_mcp_chain() -> None:
-    """Import the heavy mcp chain + start the (empty) client off the hot path.
+def _mcp_servers_configured() -> bool:
+    """Mirror MCPClient.start's enabled-server filter without importing MCP SDKs."""
+    from atlas.config import get_config
 
-    Only used on the no-configured-servers fast path: the proxy keeps serving
-    until the real client is bound (never clobbering a test patch).
-    """
-    try:
-        import atlas.server as server_module
-
-        client = await asyncio.to_thread(_construct_mcp_client)
-        if isinstance(server_module.mcp_client, server_module._DeferredMCPClient):
-            server_module.mcp_client = client
-        await client.start()
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        log.exception("mcp.warmup_failed")
+    config = get_config()
+    servers = config.get("tools.servers", {}) or {}
+    auto_start = config.get("tools.auto_start", []) or []
+    if not isinstance(servers, dict):
+        return True  # Let MCPClient report malformed configuration as a startup failure.
+    return any(
+        isinstance(value, dict)
+        and value.get("enabled", True)
+        and (not auto_start or name in auto_start)
+        for name, value in servers.items()
+    )
 
 
 async def _start_mcp(services: Any) -> None:
     """S2.2: bring MCP up.
 
-    With configured servers, construct + connect here (the heavy mcp import
-    chain is paid after uvicorn binds, not at module import). With none, there
-    is nothing to connect and every consumer reads the client lazily through
-    the proxy — mark ready immediately and warm the import in the background
-    so the first request never pays it.
+    The heavy MCP import and optional server connections are paid after
+    uvicorn binds, not on the critical path. With no enabled servers the MCP
+    component is settled without importing the SDK; the deferred proxy keeps
+    dynamic add and first-use access compatible.
     """
+    if not _mcp_servers_configured():
+        log.info("mcp.no_servers_configured")
+        return
+
     import atlas.server as server_module
 
-    if not _mcp_servers_configured():
-        warmup = asyncio.create_task(_warm_mcp_chain(), name="startup-mcp-warmup")
-        _MCP_WARMUP_TASKS.add(warmup)
-        warmup.add_done_callback(_MCP_WARMUP_TASKS.discard)
-        return
     mcp_client = await asyncio.to_thread(_construct_mcp_client)
     server_module.mcp_client = mcp_client
     await mcp_client.start()
+
+
+async def _migrate_legacy_sessions(services: Any) -> None:
+    """R3 startup seam: import historical sessions after the API is serving."""
+    from atlas.config import DATA_ROOT, get_config
+    from atlas.session_migration_gate import finish_session_migration, has_legacy_transcripts
+
+    home = DATA_ROOT / "engine"
+    try:
+        if not has_legacy_transcripts(
+            get_config().db_path, DATA_ROOT / "engine" / "state.db",
+        ):
+            finish_session_migration(home, "ready")
+            return
+        from atlas.engine.session_migration import migrate_legacy_sessions
+
+        report = await migrate_legacy_sessions(home, services.memory)
+        if report.status == "failed":
+            raise RuntimeError(report.error or "Session history migration failed")
+    except BaseException:
+        finish_session_migration(home, "failed")
+        raise
 
 
 async def _scan_and_register_skills(services: Any) -> None:
@@ -254,12 +336,7 @@ async def _start_engine_registrations(services: Any) -> None:
     Idempotent and fingerprint-checked; a failure only means the first turn
     re-runs the registration. The engine import + registration work is CPU
     heavy and thread-safe; off the loop it overlaps the DBOS worker."""
-    try:
-        await asyncio.to_thread(_engine_startup_registrations, services.model_mgr)
-    except asyncio.CancelledError:
-        raise
-    except Exception:  # noqa: BLE001 — degraded to a warning; first turn retries
-        log.exception("engine.startup_registrations_failed")
+    await asyncio.to_thread(_engine_startup_registrations, services.model_mgr)
 
 
 def _engine_startup_registrations(model_manager: Any) -> None:
@@ -284,15 +361,13 @@ async def _start_automation(services: Any, components: StartupComponents) -> Non
     if not await components.wait_ready("dbos", timeout=120.0):
         # durable.start() failed: automation CRUD keeps working (store only),
         # but triggers/runs report 503 until the next restart.
-        log.warning("automation.engine_not_started", reason="dbos_not_ready")
-        return
+        raise RuntimeError("automation engine not started: DBOS is not ready")
     import dbos._dbos as _dbos_module
 
     dbos_instance = getattr(_dbos_module, "_dbos_global_instance", None)
     automation_engine = get_automation_engine()
     if automation_engine is None or dbos_instance is None:
-        log.warning("automation.engine_not_started", reason="dbos_instance_unavailable")
-        return
+        raise RuntimeError("automation engine not started: DBOS instance unavailable")
     await automation_engine.start_async(dbos_instance)
     await _reconcile_agent_heartbeats(services.persistent_agents, automation_engine)
 
@@ -313,8 +388,6 @@ async def _start_scheduler(services: Any) -> None:
 async def _start_telegram(services: Any) -> None:
     """S2.9: legacy TelegramService fallback poll — only when the gateway's
     telegram channel is NOT enabled, so the two stacks never double-poll."""
-    from atlas.config import get_config
-
     telegram_service = services.telegram_service
     channel_manager = services.channel_manager
     if not ((channel_manager.configs if channel_manager else {}).get("telegram") or {}).get(
@@ -326,21 +399,27 @@ async def _start_telegram(services: Any) -> None:
 async def _register_extensions(app: Any) -> None:
     """S2.10: /init 与 /review 的路由和工具注册。这些模块由独立子模块提供，
     注册失败只降级告警，绝不能拖垮 Atlas 本体启动。"""
+    errors: list[str] = []
     try:
         from atlas.commands.init import register_init_routes
 
         register_init_routes(app)
     except Exception:  # /init 模块缺失或注册失败只降级（lint: logger.exception）
         log.exception("C6 启动注册 /init 路由失败，/init 功能暂不可用")
+        errors.append("/init route registration failed")
     try:
         from atlas.review.engine import register_review_tools
 
         register_review_tools()
     except Exception:  # review 模块缺失或注册失败只降级
         log.exception("C6 启动注册审查工具失败，/review 功能暂不可用")
+        errors.append("/review tool registration failed")
     try:
         from atlas.review.engine import register_review_routes
 
         register_review_routes(app)
     except Exception:  # review 路由注册失败只降级
         log.exception("C6 启动注册 /review 路由失败，/review 功能暂不可用")
+        errors.append("/review route registration failed")
+    if errors:
+        raise RuntimeError("; ".join(errors))

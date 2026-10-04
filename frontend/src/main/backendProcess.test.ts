@@ -117,6 +117,27 @@ describe('backendProcess startup (H8 §10.3)', () => {
     await promise;
   });
 
+  it('reads the backend string state contract and shows failed component details', async () => {
+    let health: unknown = {
+      status: 'starting',
+      components: { session_migration: 'failed', mcp: 'starting' },
+      component_errors: { session_migration: 'legacy import failed' },
+    };
+    stubHealth(() => health);
+    const child = makeChild();
+    stubSpawn(child);
+    const progress: BackendStartupProgress[] = [];
+    const promise = ensureBackendRunning({ onProgress: (p) => progress.push(p) });
+    await vi.advanceTimersByTimeAsync(1_200);
+
+    expect(progress.at(-1)?.detail).toContain('session_migration(failed: legacy import failed)');
+    expect(progress.at(-1)?.detail).toContain('mcp');
+
+    health = { status: 'ok' };
+    await vi.advanceTimersByTimeAsync(1_000);
+    await promise;
+  });
+
   it('fails immediately when the process exits, with the last 50 log lines', async () => {
     stubHealth(() => null);
     const child = makeChild();

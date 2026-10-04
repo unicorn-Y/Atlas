@@ -21,6 +21,7 @@ log = structlog.get_logger(__name__)
 COMPONENT_NAMES: tuple[str, ...] = (
     "dbos", "mcp", "skills", "plugins", "engine_registrations",
     "channels", "automation", "scheduler", "telegram", "extensions",
+    "session_migration",
 )
 
 VALID_STATES = frozenset({"starting", "ready", "failed"})
@@ -32,11 +33,16 @@ class StartupComponents:
     def __init__(self) -> None:
         self._states: dict[str, str] = {}
         self._events: dict[str, asyncio.Event] = {}
+        self._errors: dict[str, str] = {}
 
-    def mark(self, name: str, state: str) -> None:
+    def mark(self, name: str, state: str, *, error: str | None = None) -> None:
         if state not in VALID_STATES:
             raise ValueError(f"invalid startup component state: {state!r}")
         self._states[name] = state
+        if state == "failed" and error:
+            self._errors[name] = error
+        else:
+            self._errors.pop(name, None)
         if state != "starting":
             # Only a settled state releases wait_ready(): a component marked
             # "starting" keeps its waiters parked (S3's bounded wait must
@@ -52,6 +58,10 @@ class StartupComponents:
 
     def snapshot(self) -> dict[str, str]:
         return dict(self._states)
+
+    def error_snapshot(self) -> dict[str, str]:
+        """Return sanitized failure details for health and startup progress."""
+        return dict(self._errors)
 
     async def wait_ready(self, name: str, timeout: float = 30.0) -> bool:
         event = self._events.setdefault(name, asyncio.Event())

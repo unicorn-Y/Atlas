@@ -119,6 +119,8 @@ def _cold_start_once_keep_log(
             try:
                 deadline = started + timeout_seconds
                 health_url = f"http://127.0.0.1:{port}/api/health"
+                first_health_seconds: float | None = None
+                component_ready_seconds: dict[str, float] = {}
                 while time.perf_counter() < deadline:
                     if process.poll() is not None:
                         raise RuntimeError(
@@ -128,9 +130,17 @@ def _cold_start_once_keep_log(
                     try:
                         with urllib.request.urlopen(health_url, timeout=0.5) as response:
                             payload = json.loads(response.read().decode("utf-8"))
+                            elapsed = time.perf_counter() - started
+                            if first_health_seconds is None:
+                                first_health_seconds = elapsed
+                            for name, state in payload.get("components", {}).items():
+                                if state == "ready":
+                                    component_ready_seconds.setdefault(name, elapsed)
                         if response.status == 200 and payload.get("status") == "ok":
                             return {
-                                "seconds": time.perf_counter() - started,
+                                "seconds": elapsed,
+                                "first_health_seconds": first_health_seconds,
+                                "component_ready_seconds": component_ready_seconds,
                                 "health": payload,
                                 "log": str(log_path),
                             }
@@ -216,6 +226,10 @@ def main() -> int:
         result["metrics"]["backend_cold_start"] = {
             "samples_seconds": seconds,
             "median_seconds": statistics.median(seconds),
+            "first_health_seconds": [sample.get("first_health_seconds") for sample in samples],
+            "component_ready_seconds": [
+                sample.get("component_ready_seconds") for sample in samples
+            ],
             "health_statuses": [sample["health"].get("status") for sample in samples],
             "logs": [sample["log"] for sample in samples],
             "status": "measured",

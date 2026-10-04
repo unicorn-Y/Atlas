@@ -82,12 +82,21 @@ async function isBackendHealthy(): Promise<boolean> {
 function progressDetail(payload: unknown): string {
   const body = payload as {
     status?: unknown;
-    components?: Record<string, { status?: unknown } | undefined> | null;
+    components?: Record<string, string | { status?: unknown; error?: unknown } | undefined> | null;
+    component_errors?: Record<string, string | undefined> | null;
   } | null;
   if (body && typeof body === 'object' && body.components && typeof body.components === 'object') {
     const pending = Object.entries(body.components)
-      .filter(([, state]) => state?.status === 'starting' || state?.status === 'failed')
-      .map(([name, state]) => state?.status === 'failed' ? `${name}(failed)` : name);
+      .map(([name, state]) => {
+        const componentStatus = typeof state === 'string' ? state : state?.status;
+        if (componentStatus === 'failed') {
+          const detail = body.component_errors?.[name]
+            ?? (typeof state === 'object' && typeof state?.error === 'string' ? state.error : undefined);
+          return detail ? `${name}(failed: ${detail})` : `${name}(failed)`;
+        }
+        return componentStatus === 'starting' ? name : null;
+      })
+      .filter((name): name is string => name !== null);
     if (pending.length > 0) return `启动中：${pending.join('、')}`;
     return '组件已就绪，等待后端确认';
   }

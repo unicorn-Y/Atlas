@@ -18,11 +18,16 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import threading
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+import structlog
+
 from atlas.config import get_config
+
+log = structlog.get_logger(__name__)
 
 Dispatcher = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
@@ -52,6 +57,7 @@ class DurableBackend:
         self._started = False
         self._start_error: str | None = None
         self._agent_task_workflow: Any = None
+        self._cancel_start = threading.Event()
 
     @property
     def started(self) -> bool:
@@ -75,6 +81,10 @@ class DurableBackend:
         """
         self._dispatcher = dispatcher
         self._loop = loop
+
+    def cancel_pending_start(self) -> None:
+        """Prevent a worker-thread launch from publishing DBOS after shutdown."""
+        self._cancel_start.set()
 
     def start(self, *, run_migrations: bool = True) -> dict[str, Any]:
         """Launch the process-global DBOS instance.
@@ -119,11 +129,17 @@ class DurableBackend:
 
             self._agent_task_workflow = _agent_task_workflow
             DBOS.launch()
+            if self._cancel_start.is_set():
+                DBOS.destroy(destroy_registry=True)
+                self._agent_task_workflow = None
+                self._start_error = "DBOS start cancelled during shutdown"
+                return self.status()
             self._started = True
             self._start_error = None
         except Exception as exc:  # durable is best-effort: never block startup
             self._started = False
             self._start_error = str(exc)
+            log.exception("dbos.start_failed")
         return self.status()
 
     async def run_agent_task(
@@ -146,7 +162,7 @@ class DurableBackend:
 
             DBOS.destroy(destroy_registry=True)
         except Exception:
-            pass
+            log.exception("dbos.destroy_failed")
         self._started = False
         # DBOS replaces the loop's default executor with its own and shuts it
         # down on destroy; restore a plain one so the same process (tests,
