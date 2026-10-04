@@ -14,6 +14,24 @@ _SYSTEM = (
     "is destructive or exposes data. Reply exactly APPROVE, DENY, or ESCALATE."
 )
 
+# Module-lifetime cache for the lazily-shared router (see _shared_router).
+_router_cache: Any | None = None
+
+
+def _shared_router() -> Any:
+    """Router of a lazily-built shared ModelManager (H4: single model path).
+
+    The current production caller (the atlas.agent safety gate) passes only a
+    model id, so the review resolves its own route through the shared router;
+    callers holding a model manager can inject ``router=`` directly instead.
+    """
+    global _router_cache
+    if _router_cache is None:
+        from atlas.models import ModelManager
+
+        _router_cache = ModelManager().model_router
+    return _router_cache
+
 
 def _strip_comments(text: str) -> str:
     return "\n".join(re.sub(r"(?<!['\"`])#.*$", "", line) for line in text.splitlines())
@@ -21,16 +39,19 @@ def _strip_comments(text: str) -> str:
 
 async def review_tool_input(
     value: dict[str, Any], *, model: str, timeout: float = 15.0,
+    router: Any | None = None,
 ) -> str:
-    from litellm import acompletion
-
+    if router is None:
+        router = _shared_router()
     body = _strip_comments(str(value))
-    response = await asyncio.wait_for(acompletion(
-        model=model,
-        messages=[{"role": "system", "content": _SYSTEM},
-                  {"role": "user", "content": f"<tool_input>\n{body}\n</tool_input>"}],
-        max_tokens=8, temperature=0,
-    ), timeout=timeout)
-    choice = response.choices[0]
-    verdict = str(choice.message.content or "").strip().upper()
+    result = await asyncio.wait_for(
+        router.complete_for(
+            model, "safety_review",
+            messages=[{"role": "system", "content": _SYSTEM},
+                      {"role": "user", "content": f"<tool_input>\n{body}\n</tool_input>"}],
+            max_tokens=8, temperature=0,
+        ),
+        timeout=timeout,
+    )
+    verdict = result.text.strip().upper()
     return {"APPROVE": "allow", "DENY": "deny", "ESCALATE": "ask"}.get(verdict, "ask")

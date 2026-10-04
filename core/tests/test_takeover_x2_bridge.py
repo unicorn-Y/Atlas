@@ -25,6 +25,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 import atlas.api.device_router as device_router_module
+from atlas.api.app_services import AppServices
 from atlas.api.device_router import router as device_router
 from atlas.devices import DeviceRegistry
 from atlas.devices.takeover import TakeoverStateMachine
@@ -56,21 +57,32 @@ def clean_x2_registry():
 
 
 @pytest.fixture()
-def machine(tmp_path: Path) -> TakeoverStateMachine:
+def takeover_stack(tmp_path: Path) -> tuple[DeviceRegistry, TakeoverStateMachine]:
     registry = DeviceRegistry(tmp_path / "devices.json", clock=FakeClock(),
                               probe=lambda: dict(PROBE))
     registry.register_self()
     machine = TakeoverStateMachine(device_id="self", clock=FakeClock())
     device_router_module.set_registry(registry)
     device_router_module.set_takeover(machine)
-    yield machine
+    yield registry, machine
     device_router_module.set_registry(None)
     device_router_module.set_takeover(None)
 
 
 @pytest.fixture()
-async def client(machine: TakeoverStateMachine) -> AsyncClient:
+def machine(takeover_stack: tuple[DeviceRegistry, TakeoverStateMachine]) -> TakeoverStateMachine:
+    return takeover_stack[1]
+
+
+@pytest.fixture()
+async def client(
+    takeover_stack: tuple[DeviceRegistry, TakeoverStateMachine],
+) -> AsyncClient:
+    # H5 DI: the router reads its services from app.state (same pattern as
+    # test_devices_router.py); the instances are the fixture's isolated ones.
+    registry, machine = takeover_stack
     app = FastAPI()
+    app.state.services = AppServices(device_registry=registry, takeover=machine)
     app.include_router(device_router)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="test://bridge") as c:
         yield c

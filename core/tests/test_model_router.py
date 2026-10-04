@@ -280,19 +280,15 @@ async def test_gateway_probe_uses_real_http_and_caches_result() -> None:
 
 
 def test_ast_no_acompletion_outside_router() -> None:
-    """AST gate: litellm direct calls only survive in files other lanes still own.
+    """AST gate: no direct litellm calls outside ``atlas.models.router``.
 
-    Every remaining file here is a wiring ticket (see the H4 result report); the
-    set may only shrink. ``atlas/models/`` must already be clean, and the router
-    itself goes through Hermes' transport instead of litellm.
+    All lanes have wired their call sites through ``atlas.models.router``
+    (agent MoA summary / trajectory review / plan / verify / goal evaluation
+    included, H2); files still listed here are other lanes' wiring tickets.
+    The set may only shrink. ``atlas/models/`` must already be clean, and the
+    router itself goes through Hermes' transport instead of litellm.
     """
-    pending_unification = {
-        "core/atlas/agent/__init__.py",       # H2 owner: MoA summary, trajectory review, plan/verify/goal
-        "core/atlas/engine/branch_summaries.py",  # engine owner: branch summary completion
-        "core/atlas/engine/hermes_runtime.py",    # L1 owner: reference consult + context handoff
-        "core/atlas/safety/smart.py",          # follow-up: smart approval review
-        "core/atlas/server.py",               # H5 owner: /api/settings/test-connection
-    }
+    pending_unification: set[str] = set()
     core_dir = Path(__file__).resolve().parents[1] / "atlas"
     repo_root = core_dir.parents[1]
     offenders: dict[str, list[str]] = {}
@@ -316,6 +312,15 @@ def test_ast_no_acompletion_outside_router() -> None:
 
 
 def _litellm_hits(tree: ast.AST) -> list[str]:
+    """Report litellm completion entry points (imports and direct calls).
+
+    Metadata probes are not completion calls: ``get_supported_openai_params``
+    (capability introspection, kept per the H4/H5 spec) and friends import
+    litellm without ever sending a model request, so they are not hits.
+    """
+    completion_call_names = {
+        "acompletion", "completion", "batch_completion", "text_completion",
+    }
     hits: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -323,8 +328,9 @@ def _litellm_hits(tree: ast.AST) -> list[str]:
                 if alias.name == "litellm" or alias.name.startswith("litellm."):
                     hits.append(f"import litellm (line {node.lineno})")
         elif isinstance(node, ast.ImportFrom) and node.module == "litellm":
-            names = ", ".join(alias.name for alias in node.names)
-            hits.append(f"from litellm import {names} (line {node.lineno})")
+            names = [alias.name for alias in node.names if alias.name in completion_call_names]
+            if names:
+                hits.append(f"from litellm import {', '.join(names)} (line {node.lineno})")
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "acompletion":
             hits.append(f"acompletion call (line {node.lineno})")
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "acompletion":

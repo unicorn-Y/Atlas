@@ -28,7 +28,7 @@ from atlas.channels import ChannelManager
 from atlas.channels.contract import ChannelAdapter, MessageEvent, SendResult
 from atlas.persistent_agents import session_key
 
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall
 
 pytest.importorskip("dbos")
 
@@ -135,7 +135,11 @@ async def app_client(tmp_path_factory: pytest.TempPathFactory, fake_llm: FakeLLM
         "litellm_model=\"openai/fake-model\"\nmax_output_tokens=512\n"
         "[agent]\nverify_before_stop=false\n"
         "[tools]\nauto_start=[]\n[tools.servers]\n"
-        "[scheduler]\nenabled=false\n",
+        "[scheduler]\nenabled=false\n"
+        # H7 W5: the wired defaults under test (see the gateway-default-mode test
+        # below). Unattended heartbeat/automation turns keep their explicit
+        # full_access, so only channel tasks observe these values.
+        "[gateway]\ndefault_permission_mode=\"read_only\"\napproval_timeout_seconds=1\n",
         encoding="utf-8",
     )
     mp.setattr(config, "CONFIG_PATH", config_path)
@@ -496,6 +500,53 @@ async def test_group_handoff_between_persistent_agents(app_client) -> None:
         assert f"agent:{aid}:group:team-g11" in keys, keys
     bob = (await bundle.client.get("/api/agents/bob-g11/sessions")).json()
     assert bob["sessions"] == []
+
+
+async def test_gateway_default_mode_config_flows_through_lifespan_wiring(
+        app_client, tmp_path) -> None:
+    """H7 W5 (integration): the [gateway] config reaches the wired bridge.
+
+    Integration variant of the bridge-level
+    ``test_gateway_write_approval_e2e.py::
+    test_gateway_default_mode_override_skips_channel_approval``: the module
+    fixture's atlas.toml sets ``default_permission_mode="read_only"`` and
+    ``approval_timeout_seconds=1``; a fake-channel inbound write task must run
+    under read_only through the REAL lifespan wiring — no approval round-trip
+    on the channel, no file written, completion still answered.
+    """
+    bundle = app_client
+    server = bundle.server
+    bridge = server.gateway_bridge
+    # W1: the configured values landed on the bridge through the lifespan.
+    assert bridge._default_permission_mode == "read_only"
+    assert bridge._approval_timeout_seconds == 1.0
+
+    captured = _spy_on_submit(bridge)
+    target = tmp_path / "渠道文件.txt"
+    model_calls = {"n": 0}
+
+    def responder(_record):
+        model_calls["n"] += 1
+        if model_calls["n"] == 1:
+            return ToolCall("write_file", {"path": str(target), "content": "只读不该写入"})
+        return Text("只读模式下不能写入")
+
+    bundle.fake_llm._responder = responder
+
+    await bundle.adapter.emit(make_event("evt-h7", chat_id="600", text="请写入文件"))
+    assert await wait_for(
+        lambda: any(
+            m["chat_id"] == "600" and "只读模式下不能写入" in m["content"]
+            for m in bundle.adapter.sent
+        ),
+        timeout=REPLY_WAIT,
+    )
+
+    # The run was gated by the configured default (W1), not the constructor's.
+    assert captured and captured[0]["permission_mode"] == "read_only"
+    # No approval request ever reached the channel and the write never happened.
+    assert not any("需要审批" in m["content"] for m in bundle.adapter.sent)
+    assert not target.exists()
 
 
 async def test_heartbeat_event_notifies_channel_target(app_client) -> None:

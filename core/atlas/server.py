@@ -12,6 +12,7 @@ import os
 import re
 import secrets
 import shlex
+import sqlite3
 import subprocess
 import sys
 import time
@@ -601,18 +602,31 @@ def _set_agent_status_quiet(agent_id: str, status: str, error: str = "") -> None
         log.debug("agent.status_projection_failed", agent_id=agent_id, error=str(exc))
 
 
+def _channel_agent_profile(agent_id: str) -> dict[str, Any] | None:
+    """Agent profile for the gateway's permission-mode ladder (binding → profile → default)."""
+    try:
+        return _agent_service().get(agent_id)
+    except sqlite3.Error:  # unreadable profile store → ladder falls back to defaults
+        return None
+
+
 def _sync_channel_routing(agents_service: PersistentAgentService, manager: ChannelManager) -> None:
     """Project per-agent channel bindings onto the gateway routing table."""
     roster = agents_service.list_agents(include_roles=False)
     bindings: list[dict[str, Any]] = []
     for record in roster:
         for row in (record.get("agent") or {}).get("channels") or []:
-            bindings.append({
+            binding = {
                 "agent_id": str(record["id"]),
                 "channel": str(row.get("channel", "")),
                 "account": str(row.get("account", "")),
                 "peer_id": str(row.get("target", "")),
-            })
+            }
+            # H7 §9.1: per-binding permission-mode override (validated by the
+            # profile store; routing ignores unknown keys — behavior-neutral).
+            if row.get("permission_mode"):
+                binding["permission_mode"] = str(row["permission_mode"])
+            bindings.append(binding)
     manager.set_bindings(bindings)
     manager.set_agent_ids([str(record["id"]) for record in roster])
 
@@ -1292,6 +1306,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     _refresh_extension_sources()
 
+    # H3/H5 seam: run the once-per-process registrations (Atlas policy plugin +
+    # Hermes MCP servers) at startup so the first user turn does not pay for
+    # them. Idempotent and fingerprint-checked; a failure only means the first
+    # turn re-runs the registration, so it must never break startup.
+    try:
+        from atlas.config import DATA_ROOT
+        from atlas.engine import HermesRuntime
+
+        HermesRuntime(data_dir=DATA_ROOT, model_manager=model_mgr).startup_registrations()
+    except Exception:  # noqa: BLE001 — degraded to a warning; first turn retries
+        log.exception("engine.startup_registrations_failed")
+
     notifications = NotificationBus()
     if plugin_load_report.get("errors"):
         log.warning("plugins.load_errors", errors=plugin_load_report["errors"])
@@ -1332,6 +1358,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         create_conversation=_create_channel_conversation,
         default_workspace=str(channel_workspace) if channel_workspace else None,
         set_agent_status=_set_agent_status_quiet,
+        # H7 §9.1/§9.2: the configured defaults and the per-agent profile rung
+        # of the permission ladder finally reach production wiring.
+        default_permission_mode=get_config().gateway_default_permission_mode,
+        approval_timeout_seconds=get_config().gateway_approval_timeout_seconds,
+        get_agent=_channel_agent_profile,
     )
     channel_manager.set_dispatcher(gateway_bridge.dispatch)
     _sync_channel_routing(agents_service, channel_manager)
@@ -1346,12 +1377,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # heartbeat/automation — never a second agent core. Room log + watermarks
     # live under data/groups/<group_id>/ (the orchestrator's store.root).
     group_service = GroupService(GroupStore(cfg.db_path.parent), lookup=agents_service)
+    group_orchestrator = GroupOrchestrator(
+        group_service, dispatcher=_dispatch_group_member_turn,
+    )
     from atlas.api.group_router import set_group_orchestrator, set_group_service
 
     set_group_service(group_service)
-    set_group_orchestrator(GroupOrchestrator(
-        group_service, dispatcher=_dispatch_group_member_turn,
-    ))
+    set_group_orchestrator(group_orchestrator)
 
     automation_engine = AutomationEngine(
         AutomationStore(cfg.db_path.parent / "automations.toml"),
@@ -1444,9 +1476,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "cua_backend", "browser_use", "agent_backend_host", "projects", "durable",
         "plugin_runtime", "notifications", "web_runtime", "custom_tools",
         "telegram_service", "usage_ledger", "channel_manager", "gateway_bridge",
-        "heartbeat_service", "persistent_agents", "group_service", "group_orchestrator",
+        "heartbeat_service",
     ):
         setattr(services, service_name, globals().get(service_name))
+    # persistent_agents / group_service / group_orchestrator live only as
+    # lifespan locals — the globals sweep above can never see them, so bind
+    # them explicitly (globals().get() would clobber them back to None).
+    services.persistent_agents = agents_service
+    services.agent_conversation_lookup = _conversation_summary
+    services.group_service = group_service
+    services.group_orchestrator = group_orchestrator
     manager.services = services
 
     yield  # app is running

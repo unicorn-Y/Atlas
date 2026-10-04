@@ -13,6 +13,7 @@ worktree 内的文件,pytest 系统 tmp_path 会被关掉;``_tmp`` 已被 gitign
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import os
 import shutil
@@ -30,8 +31,22 @@ from websockets.asyncio.client import connect
 from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
 
 FAKE_SERVER = Path(__file__).resolve().parent / "fakes" / "fake_lsp_server.py"
-ATLAS_ROOT = Path(__file__).resolve().parents[2]  # D:\Atlas — git 仓库根
+ATLAS_ROOT = Path(__file__).resolve().parents[2]  # git 仓库根（h1 工作区即 checkout 根）
 FIXTURE_BASE = ATLAS_ROOT / "_tmp" / "lsp-fixtures"
+
+
+def _resolved_agent_fork_root() -> str | None:
+    """Root of the ``agent`` package this test process actually resolves.
+
+    The backend venv's ``.pth`` injects the HOST checkout's stale hermes fork
+    into ``sys.path``; whatever the test process imports must win, so the
+    resolved fork root goes onto the subprocess PYTHONPATH ahead of any .pth
+    path (H1 pinned fork with ``agent.agent_hooks``; PYTHONPATH beats .pth).
+    """
+    spec = importlib.util.find_spec("agent")
+    if spec is None or not spec.submodule_search_locations:
+        return None
+    return str(Path(list(spec.submodule_search_locations)[0]).resolve().parent)
 
 CLEAN = "alpha = 1\nbeta = 2\n\ndef main():\n    return alpha\n"
 BUG_ONE = "alpha = 1\nbeta = 2\n\ndef main():\n    return LSP_BUG\n"
@@ -90,7 +105,11 @@ class IsolatedBackend:
             env.pop(key, None)
         launch_root = root / "backend-cwd"
         launch_root.mkdir()
-        env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+        pythonpath = [str(Path(__file__).resolve().parents[1])]
+        agent_fork_root = _resolved_agent_fork_root()
+        if agent_fork_root:
+            pythonpath.append(agent_fork_root)
+        env["PYTHONPATH"] = os.pathsep.join(pythonpath)
         self.log = (root / "backend.log").open("w", encoding="utf-8")
         self.process = subprocess.Popen([
             sys.executable, "-m", "uvicorn", "atlas.server:app", "--host", "127.0.0.1", "--port", str(self.port),

@@ -176,3 +176,26 @@ all green twice in a row (5 passed, ~40s).
 - `run.recovery.notice` on channel delivery failure is already produced by the bridge
   (`GatewayBridge.delivery_failed` → `channel_recovery_notice`, server.py:1313-1318) and tested in
   `core/tests/test_gateway_permissions.py::test_channel_delivery_failure_logs_and_emits_notice_without_stopping_run`.
+
+---
+
+## Decision note (appended by Lane A2, H5 server split, 2026-10-04) — §9.3 unattended turns
+
+The question raised under "Out-of-scope notes for the record" is **flagged for H11 review,
+behavior intentionally NOT changed**:
+
+- Heartbeat (`_AtlasHeartbeatHost.dispatch_heartbeat_turn`), automation (`_automation_dispatch_turn`)
+  and group member turns (`_dispatch_group_member_turn`) all run through
+  `_collect_orchestrator_text` with `permission_mode="full_access"` and a deny-all approval
+  callback, exactly as before this hardening wave.
+- Rationale for not wiring §9.3 now: taskbook §9.3 only says unattended turns honor the mode
+  chosen at creation time, but honoring a * restrictive* creator mode (e.g. `read_only`) would
+  change what existing heartbeats/automations/groups can do mid-flight, and the deny-all callback
+  means an `ask_writes` unattended turn could deadlock until timeout. That is a user-visible
+  behavior change, out of H5's behavior-preserving mandate and not specified by W1–W5.
+- If H11 confirms §9.3 extends to unattended turns, the seam is ready: add
+  `permission_mode: str | None = None` to `_collect_orchestrator_text` and pass
+  `profile["agent"]["permission_mode"]` at the two known-agent call sites
+  (`_AtlasHeartbeatHost.dispatch_heartbeat_turn` and automation `dispatch_turn`; the group
+  dispatcher knows each member id). W1's `get_agent`/`_channel_agent_profile` shows the lookup
+  pattern. Default `None` keeps today's `full_access`.

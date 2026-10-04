@@ -428,22 +428,38 @@ class TestModels:
         duplicate = await client.post("/api/models/custom", json=model)
         assert duplicate.status_code == 409
 
-    async def test_connection_test_uses_litellm_and_does_not_change_selection(
+    async def test_connection_test_goes_through_model_router_and_keeps_selection(
         self, client: AsyncClient, monkeypatch
     ) -> None:
+        """H4: the settings probe rides the shared model router (same seam as
+        ``/api/models/test``) — no direct ``litellm.acompletion`` from a route —
+        and the probe never changes the selected model."""
+        from atlas.models.router import RouteSpec
+
         from atlas.server import model_mgr
 
-        call = {}
+        calls: dict = {}
 
-        async def fake_completion(**kwargs):
-            call.update(kwargs)
+        async def fake_resolve(self, model_id, purpose):
+            calls["resolve"] = (model_id, purpose)
+            return RouteSpec(
+                provider="openai", api_mode="chat_completions", model="gpt-4o", base_url=None,
+                purpose=purpose,
+            )
+
+        async def fake_complete(self, route, *, messages, **kwargs):
+            calls["complete"] = {"purpose": route.purpose, "messages": messages, **kwargs}
             return object()
 
-        monkeypatch.setattr("litellm.acompletion", fake_completion)
+        monkeypatch.setattr("atlas.models.router.ModelRouter.resolve", fake_resolve)
+        monkeypatch.setattr("atlas.models.router.ModelRouter.complete", fake_complete)
         selected_before = model_mgr.current_model
         response = await client.post("/api/settings/test-connection", json={"model": "gpt-4o"})
-        assert response.json()["ok"] is True
-        assert call["model"] == "openai/gpt-4o"
+        body = response.json()
+        assert body["ok"] is True, body
+        assert calls["resolve"] == ("gpt-4o", "model_test")
+        assert calls["complete"]["purpose"] == "model_test"
+        assert calls["complete"]["max_tokens"] == 2
         assert model_mgr.current_model == selected_before
 
 

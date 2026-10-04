@@ -16,7 +16,9 @@ switching and are cached:
 Model path: the auxiliary cheap model — the ``compression_model`` user setting
 resolved through ModelManager (the same setting Hermes' ContextCompressor uses
 via ``HermesRuntime._apply_compression_model_setting``), falling back to the
-current run model. Tests inject ``complete`` to fake the model call.
+current run model. The completion itself goes through the shared model router
+(``complete_for(model, "compression", ...)``), so native provider credentials
+work with no gateway configured. Tests inject ``complete`` to fake the call.
 
 server.py stays untouched. Wiring for the integration owner (branch-switch or
 ``GET /api/conversations/{id}/branches`` route, ~line 1266):
@@ -64,15 +66,13 @@ def resolve_summary_model(model_manager: Any) -> str:
 
 
 def _default_complete(model_manager: Any) -> CompleteFn:
+    """Aux completion through the shared model router (H4: single model path)."""
     async def complete(model: str, messages: list[dict[str, str]]) -> str:
-        from litellm import acompletion
-
-        response = await acompletion(
-            model=model, messages=messages, max_tokens=300, stream=False,
-            api_key=getattr(model_manager, "_api_key", None),
-            api_base=getattr(model_manager, "gateway_base_url", None),
-        )
-        return str(response.choices[0].message.content or "").strip()
+        router = getattr(model_manager, "model_router", None)
+        if router is None:
+            raise RuntimeError("model router is unavailable for branch summaries")
+        result = await router.complete_for(model, "compression", messages, max_tokens=300)
+        return result.text.strip()
 
     return complete
 

@@ -284,14 +284,16 @@ async def test_connection(
     if model is None:
         raise HTTPException(status_code=400, detail=f"Unknown model: {selected}")
 
-    from litellm import acompletion
-
+    # H4: probe through the shared model router (same seam as /api/models/test),
+    # so native-channel probes and credential pools apply here too — never a
+    # direct litellm.acompletion from a route handler.
     try:
-        await acompletion(
-            model=str(model.get("litellm_model", selected)),
+        route = await model_mgr.model_router.resolve(selected, "model_test")
+        await model_mgr.model_router.complete(
+            route,
             messages=[{"role": "user", "content": "Reply with OK."}],
             max_tokens=2,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — 网关错误原样返回给 UI
         return {"ok": False, "model": selected, "message": str(exc)}
     return {"ok": True, "model": selected, "message": "模型连接测试成功。"}

@@ -10,6 +10,7 @@ lifespan; tests may stub it).
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -25,6 +26,8 @@ from atlas.persistent_agents import PersistentAgentService
 from atlas.persistent_agents.store import BUILTIN_ROLE_IDS
 
 T = TypeVar("T")
+
+log = logging.getLogger("atlas.agent_router")
 
 _service: PersistentAgentService | None = None
 #: async conversation_id → metadata dict | None (bound by the server lifespan)
@@ -88,6 +91,32 @@ def _service_from(services: AppServices) -> PersistentAgentService:
     if service is None:
         raise RuntimeError("FastAPI app is missing its persistent-agent service")
     return service
+
+
+def _refresh_gateway_routing(services: AppServices) -> None:
+    """Re-project channel bindings after a mutation (H7 §9.1) — best-effort.
+
+    A binding-level ``permission_mode`` override only reaches the running
+    gateway through the routing projection, so binding CRUD re-syncs it without
+    a restart. When the gateway is not running (503) or the router is mounted
+    standalone, CRUD still succeeds: routing sync is auxiliary state, never
+    part of the store contract. Profile-level overrides need no refresh here —
+    the bridge reads them live through its ``get_agent`` hook.
+    """
+    agents = services.persistent_agents
+    if agents is None:
+        return
+    try:
+        from atlas.api.channel_router import get_channel_manager
+        from atlas.server import _sync_channel_routing
+    except ImportError:  # standalone router mount without the app wiring
+        return
+    try:
+        _sync_channel_routing(agents, get_channel_manager())
+    except (HTTPException, sqlite3.Error) as exc:
+        # Gateway not started yet (503 degraded state) or the agent store read
+        # failed; the CRUD result is already committed, so only sync is skipped.
+        log.debug("agents.gateway_routing_sync_failed", error=str(exc))
 
 
 @router.get("")
@@ -232,7 +261,9 @@ async def add_agent_channel(
         str(req.get("channel", "")),
         str(req.get("target", "")),
         str(req.get("account", "")),
+        permission_mode=req.get("permission_mode"),
     ))
+    _refresh_gateway_routing(services)
     return {"agent_id": agent_id, "channels": channels}
 
 
@@ -247,6 +278,7 @@ async def remove_agent_channel(
     channels = _call(lambda: _service_from(services).remove_channel(
         agent_id, channel, target, account,
     ))
+    _refresh_gateway_routing(services)
     return {"agent_id": agent_id, "channels": channels}
 
 

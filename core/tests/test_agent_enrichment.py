@@ -136,14 +136,17 @@ async def test_trajectory_reviewer_is_optional_and_records_correction() -> None:
     }]
 
 
-async def test_trajectory_reviewer_config_defaults_off_and_supports_litellm(
+async def test_trajectory_reviewer_config_defaults_off_and_routes_through_router(
     model_mgr, memory, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from atlas import agent as agent_module
+    from atlas.models.router import CompletionResult
 
     monkeypatch.setattr(agent_module, "get_config", lambda: AtlasConfig())
     disabled = AgentOrchestrator(model_mgr, memory).trajectory_reviewer
-    with patch("atlas.agent.acompletion", AsyncMock()) as complete:
+    with patch(
+        "atlas.models.router.ModelRouter.complete_for", AsyncMock(),
+    ) as complete:
         assert (await disabled.review_trajectory([], "goal"))["enabled"] is False
         complete.assert_not_awaited()
 
@@ -152,15 +155,18 @@ async def test_trajectory_reviewer_config_defaults_off_and_supports_litellm(
             "enabled": True, "backend": "litellm", "model": "openai/test-reviewer",
         }},
     }))
-    configured = AgentOrchestrator(model_mgr, memory).trajectory_reviewer
-    response = {"choices": [{"message": {"content": json.dumps({
+    orchestrator = AgentOrchestrator(model_mgr, memory)
+    configured = orchestrator.trajectory_reviewer
+    complete_for = AsyncMock(return_value=CompletionResult(text=json.dumps({
         "decision": "corrective_guidance", "guidance": "Check the output once more.",
-    })}}]}
-    with patch("atlas.agent.acompletion", AsyncMock(return_value=response)) as complete:
-        result = await configured.review_trajectory([{"type": "tool_result"}], "goal")
+    })))
+    orchestrator._model_router = SimpleNamespace(complete_for=complete_for)
+    result = await configured.review_trajectory([{"type": "tool_result"}], "goal")
     assert result["decision"] == "corrective_guidance"
     assert result["guidance"] == "Check the output once more."
-    assert complete.call_args.kwargs["model"] == "openai/test-reviewer"
+    assert complete_for.call_args.args[0] == "openai/test-reviewer"
+    assert complete_for.call_args.args[1] == "reflection"
+    assert complete_for.call_args.kwargs["max_tokens"] == 256
 
 
 async def test_codeact_subprocess_uses_atlas_bridge_for_three_operations(tmp_path: Path) -> None:

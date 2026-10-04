@@ -73,6 +73,7 @@ def _resolve_legacy_telegram_service() -> Any:
     try:
         from atlas import server as atlas_server  # noqa: PLC0415 — 避免循环导入
     except Exception:  # pragma: no cover - server module not importable here
+        log.debug("channels.legacy_telegram_probe_failed", exc_info=True)
         return None
     return getattr(atlas_server, "telegram_service", None)
 
@@ -98,7 +99,8 @@ async def _stop_legacy_telegram_poller() -> bool:
         if inspect.isawaitable(result):
             await result
     except Exception as exc:
-        log.warning("channels.legacy_telegram_stop_failed", error=str(exc))
+        # H6: blind catch must at least log with the traceback (BLE001).
+        log.exception("channels.legacy_telegram_stop_failed", error=str(exc))
         return False
     log.info("channels.legacy_telegram_poller_stopped")
     return True

@@ -20,3 +20,12 @@
 - H3/H4/H5 and controller H6/H7 are in progress. No overall H1–H11 completion is claimed.
 
 Pending: H5 complete snapshot/mechanical split/production DI, H1/H4/H6/H8/H9/H10.1 performance, H3, H2, H7 production wiring, H10.2, H11, final gates and main push.
+
+## Crew takeover (ZCode controller), 2026-10-04 evening
+Codex controller exhausted quota ~20:15 after H0 acceptance + commits 0a89089/eaac33a/f57249a. ZCode controller took over ~20:42, checkpointed inherited mid-flight state as b7b3b6a.
+
+Wave 1 (5 parallel lanes): H3 delivered — per-session Agent cache + MCP-once + event-driven turn loop (8 sessions x 20 waves -> 8 constructions; 5s model wait 6 loop iterations vs baseline 197). H4 delivered — shared model router (native-first + one-time gateway probe) + tokens; models/ is litellm-free. H10.1 verified — collection defect already fixed by mechanism in 0a89089; 2144 tests collect 1980/163/1/0 from both roots; lane timing under load in artifacts/h10-lanes-takeover/. H6/H7 delivered — owned scopes lint-zero, delivery-pump resilience, 5-test server-free write-approval e2e, ATLAS-H1-H7-wiring-spec.md. H5 cancelled mid-flight -> relaunched as A2.
+
+Wave 2 (4 parallel lanes): H5/A2 done — lifespan DI clobber fix; server.py 8609 -> 3503 lines, zero route decorators; H3 startup_registrations seam; H7 W1-W5 landed + config-flow test; H4 test-connection seam; route snapshot 394 ops identical to frozen baseline. H2 done — run() -> RunRequest/execute_run thin adapter (signature parity verified), agent/__init__ 3097 -> 1034, event-driven cancel, 5 router sites wired, AST pending_unification allowlist EMPTY (zero direct litellm calls in core/atlas/**), memory injection budget. H9 done — atlas run/doctor headless CLI (exit codes 0/1/2/3, stream-json, --resume, approval deny path; 11 tests). Engine wiring done — MoA/handoff/history-tokens/main-factory route via shared router (native Claude engages), c6 harness fork-path fix, ratchet shrunk to empty.
+
+Remaining after wave 2: H5 final extraction (server.py <= 800, A9) + stale-symbol tests (test_subagent_settings, test_backend_parity_wave4); H8 startup speed (backend lifespan + Electron); H2.1 dual-write exit steps 1-3 per docs/plan/DATA-OWNERS.md; H6 global lint gate to zero (agent 31 / server 25 / api ~30 / engine 25); H10.2 real-model smoke (CLI now exists); H11 acceptance + full gates + push decision.

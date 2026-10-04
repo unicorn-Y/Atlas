@@ -70,7 +70,7 @@ channels = [
 ]
 
 [project.scripts]
-atlas = "atlas.cli:main"
+atlas = "atlas.cli:cli_main"
 
 [build-system]
 requires = ["hatchling"]
