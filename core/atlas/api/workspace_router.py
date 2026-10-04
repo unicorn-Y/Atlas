@@ -745,7 +745,7 @@ async def delete_conversation_worktree(
         from atlas.lsp import release_workspace
 
         release_workspace(str(conv["worktree_path"]))
-    except Exception as exc:  # noqa: BLE001 — LSP 释放失败不影响 worktree 删除
+    except (ImportError, OSError, RuntimeError) as exc:
         log.debug("lsp.workspace_release_failed", path=str(conv["worktree_path"]), error=str(exc))
     await memory.update_conversation(conversation_id, worktree_path="", worktree_branch="", base_branch="")
     return {"status": "removed"}
@@ -767,7 +767,8 @@ async def collect_workspace_rules(root: str) -> dict[str, Any]:
             path = str(PurePosixPath(base) / name)
             try:
                 raw = await ssh_workspaces.read_bytes(host, path)
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 — async SSH/SFTP transports use provider-specific errors
+                log.exception("workspace.rules_ssh_read_failed", host=host, path=path)
                 continue
             files.append({"path": path, "bytes": len(raw),
                           "content": raw[:65536].decode("utf-8", errors="replace"),
@@ -892,7 +893,7 @@ async def get_run_diagnostics(
         return {"run_id": run_id, "files": []}
     try:
         from atlas.lsp import diagnostics_for
-    except Exception as exc:  # noqa: BLE001 — LSP 模块缺失时返回空清单
+    except ImportError as exc:
         log.warning("C6 诊断路由的 LSP 模块不可用", error=str(exc))
         return {"run_id": run_id, "files": []}
     files: list[dict[str, Any]] = []
@@ -906,16 +907,13 @@ async def get_run_diagnostics(
         seen.add(key)
         count = 0
         diagnostics: list[dict[str, Any]] = []
-        try:
-            for diag in diagnostics_for(str(Path(workspace) / relative)):
-                count += 1
-                diagnostics.append({
-                    "line": diag.line, "column": diag.column,
-                    "severity": diag.severity, "code": diag.code,
-                    "message": diag.message,
-                })
-        except Exception:  # noqa: BLE001 — 单个文件的诊断失败按 0 计
-            count, diagnostics = 0, []
+        for diag in diagnostics_for(str(Path(workspace) / relative)):
+            count += 1
+            diagnostics.append({
+                "line": diag.line, "column": diag.column,
+                "severity": diag.severity, "code": diag.code,
+                "message": diag.message,
+            })
         files.append({"path": relative, "count": count, "diagnostics": diagnostics})
     return {"run_id": run_id, "files": files}
 
@@ -952,7 +950,7 @@ async def lsp_status(
         hint = ""
         try:
             available = srv.build_spawn(str(root), ctx) is not None
-        except Exception:  # noqa: BLE001 — 探测失败按不可用处理
+        except (OSError, RuntimeError, ValueError):
             hint = "探测该语言服务时出错，请检查安装与配置。"
         if not available and not hint:
             hint = missing_server_hint(srv.server_id)

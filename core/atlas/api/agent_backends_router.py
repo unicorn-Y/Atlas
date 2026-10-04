@@ -127,7 +127,7 @@ async def start_agent_backend_session(
         session = await agent_backend_host.start(name, req.cwd)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Agent backend not found: {name}") from None
-    except Exception as exc:
+    except (OSError, RuntimeError, TimeoutError, ValueError) as exc:
         raise HTTPException(
             status_code=503, detail=f"Agent backend failed to start: {type(exc).__name__}",
         ) from None
@@ -148,7 +148,7 @@ async def resume_agent_backend_session(
         raise HTTPException(
             status_code=404, detail="Agent backend session cannot be resumed",
         ) from None
-    except Exception as exc:
+    except (OSError, RuntimeError, TimeoutError, ValueError) as exc:
         raise HTTPException(
             status_code=503, detail=f"Agent backend resume failed: {type(exc).__name__}",
         ) from None

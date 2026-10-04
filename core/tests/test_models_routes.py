@@ -418,3 +418,45 @@ async def test_model_test_reports_gateway_error(client: AsyncClient,
     assert body["ok"] is False
     assert "连接被拒绝" in body["error"]
     assert isinstance(body["latency_ms"], int)
+
+
+async def test_connection_test_reports_sdk_exception_and_logs_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from atlas.api import models_settings_router
+    from atlas.api.app_services import AppServices
+    from atlas.api.models_settings_router import ConnectionTestRequest
+
+    class ProviderAPIError(Exception):
+        pass
+
+    class FailingModelRouter:
+        async def resolve(self, *_args: Any) -> object:
+            return object()
+
+        async def complete(self, *_args: Any, **_kwargs: Any) -> None:
+            raise ProviderAPIError("provider request failed with status 429")
+
+    class ModelManager:
+        current_model = "test-model"
+        model_router = FailingModelRouter()
+
+        def list_models(self) -> list[dict[str, str]]:
+            return [{"id": self.current_model}]
+
+    logged: list[str] = []
+
+    class CapturingLog:
+        def exception(self, event: str, **_fields: Any) -> None:
+            logged.append(event)
+
+    monkeypatch.setattr(models_settings_router, "log", CapturingLog())
+    result = await models_settings_router.test_connection(
+        AppServices(model_mgr=ModelManager()), ConnectionTestRequest(model="test-model"),
+    )
+
+    assert result == {
+        "ok": False, "model": "test-model",
+        "message": "provider request failed with status 429",
+    }
+    assert logged == ["models.connection_test_failed"]

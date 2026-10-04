@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
+import structlog
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -23,6 +25,7 @@ from fastapi import Request, WebSocket, WebSocketDisconnect
 
 from atlas.skills.dependencies import dependency_preflight
 router = APIRouter()
+log = structlog.get_logger(__name__)
 
 def _server() -> Any:
     """Late-bound atlas.server: its module globals stay the seam tests patch."""
@@ -102,7 +105,8 @@ async def ws_terminal(ws: WebSocket, cwd: str = Query(...)) -> None:
         return
     try:
         pty = PtyProcess.spawn(["powershell.exe", "-NoLogo", "-NoProfile"], cwd=str(directory))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — PTY providers can raise platform-specific spawn errors
+        log.exception("terminal.spawn_failed", cwd=str(directory))
         await ws.send_json({"type": "error", "error": str(exc)})
         await ws.close(code=1011)
         return
@@ -112,7 +116,7 @@ async def ws_terminal(ws: WebSocket, cwd: str = Query(...)) -> None:
                 chunk = await asyncio.to_thread(pty.read, 4096)
                 if chunk:
                     await ws.send_json({"type": "output", "data": chunk})
-            except Exception:
+            except (EOFError, OSError, RuntimeError, WebSocketDisconnect):
                 break
         await ws.send_json({"type": "exit", "code": pty.exitstatus})
     reader = asyncio.create_task(read_output())
@@ -378,7 +382,8 @@ async def add_mcp_server(
 
     try:
         await mcp_client._connect_server(cfg)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — MCP transports may raise transport-specific exception groups
+        log.exception("mcp.server_connect_failed", server=req.name)
         raise HTTPException(status_code=500, detail=f"Failed to connect: {e}")
 
     tools = mcp_client.get_server_tools(req.name)
@@ -427,7 +432,8 @@ async def restart_mcp_server(
 
     try:
         await mcp_client.restart_server(server_name)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — MCP transports may raise transport-specific exception groups
+        log.exception("mcp.server_restart_failed", server=server_name)
         raise HTTPException(status_code=500, detail=f"Restart failed: {e}")
 
     tools = mcp_client.get_server_tools(server_name)

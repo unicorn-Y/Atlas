@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from atlas.tools.mcp_client import (
     MCPClient,
     MCPServerConfig,
@@ -349,3 +351,36 @@ class TestMCPClient:
                 "parameters": mock_tool.input_schema,
             },
         }]
+
+
+async def test_restart_route_surfaces_transport_specific_exception_and_logs_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi import HTTPException
+
+    from atlas.api import tools_router
+    from atlas.api.app_services import AppServices
+
+    class MCPTransportError(Exception):
+        pass
+
+    class FailingClient:
+        def get_server_names(self) -> list[str]:
+            return ["remote"]
+
+        async def restart_server(self, _name: str) -> None:
+            raise MCPTransportError("MCP session reset")
+
+    logged: list[str] = []
+
+    class CapturingLog:
+        def exception(self, event: str, **_fields: object) -> None:
+            logged.append(event)
+
+    monkeypatch.setattr(tools_router, "log", CapturingLog())
+    with pytest.raises(HTTPException) as error:
+        await tools_router.restart_mcp_server(AppServices(mcp_client=FailingClient()), "remote")
+
+    assert error.value.status_code == 500
+    assert error.value.detail == "Restart failed: MCP session reset"
+    assert logged == ["mcp.server_restart_failed"]

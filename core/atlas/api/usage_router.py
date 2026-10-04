@@ -15,6 +15,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+import structlog
 
 from atlas.asr import ASRManager
 from atlas.config import get_config
@@ -31,6 +32,14 @@ from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 
 router = APIRouter()
+log = structlog.get_logger(__name__)
+
+
+def _get_asr_manager(services: AppServices) -> ASRManager:
+    """Create the one lazy ASR service owned by this application container."""
+    if services.asr_manager is None:
+        services.asr_manager = ASRManager()
+    return services.asr_manager
 
 
 def _server() -> Any:
@@ -255,9 +264,7 @@ async def get_safety_review_log(
 async def get_asr_status(
     services: Annotated[AppServices, Depends(get_app_services)],
 ) -> dict[str, Any]:
-    global asr_manager
-    if asr_manager is None:
-        asr_manager = ASRManager()
+    asr_manager = _get_asr_manager(services)
     return asr_manager.status()
 
 
@@ -265,12 +272,11 @@ async def get_asr_status(
 async def download_asr_model(
     services: Annotated[AppServices, Depends(get_app_services)],
 ) -> dict[str, Any]:
-    global asr_manager
-    if asr_manager is None:
-        asr_manager = ASRManager()
+    asr_manager = _get_asr_manager(services)
     try:
         await asr_manager.download()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — downloader libraries use transport-specific errors
+        log.exception("asr.model_download_failed")
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return asr_manager.status()
 
@@ -280,10 +286,8 @@ async def asr_websocket(
     services: Annotated[AppServices, Depends(get_app_services)],
     websocket: WebSocket,
 ) -> None:
-    global asr_manager
     await websocket.accept()
-    if asr_manager is None:
-        asr_manager = ASRManager()
+    asr_manager = _get_asr_manager(services)
     if not asr_manager.status()["ready"]:
         await websocket.send_json({"type": "error", "detail": "请先下载本地语音模型。"})
         await websocket.close(code=1013)
@@ -315,7 +319,8 @@ async def asr_websocket(
                     return
     except WebSocketDisconnect:
         return
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — decoder and VAD providers expose native exceptions
+        log.exception("asr.websocket_failed")
         with suppress(Exception):
             await websocket.send_json({"type": "error", "detail": str(exc)})
             await websocket.close(code=1011)

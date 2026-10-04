@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 import httpx
+import structlog
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 
 router = APIRouter()
+log = structlog.get_logger(__name__)
 
 
 def _server() -> Any:
@@ -88,7 +90,7 @@ def _model_supports_reasoning(model: dict[str, Any]) -> bool:
         provider = model.get("provider")
         params = get_supported_openai_params(model=model_name, custom_llm_provider=provider)
         return isinstance(params, list) and "reasoning_effort" in params
-    except Exception:
+    except (ImportError, AttributeError, KeyError, TypeError, ValueError):
         return False
 
 
@@ -181,14 +183,18 @@ async def generate_image(
                 headers={"Authorization": f"Bearer {key}"},
                 json=payload,
             )
-    except Exception as exc:  # noqa: BLE001 — surface any transport error to the UI
+    except Exception as exc:  # noqa: BLE001 — gateways and clients may expose provider-specific errors
+        log.exception("images.gateway_request_failed", model=req.model)
         raise HTTPException(status_code=502, detail=f"图像网关请求失败：{exc}")
     if resp.status_code >= 400:
         detail = resp.text
         try:
-            detail = resp.json().get("error", {}).get("message", detail)
-        except Exception:  # noqa: BLE001
-            pass
+            error = resp.json().get("error", {})
+            message = error.get("message") if isinstance(error, dict) else None
+            if isinstance(message, str):
+                detail = message
+        except (ValueError, AttributeError, TypeError):
+            detail = resp.text
         raise HTTPException(status_code=resp.status_code, detail=detail)
     data = resp.json()
     images: list[dict[str, str]] = []
@@ -302,6 +308,7 @@ async def test_connection(
             messages=[{"role": "user", "content": "Reply with OK."}],
             max_tokens=2,
         )
-    except Exception as exc:  # noqa: BLE001 — 网关错误原样返回给 UI
+    except Exception as exc:  # noqa: BLE001 — provider SDK exceptions must reach the connection-test UI
+        log.exception("models.connection_test_failed", model=selected)
         return {"ok": False, "model": selected, "message": str(exc)}
     return {"ok": True, "model": selected, "message": "模型连接测试成功。"}

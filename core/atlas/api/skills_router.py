@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import re
 import secrets
+import sqlite3
 import subprocess
 import sys
 import time
@@ -21,6 +22,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from pydantic import BaseModel
+import structlog
 
 from atlas.api.skills_market_router import get_market
 
@@ -50,6 +52,7 @@ from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 
 router = APIRouter()
+log = structlog.get_logger(__name__)
 
 
 def _server() -> Any:
@@ -661,7 +664,8 @@ async def create_skill_lifecycle_decision(
             "created_at": now.isoformat(),
             "expires_at": (now + _server().SKILL_ACQUISITION_TTL).isoformat(),
         })
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
+        log.exception("skills.lifecycle_decision_persist_failed", decision_id=decision_id)
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"decision_id": decision_id, "action": action, "name": name,
             "version": version, "content_hash": content_hash,
@@ -708,16 +712,20 @@ def _consume_lifecycle_approval(
     token = payload.get("approval_token")
     if not isinstance(token, str):
         raise HTTPException(status_code=403, detail="server-issued lifecycle approval is required")
-    approval = registry.consume_lifecycle_approval(
-        token=token, action=action, name=name, version=version, content_hash=content_hash,
-        current_hash=current_hash,
-        acquisition_id=(payload.get("dependency_plan_id") if action == "dependency-install"
-                        else payload.get("acquisition_id")
-                        if action in {"install", "update", "downgrade"} else None),
-        target_trust_state=target_trust_state, target_pin_policy=target_pin_policy,
-        rollback_event_id=rollback_event_id,
-        rollback_snapshot_hash=rollback_snapshot_hash,
-    )
+    try:
+        approval = registry.consume_lifecycle_approval(
+            token=token, action=action, name=name, version=version, content_hash=content_hash,
+            current_hash=current_hash,
+            acquisition_id=(payload.get("dependency_plan_id") if action == "dependency-install"
+                            else payload.get("acquisition_id")
+                            if action in {"install", "update", "downgrade"} else None),
+            target_trust_state=target_trust_state, target_pin_policy=target_pin_policy,
+            rollback_event_id=rollback_event_id,
+            rollback_snapshot_hash=rollback_snapshot_hash,
+        )
+    except sqlite3.Error as exc:
+        log.exception("skills.lifecycle_approval_read_failed", action=action, name=name)
+        raise HTTPException(status_code=503, detail="Skill approval storage is unavailable") from exc
     if approval is None:
         raise HTTPException(
             status_code=403, detail="approval is invalid, expired, mismatched, or replayed",

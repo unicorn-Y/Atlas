@@ -24,7 +24,7 @@ def test_asr_websocket_segments_partial_final_and_end(monkeypatch) -> None:
                 return [], ["你好，Atlas"]
             return (["你好"] if data else []), []
 
-    monkeypatch.setattr(server, "asr_manager", MockASR())
+    monkeypatch.setattr(server.app.state.services, "asr_manager", MockASR())
     with TestClient(app).websocket_connect("/ws/asr") as websocket:
         websocket.send_bytes(b"\x00\x00")
         assert websocket.receive_json() == {"type": "partial", "text": "你好"}
@@ -39,7 +39,7 @@ async def test_asr_status_endpoint_uses_mock(monkeypatch) -> None:
             return {"ready": False, "model": None, "downloading": False,
                     "progress": 0, "detail": "not installed"}
 
-    monkeypatch.setattr(server, "asr_manager", MockASR())
+    monkeypatch.setattr(server.app.state.services, "asr_manager", MockASR())
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         result = await client.get("/api/asr/status")
     assert result.json()["detail"] == "not installed"

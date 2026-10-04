@@ -221,7 +221,7 @@ async def list_agent_sessions(
         if lookup is not None:
             try:
                 conversation = await lookup(str(row["conversation_id"]))
-            except Exception:  # noqa: BLE001 — metadata is best-effort in a listing
+            except (OSError, RuntimeError, sqlite3.Error, ValueError):
                 conversation = None
         sessions.append({**row, "conversation": conversation})
     return {"agent_id": agent_id, "sessions": sessions}

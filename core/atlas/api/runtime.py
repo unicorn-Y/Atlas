@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 from atlas.config import get_config
 
@@ -194,8 +194,8 @@ class RuntimeManager:
         if ws:
             try:
                 await ws.send_json(data)
-            except Exception:
-                pass  # connection may have closed
+            except (OSError, RuntimeError, WebSocketDisconnect):
+                return  # connection may have closed
 
     async def send_run(self, run: RunState, data: dict[str, Any], fallback_conn_id: str) -> None:
         """Send to the most recently attached connection for this run."""

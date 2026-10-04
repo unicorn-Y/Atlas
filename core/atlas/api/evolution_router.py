@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Any
 
 import structlog
@@ -220,7 +221,7 @@ async def approve_candidate(candidate_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     try:
         saved = _persist_evolved_bundle(bundle)
-    except Exception as exc:  # noqa: BLE001 - 批准已生效；落库失败降级为中文提示
+    except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
         log.warning("evolution.candidate.persist_failed",
                     candidate=candidate_id, error=str(exc))
         return {"ok": True, "bundle": bundle, "saved": False,

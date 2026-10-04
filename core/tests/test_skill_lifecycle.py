@@ -577,6 +577,42 @@ async def test_lifecycle_approval_requires_server_held_decision(tmp_path, monkey
 
 
 @pytest.mark.asyncio
+async def test_lifecycle_decision_storage_error_is_visible_and_logged(tmp_path, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+
+    from atlas.api import skills_router
+
+    registry, skills_dir, _target, _digest = _installed(tmp_path)
+    monkeypatch.setattr(server, "skill_registry", registry)
+    monkeypatch.setattr(server, "skill_mgr", SkillManager(skills_dir=skills_dir))
+    monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", SKILL_CENTER_TOKEN)
+    services = server.app.state.services
+    monkeypatch.setattr(services, "skill_registry", registry)
+    monkeypatch.setattr(services, "skill_mgr", server.skill_mgr)
+
+    def fail_storage(_decision):
+        raise sqlite3.OperationalError("database is locked")
+
+    logged: list[str] = []
+
+    class CapturingLog:
+        def exception(self, event: str, **_fields: object) -> None:
+            logged.append(event)
+
+    monkeypatch.setattr(registry, "create_lifecycle_decision", fail_storage)
+    monkeypatch.setattr(skills_router, "log", CapturingLog())
+    async with AsyncClient(transport=ASGITransport(app=server.app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/skills/lifecycle/decision", headers=_skill_center_headers(), json={
+                "action": "trust", "name": NAME, "version": "1.0.0",
+                "trust_state": "trusted", "reason": "reviewed trust change",
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "database is locked"
+    assert logged == ["skills.lifecycle_decision_persist_failed"]
+@pytest.mark.asyncio
 async def test_http_rollback_approval_binds_event_id_even_when_snapshot_hash_matches(
     tmp_path, monkeypatch,
 ):
