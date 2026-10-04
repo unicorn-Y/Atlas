@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "label": "after",
+  "captured_at_utc": "2026-10-04T17:32:16.149732+00:00",
+  "load_context": "ZCode H8 lane; H5-final server.py refactor landed in tree concurrently; 8 logical cores",
+  "source": {
+    "root": "D:\\Atlas-h1-core-hardening",
+    "commit": "25621241c81118e9c48ac9addd6f987530c39e56",
+    "dirty": true,
+    "dirty_paths": [
+      "ore/atlas/api/models_settings_router.py",
+      "core/atlas/api/workspace_router.py",
+      "core/atlas/engine/session_sync.py",
+      "core/atlas/server.py",
+      "core/scripts/baseline_metrics.py",
+      "core/tests/test_backend_parity_wave4.py",
+      "core/tests/test_hermes_session_sync.py",
+      "core/tests/test_subagent_settings.py",
+      "frontend/src/main/backendProcess.ts",
+      "frontend/src/main/electron.ts",
+      "frontend/src/preload/index.cts",
+      "frontend/src/renderer/App.tsx",
+      "frontend/src/renderer/store/useAtlasStore.ts",
+      "frontend/src/shared/ipc.ts",
+      "artifacts/h10-live-smoke/",
+      "artifacts/h8-startup/",
+      "core/atlas/api/run_drive.py",
+      "core/scripts/startup_probe.py",
+      "core/tests/test_live_model_smoke.py",
+      "core/tests/test_startup_time.py",
+      "frontend/src/main/backendProcess.test.ts",
+      "tasks/results/ATLAS-H1-H8-lifespan-spec.md"
+    ]
+  },
+  "hermes": null,
+  "python": "D:\\Atlas-h1-core-hardening\\core\\.venv\\Scripts\\python.exe",
+  "metrics": {
+    "import_atlas_server": {
+      "samples_seconds": [
+        3.5153512000106275,
+        3.437083500000881,
+        3.433788199996343
+      ],
+      "median_seconds": 3.437083500000881,
+      "min_seconds": 3.433788199996343,
+      "importtime_total_us": 2977984,
+      "importtime_top_packages_us": {
+        "atlas": 828907,
+        "mcp_types": 500916,
+        "mcp": 227565,
+        "fastapi": 219223,
+        "apscheduler": 131457,
+        "pydantic": 86143,
+        "rich": 72175,
+        "httpx2": 62224,
+        "asyncio": 43260,
+        "anyio": 40590,
+        "yaml": 39691,
+        "urllib3": 36504,
+        "langchain_core": 34157,
+        "httpx": 33832,
+        "opentelemetry": 33201,
+        "cryptography": 27297,
+        "starlette": 26192,
+        "structlog": 23472,
+        "uvicorn": 21427,
+        "requests": 21193
+      },
+      "status": "measured",
+      "error": null,
+      "importtime_dump": "D:\\Atlas-h1-core-hardening\\artifacts\\h8-startup\\logs-after\\importtime.txt"
+    },
+    "backend_cold_start": {
+      "samples_seconds": [
+        7.492168500000844,
+        6.945718200004194,
+        6.902367200003937
+      ],
+      "median_seconds": 6.945718200004194,
+      "health_statuses": [
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "logs": [
+        "D:\\Atlas-h1-core-hardening\\artifacts\\h8-startup\\logs-after\\cold-start-0.log",
+        "D:\\Atlas-h1-core-hardening\\artifacts\\h8-startup\\logs-after\\cold-start-1.log",
+        "D:\\Atlas-h1-core-hardening\\artifacts\\h8-startup\\logs-after\\cold-start-2.log"
+      ],
+      "status": "measured"
+    }
+  }
+}

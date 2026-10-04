@@ -100,6 +100,7 @@ export default function App() {
     apiBaseUrl: state.apiBaseUrl, providerBaseUrl: state.providerBaseUrl, apiKeyConfigured: state.apiKeyConfigured,
     compressionModel: state.compressionModel, configLoaded: state.configLoaded, settingsBusy: state.settingsBusy,
     connectionTest: state.connectionTest, mode: state.mode, connected: state.connected, busy: state.busy, paused: state.paused,
+    backendStarting: state.backendStarting, startupDetail: state.startupDetail,
     error: state.error, model: state.model, models: state.models, providers: state.providers, reasoningStages: state.reasoningStages,
     tools: state.tools, skills: state.skills, activeSkills: state.activeSkills, capabilities: state.capabilities,
     conversations: state.conversations, conversationsLoading: state.conversationsLoading,
@@ -238,6 +239,11 @@ export default function App() {
   const notify = useCallback((text: string) => setToast(text), []);
 
   useEffect(() => { void store.initialize(); }, []);
+  // H8 §10.3/§10.4: the backend boots in parallel with the window; startup progress
+  // drives the「启动中」surfaces and re-reads real data once the backend is ready.
+  useEffect(() => window.atlasDesktop?.onBackendStartupProgress(
+    (progress) => useAtlasStore.getState().applyStartupProgress(progress),
+  ), []);
   useEffect(() => {
     let stale = false;
     const refresh = () => void backend.getProcesses().then((items) => { if (!stale) setProcessCount(items.filter((item) => item.status === 'running').length); }).catch(() => { if (!stale) setProcessCount(null); });
@@ -666,7 +672,7 @@ export default function App() {
   const worktreeActive = Boolean(activeConversation?.worktree_path);
   const worktreeRequested = Boolean(store.worktreeRequests[store.activeConversationId]);
   const profileName = store.profiles.find((profile) => profile.id === store.profileId)?.name ?? '默认';
-  const composerStatus = listening ? '正在听…' : store.connected ? '' : 'Atlas 后端没有连接';
+  const composerStatus = listening ? '正在听…' : store.connected ? '' : store.backendStarting ? 'Atlas 后端启动中…' : 'Atlas 后端没有连接';
   const composerBase = {
     value: input, onChange: setInput, attachments, onPickImages: addFiles, listening, onToggleMic: toggleSpeechInput,
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
@@ -909,7 +915,9 @@ export default function App() {
   // One open conversation reads better as a plain title; tabs appear from the second one.
   const showTabs = view === 'chat' && tabs.length > 1 && tabs.includes(store.activeConversationId);
   const connection = !store.connected
-    ? <span className="inline-flex items-center gap-1.5 text-[12px] text-danger"><i className="size-1.5 rounded-full bg-danger" />后端没有连接</span>
+    ? store.backendStarting
+      ? <span className="inline-flex items-center gap-1.5 text-[12px] text-fg-2"><i className="size-1.5 animate-pulse rounded-full bg-fg-3" />后端启动中{store.startupDetail ? `（${store.startupDetail}）` : '…'}</span>
+      : <span className="inline-flex items-center gap-1.5 text-[12px] text-danger"><i className="size-1.5 rounded-full bg-danger" />后端没有连接</span>
     : null;
 
   return <TooltipProvider>
@@ -919,7 +927,7 @@ export default function App() {
         conversations={store.conversations} conversationsLoading={store.conversationsLoading}
         activeConversationId={store.activeConversationId} loadingConversationId={store.loadingMessagesConversationId}
         onOpenConversation={openConversation} onNewTask={newTask} creating={store.creatingConversation} onSearch={() => setPaletteOpen(true)}
-        pendingMemories={pendingCount} username={username} subtitle={store.connected ? modelName : '后端没有连接'}
+        pendingMemories={pendingCount} username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
         theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
         pinned={store.pinned} archived={store.archived} unread={store.unread}
         running={runningConversations}

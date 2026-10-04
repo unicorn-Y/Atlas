@@ -91,7 +91,12 @@ async def test_subagent_settings_apply_to_new_children_only(monkeypatch, tmp_pat
             "pending_events": [], "runtime": context,
         })
 
-    saved = await server.update_configuration(server.ProviderSettingsRequest(
+    # H5: update_configuration lives on the models settings router now; its
+    # settings store seams are still read/patched through atlas.server.
+    from atlas.api.models_settings_router import ProviderSettingsRequest, update_configuration
+
+    services = SimpleNamespace(model_mgr=None)  # falls back to server.model_mgr
+    saved = await update_configuration(services, ProviderSettingsRequest(
         subagents_enabled=True,
         subagent_default_model="child-model",
     ))
@@ -102,14 +107,14 @@ async def test_subagent_settings_apply_to_new_children_only(monkeypatch, tmp_pat
     assert child_models == ["child-model"]
     assert settings["unrelated"] == "preserved"
 
-    await server.update_configuration(server.ProviderSettingsRequest(
+    await update_configuration(services, ProviderSettingsRequest(
         subagent_default_model="parent-model",
     ))
     await execute_child("second", background=True)
     await child_started["parent-model"].wait()
     assert child_models == ["child-model", "parent-model"]
 
-    await server.update_configuration(server.ProviderSettingsRequest(
+    await update_configuration(services, ProviderSettingsRequest(
         subagents_enabled=False,
     ))
     disabled_result = await execute_child("third")

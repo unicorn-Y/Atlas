@@ -13,12 +13,20 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from atlas.config import get_config, load_user_settings, save_user_settings
+from atlas.config import get_config
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 
 router = APIRouter()
+
+
+def _server() -> Any:
+    """Late-bound atlas.server: its module globals stay the seam tests patch
+    (``load_user_settings``/``save_user_settings`` are monkeypatched there)."""
+    import atlas.server
+
+    return atlas.server
 
 
 class ModelListResponse(BaseModel):
@@ -121,7 +129,7 @@ def _resolved_model_mgr(services: AppServices):
 
 
 def _configuration_payload(model_mgr) -> dict[str, Any]:
-    settings = load_user_settings()
+    settings = _server().load_user_settings()
     return {
         "gateway_base_url": model_mgr.gateway_base_url,
         "api_key_configured": model_mgr.api_key_configured,
@@ -217,13 +225,13 @@ async def update_configuration(
     if req.gateway_base_url is not None or api_key:
         model_mgr.update_provider(base_url, api_key)
     if req.compression_model is not None:
-        settings = load_user_settings()
+        settings = _server().load_user_settings()
     if req.compression_model is not None:
         settings["compression_model"] = req.compression_model
     if req.compression_model is not None:
-        save_user_settings(settings)
+        _server().save_user_settings(settings)
     if req.subagents_enabled is not None or req.subagent_default_model is not None:
-        settings = load_user_settings()
+        settings = _server().load_user_settings()
         if req.subagents_enabled is not None:
             settings["subagents_enabled"] = req.subagents_enabled
         if req.subagent_default_model is not None:
@@ -233,7 +241,7 @@ async def update_configuration(
             ):
                 raise HTTPException(status_code=400, detail="默认子 Agent 模型必须来自已配置的模型列表")
             settings["subagent_default_model"] = subagent_model
-        save_user_settings(settings)
+        _server().save_user_settings(settings)
     return _configuration_payload(_resolved_model_mgr(services))
 
 

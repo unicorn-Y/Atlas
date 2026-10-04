@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BACKEND_STARTUP_CHANNEL, type BackendStartupProgress } from '../shared/ipc.js';
 
 export interface BackendLaunchResult {
   ready: true;
@@ -10,9 +11,22 @@ export interface BackendLaunchResult {
   pid?: number;
 }
 
+export interface EnsureBackendOptions {
+  /** Receives startup progress while the backend boots (H8 §10.3: the UI shows progress). */
+  onProgress?: (progress: BackendStartupProgress) => void;
+}
+
 const HEALTH_URL = `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/health`;
 const PROBE_TIMEOUT_MS = 700;
-const STARTUP_TIMEOUT_MS = 15_000;
+const PROBE_INTERVAL_MS = 250;
+// H8 §10.3: the old fixed 15-second timeout killed slow-but-healthy backends. Now the
+// wait continues while the process is alive and health makes progress; STARTUP_MAX_WAIT_MS
+// is only the total upper bound. Real failures (process exit / spawn error) surface
+// immediately with the log tail instead of waiting out a timer.
+const STARTUP_MAX_WAIT_MS = 120_000;
+// Real failures show the last lines of the backend log (H8 §10.3).
+const LOG_TAIL_LINES = 50;
+const PROGRESS_HEARTBEAT_MS = 1_000;
 const STDERR_TAIL_LIMIT = 8_192;
 const shutdownToken = randomBytes(32).toString('hex');
 
@@ -24,19 +38,60 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function isBackendHealthy(): Promise<boolean> {
+/** Last N lines of the backend log, for failure reporting (H8 §10.3). */
+function logTail(tail: string): string {
+  const lines = tail.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  return lines.slice(-LOG_TAIL_LINES).join('\n');
+}
+
+interface HealthContact {
+  /** True only when the backend reports itself fully ready (status === 'ok'). */
+  ready: boolean;
+  /** Raw JSON body; used to detect progress between polls. */
+  payload: unknown;
+}
+
+/** One health poll. Null means "no contact yet" (backend still booting or port not bound). */
+async function probeHealth(): Promise<HealthContact | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
     const response = await fetch(HEALTH_URL, { signal: controller.signal });
-    if (response.status !== 200) return false;
-    const body: unknown = await response.json();
-    return typeof body === 'object' && body !== null && 'status' in body && body.status === 'ok';
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    const body = payload as { status?: unknown } | null;
+    return { ready: response.status === 200 && body?.status === 'ok', payload };
   } catch {
-    return false;
+    return null;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Back-compat helper: is a backend fully ready right now? */
+async function isBackendHealthy(): Promise<boolean> {
+  return (await probeHealth())?.ready ?? false;
+}
+
+/** Short progress line for the UI. Prefers the lifespan components report (H8 §10.2)
+ *  once the backend exposes it; falls back to a generic "booting" line. */
+function progressDetail(payload: unknown): string {
+  const body = payload as {
+    status?: unknown;
+    components?: Record<string, { status?: unknown } | undefined> | null;
+  } | null;
+  if (body && typeof body === 'object' && body.components && typeof body.components === 'object') {
+    const pending = Object.entries(body.components)
+      .filter(([, state]) => state?.status === 'starting' || state?.status === 'failed')
+      .map(([name, state]) => state?.status === 'failed' ? `${name}(failed)` : name);
+    if (pending.length > 0) return `启动中：${pending.join('、')}`;
+    return '组件已就绪，等待后端确认';
+  }
+  return '后端进程已启动，等待健康检查通过';
 }
 
 function resolveCoreDir(): string {
@@ -97,22 +152,61 @@ async function startCandidate(
   return { child, stderr: () => stderrTail, outcome };
 }
 
-async function waitUntilReady(child: ChildProcess, stderr: () => string, outcome: Promise<ProcessOutcome>): Promise<void> {
-  const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+async function waitUntilReady(
+  child: ChildProcess,
+  stderr: () => string,
+  outcome: Promise<ProcessOutcome>,
+  onProgress?: (progress: BackendStartupProgress) => void,
+): Promise<void> {
+  const startedAt = Date.now();
+  const deadline = startedAt + STARTUP_MAX_WAIT_MS;
+  let lastFingerprint: string | null = null;
+  let lastHeartbeat = 0;
+  const emit = (phase: BackendStartupProgress['phase'], detail?: string) => {
+    onProgress?.({ phase, managed: true, elapsedMs: Date.now() - startedAt, detail });
+  };
 
   while (Date.now() < deadline) {
-    const probe = isBackendHealthy().then((healthy) => healthy ? { kind: 'ready' as const } : null);
-    const result = await Promise.race([probe, outcome, sleep(250).then(() => null)]);
-    if (result?.kind === 'ready') return;
+    const probe = probeHealth().then((contact) => (contact ? { kind: 'health' as const, contact } : null));
+    const result = await Promise.race([probe, outcome, sleep(PROBE_INTERVAL_MS).then(() => null)]);
+    if (result?.kind === 'health') {
+      if (result.contact.ready) {
+        emit('ready');
+        return;
+      }
+      // Any health response means the server is up and progressing; report changes
+      // (component flips) plus a periodic heartbeat so the UI can show movement.
+      const fingerprint = JSON.stringify(result.contact.payload);
+      const now = Date.now();
+      if (fingerprint !== lastFingerprint || now - lastHeartbeat >= PROGRESS_HEARTBEAT_MS) {
+        lastFingerprint = fingerprint;
+        lastHeartbeat = now;
+        emit('starting', progressDetail(result.contact.payload));
+      }
+      // Pace the next poll: the race above resolves as soon as the probe does, so
+      // without a delay a fast-responding "starting" health endpoint would be polled
+      // in a hot loop. Process death still cuts the wait short immediately.
+      await Promise.race([sleep(PROBE_INTERVAL_MS), outcome]);
+      continue;
+    }
     if (result?.kind === 'error') {
+      emit('failed', result.error.message);
       if (result.error.code === 'ENOENT') throw result.error;
-      throw new Error(`Atlas backend process failed: ${result.error.message}${stderr() ? `\n${stderr()}` : ''}`);
+      throw new Error(`Atlas backend process failed: ${result.error.message}${stderr() ? `\n${logTail(stderr())}` : ''}`);
     }
     if (result?.kind === 'exit') {
-      throw new Error(`Atlas backend exited before becoming healthy (code ${result.code ?? 'unknown'}, signal ${result.signal ?? 'none'}).${stderr() ? `\n${stderr()}` : ''}`);
+      emit('failed', `exit ${result.code ?? 'unknown'}`);
+      throw new Error(
+        `Atlas backend exited before becoming healthy (code ${result.code ?? 'unknown'}, signal ${result.signal ?? 'none'}).` +
+        `${stderr() ? `\n${logTail(stderr())}` : ''}`,
+      );
     }
   }
-  throw new Error(`Atlas backend did not become healthy within ${STARTUP_TIMEOUT_MS / 1000} seconds.${stderr() ? `\n${stderr()}` : ''}`);
+  emit('failed', `no healthy backend within ${STARTUP_MAX_WAIT_MS / 1000}s`);
+  throw new Error(
+    `Atlas backend did not become healthy within ${STARTUP_MAX_WAIT_MS / 1000} seconds.` +
+    `${stderr() ? `\n${logTail(stderr())}` : ''}`,
+  );
 }
 
 async function terminate(child: ChildProcess): Promise<void> {
@@ -153,8 +247,21 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
   ]);
 }
 
-export async function ensureBackendRunning(): Promise<BackendLaunchResult> {
-  if (await isBackendHealthy()) return { ready: true, managed: false };
+export { BACKEND_STARTUP_CHANNEL };
+
+export async function ensureBackendRunning(options?: EnsureBackendOptions): Promise<BackendLaunchResult> {
+  const onProgress = options?.onProgress;
+  const startedAt = Date.now();
+  const emit = (phase: BackendStartupProgress['phase'], managed: boolean, detail?: string) => {
+    onProgress?.({ phase, managed, elapsedMs: Date.now() - startedAt, detail });
+  };
+
+  emit('probing', false);
+  const external = await probeHealth();
+  if (external?.ready) {
+    emit('ready', false);
+    return { ready: true, managed: false };
+  }
 
   const packagedBackend = process.env.ATLAS_BACKEND_EXECUTABLE;
   const rootDir = process.env.ATLAS_ROOT
@@ -174,7 +281,8 @@ export async function ensureBackendRunning(): Promise<BackendLaunchResult> {
     try {
       started = await startCandidate(candidate.command, candidate.args, candidate.cwd);
       managedChild = started.child;
-      await waitUntilReady(started.child, started.stderr, started.outcome);
+      emit('starting', true, '后端进程已启动，等待健康检查');
+      await waitUntilReady(started.child, started.stderr, started.outcome, onProgress);
       return { ready: true, managed: true, pid: started.child.pid };
     } catch (error) {
       if (started) await stopManagedBackend();

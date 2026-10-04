@@ -198,7 +198,7 @@ def _stop_owned_process_tree(process: subprocess.Popen[Any]) -> None:
         try:
             subprocess.run(
                 ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                capture_output=True, text=True, timeout=15, check=False,
+                capture_output=True, text=True, errors="replace", timeout=15, check=False,
             )
         except (OSError, subprocess.SubprocessError):
             process.terminate()

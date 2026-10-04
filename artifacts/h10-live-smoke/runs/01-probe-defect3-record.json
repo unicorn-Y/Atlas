@@ -1,0 +1,19 @@
+{
+  "what": "DEFECT H10.2-3 repro: `atlas run --workspace <scratch>` with a real model; model wrote to the CLI process launch dir instead of the workspace",
+  "command": "python -m atlas.cli run -p <Chinese write-file prompt> --workspace C:/Users/25011/AppData/Local/Temp/h1-k-ws/live-root/workspaces/probe-write2 --model deepseek-v4.1-flash --output-format stream-json (launched with cwd=D:/Atlas-h1-core-hardening)",
+  "observed": {
+    "tool_arguments_path": "D:\\Atlas-h1-core-hardening\\hello.txt (repo root, outside --workspace; file was really created there)",
+    "workspace": "C:/Users/25011/AppData/Local/Temp/h1-k-ws/live-root/workspaces/probe-write2 (stayed empty)"
+  },
+  "static_root_cause": [
+    "core/atlas/engine/hermes_runtime.py:968 passes cwd=hermes_cwd(=workspace) to the AIAgent factory",
+    "fork agent/agent_init.py:2434 stores it as agent.session_cwd",
+    "but the system prompt's 'Current working directory' comes from resolve_agent_cwd() (fork agent/prompt_builder.py:1046 -> fork agent/runtime_cwd.py:105-107), which reads only the _SESSION_CWD context var / TERMINAL_CWD env and falls back to os.getcwd() (the process launch dir)",
+    "no Atlas code calls set_session_cwd (grep: zero callers in core/atlas; fork callers are acp_adapter/gateway/tui only)"
+  ],
+  "impact": "real model obeys the leaked cwd and writes outside the requested workspace; desktop backend launch dir likely the install root -> same hazard",
+  "evidence": [
+    "runs/01-probe-defect3-stream.jsonl",
+    "runs/01-probe-defect3-stderr.log"
+  ]
+}

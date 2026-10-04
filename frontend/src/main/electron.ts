@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
+import { BACKEND_STARTUP_CHANNEL, type BackendStartupProgress } from '../shared/ipc.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let windowRef: BrowserWindow | null = null;
@@ -151,17 +152,27 @@ app.whenReady().then(async () => {
       Object.fromEntries(selectedPackages.map((name) => [name, packageJson.dependencies?.[name]])),
     );
   }
-  try {
-    await ensureBackendRunning();
-  } catch (error) {
+  // H8 §10.3: the backend boots in parallel with the window instead of blocking it for
+  // up to two minutes. Startup progress is broadcast to the renderer (backend:startup-progress),
+  // which keeps its "启动中" surfaces until the backend reports ready. A real failure
+  // (process exit / cap exceeded) still surfaces the backend log tail and quits.
+  let lastProgress: BackendStartupProgress = { phase: 'probing', managed: false, elapsedMs: 0 };
+  const forwardProgress = (progress: BackendStartupProgress) => {
+    lastProgress = progress;
+    windowRef?.webContents.send(BACKEND_STARTUP_CHANNEL, progress);
+  };
+  const backendReady = ensureBackendRunning({ onProgress: forwardProgress });
+  void backendReady.catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     dialog.showErrorBox('Atlas backend startup failed', `Atlas could not start its backend.\n\n${message}`);
     app.quit();
-    return;
-  }
+  });
   attachBackendToken();
   lockDownWebviews();
   createWindow();
+  // The window may appear after boot already finished (fast external backend): give the
+  // renderer the current state once so its startup surfaces resolve immediately.
+  windowRef?.webContents.send(BACKEND_STARTUP_CHANNEL, lastProgress);
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 

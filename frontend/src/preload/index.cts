@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AtlasDesktopApi } from '../shared/ipc.js';
+import type { AtlasDesktopApi, BackendStartupProgress } from '../shared/ipc.js';
+import { BACKEND_STARTUP_CHANNEL } from '../shared/ipc.js';
 
 const desktopApi: AtlasDesktopApi = {
   platform: process.platform,
@@ -14,6 +15,11 @@ const desktopApi: AtlasDesktopApi = {
     const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);
     ipcRenderer.on('window:maximize-change', listener);
     return () => ipcRenderer.removeListener('window:maximize-change', listener);
+  },
+  onBackendStartupProgress: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: BackendStartupProgress) => callback(progress);
+    ipcRenderer.on(BACKEND_STARTUP_CHANNEL, listener);
+    return () => ipcRenderer.removeListener(BACKEND_STARTUP_CHANNEL, listener);
   },
 };
 

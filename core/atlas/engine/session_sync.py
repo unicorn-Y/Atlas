@@ -1,4 +1,18 @@
-"""Bridge Atlas history mutations to the Hermes SessionDB transcript.
+"""Single write path for the durable conversation transcript (Hermes SessionDB).
+
+DATA-OWNERS.md (H2.1): the conversation record (messages, tool calls/results,
+rewinds, forks) has ONE owner — Hermes ``SessionDB`` — and this module is the
+only place outside the engine turn loop that writes to it. Truncate, rewind,
+fork, delete and import/export operate DIRECTLY on ``SessionDB``: targets are
+SessionDB-native (user-turn ordinals), no Atlas message state is read to decide
+what gets written.
+
+The ``*_atlas_message`` adapters exist only for callers that still locate the
+target turn from an Atlas message list (the un-migrated server routes). They
+are pure ``message_id -> user-turn ordinal`` resolvers around the direct
+operations below and carry no sync logic of their own; once the server routes
+read SessionDB (DATA-OWNERS step 1) they pass ordinals directly and the
+adapters go away.
 
 Hermes source: ``hermes_state.py::SessionDB``, ``hermes_state_rewind.py`` and
 ``hermes_state_portability.py`` at unicorn-Y/hermes-agent@562ad75 (MIT).
@@ -6,8 +20,8 @@ Hermes source: ``hermes_state.py::SessionDB``, ``hermes_state_rewind.py`` and
 
 from __future__ import annotations
 
-import os
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -23,11 +37,13 @@ def _open_db(home: str | Path):
 
 
 def capture_session(home: str | Path, conversation_id: str) -> dict[str, Any] | None:
+    """Direct SessionDB read/export of one full session payload (导出)."""
     with _open_db(home) as db:
         return db.export_session(conversation_id, include_inactive=True)
 
 
 def restore_session(home: str | Path, payload: dict[str, Any] | None) -> None:
+    """Direct SessionDB write: replace a session with an exported payload (导入)."""
     if not payload:
         return
     with _open_db(home) as db:
@@ -40,19 +56,35 @@ def restore_session(home: str | Path, payload: dict[str, Any] | None) -> None:
 
 
 def delete_session(home: str | Path, conversation_id: str) -> bool:
+    """Direct SessionDB write: remove one session and its transcript (删除)."""
     with _open_db(home) as db:
         return db.delete_session(conversation_id)
 
 
-def rewind_to_atlas_message(
-    home: str | Path, conversation_id: str, atlas_messages: list[dict[str, Any]], message_id: str,
-) -> dict[str, Any] | None:
-    """Rewind Hermes at the same user turn Atlas is removing; return a redo snapshot."""
-    target = next((index for index, item in enumerate(atlas_messages)
+def atlas_turn_ordinal(
+    messages: list[dict[str, Any]], message_id: str, *, through_target: bool,
+) -> int | None:
+    """Resolve a message id inside a caller-supplied message list to the
+    SessionDB user-turn ordinal it addresses.
+
+    Pure adapter math for the transition period (DATA-OWNERS step 2): counts
+    user messages before ``message_id`` (``through_target=False`` — rewind
+    starts AT that turn) or through it (``through_target=True`` — fork keeps
+    that turn). Returns None when the id is not in the list.
+    """
+    target = next((index for index, item in enumerate(messages)
                    if str(item.get("id")) == message_id), None)
     if target is None:
         return None
-    user_ordinal = sum(1 for item in atlas_messages[:target] if item.get("role") == "user")
+    span = messages[:target + 1] if through_target else messages[:target]
+    return sum(1 for item in span if item.get("role") == "user")
+
+
+def rewind_user_turn(
+    home: str | Path, conversation_id: str, user_ordinal: int,
+) -> dict[str, Any] | None:
+    """Direct SessionDB write: export a redo snapshot, then rewind the durable
+    transcript to just before user turn ``user_ordinal`` (0 = oldest)."""
     with _open_db(home) as db:
         snapshot = db.export_session(conversation_id, include_inactive=True)
         if snapshot is None:
@@ -61,16 +93,24 @@ def rewind_to_atlas_message(
         return snapshot
 
 
-def fork_session(
-    home: str | Path, source_id: str, fork_id: str,
-    atlas_messages: list[dict[str, Any]], through_message_id: str,
+def rewind_to_atlas_message(
+    home: str | Path, conversation_id: str, atlas_messages: list[dict[str, Any]], message_id: str,
+) -> dict[str, Any] | None:
+    """Adapter (transition only): locate the Atlas message, then rewind
+    SessionDB at the same user turn. No sync logic — see :func:`rewind_user_turn`."""
+    user_ordinal = atlas_turn_ordinal(atlas_messages, message_id, through_target=False)
+    if user_ordinal is None:
+        return None
+    return rewind_user_turn(home, conversation_id, user_ordinal)
+
+
+def fork_session_through_turn(
+    home: str | Path, source_id: str, fork_id: str, user_turns: int, *,
+    branch_message_id: str | None = None,
 ) -> None:
-    """Copy the durable Hermes transcript through the selected Atlas turn."""
-    target = next((index for index, item in enumerate(atlas_messages)
-                   if str(item.get("id")) == through_message_id), None)
-    if target is None:
-        return
-    users_through = sum(1 for item in atlas_messages[:target + 1] if item.get("role") == "user")
+    """Direct SessionDB write: clone the durable transcript through the first
+    ``user_turns`` user turns. The cut point is computed from the SessionDB
+    transcript itself, never from Atlas state."""
     with _open_db(home) as db:
         payload = db.export_session(source_id, include_inactive=True)
         if payload is None:
@@ -80,7 +120,7 @@ def fork_session(
         stop = len(transcript)
         for index, item in enumerate(transcript):
             if item.get("role") == "user":
-                if seen_users >= users_through:
+                if seen_users >= user_turns:
                     stop = index
                     break
                 seen_users += 1
@@ -94,12 +134,27 @@ def fork_session(
             **payload, "id": fork_id, "parent_session_id": source_id,
             "title": f"{str(payload.get('title') or '对话')[:80]} · 分支 {fork_id[:6]}",
             "model_config": {**model_config, "_branched_from": source_id,
-                             "_branch_message_id": through_message_id},
+                             "_branch_message_id": branch_message_id},
             "messages": transcript[:stop],
         }
         result = db.import_sessions([cloned])
         if not result.get("ok") or result.get("imported") != 1:
             raise RuntimeError(f"Hermes session fork failed: {result.get('errors', result)}")
+
+
+def fork_session(
+    home: str | Path, source_id: str, fork_id: str,
+    atlas_messages: list[dict[str, Any]], through_message_id: str,
+) -> None:
+    """Adapter (transition only): locate the Atlas fork point, then clone the
+    SessionDB transcript through that user turn. No sync logic — see
+    :func:`fork_session_through_turn`."""
+    users_through = atlas_turn_ordinal(atlas_messages, through_message_id, through_target=True)
+    if users_through is None:
+        return
+    fork_session_through_turn(
+        home, source_id, fork_id, users_through, branch_message_id=through_message_id,
+    )
 
 
 def list_branch_tree(home: str | Path, conversation_id: str) -> list[dict[str, Any]]:
@@ -165,7 +220,8 @@ def goal_command(home: str | Path, conversation_id: str, command: str) -> dict[s
 
     manager = GoalManager(conversation_id)
     previous = manager.state
-    result = dispatch_goal_command(manager, command, authorize_gate=lambda: "Goal gates require explicit approval.")
+    result = dispatch_goal_command(
+        manager, command, authorize_gate=lambda: "Goal gates require explicit approval.")
     state = manager.state
     normalized = command.strip().split(maxsplit=1)[0].casefold() if command.strip() else ""
     event = None
@@ -173,7 +229,8 @@ def goal_command(home: str | Path, conversation_id: str, command: str) -> dict[s
         event = "goal.paused" if normalized == "pause" else (
             "goal.resumed" if normalized == "resume" else "goal.cleared"
         )
-    elif not is_goal_control(command) and state and (previous is None or previous.status == "cleared"):
+    elif not is_goal_control(command) and state and (
+            previous is None or previous.status == "cleared"):
         event = "goal.created"
     elif not is_goal_control(command) and state and previous and previous.goal != state.goal:
         event = "goal.replaced"

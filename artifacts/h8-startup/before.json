@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "label": "before",
+  "captured_at_utc": "2026-10-04T16:49:52.542332+00:00",
+  "load_context": "ZCode H8 lane, possibly concurrent lanes; 8 logical cores",
+  "source": {
+    "root": "D:\\Atlas-h1-core-hardening",
+    "commit": "25621241c81118e9c48ac9addd6f987530c39e56",
+    "dirty": true,
+    "dirty_paths": [
+      "ore/atlas/engine/session_sync.py",
+      "artifacts/h10-live-smoke/",
+      "core/scripts/startup_probe.py"
+    ]
+  },
+  "hermes": null,
+  "python": "D:\\Atlas-h1-core-hardening\\core\\.venv\\Scripts\\python.exe",
+  "metrics": {
+    "import_atlas_server": {
+      "samples_seconds": [
+        5.09011480002664,
+        4.234804199979408,
+        4.6348760999972
+      ],
+      "median_seconds": 4.6348760999972,
+      "min_seconds": 4.234804199979408,
+      "importtime_total_us": 3906559,
+      "importtime_top_packages_us": {
+        "atlas": 1127845,
+        "mcp_types": 608883,
+        "mcp": 269778,
+        "fastapi": 256126,
+        "tenacity": 142502,
+        "apscheduler": 126342,
+        "pydantic": 122773,
+        "rich": 106522,
+        "langchain_core": 63927,
+        "urllib3": 57193,
+        "anyio": 52620,
+        "opentelemetry": 52295,
+        "httpx2": 37984,
+        "packaging": 37817,
+        "cryptography": 37742,
+        "httpx": 36184,
+        "asyncio": 31573,
+        "starlette": 31136,
+        "requests": 28816,
+        "structlog": 27780
+      },
+      "status": "measured",
+      "error": null,
+      "importtime_dump": "D:\\Atlas-h1-core-hardening\\artifacts\\h8-startup\\logs-before\\importtime.txt"
+    },
+    "backend_cold_start": {
+      "samples_seconds": [
+        8.184435499977553,
+        8.061707399989245,
+        7.409961500001373
+      ],
+      "median_seconds": 8.061707399989245,
+      "health_statuses": [
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "logs": [
+        "D:\\Atlas-h1-core-hardening\\artifacts\\h8-startup\\logs-before\\cold-start-0.log",
+        "D:\\Atlas-h1-core-hardening\\artifacts\\h8-startup\\logs-before\\cold-start-1.log",
+        "D:\\Atlas-h1-core-hardening\\artifacts\\h8-startup\\logs-before\\cold-start-2.log"
+      ],
+      "status": "measured"
+    }
+  }
+}

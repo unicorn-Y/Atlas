@@ -248,7 +248,6 @@ def _history_checkpoint_manifest(store: Any, checkpoint_id: str) -> tuple[dict[s
 
 
 async def _git_history(
-    services: Annotated[AppServices, Depends(get_app_services)],
     root: Path, relative: str,
 ) -> list[dict[str, Any]]:
     try:

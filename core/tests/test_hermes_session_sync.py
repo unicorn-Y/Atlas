@@ -1,14 +1,26 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import os
+
 from atlas.engine.session_sync import (
-    append_branch_summary, capture_session, delete_session, evaluate_goal_after_turn, fork_session, goal_command, list_branch_tree, restore_session,
+    append_branch_summary,
+    atlas_turn_ordinal,
+    capture_session,
+    delete_session,
+    evaluate_goal_after_turn,
+    fork_session,
+    fork_session_through_turn,
+    goal_command,
+    list_branch_tree,
+    restore_session,
     rewind_to_atlas_message,
+    rewind_user_turn,
 )
 
 
 def _seed_session(home, session_id="source"):
-    import os
-
     os.environ["HERMES_HOME"] = str(home)
     from hermes_state import SessionDB
 
@@ -27,8 +39,6 @@ def _seed_session(home, session_id="source"):
 
 
 def _history(home, session_id):
-    import os
-
     os.environ["HERMES_HOME"] = str(home)
     from hermes_state import SessionDB
 
@@ -128,3 +138,177 @@ def test_branch_summary_is_mirrored_to_hermes_parent_session(tmp_path):
     append_branch_summary(home, "source", "child", "a1", "branch note")
     messages = _history(home, "source")
     assert messages[-1]["content"] == "branch note"
+
+
+# ----- H2.1 step 2: direct SessionDB write path (no Atlas state in the loop) -----
+
+
+def test_atlas_turn_ordinal_resolves_targets_without_syncing():
+    atlas = [
+        {"id": "u1", "role": "user", "content": "first"},
+        {"id": "a1", "role": "assistant", "content": "first answer"},
+        {"id": "u2", "role": "user", "content": "second"},
+        {"id": "a2", "role": "assistant", "content": "second answer"},
+    ]
+    assert atlas_turn_ordinal(atlas, "u2", through_target=False) == 1
+    assert atlas_turn_ordinal(atlas, "a1", through_target=True) == 1
+    assert atlas_turn_ordinal(atlas, "a2", through_target=True) == 2
+    assert atlas_turn_ordinal(atlas, "missing", through_target=False) is None
+
+
+def test_rewind_user_turn_direct_op_needs_no_atlas_state(tmp_path):
+    home = tmp_path / "engine"
+    home.mkdir()
+    _seed_session(home)
+
+    snapshot = rewind_user_turn(home, "source", 1)
+    rewound = _history(home, "source")
+    assert [item["content"] for item in rewound if item["role"] == "user"] == ["first"]
+    assert any(item["role"] == "tool" and item["content"] == "fixture result" for item in rewound)
+
+    restore_session(home, snapshot)
+    restored = _history(home, "source")
+    assert [item["content"] for item in restored if item["role"] == "user"] == ["first", "second"]
+    assert any(item["role"] == "tool" and item["content"] == "fixture result" for item in restored)
+
+
+def test_rewind_adapter_is_a_pure_resolver_over_the_direct_op(tmp_path, monkeypatch):
+    atlas = [
+        {"id": "u1", "role": "user", "content": "first"},
+        {"id": "a1", "role": "assistant", "content": "first answer"},
+        {"id": "u2", "role": "user", "content": "second"},
+    ]
+    homes = []
+    for name in ("adapter", "direct"):
+        home = tmp_path / name
+        home.mkdir()
+        _seed_session(home)
+        homes.append(home)
+
+    snapshot = rewind_to_atlas_message(homes[0], "source", atlas, "u2")
+    direct_snapshot = rewind_user_turn(homes[1], "source", 1)
+    assert [m["content"] for m in _history(homes[0], "source")] == [
+        m["content"] for m in _history(homes[1], "source")]
+    assert snapshot["id"] == direct_snapshot["id"] == "source"
+
+    # Unknown message id: unchanged transcript, no snapshot, no write.
+    untouched = _history(homes[0], "source")
+    assert rewind_to_atlas_message(homes[0], "source", atlas, "nope") is None
+    assert _history(homes[0], "source") == untouched
+
+
+def test_fork_session_through_turn_direct_cuts_from_sessiondb_transcript(tmp_path):
+    home = tmp_path / "engine"
+    home.mkdir()
+    _seed_session(home)
+
+    fork_session_through_turn(home, "source", "forked", 1, branch_message_id="a1")
+    fork = _history(home, "forked")
+    assert [item["content"] for item in fork if item["role"] == "user"] == ["first"]
+    assert any(item["role"] == "tool" and item["content"] == "fixture result" for item in fork)
+    from hermes_state import SessionDB
+    with SessionDB(db_path=home / "state.db") as db:
+        metadata = db.get_session("forked")
+    assert metadata["parent_session_id"] == "source"
+    assert json.loads(metadata["model_config"])["_branched_from"] == "source"
+    assert json.loads(metadata["model_config"])["_branch_message_id"] == "a1"
+    tree = list_branch_tree(home, "forked")
+    assert [item["id"] for item in tree] == ["source", "forked"]
+    assert tree[1]["branch_message_id"] == "a1"
+    # The source transcript is untouched by the fork.
+    assert [item["content"] for item in _history(home, "source") if item["role"] == "user"] == [
+        "first", "second"]
+
+
+def test_fork_adapter_is_a_pure_resolver_over_the_direct_op(tmp_path):
+    atlas = [
+        {"id": "u1", "role": "user", "content": "first"},
+        {"id": "a1", "role": "assistant", "content": "first answer"},
+        {"id": "u2", "role": "user", "content": "second"},
+        {"id": "a2", "role": "assistant", "content": "second answer"},
+    ]
+    homes = []
+    for name in ("adapter", "direct"):
+        home = tmp_path / name
+        home.mkdir()
+        _seed_session(home)
+        homes.append(home)
+
+    fork_session(homes[0], "source", "forked", atlas, "a1")
+    fork_session_through_turn(homes[1], "source", "forked", 1, branch_message_id="a1")
+    assert [m["content"] for m in _history(homes[0], "forked")] == [
+        m["content"] for m in _history(homes[1], "forked")]
+
+    # Unknown fork point: no fork session is created.
+    fork_session(homes[0], "source", "forked2", atlas, "nope")
+    assert capture_session(homes[0], "forked2") is None
+
+
+def test_history_mutations_keep_doctor_sessions_consistent(tmp_path, monkeypatch):
+    """Taskbook H2.1 acceptance: after fork/rewind/export+import/delete, the
+    `atlas doctor sessions` cross-store check reports zero inconsistencies."""
+    home = tmp_path / "engine"
+    home.mkdir()
+    _seed_session(home)
+    monkeypatch.setenv("HERMES_HOME", str(home))
+
+    import atlas.config as atlas_config
+    from atlas.memory import MemoryStore
+
+    monkeypatch.setattr(atlas_config, "DATA_ROOT", tmp_path, raising=False)
+    monkeypatch.setattr(atlas_config, "_config", atlas_config.AtlasConfig(), raising=False)
+    memory = MemoryStore(db_path=tmp_path / "data" / "atlas.db")
+
+    async def _build():
+        await memory.init()
+        # save_message auto-creates the conversation row under the given id.
+        await memory.save_message(conversation_id="source", role="user", content="first")
+        await memory.save_message(conversation_id="source", role="assistant",
+                                  content="first answer")
+        await memory.save_message(conversation_id="source", role="user", content="second")
+        await memory.save_message(conversation_id="source", role="assistant",
+                                  content="second answer")
+        return await memory.get_messages_with_rowid("source")
+
+    messages = asyncio.run(_build())
+    assert len(messages) == 4
+
+    def _doctor():
+        from atlas.cli import _check_sessions
+
+        report = _check_sessions()
+        assert report["state_db_error"] == "", report
+        assert report["atlas_db_error"] == "", report
+        return report
+
+    def _assert_consistent():
+        report = _doctor()
+        assert report["ok"] is True, report
+        assert report["missing_in_hermes"] == []
+        assert report["orphans_in_hermes"] == []
+
+    # Baseline: source exists in both stores.
+    _assert_consistent()
+    # Fork (direct SessionDB op + the metadata row its caller keeps owning).
+    fork_session_through_turn(home, "source", "forked", 1, branch_message_id="a1")
+
+    async def _seed_fork_row():
+        await memory.save_message(conversation_id="forked", role="user", content="first")
+
+    asyncio.run(_seed_fork_row())
+    _assert_consistent()
+    # Rewind: both stores lose the second user turn, session/conversation ids unchanged.
+    rewind_user_turn(home, "source", 1)
+    removed = asyncio.run(
+        memory.remove_messages_from("source", str(messages[2]["id"])))
+    assert removed is not None
+    _assert_consistent()
+    # Export + import roundtrip: same session ids on both sides.
+    payload = capture_session(home, "source")
+    restore_session(home, payload)
+    _assert_consistent()
+    # Delete: dropped from both stores.
+    assert delete_session(home, "forked") is True
+    assert asyncio.run(memory.delete_conversation("forked")) is True
+    _assert_consistent()
+    assert capture_session(home, "forked") is None

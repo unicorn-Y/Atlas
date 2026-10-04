@@ -1,0 +1,21 @@
+{
+  "name": "01-write-file",
+  "exit_code": 0,
+  "wall_seconds": 34.118,
+  "model": "deepseek-v4.1-flash",
+  "gateway_base_url": "https://cnapi.pleasure.cc.cd:8443/v1",
+  "cwd": "C:\\Users\\25011\\AppData\\Local\\Temp\\h1-k-ws\\live-root\\workspaces\\write-771f40eb",
+  "args": [
+    "run",
+    "-p",
+    "在工作区 C:\\Users\\25011\\AppData\\Local\\Temp\\h1-k-ws\\live-root\\workspaces\\write-771f40eb 创建文件 hello.txt，内容为一行：ATLAS-LIVE-SMOKE-OK。除该行外不要写入任何其他内容。",
+    "--workspace",
+    "C:\\Users\\25011\\AppData\\Local\\Temp\\h1-k-ws\\live-root\\workspaces\\write-771f40eb",
+    "--model",
+    "deepseek-v4.1-flash",
+    "--output-format",
+    "stream-json",
+    "--timeout",
+    "480"
+  ]
+}

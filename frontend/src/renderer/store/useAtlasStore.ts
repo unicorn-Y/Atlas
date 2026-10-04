@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { BackendAdapter, BackendError } from '@atlas/backend-adapter';
+import type { BackendStartupProgress } from '../../shared/ipc';
 import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, CustomModelUpdateRequest, InitProposal, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ProviderState, ReasoningEffort, ReasoningStagesConfig, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
@@ -37,6 +38,10 @@ interface AtlasState extends PersistentSlice {
   connectionTest: { ok: boolean; message: string } | null;
   mode: 'mock' | 'backend';
   connected: boolean;
+  /** H8 §10.4: 桌面后端还在启动（主进程 backend:startup-progress 事件驱动）；相关入口显示「启动中」。 */
+  backendStarting: boolean;
+  /** 最近一次启动进度详情（如仍在启动的组件名），可能为 null。 */
+  startupDetail: string | null;
   busy: boolean;
   paused: boolean;
   error: string | null;
@@ -98,6 +103,8 @@ interface AtlasState extends PersistentSlice {
   initError: string | null;
   initProposal: InitProposal | null;
   initialize: () => Promise<void>;
+  /** H8 §10.3: consume backend startup progress broadcast by the Electron main process. */
+  applyStartupProgress: (progress: BackendStartupProgress) => void;
   openConversation: (conversation: ConversationSummary) => Promise<void>;
   /** 向上翻页：把当前已载入最早一条之前的一页历史拼到前面（滚动到顶部时调用）。 */
   loadEarlier: (conversationId: string) => Promise<void>;
@@ -278,7 +285,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     // Persistent-Atlas slices (agents/groups/channels/devices/localModels/automations).
     ...createPersistentSlice(set as unknown as SetPersistent, get as () => AtlasState),
     apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
-    mode: 'mock', connected: false, busy: false, paused: false, error: null, errorDetail: null,
+    mode: 'mock', connected: false, backendStarting: false, startupDetail: null, busy: false, paused: false, error: null, errorDetail: null,
     model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', pendingRunOverrides: null, answers: {},
@@ -311,6 +318,14 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         fail(error, '无法读取后端数据');
         set({ conversationsLoading: false });
       }
+    },
+
+    /** H8 §10.3/§10.4: 主进程转发的后端启动进度。ready 时若首轮 initialize 落在了
+     * mock 模式（窗口先于后端就绪），自动重新拉取真实数据。 */
+    applyStartupProgress: (progress) => {
+      const starting = progress.phase === 'probing' || progress.phase === 'starting';
+      set({ backendStarting: starting, startupDetail: progress.detail ?? null });
+      if (progress.phase === 'ready' && !get().connected) void get().initialize();
     },
 
     openConversation: async (conversation) => {

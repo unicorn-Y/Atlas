@@ -423,12 +423,12 @@ def test_office_files_generate_read_and_preview_without_scripts(tmp_path: Path) 
 
 @pytest.mark.asyncio
 async def test_workspace_preview_uses_sandbox_headers(tmp_path: Path) -> None:
-    from atlas import server
+    from atlas.api.workspace_router import workspace_preview
 
     create_document(str(tmp_path), {
         "path": "preview.docx", "blocks": [{"type": "paragraph", "text": "safe"}],
     })
-    response = await server.workspace_preview(str(tmp_path), "preview.docx")
+    response = await workspace_preview(SimpleNamespace(), str(tmp_path), "preview.docx")
     assert response.status_code == 200
     assert response.headers["content-security-policy"] == (
         "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"
@@ -485,10 +485,21 @@ async def test_workspace_history_orders_versions_and_snapshots_before_restore(
     store.create_checkpoint(workspace, ["note.txt"], run_id="second-run")
     monkeypatch.setattr(server, "orchestrator", SimpleNamespace(checkpoints=store))
 
-    history = await server.workspace_history(str(workspace), "note.txt")
+    # H5: the workspace history surface lives on atlas.api.workspace_router now;
+    # its per-app services container falls back to atlas.server for the
+    # orchestrator seam patched above.
+    from atlas.api.workspace_router import (
+        restore_workspace_history,
+        workspace_history,
+        workspace_history_content,
+        workspace_history_raw,
+    )
+
+    services = SimpleNamespace()
+    history = await workspace_history(services, str(workspace), "note.txt")
     assert [item["run_id"] for item in history["versions"]] == ["second-run", "first-run"]
-    old = await server.workspace_history_content(
-        str(workspace), "note.txt", f"checkpoint:{first['id']}",
+    old = await workspace_history_content(
+        services, str(workspace), "note.txt", f"checkpoint:{first['id']}",
     )
     assert old["content"] == "first"
     class RestoreRequest:
@@ -498,13 +509,13 @@ async def test_workspace_history_orders_versions_and_snapshots_before_restore(
                 "version": f"checkpoint:{first['id']}",
             }
 
-    restored = await server.restore_workspace_history(RestoreRequest())
+    restored = await restore_workspace_history(services, RestoreRequest())
     assert restored["restored"] is True
     assert target.read_text(encoding="utf-8") == "first"
     assert any(item["id"] == restored["checkpoint_id"]
                for item in store.list_checkpoints(workspace))
-    raw = await server.workspace_history_raw(
-        str(workspace), "note.txt", f"checkpoint:{first['id']}",
+    raw = await workspace_history_raw(
+        services, str(workspace), "note.txt", f"checkpoint:{first['id']}",
     )
     assert raw.body == b"first"
     assert raw.headers["content-security-policy"].startswith("sandbox;")

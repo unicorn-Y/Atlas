@@ -1,0 +1,18 @@
+{
+  "what": "Direct relay wire-format probe (run in-process; key read from scratch config, never printed)",
+  "date": "2026-10-04T24:50+08:00 approx",
+  "endpoint": "https://cnapi.pleasure.cc.cd:8443/v1/chat/completions",
+  "cases": [
+    {
+      "wire_model": "deepseek-v4.1-flash",
+      "http": 200,
+      "note": "bare id accepted, real completion returned"
+    },
+    {
+      "wire_model": "openai/deepseek-v4.1-flash",
+      "http": 404,
+      "body": "{\"error\":{\"message\":\"Model \\\"openai/deepseek-v4.1-flash\\\" is not supported by any configured account in this group\",\"type\":\"model_not_found\"}}"
+    }
+  ],
+  "conclusion": "DEFECT H10.2-1: the H4 router hands the litellm-prefixed id to the Hermes agent on chat_completions routes; the relay rejects it. Evidence of the Atlas-side repro: runs/00-probe-defect1-2-stream.jsonl + runs/00-probe-defect1-2-stderr.log"
+}
