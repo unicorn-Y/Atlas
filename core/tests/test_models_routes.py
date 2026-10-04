@@ -359,7 +359,8 @@ async def test_model_test_uses_provider_key_and_base_url(
     client: AsyncClient, fake_keyring: dict[tuple[str, str], str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import litellm
+    """端点经共享模型路由出请求，不再自建 litellm 客户端。"""
+    import agent.auxiliary_client as auxiliary_client
 
     secret = "sk-atlas-test-key"
     added = (await client.post(
@@ -374,11 +375,13 @@ async def test_model_test_uses_provider_key_and_base_url(
 
     calls: list[dict[str, Any]] = []
 
-    async def fake_acompletion(**kwargs: Any) -> dict[str, Any]:
+    def fake_call_llm(**kwargs: Any) -> Any:
         calls.append(kwargs)
-        return {"choices": [{"message": {"content": "OK"}}]}
+        from types import SimpleNamespace
 
-    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="OK"))])
+
+    monkeypatch.setattr(auxiliary_client, "call_llm", fake_call_llm)
     resp = await client.post("/api/models/test", json={"model_id": "deepseek-v3"})
     assert resp.status_code == 200
     body = resp.json()
@@ -393,19 +396,20 @@ async def test_model_test_uses_provider_key_and_base_url(
     assert kwargs["max_tokens"] == 2
     assert kwargs["stream"] is False
     assert kwargs["base_url"] == deepseek["base_url"]
+    assert kwargs["api_mode"] == "chat_completions"
 
 
 async def test_model_test_reports_gateway_error(client: AsyncClient,
                                                 fake_keyring: dict[tuple[str, str], str],
                                                 monkeypatch: pytest.MonkeyPatch) -> None:
-    import litellm
+    import agent.auxiliary_client as auxiliary_client
 
     await client.post("/api/providers/deepseek/keys", json={"secret": "sk-bad"})
 
-    async def failing_acompletion(**kwargs: Any) -> dict[str, Any]:
+    def failing_call_llm(**kwargs: Any) -> Any:
         raise RuntimeError("连接被拒绝")
 
-    monkeypatch.setattr(litellm, "acompletion", failing_acompletion)
+    monkeypatch.setattr(auxiliary_client, "call_llm", failing_call_llm)
     resp = await client.post("/api/models/test", json={"model_id": "deepseek-v3"})
     assert resp.status_code == 200
     body = resp.json()

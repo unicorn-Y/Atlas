@@ -1,0 +1,3225 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [  3%]
+........................................................................ [  7%]
+........................................................................ [ 11%]
+..........F............................................................. [ 14%]
+........................................................................ [ 18%]
+...............................................................s........ [ 22%]
+....................................................................F... [ 25%]
+..........................................F............................. [ 29%]
+.F.........F............F.......F....................................... [ 33%]
+........................................................................ [ 36%]
+........................................................................ [ 40%]
+.....................................sss................................ [ 44%]
+........................................................................ [ 47%]
+............................................................F.....F..... [ 51%]
+.......F................................................................ [ 55%]
+.................................................F...................... [ 59%]
+........................................................................ [ 62%]
+........................................................................ [ 66%]
+......F............F.................................................... [ 70%]
+..............F......................................................... [ 73%]
+........................................................................ [ 77%]
+........................................................................ [ 81%]
+........................................................................ [ 84%]
+.................................FFF.FF................................. [ 88%]
+..........................F.....................F....................... [ 92%]
+.............................................F.......................... [ 95%]
+...............................................................FFFFFFFFF [ 99%]
+FFFEEEF.                                                                 [100%]
+=================================== ERRORS ====================================
+_______________ ERROR at setup of test_daily_browser_multistep ________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+self = <Coroutine test_daily_browser_multistep>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:944: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:407: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\asyncio\runners.py:128: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:720: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:403: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+core\tests\fakes\k1_harness.py:75: in k1_backend
+    await server.ready()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E58B3230>
+
+    async def ready(self):
+        for _ in range(150):
+            if self.process.poll() is not None:
+>               raise AssertionError((self.root / "backend.log").read_text()[-3000:])
+E               AssertionError: Traceback (most recent call last):
+E                 File "<frozen runpy>", line 203, in _run_module_as_main
+E                 File "<frozen runpy>", line 88, in _run_code
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\__main__.py", line 4, in <module>
+E                   uvicorn.main()
+E                   ~~~~~~~~~~~~^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 1514, in __call__
+E                   return self.main(*args, **kwargs)
+E                          ~~~~~~~~~^^^^^^^^^^^^^^^^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 1435, in main
+E                   rv = self.invoke(ctx)
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 1298, in invoke
+E                   return ctx.invoke(self.callback, **ctx.params)
+E                          ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 853, in invoke
+E                   return callback(*args, **kwargs)
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\main.py", line 448, in main
+E                   run(
+E                   ~~~^
+E                       app,
+E                       ^^^^
+E                   ...<49 lines>...
+E                       reset_contextvars=reset_contextvars,
+E                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   )
+E                   ^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\main.py", line 620, in run
+E                   config.load_app()
+E                   ~~~~~~~~~~~~~~~^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\config.py", line 434, in load_app
+E                   return import_from_string(self.app)
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\importer.py", line 19, in import_from_string
+E                   module = importlib.import_module(module_str)
+E                 File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\importlib\__init__.py", line 88, in import_module
+E                   return _bootstrap._gcd_import(name[level:], package, level)
+E                          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                 File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+E                 File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+E                 File "<frozen importlib._bootstrap>", line 1342, in _find_and_load_unlocked
+E                 File "<frozen importlib._bootstrap>", line 938, in _load_unlocked
+E                 File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+E                 File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+E                 File "D:\Atlas-h1-core-hardening\core\atlas\server.py", line 79, in <module>
+E                   from atlas.api.application import create_app
+E                 File "D:\Atlas-h1-core-hardening\core\atlas\api\application.py", line 21, in <module>
+E                   from atlas.api.memory_router import router as memory_router
+E                 File "D:\Atlas-h1-core-hardening\core\atlas\api\memory_router.py", line 354, in <module>
+E                   candidate_id: str = Body(...),
+E                                       ^^^^
+E               NameError: name 'Body' is not defined
+
+core\tests\test_c1_websocket_acceptance.py:87: AssertionError
+_________ ERROR at setup of test_daily_computer_use_with_fake_driver __________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+self = <Coroutine test_daily_computer_use_with_fake_driver>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:944: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:407: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\asyncio\runners.py:128: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:720: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:403: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+core\tests\fakes\k1_harness.py:75: in k1_backend
+    await server.ready()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E58B2DD0>
+
+    async def ready(self):
+        for _ in range(150):
+            if self.process.poll() is not None:
+>               raise AssertionError((self.root / "backend.log").read_text()[-3000:])
+E               AssertionError: Traceback (most recent call last):
+E                 File "<frozen runpy>", line 203, in _run_module_as_main
+E                 File "<frozen runpy>", line 88, in _run_code
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\__main__.py", line 4, in <module>
+E                   uvicorn.main()
+E                   ~~~~~~~~~~~~^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 1514, in __call__
+E                   return self.main(*args, **kwargs)
+E                          ~~~~~~~~~^^^^^^^^^^^^^^^^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 1435, in main
+E                   rv = self.invoke(ctx)
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 1298, in invoke
+E                   return ctx.invoke(self.callback, **ctx.params)
+E                          ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 853, in invoke
+E                   return callback(*args, **kwargs)
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\main.py", line 448, in main
+E                   run(
+E                   ~~~^
+E                       app,
+E                       ^^^^
+E                   ...<49 lines>...
+E                       reset_contextvars=reset_contextvars,
+E                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   )
+E                   ^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\main.py", line 620, in run
+E                   config.load_app()
+E                   ~~~~~~~~~~~~~~~^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\config.py", line 434, in load_app
+E                   return import_from_string(self.app)
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\importer.py", line 19, in import_from_string
+E                   module = importlib.import_module(module_str)
+E                 File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\importlib\__init__.py", line 88, in import_module
+E                   return _bootstrap._gcd_import(name[level:], package, level)
+E                          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                 File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+E                 File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+E                 File "<frozen importlib._bootstrap>", line 1342, in _find_and_load_unlocked
+E                 File "<frozen importlib._bootstrap>", line 938, in _load_unlocked
+E                 File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+E                 File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+E                 File "D:\Atlas-h1-core-hardening\core\atlas\server.py", line 79, in <module>
+E                   from atlas.api.application import create_app
+E                 File "D:\Atlas-h1-core-hardening\core\atlas\api\application.py", line 21, in <module>
+E                   from atlas.api.memory_router import router as memory_router
+E                 File "D:\Atlas-h1-core-hardening\core\atlas\api\memory_router.py", line 354, in <module>
+E                   candidate_id: str = Body(...),
+E                                       ^^^^
+E               NameError: name 'Body' is not defined
+
+core\tests\test_c1_websocket_acceptance.py:87: AssertionError
+___ ERROR at setup of test_daily_skills_market_install_use_update_uninstall ___
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+self = <Coroutine test_daily_skills_market_install_use_update_uninstall>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:944: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:407: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\asyncio\runners.py:128: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py:720: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\pytest_asyncio\plugin.py:403: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+core\tests\fakes\k1_harness.py:75: in k1_backend
+    await server.ready()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E67CADD0>
+
+    async def ready(self):
+        for _ in range(150):
+            if self.process.poll() is not None:
+>               raise AssertionError((self.root / "backend.log").read_text()[-3000:])
+E               AssertionError: Traceback (most recent call last):
+E                 File "<frozen runpy>", line 203, in _run_module_as_main
+E                 File "<frozen runpy>", line 88, in _run_code
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\__main__.py", line 4, in <module>
+E                   uvicorn.main()
+E                   ~~~~~~~~~~~~^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 1514, in __call__
+E                   return self.main(*args, **kwargs)
+E                          ~~~~~~~~~^^^^^^^^^^^^^^^^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 1435, in main
+E                   rv = self.invoke(ctx)
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 1298, in invoke
+E                   return ctx.invoke(self.callback, **ctx.params)
+E                          ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\click\core.py", line 853, in invoke
+E                   return callback(*args, **kwargs)
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\main.py", line 448, in main
+E                   run(
+E                   ~~~^
+E                       app,
+E                       ^^^^
+E                   ...<49 lines>...
+E                       reset_contextvars=reset_contextvars,
+E                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   )
+E                   ^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\main.py", line 620, in run
+E                   config.load_app()
+E                   ~~~~~~~~~~~~~~~^^
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\config.py", line 434, in load_app
+E                   return import_from_string(self.app)
+E                 File "D:\Atlas\core\.venv\Lib\site-packages\uvicorn\importer.py", line 19, in import_from_string
+E                   module = importlib.import_module(module_str)
+E                 File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\importlib\__init__.py", line 88, in import_module
+E                   return _bootstrap._gcd_import(name[level:], package, level)
+E                          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                 File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+E                 File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+E                 File "<frozen importlib._bootstrap>", line 1342, in _find_and_load_unlocked
+E                 File "<frozen importlib._bootstrap>", line 938, in _load_unlocked
+E                 File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+E                 File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+E                 File "D:\Atlas-h1-core-hardening\core\atlas\server.py", line 79, in <module>
+E                   from atlas.api.application import create_app
+E                 File "D:\Atlas-h1-core-hardening\core\atlas\api\application.py", line 21, in <module>
+E                   from atlas.api.memory_router import router as memory_router
+E                 File "D:\Atlas-h1-core-hardening\core\atlas\api\memory_router.py", line 354, in <module>
+E                   candidate_id: str = Body(...),
+E                                       ^^^^
+E               NameError: name 'Body' is not defined
+
+core\tests\test_c1_websocket_acceptance.py:87: AssertionError
+================================== FAILURES ===================================
+____________________ test_stable_run_resets_backoff_ladder ____________________
+[gw7] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/25011/AppData/Local/Temp/h1-h10/popen-gw7/test_stable_run_resets_backoff0')
+
+    @pytest.mark.asyncio
+    async def test_stable_run_resets_backoff_ladder(tmp_path):
+        # each run stays stable 60ms then dies; with a 50ms stable-reset the ladder
+        # never grows past the initial 20ms, so restarts keep coming quickly.
+        manager = make_manager(tmp_path, stable_reset_seconds=0.05)
+        manager.configure(
+            "fake", {"enabled": True, "behaviour": "run", "run_seconds": 0.06}, persist=False
+        )
+        await manager.start()
+        await asyncio.sleep(0.4)
+>       assert FakeAdapter.total_started >= 5  # would be ~3 if the ladder kept growing
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       assert 4 >= 5
+E        +  where 4 = FakeAdapter.total_started
+
+core\tests\test_channels_manager.py:184: AssertionError
+------------------------------ Captured log call ------------------------------
+[1m[31mERROR   [0m atlas.channels:__init__.py:298 渠道 fake 连接中断
+Traceback (most recent call last):
+  File "D:\Atlas-h1-core-hardening\core\atlas\channels\__init__.py", line 284, in _supervise
+    await worker
+  File "D:\Atlas-h1-core-hardening\core\tests\test_channels_manager.py", line 47, in _idle
+    raise RuntimeError("run failed after stable window")
+RuntimeError: run failed after stable window
+[1m[31mERROR   [0m atlas.channels:__init__.py:298 渠道 fake 连接中断
+Traceback (most recent call last):
+  File "D:\Atlas-h1-core-hardening\core\atlas\channels\__init__.py", line 284, in _supervise
+    await worker
+  File "D:\Atlas-h1-core-hardening\core\tests\test_channels_manager.py", line 47, in _idle
+    raise RuntimeError("run failed after stable window")
+RuntimeError: run failed after stable window
+[1m[31mERROR   [0m atlas.channels:__init__.py:298 渠道 fake 连接中断
+Traceback (most recent call last):
+  File "D:\Atlas-h1-core-hardening\core\atlas\channels\__init__.py", line 284, in _supervise
+    await worker
+  File "D:\Atlas-h1-core-hardening\core\tests\test_channels_manager.py", line 47, in _idle
+    raise RuntimeError("run failed after stable window")
+RuntimeError: run failed after stable window
+__________________ test_presence_beat_and_online_projection ___________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <starlette.testclient.TestClient object at 0x000001B4E3F34AD0>
+
+    def test_presence_beat_and_online_projection(client: TestClient) -> None:
+>       assert client.post("/api/devices", json={
+            "device_id": "phone-1", "display_name": "手机"}).status_code == 200
+
+core\tests\test_devices_router.py:103: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1204: in post
+    return self.request(
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001B4E3EE7B70>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_____________________ test_takeover_full_matrix_over_http _____________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <starlette.testclient.TestClient object at 0x000001B4E4182850>
+
+    def test_takeover_full_matrix_over_http(client: TestClient) -> None:
+>       assert client.get("/api/devices/takeover").json()["state"] == "FREE"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_devices_router.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1113: in get
+    return self.request(
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001B4E592D020>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+________________ test_takeover_agent_release_requires_agent_id ________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <starlette.testclient.TestClient object at 0x000001B4E42B5090>
+
+    def test_takeover_agent_release_requires_agent_id(client: TestClient) -> None:
+>       assert client.post("/api/devices/takeover",
+                           json={"action": "agent_take", "agent_id": "agent:coder"}).status_code == 200
+
+core\tests\test_devices_router.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1204: in post
+    return self.request(
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001B4E592EF10>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+___________________________ test_activity_endpoint ____________________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <starlette.testclient.TestClient object at 0x000001B4E5BD0E90>
+
+    def test_activity_endpoint(client: TestClient) -> None:
+>       client.post("/api/devices/takeover", json={"action": "human_take"})
+
+core\tests\test_devices_router.py:171: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1204: in post
+    return self.request(
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001B4E42C26D0>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+______________________ test_handoff_endpoints_lifecycle _______________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <starlette.testclient.TestClient object at 0x000001B4E5BD2C40>
+
+    def test_handoff_endpoints_lifecycle(client: TestClient) -> None:
+>       opened = client.post("/api/devices/handoff",
+                             json={"action": "open", "note": "请确认支付验证码"})
+
+core\tests\test_devices_router.py:185: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1204: in post
+    return self.request(
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001B4E5BD4730>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_________________ test_static_routes_do_not_shadow_device_id __________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <starlette.testclient.TestClient object at 0x000001B4E5C984D0>
+
+    def test_static_routes_do_not_shadow_device_id(client: TestClient) -> None:
+        # /takeover, /activity and /handoff must resolve as routes, never as an id.
+        for segment in ("takeover", "activity", "handoff"):
+>           assert client.get(f"/api/devices/{segment}").status_code == 200
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_devices_router.py:216: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1113: in get
+    return self.request(
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001B4E5BD6FC0>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_______________________ test_list_devices_includes_self _______________________
+[gw2] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <starlette.testclient.TestClient object at 0x0000024A5CF5D590>
+
+    def test_list_devices_includes_self(client: TestClient) -> None:
+>       res = client.get("/api/devices")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_devices_router.py:54: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1113: in get
+    return self.request(
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x0000024A5B14EE60>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_______________________ test_ingress_registration_crud ________________________
+[gw2] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <starlette.testclient.TestClient object at 0x0000024A5B1FE360>
+
+    def test_ingress_registration_crud(client: TestClient) -> None:
+>       created = client.post("/api/devices", json={
+            "device_id": "phone-1", "display_name": "我的手机", "os": "iOS 18",
+            "notes": "仅接收", "capabilities": {"computer": False, "browser": True},
+        })
+
+core\tests\test_devices_router.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1204: in post
+    return self.request(
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:454: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\concurrent\futures\_base.py:396: in __get_result
+    raise self._exception
+D:\Atlas\core\.venv\Lib\site-packages\anyio\from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x0000024A5E9E66D0>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+____ test_critical_exception_scopes_are_clean_and_no_baseline_scope_grows _____
+[gw2] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+    def test_critical_exception_scopes_are_clean_and_no_baseline_scope_grows():
+        completed = subprocess.run(
+            [sys.executable, "-m", "ruff", "check", "atlas", "--select", "BLE001,S110,S112",
+             "--ignore-noqa", "--output-format=json"],
+            cwd=ROOT, capture_output=True, text=True, timeout=30,
+        )
+        assert completed.returncode in (0, 1), completed.stderr
+        rows = json.loads(completed.stdout)
+        current = Counter(
+            (Path(row["filename"]).relative_to(ROOT).as_posix(), row["code"]) for row in rows
+        )
+        critical = {scope: count for scope, count in current.items() if CRITICAL.match(scope[0])}
+>       assert critical == {}, critical
+E       AssertionError: {('atlas/agent/__init__.py', 'BLE001'): 23, ('atlas/agent/delegation_output_schema.py', 'BLE001'): 1, ('atlas/agent/enrichment.py', 'BLE001'): 7, ('atlas/api/agent_router.py', 'BLE001'): 1, ...}
+E       assert {('atlas/agen...001'): 1, ...} == {}
+E         
+E         Left contains 21 more items:
+E         [0m{([33m'[39;49;00m[33matlas/agent/__init__.py[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mBLE001[39;49;00m[33m'[39;49;00m): [94m23[39;49;00m,[90m[39;49;00m
+E          ([33m'[39;49;00m[33matlas/agent/delegation_output_schema.py[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mBLE001[39;49;00m[33m'[39;49;00m): [94m1[39;49;00m,[90m[39;49;00m
+E          ([33m'[39;49;00m[33matlas/agent/enrichment.py[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mBLE001[39;49;00m[33m'[39;49;00m): [94m7[39;49;00m,[90m[39;49;00m
+E          ([33m'[39;49;00m[33matlas/api/agent_rou...
+E         
+E         ...Full output truncated (19 lines hidden), use '-vv' to show
+
+core\tests\test_lint_gate.py:32: AssertionError
+__________________ test_wave3_hook_exit_two_blocks_tool_call __________________
+[gw0] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/25011/AppData/Local/Temp/h1-h10/popen-gw0/test_wave3_hook_exit_two_block0')
+
+    @pytest.mark.asyncio
+    async def test_wave3_hook_exit_two_blocks_tool_call(tmp_path: Path) -> None:
+        store = HookStore(tmp_path / "hooks.toml")
+        command = "exit 2"
+        store.save(
+            [{"id": "pre", "event": "tool.before", "command": command, "timeout_s": 2, "enabled": True}]
+        )
+        result = await store.execute("tool.before", {"tool_name": "local_file"})
+>       assert result["blocked"] is True
+E       assert False is True
+
+core\tests\test_backend_parity_wave3.py:579: AssertionError
+_____________ test_cancelling_atlas_process_terminates_child_tree _____________
+[gw2] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/25011/AppData/Local/Temp/h1-h10/popen-gw2/test_cancelling_atlas_process_0')
+
+    @pytest.mark.asyncio
+    async def test_cancelling_atlas_process_terminates_child_tree(tmp_path: Path) -> None:
+        runtime = LocalExecutionRuntime()
+        marker = tmp_path / "child-survived.txt"
+        child_code = f"import time; time.sleep(3); open({str(marker)!r}, 'w').write('alive')"
+        parent_code = (
+            "import subprocess,sys,time; "
+            f"subprocess.Popen([sys.executable, '-c', {child_code!r}]); "
+            "print('parent-ready', flush=True); time.sleep(60)"
+        )
+        started = await runtime.call_tool(
+            "local_process",
+            {
+                "action": "start",
+                "executable": sys.executable,
+                "args": ["-u", "-c", parent_code],
+                "cwd": str(tmp_path),
+                "detached": False,
+            },
+            run_id="tree-run",
+        )
+        execution_id = started["data"]["execution_id"]
+        for _ in range(50):
+            output = await runtime.call_tool(
+                "local_process",
+                {
+                    "action": "read",
+                    "execution_id": execution_id,
+                    "stream": "stdout",
+                    "offset": 0,
+                },
+            )
+            if "parent-ready" in output["data"]["text"]:
+                break
+            await asyncio.sleep(0.05)
+    
+        await runtime.cancel_run("tree-run")
+        await asyncio.sleep(3.2)
+        await runtime.shutdown()
+    
+>       assert not marker.exists()
+E       AssertionError: assert not True
+E        +  where True = exists()
+E        +    where exists = WindowsPath('C:/Users/25011/AppData/Local/Temp/h1-h10/popen-gw2/test_cancelling_atlas_process_0/child-survived.txt').exists
+
+core\tests\test_local_execution.py:366: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-10-04 21:04:09 [info     ] local_execution.started        cwd=C:\Users\25011\AppData\Local\Temp\h1-h10\popen-gw2\test_cancelling_atlas_process_0 detached=False execution_id=f5847cd6-fa2b-4dac-80ce-f0ef5ae8f202 pid=48184
+_ test_native_anthropic_route_preserves_cache_thinking_signature_and_tool_blocks _
+[gw6] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+    async def test_native_anthropic_route_preserves_cache_thinking_signature_and_tool_blocks() -> None:
+        manager = FakeModelManager("native_only")
+        content = [
+            {"type": "text", "text": "cached prefix", "cache_control": {"type": "ephemeral"}},
+            {"type": "thinking", "thinking": "reasoning", "signature": "sig_fake"},
+            {"type": "tool_use", "id": "tool_1", "name": "lookup", "input": {"q": "x"}},
+        ]
+        messages = [
+            {"role": "assistant", "content": content},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tool_1", "content": "found"}]},
+        ]
+        with FakeLLMServer(default_text="native reply", api_key="sk-native-secret", anthropic_messages=True) as server:
+            manager.provider_config = lambda _provider: {
+                "base_url": server.base_url.replace("/v1", "/anthropic/v1"), "keys": [{"id": "native-key-1"}],
+            }
+            router = ModelRouter(manager)
+            route = await router.resolve("claude-sonnet-4", "conversation")
+            await router.complete(route, messages, max_tokens=12)
+    
+            sent = server.anthropic_requests()[0]
+>           assert sent["messages"] == messages
+E           AssertionError: assert [{'role': 'us...': 'found'}]}] == [{'role': 'as...': 'found'}]}]
+E             
+E             At index 0 diff: [0m{[33m'[39;49;00m[33mrole[39;49;00m[33m'[39;49;00m: [33m'[39;49;00m[33muser[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mcontent[39;49;00m[33m'[39;49;00m: [{[33m'[39;49;00m[33mtype[39;49;00m[33m'[39;49;00m: [33m'[39;49;00m[33mtext[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33mtext[39;49;00m[33m'[39;49;00m: [33m'[39;49;00m[33m(empty)[39;49;00m[33m'[39;49;00m}]}[90m[39;49;00m != [0m{[33m'[39;49;00m[33mrole[39;49;00m[33m'[39;49;00m: [33m'[39;49;00m[33massistant[39;49;00m[33m'[39;49;00m, [33m'[39;...
+E             
+E             ...Full output truncated (3 lines hidden), use '-vv' to show
+
+core\tests\test_model_router.py:177: AssertionError
+______________________ test_routes_match_frozen_snapshot ______________________
+[gw6] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+    def test_routes_match_frozen_snapshot() -> None:
+        expected = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+>       assert build_route_snapshot() == expected
+               ^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_route_snapshot.py:348: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+core\tests\test_route_snapshot.py:322: in build_route_snapshot
+    endpoint_tree = ast.parse(inspect.getsource(endpoint))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+source = '        raise HTTPException(status_code=404, detail="Process not found")\n'
+filename = '<unknown>', mode = 'exec', type_comments = False
+feature_version = -1, optimize = -1
+
+    def parse(source, filename='<unknown>', mode='exec', *,
+              type_comments=False, feature_version=None, optimize=-1):
+        """
+        Parse the source into an AST node.
+        Equivalent to compile(source, filename, mode, PyCF_ONLY_AST).
+        Pass type_comments=True to get back type comments where the syntax allows.
+        """
+        flags = PyCF_ONLY_AST
+        if optimize > 0:
+            flags |= PyCF_OPTIMIZED_AST
+        if type_comments:
+            flags |= PyCF_TYPE_COMMENTS
+        if feature_version is None:
+            feature_version = -1
+        elif isinstance(feature_version, tuple):
+            major, minor = feature_version  # Should be a 2-tuple.
+            if major != 3:
+                raise ValueError(f"Unsupported major version: {major}")
+            feature_version = minor
+        # Else it should be an int giving the minor version for 3.x.
+>       return compile(source, filename, mode, flags,
+                       _feature_version=feature_version, optimize=optimize)
+E         File "<unknown>", line 1
+E           raise HTTPException(status_code=404, detail="Process not found")
+E       IndentationError: unexpected indent
+
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\ast.py:46: IndentationError
+______________ test_resolve_card_with_no_pending_waiter_is_safe _______________
+[gw2] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <httpx.AsyncClient object at 0x0000024A5E5CD550>
+
+    async def test_resolve_card_with_no_pending_waiter_is_safe(client: AsyncClient) -> None:
+        # (e) card whose run_id has no live waiter: settles fine, resolve → False.
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "没人等这张卡", "run_id": "run-nobody"})
+
+core\tests\test_takeover_x2_bridge.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x0000024A5E4B4C00>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_____________________ test_double_resolve_still_conflicts _____________________
+[gw2] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <httpx.AsyncClient object at 0x0000024A5E5CD950>
+
+    async def test_double_resolve_still_conflicts(client: AsyncClient) -> None:
+        # (f) the bridge must not change the card terminal-once rule.
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "n", "run_id": "run-double"})
+
+core\tests\test_takeover_x2_bridge.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x0000024A5E615020>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+__________________ test_card_without_run_id_never_touches_x2 __________________
+[gw2] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <httpx.AsyncClient object at 0x0000024A5E6467B0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000024A5E5B51D0>
+
+    async def test_card_without_run_id_never_touches_x2(client: AsyncClient, monkeypatch) -> None:
+        # (f) legacy cards keep the old behavior: zero x2.pending interaction.
+        calls: list[tuple[str, str]] = []
+        monkeypatch.setattr(x2_pending, "resolve",
+                            lambda run_id, value: calls.append((run_id, value)) or False)
+        monkeypatch.setattr(x2_pending, "cancel_run", lambda run_id: calls.append((run_id, "cancel")))
+    
+>       opened = await client.post("/api/devices/handoff",
+                                   json={"action": "open", "note": "老式卡片，无 run"})
+
+core\tests\test_takeover_x2_bridge.py:193: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x0000024A5E615DE0>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+___________ test_pending_side_failure_never_breaks_the_settled_card ___________
+[gw2] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <httpx.AsyncClient object at 0x0000024A5E647A70>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000024A5E5B7930>
+
+    async def test_pending_side_failure_never_breaks_the_settled_card(
+            client: AsyncClient, monkeypatch) -> None:
+        def explode(run_id: str, value: str) -> bool:
+            raise RuntimeError("x2 registry exploded")
+    
+        monkeypatch.setattr(x2_pending, "resolve", explode)
+    
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "n", "run_id": "run-boom"})
+
+core\tests\test_takeover_x2_bridge.py:212: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x0000024A5E5E94F0>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_________________ test_bridge_targets_the_run_id_on_the_card __________________
+[gw2] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <httpx.AsyncClient object at 0x0000024A5B3CF230>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000024A5B4E9630>
+
+    async def test_bridge_targets_the_run_id_on_the_card(client: AsyncClient, monkeypatch) -> None:
+        calls: list[tuple[str, str]] = []
+        monkeypatch.setattr(x2_pending, "resolve",
+                            lambda run_id, value: calls.append((run_id, value)) or False)
+        monkeypatch.setattr(x2_pending, "cancel_run", lambda run_id: calls.append((run_id, "cancel")))
+    
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "n", "run_id": "run-spy"})
+
+core\tests\test_takeover_x2_bridge.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x0000024A5E5EA620>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+____________ test_done_resolution_resumes_the_blocked_original_run ____________
+[gw6] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <httpx.AsyncClient object at 0x000002350E798DD0>
+
+    async def test_done_resolution_resumes_the_blocked_original_run(client: AsyncClient) -> None:
+        # (a) the fake original run blocks on its pending resolution, then resumes.
+        resumed: dict[str, str] = {}
+    
+        async def original_run() -> str:
+            value = await x2_pending.wait_for_resolution(
+                "run-bridge-1", "登录 2FA", ["done", "give_up"], timeout_seconds=10)
+            resumed["value"] = value
+            return "re-observed-and-resumed"  # the run continues past the block
+    
+        run_task = asyncio.create_task(original_run())
+        await wait_for(lambda: "run-bridge-1" in x2_pending.pending_runs())
+    
+        # (b) open the handoff card linked to the blocked run.
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "2FA 等人工", "run_id": "run-bridge-1"})
+
+core\tests\test_takeover_x2_bridge.py:116: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x0000023512799860>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_______________ test_give_up_resolution_cancels_the_blocked_run _______________
+[gw6] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+client = <httpx.AsyncClient object at 0x000002350E79B650>
+
+    async def test_give_up_resolution_cancels_the_blocked_run(client: AsyncClient) -> None:
+        # (d) second blocked run; give_up unwinds it with the GIVE_UP sentinel.
+        run_task = asyncio.create_task(x2_pending.wait_for_resolution(
+            "run-bridge-2", "页面卡死", ["done", "give_up"], timeout_seconds=10))
+        await wait_for(lambda: "run-bridge-2" in x2_pending.pending_runs())
+    
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "环境异常，放弃本次", "run_id": "run-bridge-2"})
+
+core\tests\test_takeover_x2_bridge.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x00000235127BD700>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_______________________ test_edit_review_fix_main_chain _______________________
+[gw5] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+chain_backend = <tests.test_c6_lsp_e2e.IsolatedBackend object at 0x000002152A7806E0>
+chain_root = WindowsPath('D:/Atlas-h1-core-hardening/_tmp/lsp-fixtures/chain_05adec0223')
+
+    @pytest.mark.asyncio
+    async def test_edit_review_fix_main_chain(chain_backend, chain_root):
+        backend = chain_backend
+        workspace = chain_root / "workspace"
+        target = workspace / "e2e_bug.py"
+        conversation = await backend.conversation()
+    
+        turns = 0
+    
+        def responder(record):
+            nonlocal turns
+            turns += 1
+            if turns == 1:  # run 1：先读后写（防覆盖闸要求见过全文）
+                return ToolCall("read_file", {"path": str(target)})
+            if turns == 2:
+                return ToolCall("write_file", {"path": str(target), "content": BUG_ONE})
+            if turns == 3:
+                return Text("已写入有问题的版本。")
+            if turns == 4:  # run 2 主链第 1 轮：派只读审查员（规划请求走 aux,见下）
+                return ToolCall("delegate_task", {
+                    "goal": (
+                        "独立代码审查：当前未提交改动。只读调查。"
+                        "最终只输出一个 findings JSON 数组（file/line/range/severity/title/"
+                        "explanation/evidence/suggested_fix），没有问题输出 []。"
+                    ),
+                    "agent": "general",
+                    "permission_mode": "read_only",
+                })
+            if turns == 5:  # 审查员子代理（真实 delegate 链路里它的模型请求打同一个假服务）
+                # JSON 用代码围栏包住：引擎的 truncated-stop 守卫会对“≥200 字符且结尾
+                # 没有句读”的回复强制续跑一轮，裸 JSON 数组正好命中；那轮续跑会在
+                # 子代理上下文里抢走下一轮的 submit_findings（子代理的事件队列会被
+                # 委派循环丢弃，review.findings 就到不了运行事件流）。围栏结尾的 ```
+                # 在守卫的豁免名单里，子代理一轮回合即干净收尾。
+                return Text("```json\n" + FINDINGS_JSON + "\n```")
+            if turns == 6:  # 父运行原样提交 findings
+                return ToolCall("submit_findings", {
+                    "findings_json": FINDINGS_JSON,
+                    "scope": "working_tree",
+                    "scope_label": "当前未提交改动",
+                })
+            if turns == 7:
+                return Text("审查完成：发现 1 个 blocker 问题，请查看审查卡片。")
+            if turns == 8:  # run 3：普通消息回到正常执行入口，先读后修
+                return ToolCall("read_file", {"path": str(target)})
+            if turns == 9:
+                return ToolCall("write_file", {"path": str(target), "content": CLEAN})
+            return Text("已修复，main() 恢复返回 alpha。")
+    
+        # 派发提示词含编号步骤会触发任务规划器；规划请求不带 tools（aux 类），
+        # 不走上面的 responder——在 aux 通道按系统提示词识别并返回计划 JSON。
+        original_aux = backend.fake._aux
+        plan_json = json.dumps({
+            "goal": "审查当前未提交改动",
+            "subtasks": [{"id": "review", "title": "派只读审查员审查",
+                          "verification": "submit_findings 已提交审查结论"}],
+        }, ensure_ascii=False)
+    
+        def aux_with_plan(record):
+            body = json.dumps(record.get("body") or {}, ensure_ascii=False)
+            if "Break the user's multi-step task" in body:
+                return Text(plan_json)
+            return original_aux(record)
+    
+        backend.fake._aux = aux_with_plan
+        backend.fake._responder = responder
+    
+        backend.fake._responder = responder
+    
+        # --- run 1：编辑引入错误 → LSP 新诊断 ------------------------------------
+>       _, events_1 = await backend.run("把 e2e_bug.py 改成有 bug 的版本",
+                                        conversation=conversation, workspace=str(workspace))
+
+core\tests\test_c6_main_chain.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c6_lsp_e2e.IsolatedBackend object at 0x000002152A7806E0>
+content = '把 e2e_bug.py 改成有 bug 的版本'
+conversation = 'be05b31c-6187-47e8-9702-4f2d6e48ae4c'
+workspace = 'D:\\Atlas-h1-core-hardening\\_tmp\\lsp-fixtures\\chain_05adec0223\\workspace'
+expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, expected="run.completed", **options):
+        import uuid as _uuid
+    
+        conversation = conversation or await self.conversation()
+        run_id = _uuid.uuid4().hex
+        received = []
+        try:
+            async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                               additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+                await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                    "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                    "model": "fake-model", **options}))
+                async with asyncio.timeout(120):
+                    while True:
+                        event = json.loads(await ws.recv())
+                        received.append(event)
+                        if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                            break
+        except (TimeoutError, asyncio.TimeoutError):
+            log_tail = (self.root / "backend.log").read_text(errors="replace")[-2000:]
+            raise AssertionError(f"run did not finish; last events: {received[-3:]}\nbackend.log tail:\n{log_tail}")
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(received, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'ed785752ac3248c5ad70364ee7b2e818', 'event_id': 'ed785752ac3248c5ad70364ee7b2e818:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c6_lsp_e2e.py:142: AssertionError
+____________________ test_daily_edit_diff_review_then_fix _____________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E43A2CF0>
+
+    @pytest.mark.asyncio
+    async def test_daily_edit_diff_review_then_fix(k1_backend):  # noqa: F811
+        backend = k1_backend
+        workspace = backend.root / "gitws"
+        workspace.mkdir()
+        _git(workspace, "init", "-b", "main")
+        _git(workspace, "config", "user.name", "K1 fixture")
+        _git(workspace, "config", "user.email", "k1@example.invalid")
+        target = workspace / "app.txt"
+        target.write_text("line one\ncat line\n", encoding="utf-8")
+        _git(workspace, "add", ".")
+        _git(workspace, "commit", "-m", "baseline")
+    
+        # -- new session, workspace picked, file edited through tools, diff read --
+        turns = {"n": 0}
+    
+        def edit_responder(record):
+            turns["n"] += 1
+            if turns["n"] == 1:
+                return ToolCall("patch", {"path": str(target), "old_string": "cat line",
+                                          "new_string": "dog line"})
+            if turns["n"] == 2:
+                return ToolCall("terminal", {"command": "git --no-pager diff", "shell": "powershell"})
+            return Text("edit complete, diff shown")
+    
+        backend.fake._responder = edit_responder
+>       conversation, events = await backend.run("edit app.txt and show me the diff",
+                                                 workspace=str(workspace))
+
+core\tests\test_k1_daily_paths.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E43A2CF0>
+content = 'edit app.txt and show me the diff'
+conversation = '63f0cd8d-151d-45c1-80ec-6688bd01ecf0'
+workspace = 'C:\\Users\\25011\\AppData\\Local\\Temp\\h1-h10\\popen-gw4\\test_daily_edit_diff_review_th0\\gitws'
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '42ff3aa96e9c4a8a9d375fb926adad71', 'event_id': '42ff3aa96e9c4a8a9d375fb926adad71:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+________________ test_daily_long_task_compacts_then_continues _________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E58165D0>
+
+    @pytest.mark.asyncio
+    async def test_daily_long_task_compacts_then_continues(k1_backend):  # noqa: F811
+        backend = k1_backend
+        config = backend.root / "atlas/engine/config.yaml"
+        config.write_text(config.read_text().replace("128000", "64000") +
+            "  compression:\n    provider: custom\n    model: fake-model\n"
+            f"    base_url: {backend.fake.base_url}\n    api_key: sk-fake-e2e\n", encoding="utf-8")
+        backend.fake.context_length = 64000  # Hermes' minimum supported window.
+        backend.fake.prompt_tokens_fn = lambda body: len(json.dumps(body, ensure_ascii=False)) // 2
+        turns = {"n": 0}
+    
+        def responder(record):
+            turns["n"] += 1
+            if turns["n"] <= 12:
+                return ToolCall("terminal", {"command": "Write-Output ('fixture-context ' * 2600)",
+                                             "shell": "powershell"})
+            return Text("K1_COMPACT_CONTINUED")
+    
+        backend.fake._responder = responder
+>       _, events = await backend.run("K1_COMPACT gather lots of context and finish", timeout=150)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_k1_daily_paths.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E58165D0>
+content = 'K1_COMPACT gather lots of context and finish'
+conversation = 'fc7d2fd1-b185-4743-88fd-8deba34649d5', workspace = None
+respond = None, expected = 'run.completed', options = {'timeout': 150}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'b16f0d4857184cf6abd2b7d6db4edc22', 'event_id': 'b16f0d4857184cf6abd2b7d6db4edc22:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+_______________________ test_daily_steer_queue_and_stop _______________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E5815090>
+
+    @pytest.mark.asyncio
+    async def test_daily_steer_queue_and_stop(k1_backend):  # noqa: F811
+        backend = k1_backend
+        first = {"done": False}
+    
+        def responder(record):
+            if not first["done"]:
+                first["done"] = True
+                return ToolCall("terminal", {
+                    "command": "Start-Sleep -Milliseconds 800; Write-Output K1",
+                    "shell": "powershell"})
+            return Text("K1_STEER_CONSUMED")
+    
+        backend.fake._responder = responder
+        sent = {"done": False}
+    
+        async def steer(ws, event):
+            if event["event"] == "tool.started" and not sent["done"]:
+                sent["done"] = True
+                for text in ("K1_STEER_ONE", "K1_STEER_TWO"):
+                    await ws.send(json.dumps({"type": "run.steer", "run_id": event["run_id"],
+                                              "content": text, "event_id": uuid.uuid4().hex}))
+    
+>       _, events = await backend.run("start a task so the steering messages can queue",
+                                      respond=steer)
+
+core\tests\test_k1_daily_paths.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E5815090>
+content = 'start a task so the steering messages can queue'
+conversation = '1b9344c3-ad48-4739-ab08-611b15342c8d', workspace = None
+respond = <function test_daily_steer_queue_and_stop.<locals>.steer at 0x000001B4E58A57A0>
+expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'e8fa79105d044b9bb991f67be5659cf5', 'event_id': 'e8fa79105d044b9bb991f67be5659cf5:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+__________________ test_daily_plan_mode_approve_then_execute __________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E57F1E00>
+
+    @pytest.mark.asyncio
+    async def test_daily_plan_mode_approve_then_execute(k1_backend):  # noqa: F811
+        backend = k1_backend
+        plan_target = backend.root / "workspace/plan-output.txt"
+        approved = {"v": False}
+        executed = {"v": False}
+    
+        def responder(record):
+            if not approved["v"]:
+                return Text("K1_PLAN_READY: 1) write plan-output.txt 2) confirm")
+            if not executed["v"]:
+                executed["v"] = True
+                return ToolCall("write_file", {"path": str(plan_target),
+                                               "content": "K1_PLANNED_AND_APPROVED"})
+            return Text("K1_PLAN_EXECUTED")
+    
+        backend.fake._responder = responder
+    
+        async def approve(ws, event):
+            if event["event"] == "run.plan.proposed":
+                approved["v"] = True
+                await ws.send(json.dumps({"type": "run.plan.approve", "run_id": event["run_id"],
+                                          "event_id": event["data"]["event_id"]}))
+    
+>       _, events = await backend.run("plan writing the K1 output file, then do it",
+                                      mode="plan", permission_mode="plan", respond=approve)
+
+core\tests\test_k1_daily_paths.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E57F1E00>
+content = 'plan writing the K1 output file, then do it'
+conversation = '17800184-9dc3-41e4-9c2c-7630cf699662', workspace = None
+respond = <function test_daily_plan_mode_approve_then_execute.<locals>.approve at 0x000001B4E58A6CF0>
+expected = 'run.completed'
+options = {'mode': 'plan', 'permission_mode': 'plan'}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '40b861dae9a749e0ad8115953c517f30', 'event_id': '40b861dae9a749e0ad8115953c517f30:6', 'sequence': 6, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+-------------------------- Captured stderr teardown ---------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 52105)
+Traceback (most recent call last):
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。
+----------------------------------------
+___________ test_daily_parallel_subagents_with_verifier_acceptance ____________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E57F23F0>
+
+    @pytest.mark.asyncio
+    async def test_daily_parallel_subagents_with_verifier_acceptance(k1_backend):  # noqa: F811
+        backend = k1_backend
+        delegated = {"v": False}
+    
+        def responder(record):
+            text = last_user_text(record)
+            if "验收并行任务" in text:
+                return Text('{"verified":true,"note":"both results contain OK"}')
+            if "CHILD_ALPHA" in text:
+                return Text("alpha OK")
+            if "CHILD_BETA" in text:
+                return Text("beta OK")
+            if not delegated["v"]:
+                delegated["v"] = True
+                return ToolCall("delegate_task", {"tasks": [
+                    {"title": "alpha", "goal": "CHILD_ALPHA return OK"},
+                    {"title": "beta", "goal": "CHILD_BETA return OK"}],
+                    "background": False, "max_concurrency": 2,
+                    "verify": {"criteria": "each result must contain OK"}})
+            return Text("K1_BOTH_CHILDREN_ACCEPTED")
+    
+        backend.fake._responder = responder
+>       _, events = await backend.run("delegate two parallel children and verify them")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_k1_daily_paths.py:303: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E57F23F0>
+content = 'delegate two parallel children and verify them'
+conversation = 'c867120d-c6e9-47ed-af6a-b482147a7e4e', workspace = None
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'd06e6e3057a7492f8f5d76f180e7f205', 'event_id': 'd06e6e3057a7492f8f5d76f180e7f205:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+____________ test_daily_background_process_completion_notification ____________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E67F4CB0>
+content = 'start the long job in the background and wait for its completion notification'
+conversation = '83d12102-1bbc-4554-8327-f6fe86f3c074', model = 'fake-model'
+workspace = None, respond = None
+keep_reading = <function test_daily_background_process_completion_notification.<locals>.process_finished at 0x000001B4E58A66C0>
+timeout = 150, options = {}
+
+    async def ws_run(
+        backend: IsolatedBackend,
+        content: str,
+        *,
+        conversation: str | None = None,
+        model: str | None = "fake-model",
+        workspace: str | None = None,
+        respond: Any = None,
+        keep_reading: Any = None,
+        timeout: float = 120,
+        **options: Any,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """Send ``run.start`` over the real WebSocket and collect envelopes.
+    
+        Collects until a terminal event (and, when ``keep_reading(events)`` is
+        given, until it returns True — for events that may trail the run, such as
+        ``process.completed`` from background terminals). Returns
+        ``(conversation_id, events)``.
+        """
+        from websockets.asyncio.client import connect
+    
+        conversation = conversation or await backend.conversation()
+        run_id = uuid.uuid4().hex
+        start: dict[str, Any] = {"type": "run.start", "run_id": run_id, "content": content,
+            "conversation_id": conversation,
+            "workspace": str(workspace or backend.root / "workspace")}
+        if model is not None:
+            start["model"] = model
+        start.update(options)
+        events: list[dict[str, Any]] = []
+        async with connect(backend.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": TOKEN}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps(start))
+            async with asyncio.timeout(timeout):
+                while True:
+>                   event = json.loads(await ws.recv())
+                                       ^^^^^^^^^^^^^^^
+
+core\tests\fakes\k1_harness.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\websockets\asyncio\connection.py:303: in recv
+    return await self.recv_messages.get(decode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\websockets\asyncio\messages.py:159: in get
+    frame = await self.frames.get(not self.closed)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <websockets.asyncio.messages.SimpleQueue object at 0x000001B4E67F5FD0>
+block = True
+
+    async def get(self, block: bool = True) -> T:
+        """Remove and return an item from the queue, waiting if necessary."""
+        if not self.queue:
+            if not block:
+                raise EOFError("stream of frames ended")
+            assert self.get_waiter is None, "cannot call get() concurrently"
+            self.get_waiter = self.loop.create_future()
+            try:
+>               await self.get_waiter
+E               asyncio.exceptions.CancelledError
+
+D:\Atlas\core\.venv\Lib\site-packages\websockets\asyncio\messages.py:51: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E67F4CB0>
+
+    @pytest.mark.asyncio
+    async def test_daily_background_process_completion_notification(k1_backend):  # noqa: F811
+        backend = k1_backend
+        done_marker = backend.root / "workspace/bg-done.txt"
+        wait_marker = backend.root / "workspace/bg-wait-done.txt"
+        command = ("Write-Output K1_BG_READY; Start-Sleep -Milliseconds 500; "
+                   f"[IO.File]::WriteAllText('{done_marker}', 'done'); Write-Output K1_BG_DONE")
+        # The second turn blocks on the marker so the run is still live when the
+        # background job's completion notification is delivered.
+        wait_command = (
+            f"$deadline=(Get-Date).AddSeconds(20); "
+            f"while(-not (Test-Path '{done_marker}') -and (Get-Date) -lt $deadline) "
+            "{ Start-Sleep -Milliseconds 100 }; "
+            f"[IO.File]::WriteAllText('{wait_marker}', 'waited'); Write-Output K1_BG_WAITED")
+        turns = {"n": 0}
+    
+        def responder(record):
+            turns["n"] += 1
+            if turns["n"] == 1:
+                return ToolCall("terminal", {"command": command, "shell": "powershell",
+                    "background": True, "notify": True, "watch_patterns": ["K1_BG_DONE"]})
+            if turns["n"] == 2:
+                return ToolCall("terminal", {"command": wait_command, "shell": "powershell"})
+            return Text("K1_BG_DISPATCHED")
+    
+        backend.fake._responder = responder
+    
+        def process_finished(events):
+            return any(e["event"] == "process.completed" for e in events)
+    
+>       _, events = await ws_run(backend,
+            "start the long job in the background and wait for its completion notification",
+            keep_reading=process_finished, timeout=150)
+
+core\tests\test_k1_daily_paths.py:350: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+core\tests\fakes\k1_harness.py:211: in ws_run
+    async with asyncio.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x000001B4E5CF2E40>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\asyncio\timeouts.py:115: TimeoutError
+__________________ test_daily_model_switch_mid_conversation ___________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E4387570>
+
+    @pytest.mark.asyncio
+    async def test_daily_model_switch_mid_conversation(k1_backend):  # noqa: F811
+        backend = k1_backend
+        added = await backend.http.post("/api/models/custom", json={
+            "id": "fake-model-b", "name": "Fake B", "provider": "openai",
+            "litellm_model": "openai/fake-model-b", "max_output_tokens": 512})
+        assert added.status_code in (200, 201), added.text
+    
+        backend.fake._responder = lambda record: Text("K1_FIRST_MODEL_TURN")
+>       conversation, events = await backend.run("turn one on the default model")
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_k1_daily_paths.py:377: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E4387570>
+content = 'turn one on the default model'
+conversation = '2da6fe68-514b-4cf0-975c-7f4566d6a757', workspace = None
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'e990bb9837c74235b73e074c8a9c19fa', 'event_id': 'e990bb9837c74235b73e074c8a9c19fa:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+________ test_daily_permission_modes_gate_writes[read_only-None-False] ________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E67E08D0>
+mode = 'read_only', choice = None, should_write = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode,choice,should_write", [
+        ("read_only", None, False),
+        ("ask_writes", "allow", True),
+        ("ask_writes", "deny", False),
+    ])
+    async def test_daily_permission_modes_gate_writes(k1_backend, mode, choice, should_write):  # noqa: F811
+        backend = k1_backend
+        target = backend.root / "workspace/k1-permission.txt"
+        called = {"v": False}
+    
+        def responder(record):
+            if not called["v"]:
+                called["v"] = True
+                return ToolCall("write_file", {"path": str(target), "content": "K1_PERMISSION_FIXTURE"})
+            return Text("K1_PERMISSION_CHECKED")
+    
+        backend.fake._responder = responder
+    
+        async def decide(ws, event):
+            if event["event"] == "approval.required":
+                await ws.send(json.dumps({"type": "approval.response", "run_id": event["run_id"],
+                    "event_id": event["data"]["approval_id"], "choice": choice or "deny"}))
+    
+>       _, events = await backend.run("write the K1 permission fixture", permission_mode=mode,
+                                      respond=decide)
+
+core\tests\test_k1_daily_paths.py:428: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E67E08D0>
+content = 'write the K1 permission fixture'
+conversation = '7ae158e0-f281-4355-97a0-fa9fbe06659b', workspace = None
+respond = <function test_daily_permission_modes_gate_writes.<locals>.decide at 0x000001B4E689E090>
+expected = 'run.completed', options = {'permission_mode': 'read_only'}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '9afc3c0273194cd4ae502faa705d826d', 'event_id': '9afc3c0273194cd4ae502faa705d826d:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+_______ test_daily_permission_modes_gate_writes[ask_writes-allow-True] ________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E67CCF50>
+mode = 'ask_writes', choice = 'allow', should_write = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode,choice,should_write", [
+        ("read_only", None, False),
+        ("ask_writes", "allow", True),
+        ("ask_writes", "deny", False),
+    ])
+    async def test_daily_permission_modes_gate_writes(k1_backend, mode, choice, should_write):  # noqa: F811
+        backend = k1_backend
+        target = backend.root / "workspace/k1-permission.txt"
+        called = {"v": False}
+    
+        def responder(record):
+            if not called["v"]:
+                called["v"] = True
+                return ToolCall("write_file", {"path": str(target), "content": "K1_PERMISSION_FIXTURE"})
+            return Text("K1_PERMISSION_CHECKED")
+    
+        backend.fake._responder = responder
+    
+        async def decide(ws, event):
+            if event["event"] == "approval.required":
+                await ws.send(json.dumps({"type": "approval.response", "run_id": event["run_id"],
+                    "event_id": event["data"]["approval_id"], "choice": choice or "deny"}))
+    
+>       _, events = await backend.run("write the K1 permission fixture", permission_mode=mode,
+                                      respond=decide)
+
+core\tests\test_k1_daily_paths.py:428: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E67CCF50>
+content = 'write the K1 permission fixture'
+conversation = 'f53ea916-3fdc-44ea-9ca6-2c6093e40653', workspace = None
+respond = <function test_daily_permission_modes_gate_writes.<locals>.decide at 0x000001B4E689F5E0>
+expected = 'run.completed', options = {'permission_mode': 'ask_writes'}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '6890fb708bc7456ba3d8bbbb52f1be5d', 'event_id': '6890fb708bc7456ba3d8bbbb52f1be5d:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+_______ test_daily_permission_modes_gate_writes[ask_writes-deny-False] ________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E67CE450>
+mode = 'ask_writes', choice = 'deny', should_write = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode,choice,should_write", [
+        ("read_only", None, False),
+        ("ask_writes", "allow", True),
+        ("ask_writes", "deny", False),
+    ])
+    async def test_daily_permission_modes_gate_writes(k1_backend, mode, choice, should_write):  # noqa: F811
+        backend = k1_backend
+        target = backend.root / "workspace/k1-permission.txt"
+        called = {"v": False}
+    
+        def responder(record):
+            if not called["v"]:
+                called["v"] = True
+                return ToolCall("write_file", {"path": str(target), "content": "K1_PERMISSION_FIXTURE"})
+            return Text("K1_PERMISSION_CHECKED")
+    
+        backend.fake._responder = responder
+    
+        async def decide(ws, event):
+            if event["event"] == "approval.required":
+                await ws.send(json.dumps({"type": "approval.response", "run_id": event["run_id"],
+                    "event_id": event["data"]["approval_id"], "choice": choice or "deny"}))
+    
+>       _, events = await backend.run("write the K1 permission fixture", permission_mode=mode,
+                                      respond=decide)
+
+core\tests\test_k1_daily_paths.py:428: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E67CE450>
+content = 'write the K1 permission fixture'
+conversation = '15bc0440-fc57-4991-998a-32277e7d095b', workspace = None
+respond = <function test_daily_permission_modes_gate_writes.<locals>.decide at 0x000001B4E68189E0>
+expected = 'run.completed', options = {'permission_mode': 'ask_writes'}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'ddc0c709922a4cf5b4c4e25c0dcc18ab', 'event_id': 'ddc0c709922a4cf5b4c4e25c0dcc18ab:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+________ test_daily_restart_preserves_conversations_settings_and_state ________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/25011/AppData/Local/Temp/h1-h10/popen-gw4/test_daily_restart_preserves_c0')
+
+    @pytest.mark.asyncio
+    async def test_daily_restart_preserves_conversations_settings_and_state(tmp_path):
+        from tests.fakes.fake_llm_provider import FakeLLMServer
+        from tests.fakes.k1_harness import RestartableBackend
+        from tests.test_c1_websocket_acceptance import IsolatedBackend
+    
+        (tmp_path / "workspace").mkdir()
+        with FakeLLMServer() as fake:
+            first_root = tmp_path / "run-a"
+            server = IsolatedBackend(first_root, fake)
+            try:
+                await server.ready()
+                fake._responder = lambda record: Text("K1_PERSISTED_REPLY")
+>               conversation, events = await server.run("persist me across restart",
+                                                        workspace=str(tmp_path / "workspace"))
+
+core\tests\test_k1_daily_paths.py:462: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E686A300>
+content = 'persist me across restart'
+conversation = '07bb7944-50c0-41c6-9141-5a422008826f'
+workspace = 'C:\\Users\\25011\\AppData\\Local\\Temp\\h1-h10\\popen-gw4\\test_daily_restart_preserves_c0\\workspace'
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '51daea17599e46b0a2f75e1cc107654a', 'event_id': '51daea17599e46b0a2f75e1cc107654a:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+________________ test_daily_provider_faults_recover_gracefully ________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/25011/AppData/Local/Temp/h1-h10/popen-gw4/test_daily_provider_faults_rec0')
+
+    @pytest.mark.asyncio
+    async def test_daily_provider_faults_recover_gracefully(tmp_path):
+        from tests.fakes.fake_llm_provider import FakeLLMServer
+        from tests.test_c1_websocket_acceptance import IsolatedBackend
+    
+        (tmp_path / "workspace").mkdir()
+        script = [Error(status=429, retry_after=0.2), Error(status=500),
+                  Text("K1_RECOVERED_AFTER_FAULTS")]
+        with FakeLLMServer(script) as fake:
+            server = IsolatedBackend(tmp_path, fake)
+            # Widen the retry budget before the app finishes booting so the scripted
+            # faults are survivable instead of immediately fatal.
+            engine_config = tmp_path / "atlas/engine/config.yaml"
+            engine_config.write_text(
+                engine_config.read_text(encoding="utf-8").replace(
+                    "api_max_retries: 1", "api_max_retries: 4"), encoding="utf-8")
+            try:
+                await server.ready()
+>               _, events = await server.run("survive provider faults and finish")
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_k1_daily_paths.py:519: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E686AA80>
+content = 'survive provider faults and finish'
+conversation = '384e5043-e548-45e5-a40e-8d02f7b68ac8', workspace = None
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '7c70f141efa1485297d477c2bb7a9058', 'event_id': '7c70f141efa1485297d477c2bb7a9058:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+__________________ test_daily_recording_to_skill_and_replay ___________________
+[gw4] win32 -- Python 3.14.7 D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E5A384D0>
+
+    @pytest.mark.asyncio
+    async def test_daily_recording_to_skill_and_replay(k1_backend):  # noqa: F811
+        backend = k1_backend
+        started = await backend.http.post("/api/browser/recordings", json={"action": "start"})
+        assert started.status_code == 200, started.text
+        recording_id = started.json().get("recording_id")
+        assert recording_id, started.text
+    
+        stopped = await backend.http.post("/api/browser/recordings", json={"action": "stop"})
+        assert stopped.status_code == 200, stopped.text
+        assert stopped.json().get("recording_id") == recording_id
+    
+        detail = await backend.http.get(f"/api/browser/recordings/{recording_id}")
+        assert detail.status_code == 200, detail.text
+        assert "steps" in detail.json(), detail.json()
+    
+        saved = await backend.http.post(f"/api/browser/recordings/{recording_id}/to-skill",
+                                        json={"save": True, "name": "k1-recorded-skill"})
+        assert saved.status_code == 200 and saved.json().get("saved") is True, saved.text
+        listing = await backend.http.get("/api/skills")
+        assert "k1-recorded-skill" in _skill_names(listing.json()), listing.text
+    
+        # replay: the recorded skill is a real installed skill and can drive a run
+        backend.fake._responder = lambda record: Text("K1_REPLAY_DONE")
+>       _, events = await backend.run("replay the k1-recorded-skill",
+                                      active_skills=["k1-recorded-skill"])
+
+core\tests\test_k1_daily_paths_x2x4x5.py:190: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001B4E5A384D0>
+content = 'replay the k1-recorded-skill'
+conversation = 'a7734913-5a17-4233-91c0-3bbf9d9ff119', workspace = None
+respond = None, expected = 'run.completed'
+options = {'active_skills': ['k1-recorded-skill']}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '5dae563d007b4702a42cfff85e096b23', 'event_id': '5dae563d007b4702a42cfff85e096b23:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         [0m[91m- run.completed[39;49;00m[90m[39;49;00m
+E         [92m+ run.failed[39;49;00m[90m[39;49;00m
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+============================== warnings summary ===============================
+tests/test_c6_lsp_wiring.py::test_write_file_handler_appends_report_and_event
+  D:\hermes-agent-h1-core\pm\shell.py:13: SyntaxWarning: "\W" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\W"? A raw string is also an option.
+    minus C:\Windows\System32\bash.exe (the WSL launcher stub, first on PATH
+
+tests/test_automation_dbos_probe.py::test_dbos_automation_surface
+  D:\Atlas-h1-core-hardening\core\tests\test_automation_dbos_probe.py:38: RuntimeWarning: coroutine 'test_dbos_automation_surface.<locals>._cancelled' was never awaited
+    if predicate():
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED core\tests\test_channels_manager.py::test_stable_run_resets_backoff_ladder
+FAILED core\tests\test_devices_router.py::test_presence_beat_and_online_projection
+FAILED core\tests\test_devices_router.py::test_takeover_full_matrix_over_http
+FAILED core\tests\test_devices_router.py::test_takeover_agent_release_requires_agent_id
+FAILED core\tests\test_devices_router.py::test_activity_endpoint - RuntimeErr...
+FAILED core\tests\test_devices_router.py::test_handoff_endpoints_lifecycle - ...
+FAILED core\tests\test_devices_router.py::test_static_routes_do_not_shadow_device_id
+FAILED core\tests\test_devices_router.py::test_list_devices_includes_self - R...
+FAILED core\tests\test_devices_router.py::test_ingress_registration_crud - Ru...
+FAILED core\tests\test_lint_gate.py::test_critical_exception_scopes_are_clean_and_no_baseline_scope_grows
+FAILED core\tests\test_backend_parity_wave3.py::test_wave3_hook_exit_two_blocks_tool_call
+FAILED core\tests\test_local_execution.py::test_cancelling_atlas_process_terminates_child_tree
+FAILED core\tests\test_model_router.py::test_native_anthropic_route_preserves_cache_thinking_signature_and_tool_blocks
+FAILED core\tests\test_route_snapshot.py::test_routes_match_frozen_snapshot
+FAILED core\tests\test_takeover_x2_bridge.py::test_resolve_card_with_no_pending_waiter_is_safe
+FAILED core\tests\test_takeover_x2_bridge.py::test_double_resolve_still_conflicts
+FAILED core\tests\test_takeover_x2_bridge.py::test_card_without_run_id_never_touches_x2
+FAILED core\tests\test_takeover_x2_bridge.py::test_pending_side_failure_never_breaks_the_settled_card
+FAILED core\tests\test_takeover_x2_bridge.py::test_bridge_targets_the_run_id_on_the_card
+FAILED core\tests\test_takeover_x2_bridge.py::test_done_resolution_resumes_the_blocked_original_run
+FAILED core\tests\test_takeover_x2_bridge.py::test_give_up_resolution_cancels_the_blocked_run
+FAILED core\tests\test_c6_main_chain.py::test_edit_review_fix_main_chain - As...
+FAILED core\tests\test_k1_daily_paths.py::test_daily_edit_diff_review_then_fix
+FAILED core\tests\test_k1_daily_paths.py::test_daily_long_task_compacts_then_continues
+FAILED core\tests\test_k1_daily_paths.py::test_daily_steer_queue_and_stop - A...
+FAILED core\tests\test_k1_daily_paths.py::test_daily_plan_mode_approve_then_execute
+FAILED core\tests\test_k1_daily_paths.py::test_daily_parallel_subagents_with_verifier_acceptance
+FAILED core\tests\test_k1_daily_paths.py::test_daily_background_process_completion_notification
+FAILED core\tests\test_k1_daily_paths.py::test_daily_model_switch_mid_conversation
+FAILED core\tests\test_k1_daily_paths.py::test_daily_permission_modes_gate_writes[read_only-None-False]
+FAILED core\tests\test_k1_daily_paths.py::test_daily_permission_modes_gate_writes[ask_writes-allow-True]
+FAILED core\tests\test_k1_daily_paths.py::test_daily_permission_modes_gate_writes[ask_writes-deny-False]
+FAILED core\tests\test_k1_daily_paths.py::test_daily_restart_preserves_conversations_settings_and_state
+FAILED core\tests\test_k1_daily_paths.py::test_daily_provider_faults_recover_gracefully
+FAILED core\tests\test_k1_daily_paths_x2x4x5.py::test_daily_recording_to_skill_and_replay
+ERROR core\tests\test_k1_daily_paths_x2x4x5.py::test_daily_browser_multistep
+ERROR core\tests\test_k1_daily_paths_x2x4x5.py::test_daily_computer_use_with_fake_driver
+ERROR core\tests\test_k1_daily_paths_x2x4x5.py::test_daily_skills_market_install_use_update_uninstall
+35 failed, 1910 passed, 4 skipped, 2 warnings, 3 errors in 788.84s (0:13:08)
+
+real	13m11.644s
+user	0m0.015s
+sys	0m0.031s
+exit=1

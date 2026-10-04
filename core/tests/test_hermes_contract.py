@@ -204,7 +204,10 @@ async def test_real_agent_fake_tool_round_uses_atlas_identity_and_keeps_stable_p
         while hook_counts["on_session_title"] == 0 and asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(0.02)
         assert all(count > 0 for count in hook_counts.values()), hook_counts
-        assert len(agents) == 2
+        # H3: two consecutive turns of the same session reuse ONE Hermes agent
+        # (per-session cache) — construction count is the reuse contract itself;
+        # per-turn hook rebinding keeps every hook exercised on both turns.
+        assert len(agents) == 1
         stable_prefix = agents[0]._cached_system_prompt_static.encode("utf-8")
         actual_prefixes = [prompt.encode("utf-8")[:len(stable_prefix)] for prompt in prompts]
         assert all(prefix == stable_prefix for prefix in actual_prefixes)

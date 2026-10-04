@@ -261,7 +261,7 @@ class AtlasCredentialEntry:
         try:
             secret = self._pool._store.get(self._pool._keyring_account(self.id))
         except Exception as exc:
-            log.debug("credentials.keyring_read_failed", key_id=self.id, error=str(exc))
+            log.debug("credentials.keyring_read_failed", key_id=self.id, error=str(exc), exc_info=True)
             return ""
         if secret:
             self._runtime_key_cache = str(secret)

@@ -430,12 +430,17 @@ class ChannelManager:
         )
 
     async def _delivery_loop(self) -> None:
-        try:
-            while not self._stopping:
+        # One failed cycle must not silently strand every queued reply: the
+        # pump logs the exception and retries on the next interval. Only
+        # cancellation ends the loop.
+        while not self._stopping:
+            try:
                 await self.drain_delivery()
-                await asyncio.sleep(self._delivery_interval)
-        except asyncio.CancelledError:
-            raise
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("渠道发送泵异常，将在下个周期重试")
+            await asyncio.sleep(self._delivery_interval)
 
     async def drain_delivery(self) -> int:
         """Pump every due outbound message once; returns the processed count."""

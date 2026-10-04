@@ -1,7 +1,8 @@
 """Router contract tests — full /api/devices surface on an isolated tmp_path store.
 
 Builds a bare FastAPI app with only the device router (lane discipline: no
-server.py involvement) and injects registry/takeover singletons per test.
+server.py involvement) and injects the registry/takeover through per-app
+AppServices, exactly like the production lifespan does.
 """
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import atlas.api.device_router as device_router_module
+from atlas.api.app_services import AppServices
 from atlas.api.device_router import router as device_router
 from atlas.devices import DeviceRegistry
 from atlas.devices.takeover import TakeoverStateMachine
@@ -38,13 +39,10 @@ def client(tmp_path: Path) -> TestClient:
                               probe=lambda: dict(PROBE))
     registry.register_self()
     machine = TakeoverStateMachine(device_id="self", clock=FakeClock())
-    device_router_module.set_registry(registry)
-    device_router_module.set_takeover(machine)
     app = FastAPI()
+    app.state.services = AppServices(device_registry=registry, takeover=machine)
     app.include_router(device_router)
     yield TestClient(app)
-    device_router_module.set_registry(None)
-    device_router_module.set_takeover(None)
 
 
 # ---------------------------------------------------------------------------

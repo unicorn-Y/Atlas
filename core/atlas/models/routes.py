@@ -242,7 +242,7 @@ async def test_model(
     req: ModelTestRequest,
     services: Annotated[AppServices, Depends(get_app_services)],
 ) -> dict[str, Any]:
-    """Probe one model with a 2-token completion through its provider credentials."""
+    """Probe one model with a 2-token completion through the shared model router."""
     mgr = _mgr(services)
     model = next((m for m in mgr.list_models() if m["id"] == req.model_id), None)
     if model is None:
@@ -253,34 +253,20 @@ async def test_model(
     api_key = mgr.resolve_api_key(provider_id)
     if not api_key:
         raise HTTPException(status_code=400, detail="该模型所属服务商尚未配置可用密钥，请先添加密钥。")
-    base_url = (
-        model.get("base_url")
-        or (mgr.provider_config(provider_id) or {}).get("base_url")
-        or _catalog_default_base_url(provider_id)
-    )
 
-    from litellm import acompletion
-
+    route = await mgr.model_router.resolve(req.model_id, "model_test")
     started = time.perf_counter()
     try:
-        await acompletion(
-            model=str(model.get("litellm_model") or req.model_id),
+        await mgr.model_router.complete(
+            route,
             messages=[{"role": "user", "content": "Reply with OK."}],
             max_tokens=2,
-            stream=False,
-            api_key=api_key,
-            base_url=base_url,
         )
     except Exception as exc:  # noqa: BLE001 — 网关错误原样返回给 UI
+        log.warning("model.test_failed", model_id=req.model_id, error=str(exc), exc_info=True)
         return {"ok": False, "latency_ms": _latency_ms(started), "error": str(exc)}
     return {"ok": True, "latency_ms": _latency_ms(started)}
 
 
 def _latency_ms(started: float) -> int:
     return int((time.perf_counter() - started) * 1000)
-
-
-def _catalog_default_base_url(pid: str) -> str | None:
-    _, get_provider = _catalog()
-    provider = get_provider(pid)
-    return provider.get("default_base_url") if provider else None

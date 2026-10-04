@@ -1,0 +1,2103 @@
+.FF........FFFFFFFFFFFFFFFFF.FFFFFFFFF                                   [100%]
+================================== FAILURES ===================================
+_______________________ test_edit_review_fix_main_chain _______________________
+
+chain_backend = <tests.test_c6_lsp_e2e.IsolatedBackend object at 0x000001E473947230>
+chain_root = WindowsPath('D:/Atlas-h1-core-hardening/_tmp/lsp-fixtures/chain_ae3855dd32')
+
+    @pytest.mark.asyncio
+    async def test_edit_review_fix_main_chain(chain_backend, chain_root):
+        backend = chain_backend
+        workspace = chain_root / "workspace"
+        target = workspace / "e2e_bug.py"
+        conversation = await backend.conversation()
+    
+        turns = 0
+    
+        def responder(record):
+            nonlocal turns
+            turns += 1
+            if turns == 1:  # run 1：先读后写（防覆盖闸要求见过全文）
+                return ToolCall("read_file", {"path": str(target)})
+            if turns == 2:
+                return ToolCall("write_file", {"path": str(target), "content": BUG_ONE})
+            if turns == 3:
+                return Text("已写入有问题的版本。")
+            if turns == 4:  # run 2 主链第 1 轮：派只读审查员（规划请求走 aux,见下）
+                return ToolCall("delegate_task", {
+                    "goal": (
+                        "独立代码审查：当前未提交改动。只读调查。"
+                        "最终只输出一个 findings JSON 数组（file/line/range/severity/title/"
+                        "explanation/evidence/suggested_fix），没有问题输出 []。"
+                    ),
+                    "agent": "general",
+                    "permission_mode": "read_only",
+                })
+            if turns == 5:  # 审查员子代理（真实 delegate 链路里它的模型请求打同一个假服务）
+                # JSON 用代码围栏包住：引擎的 truncated-stop 守卫会对“≥200 字符且结尾
+                # 没有句读”的回复强制续跑一轮，裸 JSON 数组正好命中；那轮续跑会在
+                # 子代理上下文里抢走下一轮的 submit_findings（子代理的事件队列会被
+                # 委派循环丢弃，review.findings 就到不了运行事件流）。围栏结尾的 ```
+                # 在守卫的豁免名单里，子代理一轮回合即干净收尾。
+                return Text("```json\n" + FINDINGS_JSON + "\n```")
+            if turns == 6:  # 父运行原样提交 findings
+                return ToolCall("submit_findings", {
+                    "findings_json": FINDINGS_JSON,
+                    "scope": "working_tree",
+                    "scope_label": "当前未提交改动",
+                })
+            if turns == 7:
+                return Text("审查完成：发现 1 个 blocker 问题，请查看审查卡片。")
+            if turns == 8:  # run 3：普通消息回到正常执行入口，先读后修
+                return ToolCall("read_file", {"path": str(target)})
+            if turns == 9:
+                return ToolCall("write_file", {"path": str(target), "content": CLEAN})
+            return Text("已修复，main() 恢复返回 alpha。")
+    
+        # 派发提示词含编号步骤会触发任务规划器；规划请求不带 tools（aux 类），
+        # 不走上面的 responder——在 aux 通道按系统提示词识别并返回计划 JSON。
+        original_aux = backend.fake._aux
+        plan_json = json.dumps({
+            "goal": "审查当前未提交改动",
+            "subtasks": [{"id": "review", "title": "派只读审查员审查",
+                          "verification": "submit_findings 已提交审查结论"}],
+        }, ensure_ascii=False)
+    
+        def aux_with_plan(record):
+            body = json.dumps(record.get("body") or {}, ensure_ascii=False)
+            if "Break the user's multi-step task" in body:
+                return Text(plan_json)
+            return original_aux(record)
+    
+        backend.fake._aux = aux_with_plan
+        backend.fake._responder = responder
+    
+        backend.fake._responder = responder
+    
+        # --- run 1：编辑引入错误 → LSP 新诊断 ------------------------------------
+>       _, events_1 = await backend.run("把 e2e_bug.py 改成有 bug 的版本",
+                                        conversation=conversation, workspace=str(workspace))
+
+core\tests\test_c6_main_chain.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c6_lsp_e2e.IsolatedBackend object at 0x000001E473947230>
+content = '把 e2e_bug.py 改成有 bug 的版本'
+conversation = '03906304-2370-47de-a5f5-1fe30bd0a163'
+workspace = 'D:\\Atlas-h1-core-hardening\\_tmp\\lsp-fixtures\\chain_ae3855dd32\\workspace'
+expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, expected="run.completed", **options):
+        import uuid as _uuid
+    
+        conversation = conversation or await self.conversation()
+        run_id = _uuid.uuid4().hex
+        received = []
+        try:
+            async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                               additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+                await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                    "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                    "model": "fake-model", **options}))
+                async with asyncio.timeout(120):
+                    while True:
+                        event = json.loads(await ws.recv())
+                        received.append(event)
+                        if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                            break
+        except (TimeoutError, asyncio.TimeoutError):
+            log_tail = (self.root / "backend.log").read_text(errors="replace")[-2000:]
+            raise AssertionError(f"run did not finish; last events: {received[-3:]}\nbackend.log tail:\n{log_tail}")
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(received, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'bed6d180b6494ea5a73085d24e27cb08', 'event_id': 'bed6d180b6494ea5a73085d24e27cb08:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c6_lsp_e2e.py:142: AssertionError
+____________________ test_stable_run_resets_backoff_ladder ____________________
+
+tmp_path = WindowsPath('C:/Users/25011/AppData/Local/Temp/h1-h10-rerun1/test_stable_run_resets_backoff0')
+
+    @pytest.mark.asyncio
+    async def test_stable_run_resets_backoff_ladder(tmp_path):
+        # each run stays stable 60ms then dies; with a 50ms stable-reset the ladder
+        # never grows past the initial 20ms, so restarts keep coming quickly.
+        manager = make_manager(tmp_path, stable_reset_seconds=0.05)
+        manager.configure(
+            "fake", {"enabled": True, "behaviour": "run", "run_seconds": 0.06}, persist=False
+        )
+        await manager.start()
+        await asyncio.sleep(0.4)
+>       assert FakeAdapter.total_started >= 5  # would be ~3 if the ladder kept growing
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       assert 4 >= 5
+E        +  where 4 = FakeAdapter.total_started
+
+core\tests\test_channels_manager.py:184: AssertionError
+------------------------------ Captured log call ------------------------------
+ERROR    atlas.channels:__init__.py:298 渠道 fake 连接中断
+Traceback (most recent call last):
+  File "D:\Atlas-h1-core-hardening\core\atlas\channels\__init__.py", line 284, in _supervise
+    await worker
+  File "D:\Atlas-h1-core-hardening\core\tests\test_channels_manager.py", line 47, in _idle
+    raise RuntimeError("run failed after stable window")
+RuntimeError: run failed after stable window
+ERROR    atlas.channels:__init__.py:298 渠道 fake 连接中断
+Traceback (most recent call last):
+  File "D:\Atlas-h1-core-hardening\core\atlas\channels\__init__.py", line 284, in _supervise
+    await worker
+  File "D:\Atlas-h1-core-hardening\core\tests\test_channels_manager.py", line 47, in _idle
+    raise RuntimeError("run failed after stable window")
+RuntimeError: run failed after stable window
+ERROR    atlas.channels:__init__.py:298 渠道 fake 连接中断
+Traceback (most recent call last):
+  File "D:\Atlas-h1-core-hardening\core\atlas\channels\__init__.py", line 284, in _supervise
+    await worker
+  File "D:\Atlas-h1-core-hardening\core\tests\test_channels_manager.py", line 47, in _idle
+    raise RuntimeError("run failed after stable window")
+RuntimeError: run failed after stable window
+ERROR    atlas.channels:__init__.py:298 渠道 fake 连接中断
+Traceback (most recent call last):
+  File "D:\Atlas-h1-core-hardening\core\atlas\channels\__init__.py", line 284, in _supervise
+    await worker
+  File "D:\Atlas-h1-core-hardening\core\tests\test_channels_manager.py", line 47, in _idle
+    raise RuntimeError("run failed after stable window")
+RuntimeError: run failed after stable window
+____________ test_daily_background_process_completion_notification ____________
+
+backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E473AFC980>
+content = 'start the long job in the background and wait for its completion notification'
+conversation = 'b37549fc-fe31-430f-9446-4e3ce542ca2d', model = 'fake-model'
+workspace = None, respond = None
+keep_reading = <function test_daily_background_process_completion_notification.<locals>.process_finished at 0x000001E473B1D430>
+timeout = 150, options = {}
+
+    async def ws_run(
+        backend: IsolatedBackend,
+        content: str,
+        *,
+        conversation: str | None = None,
+        model: str | None = "fake-model",
+        workspace: str | None = None,
+        respond: Any = None,
+        keep_reading: Any = None,
+        timeout: float = 120,
+        **options: Any,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """Send ``run.start`` over the real WebSocket and collect envelopes.
+    
+        Collects until a terminal event (and, when ``keep_reading(events)`` is
+        given, until it returns True — for events that may trail the run, such as
+        ``process.completed`` from background terminals). Returns
+        ``(conversation_id, events)``.
+        """
+        from websockets.asyncio.client import connect
+    
+        conversation = conversation or await backend.conversation()
+        run_id = uuid.uuid4().hex
+        start: dict[str, Any] = {"type": "run.start", "run_id": run_id, "content": content,
+            "conversation_id": conversation,
+            "workspace": str(workspace or backend.root / "workspace")}
+        if model is not None:
+            start["model"] = model
+        start.update(options)
+        events: list[dict[str, Any]] = []
+        async with connect(backend.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": TOKEN}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps(start))
+            async with asyncio.timeout(timeout):
+                while True:
+>                   event = json.loads(await ws.recv())
+                                       ^^^^^^^^^^^^^^^
+
+core\tests\fakes\k1_harness.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\websockets\asyncio\connection.py:303: in recv
+    return await self.recv_messages.get(decode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\websockets\asyncio\messages.py:159: in get
+    frame = await self.frames.get(not self.closed)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <websockets.asyncio.messages.SimpleQueue object at 0x000001E474BED090>
+block = True
+
+    async def get(self, block: bool = True) -> T:
+        """Remove and return an item from the queue, waiting if necessary."""
+        if not self.queue:
+            if not block:
+                raise EOFError("stream of frames ended")
+            assert self.get_waiter is None, "cannot call get() concurrently"
+            self.get_waiter = self.loop.create_future()
+            try:
+>               await self.get_waiter
+E               asyncio.exceptions.CancelledError
+
+D:\Atlas\core\.venv\Lib\site-packages\websockets\asyncio\messages.py:51: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E473AFC980>
+
+    @pytest.mark.asyncio
+    async def test_daily_background_process_completion_notification(k1_backend):  # noqa: F811
+        backend = k1_backend
+        done_marker = backend.root / "workspace/bg-done.txt"
+        wait_marker = backend.root / "workspace/bg-wait-done.txt"
+        command = ("Write-Output K1_BG_READY; Start-Sleep -Milliseconds 500; "
+                   f"[IO.File]::WriteAllText('{done_marker}', 'done'); Write-Output K1_BG_DONE")
+        # The second turn blocks on the marker so the run is still live when the
+        # background job's completion notification is delivered.
+        wait_command = (
+            f"$deadline=(Get-Date).AddSeconds(20); "
+            f"while(-not (Test-Path '{done_marker}') -and (Get-Date) -lt $deadline) "
+            "{ Start-Sleep -Milliseconds 100 }; "
+            f"[IO.File]::WriteAllText('{wait_marker}', 'waited'); Write-Output K1_BG_WAITED")
+        turns = {"n": 0}
+    
+        def responder(record):
+            turns["n"] += 1
+            if turns["n"] == 1:
+                return ToolCall("terminal", {"command": command, "shell": "powershell",
+                    "background": True, "notify": True, "watch_patterns": ["K1_BG_DONE"]})
+            if turns["n"] == 2:
+                return ToolCall("terminal", {"command": wait_command, "shell": "powershell"})
+            return Text("K1_BG_DISPATCHED")
+    
+        backend.fake._responder = responder
+    
+        def process_finished(events):
+            return any(e["event"] == "process.completed" for e in events)
+    
+>       _, events = await ws_run(backend,
+            "start the long job in the background and wait for its completion notification",
+            keep_reading=process_finished, timeout=150)
+
+core\tests\test_k1_daily_paths.py:350: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+core\tests\fakes\k1_harness.py:211: in ws_run
+    async with asyncio.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x000001E473AEF180>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\asyncio\timeouts.py:115: TimeoutError
+____________________ test_daily_edit_diff_review_then_fix _____________________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E473AC3250>
+
+    @pytest.mark.asyncio
+    async def test_daily_edit_diff_review_then_fix(k1_backend):  # noqa: F811
+        backend = k1_backend
+        workspace = backend.root / "gitws"
+        workspace.mkdir()
+        _git(workspace, "init", "-b", "main")
+        _git(workspace, "config", "user.name", "K1 fixture")
+        _git(workspace, "config", "user.email", "k1@example.invalid")
+        target = workspace / "app.txt"
+        target.write_text("line one\ncat line\n", encoding="utf-8")
+        _git(workspace, "add", ".")
+        _git(workspace, "commit", "-m", "baseline")
+    
+        # -- new session, workspace picked, file edited through tools, diff read --
+        turns = {"n": 0}
+    
+        def edit_responder(record):
+            turns["n"] += 1
+            if turns["n"] == 1:
+                return ToolCall("patch", {"path": str(target), "old_string": "cat line",
+                                          "new_string": "dog line"})
+            if turns["n"] == 2:
+                return ToolCall("terminal", {"command": "git --no-pager diff", "shell": "powershell"})
+            return Text("edit complete, diff shown")
+    
+        backend.fake._responder = edit_responder
+>       conversation, events = await backend.run("edit app.txt and show me the diff",
+                                                 workspace=str(workspace))
+
+core\tests\test_k1_daily_paths.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E473AC3250>
+content = 'edit app.txt and show me the diff'
+conversation = '417f920e-811a-4979-bdb7-63be8fd416f5'
+workspace = 'C:\\Users\\25011\\AppData\\Local\\Temp\\h1-h10-rerun1\\test_daily_edit_diff_review_th0\\gitws'
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '2f6c090c72ee4660a58d3944e85538d8', 'event_id': '2f6c090c72ee4660a58d3944e85538d8:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+________________ test_daily_long_task_compacts_then_continues _________________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E473AC3610>
+
+    @pytest.mark.asyncio
+    async def test_daily_long_task_compacts_then_continues(k1_backend):  # noqa: F811
+        backend = k1_backend
+        config = backend.root / "atlas/engine/config.yaml"
+        config.write_text(config.read_text().replace("128000", "64000") +
+            "  compression:\n    provider: custom\n    model: fake-model\n"
+            f"    base_url: {backend.fake.base_url}\n    api_key: sk-fake-e2e\n", encoding="utf-8")
+        backend.fake.context_length = 64000  # Hermes' minimum supported window.
+        backend.fake.prompt_tokens_fn = lambda body: len(json.dumps(body, ensure_ascii=False)) // 2
+        turns = {"n": 0}
+    
+        def responder(record):
+            turns["n"] += 1
+            if turns["n"] <= 12:
+                return ToolCall("terminal", {"command": "Write-Output ('fixture-context ' * 2600)",
+                                             "shell": "powershell"})
+            return Text("K1_COMPACT_CONTINUED")
+    
+        backend.fake._responder = responder
+>       _, events = await backend.run("K1_COMPACT gather lots of context and finish", timeout=150)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_k1_daily_paths.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E473AC3610>
+content = 'K1_COMPACT gather lots of context and finish'
+conversation = '7b111362-7ace-453a-8c94-f62024dbd906', workspace = None
+respond = None, expected = 'run.completed', options = {'timeout': 150}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'c330216639fd41f1a6bcc2102342ad62', 'event_id': 'c330216639fd41f1a6bcc2102342ad62:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+__________________ test_daily_model_switch_mid_conversation ___________________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474BF2060>
+
+    @pytest.mark.asyncio
+    async def test_daily_model_switch_mid_conversation(k1_backend):  # noqa: F811
+        backend = k1_backend
+        added = await backend.http.post("/api/models/custom", json={
+            "id": "fake-model-b", "name": "Fake B", "provider": "openai",
+            "litellm_model": "openai/fake-model-b", "max_output_tokens": 512})
+        assert added.status_code in (200, 201), added.text
+    
+        backend.fake._responder = lambda record: Text("K1_FIRST_MODEL_TURN")
+>       conversation, events = await backend.run("turn one on the default model")
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_k1_daily_paths.py:377: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474BF2060>
+content = 'turn one on the default model'
+conversation = '010ddb68-e47d-4918-bd04-f3459d9f8685', workspace = None
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'c712045f320b4234b5856d4079b71bc8', 'event_id': 'c712045f320b4234b5856d4079b71bc8:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+___________ test_daily_parallel_subagents_with_verifier_acceptance ____________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C0D220>
+
+    @pytest.mark.asyncio
+    async def test_daily_parallel_subagents_with_verifier_acceptance(k1_backend):  # noqa: F811
+        backend = k1_backend
+        delegated = {"v": False}
+    
+        def responder(record):
+            text = last_user_text(record)
+            if "验收并行任务" in text:
+                return Text('{"verified":true,"note":"both results contain OK"}')
+            if "CHILD_ALPHA" in text:
+                return Text("alpha OK")
+            if "CHILD_BETA" in text:
+                return Text("beta OK")
+            if not delegated["v"]:
+                delegated["v"] = True
+                return ToolCall("delegate_task", {"tasks": [
+                    {"title": "alpha", "goal": "CHILD_ALPHA return OK"},
+                    {"title": "beta", "goal": "CHILD_BETA return OK"}],
+                    "background": False, "max_concurrency": 2,
+                    "verify": {"criteria": "each result must contain OK"}})
+            return Text("K1_BOTH_CHILDREN_ACCEPTED")
+    
+        backend.fake._responder = responder
+>       _, events = await backend.run("delegate two parallel children and verify them")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_k1_daily_paths.py:303: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C0D220>
+content = 'delegate two parallel children and verify them'
+conversation = '885d2295-a0d6-4b76-a438-f07563decec8', workspace = None
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '153a5c8852e640aaab68c35e5c0c6193', 'event_id': '153a5c8852e640aaab68c35e5c0c6193:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+_______ test_daily_permission_modes_gate_writes[ask_writes-allow-True] ________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474D12690>
+mode = 'ask_writes', choice = 'allow', should_write = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode,choice,should_write", [
+        ("read_only", None, False),
+        ("ask_writes", "allow", True),
+        ("ask_writes", "deny", False),
+    ])
+    async def test_daily_permission_modes_gate_writes(k1_backend, mode, choice, should_write):  # noqa: F811
+        backend = k1_backend
+        target = backend.root / "workspace/k1-permission.txt"
+        called = {"v": False}
+    
+        def responder(record):
+            if not called["v"]:
+                called["v"] = True
+                return ToolCall("write_file", {"path": str(target), "content": "K1_PERMISSION_FIXTURE"})
+            return Text("K1_PERMISSION_CHECKED")
+    
+        backend.fake._responder = responder
+    
+        async def decide(ws, event):
+            if event["event"] == "approval.required":
+                await ws.send(json.dumps({"type": "approval.response", "run_id": event["run_id"],
+                    "event_id": event["data"]["approval_id"], "choice": choice or "deny"}))
+    
+>       _, events = await backend.run("write the K1 permission fixture", permission_mode=mode,
+                                      respond=decide)
+
+core\tests\test_k1_daily_paths.py:428: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474D12690>
+content = 'write the K1 permission fixture'
+conversation = 'b3b3e5b7-9ea1-4c09-8b03-39a83d77bac4', workspace = None
+respond = <function test_daily_permission_modes_gate_writes.<locals>.decide at 0x000001E474C8BCC0>
+expected = 'run.completed', options = {'permission_mode': 'ask_writes'}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '93908dd1c72e431e9700face9267e883', 'event_id': '93908dd1c72e431e9700face9267e883:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+_______ test_daily_permission_modes_gate_writes[ask_writes-deny-False] ________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E473B917B0>
+mode = 'ask_writes', choice = 'deny', should_write = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode,choice,should_write", [
+        ("read_only", None, False),
+        ("ask_writes", "allow", True),
+        ("ask_writes", "deny", False),
+    ])
+    async def test_daily_permission_modes_gate_writes(k1_backend, mode, choice, should_write):  # noqa: F811
+        backend = k1_backend
+        target = backend.root / "workspace/k1-permission.txt"
+        called = {"v": False}
+    
+        def responder(record):
+            if not called["v"]:
+                called["v"] = True
+                return ToolCall("write_file", {"path": str(target), "content": "K1_PERMISSION_FIXTURE"})
+            return Text("K1_PERMISSION_CHECKED")
+    
+        backend.fake._responder = responder
+    
+        async def decide(ws, event):
+            if event["event"] == "approval.required":
+                await ws.send(json.dumps({"type": "approval.response", "run_id": event["run_id"],
+                    "event_id": event["data"]["approval_id"], "choice": choice or "deny"}))
+    
+>       _, events = await backend.run("write the K1 permission fixture", permission_mode=mode,
+                                      respond=decide)
+
+core\tests\test_k1_daily_paths.py:428: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E473B917B0>
+content = 'write the K1 permission fixture'
+conversation = 'd036c7d4-e2f6-46e3-88f2-e649e8a60923', workspace = None
+respond = <function test_daily_permission_modes_gate_writes.<locals>.decide at 0x000001E474C39590>
+expected = 'run.completed', options = {'permission_mode': 'ask_writes'}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '929c5636c26b4a8fad75a5a68239ac02', 'event_id': '929c5636c26b4a8fad75a5a68239ac02:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+________ test_daily_permission_modes_gate_writes[read_only-None-False] ________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C197B0>
+mode = 'read_only', choice = None, should_write = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode,choice,should_write", [
+        ("read_only", None, False),
+        ("ask_writes", "allow", True),
+        ("ask_writes", "deny", False),
+    ])
+    async def test_daily_permission_modes_gate_writes(k1_backend, mode, choice, should_write):  # noqa: F811
+        backend = k1_backend
+        target = backend.root / "workspace/k1-permission.txt"
+        called = {"v": False}
+    
+        def responder(record):
+            if not called["v"]:
+                called["v"] = True
+                return ToolCall("write_file", {"path": str(target), "content": "K1_PERMISSION_FIXTURE"})
+            return Text("K1_PERMISSION_CHECKED")
+    
+        backend.fake._responder = responder
+    
+        async def decide(ws, event):
+            if event["event"] == "approval.required":
+                await ws.send(json.dumps({"type": "approval.response", "run_id": event["run_id"],
+                    "event_id": event["data"]["approval_id"], "choice": choice or "deny"}))
+    
+>       _, events = await backend.run("write the K1 permission fixture", permission_mode=mode,
+                                      respond=decide)
+
+core\tests\test_k1_daily_paths.py:428: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C197B0>
+content = 'write the K1 permission fixture'
+conversation = 'b21c6822-6fd5-4bba-a12d-f6891dfc1397', workspace = None
+respond = <function test_daily_permission_modes_gate_writes.<locals>.decide at 0x000001E474C3ACF0>
+expected = 'run.completed', options = {'permission_mode': 'read_only'}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '4f8966799edb40ea913d08937ac56a4a', 'event_id': '4f8966799edb40ea913d08937ac56a4a:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+__________________ test_daily_plan_mode_approve_then_execute __________________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C3D550>
+
+    @pytest.mark.asyncio
+    async def test_daily_plan_mode_approve_then_execute(k1_backend):  # noqa: F811
+        backend = k1_backend
+        plan_target = backend.root / "workspace/plan-output.txt"
+        approved = {"v": False}
+        executed = {"v": False}
+    
+        def responder(record):
+            if not approved["v"]:
+                return Text("K1_PLAN_READY: 1) write plan-output.txt 2) confirm")
+            if not executed["v"]:
+                executed["v"] = True
+                return ToolCall("write_file", {"path": str(plan_target),
+                                               "content": "K1_PLANNED_AND_APPROVED"})
+            return Text("K1_PLAN_EXECUTED")
+    
+        backend.fake._responder = responder
+    
+        async def approve(ws, event):
+            if event["event"] == "run.plan.proposed":
+                approved["v"] = True
+                await ws.send(json.dumps({"type": "run.plan.approve", "run_id": event["run_id"],
+                                          "event_id": event["data"]["event_id"]}))
+    
+>       _, events = await backend.run("plan writing the K1 output file, then do it",
+                                      mode="plan", permission_mode="plan", respond=approve)
+
+core\tests\test_k1_daily_paths.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C3D550>
+content = 'plan writing the K1 output file, then do it'
+conversation = '38560f08-8939-40dd-8a05-b239a814375a', workspace = None
+respond = <function test_daily_plan_mode_approve_then_execute.<locals>.approve at 0x000001E474C3B740>
+expected = 'run.completed'
+options = {'mode': 'plan', 'permission_mode': 'plan'}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '8003a709b8b44fd5a70b739fb6b82e02', 'event_id': '8003a709b8b44fd5a70b739fb6b82e02:6', 'sequence': 6, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+-------------------------- Captured stderr teardown ---------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 63236)
+Traceback (most recent call last):
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。
+----------------------------------------
+________________ test_daily_provider_faults_recover_gracefully ________________
+
+tmp_path = WindowsPath('C:/Users/25011/AppData/Local/Temp/h1-h10-rerun1/test_daily_provider_faults_rec0')
+
+    @pytest.mark.asyncio
+    async def test_daily_provider_faults_recover_gracefully(tmp_path):
+        from tests.fakes.fake_llm_provider import FakeLLMServer
+        from tests.test_c1_websocket_acceptance import IsolatedBackend
+    
+        (tmp_path / "workspace").mkdir()
+        script = [Error(status=429, retry_after=0.2), Error(status=500),
+                  Text("K1_RECOVERED_AFTER_FAULTS")]
+        with FakeLLMServer(script) as fake:
+            server = IsolatedBackend(tmp_path, fake)
+            # Widen the retry budget before the app finishes booting so the scripted
+            # faults are survivable instead of immediately fatal.
+            engine_config = tmp_path / "atlas/engine/config.yaml"
+            engine_config.write_text(
+                engine_config.read_text(encoding="utf-8").replace(
+                    "api_max_retries: 1", "api_max_retries: 4"), encoding="utf-8")
+            try:
+                await server.ready()
+>               _, events = await server.run("survive provider faults and finish")
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_k1_daily_paths.py:519: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C3D250>
+content = 'survive provider faults and finish'
+conversation = 'af273f60-86ff-49a7-9bf3-c2470a747653', workspace = None
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '163aa02161834fd88b17bedbb51c1c49', 'event_id': '163aa02161834fd88b17bedbb51c1c49:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+________ test_daily_restart_preserves_conversations_settings_and_state ________
+
+tmp_path = WindowsPath('C:/Users/25011/AppData/Local/Temp/h1-h10-rerun1/test_daily_restart_preserves_c0')
+
+    @pytest.mark.asyncio
+    async def test_daily_restart_preserves_conversations_settings_and_state(tmp_path):
+        from tests.fakes.fake_llm_provider import FakeLLMServer
+        from tests.fakes.k1_harness import RestartableBackend
+        from tests.test_c1_websocket_acceptance import IsolatedBackend
+    
+        (tmp_path / "workspace").mkdir()
+        with FakeLLMServer() as fake:
+            first_root = tmp_path / "run-a"
+            server = IsolatedBackend(first_root, fake)
+            try:
+                await server.ready()
+                fake._responder = lambda record: Text("K1_PERSISTED_REPLY")
+>               conversation, events = await server.run("persist me across restart",
+                                                        workspace=str(tmp_path / "workspace"))
+
+core\tests\test_k1_daily_paths.py:462: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C646E0>
+content = 'persist me across restart'
+conversation = 'f41e3556-4db0-4d25-815b-badd5c7a2e8a'
+workspace = 'C:\\Users\\25011\\AppData\\Local\\Temp\\h1-h10-rerun1\\test_daily_restart_preserves_c0\\workspace'
+respond = None, expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': 'f896f913959f470dbf0e2d22bca368a5', 'event_id': 'f896f913959f470dbf0e2d22bca368a5:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+_______________________ test_daily_steer_queue_and_stop _______________________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C67200>
+
+    @pytest.mark.asyncio
+    async def test_daily_steer_queue_and_stop(k1_backend):  # noqa: F811
+        backend = k1_backend
+        first = {"done": False}
+    
+        def responder(record):
+            if not first["done"]:
+                first["done"] = True
+                return ToolCall("terminal", {
+                    "command": "Start-Sleep -Milliseconds 800; Write-Output K1",
+                    "shell": "powershell"})
+            return Text("K1_STEER_CONSUMED")
+    
+        backend.fake._responder = responder
+        sent = {"done": False}
+    
+        async def steer(ws, event):
+            if event["event"] == "tool.started" and not sent["done"]:
+                sent["done"] = True
+                for text in ("K1_STEER_ONE", "K1_STEER_TWO"):
+                    await ws.send(json.dumps({"type": "run.steer", "run_id": event["run_id"],
+                                              "content": text, "event_id": uuid.uuid4().hex}))
+    
+>       _, events = await backend.run("start a task so the steering messages can queue",
+                                      respond=steer)
+
+core\tests\test_k1_daily_paths.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C67200>
+content = 'start a task so the steering messages can queue'
+conversation = '8e56fe0f-f112-4f03-b369-e6bb00474175', workspace = None
+respond = <function test_daily_steer_queue_and_stop.<locals>.steer at 0x000001E474C45E80>
+expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '3fbd72ecc52b48e8b4204f43dc08d730', 'event_id': '3fbd72ecc52b48e8b4204f43dc08d730:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+________________________ test_daily_browser_multistep _________________________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E467D41550>
+
+    @pytest.mark.asyncio
+    async def test_daily_browser_multistep(k1_backend):  # noqa: F811
+        backend = k1_backend
+        page = backend.root / "workspace/k1-page.html"
+        page.write_text("<html><body><h1>K1_BROWSER_FIXTURE</h1></body></html>", encoding="utf-8")
+        steps = {"n": 0}
+    
+        def responder(record):
+            steps["n"] += 1
+            if steps["n"] == 1:
+                return ToolCall("browser_navigate", {"url": page.as_uri()})
+            if steps["n"] == 2:
+                return ToolCall("browser_snapshot", {})
+            return Text("K1_BROWSER_DONE")
+    
+        backend.fake._responder = responder
+>       _, events = await backend.run("open the local page in the browser and read its heading",
+                                      timeout=240)
+
+core\tests\test_k1_daily_paths_x2x4x5.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E467D41550>
+content = 'open the local page in the browser and read its heading'
+conversation = 'c22df789-8f12-4332-bc56-a1fcf82ffaab', workspace = None
+respond = None, expected = 'run.completed', options = {'timeout': 240}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '1b48ec3ec9674dd093b872c8ceeb56fd', 'event_id': '1b48ec3ec9674dd093b872c8ceeb56fd:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+__________________ test_daily_computer_use_with_fake_driver ___________________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E467D42350>
+
+    @pytest.mark.asyncio
+    async def test_daily_computer_use_with_fake_driver(k1_backend):  # noqa: F811
+        backend = k1_backend
+        steps = {"n": 0}
+    
+        def responder(record):
+            steps["n"] += 1
+            if steps["n"] == 1:
+                return ToolCall("computer_observe", {"target": "desktop"})
+            return Text("K1_COMPUTER_DONE")
+    
+        backend.fake._responder = responder
+>       _, events = await backend.run("observe the desktop through the fake Cua driver", timeout=180)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+core\tests\test_k1_daily_paths_x2x4x5.py:80: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E467D42350>
+content = 'observe the desktop through the fake Cua driver'
+conversation = 'ebbbf34a-7968-4688-be2d-edb7d2f0579e', workspace = None
+respond = None, expected = 'run.completed', options = {'timeout': 180}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '700ead8abb7746e9b14132e3d458ff14', 'event_id': '700ead8abb7746e9b14132e3d458ff14:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+__________________ test_daily_recording_to_skill_and_replay ___________________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C92340>
+
+    @pytest.mark.asyncio
+    async def test_daily_recording_to_skill_and_replay(k1_backend):  # noqa: F811
+        backend = k1_backend
+        started = await backend.http.post("/api/browser/recordings", json={"action": "start"})
+        assert started.status_code == 200, started.text
+        recording_id = started.json().get("recording_id")
+        assert recording_id, started.text
+    
+        stopped = await backend.http.post("/api/browser/recordings", json={"action": "stop"})
+        assert stopped.status_code == 200, stopped.text
+        assert stopped.json().get("recording_id") == recording_id
+    
+        detail = await backend.http.get(f"/api/browser/recordings/{recording_id}")
+        assert detail.status_code == 200, detail.text
+        assert "steps" in detail.json(), detail.json()
+    
+        saved = await backend.http.post(f"/api/browser/recordings/{recording_id}/to-skill",
+                                        json={"save": True, "name": "k1-recorded-skill"})
+        assert saved.status_code == 200 and saved.json().get("saved") is True, saved.text
+        listing = await backend.http.get("/api/skills")
+        assert "k1-recorded-skill" in _skill_names(listing.json()), listing.text
+    
+        # replay: the recorded skill is a real installed skill and can drive a run
+        backend.fake._responder = lambda record: Text("K1_REPLAY_DONE")
+>       _, events = await backend.run("replay the k1-recorded-skill",
+                                      active_skills=["k1-recorded-skill"])
+
+core\tests\test_k1_daily_paths_x2x4x5.py:190: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C92340>
+content = 'replay the k1-recorded-skill'
+conversation = '8d0ac9d1-09f6-40c3-a0bc-947b64ea1e7d', workspace = None
+respond = None, expected = 'run.completed'
+options = {'active_skills': ['k1-recorded-skill']}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '66c6f4ebbc664acba2b00ee8f27cff73', 'event_id': '66c6f4ebbc664acba2b00ee8f27cff73:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+____________ test_daily_skills_market_install_use_update_uninstall ____________
+
+k1_backend = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C16510>
+
+    @pytest.mark.asyncio
+    async def test_daily_skills_market_install_use_update_uninstall(k1_backend):  # noqa: F811
+        backend = k1_backend
+        market_dir = backend.root / "market"
+        skill_dir = market_dir / "demo-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: demo-skill\nversion: 1.0.0\ndescription: K1 fixture skill\n---\n\n"
+            "K1_SKILL_INSTRUCTION do the fixture thing.\n", encoding="utf-8")
+    
+        added = await backend.http.post("/api/skills/market/sources",
+                                        json={"name": "k1-local", "kind": "directory",
+                                              "path": str(market_dir)})
+        assert added.status_code == 200, added.text
+    
+        found = (await backend.http.get("/api/skills/market/search?q=demo")).json()
+        assert found.get("count", 0) >= 1, found
+        # Pin the LOCAL tap entry: hub sources may reach the live network and a
+        # real ClawHub skill named "demo-skill" exists — never install that here.
+        entries = [item for item in found.get("results", [])
+                   if item.get("id") == "demo-skill" and item.get("source") == "k1-local"]
+        assert entries, f"k1-local demo-skill not in search results: {found}"
+        entry = entries[0]
+    
+        installed = await backend.http.post("/api/skills/market/install",
+                                            json={"source": entry["source"], "id": entry["id"]})
+        assert installed.status_code == 200, installed.text
+        assert installed.json()["status"] == "installed", installed.text
+        listing = await backend.http.get("/api/skills")
+        assert listing.status_code == 200
+        assert "demo-skill" in _skill_names(listing.json()), listing.text
+    
+        # use: a run with the skill active must inject its instructions
+        backend.fake._responder = lambda record: Text("K1_SKILL_USED")
+>       _, events = await backend.run("use the installed demo skill",
+                                      active_skills=["demo-skill"])
+
+core\tests\test_k1_daily_paths_x2x4x5.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c1_websocket_acceptance.IsolatedBackend object at 0x000001E474C16510>
+content = 'use the installed demo skill'
+conversation = '4ace9ce8-ac94-4f9e-b57b-8f839ab73817', workspace = None
+respond = None, expected = 'run.completed'
+options = {'active_skills': ['demo-skill']}
+
+    async def run(self, content, *, conversation=None, workspace=None, respond=None, expected="run.completed", **options):
+        conversation = conversation or await self.conversation()
+        run_id = uuid.uuid4().hex
+        received = []
+        async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                           additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+            await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                "model": "fake-model", **options}))
+            async with asyncio.timeout(90):
+                while True:
+                    event = json.loads(await ws.recv())
+                    received.append(event)
+                    if respond:
+                        await respond(ws, event)
+                    if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                        break
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(self.events, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '0f175baaf61d46229eb61dc864a9f252', 'event_id': '0f175baaf61d46229eb61dc864a9f252:5', 'sequence': 5, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+core\tests\test_c1_websocket_acceptance.py:121: AssertionError
+____ test_critical_exception_scopes_are_clean_and_no_baseline_scope_grows _____
+
+    def test_critical_exception_scopes_are_clean_and_no_baseline_scope_grows():
+        completed = subprocess.run(
+            [sys.executable, "-m", "ruff", "check", "atlas", "--select", "BLE001,S110,S112",
+             "--ignore-noqa", "--output-format=json"],
+            cwd=ROOT, capture_output=True, text=True, timeout=30,
+        )
+        assert completed.returncode in (0, 1), completed.stderr
+        rows = json.loads(completed.stdout)
+        current = Counter(
+            (Path(row["filename"]).relative_to(ROOT).as_posix(), row["code"]) for row in rows
+        )
+        critical = {scope: count for scope, count in current.items() if CRITICAL.match(scope[0])}
+>       assert critical == {}, critical
+E       AssertionError: {('atlas/agent/__init__.py', 'BLE001'): 23, ('atlas/agent/delegation_output_schema.py', 'BLE001'): 1, ('atlas/agent/enrichment.py', 'BLE001'): 7, ('atlas/api/agent_router.py', 'BLE001'): 1, ...}
+E       assert {('atlas/agen...001'): 1, ...} == {}
+E         
+E         Left contains 18 more items:
+E         {('atlas/agent/__init__.py', 'BLE001'): 23,
+E          ('atlas/agent/delegation_output_schema.py', 'BLE001'): 1,
+E          ('atlas/agent/enrichment.py', 'BLE001'): 7,
+E          ('atlas/api/agent_router.py', 'BLE001'): 1,
+E          ('atlas/api/channel_router.py', 'BLE001'): 2,...
+E         
+E         ...Full output truncated (14 lines hidden), use '-vv' to show
+
+core\tests\test_lint_gate.py:32: AssertionError
+_ test_native_anthropic_route_preserves_cache_thinking_signature_and_tool_blocks _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E474F612B0>
+
+    async def test_native_anthropic_route_preserves_cache_thinking_signature_and_tool_blocks(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Round 1 returns a signed thinking block + tool_use; round 2 replays both verbatim.
+    
+        Messages use the OpenAI-internal shape the aux transport documents: signed
+        thinking rides the ``reasoning_details`` carrier, tools pair via
+        ``tool_calls`` + ``role: "tool"``, and caller-placed ``cache_control``
+        breakpoints survive conversion. The fake endpoint is a third-party host, so
+        the thinking policy is pinned to ``native`` exactly like a direct Anthropic
+        route.
+        """
+        monkeypatch.setattr(
+            "agent.anthropic_message_convert.anthropic_thinking_route",
+            lambda _base_url, _model: "native",
+        )
+        manager = FakeModelManager("native_only")
+        round_one_messages = [
+            {"role": "system", "content": "You are Atlas."},
+            {"role": "user", "content": "Lookup the thing.", "cache_control": {"type": "ephemeral"}},
+        ]
+        round_one_reply = AnthropicReply(blocks=[
+            {"type": "thinking", "thinking": "need the lookup tool", "signature": "sig_round1"},
+            {"type": "tool_use", "id": "tool_1", "name": "lookup", "input": {"q": "x"}},
+        ])
+        with FakeLLMServer(
+            [round_one_reply], default_text="native reply", api_key="sk-native-secret", anthropic_messages=True,
+        ) as server:
+            provider_base = server.base_url.replace("/v1", "/anthropic/v1")
+            manager.provider_config = lambda _provider: {  # type: ignore[method-assign]
+                "base_url": provider_base, "keys": [{"id": "native-key-1"}],
+            }
+            router = ModelRouter(manager)
+            route = await router.resolve("claude-sonnet-4", "conversation")
+            assert route.api_mode == "anthropic_messages"
+    
+            first = await router.complete(route, round_one_messages, max_tokens=64)
+            first_record = next(r for r in server.requests if r["kind"] == "anthropic")
+>           first_wire = first_record["body"]
+                   ^^^^^^^^^^^^^^^^^^
+E           KeyError: 'path'
+
+core\tests\test_model_router.py:198: KeyError
+______________________ test_routes_match_frozen_snapshot ______________________
+
+    def test_routes_match_frozen_snapshot() -> None:
+        expected = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+>       assert build_route_snapshot() == expected
+E       AssertionError: assert {'build': {'s...ject'}, ...}}} == {'build': {'s...ject'}, ...}}}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'components': {'schemas': {'AccountsPayload': {'properties': {'configs': {'additionalProperties': {...}, 'title': 'Co...'properties': {'cwd': {'anyOf': [...], 'title': 'Cwd'}}, 'title': 'AgentSessionStartRequest', 'type': 'object'}, ...}}} != {'components': {'schemas': {'AccountsPayload': {'properties': {'configs': {'additionalProperties': {...}, 'title': 'Co...'properties': {'cwd': {'anyOf': [...], 'title': 'Cwd'}}, 'title': 'AgentSessionStartRequest', 'type': 'object'}, ...}}}
+E         {'routes': [{'path': '/api/agent/...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+core\tests\test_route_snapshot.py:348: AssertionError
+_________________ test_bridge_targets_the_run_id_on_the_card __________________
+
+client = <httpx.AsyncClient object at 0x000001E477EDA690>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E47B5EF770>
+
+    async def test_bridge_targets_the_run_id_on_the_card(client: AsyncClient, monkeypatch) -> None:
+        calls: list[tuple[str, str]] = []
+        monkeypatch.setattr(x2_pending, "resolve",
+                            lambda run_id, value: calls.append((run_id, value)) or False)
+        monkeypatch.setattr(x2_pending, "cancel_run", lambda run_id: calls.append((run_id, "cancel")))
+    
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "n", "run_id": "run-spy"})
+
+core\tests\test_takeover_x2_bridge.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001E479E11F40>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+__________________ test_card_without_run_id_never_touches_x2 __________________
+
+client = <httpx.AsyncClient object at 0x000001E47A142510>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E47B5EEB30>
+
+    async def test_card_without_run_id_never_touches_x2(client: AsyncClient, monkeypatch) -> None:
+        # (f) legacy cards keep the old behavior: zero x2.pending interaction.
+        calls: list[tuple[str, str]] = []
+        monkeypatch.setattr(x2_pending, "resolve",
+                            lambda run_id, value: calls.append((run_id, value)) or False)
+        monkeypatch.setattr(x2_pending, "cancel_run", lambda run_id: calls.append((run_id, "cancel")))
+    
+>       opened = await client.post("/api/devices/handoff",
+                                   json={"action": "open", "note": "老式卡片，无 run"})
+
+core\tests\test_takeover_x2_bridge.py:193: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001E4030878B0>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+____________ test_done_resolution_resumes_the_blocked_original_run ____________
+
+client = <httpx.AsyncClient object at 0x000001E474C15910>
+
+    async def test_done_resolution_resumes_the_blocked_original_run(client: AsyncClient) -> None:
+        # (a) the fake original run blocks on its pending resolution, then resumes.
+        resumed: dict[str, str] = {}
+    
+        async def original_run() -> str:
+            value = await x2_pending.wait_for_resolution(
+                "run-bridge-1", "登录 2FA", ["done", "give_up"], timeout_seconds=10)
+            resumed["value"] = value
+            return "re-observed-and-resumed"  # the run continues past the block
+    
+        run_task = asyncio.create_task(original_run())
+        await wait_for(lambda: "run-bridge-1" in x2_pending.pending_runs())
+    
+        # (b) open the handoff card linked to the blocked run.
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "2FA 等人工", "run_id": "run-bridge-1"})
+
+core\tests\test_takeover_x2_bridge.py:116: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001E47DED2620>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_____________________ test_double_resolve_still_conflicts _____________________
+
+client = <httpx.AsyncClient object at 0x000001E47A140D10>
+
+    async def test_double_resolve_still_conflicts(client: AsyncClient) -> None:
+        # (f) the bridge must not change the card terminal-once rule.
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "n", "run_id": "run-double"})
+
+core\tests\test_takeover_x2_bridge.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001E47A354260>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+_______________ test_give_up_resolution_cancels_the_blocked_run _______________
+
+client = <httpx.AsyncClient object at 0x000001E474C15190>
+
+    async def test_give_up_resolution_cancels_the_blocked_run(client: AsyncClient) -> None:
+        # (d) second blocked run; give_up unwinds it with the GIVE_UP sentinel.
+        run_task = asyncio.create_task(x2_pending.wait_for_resolution(
+            "run-bridge-2", "页面卡死", ["done", "give_up"], timeout_seconds=10))
+        await wait_for(lambda: "run-bridge-2" in x2_pending.pending_runs())
+    
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "环境异常，放弃本次", "run_id": "run-bridge-2"})
+
+core\tests\test_takeover_x2_bridge.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001E47A356F10>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+___________ test_pending_side_failure_never_breaks_the_settled_card ___________
+
+client = <httpx.AsyncClient object at 0x000001E47A32D190>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E47A3E2580>
+
+    async def test_pending_side_failure_never_breaks_the_settled_card(
+            client: AsyncClient, monkeypatch) -> None:
+        def explode(run_id: str, value: str) -> bool:
+            raise RuntimeError("x2 registry exploded")
+    
+        monkeypatch.setattr(x2_pending, "resolve", explode)
+    
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "n", "run_id": "run-boom"})
+
+core\tests\test_takeover_x2_bridge.py:212: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001E47A464CB0>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+______________ test_resolve_card_with_no_pending_waiter_is_safe _______________
+
+client = <httpx.AsyncClient object at 0x000001E47A47C110>
+
+    async def test_resolve_card_with_no_pending_waiter_is_safe(client: AsyncClient) -> None:
+        # (e) card whose run_id has no live waiter: settles fine, resolve → False.
+>       opened = await client.post("/api/devices/handoff", json={
+            "action": "open", "note": "没人等这张卡", "run_id": "run-nobody"})
+
+core\tests\test_takeover_x2_bridge.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1780: in handle
+    await self.original_router.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:2789: in handle
+    await included_router._handle_selected(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1800: in _handle_selected
+    await original_route.handle(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:1279: in handle
+    await app(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+D:\Atlas\core\.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\routing.py:481: in app
+    solved_result = await solve_dependencies(
+D:\Atlas\core\.venv\Lib\site-packages\fastapi\dependencies\utils.py:676: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\to_thread.py:63: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2502: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+D:\Atlas\core\.venv\Lib\site-packages\anyio\_backends\_asyncio.py:986: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <starlette.requests.Request object at 0x000001E47A467D80>
+
+    def get_app_services(connection: HTTPConnection) -> AppServices:
+        """Resolve services from this request's app, never from a module singleton."""
+        services = getattr(connection.app.state, "services", None)
+        if not isinstance(services, AppServices):
+>           raise RuntimeError("FastAPI app is missing its AppServices container")
+E           RuntimeError: FastAPI app is missing its AppServices container
+
+core\atlas\api\dependencies.py:14: RuntimeError
+=========================== short test summary info ===========================
+FAILED core\tests\test_c6_main_chain.py::test_edit_review_fix_main_chain - As...
+FAILED core\tests\test_channels_manager.py::test_stable_run_resets_backoff_ladder
+FAILED core\tests\test_k1_daily_paths.py::test_daily_background_process_completion_notification
+FAILED core\tests\test_k1_daily_paths.py::test_daily_edit_diff_review_then_fix
+FAILED core\tests\test_k1_daily_paths.py::test_daily_long_task_compacts_then_continues
+FAILED core\tests\test_k1_daily_paths.py::test_daily_model_switch_mid_conversation
+FAILED core\tests\test_k1_daily_paths.py::test_daily_parallel_subagents_with_verifier_acceptance
+FAILED core\tests\test_k1_daily_paths.py::test_daily_permission_modes_gate_writes[ask_writes-allow-True]
+FAILED core\tests\test_k1_daily_paths.py::test_daily_permission_modes_gate_writes[ask_writes-deny-False]
+FAILED core\tests\test_k1_daily_paths.py::test_daily_permission_modes_gate_writes[read_only-None-False]
+FAILED core\tests\test_k1_daily_paths.py::test_daily_plan_mode_approve_then_execute
+FAILED core\tests\test_k1_daily_paths.py::test_daily_provider_faults_recover_gracefully
+FAILED core\tests\test_k1_daily_paths.py::test_daily_restart_preserves_conversations_settings_and_state
+FAILED core\tests\test_k1_daily_paths.py::test_daily_steer_queue_and_stop - A...
+FAILED core\tests\test_k1_daily_paths_x2x4x5.py::test_daily_browser_multistep
+FAILED core\tests\test_k1_daily_paths_x2x4x5.py::test_daily_computer_use_with_fake_driver
+FAILED core\tests\test_k1_daily_paths_x2x4x5.py::test_daily_recording_to_skill_and_replay
+FAILED core\tests\test_k1_daily_paths_x2x4x5.py::test_daily_skills_market_install_use_update_uninstall
+FAILED core\tests\test_lint_gate.py::test_critical_exception_scopes_are_clean_and_no_baseline_scope_grows
+FAILED core\tests\test_model_router.py::test_native_anthropic_route_preserves_cache_thinking_signature_and_tool_blocks
+FAILED core\tests\test_route_snapshot.py::test_routes_match_frozen_snapshot
+FAILED core\tests\test_takeover_x2_bridge.py::test_bridge_targets_the_run_id_on_the_card
+FAILED core\tests\test_takeover_x2_bridge.py::test_card_without_run_id_never_touches_x2
+FAILED core\tests\test_takeover_x2_bridge.py::test_done_resolution_resumes_the_blocked_original_run
+FAILED core\tests\test_takeover_x2_bridge.py::test_double_resolve_still_conflicts
+FAILED core\tests\test_takeover_x2_bridge.py::test_give_up_resolution_cancels_the_blocked_run
+FAILED core\tests\test_takeover_x2_bridge.py::test_pending_side_failure_never_breaks_the_settled_card
+FAILED core\tests\test_takeover_x2_bridge.py::test_resolve_card_with_no_pending_waiter_is_safe
+28 failed, 10 passed in 510.33s (0:08:30)
+
+real	8m36.427s
+user	0m0.046s
+sys	0m0.015s
+exit=1

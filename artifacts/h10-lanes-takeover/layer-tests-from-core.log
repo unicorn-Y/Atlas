@@ -1,0 +1,17 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0 -- D:\Atlas-h1-core-hardening\core\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: D:\Atlas-h1-core-hardening\core
+configfile: pyproject.toml
+plugins: rerunfailures-16.7, xdist-3.8.0, anyio-4.12.1, langsmith-0.14.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_pytest_layers.py::test_real_desktop_case_uses_desktop_lane_and_retries_once PASSED [ 16%]
+tests/test_pytest_layers.py::test_explicit_desktop_lane_also_retries_once PASSED [ 33%]
+tests/test_pytest_layers.py::test_unmarked_isolated_test_defaults_to_unit PASSED [ 50%]
+tests/test_pytest_layers.py::test_live_lane_is_skipped_without_explicit_opt_in PASSED [ 66%]
+tests/test_pytest_layers.py::test_live_lane_can_be_selected_with_opt_in PASSED [ 83%]
+tests/test_pytest_layers.py::test_cross_component_module_is_integration PASSED [100%]
+
+============================== 6 passed in 0.26s ==============================

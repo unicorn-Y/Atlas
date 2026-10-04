@@ -345,7 +345,7 @@ class ModelManager:
         try:
             self._credential_store().delete(self._keyring_account(pid, str(key_id)))
         except Exception as exc:  # 同上：凭据库失败不阻断元数据清理
-            log.warning("model_manager.keyring_delete_failed", provider=pid, key_id=key_id, error=str(exc))
+            log.warning("model_manager.keyring_delete_failed", provider=pid, key_id=key_id, error=str(exc), exc_info=True)
         entry["keys"] = remaining
         entry.pop("api_mode_probe", None)
         if not remaining and not entry.get("base_url"):
@@ -384,12 +384,12 @@ class ModelManager:
                 try:
                     store = self._credential_store()
                 except Exception as exc:
-                    log.warning("model_manager.keyring_unavailable", error=str(exc))
+                    log.warning("model_manager.keyring_unavailable", error=str(exc), exc_info=True)
                     return None
             try:
                 secret = store.get(self._keyring_account(pid, key_id))
             except Exception as exc:
-                log.warning("model_manager.keyring_read_failed", provider=pid, key_id=key_id, error=str(exc))
+                log.warning("model_manager.keyring_read_failed", provider=pid, key_id=key_id, error=str(exc), exc_info=True)
                 continue
             if secret:
                 return str(secret)
@@ -475,7 +475,7 @@ class ModelManager:
             try:
                 caps = _models_dev.get_model_capabilities(provider_pid, native, allow_network=False)
             except Exception as exc:
-                log.debug("model_manager.models_dev_lookup_failed", provider=provider_pid, error=str(exc))
+                log.debug("model_manager.models_dev_lookup_failed", provider=provider_pid, error=str(exc), exc_info=True)
                 caps = None
             if caps is not None:
                 merged = {
@@ -498,5 +498,5 @@ class ModelManager:
         try:
             return list(_reasoning_effort.route_supported_efforts(provider_pid, self._native_model_id(model)))
         except Exception as exc:
-            log.debug("model_manager.reasoning_efforts_failed", provider=provider_pid, error=str(exc))
+            log.debug("model_manager.reasoning_efforts_failed", provider=provider_pid, error=str(exc), exc_info=True)
             return None

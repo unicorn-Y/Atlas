@@ -166,6 +166,36 @@ def test_permission_defaults_and_binding_agent_overrides(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_gateway_crash_answers_channel_visibly_and_keeps_dispatching(tmp_path):
+    """A dispatcher-seam crash must surface as a visible in-channel failure
+    reply (not a swallowed log) and must not wedge the pipeline: the next
+    inbound event still dispatches normally."""
+    manager, bridge, runs, output, submitted = bridge_fixture(tmp_path)
+    try:
+        original_submit = bridge._submit_run
+
+        async def failing_submit(_conn, _data):
+            raise RuntimeError("注入的提交失败")
+
+        bridge._submit_run = failing_submit
+        await bridge.dispatch(event("第一次请求", "evt-crash"), None)
+        failures = [m for m in manager.sent if "任务执行失败" in m]
+        assert failures and "注入的提交失败" in failures[-1]
+
+        bridge._submit_run = original_submit
+        task = asyncio.create_task(bridge.dispatch(event("第二次请求", "evt-ok"), None))
+        await asyncio.wait_for(manager.approval_sent.wait(), 1)
+        assert "需要审批" in manager.sent[-1]
+        assert len(submitted) == 1  # only the recovered dispatch reached a run
+        run = next(iter(runs.values()))
+        run.approval_futures["write-1"].set_result("deny")
+        await asyncio.wait_for(task, 1)
+        assert not output.exists()
+    finally:
+        await close_fixture(manager, bridge)
+
+
+@pytest.mark.asyncio
 async def test_channel_delivery_failure_logs_and_emits_notice_without_stopping_run(
     tmp_path, caplog,
 ):

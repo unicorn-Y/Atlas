@@ -16,6 +16,7 @@ import getpass
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 from collections.abc import AsyncIterator
@@ -30,8 +31,28 @@ logger = logging.getLogger(__name__)
 
 # Keeps references to fire-and-forget lifecycle-hook futures dispatched from
 # the Hermes worker thread; without a strong reference the loop could collect
-# (and thereby cancel) them before they finish.
-_LIFECYCLE_FUTURES: list[Any] = []
+# (and thereby cancel) them before they finish. Completed futures are removed
+# by their done callback so the set cannot grow without bound (H3).
+_LIFECYCLE_FUTURES: set[Any] = set()
+
+# Process-wide cache for the once-per-config MCP registration (H3): the Hermes
+# MCP registry itself is process-global, so the fingerprint of the Atlas MCP
+# configuration is tracked at module scope. ``None`` means "never registered".
+_MCP_STATE_LOCK = threading.Lock()
+_MCP_STATE: tuple[str, tuple[str, ...]] | None = None
+
+
+def reset_runtime_registrations() -> None:
+    """Forget the cached MCP registration fingerprint (used by tests/startup)."""
+    global _MCP_STATE
+    with _MCP_STATE_LOCK:
+        _MCP_STATE = None
+
+
+def _track_lifecycle_future(future: Any) -> None:
+    """Retain a lifecycle future until it finishes, then drop the reference."""
+    _LIFECYCLE_FUTURES.add(future)
+    future.add_done_callback(_LIFECYCLE_FUTURES.discard)
 
 
 async def _fire_lifecycle_hook(
@@ -79,6 +100,131 @@ class HermesRuntime:
         self.model_manager = model_manager
         self.agent_factory = agent_factory
         self.reference_consult = reference_consult
+        # H3 per-session Hermes agent cache: conversation_id -> {"agent", "fingerprint",
+        # "last_used"}. One AIAgent per conversation across consecutive turns keeps the
+        # provider prompt cache warm; any constructor-relevant change rebuilds.
+        self._agent_cache: dict[str, dict[str, Any]] = {}
+        self._cache_limits_resolved: tuple[int, float] | None = None
+        self._close_tasks: set[asyncio.Task] = set()
+        # Conversations with a turn currently in flight: overlapping turns on one
+        # conversation keep the legacy fresh-agent behavior instead of sharing an agent.
+        self._active_sessions: set[str] = set()
+        self._hermes_home_ready = False
+        # HERMES_HOME is a process-level setting (H3): stamp it once here instead of
+        # mutating os.environ on every turn.
+        self._ensure_hermes_home()
+
+    def _ensure_hermes_home(self) -> None:
+        """Point HERMES_HOME at this runtime's engine home without per-turn rewrites.
+
+        The variable is written once per runtime instance; afterwards it is only
+        re-stamped when something else moved it (multi-runtime test processes),
+        never as a routine per-turn side effect.
+        """
+        if self._hermes_home_ready and os.environ.get("HERMES_HOME") == str(self.home):
+            return
+        self.home.mkdir(parents=True, exist_ok=True)
+        os.environ["HERMES_HOME"] = str(self.home)
+        self._hermes_home_ready = True
+
+    def _cache_limits(self) -> tuple[int, float]:
+        """(max cached agents, idle seconds) from Atlas config with H3 defaults."""
+        if self._cache_limits_resolved is None:
+            size, idle_seconds = 16, 1800.0
+            try:
+                from atlas.config import get_config
+
+                config = get_config()
+                size = int(config.get("agent.agent_cache_size", 16) or 16)
+                idle_seconds = float(config.get("agent.agent_cache_idle_seconds", 1800.0) or 0.0)
+            except Exception:  # noqa: BLE001 — cache sizing must never break a turn
+                pass
+            self._cache_limits_resolved = (max(1, size), max(0.0, idle_seconds))
+        return self._cache_limits_resolved
+
+    @staticmethod
+    def _agent_cache_fingerprint(
+        route_kwargs: dict[str, Any], hermes_cwd: str | None, enabled_toolsets: list[str],
+        fallback_model: Any, max_tokens: Any,
+    ) -> str:
+        """Constructor-relevant identity of a session agent (H3 invalidation key)."""
+        return json.dumps(
+            {
+                "route": route_kwargs, "cwd": hermes_cwd, "toolsets": enabled_toolsets,
+                "fallback": fallback_model, "max_tokens": max_tokens,
+            },
+            sort_keys=True, default=str,
+        )
+
+    def _sweep_idle_agents(self) -> None:
+        """Close agents idle beyond the configured timeout (lazy, event-driven sweep)."""
+        _, idle_seconds = self._cache_limits()
+        if idle_seconds <= 0 or not self._agent_cache:
+            return
+        now = time.monotonic()
+        idle = [
+            key for key, entry in self._agent_cache.items()
+            if now - float(entry["last_used"]) > idle_seconds
+        ]
+        for key in idle:
+            entry = self._agent_cache.pop(key, None)
+            if entry is not None:
+                self._close_agent_background(entry["agent"])
+
+    def _close_agent_background(self, agent: Any) -> None:
+        """Release an evicted/idle agent off the event loop, keeping the task referenced."""
+        task = asyncio.create_task(self._close_agent(agent))
+        self._close_tasks.add(task)
+        task.add_done_callback(self._close_tasks.discard)
+
+    @staticmethod
+    async def _close_agent(agent: Any) -> None:
+        close = getattr(agent, "close", None)
+        if not callable(close):
+            return
+        try:
+            await asyncio.to_thread(close)
+        except Exception:  # noqa: BLE001 — eviction cleanup must not break the turn
+            logger.warning("Closing cached Hermes agent failed", exc_info=True)
+
+    async def _store_session_agent(
+        self, conversation_id: str, agent: Any, fingerprint: str,
+    ) -> None:
+        """Cache a healthy session agent; enforce LRU size and close the overflow."""
+        self._sweep_idle_agents()
+        max_agents, _ = self._cache_limits()
+        self._agent_cache[conversation_id] = {
+            "agent": agent, "fingerprint": fingerprint, "last_used": time.monotonic(),
+        }
+        while len(self._agent_cache) > max_agents:
+            oldest_key = min(
+                self._agent_cache, key=lambda key: self._agent_cache[key]["last_used"],
+            )
+            entry = self._agent_cache.pop(oldest_key)
+            if entry["agent"] is not agent:
+                await self._close_agent(entry["agent"])
+
+    async def _release_session_agent(
+        self, conversation_id: str, agent: Any, *, cacheable: bool, fingerprint: str,
+    ) -> None:
+        """Cache a completed turn's agent, or close it when reuse is not allowed."""
+        if cacheable:
+            await self._store_session_agent(conversation_id, agent, fingerprint)
+            return
+        entry = self._agent_cache.get(conversation_id)
+        if entry is not None and entry["agent"] is agent:
+            self._agent_cache.pop(conversation_id, None)
+        await self._close_agent(agent)
+
+    async def aclose(self) -> None:
+        """Teardown seam: close every cached session agent and await pending closes."""
+        entries = list(self._agent_cache.values())
+        self._agent_cache.clear()
+        for entry in entries:
+            await self._close_agent(entry["agent"])
+        pending, self._close_tasks = set(self._close_tasks), set()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     async def _collect_moa_references(
         self, message: str, history: list[dict[str, Any]], system_message: str | None,
@@ -154,8 +300,9 @@ class HermesRuntime:
     def _agent_factory(self) -> Callable[..., Any]:
         if self.agent_factory is not None:
             return self.agent_factory
-        # HERMES_HOME must be set before importing modules that resolve its state root.
-        os.environ["HERMES_HOME"] = str(self.home)
+        # HERMES_HOME was stamped once at construction (__init__), before this
+        # first import of modules that resolve its state root (H3: no per-turn
+        # os.environ mutation).
         from run_agent import AIAgent
 
         return AIAgent
@@ -232,6 +379,46 @@ class HermesRuntime:
         toolsets = {f"mcp-{name}" for name in enabled_names}
         return sorted(toolsets)
 
+    def _ensure_atlas_mcp_registered(self) -> list[str]:
+        """Register MCP servers once per configuration; refresh incrementally on change.
+
+        Hermes' ``register_mcp_servers`` is idempotent for connected names and only
+        connects servers that are new (H3: registration moves off the per-turn path;
+        a changed [tools.servers]/[tools.auto_start] fingerprint re-runs it, letting
+        the fork reconnect just the differences).
+        """
+        from atlas.config import get_config
+
+        config = get_config()
+        fingerprint = json.dumps(
+            {
+                "servers": config.get("tools.servers", {}) or {},
+                "auto_start": sorted(str(item) for item in (config.get("tools.auto_start", []) or [])),
+            },
+            sort_keys=True, default=str,
+        )
+        global _MCP_STATE
+        with _MCP_STATE_LOCK:
+            state = _MCP_STATE
+            if state is not None and state[0] == fingerprint:
+                return list(state[1])
+        toolsets = tuple(self._register_atlas_mcp())
+        with _MCP_STATE_LOCK:
+            _MCP_STATE = (fingerprint, toolsets)
+        return list(toolsets)
+
+    def startup_registrations(self) -> list[str]:
+        """Run the once-per-process registrations (server startup seam, H3/H5/H8).
+
+        Installs the Atlas policy plugin and registers MCP servers a single time so
+        the first user turn does not pay for them. Safe to call repeatedly.
+        """
+        from atlas.engine.hermes_policy import install_atlas_policy_plugin
+
+        self._ensure_hermes_home()
+        install_atlas_policy_plugin()
+        return self._ensure_atlas_mcp_registered()
+
     @staticmethod
     def _apply_compression_model_setting(agent: Any, model_manager: Any) -> None:
         """Apply Atlas' optional compression model to Hermes' ContextCompressor.
@@ -293,8 +480,7 @@ class HermesRuntime:
         Hermes source: unicorn-Y/hermes-agent@562ad75baec0c8360f6ce2d48b7d9de56506956c
         compression_facade.py::_compress_context.
         """
-        self.home.mkdir(parents=True, exist_ok=True)
-        os.environ["HERMES_HOME"] = str(self.home)
+        self._ensure_hermes_home()
         settings = self.model_manager
         current = settings.current_model
         model_config = next(
@@ -443,7 +629,7 @@ class HermesRuntime:
                     _fire_lifecycle_hook(lifecycle_hook_callback, "PostCompact", payload),
                     loop,
                 )
-                _LIFECYCLE_FUTURES.append(future)
+                _track_lifecycle_future(future)
 
         def on_clarify(questions: Any) -> None:
             if input_callback is None:
@@ -595,6 +781,16 @@ class HermesRuntime:
         agent = None
         task: asyncio.Task[Any] | None = None
         terminal_scope_token = None
+        agent_fingerprint = ""
+        watchers: list[asyncio.Task] = []
+        notification_handle: tuple[asyncio.AbstractEventLoop, asyncio.Event] | None = None
+        turn_failed = False
+        stream_completed = False
+        # Overlapping turns on one conversation keep the legacy fresh-agent-per-turn
+        # behavior; only the owning turn may seed the session cache (H3).
+        session_overlapped = conversation_id in self._active_sessions
+        if not session_overlapped:
+            self._active_sessions.add(conversation_id)
         try:
             if moa_enabled:
                 consult_started = time.perf_counter()
@@ -615,8 +811,7 @@ class HermesRuntime:
                         "references": references,
                         "latency_ms": int((time.perf_counter() - consult_started) * 1000),
                     })
-            self.home.mkdir(parents=True, exist_ok=True)
-            os.environ["HERMES_HOME"] = str(self.home)
+            self._ensure_hermes_home()
             hermes_cwd = workspace
             if isinstance(workspace, str) and workspace.startswith("ssh://"):
                 from tools.terminal_scope import set_terminal_scope
@@ -630,7 +825,7 @@ class HermesRuntime:
 
                 install_atlas_policy_plugin()
                 bind_atlas_tools(atlas_agent, atlas_context, loop)
-            mcp_toolsets = self._register_atlas_mcp() if atlas_agent is not None else []
+            mcp_toolsets = self._ensure_atlas_mcp_registered() if atlas_agent is not None else []
             plan_mode = getattr(atlas_context, "mode", "act") == "plan"
             if plan_mode:
                 from agent.plan_prompt import build_plan_prompt
@@ -643,6 +838,16 @@ class HermesRuntime:
             stage_cfg = load_stage_config()
             phase = "planning" if (plan_mode or not history) else "execution"
             reasoning_effort = effort_for_phase(stage_cfg, phase) or reasoning_effort
+            resolved_toolsets = enabled_toolsets or [
+                "file", "terminal", "todo", "clarify", "code_execution",
+                "session_search", "delegation", "atlas",
+            ] + mcp_toolsets
+            resolved_max_tokens = max_output_tokens or model_config.get("max_output_tokens")
+            resolved_fallback = model_config.get("fallback")
+            agent_fingerprint = self._agent_cache_fingerprint(
+                route_kwargs, hermes_cwd, resolved_toolsets,
+                resolved_fallback, resolved_max_tokens,
+            )
             volatile_prompt = "\n\n".join(
                 str(section).strip() for section in (volatile_context or []) if str(section).strip()
             )
@@ -690,32 +895,54 @@ class HermesRuntime:
                 on_session_title=on_session_title,
                 system_prompt_suffix=system_prompt_suffix,
             )
-            agent = factory(
-                **route_kwargs,
-                session_id=conversation_id,
-                cwd=hermes_cwd,
-                skip_memory=True,
-                checkpoints_enabled=False,
-                enabled_toolsets=enabled_toolsets or [
-                    "file", "terminal", "todo", "clarify", "code_execution",
-                    "session_search", "delegation", "atlas",
-                ] + mcp_toolsets,
-                fallback_model=model_config.get("fallback"),
-                max_tokens=max_output_tokens or model_config.get("max_output_tokens"),
-                reasoning_config={"effort": reasoning_effort} if reasoning_effort else None,
-                stream_delta_callback=on_stream_delta,
-                reasoning_callback=lambda text: emit({"type": "thinking", "content": str(text)}),
-                tool_start_callback=atlas_or_native_mcp_tool_start,
-                tool_complete_callback=atlas_or_native_mcp_tool_complete,
-                clarify_callback=on_clarify,
-                status_callback=on_status,
-                event_callback=on_event,
-                hooks=hooks,
-                identity="You are Atlas, the AI assistant for this workspace.",
-            )
-            # Hermes' turn-context and iteration-prep hooks read these attributes
-            # directly to inject its one-shot time-budget reminder.
+            entry = None if session_overlapped else self._agent_cache.get(conversation_id)
+            if entry is not None and entry["fingerprint"] != agent_fingerprint:
+                # Model/toolset/workspace/plan-mode (or route credential) changed for
+                # this session: rebuild from scratch (H3 invalidation rule).
+                self._agent_cache.pop(conversation_id, None)
+                await self._close_agent(entry["agent"])
+                entry = None
+            if entry is not None:
+                # H3: consecutive turns of one session reuse the cached Hermes agent
+                # so the provider-side prompt cache stays warm across turns.
+                agent = entry["agent"]
+                entry["last_used"] = time.monotonic()
+            else:
+                agent = factory(
+                    **route_kwargs,
+                    session_id=conversation_id,
+                    cwd=hermes_cwd,
+                    skip_memory=True,
+                    checkpoints_enabled=False,
+                    enabled_toolsets=resolved_toolsets,
+                    fallback_model=resolved_fallback,
+                    max_tokens=resolved_max_tokens,
+                    reasoning_config={"effort": reasoning_effort} if reasoning_effort else None,
+                    stream_delta_callback=on_stream_delta,
+                    reasoning_callback=lambda text: emit({"type": "thinking", "content": str(text)}),
+                    tool_start_callback=atlas_or_native_mcp_tool_start,
+                    tool_complete_callback=atlas_or_native_mcp_tool_complete,
+                    clarify_callback=on_clarify,
+                    status_callback=on_status,
+                    event_callback=on_event,
+                    hooks=hooks,
+                    identity="You are Atlas, the AI assistant for this workspace.",
+                )
+            # Turn-scoped rebind (applies equally to a fresh or a reused agent):
+            # callbacks, hooks and run limits are per-turn Atlas closures bound to
+            # this turn's queue/loop; every target is a public Hermes attribute.
             agent.run_budget_seconds = run_budget_seconds
+            agent.budget_warning_ratio = budget_warning_ratio
+            agent.hooks = hooks
+            agent.stream_delta_callback = on_stream_delta
+            agent.reasoning_callback = lambda text: emit({"type": "thinking", "content": str(text)})
+            agent.tool_start_callback = atlas_or_native_mcp_tool_start
+            agent.tool_complete_callback = atlas_or_native_mcp_tool_complete
+            agent.clarify_callback = on_clarify
+            agent.status_callback = on_status
+            agent.event_callback = on_event
+            agent.max_tokens = resolved_max_tokens
+            agent.reasoning_config = {"effort": reasoning_effort} if reasoning_effort else None
             if atlas_agent is not None:
                 atlas_context.hermes_agent = agent
                 async def create_context_handoff() -> str:
@@ -829,67 +1056,110 @@ class HermesRuntime:
                     loop.call_soon_threadsafe(queue.put_nowait, _DONE)
 
             task = asyncio.create_task(asyncio.to_thread(run_sync))
-            last_notification_poll = 0.0
-            while True:
-                now = loop.time()
-                if atlas_agent is not None and now - last_notification_poll >= 0.25:
-                    last_notification_poll = now
-                    try:
-                        from atlas.engine.notifications import consume_notifications
 
-                        notices = await consume_notifications(conversation_id)
-                    except Exception as exc:
-                        notices = []
-                        emit({"type": "run.recovery.notice", "data": {
-                            "message": "后台通知读取失败。", "detail": str(exc),
-                        }})
-                    for notice in notices:
-                        content = str(notice.get("content") or "").strip()
-                        if content:
-                            agent.steer("后台通知（" + str(notice.get("kind") or "").strip()
-                                        + "）：\n" + content)
+            def drain_process_inbox() -> None:
                 inbox = getattr(atlas_context, "process_notifications", None)
                 if inbox is not None:
                     while not inbox.empty():
                         inbox.get_nowait()
-                if cancel_event is not None and cancel_event.is_set() and not task.done():
-                    agent.interrupt(hard_cancel=True)
-                if steer_queue is not None:
-                    from atlas.engine.steer_dispatch import apply_steer_payload
 
+            drain_process_inbox()
+
+            if cancel_event is not None:
+                async def cancel_watcher() -> None:
+                    await cancel_event.wait()
+                    if agent is not None and not task.done():
+                        agent.interrupt(hard_cancel=True)
+
+                watchers.append(asyncio.create_task(cancel_watcher()))
+            if steer_queue is not None:
+                from atlas.engine.steer_dispatch import apply_steer_payload
+
+                async def steer_feeder() -> None:
                     while True:
-                        try:
-                            steer = steer_queue.get_nowait()
-                        except asyncio.QueueEmpty:
-                            break
+                        steer = await steer_queue.get()
                         outcome = apply_steer_payload(agent, steer)
                         if outcome["accepted"]:
                             # send_now: the running tool was asked to yield to the
                             # background registry; the message rides the steer drain
                             # onto the next model turn either way.
-                            yield {"type": "run_steered", "content": outcome["text"],
-                                   "event_id": steer.get("event_id", ""),
-                                   "immediate": outcome["immediate"],
-                                   "send_now": outcome["send_now"],
-                                   "yield_requested": outcome["yield_requested"]}
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=0.05)
-                except TimeoutError:
-                    continue
+                            queue.put_nowait({
+                                "_atlas_control": True,
+                                "event": {
+                                    "type": "run_steered", "content": outcome["text"],
+                                    "event_id": steer.get("event_id", ""),
+                                    "immediate": outcome["immediate"],
+                                    "send_now": outcome["send_now"],
+                                    "yield_requested": outcome["yield_requested"],
+                                },
+                            })
+
+                watchers.append(asyncio.create_task(steer_feeder()))
+            if atlas_agent is not None:
+                from atlas.engine.notifications import subscribe_notifications
+
+                notification_handle = subscribe_notifications(conversation_id)
+
+                async def notification_watcher() -> None:
+                    from atlas.engine.notifications import consume_notifications
+
+                    while True:
+                        await notification_handle[1].wait()
+                        notification_handle[1].clear()
+                        try:
+                            notices = await consume_notifications(conversation_id)
+                        except Exception as exc:
+                            emit({"type": "run.recovery.notice", "data": {
+                                "message": "后台通知读取失败。", "detail": str(exc),
+                            }})
+                            continue
+                        steer = getattr(agent, "steer", None)
+                        for notice in notices:
+                            content = str(notice.get("content") or "").strip()
+                            if content and callable(steer):
+                                steer("后台通知（" + str(notice.get("kind") or "").strip()
+                                      + "）：\n" + content)
+                        drain_process_inbox()
+
+                watchers.append(asyncio.create_task(notification_watcher()))
+
+            # H3: the consumer blocks directly on the queue; cancellation, steering
+            # and notifications are delivered by watcher tasks, so a waiting model
+            # call no longer wakes the loop on a 50ms/250ms timer.
+            while True:
+                event = await queue.get()
                 if event is _DONE:
                     break
+                if isinstance(event, dict) and event.get("_atlas_control"):
+                    yield event["event"]
+                    continue
                 yield event
             result = await task
             if not isinstance(result, dict):
                 result = {"final_response": str(result or ""), "messages": []}
             yield {"type": "hermes.result", "result": result}
+            stream_completed = True
+        except BaseException:
+            turn_failed = True
+            raise
         finally:
             if terminal_scope_token is not None:
                 from tools.terminal_scope import reset_terminal_scope
 
                 reset_terminal_scope(terminal_scope_token)
+            for watcher in watchers:
+                watcher.cancel()
+            if watchers:
+                await asyncio.gather(*watchers, return_exceptions=True)
+            if notification_handle is not None:
+                from atlas.engine.notifications import unsubscribe_notifications
+
+                unsubscribe_notifications(conversation_id, notification_handle)
             if task is not None:
                 await asyncio.gather(task, return_exceptions=True)
-            close = getattr(agent, "close", None) if agent is not None else None
-            if callable(close):
-                await asyncio.to_thread(close)
+            if agent is not None:
+                cacheable = stream_completed and not turn_failed and not session_overlapped
+                await self._release_session_agent(
+                    conversation_id, agent, cacheable=cacheable, fingerprint=agent_fingerprint,
+                )
+            self._active_sessions.discard(conversation_id)

@@ -113,7 +113,22 @@ class Raw:
     content_type: str = "application/json"
 
 
-Response = Union[Text, ToolCall, Error, Hang, DropMidStream, StallMidStream, Raw]
+@dataclass
+class AnthropicReply:
+    """Scripted Anthropic Messages content blocks, streamed as SSE on /v1/messages.
+
+    ``blocks`` are wire-shape content blocks (``text`` / ``thinking`` with a
+    ``signature`` / ``redacted_thinking`` / ``tool_use``), so a test can drive
+    signed-thinking and tool_use round-trips through the real SDK client stack.
+    """
+
+    blocks: list[dict[str, Any]] = field(default_factory=list)
+    input_tokens: int = 16
+    output_tokens: int = 3
+    stop_reason: str = "end_turn"
+
+
+Response = Union[Text, ToolCall, Error, Hang, DropMidStream, StallMidStream, Raw, AnthropicReply]
 Responder = Callable[[dict[str, Any]], Response]
 
 
@@ -295,6 +310,9 @@ def _handler_for(server: FakeLLMServer) -> type[BaseHTTPRequestHandler]:
                     self.end_headers()
                     self.wfile.write(raw_response)
                     return
+                if isinstance(response, AnthropicReply):
+                    self._send_anthropic_reply(response, body)
+                    return
                 text = response.text if isinstance(response, Text) else ""
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -432,6 +450,51 @@ def _handler_for(server: FakeLLMServer) -> type[BaseHTTPRequestHandler]:
         def _sse(self, payload: dict[str, Any]) -> None:
             self.wfile.write(f"data: {json.dumps(payload)}\n\n".encode())
             self.wfile.flush()
+
+        def _send_anthropic_reply(self, reply: AnthropicReply, request_body: dict[str, Any]) -> None:
+            self._start_sse()
+            events: list[tuple[str, dict[str, Any]]] = [
+                ("message_start", {"type": "message_start", "message": {
+                    "id": "msg_fake", "type": "message", "role": "assistant",
+                    "model": request_body.get("model", "fake-model"), "content": [],
+                    "stop_reason": None, "stop_sequence": None,
+                    "usage": {"input_tokens": reply.input_tokens, "output_tokens": 0},
+                }}),
+            ]
+            for index, block in enumerate(reply.blocks):
+                kind = block.get("type")
+                if kind == "text":
+                    start = {"type": "text", "text": ""}
+                    delta = {"type": "text_delta", "text": str(block.get("text", ""))}
+                elif kind == "thinking":
+                    start = {"type": "thinking", "thinking": ""}
+                    delta = {"type": "thinking_delta", "thinking": str(block.get("thinking", ""))}
+                elif kind == "redacted_thinking":
+                    start = {"type": "redacted_thinking", "data": block.get("data", "")}
+                    delta = None
+                elif kind == "tool_use":
+                    start = {"type": "tool_use", "id": block.get("id", ""), "name": block.get("name", ""), "input": {}}
+                    delta = {"type": "input_json_delta", "partial_json": json.dumps(block.get("input", {}))}
+                else:  # unknown block type: pass through verbatim, no delta
+                    start = dict(block)
+                    delta = None
+                self._sse_pair(events, index, start, delta)
+            events.append(("message_delta", {"type": "message_delta",
+                                              "delta": {"stop_reason": reply.stop_reason, "stop_sequence": None},
+                                              "usage": {"output_tokens": reply.output_tokens}}))
+            events.append(("message_stop", {"type": "message_stop"}))
+            for event, payload in events:
+                self.wfile.write(f"event: {event}\ndata: {json.dumps(payload)}\n\n".encode())
+            self.wfile.flush()
+            self.close_connection = True
+
+        def _sse_pair(self, events, index, start, delta) -> None:
+            events.append(("content_block_start", {"type": "content_block_start", "index": index,
+                                                    "content_block": start}))
+            if delta is not None:
+                events.append(("content_block_delta", {"type": "content_block_delta", "index": index,
+                                                        "delta": delta}))
+            events.append(("content_block_stop", {"type": "content_block_stop", "index": index}))
 
     return Handler
 

@@ -279,6 +279,7 @@ def _cfg_get(*keys: str, default: Any, config: Optional[Dict[str, Any]] = None) 
                 return default
         return node
     except Exception:
+        logger.debug("models_dev.cfg_get failed for keys %s", keys, exc_info=True)
         return default
 
 
@@ -302,7 +303,7 @@ def _quietly(what: str, fn, default=None):
     try:
         return fn()
     except Exception as e:
-        logger.debug("Failed to %s: %s", what, e)
+        logger.debug("Failed to %s: %s", what, e, exc_info=True)
         return default
 
 
@@ -348,7 +349,7 @@ def _load_disk_cache() -> Dict[str, Any]:
             logger.warning("models.dev disk cache is corrupt or empty; quarantining (will refetch from network)")
             _quarantine_corrupt_cache(cache_path)
     except Exception as e:
-        logger.warning("Failed to load models.dev disk cache; quarantining: %s", e)
+        logger.warning("Failed to load models.dev disk cache; quarantining: %s", e, exc_info=True)
         with contextlib.suppress(Exception):
             _quarantine_corrupt_cache(_get_cache_path())
     return {}
@@ -361,7 +362,7 @@ def _quarantine_corrupt_cache(cache_path: Path) -> None:
     try:
         cache_path.rename(cache_path.with_suffix(".json.corrupt"))
     except Exception as e:
-        logger.debug("Could not quarantine corrupt models.dev cache: %s", e)
+        logger.debug("Could not quarantine corrupt models.dev cache: %s", e, exc_info=True)
     _clear_etag()
 
 
@@ -472,6 +473,7 @@ def _refresh_locked(where: str) -> Optional[Dict[str, Any]]:
         _confirm_cache_not_modified(where=where)
         return _models_dev_cache
     except Exception as e:
+        logger.debug("models.dev refresh failed (%s)", where, exc_info=True)
         _note_refresh_failure(e, where=where)
         return None
 
@@ -506,7 +508,7 @@ def _start_background_refresh_models_dev() -> None:
         # Thread/fd exhaustion: clear the flag so refresh isn't disabled for the rest of the process.
         with _models_dev_refresh_lock:
             _models_dev_refresh_in_flight = False
-        logger.debug("Failed to start models.dev refresh thread: %s", e)
+        logger.debug("Failed to start models.dev refresh thread: %s", e, exc_info=True)
 
 
 def fetch_models_dev(force_refresh: bool = False, *, allow_network: bool = True) -> Dict[str, Any]:

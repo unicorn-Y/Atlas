@@ -12,6 +12,46 @@ from typing import Any
 
 _lock = threading.Lock()
 
+# H3 event bridge: conversation_id -> {(loop, event)} registered by in-flight
+# turns. ``publish_notification`` wakes these waiters so a running turn consumes
+# its notifications immediately instead of polling the inbox on a timer.
+_waiters_lock = threading.Lock()
+_waiters: dict[str, set[tuple[asyncio.AbstractEventLoop, asyncio.Event]]] = {}
+
+
+def subscribe_notifications(
+    conversation_id: str,
+) -> tuple[asyncio.AbstractEventLoop, asyncio.Event]:
+    """Register an asyncio.Event woken by new notifications for this conversation."""
+    loop = asyncio.get_running_loop()
+    event = asyncio.Event()
+    with _waiters_lock:
+        _waiters.setdefault(conversation_id, set()).add((loop, event))
+    return loop, event
+
+
+def unsubscribe_notifications(
+    conversation_id: str,
+    handle: tuple[asyncio.AbstractEventLoop, asyncio.Event],
+) -> None:
+    """Remove a subscription created by :func:`subscribe_notifications`."""
+    with _waiters_lock:
+        waiters = _waiters.get(conversation_id)
+        if waiters:
+            waiters.discard(handle)
+            if not waiters:
+                _waiters.pop(conversation_id, None)
+
+
+def _wake_notification_waiters(conversation_id: str) -> None:
+    with _waiters_lock:
+        waiters = list(_waiters.get(conversation_id, ()))
+    for loop, event in waiters:
+        try:
+            loop.call_soon_threadsafe(event.set)
+        except RuntimeError:  # loop already closed: the waiter is gone
+            continue
+
 
 def _database_path() -> Path:
     from atlas.config import get_config
@@ -72,6 +112,7 @@ def publish_notification(
             (notification_id, conversation_id, source_id, kind, content, created_at),
         )
         db.commit()
+    _wake_notification_waiters(conversation_id)
     return notification_id
 
 

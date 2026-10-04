@@ -331,6 +331,80 @@ async def test_send_test_message_uses_test_metadata(tmp_path):
     assert adapter.sent[0][2] == {"test": True}
 
 
+# --- H6: delivery failures stay visible and never kill the pump ---------------------
+
+
+@pytest.mark.asyncio
+async def test_delivery_pump_survives_queue_failure_and_keeps_delivering(
+    tmp_path, caplog,
+):
+    """A crashed cycle in the delivery pump used to strand every queued reply
+    silently; now the exception is logged and the next interval recovers."""
+    import logging
+
+    manager = make_manager(tmp_path)
+    await manager.start()
+    assert await wait_for(lambda: "fake" in manager.adapters)
+    adapter = manager.adapters["fake"]
+    original_claim = manager.delivery.claim_due
+    calls = {"n": 0}
+
+    def failing_claim(*args, **kwargs):
+        calls["n"] += 1
+        raise RuntimeError("injected queue failure")
+
+    with caplog.at_level(logging.ERROR):
+        manager.delivery.claim_due = failing_claim  # type: ignore[method-assign]
+        await manager.send("fake", "100", "泵崩溃前入队")
+        assert await wait_for(lambda: calls["n"] >= 1)
+        assert "injected queue failure" in caplog.text
+
+        manager.delivery.claim_due = original_claim
+        await manager.send("fake", "100", "泵恢复后的信")
+        assert await wait_for(
+            lambda: any("泵恢复后的信" in item[1] for item in adapter.sent), timeout=2.0,
+        )
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_delivery_failure_notice_handler_error_does_not_break_pump(
+    tmp_path, caplog,
+):
+    """The recovery-notice handler itself failing is logged; the delivery loop
+    keeps running and later messages still reach the channel."""
+    import logging
+
+    manager = make_manager(tmp_path)
+
+    async def broken_handler(record, message):
+        raise RuntimeError("notice handler exploded")
+
+    manager.set_delivery_failure_handler(broken_handler)
+    await manager.start()
+    assert await wait_for(lambda: "fake" in manager.adapters)
+    adapter = manager.adapters["fake"]
+    healthy = adapter
+
+    async def failing_send(*args, **kwargs):
+        raise RuntimeError("injected channel send failure")
+
+    with caplog.at_level(logging.ERROR):
+        healthy.send = failing_send  # type: ignore[method-assign]
+        await manager.send("fake", "100", "必失败的一封")
+        assert await wait_for(
+            lambda: "渠道发送失败通知未送达" in caplog.text
+            or "notice handler exploded" in caplog.text,
+        )
+        # The pump is still alive: a healthy adapter receives the next message.
+        del healthy.send  # restore the real bound method
+        await manager.send("fake", "100", "恢复后的一封")
+        assert await wait_for(
+            lambda: any("恢复后的一封" in item[1] for item in healthy.sent), timeout=2.0,
+        )
+    await manager.stop()
+
+
 # --- webhook ingress --------------------------------------------------------------------
 
 

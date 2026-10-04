@@ -198,6 +198,7 @@ class TestWave7WorkspaceOrchestration:
         execute = AsyncMock()
         monkeypatch.setattr(server, "runtime_mgr", restarted_again)
         monkeypatch.setattr(server, "model_mgr", SimpleNamespace(current_model="test-model"))
+        server.app.state.services.model_mgr = SimpleNamespace(current_model="test-model")
         monkeypatch.setattr(server, "_execute_run", execute)
         try:
             await server._handle_run_start("recovery-connection", {
@@ -241,6 +242,7 @@ class TestWave7WorkspaceOrchestration:
         execute = AsyncMock()
         monkeypatch.setattr(server, "runtime_mgr", recovered)
         monkeypatch.setattr(server, "model_mgr", SimpleNamespace(current_model="test-model"))
+        server.app.state.services.model_mgr = SimpleNamespace(current_model="test-model")
         monkeypatch.setattr(server, "_execute_run", execute)
         try:
             await server._handle_run_start("resume-connection", {
@@ -568,7 +570,7 @@ class TestFacts:
         await original_memory.close()
         isolated_memory = MemoryStore(db_path=tmp_path / "candidate-review.db")
         await isolated_memory.init()
-        server.memory = isolated_memory
+        server.memory = app.state.services.memory = isolated_memory
         try:
             conversation_id = await isolated_memory.create_conversation()
             await isolated_memory.save_message(
@@ -592,7 +594,7 @@ class TestFacts:
             assert await isolated_memory.get_fact("user_preference") == "concise answers"
         finally:
             await isolated_memory.close()
-            server.memory = original_memory
+            server.memory = app.state.services.memory = original_memory
 
     async def test_memory_maturity_reports_are_readable_through_api(
         self, client: AsyncClient, tmp_path
@@ -601,7 +603,7 @@ class TestFacts:
         await original_memory.close()
         isolated_memory = MemoryStore(db_path=tmp_path / "maturity-reports.db")
         await isolated_memory.init()
-        server.memory = isolated_memory
+        server.memory = app.state.services.memory = isolated_memory
         try:
             await isolated_memory.set_fact("user_preference", "concise answers")
 
@@ -616,7 +618,7 @@ class TestFacts:
             assert await isolated_memory.get_fact("user_preference") == "concise answers"
         finally:
             await isolated_memory.close()
-            server.memory = original_memory
+            server.memory = app.state.services.memory = original_memory
 
     async def test_memory_self_steering_reports_are_readable_through_api(
         self, client: AsyncClient, tmp_path
@@ -625,7 +627,7 @@ class TestFacts:
         await original_memory.close()
         isolated_memory = MemoryStore(db_path=tmp_path / "self-steering-reports.db")
         await isolated_memory.init()
-        server.memory = isolated_memory
+        server.memory = app.state.services.memory = isolated_memory
         try:
             await isolated_memory.set_fact("user_preference", "concise answers")
 
@@ -643,7 +645,7 @@ class TestFacts:
             assert await isolated_memory.get_fact("user_preference") == "concise answers"
         finally:
             await isolated_memory.close()
-            server.memory = original_memory
+            server.memory = app.state.services.memory = original_memory
 
     async def test_memory_optimization_candidates_require_api_approval(
         self, client: AsyncClient, tmp_path,
@@ -652,7 +654,7 @@ class TestFacts:
         await original_memory.close()
         isolated_memory = MemoryStore(db_path=tmp_path / "optimization-candidates.db")
         await isolated_memory.init()
-        server.memory = isolated_memory
+        server.memory = app.state.services.memory = isolated_memory
         try:
             await isolated_memory.set_fact("user_preference", "concise answers")
             report = await client.post("/api/memory/self-steering-reports")
@@ -687,7 +689,7 @@ class TestFacts:
             assert listed.json()[0]["review_history"][0]["decision"] == "approved"
         finally:
             await isolated_memory.close()
-            server.memory = original_memory
+            server.memory = app.state.services.memory = original_memory
 
     async def test_memory_consolidation_proposals_require_approved_candidates(
         self, client: AsyncClient, tmp_path,
@@ -696,7 +698,7 @@ class TestFacts:
         await original_memory.close()
         isolated_memory = MemoryStore(db_path=tmp_path / "consolidation-proposals.db")
         await isolated_memory.init()
-        server.memory = isolated_memory
+        server.memory = app.state.services.memory = isolated_memory
         try:
             await isolated_memory.set_fact("user_preference", "concise answers")
             original_fact = await isolated_memory.get_fact("user_preference")
@@ -834,7 +836,7 @@ class TestFacts:
             assert await isolated_memory.get_fact("user_preference") == original_fact
         finally:
             await isolated_memory.close()
-            server.memory = original_memory
+            server.memory = app.state.services.memory = original_memory
 
     async def test_goal_experience_requires_explicit_api_approval(
         self, client: AsyncClient, tmp_path,
@@ -843,7 +845,7 @@ class TestFacts:
         await original_memory.close()
         isolated_memory = MemoryStore(db_path=tmp_path / "goal-outcomes.db")
         await isolated_memory.init()
-        server.memory = isolated_memory
+        server.memory = app.state.services.memory = isolated_memory
         try:
             outcome_id = await isolated_memory.record_goal_outcome(
                 goal_id="weekly-review",
@@ -885,7 +887,7 @@ class TestFacts:
             assert knowledge["approval_status"] == "approved"
         finally:
             await isolated_memory.close()
-            server.memory = original_memory
+            server.memory = app.state.services.memory = original_memory
 
     async def test_goal_knowledge_proposal_api_requires_explicit_approval(
         self, client: AsyncClient, tmp_path,
@@ -894,7 +896,7 @@ class TestFacts:
         await original_memory.close()
         isolated_memory = MemoryStore(db_path=tmp_path / "goal-knowledge-proposals.db")
         await isolated_memory.init()
-        server.memory = isolated_memory
+        server.memory = app.state.services.memory = isolated_memory
         try:
             source_outcome_id = await isolated_memory.record_goal_outcome(
                 goal_id="migration-review",
@@ -1028,7 +1030,7 @@ class TestFacts:
             assert recommendation["id"] == evolution_decision["recommendation_id"]
         finally:
             await isolated_memory.close()
-            server.memory = original_memory
+            server.memory = app.state.services.memory = original_memory
 
 
 # ---------------------------------------------------------------------------
@@ -1061,6 +1063,7 @@ class TestMCPServerManagement:
         )
         mcp._tool_index[tool.qualified_name] = tool
         monkeypatch.setattr(server, "mcp_client", mcp)
+        server.app.state.services.mcp_client = mcp
 
         resp = await client.get("/api/tools")
 
@@ -1118,8 +1121,12 @@ class TestMCPServerManagement:
                     "blocking_reason": "Node runtime unavailable",
                 }]}
 
-        monkeypatch.setattr(server, "skill_registry", Registry())
-        monkeypatch.setattr(server, "mcp_client", Runtime())
+        registry, runtime = Registry(), Runtime()
+        monkeypatch.setattr(server, "skill_registry", registry)
+        monkeypatch.setattr(server, "mcp_client", runtime)
+        services = server.app.state.services
+        original_registry, original_mcp = services.skill_registry, services.mcp_client
+        services.skill_registry, services.mcp_client = registry, runtime
         monkeypatch.setattr(
             "atlas.skills.dependencies._installed_package_version",
             lambda name: {"present": "2.5.0", "old": "2.5.0"}.get(name),
@@ -1147,6 +1154,7 @@ class TestMCPServerManagement:
         assert {item["state"] for item in report["skills"][0]["blocking"]} == {
             "missing", "incompatible", "unknown",
         }
+        services.skill_registry, services.mcp_client = original_registry, original_mcp
 
 
 # ---------------------------------------------------------------------------
@@ -1252,7 +1260,9 @@ class TestWebSocketProtocol:
             save_message=AsyncMock(side_effect=OSError("database unavailable"))
         )
         monkeypatch.setattr(server, "memory", memory_mock)
+        server.app.state.services.memory = memory_mock
         monkeypatch.setattr(server, "orchestrator", SimpleNamespace())
+        server.app.state.services.orchestrator = SimpleNamespace()
         monkeypatch.setitem(server.runtime_mgr.connections, conn_id, socket)
 
         try:
@@ -1295,7 +1305,9 @@ class TestWebSocketProtocol:
             mark_agent_reflections_recovered=AsyncMock(),
         )
         monkeypatch.setattr(server, "memory", memory_mock)
+        server.app.state.services.memory = memory_mock
         monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=events))
+        server.app.state.services.orchestrator = SimpleNamespace(run=events)
         monkeypatch.setitem(server.runtime_mgr.connections, conn_id, socket)
 
         try:
@@ -1341,7 +1353,9 @@ class TestWebSocketProtocol:
         )
         run = server.RunState("clean-run", "conv-clean", "test-model")
         monkeypatch.setattr(server, "memory", memory_mock)
+        server.app.state.services.memory = memory_mock
         monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=events))
+        server.app.state.services.orchestrator = SimpleNamespace(run=events)
 
         await server._execute_run("clean-connection", run, "hello", None)
 
@@ -1368,6 +1382,7 @@ class TestWebSocketProtocol:
             mark_agent_reflections_recovered=AsyncMock(),
         )
         monkeypatch.setattr(server, "memory", memory_mock)
+        server.app.state.services.memory = memory_mock
 
         for category in ("model", "runtime"):
             socket = Socket()
@@ -1383,6 +1398,8 @@ class TestWebSocketProtocol:
                     yield  # Make this an async generator.
 
             monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=events))
+
+            server.app.state.services.orchestrator = SimpleNamespace(run=events)
             monkeypatch.setitem(server.runtime_mgr.connections, conn_id, socket)
             try:
                 await server._execute_run(conn_id, run, "perform work", None)
@@ -1413,6 +1430,7 @@ class TestWebSocketProtocol:
         # Use sync TestClient for WebSocket (starlette limitation)
         with TestClient(_app) as tc:
             monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=fake_run))
+            server.app.state.services.orchestrator = SimpleNamespace(run=fake_run)
             with tc.websocket_connect("/ws/chat") as ws:
                 ws.send_text(_json.dumps({
                     "type": "run.start",
@@ -1491,6 +1509,7 @@ class TestWebSocketProtocol:
 
         execute = AsyncMock(side_effect=blocked_run)
         monkeypatch.setattr(server, "model_mgr", SimpleNamespace(current_model="test-model"))
+        server.app.state.services.model_mgr = SimpleNamespace(current_model="test-model")
         monkeypatch.setattr(server, "_execute_run", execute)
 
         try:
@@ -1542,7 +1561,9 @@ class TestBackendParityWave1:
             mark_agent_reflections_recovered=AsyncMock(),
         )
         monkeypatch.setattr(server, "memory", memory_mock)
+        server.app.state.services.memory = memory_mock
         monkeypatch.setattr(server, "orchestrator", SimpleNamespace(run=ask_then_finish))
+        server.app.state.services.orchestrator = SimpleNamespace(run=ask_then_finish)
         monkeypatch.setitem(server.runtime_mgr.connections, "ask-user-conn", socket)
         monkeypatch.setitem(server.runtime_mgr.runs, run.run_id, run)
         task = asyncio.create_task(server._execute_run(
@@ -1758,6 +1779,7 @@ class TestBackendParityWave1:
         server._set_workspace_trusted(str(workspace), True)
         conv_id = await server.memory.create_conversation("Workspace session")
         monkeypatch.setattr(server, "model_mgr", SimpleNamespace(current_model="test-model"))
+        server.app.state.services.model_mgr = SimpleNamespace(current_model="test-model")
         async def do_nothing(*args, **kwargs): return None
         monkeypatch.setattr(server, "_execute_run", do_nothing)
         run_id = "workspace-run-test"

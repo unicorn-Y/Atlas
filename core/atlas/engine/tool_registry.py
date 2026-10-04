@@ -396,7 +396,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     if lsp_pre is not _LSP_SKIP:
                         result = _lsp_attach_report(bound_runtime, bound_loop, args, lsp_pre, result)
                     return _append_repetition_reminder(bound_runtime, _name, args, str(result)) if isinstance(result, str) else result
-                tool_name, tool_args = _translate(_name, args)
+                tool_name, tool_args = _translate(_name, args, bound_runtime)
                 if tool_name in {"local_shell", "local_exec", "local_process"}:
                     starts_process = (
                         tool_name != "local_process"
@@ -522,7 +522,16 @@ def clear_atlas_tool_context() -> None:
             delattr(_context, name)
 
 
-def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+def _translate(
+    name: str, arguments: dict[str, Any], runtime: Any = None,
+) -> tuple[str, dict[str, Any]]:
+    """Translate a Hermes tool call to its Atlas execution shape.
+
+    ``runtime`` is the session-bound Atlas run context (resolved by session_id in
+    the caller, H3); the thread-local is only a fallback for legacy callers.
+    """
+    if runtime is None:
+        runtime = getattr(_context, "runtime", None)
     tool_name, action = _ALIASES.get(name, (name, None))
     args = dict(arguments)
     if action is not None and tool_name == "local_file":
@@ -553,7 +562,6 @@ def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any
             args["notify_on_complete"] = notify
         if "watch_patterns" in args and not isinstance(args["watch_patterns"], list):
             raise ValueError("watch_patterns 必须是字符串数组。")
-        runtime = getattr(_context, "runtime", None)
         args["_atlas_conversation_id"] = str(getattr(runtime, "conversation_id", "") or "")
         args.pop("persist_on_release", None)
     if name == "search_files":
@@ -591,6 +599,6 @@ def _translate(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any
             args["action"] = process_action
         if tool_name == "local_process":
             args["_atlas_conversation_id"] = str(
-                getattr(getattr(_context, "runtime", None), "conversation_id", "") or ""
+                getattr(runtime, "conversation_id", "") or ""
             )
     return tool_name, args

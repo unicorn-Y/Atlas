@@ -281,7 +281,7 @@ def _pre_tool_call(
 
             approved = getattr(runtime, "hermes_preapproved_writes", None)
             if approved is not None:
-                atlas_name, atlas_args = _translate(name, arguments)
+                atlas_name, atlas_args = _translate(name, arguments, runtime)
                 approved.add(_approval_fingerprint(atlas_name, atlas_args))
 
     if is_write and name in NATIVE_FILE_TOOLS and not str(runtime.workspace or "").startswith("ssh://"):

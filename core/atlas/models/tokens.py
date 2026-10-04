@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import structlog
+
+log = structlog.get_logger()
+
 
 def _usage_input_tokens(usage: Any) -> int | None:
     if usage is None:
@@ -41,7 +45,8 @@ def estimate_tokens(
             material += "\n" + json.dumps(tools, ensure_ascii=False, separators=(",", ":"))
         return len(encoding.encode(material))
     except (ImportError, ValueError, TypeError):
-        pass
+        # tiktoken 未安装或该模型无专用编码：落到 Hermes 的 CJK 感知估算器。
+        log.debug("tokens.tiktoken_unavailable_fallback_rough", model=model, exc_info=True)
 
     from agent.model_metadata import estimate_request_tokens_rough
 

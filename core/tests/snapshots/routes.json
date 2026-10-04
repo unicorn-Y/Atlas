@@ -18077,6 +18077,7 @@
             "run.phase",
             "run.plan.proposed",
             "run.plan.updated",
+            "run.recovery.notice",
             "run.resumed",
             "run.started",
             "run.status",
@@ -18132,6 +18133,16 @@
   "shadow_order": [
     {
       "method": "GET",
+      "earlier": "/api/agents/external",
+      "later": "/api/agents/{agent_id}"
+    },
+    {
+      "method": "GET",
+      "earlier": "/api/agents/types",
+      "later": "/api/agents/{agent_id}"
+    },
+    {
+      "method": "GET",
       "earlier": "/api/skills/market/provenance/{name}",
       "later": "/api/skills/market/{source}/{skill_id:path}"
     },
@@ -18164,16 +18175,6 @@
       "method": "GET",
       "earlier": "/api/skills/{skill_name}/usage",
       "later": "/api/skills/search/{query}"
-    },
-    {
-      "method": "GET",
-      "earlier": "/api/agents/external",
-      "later": "/api/agents/{agent_id}"
-    },
-    {
-      "method": "GET",
-      "earlier": "/api/agents/types",
-      "later": "/api/agents/{agent_id}"
     },
     {
       "method": "GET",
@@ -19752,6 +19753,23 @@
       },
       "ProviderConfigUpdateRequest": {
         "properties": {
+          "api_mode_override": {
+            "anyOf": [
+              {
+                "enum": [
+                  "auto",
+                  "chat_completions",
+                  "anthropic_messages",
+                  "codex_responses"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Mode Override"
+          },
           "base_url": {
             "anyOf": [
               {

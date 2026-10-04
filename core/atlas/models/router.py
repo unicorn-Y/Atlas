@@ -1,4 +1,14 @@
-"""Shared Atlas model routing over Hermes' provider transport layer."""
+"""Shared Atlas model routing over Hermes' provider transport layer.
+
+Single entry for every Atlas LLM call: ``resolve()`` turns a model id plus a
+purpose into a :class:`RouteSpec` (provider, api_mode, model, base_url, key,
+credential pool), and :meth:`ModelRouter.complete` executes auxiliary requests
+over Hermes' transport layer (which owns retries, fallbacks and the native
+Anthropic Messages conversion). The main conversation uses
+:meth:`ModelRouter.hermes_agent_kwargs` to build the pinned ``AIAgent`` with the
+same route, so prompt-cache breakpoints and signed thinking survive on the
+native channel.
+"""
 
 from __future__ import annotations
 
@@ -215,6 +225,16 @@ class ModelRouter:
         )
 
     async def complete(self, route: RouteSpec, messages: list[dict[str, Any]], **kwargs: Any) -> CompletionResult:
+        """Run one auxiliary request over Hermes' transport layer.
+
+        ``messages`` use the same OpenAI-internal shape every Hermes auxiliary
+        caller uses (string contents, ``tool_calls`` + ``role: "tool"`` pairs).
+        On an ``anthropic_messages`` route the transport converts them itself and
+        preserves signed thinking supplied via the internal ``reasoning_details``
+        / ``anthropic_content_blocks`` carriers plus any ``cache_control``
+        breakpoints the caller placed. ``stream`` stays off: auxiliary purposes
+        are single-shot text/tool answers.
+        """
         from agent.auxiliary_client import call_llm
 
         response = await asyncio.to_thread(

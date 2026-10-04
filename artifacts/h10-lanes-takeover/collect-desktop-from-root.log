@@ -1,0 +1,3 @@
+tests/test_computer_use.py::test_real_desktop_observe_input_clipboard_and_window_management
+
+1/2116 tests collected (2115 deselected) in 21.58s
