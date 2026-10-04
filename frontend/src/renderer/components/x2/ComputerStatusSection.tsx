@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LoaderCircle, MonitorCheck, RefreshCw } from 'lucide-react';
-import { getComputerStatus, type ComputerDiagnostic } from '../../services/x2Api';
+import { getComputerStatus, type ComputerDiagnostic, type ComputerDriver } from '../../services/x2Api';
 import { cn } from '../../ui/cn';
 
 /** 逐项诊断：就绪绿点 / 未就绪灰点，附一句说明。 */
@@ -15,10 +15,16 @@ export function ComputerDiagnostics({ items }: { items: ComputerDiagnostic[] }) 
   </ul>;
 }
 
+export function ComputerDriverLabel({ driver }: { driver?: ComputerDriver }) {
+  if (!driver) return null;
+  const label = typeof driver === 'string' ? driver : `${driver.version ?? '未知版本'} (${driver.platform})`;
+  return <span className="text-[12px] text-fg-3">驱动：{label}</span>;
+}
+
 /** 设置 → 电脑操控：这台电脑上的操控能力是否就绪、用的哪个驱动、有什么诊断项（GET /api/computer/status）。 */
 export default function ComputerStatusSection({ apiBaseUrl, className }: { apiBaseUrl: string; className?: string }) {
   const [ready, setReady] = useState<boolean | null>(null);
-  const [driver, setDriver] = useState('');
+  const [driver, setDriver] = useState<ComputerDriver>();
   const [detail, setDetail] = useState('');
   const [diagnostics, setDiagnostics] = useState<ComputerDiagnostic[]>([]);
   const [error, setError] = useState('');
@@ -31,7 +37,7 @@ export default function ComputerStatusSection({ apiBaseUrl, className }: { apiBa
       .then((status) => {
         if (stale) return;
         setReady(status.ready);
-        setDriver(status.driver ?? '');
+        setDriver(status.driver);
         setDetail(status.detail ?? '');
         setDiagnostics(status.diagnostics ?? []);
         setError('');
@@ -56,7 +62,7 @@ export default function ComputerStatusSection({ apiBaseUrl, className }: { apiBa
         <p className="m-0 mb-2 flex items-center gap-2 text-[13px]">
           <MonitorCheck size={15} className={cn('shrink-0', ready ? 'text-ok' : 'text-fg-3')} />
           <span className={ready ? 'text-ok' : 'text-fg-2'}>{ready ? '电脑操控已就绪' : '电脑操控未就绪'}</span>
-          {driver && <span className="text-[12px] text-fg-3">驱动：{driver}</span>}
+          <ComputerDriverLabel driver={driver} />
         </p>
         {!ready && detail && <p className="m-0 mb-2 text-[12.5px] text-fg-3">{detail}</p>}
         <ComputerDiagnostics items={diagnostics} />

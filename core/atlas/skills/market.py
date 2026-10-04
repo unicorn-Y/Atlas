@@ -22,11 +22,14 @@ only origin display and a SKILL.md + file-list preview, per the X4 contract.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import os
 import re
 import shutil
+import signal
+import subprocess
 import sys
 import tempfile
 import uuid
@@ -34,6 +37,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
+from weakref import WeakKeyDictionary
 
 import structlog
 
@@ -50,6 +54,51 @@ log = structlog.get_logger()
 SKILL_PREVIEW_CHARS = 4000
 SEARCH_TIMEOUT_SECONDS = 20.0
 FETCH_TIMEOUT_SECONDS = 60.0
+SEARCH_WORKER_MAX_INPUT_BYTES = 64 * 1024
+SEARCH_WORKER_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+_SEARCH_WORKER_STATES: WeakKeyDictionary[
+    asyncio.AbstractEventLoop, dict[str, Any]
+] = WeakKeyDictionary()
+
+
+def _search_worker_state() -> dict[str, Any]:
+    loop = asyncio.get_running_loop()
+    state = _SEARCH_WORKER_STATES.get(loop)
+    if state is None:
+        state = {"closing": False, "processes": set()}
+        _SEARCH_WORKER_STATES[loop] = state
+    return state
+
+
+async def _kill_and_reap_search_worker(process: asyncio.subprocess.Process) -> None:
+    """Stop only this owned worker tree and reap its direct child."""
+    if process.returncode is not None:
+        await process.wait()
+        return
+    try:
+        if os.name == "nt" and process.pid:
+            system_root = os.environ.get("SystemRoot", r"C:\Windows")
+            killer = await asyncio.create_subprocess_exec(
+                str(Path(system_root) / "System32" / "taskkill.exe"),
+                "/PID", str(process.pid), "/T", "/F",
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(killer.wait(), timeout=3)
+        elif process.pid:
+            os.killpg(process.pid, signal.SIGKILL)
+    except (OSError, ProcessLookupError, TimeoutError):
+        pass
+    if process.returncode is None:
+        try:
+            await asyncio.wait_for(process.wait(), timeout=3)
+        except TimeoutError:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            await process.wait()
 
 # Stable discovery priority for duplicate skill names (atlas.skills.__init__).
 SKILL_SOURCE_PRIORITY = {
@@ -307,7 +356,10 @@ class SkillMarket:
                 root = Path(env)
             else:
                 here = Path(__file__).resolve()
-                for candidate in (here.parents[3] / "hermes-agent", here.parents[3].parent / "hermes-agent"):
+                for candidate in (
+                    here.parents[3] / "hermes-agent",
+                    here.parents[3].parent / "hermes-agent",
+                ):
                     if candidate.is_dir():
                         root = candidate
                         break
@@ -626,8 +678,6 @@ class SkillMarket:
     async def search(
         self, query: str = "", source: str | None = None, limit: int = 20,
     ) -> dict[str, Any]:
-        import asyncio
-
         limit = max(1, min(int(limit), 100))
         adapters = self._adapters(source)
         installed_ids = {
@@ -641,6 +691,8 @@ class SkillMarket:
                 with self._proxy_env(adapter.source_id()):
                     return list(adapter.search(query, limit=limit) or [])
             try:
+                if self._injected_adapters is None:
+                    return await self._run_search_worker(adapter.source_id(), query, limit)
                 return await asyncio.wait_for(asyncio.to_thread(blocking), SEARCH_TIMEOUT_SECONDS)
             except (TimeoutError, Exception) as exc:  # noqa: BLE001 - one bad source never blocks the UI
                 log.info("market.source_search_failed", source=adapter.source_id(), error=str(exc))
@@ -695,6 +747,90 @@ class SkillMarket:
             "status": ("partial" if errors and results
                        else "error" if errors and not results else "ok"),
         }
+
+    def _search_worker_command(self) -> list[str]:
+        if getattr(sys, "frozen", False):
+            return [sys.executable, "--atlas-skill-search-worker"]
+        return [sys.executable, "-m", "atlas.desktop_entry", "--atlas-skill-search-worker"]
+
+    async def _run_search_worker(
+        self, source: str, query: str, limit: int,
+    ) -> list[dict[str, Any]]:
+        state = _search_worker_state()
+        if state["closing"]:
+            raise MarketUnavailableError("Atlas 正在关闭，已取消技能市场搜索。")
+        payload = {
+            "source": source,
+            "query": str(query),
+            "limit": max(1, min(int(limit), 100)),
+            "data_dir": str(self.data_dir),
+            "user_skills_dir": str(self.user_skills_dir),
+            "project_skills_dir": str(self.project_skills_dir) if self.project_skills_dir else None,
+            "hermes_root": str(self.hermes_root) if self.hermes_root else None,
+            "hub_state_dir": str(self.hub_state_dir),
+        }
+        encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        if len(encoded) > SEARCH_WORKER_MAX_INPUT_BYTES:
+            raise MarketError("技能市场搜索请求过大。", code="invalid_search")
+
+        spawn = asyncio.create_task(asyncio.create_subprocess_exec(
+            *self._search_worker_command(),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=os.name != "nt",
+        ))
+        try:
+            process = await asyncio.shield(spawn)
+        except asyncio.CancelledError:
+            process = await spawn
+            state["processes"].add(process)
+            await _kill_and_reap_search_worker(process)
+            state["processes"].discard(process)
+            raise
+
+        state["processes"].add(process)
+        try:
+            if state["closing"]:
+                await _kill_and_reap_search_worker(process)
+            try:
+                stdout, _ = await asyncio.wait_for(
+                    process.communicate(encoded), timeout=SEARCH_TIMEOUT_SECONDS,
+                )
+            except TimeoutError as exc:
+                await _kill_and_reap_search_worker(process)
+                raise TimeoutError(f"search worker timed out for {source}") from exc
+            if process.returncode != 0:
+                raise MarketUnavailableError(f"技能市场来源暂时不可用（{source}）。")
+            if len(stdout) > SEARCH_WORKER_MAX_OUTPUT_BYTES:
+                raise MarketUnavailableError(f"技能市场来源返回内容过大（{source}）。")
+            try:
+                response = json.loads(stdout)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                raise MarketUnavailableError(
+                    f"技能市场来源返回格式无效（{source}）。",
+                ) from exc
+            error = response.get("error") if isinstance(response, dict) else None
+            if error:
+                message = error.get("message") or f"技能市场来源暂时不可用（{source}）。"
+                raise MarketUnavailableError(str(message))
+            results = response.get("results") if isinstance(response, dict) else None
+            if not isinstance(results, list) or not all(isinstance(item, dict) for item in results):
+                raise MarketUnavailableError(f"技能市场来源返回格式无效（{source}）。")
+            return results
+        finally:
+            if process.returncode is None:
+                await _kill_and_reap_search_worker(process)
+            state["processes"].discard(process)
+
+    async def cancel_pending_searches(self) -> None:
+        """Terminate isolated search workers before the backend begins shutdown."""
+        state = _search_worker_state()
+        state["closing"] = True
+        processes = tuple(state["processes"])
+        for process in processes:
+            if process.returncode is None:
+                await _kill_and_reap_search_worker(process)
 
     async def detail(self, source: str, identifier: str) -> dict[str, Any]:
         import asyncio

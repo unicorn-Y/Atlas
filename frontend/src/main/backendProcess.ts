@@ -12,7 +12,9 @@ export interface BackendLaunchResult {
 
 const HEALTH_URL = `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/health`;
 const PROBE_TIMEOUT_MS = 700;
-const STARTUP_TIMEOUT_MS = 15_000;
+// A cold backend start boots the full MCP server set + DBOS before :8765
+// answers; 15s was measured to lose that race on this machine.
+const STARTUP_TIMEOUT_MS = 45_000;
 const STDERR_TAIL_LIMIT = 8_192;
 const shutdownToken = randomBytes(32).toString('hex');
 
@@ -50,9 +52,13 @@ function resolveCoreDir(): string {
   return coreDir;
 }
 
-function pythonCandidates(): Array<{ command: string; args: string[] }> {
+function pythonCandidates(coreDir: string): Array<{ command: string; args: string[] }> {
   const candidates: Array<{ command: string; args: string[] }> = [];
   if (process.env.ATLAS_PYTHON) candidates.push({ command: process.env.ATLAS_PYTHON, args: [] });
+  const virtualenvPython = process.platform === 'win32'
+    ? path.join(coreDir, '.venv', 'Scripts', 'python.exe')
+    : path.join(coreDir, '.venv', 'bin', 'python');
+  if (fs.existsSync(virtualenvPython)) candidates.push({ command: virtualenvPython, args: [] });
   candidates.push({ command: 'python', args: [] });
   if (process.platform === 'win32') candidates.push({ command: 'py', args: ['-3'] });
   return candidates;
@@ -154,7 +160,14 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
 }
 
 export async function ensureBackendRunning(): Promise<BackendLaunchResult> {
-  if (await isBackendHealthy()) return { ready: true, managed: false };
+  // A busy backend (mid model-switch engine rebuild, heartbeat/automation tick
+  // burst) can miss the 700ms probe. Re-probe before declaring it dead, or we
+  // spawn a duplicate that dies on the occupied port and take the window down
+  // to a blank screen with it.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (await isBackendHealthy()) return { ready: true, managed: false };
+    if (attempt < 2) await sleep(600);
+  }
 
   const packagedBackend = process.env.ATLAS_BACKEND_EXECUTABLE;
   const rootDir = process.env.ATLAS_ROOT
@@ -163,9 +176,9 @@ export async function ensureBackendRunning(): Promise<BackendLaunchResult> {
   const coreDir = packagedBackend ? rootDir : resolveCoreDir();
   const candidates: BackendCandidate[] = packagedBackend
     ? [{ command: packagedBackend, args: [], cwd: rootDir }]
-    : pythonCandidates().map((candidate) => ({
+    : pythonCandidates(coreDir).map((candidate) => ({
       command: candidate.command,
-      args: [...candidate.args, '-m', 'uvicorn', 'atlas.server:app', '--host', '127.0.0.1', '--port', process.env.ATLAS_PORT ?? '8765'],
+      args: [...candidate.args, '-m', 'atlas.desktop_entry'],
       cwd: coreDir,
     }));
   let lastNotFound: NodeJS.ErrnoException | null = null;

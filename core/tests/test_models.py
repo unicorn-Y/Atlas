@@ -396,3 +396,44 @@ class TestProviderIdNamespaceAlias:
         assert resolve_catalog_id("kimi-coding") == "kimi"
         assert resolve_catalog_id("unknown-x") is None
         assert resolve_catalog_id("") is None
+
+
+class TestGatewaySource:
+    def test_user_settings_base_wins_and_is_reported(self, tmp_path, monkeypatch) -> None:
+        """user-settings.json 是设置界面持久化的存储，静默压过 atlas.toml；
+        ModelManager 必须如实报告生效来源，冲突可被 API/日志暴露。"""
+        from atlas import config
+
+        settings_path = tmp_path / "user-settings.json"
+        settings_path.write_text(
+            '{"gateway_base_url": "https://ui-gateway.example/v1", "api_key": "sk-ui"}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(config, "USER_SETTINGS_PATH", settings_path)
+        mgr = ModelManager(default_model="claude-sonnet-4")
+        assert mgr.gateway_base_url == "https://ui-gateway.example/v1"
+        assert mgr.gateway_source == "user-settings"
+        assert mgr.atlas_toml_gateway_base_url == config.get_config().gateway_base_url
+        assert mgr.gateway_base_url != mgr.atlas_toml_gateway_base_url
+
+    def test_atlas_toml_used_when_no_user_setting(self, tmp_path, monkeypatch) -> None:
+        from atlas import config
+
+        settings_path = tmp_path / "user-settings.json"
+        settings_path.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(config, "USER_SETTINGS_PATH", settings_path)
+        mgr = ModelManager(default_model="claude-sonnet-4")
+        assert mgr.gateway_source == "atlas.toml"
+        assert mgr.gateway_base_url == config.get_config().gateway_base_url
+        assert mgr.atlas_toml_gateway_base_url == mgr.gateway_base_url
+
+    def test_update_provider_marks_user_settings_source(self, tmp_path, monkeypatch) -> None:
+        from atlas import config
+
+        settings_path = tmp_path / "user-settings.json"
+        settings_path.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(config, "USER_SETTINGS_PATH", settings_path)
+        mgr = ModelManager(default_model="claude-sonnet-4")
+        mgr.update_provider("https://new.example/v1", None)
+        assert mgr.gateway_source == "user-settings"
+        assert mgr.gateway_base_url == "https://new.example/v1"

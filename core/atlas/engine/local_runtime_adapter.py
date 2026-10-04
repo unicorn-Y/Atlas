@@ -58,6 +58,8 @@ log = structlog.get_logger()
 
 _HERMES_HOME_PINNED = False
 _HERMES_HOME_MARK = ".atlas-local-runtime-home"
+_HERMES_MODULE_IMPORT_LOCK = threading.RLock()
+_HERMES_HOST_IMPORTS_READY = False
 
 
 def _ensure_hermes_home() -> Path:
@@ -115,7 +117,17 @@ class ConflictError(LocalRuntimeError):
 def _mod(name: str):
     import importlib
 
-    return importlib.import_module(name)
+    # Hermes local_runtime has cross-module imports that can deadlock when
+    # different API worker threads initialize sibling modules simultaneously. Its
+    # hardware and PM paths also import host facts lazily after this helper returns;
+    # preload the shared host package before any runtime module can race that import.
+    global _HERMES_HOST_IMPORTS_READY
+    with _HERMES_MODULE_IMPORT_LOCK:
+        if not _HERMES_HOST_IMPORTS_READY:
+            importlib.import_module("hermes_platform.host")
+            importlib.import_module("hermes_platform.host.products")
+            _HERMES_HOST_IMPORTS_READY = True
+        return importlib.import_module(name)
 
 
 def _bootstrap():

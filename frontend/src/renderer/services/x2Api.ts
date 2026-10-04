@@ -8,10 +8,12 @@ import { api } from './api';
 // ---------- 电脑操控 ----------
 
 /** GET /api/computer/status 的返回：就绪状态、驱动与逐项诊断。 */
+export type ComputerDriver = string | { version: string | null; platform: string };
+
 export interface ComputerStatus {
   ready: boolean;
   /** 后端实际使用的操控驱动（如 cua / pywinauto），缺省时只显示就绪与否。 */
-  driver?: string;
+  driver?: ComputerDriver;
   /** 未就绪时的原因说明。 */
   detail?: string;
   diagnostics?: ComputerDiagnostic[];

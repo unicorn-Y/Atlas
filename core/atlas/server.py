@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import fnmatch
 import hashlib
 import json
@@ -27,6 +28,7 @@ from typing import Any
 import aiosqlite
 import httpx
 import structlog
+import tomli_w
 from fastapi import (
     Body,
     FastAPI,
@@ -74,6 +76,7 @@ from atlas.capabilities.durable.dbos_backend import DurableBackend
 from atlas.capabilities.durable.dbos_backend import status as dbos_status
 from atlas.channels import ChannelManager
 from atlas.channels.adapters import register_builtin_channels
+from atlas import config as config_module
 from atlas.config import get_config, load_user_settings, save_user_settings
 from atlas.devices import DeviceRegistry
 from atlas.devices.takeover import TakeoverStateMachine
@@ -1717,6 +1720,8 @@ async def get_configuration() -> dict[str, Any]:
     settings = load_user_settings()
     return {
         "gateway_base_url": model_mgr.gateway_base_url,
+        "gateway_source": model_mgr.gateway_source,
+        "atlas_toml_gateway_base_url": model_mgr.atlas_toml_gateway_base_url,
         "api_key_configured": model_mgr.api_key_configured,
         "models": model_mgr.list_models(),
         "current": model_mgr.current_model,
@@ -4282,7 +4287,8 @@ async def list_integrations(refresh: bool = Query(False)) -> dict[str, Any]:
 
 @app.get("/api/notifications/status")
 async def notification_status() -> dict[str, Any]:
-    assert notifications is not None
+    if notifications is None:
+        raise HTTPException(status_code=503, detail="Notifications are disabled")
     return notifications.status()
 
 
@@ -4343,14 +4349,16 @@ async def hub_stop() -> dict[str, Any]:
 @app.get("/api/hub/tasks")
 async def hub_tasks(response: Response) -> dict[str, Any]:
     response.headers["Deprecation"] = "true"
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     return {"tasks": [task.to_dict() for task in scheduler.list_tasks()]}
 
 
 @app.post("/api/hub/tasks")
 async def hub_create_task(req: dict[str, Any], response: Response) -> dict[str, Any]:
     response.headers["Deprecation"] = "true"
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     message = str(req.get("message", "")).strip()
     if not message or not str(req.get("id", "")).strip():
         raise HTTPException(status_code=400, detail="id and message are required")
@@ -4370,7 +4378,8 @@ async def hub_create_task(req: dict[str, Any], response: Response) -> dict[str, 
 @app.post("/api/hub/tasks/{task_id}/run")
 async def hub_run_task(task_id: str, response: Response) -> dict[str, Any]:
     response.headers["Deprecation"] = "true"
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     if not await scheduler.run_now(task_id):
         raise HTTPException(status_code=404, detail="Task not found")
     return {"status": "triggered", "task_id": task_id}
@@ -4379,7 +4388,8 @@ async def hub_run_task(task_id: str, response: Response) -> dict[str, Any]:
 @app.delete("/api/hub/tasks/{task_id}")
 async def hub_delete_task(task_id: str, response: Response) -> dict[str, Any]:
     response.headers["Deprecation"] = "true"
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     if not await scheduler.delete_task(task_id):
         raise HTTPException(status_code=404, detail="Task not found")
     return {"status": "ok", "task_id": task_id}
@@ -4388,7 +4398,8 @@ async def hub_delete_task(task_id: str, response: Response) -> dict[str, Any]:
 @app.post("/api/notifications/test")
 async def notification_test() -> dict[str, Any]:
     """Send a test notification to every configured target."""
-    assert notifications is not None
+    if notifications is None:
+        raise HTTPException(status_code=503, detail="Notifications are disabled")
     return await notifications.notify(
         "Atlas notification test", "If you can read this, notifications work.",
     )
@@ -4396,14 +4407,16 @@ async def notification_test() -> dict[str, Any]:
 
 @app.get("/api/notifications/urls")
 async def get_notification_urls() -> dict[str, Any]:
-    assert notifications is not None
+    if notifications is None:
+        raise HTTPException(status_code=503, detail="Notifications are disabled")
     return {"urls": notifications.urls}
 
 
 @app.put("/api/notifications/urls")
 async def set_notification_urls(req: dict[str, Any]) -> dict[str, Any]:
     """Persist notification target URLs (Apprise) and apply them immediately."""
-    assert notifications is not None
+    if notifications is None:
+        raise HTTPException(status_code=503, detail="Notifications are disabled")
     urls = req.get("urls")
     if not isinstance(urls, list) or not all(isinstance(u, str) for u in urls):
         raise HTTPException(status_code=400, detail="urls must be a list of strings")
@@ -4697,6 +4710,9 @@ async def request_runtime_shutdown(request: Request) -> dict[str, str]:
     callback = getattr(app.state, "desktop_shutdown_callback", None)
     if not expected or not secrets.compare_digest(supplied, expected) or not callable(callback):
         raise HTTPException(status_code=403, detail="Backend shutdown is not authorized")
+    from atlas.api.skills_market_router import get_market
+
+    await get_market().cancel_pending_searches()
     asyncio.get_running_loop().call_soon(callback)
     return {"status": "shutting_down"}
 
@@ -4726,6 +4742,23 @@ async def add_mcp_server(req: MCPServerAddRequest) -> dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to connect: {e}")
 
+    try:
+        _persist_mcp_server_config(req.name, {
+            "transport": req.transport,
+            "command": req.command,
+            "args": req.args,
+            "env": req.env,
+            "cwd": req.cwd,
+            "url": req.url,
+            "enabled": True,
+        })
+    except Exception as exc:
+        await mcp_client.disconnect_server(req.name)
+        log.error("mcp.config_persist_failed", server=req.name, error=str(exc))
+        raise HTTPException(
+            status_code=500, detail="MCP server connected but configuration could not be saved",
+        ) from exc
+
     tools = mcp_client.get_server_tools(req.name)
     return {
         "name": req.name,
@@ -4742,8 +4775,73 @@ async def remove_mcp_server(server_name: str) -> dict[str, str]:
     if server_name not in mcp_client.get_server_names():
         raise HTTPException(status_code=404, detail=f"Server not found: {server_name}")
 
+    saved_config = get_config().get("tools.servers", {}) or {}
+    server_config = saved_config.get(server_name)
+    runtime_config = mcp_client.get_server_config(server_name)
+    runtime_tool_names = {
+        tool.qualified_name for tool in mcp_client.get_server_tools(server_name)
+    }
     await mcp_client.disconnect_server(server_name)
+    try:
+        _persist_mcp_server_config(server_name, None)
+    except Exception as exc:
+        if server_config:
+            from atlas.tools.mcp_client import MCPServerConfig
+
+            await mcp_client._connect_server(MCPServerConfig(name=server_name, **server_config))
+        elif runtime_config is not None:
+            await mcp_client._connect_server(runtime_config)
+        log.error("mcp.config_remove_failed", server=server_name, error=str(exc))
+        raise HTTPException(
+            status_code=500, detail="MCP server configuration could not be removed",
+        ) from exc
+
+    try:
+        from atlas.engine.hermes_runtime import HermesRuntime
+
+        await asyncio.to_thread(
+            HermesRuntime.unregister_atlas_mcp_server, server_name, runtime_tool_names,
+        )
+    except Exception as exc:
+        log.error("mcp.hermes_unregister_failed", server=server_name, error=str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail="MCP server was removed from API but chat registry cleanup failed",
+        ) from exc
     return {"status": "ok", "server": server_name}
+
+
+def _persist_mcp_server_config(name: str, server_config: dict[str, Any] | None) -> None:
+    """Persist API-managed MCP servers in the same TOML config Hermes loads per run."""
+    config = get_config()
+    data = copy.deepcopy(config.raw)
+    tools = data.setdefault("tools", {})
+    servers = tools.setdefault("servers", {})
+    auto_start = list(tools.get("auto_start", []) or [])
+    if server_config is None:
+        servers.pop(name, None)
+        if auto_start:
+            auto_start = [item for item in auto_start if item != name]
+            if not auto_start:
+                # Empty means "all enabled servers" to Hermes. Preserve a non-empty
+                # selection that has just become empty by disabling previously excluded
+                # servers before switching back to that meaning.
+                for remaining in servers.values():
+                    if isinstance(remaining, dict) and remaining.get("enabled", True):
+                        remaining["enabled"] = False
+    else:
+        servers[name] = {key: value for key, value in server_config.items() if value is not None}
+        if auto_start and name not in auto_start:
+            auto_start.append(name)
+    tools["auto_start"] = auto_start
+
+    config_path = config_module.CONFIG_PATH
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = config_path.with_suffix(config_path.suffix + ".tmp")
+    temporary.write_text(tomli_w.dumps(data), encoding="utf-8")
+    temporary.replace(config_path)
+    config.raw.clear()
+    config.raw.update(data)
 
 
 @app.post("/api/mcp/servers/{server_name}/restart")
@@ -6115,7 +6213,8 @@ async def list_schedules(
     tag: str | None = Query(None),
 ) -> dict[str, Any]:
     """Return all scheduled tasks."""
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     filter_status = TaskStatus(status) if status else None
     tasks = scheduler.list_tasks(status=filter_status, tag=tag)
     return {
@@ -6128,7 +6227,8 @@ async def list_schedules(
 @app.get("/api/schedules/{task_id}")
 async def get_schedule(task_id: str) -> dict[str, Any]:
     """Return a single scheduled task."""
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = scheduler.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
@@ -6137,7 +6237,8 @@ async def get_schedule(task_id: str) -> dict[str, Any]:
 
 @app.post("/api/schedules/{task_id}/pause")
 async def pause_schedule(task_id: str) -> dict[str, Any]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = await scheduler.update_task(task_id, status=TaskStatus.PAUSED)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
@@ -6146,7 +6247,8 @@ async def pause_schedule(task_id: str) -> dict[str, Any]:
 
 @app.post("/api/schedules/{task_id}/resume")
 async def resume_schedule(task_id: str) -> dict[str, Any]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = await scheduler.update_task(task_id, status=TaskStatus.ACTIVE)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
@@ -6156,7 +6258,8 @@ async def resume_schedule(task_id: str) -> dict[str, Any]:
 @app.post("/api/schedules")
 async def create_schedule(req: ScheduleCreateRequest) -> dict[str, Any]:
     """Create a new scheduled task."""
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = ScheduledTask(
         id=req.id,
         name=req.name,
@@ -6176,7 +6279,8 @@ async def create_schedule(req: ScheduleCreateRequest) -> dict[str, Any]:
 @app.put("/api/schedules/{task_id}")
 async def update_schedule(task_id: str, req: ScheduleUpdateRequest) -> dict[str, Any]:
     """Update an existing scheduled task."""
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     kwargs: dict[str, Any] = {}
     if req.name is not None:
         kwargs["name"] = req.name
@@ -6202,7 +6306,8 @@ async def update_schedule(task_id: str, req: ScheduleUpdateRequest) -> dict[str,
 @app.delete("/api/schedules/{task_id}")
 async def delete_schedule(task_id: str) -> dict[str, str]:
     """Delete a scheduled task."""
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     ok = await scheduler.delete_task(task_id)
     if not ok:
         raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
@@ -6212,7 +6317,8 @@ async def delete_schedule(task_id: str) -> dict[str, str]:
 @app.post("/api/schedules/{task_id}/run")
 async def run_schedule_now(task_id: str) -> dict[str, str]:
     """Manually trigger a scheduled task immediately."""
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     ok = await scheduler.run_now(task_id)
     if not ok:
         raise HTTPException(status_code=404, detail=f"Scheduled task not found: {task_id}")
@@ -6251,7 +6357,8 @@ async def _goal_payload(task: ScheduledTask) -> dict[str, Any]:
 
 @app.get("/api/goals")
 async def list_goals() -> dict[str, Any]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     goals = [task for task in scheduler.list_tasks()
              if task.action == "goal" or task.legacy_goal]
     payload = [await _goal_payload(task) for task in goals]
@@ -6260,7 +6367,8 @@ async def list_goals() -> dict[str, Any]:
 
 @app.post("/api/goals", status_code=201)
 async def create_goal(req: GoalCreateRequest) -> dict[str, Any]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     goal = req.goal.strip()
     if not goal:
         raise HTTPException(status_code=422, detail="Goal must not be empty")
@@ -6295,7 +6403,8 @@ async def create_goal(req: GoalCreateRequest) -> dict[str, Any]:
 
 @app.get("/api/goals/{goal_id}")
 async def get_goal(goal_id: str) -> dict[str, Any]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = scheduler.get_task(goal_id)
     if not task or not (task.action == "goal" or task.legacy_goal):
         raise HTTPException(status_code=404, detail="Scheduled goal not found")
@@ -6304,7 +6413,8 @@ async def get_goal(goal_id: str) -> dict[str, Any]:
 
 @app.put("/api/goals/{goal_id}")
 async def update_goal(goal_id: str, req: dict[str, Any]) -> dict[str, Any]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = scheduler.get_task(goal_id)
     if not task or not (task.action == "goal" or task.legacy_goal):
         raise HTTPException(status_code=404, detail="Scheduled goal not found")
@@ -6332,7 +6442,8 @@ async def update_goal(goal_id: str, req: dict[str, Any]) -> dict[str, Any]:
 
 @app.post("/api/goals/{goal_id}/pause")
 async def pause_goal(goal_id: str) -> dict[str, Any]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = scheduler.get_task(goal_id)
     if not task or not (task.action == "goal" or task.legacy_goal):
         raise HTTPException(status_code=404, detail="Scheduled goal not found")
@@ -6346,7 +6457,8 @@ async def pause_goal(goal_id: str) -> dict[str, Any]:
 
 @app.post("/api/goals/{goal_id}/resume")
 async def resume_goal(goal_id: str) -> dict[str, Any]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = scheduler.get_task(goal_id)
     if not task or not (task.action == "goal" or task.legacy_goal):
         raise HTTPException(status_code=404, detail="Scheduled goal not found")
@@ -6360,7 +6472,8 @@ async def resume_goal(goal_id: str) -> dict[str, Any]:
 
 @app.delete("/api/goals/{goal_id}")
 async def clear_goal_route(goal_id: str) -> dict[str, str]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = scheduler.get_task(goal_id)
     if not task or not (task.action == "goal" or task.legacy_goal):
         raise HTTPException(status_code=404, detail="Scheduled goal not found")
@@ -6599,7 +6712,8 @@ async def get_goal_trace(
     goal_id: str, run_id: str | None = Query(default=None),
 ) -> dict[str, Any]:
     """Return canonical Hermes state; Atlas no longer stores a second goal event trace."""
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = scheduler.get_task(goal_id)
     if task is None or not (task.action == "goal" or task.legacy_goal):
         raise HTTPException(status_code=404, detail=f"Scheduled goal not found: {goal_id}")
@@ -6615,7 +6729,8 @@ async def get_goal_trace(
 
 @app.post("/api/goals/{goal_id}/run")
 async def run_goal_now(goal_id: str) -> dict[str, str]:
-    assert scheduler is not None
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler is disabled")
     task = scheduler.get_task(goal_id)
     if not task or not (task.action == "goal" or task.legacy_goal):
         raise HTTPException(status_code=404, detail=f"Scheduled goal not found: {goal_id}")

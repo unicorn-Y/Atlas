@@ -204,11 +204,45 @@ class HermesRuntime:
                 item["enabled"] = enabled
                 item["transport"] = "http" if transport in {"http", "streamable-http"} else transport
                 if item["transport"] == "stdio":
+                    item.pop("url", None)
                     item["command"] = str(value.get("command") or "")
                     item["args"] = list(value.get("args") or [])
-                    item["env"] = dict(value.get("env") or {})
+                    launcher = (
+                        Path(item["command"]).name.lower().removesuffix(".cmd").removesuffix(".exe")
+                    )
+                    if enabled and launcher in {
+                        "node", "npm", "npx",
+                    }:
+                        from atlas.tools.mcp_client import _resolve_stdio_command
+                        from atlas.tools.node_runtime import resolve_node_runtime
+
+                        item["command"], item["args"] = _resolve_stdio_command(
+                            item["command"], item["args"],
+                        )
+                        runtime = resolve_node_runtime()
+                        if runtime.bundled and runtime.executable is not None:
+                            env = dict(value.get("env") or {})
+                            configured_path = next(
+                                (str(v) for k, v in env.items() if str(k).upper() == "PATH"),
+                                os.environ.get("PATH", ""),
+                            )
+                            env = {k: v for k, v in env.items() if str(k).upper() != "PATH"}
+                            env["PATH"] = os.pathsep.join(
+                                value for value in (str(runtime.executable.parent), configured_path)
+                                if value
+                            )
+                            item["env"] = env
+                        else:
+                            item["env"] = dict(value.get("env") or {})
+                    else:
+                        item["env"] = dict(value.get("env") or {})
                     if value.get("cwd"):
                         item["cwd"] = str(value["cwd"])
+                else:
+                    item.pop("command", None)
+                    item.pop("args", None)
+                    item.pop("env", None)
+                    item.pop("cwd", None)
             else:
                 continue
             servers[str(name)] = item
@@ -231,6 +265,35 @@ class HermesRuntime:
         mcp_tool_names = register_mcp_servers(servers)
         toolsets = {f"mcp-{name}" for name in enabled_names}
         return sorted(toolsets)
+
+    @staticmethod
+    def unregister_atlas_mcp_server(server_name: str, api_tool_names: set[str] | None = None) -> None:
+        """Remove every Hermes MCP registry scope owned by one Atlas-configured server."""
+        from tools.mcp_tool_common import _core
+        from tools.mcp_tool_lifecycle import shutdown_mcp_servers
+
+        with _core._lock:
+            keys = (set(_core._servers) | set(_core._server_scope_keys)
+                    | set(_core._server_tool_scopes) | set(_core._lazy_server_configs)
+                    | set(_core._lazy_server_tool_names))
+            matching = [key for key in keys
+                        if (key[1] if isinstance(key, tuple) else key) == server_name]
+            scopes = {
+                _core._server_scope_keys.get(key, key[0] if isinstance(key, tuple) else None)
+                for key in matching
+            }
+            tool_names: set[str] = set(api_tool_names or ())
+            for key in matching:
+                tool_names.update(_core._lazy_server_tool_names.get(key, ()) or ())
+                server = _core._servers.get(key)
+                tool_names.update(getattr(server, "_registered_tool_names", ()) or ())
+        if not scopes:
+            scopes = {None}
+        for scope in scopes:
+            shutdown_mcp_servers(scope=scope, names={server_name})
+        from atlas.engine.tool_registry import unregister_atlas_mcp_tools
+
+        unregister_atlas_mcp_tools(tool_names, scopes)
 
     @staticmethod
     def _apply_compression_model_setting(agent: Any, model_manager: Any) -> None:

@@ -78,7 +78,7 @@ async def test_real_hermes_atlas_child_keeps_context_and_permissions_then_cleans
             await memory.close()
 
         child_requests = [request for request in fake.main_requests()
-                          if request.get("model") == "openai/child-model"]
+                          if request.get("model") == "child-model"]
         assert child_requests
         assert "inspect the allowed fixture" in str(child_requests[0]["messages"])
         assert "Only use the explicitly provided context." in str(child_requests[0]["messages"])

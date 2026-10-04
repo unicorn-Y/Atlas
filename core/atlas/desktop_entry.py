@@ -5,8 +5,6 @@ from __future__ import annotations
 import os
 import sys
 
-import uvicorn
-
 
 def main() -> None:
     if sys.argv[1:] == ["--atlas-mcp-bridge"]:
@@ -16,7 +14,21 @@ def main() -> None:
 
         asyncio.run(serve())
         return
+    if sys.argv[1:] == ["--atlas-skill-search-worker"]:
+        from atlas.skills.market_search_worker import run_stdio
+
+        run_stdio()
+        return
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "true")
+    # Hermes removes stale top-level modules while initializing its config. If
+    # another thread is importing ``utils`` at that moment, the frozen importer
+    # can lose its in-progress sys.modules entry. Complete this shared import
+    # before Uvicorn starts serving concurrent requests.
+    import importlib
+
+    importlib.import_module("utils")
+    import uvicorn
+
     from atlas.server import app
 
     server = uvicorn.Server(uvicorn.Config(

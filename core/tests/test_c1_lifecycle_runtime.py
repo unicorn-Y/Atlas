@@ -60,8 +60,11 @@ async def test_parallel_runs_keep_model_snapshots_without_changing_selection(tmp
 
         await asyncio.gather(run("parent-model", "parent-turn"), run("worker-model", "worker-turn"))
 
+        # The wire model is the bare gateway id; the openai/ prefix is a routing
+        # hint that strict OpenAI-compatible resellers reject (see hermes
+        # chat_completion_helpers wire-model strip).
         assert {request["model"] for request in fake.main_requests()} == {
-            "openai/parent-model", "openai/worker-model",
+            "parent-model", "worker-model",
         }
         assert models.current_model == "parent-model"
 
@@ -105,7 +108,7 @@ async def test_worker_done_event_reports_requested_model_without_mutating_select
             await local.shutdown()
             await memory.close()
 
-        assert fake.main_requests()[0]["model"] == "openai/worker-model"
+        assert fake.main_requests()[0]["model"] == "worker-model"
         done = next(event for event in events if event.get("type") == "done")
         assert done["model"] == "worker-model"
         assert models.current_model == "parent-model"
@@ -351,6 +354,6 @@ async def test_fallback_request_uses_configured_model_identity(tmp_path, monkeyp
         )]
 
         assert [request["model"] for request in fake.main_requests()[:2]] == [
-            "openai/parent-model", "fallback-model",
+            "parent-model", "fallback-model",
         ]
         assert events[-1]["result"]["final_response"] == "fallback model response"
