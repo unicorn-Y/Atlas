@@ -113,3 +113,6 @@ data/devices/
 
 # H1 measurement junk (never commit)
 **/pytest-temp/
+/artifacts/h8-startup/
+/artifacts/h10-live-smoke/
+/artifacts/h1r-*/

@@ -51,6 +51,33 @@ CLI_TIMEOUT = 600.0
 MAGIC_NUMBER = "4711"
 
 
+def _remaining_live_input_budget(directory: Path, scenario: str) -> int:
+    """Include every request from prior steps and retries in the R7 caps."""
+    total = scene_total = 0
+    seen: set[str] = set()
+    for path in sorted(directory.glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            usage = json.loads(line)
+            request_id = str(usage.get("request_id") or "")
+            if not request_id:
+                raise AssertionError(f"request usage missing its id: {path.name}")
+            if request_id in seen:
+                continue
+            seen.add(request_id)
+            if usage.get("usage_available") is False:
+                raise AssertionError("Provider omitted request usage; stop until the R7 budget can be verified")
+            tokens = max(0, int(usage.get("input_tokens") or 0))
+            total += tokens
+            if path.stem == scenario:
+                scene_total += tokens
+    remaining = min(3_000_000 - total, 500_000 - scene_total)
+    if remaining <= 0:
+        raise AssertionError("R7 input-token budget exhausted; no further requests authorized")
+    return remaining
+
+
 # ---------------------------------------------------------------------------
 # Harness
 # ---------------------------------------------------------------------------
@@ -107,6 +134,7 @@ class LiveSession:
         )
         self.evidence.mkdir(parents=True, exist_ok=True)
         self.doctor: dict[str, Any] = {}
+        self.processes: list[subprocess.Popen] = []
         self._workspace_root = self.root / "workspaces"
         self._workspace_root.mkdir(exist_ok=True)
 
@@ -135,6 +163,15 @@ class LiveSession:
         if env.get("PYTHONPATH"):
             paths.append(env["PYTHONPATH"])
         env["PYTHONPATH"] = os.pathsep.join(paths)
+        budget_directory = os.environ.get("ATLAS_LIVE_BUDGET_DIR")
+        if budget_directory:
+            match = re.search(r"test_full_(\d{2})_", os.environ.get("PYTEST_CURRENT_TEST", ""))
+            scenario = match.group(1) if match else "00"
+            directory = Path(budget_directory)
+            directory.mkdir(parents=True, exist_ok=True)
+            env["ATLAS_RUN_INPUT_TOKEN_LIMIT"] = str(_remaining_live_input_budget(directory, scenario))
+            env["ATLAS_RUN_BUDGET_ID"] = f"h1r-{scenario}-{uuid.uuid4().hex}"
+            env["ATLAS_RUN_USAGE_AUDIT_FILE"] = str(directory / f"{scenario}.jsonl")
         return env
 
     # -- execution + evidence --------------------------------------------------
@@ -147,17 +184,19 @@ class LiveSession:
         started = time.monotonic()
         timed_out = False
         try:
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 [sys.executable, "-m", "atlas.cli", *args],
-                cwd=str(cwd), env=self.child_env(), capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=timeout,
+                cwd=str(cwd), env=self.child_env(), stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
+            self.processes.append(proc)
+            stdout, stderr = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             # A hang is evidence too: kill the child and keep whatever it printed
             # so the timeout is diagnosable from the evidence directory.
             timed_out = True
-            proc = exc  # type: ignore[assignment]
+            self.close()
             stdout = exc.stdout or ""
             stderr = exc.stderr or ""
             if isinstance(stdout, bytes):
@@ -166,7 +205,7 @@ class LiveSession:
                 stderr = stderr.decode("utf-8", errors="replace")
             returncode = 124
         else:
-            stdout, stderr, returncode = proc.stdout, proc.stderr, proc.returncode
+            returncode = proc.returncode
         wall = round(time.monotonic() - started, 3)
         events: list[dict[str, Any]] = []
         for line in (stdout or "").splitlines():
@@ -197,6 +236,32 @@ class LiveSession:
         path = self._workspace_root / f"{name}-{uuid.uuid4().hex[:8]}"
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def close(self) -> None:
+        """Reap only CLI processes created by the persistent live harness."""
+        import psutil
+
+        for process in self.processes:
+            if process.poll() is not None:
+                continue
+            try:
+                parent = psutil.Process(process.pid)
+                owned = parent.children(recursive=True) + [parent]
+            except psutil.NoSuchProcess:
+                continue
+            for child in owned:
+                try:
+                    child.terminate()
+                except psutil.NoSuchProcess:
+                    pass
+            _, alive = psutil.wait_procs(owned, timeout=10)
+            for child in alive:
+                try:
+                    child.kill()
+                except psutil.NoSuchProcess:
+                    pass
+            process.wait(timeout=10)
+        self.processes.clear()
 
     def summary(self, events: list[dict[str, Any]]) -> dict[str, Any]:
         summaries = [e for e in events if e.get("type") == "summary"]

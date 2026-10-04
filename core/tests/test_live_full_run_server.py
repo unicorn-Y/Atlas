@@ -16,7 +16,7 @@
   local receiver.
 
 The backend is the regular Atlas app (same one the desktop / ``atlas run``
-in-process mode serve) started once per module on an ephemeral loopback port,
+in-process mode serve) started once per scenario on an ephemeral loopback port,
 with the full-run live root as its data dir. Requires ``ATLAS_LIVE=1`` + ``-m live``.
 """
 
@@ -82,7 +82,7 @@ def _free_port() -> int:
 
 
 class Backend:
-    """The regular Atlas app served once for this module on 127.0.0.1."""
+    """The regular Atlas app served for one scenario on 127.0.0.1."""
 
     def __init__(self, live: LiveSession) -> None:
         self.live = live
@@ -128,10 +128,11 @@ class Backend:
             except subprocess.TimeoutExpired:
                 self.proc.kill()
         self.proc = None
-        self._log.close()
+        if hasattr(self, "_log"):
+            self._log.close()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def server_live() -> tuple[LiveSession, Backend]:
     session = LiveSession()
     code, events, _stderr = session.run_cli("server-00-doctor", "doctor", "--json",
@@ -141,10 +142,11 @@ def server_live() -> tuple[LiveSession, Backend]:
         f"doctor gate failed: {report} (exit={code})"
     )
     backend = Backend(session)
-    backend.start()
     try:
+        backend.start()
         yield session, backend
     finally:
+        session.close()
         backend.stop()
 
 
@@ -186,6 +188,48 @@ def _messages(live: LiveSession, backend: Backend, conversation_id: str) -> list
     return payload.get("messages") if isinstance(payload, dict) else payload
 
 
+def _observe_run_line(line: str, state: dict[str, str], tool_started: threading.Event) -> None:
+    """Observe every event, including tools arriving after run.started."""
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(event, dict):
+        return
+    if not state.get("run_id") and event.get("run_id"):
+        state["run_id"] = str(event["run_id"])
+    kind = str(event.get("event") or event.get("type") or "")
+    data = event.get("data") or {}
+    if kind in {"tool_start", "tool.started", "run.tool.started"} and isinstance(data, dict):
+        tool_started.set()
+
+
+def _pump_stderr(process: subprocess.Popen) -> tuple[list[str], threading.Thread]:
+    """Drain stderr while the stdout observer owns its pipe."""
+    lines: list[str] = []
+
+    def drain() -> None:
+        assert process.stderr is not None
+        lines.extend(process.stderr)
+
+    thread = threading.Thread(target=drain, daemon=True)
+    thread.start()
+    return lines, thread
+
+
+def _finish_observed_process(process: subprocess.Popen, stdout_thread: threading.Thread,
+                             stderr_thread: threading.Thread, timeout: float) -> int:
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=30)
+    stdout_thread.join(timeout=30)
+    stderr_thread.join(timeout=30)
+    assert not stdout_thread.is_alive() and not stderr_thread.is_alive(), "CLI pipes did not close"
+    return int(process.returncode)
+
+
 # ---------------------------------------------------------------------------
 # 08 — plan mode proposes, the desktop approves over WS, execution follows
 # ---------------------------------------------------------------------------
@@ -215,6 +259,8 @@ def test_full_08_plan_propose_approve_then_execute(server_live) -> None:
     )
     lines: list[str] = []
     proposed: dict[str, Any] = {}
+    live.processes.append(process)
+    stderr_lines, stderr_pump = _pump_stderr(process)
 
     def _pump() -> None:
         assert process.stdout is not None
@@ -256,13 +302,8 @@ def test_full_08_plan_propose_approve_then_execute(server_live) -> None:
             }, ensure_ascii=False))
 
     asyncio.run(_approve())
-    try:
-        stdout, stderr = process.communicate(timeout=420)
-        exit_code = process.returncode
-    except subprocess.TimeoutExpired:
-        process.kill()
-        stdout, stderr = process.communicate()
-        exit_code = process.returncode
+    exit_code = _finish_observed_process(process, pump, stderr_pump, 420)
+    stdout, stderr = "", "".join(stderr_lines)
 
     (run_dir / "stream.jsonl").write_text(_redact("".join(lines) + (stdout or "")),
                                           encoding="utf-8")
@@ -369,33 +410,25 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
         errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
-    run_id = ""
+    state: dict[str, str] = {}
+    live.processes.append(process)
     tool_started = threading.Event()
     lines: list[str] = []
+    stderr_lines, stderr_pump = _pump_stderr(process)
 
     def _pump() -> None:
-        nonlocal run_id
         assert process.stdout is not None
         for line in process.stdout:
             lines.append(line)
-            if '"run_id"' in line and not run_id:
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                candidate = str(event.get("run_id") or "")
-                if candidate:
-                    run_id = candidate
-                data = event.get("data") or {}
-                if isinstance(data, dict) and data.get("name") and "tool" in str(event.get("event", "")):
-                    tool_started.set()
+            _observe_run_line(line, state, tool_started)
 
     pump = threading.Thread(target=_pump, daemon=True)
     pump.start()
 
     deadline = time.monotonic() + 60
-    while time.monotonic() < deadline and not run_id:
+    while time.monotonic() < deadline and not state.get("run_id"):
         time.sleep(0.1)
+    run_id = state.get("run_id", "")
     assert run_id, f"no run_id observed in stream: {lines[-5:] if lines else 'no output'}"
 
     async def _steer() -> dict[str, Any]:
@@ -405,6 +438,7 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
         loop = asyncio.get_running_loop()
         while not tool_started.is_set() and time.monotonic() < deadline:
             await asyncio.sleep(0.2)
+        assert tool_started.is_set(), "no tool started; refusing to steer after the run ended"
         async with websockets.connect(
             backend.base_url.replace("http", "ws", 1) + "/ws/chat",
             additional_headers={"x-atlas-api-token": "h10-live-smoke"},
@@ -430,13 +464,8 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
             return steer_reply
 
     steer_reply = asyncio.run(_steer())
-    try:
-        stdout, stderr = process.communicate(timeout=600)
-        exit_code = process.returncode
-    except subprocess.TimeoutExpired:
-        process.kill()
-        stdout, stderr = process.communicate()
-        exit_code = process.returncode
+    exit_code = _finish_observed_process(process, pump, stderr_pump, 600)
+    stdout, stderr = "", "".join(stderr_lines)
     run_dir = live.evidence / scenario
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "steer-reply.json").write_text(
@@ -617,6 +646,7 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
             f"channel task did not write its file in {workspace}; receipts={receiver.payloads!r}"
         )
         assert done.read_text(encoding="utf-8").strip() == "CHANNEL-RECEIPT-OK"
+        _check(live, scenario, scenario, workspace)
         (run_dir / "meta.json").write_text(json.dumps({
             "name": scenario, "model": live.model,
             "approval_id": approval_id,
