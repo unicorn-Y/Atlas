@@ -25,7 +25,7 @@ def test_atlas_mcp_http_oauth_config_is_preserved_for_hermes():
     assert adapted["stdio"]["enabled"] is False
 
 
-def test_atlas_compression_model_setting_maps_to_bare_wire_id(monkeypatch):
+async def test_atlas_compression_model_setting_maps_to_bare_wire_id(monkeypatch):
     """Host-shaped config (prefixed litellm id) -> compressor pins the BARE id.
 
     The compressor sends ``summary_model`` verbatim to the provider; the
@@ -40,13 +40,13 @@ def test_atlas_compression_model_setting_maps_to_bare_wire_id(monkeypatch):
         {"id": "cheap", "litellm_model": "openai/cheap-model", "api_key": "must-not-copy"},
     ])
 
-    HermesRuntime._apply_compression_model_setting(agent, models)
+    await HermesRuntime._apply_compression_model_setting(agent, models)
 
     assert compressor.summary_model == "cheap-model"
     assert "api_key" not in str(compressor.summary_model)
 
 
-def test_atlas_compression_model_setting_honors_native_model(monkeypatch):
+async def test_atlas_compression_model_setting_honors_native_model(monkeypatch):
     from types import SimpleNamespace
 
     monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"compression_model": "cheap"})
@@ -57,27 +57,27 @@ def test_atlas_compression_model_setting_honors_native_model(monkeypatch):
          "native_model": "cheap-model-native"},
     ])
 
-    HermesRuntime._apply_compression_model_setting(agent, models)
+    await HermesRuntime._apply_compression_model_setting(agent, models)
 
     assert compressor.summary_model == "cheap-model-native"
 
 
-def test_atlas_compression_model_setting_falls_back_without_router_surface(monkeypatch):
-    """No router surface -> legacy litellm id (documented fallback contract)."""
-    import sys
+async def test_atlas_compression_model_setting_uses_route_wire_model(monkeypatch):
     from types import SimpleNamespace
 
     monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"compression_model": "cheap"})
-    monkeypatch.setitem(sys.modules, "atlas.models.router", None)
     compressor = SimpleNamespace(summary_model="")
     agent = SimpleNamespace(context_compressor=compressor)
-    models = SimpleNamespace(list_models=lambda: [
-        {"id": "cheap", "litellm_model": "openai/cheap-model"},
-    ])
+    class Router:
+        async def resolve(self, model_id, purpose):
+            assert (model_id, purpose) == ("cheap", "compression")
+            return SimpleNamespace(wire_model="cheap-wire-model", model="openai/cheap-model")
 
-    HermesRuntime._apply_compression_model_setting(agent, models)
+    models = SimpleNamespace(model_router=Router())
 
-    assert compressor.summary_model == "openai/cheap-model"
+    await HermesRuntime._apply_compression_model_setting(agent, models)
+
+    assert compressor.summary_model == "cheap-wire-model"
 
 
 def test_compaction_agent_pins_bare_wire_id_from_host_shaped_config(tmp_path, monkeypatch):

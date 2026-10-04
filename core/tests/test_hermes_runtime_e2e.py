@@ -13,13 +13,54 @@ import pytest
 from tests.fakes.fake_llm_provider import FakeLLMServer, Hang, Text, ToolCall, write_hermes_home
 from atlas.engine.hermes_runtime import HermesRuntime
 from atlas.agent import AgentOrchestrator, AgentRunContext
+from atlas.models.router import ModelRouter
 from atlas.tools.local_execution import LocalExecutionRuntime
+from tests.test_engine_model_wiring import _NativeAnthropicManager, _ProviderKeyManager
 
 
 def _disable_external_mcp(monkeypatch):
     monkeypatch.setattr("atlas.config.get_config", lambda: {
         "tools.servers": {}, "tools.auto_start": [],
     })
+
+
+@pytest.mark.asyncio
+async def test_notification_read_failure_is_visible_and_does_not_stop_turn(
+    tmp_path, monkeypatch, caplog,
+):
+    from atlas.engine import notifications
+    import atlas.engine.hermes_policy as hermes_policy
+    import atlas.engine.tool_registry as tool_registry
+
+    async def fail_read(_conversation_id):
+        raise OSError("notification db unavailable")
+
+    monkeypatch.setattr(notifications, "consume_notifications", fail_read)
+    monkeypatch.setattr(hermes_policy, "install_atlas_policy_plugin", lambda: None)
+    monkeypatch.setattr(tool_registry, "bind_atlas_tools", lambda *_args: None)
+    with FakeLLMServer([Text("turn completed")]) as fake:
+        home = tmp_path / "engine"
+        write_hermes_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = SimpleNamespace(
+            current_model="fake-model", current_litellm_model="fake-model",
+            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
+            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
+        )
+        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
+        events = [event async for event in runtime.run_turn(
+            message="continue despite notification failure", conversation_id="notice-failure",
+            workspace=str(tmp_path), history=[], atlas_agent=SimpleNamespace(),
+            atlas_context=SimpleNamespace(
+                mode="act", todo_store=SimpleNamespace(snapshot=lambda: {"todos": []}),
+            ),
+        )]
+
+    assert events[-1]["type"] == "hermes.result"
+    notices = [event for event in events if event.get("type") == "run.recovery.notice"]
+    assert any("通知读取失败" in event["data"]["message"] for event in notices)
+    assert "notification db unavailable" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -159,6 +200,106 @@ async def test_real_manual_compression_uses_hermes_and_session_continues(tmp_pat
             history=[], system_message="Atlas identity and stable rules",
         )]
         assert continued[-1]["result"]["final_response"] == "continued after compaction"
+
+
+@pytest.mark.asyncio
+async def test_manual_compression_uses_prefixed_routes_wire_models_without_gateway(
+    tmp_path, monkeypatch,
+):
+    with FakeLLMServer(
+        [*[Text("done") for _ in range(24)]], default_text="continued after compaction",
+    ) as fake:
+        home = tmp_path / "engine"
+        write_hermes_home(
+            home, fake.base_url,
+            extra_config=(
+                "auxiliary:\n"
+                "  compression:\n"
+                "    provider: custom\n"
+                "    model: main-model\n"
+                f"    base_url: {fake.base_url}\n"
+                "    api_key: sk-provider-secret\n"
+            ),
+        )
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        monkeypatch.setattr("atlas.config.load_user_settings", lambda: {
+            "compression_model": "ref-model",
+        })
+        manager = _ProviderKeyManager(fake.base_url)
+        manager.gateway_base_url = ""
+        manager.gateway_api_key = ""
+        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+
+        conversation_id = "prefixed-independent-compression"
+        for index in range(24):
+            [event async for event in runtime.run_turn(
+                message=f"work item {index}: " + ("retained detail " * 160),
+                conversation_id=conversation_id, workspace=str(tmp_path), history=[],
+                system_message="Atlas identity and stable rules",
+            )]
+
+        compressed = await runtime.compact_session(
+            conversation_id=conversation_id, workspace=str(tmp_path),
+        )
+
+        assert compressed["compressed"] is True, compressed
+        aux = fake.aux_requests()
+        assert aux
+        assert {request["model"] for request in aux} == {"ref-model"}
+        assert all(request["model"] != "openai/ref-model" for request in aux)
+
+
+@pytest.mark.asyncio
+async def test_manual_compression_succeeds_with_native_only_model_configuration(
+    tmp_path, monkeypatch,
+):
+    with FakeLLMServer(
+        [Text("native turn completed") for _ in range(24)],
+        default_text="native compression continued",
+        api_key="sk-native-secret", anthropic_messages=True,
+    ) as fake:
+        home = tmp_path / "engine"
+        write_hermes_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        monkeypatch.setattr("atlas.config.load_user_settings", lambda: {})
+        manager = _NativeAnthropicManager(fake.base_url)
+        assert manager.gateway_base_url == ""
+        manager.model_router = ModelRouter(manager)
+        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+
+        conversation_id = "native-manual-compact"
+        for index in range(24):
+            events = [event async for event in runtime.run_turn(
+                message=f"native item {index}: " + ("retain these details " * 600),
+                conversation_id=conversation_id, workspace=str(tmp_path), history=[],
+            )]
+        assert events[-1]["type"] == "hermes.result"
+        compressed = await runtime.compact_session(
+            conversation_id=conversation_id, workspace=str(tmp_path),
+        )
+
+        assert compressed["compressed"] is True, compressed
+        requests = fake.anthropic_requests()
+        assert requests
+        assert any(request["model"] == "claude-main" for request in requests)
+
+
+def test_runtime_request_models_never_use_litellm_model_directly():
+    source = Path(HermesRuntime.__module__.replace(".", "/") + ".py")
+    if not source.is_absolute():
+        source = Path(__file__).resolve().parents[1] / "atlas" / "engine" / "hermes_runtime.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    violations = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg == "model" and any(
+                isinstance(part, ast.Name) and part.id == "litellm_model"
+                for part in ast.walk(keyword.value)
+            ):
+                violations.append(node.lineno)
+    assert violations == []
 
 
 @pytest.mark.asyncio

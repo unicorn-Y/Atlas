@@ -82,26 +82,26 @@ def _history_tokens(history: list[dict[str, Any]], *, model: str = "") -> int:
     )
 
 
-def _wire_model_for_config(model: dict[str, Any], fallback: str = "") -> str:
-    """The bare/native model id the Hermes wire transport must actually send.
-
-    H10.2-DEFECT-1 residual: the registry's litellm-style id
-    (``openai/deepseek-...``) is a routing label only — relays 404 it on the
-    wire. This reuses the shared model router's own derivation
-    (``atlas.models.router._model_for_provider``: explicit ``native_model``
-    wins, else the first litellm path segment is stripped), the exact function
-    every ``RouteSpec.wire_model`` is built from, so the compression summary
-    call and the manual-compaction agent pin the same id the conversation
-    agent does. ``fallback`` (the pre-fix behavior) is returned when the
-    router surface is unavailable or derives nothing.
-    """
-    try:
+async def _route_wire_model(model_manager: Any, model_id: str, purpose: str) -> str:
+    """Resolve the model exactly as the shared router will send it."""
+    router = getattr(model_manager, "model_router", None)
+    if router is None:
+        # Lightweight legacy test doubles have no routing surface. Production
+        # ModelManager always exposes one; never use a prefixed id as fallback.
+        models = model_manager.list_models() if model_manager is not None else []
+        model = next((item for item in models if str(item.get("id")) == model_id), {})
         from atlas.models.router import _model_for_provider
 
-        wire = str(_model_for_provider(model or {}, native=True) or "")
-    except ImportError:  # no router surface — keep the legacy id
-        wire = ""
-    return wire or fallback
+        return str(_model_for_provider(model, native=True) or model_id)
+    route = await router.resolve(model_id, purpose)
+    return str(route.wire_model or route.model)
+
+
+def _wire_model_from_config(model: dict[str, Any], fallback: str = "") -> str:
+    """Resolve a bare id only for legacy test doubles without ModelRouter."""
+    from atlas.models.router import _model_for_provider
+
+    return str(_model_for_provider(model or {}, native=True) or fallback)
 
 
 def _model_family_guidance(model: str) -> str:
@@ -229,11 +229,11 @@ class HermesRuntime:
                 )
             else:
                 return ModelRouter.hermes_agent_kwargs(route)
-        litellm_model = str(model_config.get("litellm_model") or model_id)
+        wire_model = _wire_model_from_config(model_config, fallback=model_id)
         api_key = getattr(self.model_manager, "_api_key", None)
         base_url = getattr(self.model_manager, "gateway_base_url", None)
         route_kwargs: dict[str, Any] = {
-            "model": litellm_model, "provider": "openai", "api_mode": "openai",
+            "model": wire_model, "provider": "openai", "api_mode": "openai",
             "base_url": base_url, "api_key": api_key,
         }
         if pid := str(model_config.get("hermes_provider") or "").strip():
@@ -242,7 +242,7 @@ class HermesRuntime:
             catalog_id = resolve_catalog_id(pid) or pid
             provider_cfg = self.model_manager.provider_config(catalog_id)
             route_kwargs.update(
-                model=str(model_config.get("native_model") or litellm_model),
+                model=wire_model,
                 provider=pid, api_mode=api_mode_for(catalog_id),
                 base_url=(model_config.get("base_url") or provider_cfg.get("base_url")
                           or (get_provider(catalog_id) or {}).get("default_base_url") or base_url),
@@ -516,7 +516,7 @@ class HermesRuntime:
         return self._ensure_atlas_mcp_registered()
 
     @staticmethod
-    def _apply_compression_model_setting(agent: Any, model_manager: Any) -> None:
+    async def _apply_compression_model_setting(agent: Any, model_manager: Any) -> None:
         """Apply Atlas' optional compression model to Hermes' ContextCompressor.
 
         Empty setting leaves Hermes on the current run model. The selected
@@ -530,13 +530,10 @@ class HermesRuntime:
         selected = str(load_user_settings().get("compression_model", "")).strip()
         if not selected:
             return
-        model = next(
-            (item for item in model_manager.list_models() if item.get("id") == selected), None,
-        )
         compressor = getattr(agent, "context_compressor", None)
-        if model is not None and compressor is not None:
-            compressor.summary_model = _wire_model_for_config(
-                model, fallback=str(model.get("litellm_model") or selected),
+        if compressor is not None:
+            compressor.summary_model = await _route_wire_model(
+                model_manager, selected, "compression",
             )
 
     async def compact_session(
@@ -587,23 +584,36 @@ class HermesRuntime:
         model_config = next(
             (item for item in settings.list_models() if item.get("id") == current), {},
         )
+        router = getattr(settings, "model_router", None)
+        route = asyncio.run(router.resolve(current, "compression")) if router is not None else None
+        wire_model = (
+            str(route.wire_model or route.model) if route is not None else
+            _wire_model_from_config(model_config, fallback=settings.current_litellm_model)
+        )
+        route_kwargs = {}
+        if route is not None:
+            from atlas.models.router import ModelRouter
+
+            route_kwargs = ModelRouter.hermes_agent_kwargs(route)
+        else:
+            route_kwargs = {
+                "provider": "openai", "api_mode": "openai",
+                "base_url": getattr(settings, "gateway_base_url", None),
+                "api_key": getattr(settings, "_api_key", None),
+            }
+        route_kwargs["model"] = wire_model
         agent = self._agent_factory()(
             # The compaction agent's transport sends ``model`` verbatim on the
             # wire: pin the bare wire id, not the litellm-style routing label
             # (H10.2-DEFECT-1 residual, same fix as the conversation agent).
-            model=_wire_model_for_config(
-                model_config, fallback=settings.current_litellm_model,
-            ),
-            provider="openai", api_mode="openai",
-            base_url=getattr(settings, "gateway_base_url", None),
-            api_key=getattr(settings, "_api_key", None), session_id=conversation_id,
+            **route_kwargs, session_id=conversation_id,
             cwd=workspace, skip_memory=True, checkpoints_enabled=False,
             enabled_toolsets=["file", "terminal", "todo", "clarify", "code_execution",
                               "session_search", "delegation", "atlas"],
             fallback_model=model_config.get("fallback"),
             max_tokens=model_config.get("max_output_tokens"),
         )
-        self._apply_compression_model_setting(agent, settings)
+        asyncio.run(self._apply_compression_model_setting(agent, settings))
         try:
             open_session_db = getattr(agent, "_get_session_db_for_recall", None)
             if callable(open_session_db) and getattr(agent, "_session_db", None) is None:
@@ -860,12 +870,18 @@ class HermesRuntime:
                     def log_title_callback_error(done: Any) -> None:
                         try:
                             done.result()
-                        except Exception:
-                            logger.warning("Atlas title callback failed", exc_info=True)
+                        except Exception as exc:
+                            logger.warning("Atlas title callback failed: %s", exc, exc_info=True)
+                            emit({"type": "run.recovery.notice", "data": {
+                                "message": "会话标题更新失败。", "detail": str(exc),
+                            }})
 
                     future.add_done_callback(log_title_callback_error)
-            except Exception:
-                logger.warning("Atlas title callback dispatch failed", exc_info=True)
+            except Exception as exc:
+                logger.warning("Atlas title callback dispatch failed: %s", exc, exc_info=True)
+                emit({"type": "run.recovery.notice", "data": {
+                    "message": "会话标题更新失败。", "detail": str(exc),
+                }})
 
         settings = self.model_manager
         from atlas.config import get_config
@@ -897,8 +913,8 @@ class HermesRuntime:
                 initial_notices = await consume_notifications(conversation_id)
             except Exception as exc:
                 logger.warning(
-                    "hermes_runtime.notification_consume_failed",
-                    conversation_id=conversation_id, error=str(exc), exc_info=True,
+                    "Notification read failed for conversation %s: %s",
+                    conversation_id, exc, exc_info=True,
                 )
                 initial_notices = []
                 emit({"type": "run.recovery.notice", "data": {
@@ -1120,7 +1136,7 @@ class HermesRuntime:
 
                 atlas_context.new_context_window_callback = create_context_handoff
             agent.budget_warning_ratio = budget_warning_ratio
-            self._apply_compression_model_setting(agent, settings)
+            await self._apply_compression_model_setting(agent, settings)
             # Hermes opens SessionDB lazily for tools when no gateway supplied one. Atlas
             # always needs its durable turn transcript, even with Hermes memory disabled.
             open_session_db = getattr(agent, "_get_session_db_for_recall", None)
@@ -1270,9 +1286,8 @@ class HermesRuntime:
                             notices = await consume_notifications(conversation_id)
                         except Exception as exc:
                             logger.warning(
-                                "hermes_runtime.notification_watcher_consume_failed",
-                                conversation_id=conversation_id,
-                                error=str(exc), exc_info=True,
+                                "Background notification watcher failed for %s: %s",
+                                conversation_id, exc, exc_info=True,
                             )
                             emit({"type": "run.recovery.notice", "data": {
                                 "message": "后台通知读取失败。", "detail": str(exc),
