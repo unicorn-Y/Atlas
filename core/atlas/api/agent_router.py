@@ -13,10 +13,12 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Annotated, Any, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from atlas.api.app_services import AppServices
+from atlas.api.dependencies import get_app_services
 from atlas.config import get_config
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 from atlas.persistent_agents import PersistentAgentService
@@ -81,9 +83,19 @@ def _with_status(service: PersistentAgentService, record: dict[str, Any]) -> dic
     return {**record, "status": service.get_status(record["id"])["status"]}
 
 
+def _service_from(services: AppServices) -> PersistentAgentService:
+    service = services.persistent_agents
+    if service is None:
+        raise RuntimeError("FastAPI app is missing its persistent-agent service")
+    return service
+
+
 @router.get("")
-async def list_agents(include_roles: bool = Query(default=False)) -> dict[str, Any]:
-    service = get_agent_service()
+async def list_agents(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    include_roles: bool = Query(default=False),
+) -> dict[str, Any]:
+    service = _service_from(services)
     agents = [
         _with_status(service, record) for record in service.list_agents(include_roles=include_roles)
     ]
@@ -91,13 +103,17 @@ async def list_agents(include_roles: bool = Query(default=False)) -> dict[str, A
 
 
 @router.post("", status_code=201)
-async def create_agent(req: dict[str, Any]) -> dict[str, Any]:
-    return _call(lambda: get_agent_service().create(req))
+async def create_agent(
+    req: dict[str, Any], services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    return _call(lambda: _service_from(services).create(req))
 
 
 @router.get("/{agent_id}")
-async def get_agent(agent_id: str) -> dict[str, Any]:
-    service = get_agent_service()
+async def get_agent(
+    agent_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    service = _service_from(services)
     record = _call(lambda: service.get(agent_id))
     if record is None:
         raise HTTPException(status_code=404, detail=f"agent not found: {agent_id}")
@@ -105,25 +121,31 @@ async def get_agent(agent_id: str) -> dict[str, Any]:
 
 
 @router.patch("/{agent_id}")
-async def patch_agent(agent_id: str, req: dict[str, Any]) -> dict[str, Any]:
-    return _call(lambda: get_agent_service().update(agent_id, req))
+async def patch_agent(
+    agent_id: str, req: dict[str, Any], services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    return _call(lambda: _service_from(services).update(agent_id, req))
 
 
 @router.delete("/{agent_id}")
-async def delete_agent(agent_id: str) -> dict[str, str]:
+async def delete_agent(
+    agent_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, str]:
     if agent_id in BUILTIN_ROLE_IDS:
         raise HTTPException(status_code=409, detail="Built-in profiles cannot be deleted")
-    _call(lambda: get_agent_service().delete(agent_id))
+    _call(lambda: _service_from(services).delete(agent_id))
     return {"status": "deleted"}
 
 
 @router.put("/{agent_id}/heartbeat")
-async def put_heartbeat(agent_id: str, req: dict[str, Any]) -> dict[str, Any]:
-    record = _call(lambda: get_agent_service().set_heartbeat(agent_id, req))
+async def put_heartbeat(
+    agent_id: str, req: dict[str, Any], services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    record = _call(lambda: _service_from(services).set_heartbeat(agent_id, req))
     return {"agent_id": agent_id, "heartbeat": record["agent"]["heartbeat"]}
 
 
-def _gateway_session_rows(agent_id: str) -> list[dict[str, Any]]:
+def _gateway_session_rows(agent_id: str, db_path: Path) -> list[dict[str, Any]]:
     """Agent-scoped rows from the gateway session map (read-only).
 
     The ``channel_sessions`` sqlite table (``atlas.gateway_service.SessionMapper``)
@@ -132,7 +154,7 @@ def _gateway_session_rows(agent_id: str) -> list[dict[str, Any]]:
     :func:`atlas.persistent_agents.session_key`). Read here directly from the
     same sqlite path — no second map, no write path.
     """
-    db_path = Path(get_config().db_path).parent / "channels.sqlite"
+    db_path = Path(db_path).parent / "channels.sqlite"
     if not db_path.is_file():
         return []
     prefix = f"agent:{agent_id}:"
@@ -156,15 +178,20 @@ def _gateway_session_rows(agent_id: str) -> list[dict[str, Any]]:
 
 
 @router.get("/{agent_id}/sessions")
-async def list_agent_sessions(agent_id: str) -> dict[str, Any]:
+async def list_agent_sessions(
+    agent_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
     """Conversation lineage for one agent (``agent:<id>:*`` session keys)."""
-    _call(lambda: get_agent_service().get_status(agent_id))  # 404 unless persistent agent
+    service = _service_from(services)
+    _call(lambda: service.get_status(agent_id))  # 404 unless persistent agent
     sessions: list[dict[str, Any]] = []
-    for row in _gateway_session_rows(agent_id):
+    db_path = services.config.db_path if services.config is not None else get_config().db_path
+    for row in _gateway_session_rows(agent_id, Path(db_path)):
         conversation = None
-        if _conversation_lookup is not None:
+        lookup = services.agent_conversation_lookup
+        if lookup is not None:
             try:
-                conversation = await _conversation_lookup(str(row["conversation_id"]))
+                conversation = await lookup(str(row["conversation_id"]))
             except Exception:  # noqa: BLE001 — metadata is best-effort in a listing
                 conversation = None
         sessions.append({**row, "conversation": conversation})
@@ -172,27 +199,35 @@ async def list_agent_sessions(agent_id: str) -> dict[str, Any]:
 
 
 @router.get("/{agent_id}/status")
-async def get_agent_status(agent_id: str) -> dict[str, Any]:
-    return _call(lambda: get_agent_service().get_status(agent_id))
+async def get_agent_status(
+    agent_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    return _call(lambda: _service_from(services).get_status(agent_id))
 
 
 @router.put("/{agent_id}/status")
-async def put_agent_status(agent_id: str, req: dict[str, Any]) -> dict[str, Any]:
+async def put_agent_status(
+    agent_id: str, req: dict[str, Any], services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
     status = req.get("status", "")
     error = req.get("error")
-    record = _call(lambda: get_agent_service().set_status(agent_id, str(status), error))
+    record = _call(lambda: _service_from(services).set_status(agent_id, str(status), error))
     return {"agent_id": agent_id, "status": record["agent"]["last_status"]}
 
 
 @router.get("/{agent_id}/channels")
-async def list_agent_channels(agent_id: str) -> dict[str, Any]:
-    channels = _call(lambda: get_agent_service().list_channels(agent_id))
+async def list_agent_channels(
+    agent_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    channels = _call(lambda: _service_from(services).list_channels(agent_id))
     return {"agent_id": agent_id, "channels": channels}
 
 
 @router.post("/{agent_id}/channels", status_code=201)
-async def add_agent_channel(agent_id: str, req: dict[str, Any]) -> dict[str, Any]:
-    channels = _call(lambda: get_agent_service().add_channel(
+async def add_agent_channel(
+    agent_id: str, req: dict[str, Any], services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    channels = _call(lambda: _service_from(services).add_channel(
         agent_id,
         str(req.get("channel", "")),
         str(req.get("target", "")),
@@ -204,11 +239,14 @@ async def add_agent_channel(agent_id: str, req: dict[str, Any]) -> dict[str, Any
 @router.delete("/{agent_id}/channels")
 async def remove_agent_channel(
     agent_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
     channel: str = Query(...),
     target: str = Query(...),
     account: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    channels = _call(lambda: get_agent_service().remove_channel(agent_id, channel, target, account))
+    channels = _call(lambda: _service_from(services).remove_channel(
+        agent_id, channel, target, account,
+    ))
     return {"agent_id": agent_id, "channels": channels}
 
 

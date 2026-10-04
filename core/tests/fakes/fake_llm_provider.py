@@ -133,6 +133,7 @@ class FakeLLMServer:
         record_get: bool = False,
         prompt_tokens_fn: Callable[[dict[str, Any]], int] | None = None,
         context_length: int = 128000,
+        anthropic_messages: bool = False,
     ) -> None:
         self._script: list[Response] = list(script) if isinstance(script, list) else []
         self._responder: Responder | None = script if callable(script) else None
@@ -148,6 +149,7 @@ class FakeLLMServer:
         # logic such as compaction triggers sees a realistic, growing count instead of a constant).
         self.prompt_tokens_fn = prompt_tokens_fn
         self.context_length = context_length
+        self.anthropic_messages = anthropic_messages
         self.requests: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -205,6 +207,9 @@ class FakeLLMServer:
     def aux_requests(self) -> list[dict[str, Any]]:
         return [r["body"] for r in self.requests if r["kind"] == "aux"]
 
+    def anthropic_requests(self) -> list[dict[str, Any]]:
+        return [r["body"] for r in self.requests if r["kind"] == "anthropic"]
+
     def wait_for_requests(self, n: int, timeout: float = 30.0, kind: str = "main") -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -258,6 +263,66 @@ def _handler_for(server: FakeLLMServer) -> type[BaseHTTPRequestHandler]:
                 self._send_json(400, {"error": {"message": "invalid json"}})
                 return
             auth = self.headers.get("Authorization", "")
+            is_anthropic = self.path.rstrip("/").endswith("/messages")
+            if is_anthropic:
+                record = {
+                    "path": self.path,
+                    "kind": "anthropic",
+                    "auth": self.headers.get("x-api-key", ""),
+                    "headers": {k.lower(): v for k, v in self.headers.items()},
+                    "body": body,
+                    "t": time.time(),
+                }
+                with server._lock:
+                    server.requests.append(record)
+                accepted = server.accepted_api_keys
+                if accepted is not None and record["auth"] not in accepted:
+                    self._send_json(401, {"error": {"message": "invalid api key", "type": "authentication_error"}})
+                    return
+                if not server.anthropic_messages:
+                    self._send_json(404, {"error": {"message": f"unsupported path {self.path}"}})
+                    return
+                response = server._next_main(record)
+                record["response"] = type(response).__name__
+                if isinstance(response, Error):
+                    self._send_json(response.status, {"error": {"message": response.message, "type": "server_error"}})
+                    return
+                if isinstance(response, Raw):
+                    raw_response = response.body.encode()
+                    self.send_response(response.status)
+                    self.send_header("Content-Type", response.content_type)
+                    self.send_header("Content-Length", str(len(raw_response)))
+                    self.end_headers()
+                    self.wfile.write(raw_response)
+                    return
+                text = response.text if isinstance(response, Text) else ""
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                events = [
+                    ("message_start", {"type": "message_start", "message": {
+                        "id": "msg_fake", "type": "message", "role": "assistant",
+                        "model": body.get("model", "fake-model"), "content": [],
+                        "stop_reason": None, "stop_sequence": None,
+                        "usage": {"input_tokens": 16, "output_tokens": 0},
+                    }}),
+                    ("content_block_start", {"type": "content_block_start", "index": 0,
+                                               "content_block": {"type": "text", "text": ""}}),
+                    ("content_block_delta", {"type": "content_block_delta", "index": 0,
+                                               "delta": {"type": "text_delta", "text": text}}),
+                    ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+                    ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn",
+                                                                                "stop_sequence": None},
+                                        "usage": {"output_tokens": 3}}),
+                    ("message_stop", {"type": "message_stop"}),
+                ]
+                for event, payload in events:
+                    self.wfile.write(f"event: {event}\ndata: {json.dumps(payload)}\n\n".encode())
+                self.wfile.flush()
+                self.close_connection = True
+                return
             kind = "main" if body.get("tools") else "aux"
             record = {
                 "path": self.path,

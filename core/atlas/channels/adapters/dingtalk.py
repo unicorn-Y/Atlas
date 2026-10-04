@@ -107,7 +107,7 @@ class DingTalkAdapter(ChannelAdapter):
                 if value:
                     return value
             except Exception:
-                pass
+                logger.exception("DingTalk credential lookup failed")
         return get_channel_secret("dingtalk", field)
 
     # -- availability / lifecycle ------------------------------------------------
@@ -116,7 +116,7 @@ class DingTalkAdapter(ChannelAdapter):
     def is_available(cls) -> bool:
         try:
             import dingtalk_stream  # noqa: F401
-        except Exception:
+        except ImportError:
             return False
         return True
 
@@ -172,6 +172,7 @@ class DingTalkAdapter(ChannelAdapter):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                logger.exception("DingTalk stream failed")
                 if not self._running:
                     return
                 delay = self._record_stream_error(exc)
@@ -315,6 +316,7 @@ class DingTalkAdapter(ChannelAdapter):
         try:
             response = await self._http_client.post(session_webhook, json=payload, timeout=15.0)
         except Exception as exc:
+            logger.exception("DingTalk message send failed")
             return SendResult(ok=False, error=str(exc), retryable=True)
         if response.status_code >= 300:
             return SendResult(ok=False, error=f"HTTP {response.status_code}: {response.text[:200]}")
@@ -360,6 +362,7 @@ class DingTalkAdapter(ChannelAdapter):
             response = await self._http_client.post(url, json=payload, timeout=15.0)
             data = response.json() if response.status_code < 300 else {}
         except Exception as exc:
+            logger.exception("DingTalk API request failed")
             return SendResult(ok=False, error=str(exc), retryable=True)
         if data.get("errcode", 0) != 0:
             return SendResult(ok=False, error=f"dingtalk api error: {data.get('errmsg', data)}")

@@ -1,0 +1,16 @@
+npm notice run @atlas/frontend@0.1.0 test
+npm notice run vitest run --root . --reporter=dot
+
+ RUN  v5.0.2 D:/Atlas-h1-core-hardening/frontend
+
+···························································································································································
+
+ Test Files  20 passed (20)
+      Tests  155 passed (155)
+   Start at  19:10:15
+   Duration  3.61s (transform 61%, import 36%, tests 3%, worker 1%)
+
+  Transform  transforming modules took 8.05s · 61% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

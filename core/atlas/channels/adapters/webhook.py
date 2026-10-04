@@ -216,7 +216,7 @@ class WebhookAdapter(ChannelAdapter):
             response = await client.post(self.url, content=body, headers=headers)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except httpx.RequestError as exc:
             return SendResult(ok=False, error=f"webhook 请求失败：{exc}", retryable=True)
         if 200 <= response.status_code < 300:
             message_id = str(response.headers.get("x-atlas-message-id", ""))

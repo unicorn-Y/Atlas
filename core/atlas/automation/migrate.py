@@ -304,9 +304,9 @@ def import_legacy_schedules(
                     "enabled": record["enabled"],
                 }
             )
-        except Exception as exc:  # noqa: BLE001 - 单条失败不阻断整批导入
+        except Exception as exc:  # 单条失败不阻断整批导入
             report.skipped.append({"id": task_id, "reason": f"error:{exc}"})
-            log.warning("automation.migrate_task_failed", task_id=task_id, error=str(exc))
+            log.exception("automation.migrate_task_failed", task_id=task_id, error=str(exc))
 
     log.info(
         "automation.migrate_done",

@@ -37,7 +37,6 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from pydantic import BaseModel
@@ -75,6 +74,10 @@ from atlas.capabilities.durable.dbos_backend import status as dbos_status
 from atlas.channels import ChannelManager
 from atlas.channels.adapters import register_builtin_channels
 from atlas.config import get_config, load_user_settings, save_user_settings
+from atlas.api.runtime import RunState, RuntimeManager
+from atlas.api.app_services import AppServices
+from atlas.api.application import create_app
+from atlas.api.runtime_ws_router import ws_chat
 from atlas.devices import DeviceRegistry
 from atlas.devices.takeover import TakeoverStateMachine
 from atlas.gateway_service import GatewayBridge
@@ -85,7 +88,6 @@ from atlas.memory.store import MemoryStore
 from atlas.models.manager import ModelManager
 from atlas.office import MAX_PREVIEW_BYTES, render_office
 from atlas.notifications import NotificationBus
-from atlas.origin_guard import DEV_ORIGINS, OriginGuard
 from atlas.persistent_agents import PersistentAgentService
 from atlas.plugins import PluginRuntime
 from atlas.projects import ProjectStore
@@ -1019,6 +1021,8 @@ async def _start_group_turn_run(
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle."""
+    services = app.state.services
+    manager = services.runtime_mgr
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
     global skill_mgr, skill_registry, scheduler
     global capability_bus, cua_backend, browser_use, agent_backend_host
@@ -1049,7 +1053,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # module pins the machine-level local-runtime home exactly once (setdefault).
     import atlas.engine.local_runtime_adapter  # noqa: F401  # W6 integration touchpoint
 
-    await runtime_mgr.init(get_config().db_path)
+    await manager.init(get_config().db_path)
 
     mcp_client = MCPClient()
     await mcp_client.start()
@@ -1293,6 +1297,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     set_agent_service(agents_service)
     set_conversation_lookup(_conversation_summary)
+    app.state.services.persistent_agents = agents_service
+    app.state.services.agent_conversation_lookup = _conversation_summary
 
     channel_manager = ChannelManager(
         db_path=cfg.db_path.parent / "channels.sqlite",
@@ -1300,11 +1306,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     register_builtin_channels(channel_manager.register_channel)
     channel_workspace = _default_workspace()
+
+    async def submit_channel_run(conn_id: str, data: dict[str, Any]) -> None:
+        await _handle_run_start(conn_id, data, manager)
+
+    async def channel_recovery_notice(run_id: str, message: str) -> None:
+        run = manager.runs.get(run_id)
+        if run is None:
+            return
+        env = run.next_envelope("run.recovery.notice", {"message": message})
+        await manager.send_run(run, env, "channel")
+
     gateway_bridge = GatewayBridge(
         manager=channel_manager,
         db_path=cfg.db_path.parent / "channels.sqlite",
-        submit_run=_handle_run_start,
-        get_run=runtime_mgr.runs.get,
+        submit_run=submit_channel_run,
+        get_run=manager.runs.get,
+        recovery_notice=channel_recovery_notice,
         read_answer=_read_conversation_answer,
         create_conversation=_create_channel_conversation,
         default_workspace=str(channel_workspace) if channel_workspace else None,
@@ -1408,6 +1426,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:  # noqa: BLE001 — review 路由注册失败只降级
         log.warning("C6 启动注册 /review 路由失败，/review 功能暂不可用", error=str(exc))
 
+    # Keep request and WebSocket dependencies bound to this lifespan's service root.
+    services.config = get_config()
+    for service_name in (
+        "model_mgr", "memory", "orchestrator", "mcp_client", "local_execution",
+        "computer_use", "skill_mgr", "skill_registry", "scheduler", "capability_bus",
+        "cua_backend", "browser_use", "agent_backend_host", "projects", "durable",
+        "plugin_runtime", "notifications", "web_runtime", "custom_tools",
+        "telegram_service", "usage_ledger", "channel_manager", "gateway_bridge",
+        "heartbeat_service", "persistent_agents", "group_service", "group_orchestrator",
+    ):
+        setattr(services, service_name, globals().get(service_name))
+    manager.services = services
+
     yield  # app is running
 
     # Shutdown
@@ -1461,76 +1492,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await usage_ledger.close()
     if memory:
         await memory.close()
-    await runtime_mgr.close()
+    await manager.close()
 
 
 # ---------------------------------------------------------------------------
-# App
+# App factory and lifecycle-owned service root
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
-
-def _configured_origins() -> list[str]:
-    value = get_config().get("server.allowed_origins", [])
-    return [str(item) for item in value] if isinstance(value, list) else []
-
-
-# "null" is the packaged renderer (file://). CORS only decides who may read responses;
-# OriginGuard, added last and therefore outermost, decides who may send requests at all.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[*sorted(DEV_ORIGINS), "null", *_configured_origins()],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(OriginGuard, extra_origins=_configured_origins)
-
-from atlas.models.routes import models_router  # noqa: E402  # C5 integration touchpoint: mount models router
-
-app.include_router(models_router)
-
-# X2 / X4 / X5 routers — mounted before any `/api/skills/...` literal routes are
-# declared below so router paths (e.g. /api/skills/updates, /api/skills/market/*)
-# win over path-parameter routes. browser/skills-market routers re-apply the
-# origin check per route; computer/evolution rely on the app-level OriginGuard.
-from atlas.api.browser_router import router as browser_router  # noqa: E402
-from atlas.api.computer_router import router as computer_router  # noqa: E402
-from atlas.api.evolution_router import evolution_router  # noqa: E402
-from atlas.api.skills_market_router import router as skills_market_router  # noqa: E402
-
-app.include_router(computer_router)
-app.include_router(browser_router)
-app.include_router(skills_market_router)
-app.include_router(evolution_router)
-
-# W10 persistent-always-on routers (singletons injected by the lifespan):
-#   agent_router         → /api/agents/*          (persistent agents CRUD/status/heartbeat)
-#   channel_router       → /api/channels/*        (channel gateway status/config/webhook)
-#   automation_router    → /api/automations/*     (cron agents over DBOS)
-#   device_router        → /api/devices/*         (device registry + desktop takeover)
-#   local_models_router  → /api/local/models/*    (managed local runtime)
-#   agent_skills_router  → /api/agents/{id}/skills, /api/skill-proposals/*,
-#                          /api/skills/{name}/usage (skill workshop)
-from atlas.api.agent_skills_router import router as agent_skills_router  # noqa: E402
-from atlas.api.automation_router import automation_router  # noqa: E402
-from atlas.api.channel_router import router as channel_router  # noqa: E402
-from atlas.api.device_router import router as device_router  # noqa: E402
-from atlas.api.local_models_router import router as local_models_router  # noqa: E402
-
-app.include_router(channel_router)
-app.include_router(automation_router)
-app.include_router(device_router)
-app.include_router(local_models_router)
-app.include_router(agent_skills_router)
-
-# GROUP_CHAT_MOUNT: W8 groups router (group CRUD, members, timeline, stop,
-# manual turns). The lifespan binds the service/orchestrator singletons and the
-# real turn dispatcher; _handle_run_start routes group_id runs through the
-# orchestrator.
-from atlas.api.group_router import router as group_router  # noqa: E402
-
-app.include_router(group_router)
+runtime_mgr = RuntimeManager()
+app = create_app(lifespan=lifespan, services=AppServices(runtime_mgr=runtime_mgr))
 
 
 # ---------------------------------------------------------------------------
@@ -6737,7 +6707,14 @@ async def asr_websocket(websocket: WebSocket) -> None:
             await websocket.close(code=1011)
 
 
-@app.post("/api/runs/{run_id}/subtasks/{subtask_id}/cancel")
+# ---------------------------------------------------------------------------
+# WebSocket chat — Runtime Event Protocol 1.2
+# ---------------------------------------------------------------------------
+
+
+
+# Compatibility helper for tests and external imports; production HTTP requests
+# are handled by atlas.api.runtime_router with request-scoped AppServices.
 async def cancel_subtask(run_id: str, subtask_id: str) -> dict[str, str]:
     run = runtime_mgr.runs.get(run_id)
     subtask = run.subtasks.get(subtask_id) if run else None
@@ -6749,213 +6726,12 @@ async def cancel_subtask(run_id: str, subtask_id: str) -> dict[str, str]:
     return {"status": "cancelling", "subtask_id": subtask_id}
 
 
-# ---------------------------------------------------------------------------
-# WebSocket chat — Runtime Event Protocol 1.2
-# ---------------------------------------------------------------------------
-
-class RunState:
-    """Tracks a single agent run's state for the runtime protocol."""
-
-    __slots__ = (
-        "run_id", "conversation_id", "model", "started_at", "sequence",
-        "status", "events", "cancel_event", "pause_event",
-        "approval_futures", "task", "plan_state",
-        "event_lock", "steer_queue", "input_futures", "mode", "workspace",
-        "usage", "workspace_rules", "plan_future", "plan_edits",
-        "tool_allow", "tool_deny", "reasoning_effort", "reasoning_effort_applied",
-        "ephemeral", "ephemeral_source", "tool_output_dir", "subtasks",
-        "read_only", "active_skills", "profile_id", "user_input",
-        "permission_mode", "allowed_paths", "trust_future", "trust_event_id",
-        "executor", "sandbox", "extra_roots",
-        "trust_roots",
-        "project_id",
-        "telegram_user_id",
-    )
-
-    def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
-        self.run_id = run_id
-        self.conversation_id = conversation_id
-        self.model = model
-        self.started_at = datetime.now(UTC).isoformat()
-        self.sequence = 0
-        self.status = "running"  # running | paused | waiting | completed | failed | cancelled
-        self.events: list[dict[str, Any]] = []  # full event log for replay
-        self.cancel_event = asyncio.Event()
-        self.pause_event = asyncio.Event()
-        self.pause_event.set()  # not paused initially
-        self.approval_futures: dict[str, asyncio.Future[str]] = {}
-        self.task: asyncio.Task[None] | None = None
-        self.plan_state: dict[str, Any] | None = None
-        self.event_lock = asyncio.Lock()
-        self.steer_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
-        self.input_futures: dict[str, asyncio.Future[str]] = {}
-        self.mode = "act"
-        self.workspace: str | None = None
-        self.usage: list[dict[str, Any]] = []
-        self.workspace_rules: list[dict[str, Any]] = []
-        self.plan_future: asyncio.Future[dict[str, str]] | None = None
-        self.plan_edits = ""
-        self.tool_allow: list[str] | None = None
-        self.tool_deny: list[str] = []
-        self.reasoning_effort: str | None = None
-        self.reasoning_effort_applied: bool | None = None
-        self.ephemeral = False
-        self.ephemeral_source: str | None = None
-        self.tool_output_dir: Path | None = None
-        self.subtasks: dict[str, dict[str, Any]] = {}
-        self.read_only = False
-        self.active_skills: list[str] = []
-        self.profile_id: str | None = None
-        self.user_input = ""
-        self.permission_mode = "full_access"
-        self.allowed_paths: list[str] = []
-        self.trust_future: asyncio.Future[bool] | None = None
-        self.trust_event_id: str | None = None
-        self.executor = "atlas"
-        self.sandbox: dict[str, Any] | None = None
-        self.extra_roots: list[str] = []
-        self.trust_roots: list[str] = []
-        self.project_id: str | None = None
-        self.telegram_user_id: int | None = None
-
-    def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Build a Runtime Event envelope and append to log."""
-        self.sequence += 1
-        envelope = {
-            "type": "agent_event",
-            "run_id": self.run_id,
-            "event_id": f"{self.run_id}:{self.sequence}",
-            "sequence": self.sequence,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "event": event,
-            "data": data,
-        }
-        self.events.append(envelope)
-        return envelope
-
-
-class RuntimeManager:
-    """Manages active WebSocket connections and agent runs."""
-
-    def __init__(self, db_path: Path | None = None) -> None:
-        self.connections: dict[str, WebSocket] = {}  # conn_id → ws
-        self.runs: dict[str, RunState] = {}  # run_id → RunState
-        self.conn_runs: dict[str, str] = {}  # conn_id → active run_id
-        self.db_path = db_path
-        self._db: aiosqlite.Connection | None = None
-
-    async def init(self, db_path: Path | None = None) -> None:
-        """Load persisted lifecycle metadata and fail runs interrupted by restart."""
-        if db_path is not None:
-            self.db_path = db_path
-        if self.db_path is None:
-            self.db_path = get_config().db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = await aiosqlite.connect(str(self.db_path))
-        self._db.row_factory = aiosqlite.Row
-        await self._db.execute("""
-            CREATE TABLE IF NOT EXISTS runtime_runs (
-                run_id TEXT PRIMARY KEY,
-                conversation_id TEXT NOT NULL,
-                model TEXT NOT NULL,
-                status TEXT NOT NULL,
-                sequence INTEGER NOT NULL DEFAULT 0,
-                recovery_event TEXT,
-                plan_state TEXT
-            )
-        """)
-        async with self._db.execute("PRAGMA table_info(runtime_runs)") as cursor:
-            columns = {row["name"] for row in await cursor.fetchall()}
-        if "plan_state" not in columns:
-            await self._db.execute("ALTER TABLE runtime_runs ADD COLUMN plan_state TEXT")
-        await self._db.commit()
-        async with self._db.execute("SELECT * FROM runtime_runs") as cursor:
-            rows = await cursor.fetchall()
-        for row in rows:
-            run = RunState(row["run_id"], row["conversation_id"], row["model"])
-            run.status = row["status"]
-            run.sequence = row["sequence"]
-            run.plan_state = json.loads(row["plan_state"]) if row["plan_state"] else None
-            if run.status in ("running", "paused", "waiting"):
-                run.status = "failed"
-                recovery = run.next_envelope("run.failed", {
-                    "category": "interrupted",
-                    "detail": (
-                        "The service restarted while this run was active; "
-                        "execution was not resumed."
-                    ),
-                    "recoverable": True,
-                })
-                await self.persist_run(run, recovery_event=recovery)
-            elif row["recovery_event"]:
-                run.events.append(json.loads(row["recovery_event"]))
-            self.runs[run.run_id] = run
-
-    async def close(self) -> None:
-        if self._db is not None:
-            await self._db.close()
-            self._db = None
-
-    async def persist_run(
-        self, run: RunState, recovery_event: dict[str, Any] | None = None,
-    ) -> None:
-        if self._db is None:
-            return
-        await self._db.execute("""
-            INSERT INTO runtime_runs (
-                run_id, conversation_id, model, status, sequence, recovery_event, plan_state
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(run_id) DO UPDATE SET
-                conversation_id=excluded.conversation_id,
-                model=excluded.model,
-                status=excluded.status,
-                sequence=excluded.sequence,
-                recovery_event=COALESCE(excluded.recovery_event, runtime_runs.recovery_event),
-                plan_state=COALESCE(excluded.plan_state, runtime_runs.plan_state)
-        """, (
-            run.run_id, run.conversation_id, run.model, run.status, run.sequence,
-            json.dumps(recovery_event) if recovery_event else None,
-            json.dumps(run.plan_state, ensure_ascii=False) if run.plan_state else None,
-        ))
-        await self._db.commit()
-
-    async def connect(self, ws: WebSocket, conn_id: str) -> None:
-        await ws.accept()
-        self.connections[conn_id] = ws
-
-    def disconnect(self, conn_id: str) -> None:
-        self.connections.pop(conn_id, None)
-        self.conn_runs.pop(conn_id, None)
-
-    async def send(self, conn_id: str, data: dict[str, Any]) -> None:
-        ws = self.connections.get(conn_id)
-        if ws:
-            try:
-                await ws.send_json(data)
-            except Exception:
-                pass  # connection may have closed
-
-    async def send_run(self, run: RunState, data: dict[str, Any], fallback_conn_id: str) -> None:
-        """Send to the most recently attached connection for this run."""
-        conn_id = next(
-            (
-                conn for conn, active_run_id in reversed(self.conn_runs.items())
-                if active_run_id == run.run_id
-            ),
-            fallback_conn_id,
-        )
-        async with run.event_lock:
-            await self.persist_run(run)
-            await self.send(conn_id, data)
-
-
-runtime_mgr = RuntimeManager()
-
-
-async def _handle_rules_trust(conn_id: str, data: dict[str, Any]) -> None:
+async def _handle_rules_trust(
+    conn_id: str, data: dict[str, Any], manager: RuntimeManager | None = None,
+) -> None:
+    manager = manager or runtime_mgr
     run_id = str(data.get("run_id", ""))
-    run = runtime_mgr.runs.get(run_id)
+    run = manager.runs.get(run_id)
     if run and run.trust_future and not run.trust_future.done() and run.trust_event_id:
         # One RunState has one outstanding trust request, so a stale event_id
         # after reconnect can safely fall back to run_id.
@@ -6965,159 +6741,31 @@ async def _handle_rules_trust(conn_id: str, data: dict[str, Any]) -> None:
                 _set_workspace_trusted(root, True)
         run.trust_future.set_result(trusted)
         return
-    await runtime_mgr.send(conn_id, {
+    await manager.send(conn_id, {
         "type": "error", "run_id": run_id,
         "detail": "没有可匹配的待处理规则信任请求。",
     })
 
 
-@app.websocket("/ws/chat")
-async def ws_chat(ws: WebSocket) -> None:
-    """Runtime Event Protocol 1.2 WebSocket endpoint.
-
-    Client sends:
-        {"type": "run.start", "run_id": "...", "content": "...",
-         "conversation_id": "...", "model": "..."}
-        {"type": "resume", "run_id": "...", "after_sequence": N}
-        {"type": "run.cancel", "run_id": "..."}
-        {"type": "run.pause", "run_id": "..."}
-        {"type": "run.resume", "run_id": "..."}
-        {"type": "approval.response", "event_id": "...", "choice": "allow"|"deny"}
-
-    Server sends:
-        {"type": "agent_event", "run_id": "...", "event_id": "...", "sequence": N,
-         "timestamp": "...", "event": "<event_type>", "data": {...}}
-
-    Event types: run.started, run.status, run.phase, message.delta,
-    message.completed, tool.started, tool.completed, approval.required,
-    approval.responded, artifact.updated, run.paused, run.resumed,
-    run.completed, run.failed, run.cancelled
-    """
-    conn_id = str(uuid.uuid4())
-    await runtime_mgr.connect(ws, conn_id)
-
-    try:
-        while True:
-            raw = await ws.receive_text()
-            data = json.loads(raw)
-            msg_type = data.get("type", "")
-
-            if msg_type == "run.start":
-                await _handle_run_start(conn_id, data)
-
-            elif msg_type == "resume":
-                await _handle_resume(conn_id, data)
-
-            elif msg_type == "rules.trust":
-                await _handle_rules_trust(conn_id, data)
-
-            elif msg_type == "run.cancel":
-                run_id = data.get("run_id", "")
-                run = runtime_mgr.runs.get(run_id)
-                if run and run.status not in ("completed", "failed", "cancelled"):
-                    run.cancel_event.set()
-
-            elif msg_type == "run.steer":
-                run_id = str(data.get("run_id", ""))
-                run = runtime_mgr.runs.get(run_id)
-                if not run:
-                    rejected = RunState(run_id, "", "")
-                    await runtime_mgr.send(conn_id, rejected.next_envelope(
-                        "run.steer.rejected", {"reason": "run_not_active"},
-                    ))
-                else:
-                    from atlas.engine.steer_dispatch import queue_run_steer
-
-                    reason = queue_run_steer(run, data)
-                    if reason:
-                        rejected = RunState(run_id, "", "")
-                        await runtime_mgr.send(conn_id, rejected.next_envelope(
-                            "run.steer.rejected", {"reason": reason},
-                        ))
-
-            elif msg_type == "subtask.message":
-                run_id = str(data.get("run_id", ""))
-                subtask_id = str(data.get("subtask_id", ""))
-                text = data.get("text")
-                run = runtime_mgr.runs.get(run_id)
-                service = getattr(orchestrator, "_delegation", None) if orchestrator else None
-                if (run is None or service is None or not isinstance(text, str)
-                        or not service.steer_subtask(subtask_id, text)):
-                    if run is not None:
-                        await runtime_mgr.send_run(run, run.next_envelope(
-                            "subtask.steer_rejected", {"subtask_id": subtask_id,
-                                                        "reason": "subtask_not_active"},
-                        ), conn_id)
-                else:
-                    await runtime_mgr.send_run(run, run.next_envelope(
-                        "subtask.steered", {"subtask_id": subtask_id, "text": text.strip()},
-                    ), conn_id)
-
-            elif msg_type == "input.response":
-                event_id = str(data.get("event_id", ""))
-                for run in runtime_mgr.runs.values():
-                    future = run.input_futures.pop(event_id, None)
-                    if future and not future.done():
-                        future.set_result(str(data.get("text", "")))
-                        break
-
-            elif msg_type == "run.plan.approve":
-                run = runtime_mgr.runs.get(str(data.get("run_id", "")))
-                if (run and run.status == "waiting" and run.plan_future
-                        and not run.plan_future.done()
-                        and data.get("event_id") == f"plan:{run.run_id}"):
-                    run.plan_future.set_result({
-                        "action": "approve", "edits": str(data.get("edits", "")),
-                    })
-
-            elif msg_type == "run.pause":
-                run_id = data.get("run_id", "")
-                run = runtime_mgr.runs.get(run_id)
-                if run and run.status == "running":
-                    run.pause_event.clear()
-                    run.status = "paused"
-                    env = run.next_envelope("run.paused", {"status": "paused"})
-                    await runtime_mgr.persist_run(run)
-                    await runtime_mgr.send(conn_id, env)
-
-            elif msg_type == "run.resume":
-                run_id = data.get("run_id", "")
-                run = runtime_mgr.runs.get(run_id)
-                if run and run.status == "paused":
-                    run.pause_event.set()
-                    run.status = "running"
-                    env = run.next_envelope("run.resumed", {"status": "running"})
-                    await runtime_mgr.persist_run(run)
-                    await runtime_mgr.send(conn_id, env)
-
-            elif msg_type == "approval.response":
-                event_id = data.get("event_id", "")
-                choice = data.get("choice", "deny")
-                # Find the run that has this approval
-                for run in runtime_mgr.runs.values():
-                    fut = run.approval_futures.pop(event_id, None)
-                    if fut and not fut.done():
-                        fut.set_result(choice)
-                        env = run.next_envelope("approval.responded", {
-                            "event_id": event_id, "choice": choice,
-                        })
-                        await runtime_mgr.persist_run(run)
-                        await runtime_mgr.send(conn_id, env)
-                        break
-
-    except WebSocketDisconnect:
-        runtime_mgr.disconnect(conn_id)
 
 
-async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
+async def _handle_run_start(
+    conn_id: str, data: dict[str, Any], manager: RuntimeManager | None = None,
+) -> None:
     """Start a new agent run."""
+    manager = manager or runtime_mgr
+    services = manager.services
+    model_mgr = getattr(services, "model_mgr", None) or globals().get("model_mgr")
+    memory = getattr(services, "memory", None) or globals().get("memory")
+    orchestrator = getattr(services, "orchestrator", None) or globals().get("orchestrator")
+    projects = getattr(services, "projects", None) or globals().get("projects")
     run_id = data.get("run_id") or str(uuid.uuid4())
-    existing = runtime_mgr.runs.get(run_id)
+    existing = manager.runs.get(run_id)
     if existing:
-        runtime_mgr.conn_runs[conn_id] = run_id
+        manager.conn_runs[conn_id] = run_id
         async with existing.event_lock:
             for env in list(existing.events):
-                await runtime_mgr.send(conn_id, env)
+                await manager.send(conn_id, env)
         return
 
     content = data.get("content", "")
@@ -7134,7 +6782,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         agent_profile = _resolve_agent_for_run(agent_key)
         if agent_profile is None:
             invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
-            await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid.next_envelope("run.failed", {
                 "category": "validation", "detail": f"persistent agent not found: {agent_key}",
             }))
             return
@@ -7155,7 +6803,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             raise ValueError("workspace must be an absolute path")
     except ValueError:
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
-        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
             "category": "validation", "detail": "workspace must be an absolute path",
         }))
         return
@@ -7176,7 +6824,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             extra_roots = normalized_roots
         except ValueError:
             invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
-            await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid.next_envelope("run.failed", {
                 "category": "validation", "detail": "附加目录必须是绝对路径或 SSH 地址，且最多 5 个。",
             }))
             return
@@ -7184,7 +6832,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
     profile = _profile_store().get(str(profile_id)) if profile_id else None
     if profile_id and profile is None:
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
-        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
             "category": "validation", "detail": f"profile not found: {profile_id}",
         }))
         return
@@ -7220,7 +6868,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             run_tool_deny is not None and (not isinstance(run_tool_deny, list)
             or any(not isinstance(item, str) or not item for item in run_tool_deny))):
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
-        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
             "category": "validation", "detail": "tool_allow/tool_deny 必须是非空字符串列表",
         }))
         return
@@ -7234,13 +6882,13 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         effective_mode = "plan"
     if permission_mode not in {"full_access", "ask_each", "ask_writes", "auto_file", "plan", "read_only"}:
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
-        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
             "category": "validation", "detail": "invalid permission_mode or allowed_paths",
         }))
         return
     if reasoning_effort not in {None, "minimal", "low", "medium", "high"}:
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
-        await runtime_mgr.send(conn_id, invalid.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
             "category": "validation", "detail": "invalid reasoning_effort",
         }))
         return
@@ -7254,7 +6902,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             str(data.get("conversation_id", "")),
             str(data.get("model", "")),
         )
-        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
             "category": "skill", "detail": str(exc),
         }))
         return
@@ -7266,7 +6914,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             str(data.get("conversation_id", "")),
             str(data.get("model", "")),
         )
-        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
             "category": "validation", "detail": str(exc),
         }))
         return
@@ -7278,13 +6926,13 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             content += "\n\nAttached files stored at:\n" + "\n".join(file_paths)
     except ValueError as exc:
         invalid_run = RunState(run_id, str(data.get("conversation_id", "")), "")
-        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
             "category": "validation", "detail": str(exc),
         }))
         return
     resume_from = data.get("resume_from")
     recovered_plan = None
-    prior_run = runtime_mgr.runs.get(resume_from) if isinstance(resume_from, str) else None
+    prior_run = manager.runs.get(resume_from) if isinstance(resume_from, str) else None
     if resume_from is not None:
         if not prior_run or prior_run.status != "failed" or not prior_run.plan_state:
             raise ValueError("resume_from must reference an interrupted run with a saved plan")
@@ -7332,7 +6980,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                     review_workspace = review_worktree
             if not review_workspace or str(review_workspace).startswith("ssh://"):
                 invalid_run = RunState(run_id, conv_id, str(data.get("model", "")))
-                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                     "category": "validation",
                     "detail": "/review 需要本机 git 工作目录才能读取改动；请先为本对话选择一个本机工作目录。",
                 }))
@@ -7342,7 +6990,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                 review_diff = collect_diff(str(review_workspace), review_scope)
             except ValueError as exc:
                 invalid_run = RunState(run_id, conv_id, str(data.get("model", "")))
-                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                     "category": "validation", "detail": str(exc),
                 }))
                 return
@@ -7364,7 +7012,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         run.telegram_user_id = data["telegram_user_id"]
     if effective_mode not in {"act", "plan"}:
         run.status = "failed"
-        await runtime_mgr.send(conn_id, run.next_envelope("run.failed", {
+        await manager.send(conn_id, run.next_envelope("run.failed", {
             "category": "validation", "detail": "mode must be 'act' or 'plan'",
         }))
         return
@@ -7417,19 +7065,19 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         or (run.sandbox.get("image") is not None and not isinstance(run.sandbox.get("image"), str))
     ):
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
             "category": "validation", "detail": "Docker 沙箱配置无效。",
         }))
         return
     if run.sandbox and run.executor != "atlas":
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
             "category": "validation", "detail": "Docker 沙箱目前只支持 Atlas Agent 执行。",
         }))
         return
     if run.executor not in {"atlas", "codex", "claude", "hermes", "pi", "zcode"}:
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
             "category": "validation", "detail": "所选执行 Agent 不受支持。",
         }))
         return
@@ -7440,7 +7088,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
             mode = ("只读" if run.permission_mode == "read_only" or run.read_only
                     else "改前问我" if run.permission_mode == "ask_writes" else "需要确认")
-            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "permission",
                 "detail": f"当前对话是「{mode}」模式，外部 Agent 的操作不经过 Atlas 确认，所以不能启动。"
                           "请把对话权限切到「完全访问」后重试。",
@@ -7448,7 +7096,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             return
         if workspace and str(workspace).startswith("ssh://"):
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "validation",
                 "detail": "外部 Agent 目前不能在 SSH 工作目录中运行，请选择本机工作目录。",
             }))
@@ -7459,7 +7107,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         }.get(run.executor)
         if not available or not available["available"]:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "external_agent",
                 "detail": (available or {}).get("detail", "所选外部 Agent 当前不可用，请先安装对应命令行程序。"),
             }))
@@ -7508,7 +7156,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                 }]
     if run.sandbox and (not workspace or str(workspace).startswith("ssh://")):
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-        await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
             "category": "validation", "detail": "Docker 沙箱需要本机工作目录，不能与 ssh:// 同时使用。",
         }))
         return
@@ -7517,13 +7165,13 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             host, remote_root = ssh_workspaces.parse_workspace(str(workspace))
         except ValueError as exc:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "validation", "detail": str(exc),
             }))
             return
         if data.get("worktree") is not None:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "validation", "detail": "SSH worktrees are not supported",
             }))
             return
@@ -7534,7 +7182,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         workspace_path = Path(workspace).expanduser().resolve()
         if not workspace_path.is_dir():
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "validation", "detail": "workspace directory does not exist",
             }))
             return
@@ -7542,7 +7190,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             workspace_path = Path(conversation["worktree_path"]).resolve()
             if not workspace_path.is_dir():
                 invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                     "category": "validation", "detail": "conversation worktree is missing",
                 }))
                 return
@@ -7550,7 +7198,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         if worktree_request is not None:
             if not isinstance(worktree_request, dict):
                 invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                     "category": "validation", "detail": "worktree must be an object",
                 }))
                 return
@@ -7567,7 +7215,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                     workspace_path = Path(worktree_data["worktree_path"])
                 except (OSError, ValueError) as exc:
                     invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-                    await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                         "category": "validation", "detail": str(exc),
                     }))
                     return
@@ -7579,13 +7227,13 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         context_files = data.get("context_files", [])
         if not isinstance(context_files, list):
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "validation", "detail": "context_files must be a list",
             }))
             return
         if context_files and not run.workspace:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "validation", "detail": "context_files require a workspace",
             }))
             return
@@ -7615,7 +7263,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                 context_blocks.append(label)
             except HTTPException as exc:
                 invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                     "category": "validation", "detail": str(exc.detail),
                 }))
                 return
@@ -7624,7 +7272,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         context_conversations = data.get("context_conversations", [])
         if not isinstance(context_conversations, list) or len(context_conversations) > 3:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                 "category": "validation", "detail": "context_conversations must contain at most three conversation ids",
             }))
             return
@@ -7632,7 +7280,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             other = await memory.get_conversation(str(other_id)) if memory else None
             if other is None:
                 invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                     "category": "validation", "detail": f"context conversation not found: {other_id}",
                 }))
                 return
@@ -7646,7 +7294,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
         if data.get("ephemeral") is True:
             if memory is None:
                 invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-                await runtime_mgr.send(conn_id, invalid_run.next_envelope("run.failed", {
+                await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
                     "category": "backend", "detail": "memory service unavailable",
                 }))
                 return
@@ -7688,15 +7336,15 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
                           if item["root"] in untrusted_roots],
             })
             run.status = "waiting"
-            await runtime_mgr.send(conn_id, trust_env)
+            await manager.send(conn_id, trust_env)
         else:
-            await runtime_mgr.send(conn_id, run.next_envelope("rules.loaded", {
+            await manager.send(conn_id, run.next_envelope("rules.loaded", {
                 "files": [{"path": item["path"], "bytes": item["bytes"]}
                           for item in run.workspace_rules],
             }))
-    runtime_mgr.runs[run_id] = run
-    runtime_mgr.conn_runs[conn_id] = run_id
-    await runtime_mgr.persist_run(run)
+    manager.runs[run_id] = run
+    manager.conn_runs[conn_id] = run_id
+    await manager.persist_run(run)
 
     # Start the run in background so we can keep receiving messages
     execute = _execute_run(
@@ -7707,6 +7355,7 @@ async def _handle_run_start(conn_id: str, data: dict[str, Any]) -> None:
             workspace=run.workspace,
             workspace_rules=run.workspace_rules,
             mode=run.mode,
+            manager=manager,
         )
     execution = _execute_after_rule_trust(run, execute) if run.trust_future else execute
     if agent_profile is not None:
@@ -7874,14 +7523,17 @@ async def _execute_external_agent(
     return "".join(response), changed
 
 
-async def _handle_resume(conn_id: str, data: dict[str, Any]) -> None:
+async def _handle_resume(
+    conn_id: str, data: dict[str, Any], manager: RuntimeManager | None = None,
+) -> None:
     """Replay events after a given sequence number."""
+    manager = manager or runtime_mgr
     run_id = data.get("run_id", "")
     try:
         after_seq = max(0, int(data.get("after_sequence", 0)))
     except (TypeError, ValueError):
         after_seq = 0
-    run = runtime_mgr.runs.get(run_id)
+    run = manager.runs.get(run_id)
     if not run:
         missing = RunState(run_id, "", "")
         missing.sequence = after_seq
@@ -7889,16 +7541,16 @@ async def _handle_resume(conn_id: str, data: dict[str, Any]) -> None:
             "category": "interrupted",
             "detail": "Run state is no longer available; start a new run to continue.",
         })
-        await runtime_mgr.send(conn_id, env)
+        await manager.send(conn_id, env)
         return
 
-    runtime_mgr.conn_runs[conn_id] = run_id
+    manager.conn_runs[conn_id] = run_id
 
     # Keep live events behind the replay so sequence order is preserved.
     async with run.event_lock:
         for env in list(run.events):
             if env["sequence"] > after_seq:
-                await runtime_mgr.send(conn_id, env)
+                await manager.send(conn_id, env)
 
 
 def _map_tool_runtime_event(
@@ -7975,8 +7627,18 @@ async def _execute_run(
     workspace_rules: list[dict[str, Any]] | None = None,
     mode: str = "act",
     continuation: bool = False,
+    manager: RuntimeManager | None = None,
 ) -> None:
     """Execute agent run, emitting Runtime Event envelopes."""
+    manager = manager or runtime_mgr
+    services = manager.services
+    model_mgr = getattr(services, "model_mgr", None) or globals().get("model_mgr")
+    memory = getattr(services, "memory", None) or globals().get("memory")
+    orchestrator = getattr(services, "orchestrator", None) or globals().get("orchestrator")
+    local_execution = getattr(services, "local_execution", None) or globals().get("local_execution")
+    sandbox_manager = getattr(services, "sandbox_manager", None) or globals().get("sandbox_manager")
+    scheduler = getattr(services, "scheduler", None) or globals().get("scheduler")
+    usage_ledger = getattr(services, "usage_ledger", None) or globals().get("usage_ledger")
     assert orchestrator is not None
     assert memory is not None
     had_tool_failure = False
@@ -7995,7 +7657,7 @@ async def _execute_run(
                 with suppress(Exception):
                     data["host"] = ssh_workspaces.parse_workspace(workspace)[0]
         env = run.next_envelope(event, data)
-        await runtime_mgr.send_run(run, env, fallback_conn_id=conn_id)
+        await manager.send_run(run, env, fallback_conn_id=conn_id)
         if event in {"run.started", "run.completed", "run.failed"}:
             hooks = _hook_store()
             asyncio.create_task(hooks.execute(event, {
@@ -8053,7 +7715,7 @@ async def _execute_run(
 
     async def persist_plan(value: dict[str, Any]) -> None:
         run.plan_state = value
-        await runtime_mgr.persist_run(run)
+        await manager.persist_run(run)
         await emit("run.plan.updated", {
             "plan": value,
             "resumed": plan_state is not None,
@@ -8154,13 +7816,40 @@ async def _execute_run(
                 approval_payload["reviewer_reason"] = str(tool_args["_reviewer_reason"])
             if tool_args.get("subtask_id"):
                 approval_payload["subtask_id"] = tool_args["subtask_id"]
-            await emit("approval.required", approval_payload)
+            approval_future = run.approval_futures.get(approval_event_id)
+            if approval_future is None:
+                approval_future = asyncio.get_running_loop().create_future()
+                run.approval_futures[approval_event_id] = approval_future
             run.status = "waiting"
-            if run.telegram_user_id is not None and telegram_service is not None:
-                approval_future = await telegram_service.request_approval(
+            await emit("approval.required", approval_payload)
+
+            services = manager.services
+            bridge = getattr(services, "gateway_bridge", None) if services else None
+            try:
+                if bridge is not None and bridge.owns_run(run.run_id):
+                    return await bridge.request_approval(
+                        run, approval_event_id, approval_payload["description"],
+                    )
+                telegram = getattr(services, "telegram_service", None) if services else None
+                if run.telegram_user_id is not None and telegram is not None:
+                    telegram_future = await telegram.request_approval(
                     run.telegram_user_id, run.run_id, approval_event_id,
                     f"需要确认执行 {tool_name}。",
-                )
+                    )
+                    cancel_waiter = asyncio.create_task(run.cancel_event.wait())
+                    try:
+                        done, _ = await asyncio.wait(
+                            {telegram_future, cancel_waiter}, timeout=600,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if telegram_future in done:
+                            return telegram_future.result()
+                        if not approval_future.done():
+                            approval_future.set_result("deny")
+                        return "deny"
+                    finally:
+                        cancel_waiter.cancel()
+                        await asyncio.gather(cancel_waiter, return_exceptions=True)
                 cancel_waiter = asyncio.create_task(run.cancel_event.wait())
                 try:
                     done, _ = await asyncio.wait(
@@ -8168,21 +7857,17 @@ async def _execute_run(
                         return_when=asyncio.FIRST_COMPLETED,
                     )
                     if approval_future in done:
-                        choice = approval_future.result()
-                    else:
-                        choice = "deny"
+                        return approval_future.result()
+                    if not approval_future.done():
+                        approval_future.set_result("deny")
+                    return "deny"
                 finally:
                     cancel_waiter.cancel()
                     await asyncio.gather(cancel_waiter, return_exceptions=True)
-                run.status = "running"
-                return choice
-            # Create a future for this approval
-            loop = asyncio.get_running_loop()
-            fut: asyncio.Future[str] = loop.create_future()
-            run.approval_futures[approval_event_id] = fut
-            choice = await fut
-            run.status = "running"
-            return choice
+            finally:
+                run.approval_futures.pop(approval_event_id, None)
+                if run.status == "waiting":
+                    run.status = "running"
 
         async def input_callback(
             call_id: str, question: str, options: list[str] | None,
@@ -8490,7 +8175,7 @@ async def _execute_run(
                         },
                         "event_id": plan_event_id,
                     })
-                    await runtime_mgr.persist_run(run)
+                    await manager.persist_run(run)
                     while not run.plan_future.done():
                         if run.cancel_event.is_set():
                             run.status = "cancelled"
@@ -8511,7 +8196,7 @@ async def _execute_run(
                         image_attachments=image_attachments,
                         active_skill_instructions=active_skill_instructions,
                         workspace=workspace, workspace_rules=workspace_rules,
-                        mode="act", continuation=True,
+                        mode="act", continuation=True, manager=manager,
                     )
                     return
                 if full_response:
@@ -8571,7 +8256,7 @@ async def _execute_run(
                         image_attachments=image_attachments,
                         active_skill_instructions=active_skill_instructions,
                         workspace=workspace, workspace_rules=workspace_rules,
-                        mode="act", continuation=True,
+                        mode="act", continuation=True, manager=manager,
                     )
                     return
         await emit("run.completed", {
@@ -8607,3 +8292,7 @@ async def _execute_run(
 from atlas.api.agent_router import router as agent_router  # noqa: E402
 
 app.include_router(agent_router)
+
+app.state.services.runtime_start_handler = _handle_run_start
+app.state.services.runtime_resume_handler = _handle_resume
+app.state.services.rules_trust_handler = _handle_rules_trust

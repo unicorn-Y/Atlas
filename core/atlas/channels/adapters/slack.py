@@ -79,7 +79,7 @@ class SlackAdapter(ChannelAdapter):
                 if value:
                     return value
             except Exception:
-                pass
+                logger.exception("Slack credential lookup failed")
         return get_channel_secret("slack", field)
 
     # -- availability / lifecycle ------------------------------------------------
@@ -88,7 +88,7 @@ class SlackAdapter(ChannelAdapter):
     def is_available(cls) -> bool:
         try:
             import slack_sdk  # noqa: F401
-        except Exception:
+        except ImportError:
             return False
         return True
 
@@ -240,6 +240,7 @@ class SlackAdapter(ChannelAdapter):
         try:
             response = await self._web.chat_postMessage(**payload)
         except Exception as exc:
+            logger.exception("Slack message send failed")
             return SendResult(ok=False, error=str(exc), retryable=True)
         data = getattr(response, "data", None)
         if not isinstance(data, dict):

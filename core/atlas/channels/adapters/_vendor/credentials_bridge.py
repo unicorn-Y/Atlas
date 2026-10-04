@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import os
 import re
+import logging
 from typing import Optional
 
 try:  # Wave2 converge: shared W2a credential store when present.
     from atlas.channels.credentials import channel_credentials as _shared
-except Exception:  # pragma: no cover - pre-converge fallback only
+except ImportError:  # pragma: no cover - pre-converge fallback only
     _shared = None
 
 
@@ -32,6 +33,7 @@ def get_channel_secret(name: str, field: str) -> Optional[str]:
         try:
             value = _shared.get(name, field)
         except Exception:
+            logging.getLogger(__name__).exception("Channel credential lookup failed")
             value = None
         if value:
             return value

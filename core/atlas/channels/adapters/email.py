@@ -85,6 +85,7 @@ def parse_mail(raw: bytes, *, uid: str, account: str = "") -> MessageEvent:
             try:
                 body_parts.append(part.get_content())
             except Exception:
+                logger.exception("Email body decoding failed; falling back to UTF-8")
                 payload = part.get_payload(decode=True) or b""
                 body_parts.append(payload.decode("utf-8", "replace"))
     body = "\n".join(body_parts).strip()
@@ -99,6 +100,7 @@ def parse_mail(raw: bytes, *, uid: str, account: str = "") -> MessageEvent:
         parsed = email.utils.parsedate_to_datetime(str(message.get("Date", "")))
         ts = parsed.timestamp() if parsed else 0.0
     except Exception:
+        logger.exception("Email date parsing failed")
         ts = 0.0
     return MessageEvent(
         channel="email",
@@ -273,7 +275,7 @@ class EmailAdapter(ChannelAdapter):
             try:
                 client.logout()
             except Exception:
-                pass
+                logger.exception("Email IMAP logout failed")
 
     def _passes_filters(self, event: MessageEvent) -> bool:
         subject = str(event.raw.get("subject", "")).lower()
@@ -325,7 +327,7 @@ class EmailAdapter(ChannelAdapter):
                 try:
                     client.quit()
                 except Exception:
-                    pass
+                    logger.exception("Email SMTP disconnect failed")
             return str(message.get("Message-ID", ""))
 
         try:
@@ -335,6 +337,7 @@ class EmailAdapter(ChannelAdapter):
         except AdapterAuthError as exc:
             return SendResult(ok=False, error=str(exc), retryable=False)
         except Exception as exc:
+            logger.exception("Email send failed")
             return SendResult(ok=False, error=f"邮件发送失败：{exc}", retryable=True)
         return SendResult(ok=True, message_id=message_id)
 

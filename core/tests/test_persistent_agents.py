@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from atlas.api import agent_router
+from atlas.api.app_services import AppServices
 from atlas.gateway_service import SessionMapper
 from atlas.persistent_agents import PersistentAgentService, session_key
 from atlas.persistent_agents.store import (
@@ -31,12 +32,11 @@ def service(store) -> PersistentAgentService:
 
 @pytest.fixture()
 def client(service):
-    agent_router.set_agent_service(service)
     app = FastAPI()
+    app.state.services = AppServices(persistent_agents=service)
     app.include_router(agent_router.router)
     with TestClient(app) as test_client:
         yield test_client
-    agent_router.set_agent_service(None)
 
 
 def make_agent(service: PersistentAgentService, **overrides: Any) -> dict[str, Any]:

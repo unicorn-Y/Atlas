@@ -36,6 +36,7 @@ import structlog
 
 from atlas.channels import ChannelManager
 from atlas.channels.contract import MessageEvent
+from atlas.channels.delivery import OutboundRecord
 from atlas.channels.routing import resolve_binding, validate_permission_mode
 from atlas.persistent_agents import session_key
 
@@ -119,6 +120,7 @@ class GatewayBridge:
         default_permission_mode: str = "ask_writes",
         approval_timeout_seconds: float = 600,
         get_agent: Callable[[str], dict[str, Any] | None] | None = None,
+        recovery_notice: Callable[[str, str], Awaitable[None]] | None = None,
     ) -> None:
         self.manager = manager
         self.sessions = SessionMapper(db_path)
@@ -133,11 +135,18 @@ class GatewayBridge:
             raise ValueError("approval timeout must be positive")
         self._approval_timeout_seconds = approval_timeout_seconds
         self._get_agent = get_agent
+        self._recovery_notice = recovery_notice
         self._origins: dict[str, MessageEvent] = {}
         self._approvals: dict[tuple[str, str], tuple[MessageEvent, asyncio.Future[str]]] = {}
         self._channel_decisions: set[tuple[str, str]] = set()
         self._recent_approvals: dict[tuple[str, ...], tuple[float, str]] = {}
         self.manager.set_control_handler(self.handle_approval_reply)
+        self.manager.set_delivery_failure_handler(self.delivery_failed)
+
+    async def delivery_failed(self, record: OutboundRecord, message: str) -> None:
+        run_id = str(record.metadata.get("run_id") or "")
+        if run_id and self._recovery_notice is not None:
+            await self._recovery_notice(run_id, message)
 
     def permission_mode(self, event: MessageEvent, agent_id: str | None) -> str:
         binding = resolve_binding(self.manager.bindings, event, agent_ids=self.manager.agent_ids)
@@ -249,8 +258,8 @@ class GatewayBridge:
             return known
         try:
             conversation_id = await self._create_conversation(key, event)
-        except Exception as exc:  # noqa: BLE001 — infra failure: report in-band
-            log.error("gateway.conversation_create_failed", session_key=key, error=str(exc))
+        except Exception:
+            log.exception("gateway.conversation_create_failed", session_key=key)
             return None
         if not conversation_id:
             return None
@@ -272,9 +281,9 @@ class GatewayBridge:
             await self._dispatch(event, agent_id)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001 — last-resort in-band failure reply
-            log.error("gateway.dispatch_failed", channel=event.channel,
-                      event_id=event.event_id, error=str(exc))
+        except Exception as exc:
+            log.exception("gateway.dispatch_failed", channel=event.channel,
+                          event_id=event.event_id)
             await self._reply(event, f"任务执行失败：{str(exc)[:MAX_FAILURE_CHARS]}")
             await self._project_status(agent_id, "idle", str(exc))
 
@@ -333,7 +342,8 @@ class GatewayBridge:
             await self._reply(event, "任务已停止。")
             await self._project_status(agent_id, "idle")
             return
-        except Exception as exc:  # noqa: BLE001 — in-band failure summary
+        except Exception as exc:
+            log.exception("gateway.run_failed", run_id=run.run_id)
             await self._reply(event, f"任务执行失败：{str(exc)[:MAX_FAILURE_CHARS]}")
             await self._project_status(agent_id, "idle", str(exc))
             return
@@ -355,8 +365,8 @@ class GatewayBridge:
         answer = ""
         try:
             answer = str(await self._read_answer(conversation_id) or "")
-        except Exception as exc:  # noqa: BLE001 — still deliver a terminal ack
-            log.warning("gateway.answer_read_failed", error=str(exc))
+        except Exception:
+            log.exception("gateway.answer_read_failed", conversation_id=conversation_id)
         await self._reply(event, answer or "任务完成。")
         await self._project_status(agent_id, "idle")
 
@@ -366,12 +376,17 @@ class GatewayBridge:
         body = str(text or "").strip()
         if not body:
             return
+        run_id = next(
+            (run_id for run_id, origin in self._origins.items()
+             if self._origin_key(origin) == self._origin_key(event)), None,
+        )
         await self.manager.send(
             event.channel,
             event.chat_id,
             body[:MAX_REPLY_CHARS],
             account=event.account or "",
             reply_to=event.thread_id or "",
+            metadata={"run_id": run_id} if run_id else None,
         )
 
     async def _project_status(self, agent_id: str | None, status: str, error: str = "") -> None:
@@ -379,8 +394,8 @@ class GatewayBridge:
             return
         try:
             await _await_maybe(self._set_agent_status(agent_id, status, error))
-        except Exception as exc:  # noqa: BLE001 — projection must never break a run
-            log.debug("gateway.status_projection_failed", agent_id=agent_id, error=str(exc))
+        except Exception:
+            log.exception("gateway.status_projection_failed", agent_id=agent_id)
 
     @staticmethod
     def _failure_detail(run: Any) -> str:

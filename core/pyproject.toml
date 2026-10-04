@@ -87,7 +87,7 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
+select = ["E", "F", "I", "N", "W", "UP", "BLE001", "S110", "S112"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

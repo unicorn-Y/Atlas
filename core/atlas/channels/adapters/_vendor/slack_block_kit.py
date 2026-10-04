@@ -6,7 +6,7 @@ gives us real structural primitives — section headers, dividers, and true
 *nested* lists via ``rich_text`` — that plain mrkdwn can only approximate.
 
 # Ported from NousResearch/hermes-agent @ c8301ea6c9 (plugins/platforms/slack/block_kit.py)
-# Verbatim port (pure stdlib; zero changes vs. upstream).
+# Atlas H1 change: log rendering failures before the existing plain-text fallback.
 
 Design constraints (why this module is deliberately conservative):
 
@@ -32,6 +32,7 @@ adapter state — so it is trivially unit-testable.
 from __future__ import annotations
 
 import re
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 # Slack Block Kit hard limits (https://docs.slack.dev/reference/block-kit/blocks)
@@ -482,6 +483,7 @@ def render_blocks(markdown: str, mrkdwn_fn=None) -> Optional[List[Block]]:
         return blocks
     except Exception:
         # Never let a rendering bug drop a message.
+        logging.getLogger(__name__).exception("Slack Block Kit rendering failed")
         return None
 
 
@@ -621,4 +623,5 @@ def sanitize_blocks(blocks: Optional[List[Block]]) -> Optional[List[Block]]:
         return out[:MAX_BLOCKS]
     except Exception:
         # A sanitizer bug must never take down the send path.
+        logging.getLogger(__name__).exception("Slack Block Kit sanitization failed")
         return None

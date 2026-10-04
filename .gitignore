@@ -110,3 +110,6 @@ data/engine/
 .tmp/
 data/*.sqlite
 data/devices/
+
+# H1 measurement junk (never commit)
+**/pytest-temp/

@@ -120,7 +120,7 @@ class WeComAdapter(ChatSendQueueMixin, ChannelAdapter):
                 if value:
                     return value
             except Exception:
-                pass
+                logger.exception("WeCom credential lookup failed")
         return get_channel_secret("wecom", field)
 
     def _normalize_apps(self, config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -332,6 +332,7 @@ class WeComAdapter(ChatSendQueueMixin, ChannelAdapter):
                 else:
                     return SendResult(ok=False, error=str(result))
         except Exception as exc:  # queue worker cancelled during shutdown, etc.
+            logger.exception("WeCom queued message failed")
             return SendResult(ok=False, error=str(exc), retryable=True)
         return SendResult(ok=True, message_id=last_message_id)
 
@@ -361,6 +362,7 @@ class WeComAdapter(ChatSendQueueMixin, ChannelAdapter):
                                   retryable=errcode in {-1, 45009})
             return SendResult(ok=False, error="send failed after token refresh")
         except Exception as exc:
+            logger.exception("WeCom message send failed")
             return SendResult(ok=False, error=str(exc), retryable=True)
 
     # -- helpers ------------------------------------------------------------------

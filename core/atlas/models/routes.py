@@ -9,22 +9,23 @@ keyring and never echoed in any response, log or persisted setting.
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import structlog
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
+
+from atlas.api.app_services import AppServices
+from atlas.api.dependencies import get_app_services
 
 log = structlog.get_logger()
 
 models_router = APIRouter()
 
 
-def _mgr() -> Any:
-    """The server's ModelManager singleton (lazy import avoids a cycle)."""
-    from atlas import server as _server
-
-    mgr = _server.model_mgr
+def _mgr(services: AppServices) -> Any:
+    """Resolve the ModelManager owned by this FastAPI application."""
+    mgr = services.model_mgr
     assert mgr is not None, "ModelManager 尚未初始化"
     return mgr
 
@@ -52,6 +53,8 @@ def _provider_payload(mgr: Any, provider: dict[str, Any]) -> dict[str, Any]:
         "base_url": config.get("base_url") or provider.get("default_base_url"),
         "key_count": len(keys),
         "keys": keys,
+        "api_mode_override": mgr.get_api_mode_override(pid),
+        "api_mode_probe": mgr.get_api_mode_probe(pid),
         # 已配密钥或有 base_url 覆盖都算已配置。
         "configured": bool(keys) or bool(config.get("base_url")),
     }
@@ -70,25 +73,36 @@ def _require_provider(get_provider: Any, pid: str) -> dict[str, Any]:
 
 
 @models_router.get("/api/providers")
-async def list_providers() -> list[dict[str, Any]]:
+async def list_providers(
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> list[dict[str, Any]]:
     """All catalog providers with per-provider base_url and key-slot state."""
-    mgr = _mgr()
+    mgr = _mgr(services)
     PROVIDERS, _ = _catalog()
     return [_provider_payload(mgr, provider) for provider in PROVIDERS]
 
 
 class ProviderConfigUpdateRequest(BaseModel):
     base_url: str | None = None
+    api_mode_override: Literal[
+        "auto", "chat_completions", "anthropic_messages", "codex_responses",
+    ] | None = None
 
 
 @models_router.put("/api/providers/{pid}/config")
-async def update_provider_config(pid: str, req: ProviderConfigUpdateRequest) -> dict[str, Any]:
+async def update_provider_config(
+    pid: str, req: ProviderConfigUpdateRequest,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
     _, get_provider = _catalog()
     _require_provider(get_provider, pid)
     base_url = req.base_url
     if base_url is not None and not base_url.strip().startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="服务地址必须以 http:// 或 https:// 开头")
-    _mgr().update_provider_config(pid, base_url.strip() if base_url else None)
+    mgr = _mgr(services)
+    mgr.update_provider_config(pid, base_url.strip() if base_url else None)
+    if "api_mode_override" in req.model_fields_set:
+        mgr.set_api_mode_override(pid, req.api_mode_override)
     log.info("provider.config_updated", provider=pid)
     return {"ok": True}
 
@@ -99,31 +113,39 @@ class ProviderKeyCreateRequest(BaseModel):
 
 
 @models_router.post("/api/providers/{pid}/keys", status_code=201)
-async def add_provider_key(pid: str, req: ProviderKeyCreateRequest) -> dict[str, Any]:
+async def add_provider_key(
+    pid: str, req: ProviderKeyCreateRequest,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
     _, get_provider = _catalog()
     _require_provider(get_provider, pid)
     secret = req.secret.strip()
     if not secret:
         raise HTTPException(status_code=422, detail="密钥内容不能为空")
     try:
-        return _mgr().add_key(pid, secret, req.label.strip())
+        return _mgr(services).add_key(pid, secret, req.label.strip())
     except RuntimeError as exc:  # keyring 不可用等系统级失败 → 500 中文
         raise HTTPException(status_code=500, detail=str(exc) or "密钥写入系统凭据库失败") from exc
 
 
 @models_router.get("/api/providers/{pid}/keys")
-async def list_provider_keys(pid: str) -> dict[str, Any]:
+async def list_provider_keys(
+    pid: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
     """密钥元数据列表（前端按 {"keys": [...]} 解析）；永不包含密钥原文。"""
     _, get_provider = _catalog()
     _require_provider(get_provider, pid)
-    return {"keys": _mgr().list_keys(pid)}
+    return {"keys": _mgr(services).list_keys(pid)}
 
 
 @models_router.delete("/api/providers/{pid}/keys/{key_id}", status_code=204)
-async def remove_provider_key(pid: str, key_id: str) -> Response:
+async def remove_provider_key(
+    pid: str, key_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> Response:
     _, get_provider = _catalog()
     _require_provider(get_provider, pid)
-    mgr = _mgr()
+    mgr = _mgr(services)
     if key_id not in {key["id"] for key in mgr.list_keys(pid)}:
         raise HTTPException(status_code=404, detail=f"未知密钥：{key_id}")
     mgr.remove_key(pid, key_id)
@@ -148,18 +170,23 @@ class CustomModelUpdateRequest(BaseModel):
 
 
 @models_router.put("/api/models/custom/{model_id}")
-async def update_custom_model(model_id: str, req: CustomModelUpdateRequest) -> dict[str, Any]:
+async def update_custom_model(
+    model_id: str, req: CustomModelUpdateRequest,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
     patch = req.model_dump(exclude_unset=True)
     try:
-        return _mgr().update_model(model_id, patch)
+        return _mgr(services).update_model(model_id, patch)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @models_router.delete("/api/models/custom/{model_id}", status_code=204)
-async def delete_custom_model(model_id: str) -> Response:
+async def delete_custom_model(
+    model_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> Response:
     try:
-        _mgr().delete_model(model_id)
+        _mgr(services).delete_model(model_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     log.info("model.deleted", model_id=model_id)
@@ -211,9 +238,12 @@ class ModelTestRequest(BaseModel):
 
 
 @models_router.post("/api/models/test")
-async def test_model(req: ModelTestRequest) -> dict[str, Any]:
+async def test_model(
+    req: ModelTestRequest,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
     """Probe one model with a 2-token completion through its provider credentials."""
-    mgr = _mgr()
+    mgr = _mgr(services)
     model = next((m for m in mgr.list_models() if m["id"] == req.model_id), None)
     if model is None:
         raise HTTPException(status_code=404, detail=f"未知模型：{req.model_id}")

@@ -38,11 +38,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from atlas.api.app_services import AppServices
+from atlas.api.dependencies import get_app_services
 from atlas.devices import SELF_DEVICE_ID, DeviceError, DeviceRegistry
 from atlas.devices.takeover import (
     AGENT,
@@ -94,6 +96,20 @@ def get_takeover() -> TakeoverStateMachine:
     return _takeover
 
 
+def _registry_for(services: AppServices) -> DeviceRegistry:
+    registry = services.device_registry
+    if registry is None:
+        raise RuntimeError("FastAPI app is missing its device registry")
+    return registry
+
+
+def _takeover_for(services: AppServices) -> TakeoverStateMachine:
+    machine = services.takeover
+    if machine is None:
+        raise RuntimeError("FastAPI app is missing its takeover state machine")
+    return machine
+
+
 def _require_trusted_origin(request: Request) -> None:
     """Mirror of the app-level OriginGuard rule for standalone mounts."""
     trusted = is_trusted(
@@ -117,8 +133,10 @@ def _takeover_error(exc: TakeoverError) -> HTTPException:
 # Devices CRUD
 # ---------------------------------------------------------------------------
 @router.get("")
-async def list_devices() -> dict[str, Any]:
-    registry = await asyncio.to_thread(get_registry)
+async def list_devices(
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
     devices = await asyncio.to_thread(registry.list_devices)
     return {"devices": devices, "self": SELF_DEVICE_ID}
 
@@ -134,8 +152,11 @@ class IngressRegistration(BaseModel):
 
 
 @router.post("", dependencies=[Depends(_require_trusted_origin)])
-async def register_device(req: IngressRegistration) -> dict[str, Any]:
-    registry = await asyncio.to_thread(get_registry)
+async def register_device(
+    req: IngressRegistration,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
     try:
         device = await asyncio.to_thread(
             registry.add, req.device_id, req.display_name,
@@ -147,8 +168,10 @@ async def register_device(req: IngressRegistration) -> dict[str, Any]:
 
 
 @router.get("/takeover")
-async def takeover_state() -> dict[str, Any]:
-    return get_takeover().snapshot()
+async def takeover_state(
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    return _takeover_for(services).snapshot()
 
 
 class TakeoverRequest(BaseModel):
@@ -158,8 +181,11 @@ class TakeoverRequest(BaseModel):
 
 
 @router.post("/takeover", dependencies=[Depends(_require_trusted_origin)])
-async def takeover_action(req: TakeoverRequest) -> dict[str, Any]:
-    machine = get_takeover()
+async def takeover_action(
+    req: TakeoverRequest,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    machine = _takeover_for(services)
     if req.action == "human_take":
         actor: str = HUMAN_ACTOR
     elif req.action == "agent_take":
@@ -190,16 +216,20 @@ async def takeover_action(req: TakeoverRequest) -> dict[str, Any]:
 
 
 @router.get("/activity")
-async def activity_feed(limit: int = 0) -> dict[str, Any]:
+async def activity_feed(
+    services: Annotated[AppServices, Depends(get_app_services)], limit: int = 0,
+) -> dict[str, Any]:
     if limit < 0:
         raise HTTPException(status_code=422, detail="limit 不能为负")
-    events = await asyncio.to_thread(get_takeover().activity, limit or None)
+    events = await asyncio.to_thread(_takeover_for(services).activity, limit or None)
     return {"activity": events}
 
 
 @router.get("/handoff")
-async def list_handoff(status: str | None = None) -> dict[str, Any]:
-    cards = await asyncio.to_thread(get_takeover().handoff_cards, status)
+async def list_handoff(
+    services: Annotated[AppServices, Depends(get_app_services)], status: str | None = None,
+) -> dict[str, Any]:
+    cards = await asyncio.to_thread(_takeover_for(services).handoff_cards, status)
     return {"cards": cards}
 
 
@@ -238,8 +268,11 @@ def _bridge_x2_pending(resolution: str, card: dict[str, Any]) -> None:
 
 
 @router.post("/handoff", dependencies=[Depends(_require_trusted_origin)])
-async def handoff_action(req: HandoffRequest) -> dict[str, Any]:
-    machine = get_takeover()
+async def handoff_action(
+    req: HandoffRequest,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    machine = _takeover_for(services)
     if req.action == "open":
         return await asyncio.to_thread(
             machine.open_handoff, req.note, actor=req.actor, run_id=req.run_id or "")
@@ -257,8 +290,10 @@ async def handoff_action(req: HandoffRequest) -> dict[str, Any]:
 
 
 @router.get("/{device_id}")
-async def get_device(device_id: str) -> dict[str, Any]:
-    registry = await asyncio.to_thread(get_registry)
+async def get_device(
+    device_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
     device = await asyncio.to_thread(registry.get, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail=f"没有 id 为 {device_id!r} 的设备")
@@ -274,8 +309,11 @@ class DevicePatch(BaseModel):
 
 
 @router.patch("/{device_id}", dependencies=[Depends(_require_trusted_origin)])
-async def patch_device(device_id: str, req: DevicePatch) -> dict[str, Any]:
-    registry = await asyncio.to_thread(get_registry)
+async def patch_device(
+    device_id: str, req: DevicePatch,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
     fields = {k: v for k, v in req.model_dump().items() if v is not None}
     try:
         return await asyncio.to_thread(registry.update, device_id, **fields)
@@ -289,8 +327,11 @@ class PresenceBeat(BaseModel):
 
 
 @router.put("/{device_id}/presence", dependencies=[Depends(_require_trusted_origin)])
-async def put_presence(device_id: str, req: PresenceBeat) -> dict[str, Any]:
-    registry = await asyncio.to_thread(get_registry)
+async def put_presence(
+    device_id: str, req: PresenceBeat,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
     try:
         return await asyncio.to_thread(
             registry.set_presence, device_id,
@@ -300,8 +341,10 @@ async def put_presence(device_id: str, req: PresenceBeat) -> dict[str, Any]:
 
 
 @router.delete("/{device_id}", dependencies=[Depends(_require_trusted_origin)])
-async def delete_device(device_id: str) -> dict[str, Any]:
-    registry = await asyncio.to_thread(get_registry)
+async def delete_device(
+    device_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
     try:
         await asyncio.to_thread(registry.remove, device_id)
     except DeviceError as exc:

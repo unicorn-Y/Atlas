@@ -122,7 +122,7 @@ class FeishuAdapter(ChannelAdapter):
                 if value:
                     return value
             except Exception:
-                pass
+                logger.exception("Feishu credential lookup failed")
         return get_channel_secret("feishu", field)
 
     # -- availability / lifecycle ------------------------------------------------
@@ -131,7 +131,7 @@ class FeishuAdapter(ChannelAdapter):
     def is_available(cls) -> bool:
         try:
             import lark_oapi  # noqa: F401
-        except Exception:
+        except ImportError:
             return False
         return True
 
@@ -389,6 +389,7 @@ class FeishuAdapter(ChannelAdapter):
                     .receive_id_type("chat_id").request_body(body).build()
                 response = await asyncio.to_thread(self._client.im.v1.message.create, request)
         except Exception as exc:
+            logger.exception("Feishu message send failed")
             return SendResult(ok=False, error=str(exc), retryable=True)
         if not self._response_succeeded(response):
             code = int(getattr(response, "code", 0) or 0)
@@ -420,6 +421,7 @@ class FeishuAdapter(ChannelAdapter):
             try:
                 return bool(success())
             except Exception:
+                logger.exception("Feishu response status check failed")
                 return False
         return bool(response)
 

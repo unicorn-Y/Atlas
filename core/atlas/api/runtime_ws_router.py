@@ -1,0 +1,156 @@
+"""Runtime chat WebSocket protocol, bound to each FastAPI app's services."""
+
+from __future__ import annotations
+
+import json
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+
+from atlas.api.app_services import AppServices
+from atlas.api.dependencies import get_app_services
+from atlas.api.runtime import RunState
+
+router = APIRouter()
+
+
+@router.websocket("/ws/chat")
+async def ws_chat(
+    ws: WebSocket, services: Annotated[AppServices, Depends(get_app_services)],
+) -> None:
+    """Runtime Event Protocol 1.2 WebSocket endpoint.
+
+    Client sends:
+        {"type": "run.start", "run_id": "...", "content": "...",
+         "conversation_id": "...", "model": "..."}
+        {"type": "resume", "run_id": "...", "after_sequence": N}
+        {"type": "run.cancel", "run_id": "..."}
+        {"type": "run.pause", "run_id": "..."}
+        {"type": "run.resume", "run_id": "..."}
+        {"type": "approval.response", "event_id": "...", "choice": "allow"|"deny"}
+
+    Server sends:
+        {"type": "agent_event", "run_id": "...", "event_id": "...", "sequence": N,
+         "timestamp": "...", "event": "<event_type>", "data": {...}}
+
+    Event types: run.started, run.status, run.phase, message.delta,
+    message.completed, tool.started, tool.completed, approval.required,
+    approval.responded, artifact.updated, run.paused, run.resumed,
+    run.completed, run.failed, run.cancelled
+    """
+    conn_id = str(uuid.uuid4())
+    await services.runtime_mgr.connect(ws, conn_id)
+
+    try:
+        while True:
+            raw = await ws.receive_text()
+            data = json.loads(raw)
+            msg_type = data.get("type", "")
+
+            if msg_type == "run.start":
+                await services.runtime_start_handler(conn_id, data, services.runtime_mgr)
+
+            elif msg_type == "resume":
+                await services.runtime_resume_handler(conn_id, data, services.runtime_mgr)
+
+            elif msg_type == "rules.trust":
+                await services.rules_trust_handler(conn_id, data, services.runtime_mgr)
+
+            elif msg_type == "run.cancel":
+                run_id = data.get("run_id", "")
+                run = services.runtime_mgr.runs.get(run_id)
+                if run and run.status not in ("completed", "failed", "cancelled"):
+                    run.cancel_event.set()
+
+            elif msg_type == "run.steer":
+                run_id = str(data.get("run_id", ""))
+                run = services.runtime_mgr.runs.get(run_id)
+                if not run:
+                    rejected = RunState(run_id, "", "")
+                    await services.runtime_mgr.send(conn_id, rejected.next_envelope(
+                        "run.steer.rejected", {"reason": "run_not_active"},
+                    ))
+                else:
+                    from atlas.engine.steer_dispatch import queue_run_steer
+
+                    reason = queue_run_steer(run, data)
+                    if reason:
+                        rejected = RunState(run_id, "", "")
+                        await services.runtime_mgr.send(conn_id, rejected.next_envelope(
+                            "run.steer.rejected", {"reason": reason},
+                        ))
+
+            elif msg_type == "subtask.message":
+                run_id = str(data.get("run_id", ""))
+                subtask_id = str(data.get("subtask_id", ""))
+                text = data.get("text")
+                run = services.runtime_mgr.runs.get(run_id)
+                delegation = getattr(services.orchestrator, "_delegation", None)
+                service = delegation if services.orchestrator else None
+                if (run is None or service is None or not isinstance(text, str)
+                        or not service.steer_subtask(subtask_id, text)):
+                    if run is not None:
+                        await services.runtime_mgr.send_run(run, run.next_envelope(
+                            "subtask.steer_rejected", {"subtask_id": subtask_id,
+                                                        "reason": "subtask_not_active"},
+                        ), conn_id)
+                else:
+                    await services.runtime_mgr.send_run(run, run.next_envelope(
+                        "subtask.steered", {"subtask_id": subtask_id, "text": text.strip()},
+                    ), conn_id)
+
+            elif msg_type == "input.response":
+                event_id = str(data.get("event_id", ""))
+                for run in services.runtime_mgr.runs.values():
+                    future = run.input_futures.pop(event_id, None)
+                    if future and not future.done():
+                        future.set_result(str(data.get("text", "")))
+                        break
+
+            elif msg_type == "run.plan.approve":
+                run = services.runtime_mgr.runs.get(str(data.get("run_id", "")))
+                if (run and run.status == "waiting" and run.plan_future
+                        and not run.plan_future.done()
+                        and data.get("event_id") == f"plan:{run.run_id}"):
+                    run.plan_future.set_result({
+                        "action": "approve", "edits": str(data.get("edits", "")),
+                    })
+
+            elif msg_type == "run.pause":
+                run_id = data.get("run_id", "")
+                run = services.runtime_mgr.runs.get(run_id)
+                if run and run.status == "running":
+                    run.pause_event.clear()
+                    run.status = "paused"
+                    env = run.next_envelope("run.paused", {"status": "paused"})
+                    await services.runtime_mgr.persist_run(run)
+                    await services.runtime_mgr.send(conn_id, env)
+
+            elif msg_type == "run.resume":
+                run_id = data.get("run_id", "")
+                run = services.runtime_mgr.runs.get(run_id)
+                if run and run.status == "paused":
+                    run.pause_event.set()
+                    run.status = "running"
+                    env = run.next_envelope("run.resumed", {"status": "running"})
+                    await services.runtime_mgr.persist_run(run)
+                    await services.runtime_mgr.send(conn_id, env)
+
+            elif msg_type == "approval.response":
+                event_id = data.get("event_id", "")
+                choice = data.get("choice", "deny")
+                # Find the run that has this approval
+                for run in services.runtime_mgr.runs.values():
+                    fut = run.approval_futures.pop(event_id, None)
+                    if fut and not fut.done():
+                        fut.set_result(choice)
+                        env = run.next_envelope("approval.responded", {
+                            "event_id": event_id, "choice": choice,
+                        })
+                        await services.runtime_mgr.persist_run(run)
+                        await services.runtime_mgr.send(conn_id, env)
+                        break
+
+    except WebSocketDisconnect:
+        services.runtime_mgr.disconnect(conn_id)

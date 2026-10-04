@@ -1,0 +1,1587 @@
+{
+  "schema_version": 1,
+  "source_commit": "9adfeb88acfd260b566ca75ef64bf6b8a6ccfbb1",
+  "command": "python -m ruff check atlas --select BLE001,S110,S112 --ignore-noqa --output-format=json",
+  "counts": {
+    "BLE001": 283,
+    "S110": 27,
+    "S112": 4
+  },
+  "critical_counts": {
+    "BLE001": 160,
+    "S110": 12,
+    "S112": 1
+  },
+  "violations": [
+    {
+      "row": 367,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 399,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 432,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1123,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1356,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1945,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2004,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2153,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2176,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2323,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2340,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2366,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2392,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2405,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2463,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2497,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2510,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2782,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2797,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2815,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2829,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2849,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2865,
+      "file": "atlas/agent/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 30,
+      "file": "atlas/agent/delegation_output_schema.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 70,
+      "file": "atlas/agent/enrichment.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 243,
+      "file": "atlas/agent/enrichment.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 287,
+      "file": "atlas/agent/enrichment.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 395,
+      "file": "atlas/agent/enrichment.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 487,
+      "file": "atlas/agent/enrichment.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 759,
+      "file": "atlas/agent/enrichment.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 909,
+      "file": "atlas/agent/enrichment.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 168,
+      "file": "atlas/api/agent_router.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 75,
+      "file": "atlas/api/channel_router.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 100,
+      "file": "atlas/api/channel_router.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 223,
+      "file": "atlas/api/evolution_router.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 130,
+      "file": "atlas/automation/engine.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 285,
+      "file": "atlas/automation/engine.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 299,
+      "file": "atlas/automation/engine.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 642,
+      "file": "atlas/automation/engine.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 686,
+      "file": "atlas/automation/engine.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 760,
+      "file": "atlas/automation/engine.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 307,
+      "file": "atlas/automation/migrate.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 129,
+      "file": "atlas/automation/triggers.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 116,
+      "file": "atlas/capabilities/durable/dbos_backend.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 140,
+      "file": "atlas/capabilities/durable/dbos_backend.py",
+      "code": "S110"
+    },
+    {
+      "row": 140,
+      "file": "atlas/capabilities/durable/dbos_backend.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 275,
+      "file": "atlas/channels/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 368,
+      "file": "atlas/channels/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 438,
+      "file": "atlas/channels/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 19,
+      "file": "atlas/channels/adapters/_vendor/credentials_bridge.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 34,
+      "file": "atlas/channels/adapters/_vendor/credentials_bridge.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 483,
+      "file": "atlas/channels/adapters/_vendor/slack_block_kit.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 622,
+      "file": "atlas/channels/adapters/_vendor/slack_block_kit.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 77,
+      "file": "atlas/channels/adapters/_vendor/wecom_send_queue.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 109,
+      "file": "atlas/channels/adapters/dingtalk.py",
+      "code": "S110"
+    },
+    {
+      "row": 109,
+      "file": "atlas/channels/adapters/dingtalk.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 119,
+      "file": "atlas/channels/adapters/dingtalk.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 174,
+      "file": "atlas/channels/adapters/dingtalk.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 317,
+      "file": "atlas/channels/adapters/dingtalk.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 362,
+      "file": "atlas/channels/adapters/dingtalk.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 87,
+      "file": "atlas/channels/adapters/email.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 101,
+      "file": "atlas/channels/adapters/email.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 275,
+      "file": "atlas/channels/adapters/email.py",
+      "code": "S110"
+    },
+    {
+      "row": 275,
+      "file": "atlas/channels/adapters/email.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 327,
+      "file": "atlas/channels/adapters/email.py",
+      "code": "S110"
+    },
+    {
+      "row": 327,
+      "file": "atlas/channels/adapters/email.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 337,
+      "file": "atlas/channels/adapters/email.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 124,
+      "file": "atlas/channels/adapters/feishu.py",
+      "code": "S110"
+    },
+    {
+      "row": 124,
+      "file": "atlas/channels/adapters/feishu.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 134,
+      "file": "atlas/channels/adapters/feishu.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 391,
+      "file": "atlas/channels/adapters/feishu.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 422,
+      "file": "atlas/channels/adapters/feishu.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 81,
+      "file": "atlas/channels/adapters/slack.py",
+      "code": "S110"
+    },
+    {
+      "row": 81,
+      "file": "atlas/channels/adapters/slack.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 91,
+      "file": "atlas/channels/adapters/slack.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 242,
+      "file": "atlas/channels/adapters/slack.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 176,
+      "file": "atlas/channels/adapters/telegram.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 185,
+      "file": "atlas/channels/adapters/telegram.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 219,
+      "file": "atlas/channels/adapters/webhook.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 122,
+      "file": "atlas/channels/adapters/wecom.py",
+      "code": "S110"
+    },
+    {
+      "row": 122,
+      "file": "atlas/channels/adapters/wecom.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 334,
+      "file": "atlas/channels/adapters/wecom.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 363,
+      "file": "atlas/channels/adapters/wecom.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 162,
+      "file": "atlas/cli.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 180,
+      "file": "atlas/cli.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 198,
+      "file": "atlas/cli.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 220,
+      "file": "atlas/cli.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 241,
+      "file": "atlas/cli.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 83,
+      "file": "atlas/devices/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 90,
+      "file": "atlas/devices/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 176,
+      "file": "atlas/engine/hermes_policy.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 294,
+      "file": "atlas/engine/hermes_policy.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 148,
+      "file": "atlas/engine/hermes_runtime.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 483,
+      "file": "atlas/engine/hermes_runtime.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 565,
+      "file": "atlas/engine/hermes_runtime.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 815,
+      "file": "atlas/engine/hermes_runtime.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 836,
+      "file": "atlas/engine/hermes_runtime.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 247,
+      "file": "atlas/engine/local_runtime_adapter.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 451,
+      "file": "atlas/engine/local_runtime_adapter.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 538,
+      "file": "atlas/engine/local_runtime_adapter.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 824,
+      "file": "atlas/engine/local_runtime_adapter.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 936,
+      "file": "atlas/engine/local_runtime_adapter.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 942,
+      "file": "atlas/engine/local_runtime_adapter.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 960,
+      "file": "atlas/engine/local_runtime_adapter.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 978,
+      "file": "atlas/engine/local_runtime_adapter.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 49,
+      "file": "atlas/engine/lsp_bridge.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 71,
+      "file": "atlas/engine/lsp_bridge.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 106,
+      "file": "atlas/engine/lsp_bridge.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 109,
+      "file": "atlas/engine/tool_registry.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 143,
+      "file": "atlas/engine/tool_registry.py",
+      "code": "S110"
+    },
+    {
+      "row": 143,
+      "file": "atlas/engine/tool_registry.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 151,
+      "file": "atlas/engine/tool_registry.py",
+      "code": "S110"
+    },
+    {
+      "row": 151,
+      "file": "atlas/engine/tool_registry.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 180,
+      "file": "atlas/engine/tool_registry.py",
+      "code": "S110"
+    },
+    {
+      "row": 180,
+      "file": "atlas/engine/tool_registry.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 143,
+      "file": "atlas/evolution/branch_flow.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 144,
+      "file": "atlas/gateway_service.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 165,
+      "file": "atlas/gateway_service.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 214,
+      "file": "atlas/gateway_service.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 236,
+      "file": "atlas/gateway_service.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 260,
+      "file": "atlas/gateway_service.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 373,
+      "file": "atlas/groups/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 326,
+      "file": "atlas/heartbeat/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 385,
+      "file": "atlas/heartbeat/wake.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 69,
+      "file": "atlas/lsp/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 82,
+      "file": "atlas/lsp/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 90,
+      "file": "atlas/lsp/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 105,
+      "file": "atlas/lsp/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 117,
+      "file": "atlas/lsp/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 132,
+      "file": "atlas/lsp/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 158,
+      "file": "atlas/lsp/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 409,
+      "file": "atlas/lsp/client.py",
+      "code": "S110"
+    },
+    {
+      "row": 409,
+      "file": "atlas/lsp/client.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 519,
+      "file": "atlas/lsp/client.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 530,
+      "file": "atlas/lsp/client.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 127,
+      "file": "atlas/lsp/manager.py",
+      "code": "S110"
+    },
+    {
+      "row": 127,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 263,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 294,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 407,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 440,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 477,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 502,
+      "file": "atlas/lsp/manager.py",
+      "code": "S110"
+    },
+    {
+      "row": 502,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 513,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 567,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 629,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 688,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 711,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 741,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 783,
+      "file": "atlas/lsp/manager.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 295,
+      "file": "atlas/models/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 333,
+      "file": "atlas/models/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 338,
+      "file": "atlas/models/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 424,
+      "file": "atlas/models/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 447,
+      "file": "atlas/models/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 263,
+      "file": "atlas/models/credentials.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 281,
+      "file": "atlas/models/models_dev.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 304,
+      "file": "atlas/models/models_dev.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 350,
+      "file": "atlas/models/models_dev.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 363,
+      "file": "atlas/models/models_dev.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 474,
+      "file": "atlas/models/models_dev.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 505,
+      "file": "atlas/models/models_dev.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 244,
+      "file": "atlas/models/routes.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 77,
+      "file": "atlas/notifications/apprise.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 620,
+      "file": "atlas/plugins/runtime.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 390,
+      "file": "atlas/projects/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 733,
+      "file": "atlas/review/engine.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 62,
+      "file": "atlas/runtime/backend_host.py",
+      "code": "S112"
+    },
+    {
+      "row": 62,
+      "file": "atlas/runtime/backend_host.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 109,
+      "file": "atlas/runtime/backends.py",
+      "code": "S110"
+    },
+    {
+      "row": 109,
+      "file": "atlas/runtime/backends.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 142,
+      "file": "atlas/runtime/backends.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 270,
+      "file": "atlas/runtime/hooks.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 58,
+      "file": "atlas/runtime/hub_control.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 74,
+      "file": "atlas/runtime/hub_control.py",
+      "code": "S110"
+    },
+    {
+      "row": 74,
+      "file": "atlas/runtime/hub_control.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 112,
+      "file": "atlas/runtime/hub_control.py",
+      "code": "S110"
+    },
+    {
+      "row": 112,
+      "file": "atlas/runtime/hub_control.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 64,
+      "file": "atlas/safety/checkpoints.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 557,
+      "file": "atlas/safety/hermes_detection.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 569,
+      "file": "atlas/safety/hermes_detection.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 453,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 471,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 500,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 698,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 709,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 808,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "S110"
+    },
+    {
+      "row": 808,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 817,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "S110"
+    },
+    {
+      "row": 817,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 849,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "S110"
+    },
+    {
+      "row": 849,
+      "file": "atlas/scheduler/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 348,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 397,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 505,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 565,
+      "file": "atlas/server.py",
+      "code": "S110"
+    },
+    {
+      "row": 565,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 593,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 654,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 794,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 826,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 852,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1000,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1396,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1402,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1408,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1699,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1761,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1767,
+      "file": "atlas/server.py",
+      "code": "S110"
+    },
+    {
+      "row": 1767,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1856,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1913,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 2169,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 3348,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 3363,
+      "file": "atlas/server.py",
+      "code": "S112"
+    },
+    {
+      "row": 3363,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 3551,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 3573,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 3608,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 3671,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 3681,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 4726,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 4759,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 4887,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 4906,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 5487,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 6734,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 6936,
+      "file": "atlas/server.py",
+      "code": "S110"
+    },
+    {
+      "row": 6936,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 7303,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 7311,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 7327,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 7490,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 7499,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 8027,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 8036,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 8087,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 8108,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 8550,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 8587,
+      "file": "atlas/server.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 110,
+      "file": "atlas/skills/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 121,
+      "file": "atlas/skills/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 172,
+      "file": "atlas/skills/lifecycle.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 289,
+      "file": "atlas/skills/market.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 645,
+      "file": "atlas/skills/market.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 1248,
+      "file": "atlas/skills/market.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 624,
+      "file": "atlas/skills/proposals.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 266,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 406,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 413,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 424,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 432,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 444,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 448,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 483,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 508,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 532,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 548,
+      "file": "atlas/ssh.py",
+      "code": "S112"
+    },
+    {
+      "row": 548,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 603,
+      "file": "atlas/ssh.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 169,
+      "file": "atlas/telegram.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 189,
+      "file": "atlas/telegram.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 235,
+      "file": "atlas/telegram.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 374,
+      "file": "atlas/tools/computer_use.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 484,
+      "file": "atlas/tools/computer_use.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 403,
+      "file": "atlas/tools/local_execution.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 469,
+      "file": "atlas/tools/local_execution.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 485,
+      "file": "atlas/tools/local_execution.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 891,
+      "file": "atlas/tools/local_execution.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 213,
+      "file": "atlas/tools/mcp_client.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 392,
+      "file": "atlas/tools/mcp_client.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 474,
+      "file": "atlas/tools/mcp_client.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 513,
+      "file": "atlas/tools/mcp_client.py",
+      "code": "S110"
+    },
+    {
+      "row": 513,
+      "file": "atlas/tools/mcp_client.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 517,
+      "file": "atlas/tools/mcp_client.py",
+      "code": "S110"
+    },
+    {
+      "row": 517,
+      "file": "atlas/tools/mcp_client.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 42,
+      "file": "atlas/tools/output_limits.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 74,
+      "file": "atlas/tools/web.py",
+      "code": "S110"
+    },
+    {
+      "row": 74,
+      "file": "atlas/tools/web.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 84,
+      "file": "atlas/tools/web.py",
+      "code": "S110"
+    },
+    {
+      "row": 84,
+      "file": "atlas/tools/web.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 120,
+      "file": "atlas/tools/web.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 78,
+      "file": "atlas/tools/web_extract.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 161,
+      "file": "atlas/tools/web_extract.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 60,
+      "file": "atlas/tools/x2/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 103,
+      "file": "atlas/tools/x2/__init__.py",
+      "code": "S112"
+    },
+    {
+      "row": 103,
+      "file": "atlas/tools/x2/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 109,
+      "file": "atlas/tools/x2/__init__.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 483,
+      "file": "atlas/tools/x2/browser.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 492,
+      "file": "atlas/tools/x2/browser.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 527,
+      "file": "atlas/tools/x2/browser.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 550,
+      "file": "atlas/tools/x2/browser.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 555,
+      "file": "atlas/tools/x2/browser.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 244,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 254,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 304,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 315,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 327,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 341,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 357,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 448,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 467,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 509,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 517,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 666,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 674,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 702,
+      "file": "atlas/tools/x2/computer.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 49,
+      "file": "atlas/tools/x2/context.py",
+      "code": "S110"
+    },
+    {
+      "row": 49,
+      "file": "atlas/tools/x2/context.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 42,
+      "file": "atlas/tools/x2/hermes_config_sync.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 68,
+      "file": "atlas/tools/x2/hermes_config_sync.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 341,
+      "file": "atlas/tools/x2/recording.py",
+      "code": "BLE001"
+    },
+    {
+      "row": 356,
+      "file": "atlas/tools/x2/recording.py",
+      "code": "BLE001"
+    }
+  ]
+}

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import secrets
 import time
 from datetime import datetime, timezone
@@ -94,6 +93,7 @@ class ModelManager:
         self._favorites: set[str] = {"claude-opus-4", "claude-sonnet-4", "gpt-4o"}
         self._api_base = str(settings.get("gateway_base_url") or cfg.gateway_base_url)
         self._api_key = str(settings.get("api_key") or cfg.gateway_api_key)
+        self._model_router = None
         # 服务商配置（base_url 覆盖 + 密钥元数据；密钥原文在系统凭据库，见 add_key）。
         self._providers: dict[str, dict[str, Any]] = self._load_providers(settings)
 
@@ -105,17 +105,7 @@ class ModelManager:
             if custom.get("id") and not any(model["id"] == custom["id"] for model in self._models):
                 self.add_model(custom, persist=False)
 
-        # Configure LiteLLM to use gateway
-        self._apply_provider_environment()
-
         log.info("model_manager.init", default=self._current, api_base=self._api_base)
-
-    def _apply_provider_environment(self) -> None:
-        if self._api_base:
-            os.environ["OPENAI_API_BASE"] = self._api_base
-        if self._api_key:
-            os.environ["OPENAI_API_KEY"] = self._api_key
-            os.environ["ANTHROPIC_API_KEY"] = self._api_key
 
     @property
     def gateway_base_url(self) -> str:
@@ -125,11 +115,28 @@ class ModelManager:
     def api_key_configured(self) -> bool:
         return bool(self._api_key)
 
+    @property
+    def gateway_api_key(self) -> str:
+        return self._api_key
+
+    @property
+    def model_router(self):
+        """One router instance per model manager/app."""
+        if self._model_router is None:
+            from atlas.models.router import ModelRouter
+
+            self._model_router = ModelRouter(self)
+        return self._model_router
+
     def update_provider(self, base_url: str, api_key: str | None) -> None:
+        if self._api_base != base_url.rstrip("/"):
+            for entry in self._providers.values():
+                entry.pop("api_mode_probe", None)
         self._api_base = base_url.rstrip("/")
         if api_key:
             self._api_key = api_key
-        self._apply_provider_environment()
+            for entry in self._providers.values():
+                entry.pop("api_mode_probe", None)
         self._persist_settings()
 
     def _persist_settings(self) -> None:
@@ -213,6 +220,11 @@ class ModelManager:
             providers[str(pid)] = {
                 "base_url": entry.get("base_url") or None,
                 "keys": [key for key in keys if isinstance(key, dict)] if isinstance(keys, list) else [],
+                "api_mode_override": entry.get("api_mode_override")
+                if entry.get("api_mode_override") in {None, "auto", "openai", "chat_completions", "anthropic_messages", "codex_responses"}
+                else None,
+                "api_mode_probe": dict(entry["api_mode_probe"])
+                if isinstance(entry.get("api_mode_probe"), dict) else None,
             }
         return providers
 
@@ -241,18 +253,57 @@ class ModelManager:
         entry = self._providers.get(pid)
         if not entry:
             return {}
-        return {"base_url": entry.get("base_url"), "keys": [dict(key) for key in entry.get("keys", [])]}
+        result = {
+            "base_url": entry.get("base_url"),
+            "keys": [dict(key) for key in entry.get("keys", [])],
+        }
+        if entry.get("api_mode_override") is not None:
+            result["api_mode_override"] = entry["api_mode_override"]
+        if isinstance(entry.get("api_mode_probe"), dict):
+            result["api_mode_probe"] = dict(entry["api_mode_probe"])
+        return result
 
     def update_provider_config(self, provider_id: str, base_url: str | None) -> None:
         """设置/清除服务商的 base_url 覆盖（None = 回退 catalog 默认）。"""
         pid = self._require_provider(provider_id)
         url = str(base_url).strip().rstrip("/") if base_url and str(base_url).strip() else None
         entry = self._providers.setdefault(pid, {"base_url": None, "keys": []})
+        if entry.get("base_url") != url:
+            entry.pop("api_mode_probe", None)
         entry["base_url"] = url
         if not url and not entry["keys"]:
             self._providers.pop(pid, None)
         self._persist_settings()
         log.info("model_manager.provider_config_updated", provider=pid)
+
+    def get_api_mode_override(self, provider_id: str) -> str | None:
+        pid = _catalog.resolve_catalog_id(str(provider_id or "").strip()) or str(provider_id or "").strip()
+        value = self._providers.get(pid, {}).get("api_mode_override")
+        return value if value not in (None, "", "auto") else None
+
+    def set_api_mode_override(self, provider_id: str, api_mode: str | None) -> None:
+        pid = self._require_provider(provider_id)
+        if api_mode in (None, "", "auto"):
+            value = None
+        elif api_mode in {"openai", "chat_completions", "anthropic_messages", "codex_responses"}:
+            value = "chat_completions" if api_mode == "openai" else api_mode
+        else:
+            raise ValueError(f"不支持的 API 模式: {api_mode}")
+        entry = self._providers.setdefault(pid, {"base_url": None, "keys": []})
+        entry["api_mode_override"] = value
+        self._persist_settings()
+
+    def get_api_mode_probe(self, provider_id: str) -> dict[str, Any] | None:
+        pid = _catalog.resolve_catalog_id(str(provider_id or "").strip()) or str(provider_id or "").strip()
+        probe = self._providers.get(pid, {}).get("api_mode_probe")
+        return dict(probe) if isinstance(probe, dict) else None
+
+    def set_api_mode_probe(self, provider_id: str, probe: dict[str, Any]) -> None:
+        pid = self._require_provider(provider_id)
+        allowed = {"endpoint", "base_url", "credential_fingerprint", "supported", "reason", "checked_at"}
+        entry = self._providers.setdefault(pid, {"base_url": None, "keys": []})
+        entry["api_mode_probe"] = {key: value for key, value in probe.items() if key in allowed}
+        self._persist_settings()
 
     def add_key(self, provider_id: str, secret: str, label: str = "") -> dict:
         """新增密钥：原文写入系统凭据库，settings 只留 {"id","label","added_at"} 元数据。"""
@@ -278,6 +329,7 @@ class ModelManager:
             log.warning("model_manager.keyring_write_failed", provider=pid, key_id=key_id, error=str(exc))
             raise RuntimeError(f"密钥写入系统凭据库失败: {exc}") from exc
         entry["keys"].append(meta)
+        entry.pop("api_mode_probe", None)
         self._persist_settings()
         log.info("model_manager.key_added", provider=pid, key_id=key_id)
         return {"id": key_id, "label": meta["label"]}
@@ -295,6 +347,7 @@ class ModelManager:
         except Exception as exc:  # 同上：凭据库失败不阻断元数据清理
             log.warning("model_manager.keyring_delete_failed", provider=pid, key_id=key_id, error=str(exc))
         entry["keys"] = remaining
+        entry.pop("api_mode_probe", None)
         if not remaining and not entry.get("base_url"):
             self._providers.pop(pid, None)
         self._persist_settings()

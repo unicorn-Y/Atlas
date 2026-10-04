@@ -28,8 +28,10 @@ class RecordingManager(ChannelManager):
 
     async def send(self, channel, chat_id, content, **kwargs):
         self.sent.append(content)
+        result = await super().send(channel, chat_id, content, **kwargs)
         if "需要审批" in content:
             self.approval_sent.set()
+        return result
 
 
 def bridge_fixture(tmp_path, *, timeout=1):
@@ -161,3 +163,36 @@ def test_permission_defaults_and_binding_agent_overrides(tmp_path):
         manager.ingress.close()
         manager.delivery.close()
         bridge.sessions.close()
+
+
+@pytest.mark.asyncio
+async def test_channel_delivery_failure_logs_and_emits_notice_without_stopping_run(
+    tmp_path, caplog,
+):
+    manager, bridge, runs, output, _ = bridge_fixture(tmp_path)
+    notices = []
+
+    async def recovery(run_id, message):
+        notices.append({"event": "run.recovery.notice", "run_id": run_id, "message": message})
+
+    class BrokenAdapter:
+        async def send(self, *_args, **_kwargs):
+            raise RuntimeError("injected channel send failure")
+
+    manager.adapters["fake"] = BrokenAdapter()
+    bridge._recovery_notice = recovery
+    task = asyncio.create_task(bridge.dispatch(event("请写入"), None))
+    try:
+        await asyncio.wait_for(manager.approval_sent.wait(), 1)
+        run = next(iter(runs.values()))
+        await manager.drain_delivery()
+        assert notices and notices[0]["run_id"] == run.run_id
+        assert notices[0]["event"] == "run.recovery.notice"
+        assert "injected channel send failure" in caplog.text
+        run.approval_futures["write-1"].set_result("allow")
+        await asyncio.wait_for(task, 1)
+        assert output.read_text(encoding="utf-8") == "中文内容"
+        assert run.status == "completed"
+    finally:
+        manager.adapters.clear()
+        await close_fixture(manager, bridge)

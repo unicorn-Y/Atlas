@@ -1,0 +1,16 @@
+
+=================================== ERRORS ====================================
+________________ ERROR collecting tests/test_pytest_layers.py _________________
+ImportError while importing test module 'D:\Atlas-h1-core-hardening\core\tests\test_pytest_layers.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\25011\AppData\Local\Programs\Python\Python314\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_pytest_layers.py:5: in <module>
+    from conftest import _apply_test_lane
+E   ModuleNotFoundError: No module named 'conftest'
+=========================== short test summary info ===========================
+ERROR tests/test_pytest_layers.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 1.08s

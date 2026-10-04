@@ -37,7 +37,7 @@ from atlas.channels.contract import (
     MessageEvent,
 )
 from atlas.channels.credentials import ChannelCredentialStore, channel_credentials
-from atlas.channels.delivery import DeliveryQueue
+from atlas.channels.delivery import DeliveryQueue, OutboundRecord
 from atlas.channels.gating import (
     MentionFacts,
     MentionPolicy,
@@ -137,6 +137,9 @@ class ChannelManager:
         self.policies: dict[str, dict[str, Any]] = {}
         self._dispatcher = dispatcher
         self._control_handler: Callable[[MessageEvent], Awaitable[bool]] | None = None
+        self._delivery_failure_handler: (
+            Callable[[OutboundRecord, str], Awaitable[None]] | None
+        ) = None
         self._backoff = (backoff_initial, backoff_factor, backoff_cap, backoff_jitter)
         self._stable_reset_seconds = stable_reset_seconds
         self._delivery_interval = delivery_interval
@@ -188,6 +191,19 @@ class ChannelManager:
     def set_control_handler(self, handler: Callable[[MessageEvent], Awaitable[bool]]) -> None:
         """Handle admitted approval replies even when a run occupies the drain."""
         self._control_handler = handler
+
+    def set_delivery_failure_handler(
+        self, handler: Callable[[OutboundRecord, str], Awaitable[None]],
+    ) -> None:
+        self._delivery_failure_handler = handler
+
+    async def _report_delivery_failure(self, record: OutboundRecord, detail: str) -> None:
+        if self._delivery_failure_handler is None:
+            return
+        try:
+            await self._delivery_failure_handler(record, detail)
+        except Exception:
+            logger.exception("渠道发送失败通知未送达")
 
     def _state(self, name: str) -> ChannelState:
         return self.states.setdefault(name, ChannelState(name))
@@ -279,7 +295,7 @@ class ChannelManager:
                 return
             except Exception as exc:
                 state.last_error = f"{type(exc).__name__}: {exc}"
-                logger.warning("渠道 %s 连接中断： %s", name, exc)
+                logger.exception("渠道 %s 连接中断", name)
             finally:
                 state.running = False
                 with contextlib.suppress(Exception):
@@ -375,6 +391,7 @@ class ChannelManager:
                         try:
                             await self._dispatcher(event, agent_id)
                         except Exception as exc:
+                            logger.exception("渠道入站任务处理失败 %s", event.channel)
                             self.ingress.fail(
                                 record.id, f"{type(exc).__name__}: {exc}", retryable=True
                             )
@@ -433,6 +450,7 @@ class ChannelManager:
                 adapter = self.adapters.get(record.channel)
                 if adapter is None:
                     self.delivery.fail(record.id, f"渠道 {record.channel} 未运行", retryable=True)
+                    await self._report_delivery_failure(record, "渠道未运行，消息已排队重试。")
                     continue
                 attachments = [Attachment(**item) for item in (record.attachments or [])]
                 try:
@@ -443,17 +461,23 @@ class ChannelManager:
                         metadata=record.metadata,
                     )
                 except AdapterAuthError as exc:
+                    logger.exception("渠道鉴权失败 %s", record.channel)
                     self.delivery.fail(record.id, str(exc), retryable=False)
+                    await self._report_delivery_failure(record, "渠道鉴权失败，消息未送达。")
                 except Exception as exc:
+                    logger.exception("渠道消息发送失败 %s", record.channel)
                     self.delivery.fail(record.id, f"{type(exc).__name__}: {exc}", retryable=True)
+                    await self._report_delivery_failure(record, "渠道发送失败，消息已排队重试。")
                 else:
                     if result.ok:
                         self.delivery.mark_delivered(record.id, result.message_id)
                         state.delivered += 1
                     else:
+                        logger.warning("渠道发送未成功 %s", record.channel)
                         self.delivery.fail(
                             record.id, result.error or "发送失败", retryable=result.retryable
                         )
+                        await self._report_delivery_failure(record, "渠道发送失败，消息未送达。")
 
     # -- webhook ingress ------------------------------------------------------------------
 

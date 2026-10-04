@@ -18,6 +18,7 @@ cooldown ``retry_at`` values line up.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Optional
@@ -383,6 +384,7 @@ class WakeBus:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # a thrown handler retries (port)
+                    logging.getLogger(__name__).exception("Heartbeat wake handler failed")
                     self._retry(wake, WakeResult.skipped(f"handler-error: {exc}"))
                     continue
                 if (

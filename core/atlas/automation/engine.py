@@ -127,7 +127,8 @@ def compute_next_run_at(record: dict[str, Any], *, from_time: datetime | None = 
             if at.tzinfo is None:
                 at = at.replace(tzinfo=UTC)
             return at.isoformat() if at > now else ""
-    except Exception:  # noqa: BLE001 - 展示字段，绝不抛
+    except Exception:  # 展示字段，绝不抛
+        log.exception("automation.next_run_time_failed")
         return ""
     return ""
 
@@ -283,7 +284,7 @@ class AutomationEngine:
         try:
             DBOS.register_queue(self.QUEUE_NAME, global_concurrency=self._queue_concurrency)
         except Exception as exc:  # pragma: no cover - defensive
-            log.warning("automation.queue_register_failed", error=str(exc))
+            log.exception("automation.queue_register_failed", error=str(exc))
 
     def _require_started(self) -> None:
         if not self._started or self._dbos is None or self._wf is None:
@@ -297,7 +298,7 @@ class AutomationEngine:
             try:
                 await self._sync_automation(record)
             except Exception as exc:
-                log.warning(
+                log.exception(
                     "automation.sync_failed",
                     automation_id=record.get("id"),
                     error=str(exc),
@@ -639,7 +640,8 @@ class AutomationEngine:
                 raise ValueError(f"未知 payload.kind: {kind!r}")
         except (asyncio.TimeoutError, TimeoutError):
             status, error = "error", "script timeout"
-        except Exception as exc:  # noqa: BLE001 - 失败进入 consecutive_errors 统计
+        except Exception as exc:  # 失败进入 consecutive_errors 统计
+            log.exception("automation.script_failed", automation_id=record["id"])
             status, error = "error", str(exc)
         delivery = await self._settle_delivery(record, {"status": status, "result": result})
         return {
@@ -683,8 +685,8 @@ class AutomationEngine:
             return "not-delivered"
         try:
             delivered = await self._deliver(record, outcome)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("automation.delivery_failed", automation_id=record["id"], error=str(exc))
+        except Exception as exc:
+            log.exception("automation.delivery_failed", automation_id=record["id"], error=str(exc))
             return "not-delivered"
         return "delivered" if delivered else "not-delivered"
 
@@ -758,7 +760,7 @@ class AutomationEngine:
                 load_output=False,
             )
         except Exception as exc:  # pragma: no cover - 防御：schedule 过滤不可用时降级
-            log.warning("automation.cron_runs_query_failed", error=str(exc))
+            log.exception("automation.cron_runs_query_failed", error=str(exc))
             cron_rows = []
         merged: dict[str, dict[str, Any]] = {}
         for row in [*cron_rows, *rows]:

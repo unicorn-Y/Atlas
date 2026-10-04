@@ -173,7 +173,7 @@ class TelegramAdapter(ChannelAdapter):
             )
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except httpx.RequestError:
             # Client exceptions may embed the secret-bearing request URL.
             raise ChannelAdapterError("Telegram 请求失败。") from None
         if response.status_code in AUTH_ERROR_CODES:
@@ -182,7 +182,7 @@ class TelegramAdapter(ChannelAdapter):
             raise ChannelAdapterError(f"Telegram 请求失败（HTTP {response.status_code}）。")
         try:
             data = response.json()
-        except Exception:
+        except ValueError:
             raise ChannelAdapterError("Telegram 响应格式无效。") from None
         if not isinstance(data, dict) or not data.get("ok"):
             code = (data or {}).get("error_code")

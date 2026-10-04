@@ -126,8 +126,8 @@ class EventTriggerManager:
                 await self._engine.trigger_event(
                     automation_id, source="event", payload={"path": path}
                 )
-            except Exception as exc:  # noqa: BLE001
-                log.warning(
+            except Exception as exc:
+                log.exception(
                     "automation.event_trigger_failed",
                     automation_id=automation_id,
                     error=str(exc),

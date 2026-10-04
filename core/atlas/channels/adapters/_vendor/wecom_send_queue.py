@@ -2,7 +2,7 @@
 Two lanes per chat: normal, and a control lane (approval prompts, finalize frames) backed by a reserved token pool.
 
 # Ported from NousResearch/hermes-agent @ c8301ea6c9 (plugins/platforms/wecom/send_queue.py)
-# Atlas change vs. upstream: logger name only (``atlas.channels.adapters.wecom``).
+# Atlas changes: logger name and H1 send-failure diagnostics.
 """
 
 from __future__ import annotations
@@ -75,6 +75,7 @@ class ChatSendQueueMixin:
                     if not future.done():
                         future.set_result(result)
                 except Exception as exc:
+                    logger.exception("WeCom queued send failed")
                     if not future.done():
                         future.set_exception(exc)
                 finally:

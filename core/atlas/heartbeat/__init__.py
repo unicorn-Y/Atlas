@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import tempfile
 from dataclasses import dataclass
@@ -324,6 +325,7 @@ class HeartbeatService:
             if asyncio.isfuture(raw) or asyncio.iscoroutine(raw):
                 raw = await raw
         except Exception as exc:
+            logging.getLogger(__name__).exception("Heartbeat tick failed")
             self._save()
             return TickResult(status="failed", reason=str(exc) or exc.__class__.__name__)
 
