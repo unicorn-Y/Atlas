@@ -33,6 +33,18 @@ def _ensure_init_routes() -> None:
         _init_routes_registered = True
 
 
+def _seed_sessiondb(tmp_path: Path, conversation_id: str, contents: list[str]) -> list[str]:
+    import hermes_state
+
+    with hermes_state.SessionDB(db_path=tmp_path / "engine" / "state.db") as db:
+        db.ensure_session(conversation_id, "api_server")
+        ids = []
+        for content in contents:
+            db.append_message(conversation_id, "user", content=content)
+            ids.append(str(db.get_messages(conversation_id, limit=1, latest=True)[-1]["message_uid"]))
+    return ids
+
+
 def _install_fake_review_engine(monkeypatch, *, collect_error: str | None = None) -> dict:
     """契约一致的 atlas.review.engine 替身（W3 模块未落地时也能验证 W6 拦截逻辑）。
 
@@ -143,11 +155,14 @@ async def test_init_preview_rejects_missing_workspace(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 async def test_messages_pagination_returns_newest_window(tmp_path: Path, monkeypatch) -> None:
+    import atlas.config as config
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
     conv = await store.create_conversation("pager")
-    ids = [await store.save_message(conv, "user", f"m{i}") for i in range(250)]
-    monkeypatch.setattr(server, "memory", store)
+    ids = _seed_sessiondb(tmp_path, conv, [f"m{i}" for i in range(250)])
+    monkeypatch.setattr(server.app.state.services, "memory", store)
 
     transport = ASGITransport(app=server.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -172,11 +187,14 @@ async def test_messages_pagination_returns_newest_window(tmp_path: Path, monkeyp
 
 
 async def test_messages_before_id_unknown_returns_empty(tmp_path: Path, monkeypatch) -> None:
+    import atlas.config as config
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
     conv = await store.create_conversation("pager2")
-    await store.save_message(conv, "user", "only")
-    monkeypatch.setattr(server, "memory", store)
+    _seed_sessiondb(tmp_path, conv, ["only"])
+    monkeypatch.setattr(server.app.state.services, "memory", store)
     transport = ASGITransport(app=server.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get(f"/api/conversations/{conv}/messages",

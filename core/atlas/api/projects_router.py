@@ -330,4 +330,17 @@ async def search_messages(
 
         memory = _atlas_server.memory
     assert memory is not None
-    return await memory.search(q, limit=limit)
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import search_session_messages
+
+    matches = await asyncio.to_thread(
+        search_session_messages, DATA_ROOT / "engine", q, limit=limit,
+    )
+    conversations = {
+        str(item["id"]): item for item in await memory.list_conversations(limit=None)
+    }
+    return [{
+        **item,
+        "title": conversations.get(item["conversation_id"], {}).get("title", ""),
+        "snippet": item.get("snippet") or item.get("context", ""),
+    } for item in matches]

@@ -134,6 +134,12 @@ async def hub_main() -> None:
     cfg = get_config()
     memory = MemoryStore()
     await memory.init()
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_migration import migrate_legacy_sessions
+
+    migration = await migrate_legacy_sessions(DATA_ROOT / "engine", memory)
+    if migration.status != "ready":
+        raise RuntimeError(migration.error or "会话迁移失败；历史记录已保护。")
     manager = ModelManager()
     local = LocalExecutionRuntime()
 
@@ -203,9 +209,7 @@ async def hub_main() -> None:
                 cancel_waiter.cancel()
                 await asyncio.gather(cancel_waiter, return_exceptions=True)
 
-        await memory.save_message(
-            conversation_id, "user", text, {"run_id": run_id, "source": "telegram"},
-        )
+        await memory.save_conversation_metadata(conversation_id, title_hint=text)
         response: list[str] = []
         failed = None
         try:

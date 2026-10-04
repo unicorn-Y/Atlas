@@ -3,13 +3,11 @@
 Pi v1.0 "Branch Summarization" parity: when the user switches to a branch of a
 forked conversation, every other branch in the tree gets a short "what this
 branch contains" note so the picker can label each one. The notes never block
-switching and are cached:
+switching and are cached in the canonical SessionDB transcript:
 
 - async: :func:`branch_summaries` returns whatever is cached right now (DB read
   only) and schedules missing summaries as fire-and-forget asyncio tasks;
-- cached: one summary per branch child, persisted through
-  ``MemoryStore.save_branch_summary`` (upsert keyed on the fork point) and
-  mirrored into the Hermes parent transcript via
+- cached: one summary per branch child, persisted in the Hermes parent transcript via
   ``atlas.engine.session_sync.append_branch_summary`` (which dedupes too);
 - single-flight: concurrent switches share one in-flight generation per child.
 
@@ -107,8 +105,13 @@ def _transcript_delta(child_messages: list[dict[str, Any]], prefix_source: list[
 
 
 async def _branch_delta(memory: Any, parent_id: str, fork_id: str, child_id: str) -> str:
-    parent_messages = await memory.get_conversation_messages(parent_id, limit=100000)
-    child_messages = await memory.get_conversation_messages(child_id, limit=100000)
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+
+    parent_messages, child_messages = await asyncio.gather(
+        asyncio.to_thread(read_session_all_messages, DATA_ROOT / "engine", parent_id),
+        asyncio.to_thread(read_session_all_messages, DATA_ROOT / "engine", child_id),
+    )
     boundary = next(
         (index for index, item in enumerate(parent_messages)
          if str(item.get("id")) == fork_id),
@@ -127,11 +130,15 @@ async def _find_cached(memory: Any, child_id: str) -> tuple[str, str, str] | Non
     fork_id = str(child.get("fork_message_id") or "")
     if not parent_id or not fork_id:
         return None
-    parent_messages = await memory.get_conversation_messages(parent_id, limit=100000)
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+
+    parent_messages = await asyncio.to_thread(
+        read_session_all_messages, DATA_ROOT / "engine", parent_id,
+    )
     for item in parent_messages:
         metadata = item.get("metadata") or {}
-        if (metadata.get("kind") == "branch_summary"
-                and metadata.get("child_conversation_id") == child_id):
+        if metadata.get("child_conversation_id") == child_id:
             return parent_id, fork_id, str(item.get("content") or "")
     return parent_id, fork_id, ""
 
@@ -172,10 +179,6 @@ async def generate_branch_summary(
         return None
     content = f"分支摘要：{summary[:600]}"
     try:
-        await memory.save_branch_summary(parent_id, child_id, fork_id, content)
-    except Exception:
-        logger.warning("branch summary persist failed for %s", child_id, exc_info=True)
-    try:
         await (mirror or _default_mirror)(parent_id, child_id, fork_id, content)
     except Exception:
         logger.warning("branch summary mirror skipped for %s", child_id, exc_info=True)
@@ -210,7 +213,7 @@ def _schedule(
 
 async def cached_branch_summaries(memory: Any, conversation_id: str) -> dict[str, str]:
     """Cached summaries for every branch around ``conversation_id`` (DB read only)."""
-    conversations = await memory.list_conversations(limit=10000)
+    conversations = await memory.list_conversations(limit=None)
     by_id = {str(item.get("id")): item for item in conversations}
     if conversation_id not in by_id:
         return {}
@@ -253,7 +256,7 @@ async def branch_summaries(
     call — typically when the tree is re-rendered — sees them from cache.
     """
     cached = await cached_branch_summaries(memory, conversation_id)
-    conversations = await memory.list_conversations(limit=10000)
+    conversations = await memory.list_conversations(limit=None)
     children = sorted(
         str(item.get("id")) for item in conversations
         if str(item.get("parent_conversation_id") or "") == conversation_id

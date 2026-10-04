@@ -115,8 +115,11 @@ async def test_unknown_model_still_yields_single_error_event() -> None:
 
 
 async def test_blocked_prompt_hook_persists_reason_and_stops_before_turn(
-    monkeypatch,
+    monkeypatch, tmp_path,
 ) -> None:
+    import atlas.config as config
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
     memory = _memory_stub()
     agent = _orchestrator(memory)
 
@@ -133,9 +136,14 @@ async def test_blocked_prompt_hook_persists_reason_and_stops_before_turn(
     )]
     assert [event["type"] for event in events] == ["chunk", "done"]
     assert events[0] == {"type": "chunk", "content": "不行"}
-    assert events[1]["message_id"] == "message-1"
-    memory.save_message.assert_awaited_once()
-    assert memory.save_message.call_args.kwargs["metadata"]["hook"] == "UserPromptSubmit"
+    from atlas.engine.session_sync import read_session_all_messages
+
+    messages = read_session_all_messages(tmp_path / "engine", "conv-1")
+    assert len(messages) == 1
+    assert events[1]["message_id"] == messages[0]["id"]
+    assert messages[0]["role"] == "assistant" and messages[0]["content"] == "不行"
+    assert messages[0]["metadata"]["hook"] == "UserPromptSubmit"
+    memory.save_message.assert_not_awaited()
 
 
 # -- H2.2/H3.5: event-driven cancel pump -------------------------------------

@@ -6,6 +6,7 @@ injection — never a module-level singleton — so two app instances stay isola
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Annotated, Any
 
@@ -171,7 +172,12 @@ async def recipe_from_run(
     conv = await memory.get_conversation(run.conversation_id)
     if conv is None:
         raise HTTPException(status_code=404, detail="Run conversation not found")
-    messages = await memory.get_conversation_messages(conv["id"], limit=1000)
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_messages
+
+    messages = await asyncio.to_thread(
+        read_session_messages, DATA_ROOT / "engine", conv["id"], limit=1000,
+    )
     user_message = run.user_input or next((item["content"] for item in reversed(messages) if item["role"] == "user"), None)
     if not user_message:
         raise HTTPException(status_code=422, detail="Run has no user message")

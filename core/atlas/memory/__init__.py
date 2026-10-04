@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -27,6 +28,19 @@ from atlas.memory.quality import (
 )
 
 log = structlog.get_logger()
+
+
+async def _session_evidence(
+    conversation_id: str | None, message_id: str | None,
+) -> dict[str, Any] | None:
+    if not message_id:
+        return None
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import session_message_evidence
+
+    return await asyncio.to_thread(
+        session_message_evidence, DATA_ROOT / "engine", conversation_id, message_id,
+    )
 
 _MEMORY_LINE = re.compile(
     r"^\s*(?:remember|记住)\s*[:：]\s*"
@@ -711,15 +725,52 @@ class MemoryStore:
         await self._db.commit()
         return conv_id
 
-    async def list_conversations(self, limit: int = 50) -> list[dict[str, Any]]:
+    async def save_conversation_metadata(
+        self, conversation_id: str, *, title_hint: str = "",
+    ) -> None:
+        """Create/touch conversation metadata without persisting transcript text."""
         assert self._db is not None
         cursor = await self._db.execute(
+            "SELECT id, title FROM conversations WHERE id = ?", (conversation_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            title = title_hint[:30].strip() + ("..." if len(title_hint) > 30 else "")
+            await self._db.execute(
+                "INSERT INTO conversations (id, title) VALUES (?, ?)",
+                (conversation_id, title or "New Conversation"),
+            )
+        else:
+            await self._db.execute(
+                "UPDATE conversations SET updated_at=datetime('now') WHERE id=?",
+                (conversation_id,),
+            )
+        await self._db.commit()
+
+    async def fork_conversation_metadata(
+        self, conversation_id: str, *, title: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Create only the Atlas metadata row for a SessionDB-owned branch."""
+        source = await self.get_conversation(conversation_id)
+        if source is None:
+            return None
+        fork_id = await self.create_conversation(title or f"{source['title']} (fork)")
+        await self.update_conversation(
+            fork_id, parent_conversation_id=conversation_id, workspace=source.get("workspace"),
+            permission_mode=source.get("permission_mode"), source=source.get("source"),
+        )
+        return await self.get_conversation(fork_id)
+
+    async def list_conversations(self, limit: int | None = 50) -> list[dict[str, Any]]:
+        assert self._db is not None
+        query = (
             "SELECT id, title, created_at, updated_at, pinned, archived, workspace, "
             "worktree_path, worktree_branch, base_branch, parent_conversation_id, fork_message_id, "
             "permission_mode, allowed_paths, executor, sandbox, extra_roots, source "
-            "FROM conversations ORDER BY pinned DESC, updated_at DESC LIMIT ?",
-            (limit,),
+            "FROM conversations ORDER BY pinned DESC, updated_at DESC"
         )
+        cursor = await self._db.execute(query if limit is None else query + " LIMIT ?",
+                                        () if limit is None else (limit,))
         rows = await cursor.fetchall()
         return [{**dict(r), "pinned": bool(r["pinned"]),
                  "archived": bool(r["archived"]),
@@ -900,42 +951,51 @@ class MemoryStore:
         When ``conversation_ids`` is provided, only those conversations are
         searched (used for project-scoped recall).
         """
-        assert self._db is not None
-        tokens = re.findall(r"[\w\u4e00-\u9fff]+", query or "")
-        if not tokens:
+        if not (query or "").strip():
             return []
-        match_query = " OR ".join(f'"{token}"' for token in tokens[:12])
-        hits: list[dict[str, Any]] = []
-        try:
-            cursor = await self._db.execute(
-                "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, "
-                "       c.title AS conversation_title, "
-                "       highlight(messages_fts, 0, '[', ']') AS snippet "
-                "FROM messages_fts "
-                "JOIN messages m ON messages_fts.rowid = m.rowid "
-                "JOIN conversations c ON c.id = m.conversation_id "
-                "WHERE messages_fts MATCH ? "
-                "ORDER BY rank LIMIT ?",
-                (match_query, limit),
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import read_session_all_messages, search_session_messages
+
+        session_home = DATA_ROOT / "engine"
+        if (session_home / "state.db").exists():
+            hits = await asyncio.to_thread(
+                search_session_messages, session_home, query, limit=limit,
             )
-            hits = [dict(row) for row in await cursor.fetchall()]
-        except aiosqlite.OperationalError:
+        else:
+            assert self._db is not None
+            tokens = re.findall(r"[\w\u4e00-\u9fff]+", query or "")
+            if not tokens:
+                return []
+            match_query = " OR ".join(f'"{token}"' for token in tokens[:12])
             hits = []
-        if not hits:
-            like = f"%{query.strip()}%"
-            cursor = await self._db.execute(
-                "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, "
-                "       c.title AS conversation_title, "
-                "       substr(m.content, 1, 200) AS snippet "
-                "FROM messages m JOIN conversations c ON c.id = m.conversation_id "
-                "WHERE m.content LIKE ? ORDER BY m.created_at DESC LIMIT ?",
-                (like, limit),
-            )
-            hits = [dict(row) for row in await cursor.fetchall()]
+            try:
+                cursor = await self._db.execute(
+                    "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, "
+                    "c.title AS conversation_title, "
+                    "highlight(messages_fts, 0, '[', ']') AS snippet "
+                    "FROM messages_fts JOIN messages m ON messages_fts.rowid=m.rowid "
+                    "JOIN conversations c ON c.id=m.conversation_id "
+                    "WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?",
+                    (match_query, limit),
+                )
+                hits = [dict(row) for row in await cursor.fetchall()]
+            except aiosqlite.OperationalError:
+                hits = []
+            if not hits:
+                cursor = await self._db.execute(
+                    "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, "
+                    "c.title AS conversation_title, substr(m.content, 1, 200) AS snippet "
+                    "FROM messages m JOIN conversations c ON c.id=m.conversation_id "
+                    "WHERE m.content LIKE ? ORDER BY m.created_at DESC LIMIT ?",
+                    (f"%{query.strip()}%", limit),
+                )
+                hits = [dict(row) for row in await cursor.fetchall()]
         if conversation_ids is not None:
             allowed = {str(value) for value in conversation_ids}
             hits = [hit for hit in hits if str(hit["conversation_id"]) in allowed]
         for hit in hits:
+            conversation = await self.get_conversation(str(hit["conversation_id"]))
+            hit["conversation_title"] = (conversation or {}).get("title", "")
             hit["context"] = await self._session_context(
                 str(hit["conversation_id"]), str(hit["id"]), context,
             )
@@ -944,16 +1004,28 @@ class MemoryStore:
     async def _session_context(
         self, conversation_id: str, message_id: str, window: int,
     ) -> list[dict[str, Any]]:
-        assert self._db is not None
-        cursor = await self._db.execute(
-            "SELECT id, role, content, created_at FROM messages "
-            "WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC",
-            (conversation_id,),
-        )
-        messages = [dict(row) for row in await cursor.fetchall()]
+        from atlas.config import DATA_ROOT
+
+        session_home = DATA_ROOT / "engine"
+        if (session_home / "state.db").exists():
+            from atlas.engine.session_sync import read_session_all_messages
+
+            messages = await asyncio.to_thread(
+                read_session_all_messages, session_home, conversation_id,
+            )
+        else:
+            assert self._db is not None
+            cursor = await self._db.execute(
+                "SELECT id, role, content, created_at FROM messages "
+                "WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC",
+                (conversation_id,),
+            )
+            messages = [dict(row) for row in await cursor.fetchall()]
         index = next(
-            (i for i, message in enumerate(messages) if message["id"] == message_id), 0,
+            (i for i, message in enumerate(messages) if message["id"] == message_id), None,
         )
+        if index is None:
+            return []
         return messages[max(index - window, 0): index + window + 1]
 
     # ----- Facts -----
@@ -1044,18 +1116,34 @@ class MemoryStore:
         return extracted
 
     async def extract_conversation_candidates(
-        self, conversation_id: str, *, provenance: str = "user"
+        self, conversation_id: str, *, provenance: str = "user",
+        transcript: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Extract conservative user-stated memories into a review queue."""
         assert self._db is not None
         if provenance not in {"user", "agent", "external"}:
             raise ValueError("invalid memory candidate provenance")
-        cursor = await self._db.execute(
-            "SELECT id, role, content FROM messages WHERE conversation_id = ? "
-            "ORDER BY created_at ASC, rowid ASC",
-            (conversation_id,),
-        )
-        messages = await cursor.fetchall()
+        if transcript is None:
+            from atlas.config import DATA_ROOT
+
+            session_home = DATA_ROOT / "engine"
+            if (session_home / "state.db").exists():
+                from atlas.engine.session_sync import read_session_all_messages
+                from atlas.session_migration_gate import wait_for_session_migration
+
+                await wait_for_session_migration(session_home)
+                messages = await asyncio.to_thread(
+                    read_session_all_messages, session_home, conversation_id,
+                )
+            else:
+                cursor = await self._db.execute(
+                    "SELECT id, role, content FROM messages WHERE conversation_id = ? "
+                    "ORDER BY created_at ASC, rowid ASC",
+                    (conversation_id,),
+                )
+                messages = await cursor.fetchall()
+        else:
+            messages = transcript
         for message in messages:
             if message["role"] != "user":
                 continue
@@ -1203,11 +1291,10 @@ class MemoryStore:
         if not candidate:
             await self._db.rollback()
             return False
-        cursor = await self._db.execute(
-            "SELECT 1 FROM messages WHERE id = ? AND conversation_id = ? AND role = 'user'",
-            (candidate["source_message_id"], candidate["source_conversation_id"]),
+        candidate_message = await _session_evidence(
+            candidate["source_conversation_id"], candidate["source_message_id"],
         )
-        if not await cursor.fetchone():
+        if not candidate_message or candidate_message.get("role") != "user":
             await self._db.rollback()
             return False
         cursor = await self._db.execute(
@@ -1233,21 +1320,14 @@ class MemoryStore:
             await self._db.commit()
             return True
         if current:
-            cursor = await self._db.execute(
-                "SELECT created_at FROM messages WHERE id = ?",
-                (candidate["source_message_id"],),
+            current_message = await _session_evidence(
+                current["source_conversation_id"], current["source_message_id"],
             )
-            candidate_message = await cursor.fetchone()
-            cursor = await self._db.execute(
-                "SELECT created_at FROM messages WHERE id = ?",
-                (current["source_message_id"],),
-            )
-            current_message = await cursor.fetchone()
             candidate_time = (
-                candidate_message["created_at"] if candidate_message else None
+                candidate_message.get("timestamp") if candidate_message else None
             )
             current_time = (
-                current_message["created_at"] if current_message else current["updated_at"]
+                current_message.get("timestamp") if current_message else current["updated_at"]
             )
             if candidate_time and current_time and candidate_time < current_time:
                 await self._db.execute(
@@ -1369,11 +1449,8 @@ class MemoryStore:
         if not await cursor.fetchone():
             raise ValueError("Cannot correct an unknown memory")
         if source_message_id:
-            cursor = await self._db.execute(
-                "SELECT 1 FROM messages WHERE id = ? AND role = 'user'",
-                (source_message_id,),
-            )
-            if not await cursor.fetchone():
+            evidence = await _session_evidence(None, source_message_id)
+            if not evidence or evidence.get("role") != "user":
                 raise ValueError("Correction evidence must be a user message")
         cursor = await self._db.execute(
             "INSERT INTO memory_feedback (memory_key, signal, source_message_id) "
@@ -3810,11 +3887,8 @@ class MemoryStore:
         source_conversation_id = fact.get("source_conversation_id")
         if not source_message_id or not source_conversation_id:
             return False
-        cursor = await self._db.execute(
-            "SELECT 1 FROM messages WHERE id = ? AND conversation_id = ? AND role = 'user'",
-            (source_message_id, source_conversation_id),
-        )
-        if not await cursor.fetchone():
+        evidence = await _session_evidence(source_conversation_id, source_message_id)
+        if not evidence or evidence.get("role") != "user":
             return False
         cursor = await self._db.execute(
             "SELECT 1 FROM memory_candidates WHERE key = ? AND value = ? "
@@ -3841,10 +3915,8 @@ class MemoryStore:
         if not fact:
             await self._db.rollback()
             return False
-        cursor = await self._db.execute(
-            "SELECT 1 FROM messages WHERE id = ? AND role = 'user'", (source_message_id,)
-        )
-        if not await cursor.fetchone():
+        evidence = await _session_evidence(None, source_message_id)
+        if not evidence or evidence.get("role") != "user":
             await self._db.rollback()
             return False
         previous_status = fact["commitment_status"] or "active"
@@ -3983,13 +4055,14 @@ class MemoryStore:
         return {**(await self.get_conversation(fork_id) or {}), "files_shared": True}
 
     async def delete_conversation(self, conversation_id: str) -> bool:
-        """Delete a conversation and all its messages. Returns True if found."""
+        """Delete the SessionDB transcript and Atlas metadata, retaining legacy rows."""
         assert self._db is not None
-        # Delete messages first (triggers clean up FTS)
-        await self._db.execute(
-            "DELETE FROM messages WHERE conversation_id = ?",
-            (conversation_id,),
-        )
+        if await self.get_conversation(conversation_id) is None:
+            return False
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import delete_session
+
+        await asyncio.to_thread(delete_session, DATA_ROOT / "engine", conversation_id)
         cursor = await self._db.execute(
             "DELETE FROM conversations WHERE id = ?",
             (conversation_id,),

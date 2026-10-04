@@ -199,17 +199,9 @@ def test_history_mutations_keep_doctor_sessions_consistent(tmp_path, monkeypatch
 
     async def _build():
         await memory.init()
-        # save_message auto-creates the conversation row under the given id.
-        await memory.save_message(conversation_id="source", role="user", content="first")
-        await memory.save_message(conversation_id="source", role="assistant",
-                                  content="first answer")
-        await memory.save_message(conversation_id="source", role="user", content="second")
-        await memory.save_message(conversation_id="source", role="assistant",
-                                  content="second answer")
-        return await memory.get_messages_with_rowid("source")
+        await memory.save_conversation_metadata("source")
 
-    messages = asyncio.run(_build())
-    assert len(messages) == 4
+    asyncio.run(_build())
 
     def _doctor():
         from atlas.cli import _check_sessions
@@ -227,19 +219,18 @@ def test_history_mutations_keep_doctor_sessions_consistent(tmp_path, monkeypatch
 
     # Baseline: source exists in both stores.
     _assert_consistent()
-    # Fork (direct SessionDB op + the metadata row its caller keeps owning).
+    # Fork (direct SessionDB op + metadata-only conversation row).
     fork_session_through_turn(home, "source", "forked", 1, branch_message_id="a1")
 
     async def _seed_fork_row():
-        await memory.save_message(conversation_id="forked", role="user", content="first")
+        await memory.save_conversation_metadata("forked")
+        await memory.update_conversation("forked", parent_conversation_id="source",
+                                         fork_message_id="a1")
 
     asyncio.run(_seed_fork_row())
     _assert_consistent()
-    # Rewind: both stores lose the second user turn, session/conversation ids unchanged.
+    # Rewind changes the canonical transcript only; Atlas' old message table is frozen.
     rewind_user_turn(home, "source", 1)
-    removed = asyncio.run(
-        memory.remove_messages_from("source", str(messages[2]["id"])))
-    assert removed is not None
     _assert_consistent()
     # Export + import roundtrip: same session ids on both sides.
     payload = capture_session(home, "source")
