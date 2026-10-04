@@ -157,6 +157,15 @@ async def app_client(tmp_path_factory: pytest.TempPathFactory, fake_llm: FakeLLM
         transport = ASGITransport(app=server.app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             async with server.lifespan(server.app):
+                # H8 S2: component starts (DBOS/MCP/channels/automation) now run
+                # as the deferred task after the lifespan yields. Wait for them
+                # so the manual manager restart below cannot race the deferred
+                # channels start, and automation is wired before tests drive it.
+                startup = server.app.state.services.startup
+                if startup is not None:
+                    assert await startup.wait_all_ready(timeout=120.0), (
+                        f"deferred startup did not become ready: {startup.snapshot()}"
+                    )
                 manager: ChannelManager = server.channel_manager
                 assert manager is not None and server.gateway_bridge is not None
                 manager.register_channel("fake", FakeAdapter)

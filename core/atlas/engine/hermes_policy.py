@@ -10,10 +10,13 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 import re
 import threading
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _installed: set[int] = set()
 _install_lock = threading.Lock()
@@ -174,6 +177,9 @@ def _checkpoint_first_write(agent: Any, runtime: Any, loop: asyncio.AbstractEven
                 )
             runtime.hermes_write_checkpoint_created = True
     except Exception as exc:
+        logger.warning(
+            "hermes_policy.first_write_checkpoint_failed", error=str(exc), exc_info=True,
+        )
         return f"写前检查点创建失败，操作已取消：{exc}"
     return None
 
@@ -292,6 +298,10 @@ def _pre_tool_call(
                     "type": "checkpoint_created", "checkpoint": checkpoint, "tool": name,
                 })
         except Exception as exc:
+            logger.warning(
+                "hermes_policy.write_checkpoint_failed", tool=name,
+                error=str(exc), exc_info=True,
+            )
             return _blocked(runtime, loop, name, kwargs, f"写前检查点创建失败，操作已取消：{exc}")
     if is_write and name.startswith("mcp__"):
         failure = _checkpoint_first_write(agent, runtime, loop)

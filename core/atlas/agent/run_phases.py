@@ -258,6 +258,9 @@ async def _phase_prompt_hook(agent, state: _RunState) -> AsyncIterator[dict[str,
                 metadata={"model": state.litellm_model, "hook": "UserPromptSubmit"},
             )
         except Exception as e:
+            log.warning(
+                "agent.hook_denial_save_failed", error=str(e), exc_info=True,
+            )
             yield {
                 "type": "error",
                 "category": "backend",
@@ -281,6 +284,9 @@ async def _phase_goal_knowledge(agent, state: _RunState) -> AsyncIterator[dict[s
             await agent._memory.retrieve_approved_goal_knowledge(state.message, limit=3)
         )
     except Exception as exc:
+        log.warning(
+            "agent.goal_knowledge_load_failed", error=str(exc), exc_info=True,
+        )
         yield {
             "type": "error",
             "category": "backend",
@@ -312,6 +318,9 @@ async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
                 if inspect.isawaitable(result):
                     await result
             except Exception as exc:
+                log.warning(
+                    "agent.recovered_plan_persist_failed", error=str(exc), exc_info=True,
+                )
                 yield {
                     "type": "error",
                     "category": "backend",
@@ -341,6 +350,9 @@ async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
                 planning_insights,
             )
         except Exception as exc:
+            log.warning(
+                "agent.plan_create_failed", error=str(exc), exc_info=True,
+            )
             yield {
                 "type": "error",
                 "category": "model",
@@ -355,6 +367,9 @@ async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
                 if inspect.isawaitable(result):
                     await result
             except Exception as exc:
+                log.warning(
+                    "agent.plan_persist_failed", error=str(exc), exc_info=True,
+                )
                 yield {
                     "type": "error",
                     "category": "backend",
@@ -424,6 +439,9 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             "active_process_refs": [],
         }
     except Exception as exc:
+        log.warning(
+            "agent.memory_context_load_failed", error=str(exc), exc_info=True,
+        )
         yield {
             "type": "error",
             "category": "backend",
@@ -500,6 +518,7 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
                 for item in agent._skills.list_skills()[:60]
             ]
         except Exception:
+            log.debug("agent.skill_index_unavailable", exc_info=True)
             skill_index = []
         if skill_index:
             initial_messages.append(SystemMessage(content=(
@@ -513,6 +532,7 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
                 request.conversation_id, state.message,
             )
         except Exception:
+            log.debug("agent.project_context_unavailable", exc_info=True)
             project_context = ""
         if project_context:
             initial_messages.append(SystemMessage(content=(
@@ -868,7 +888,7 @@ async def _turn(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
             async for event in finalize:
                 yield event
     except Exception as e:
-        log.error("agent.run.error", error=str(e))
+        log.error("agent.run.error", error=str(e), exc_info=True)
         yield {
             "type": "error",
             "category": getattr(e, "category", "runtime"),
@@ -920,7 +940,7 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
                 "resumed": state.plan_resumed,
             }
         except Exception as exc:
-            log.warning("agent.plan_verification_failed", error=str(exc))
+            log.warning("agent.plan_verification_failed", error=str(exc), exc_info=True)
 
     await agent._emit_hook(
         runtime, "before_response", conversation_id=request.conversation_id,
@@ -935,6 +955,9 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
                 state.message, state.plan, full_response, state.litellm_model,
             )
         except Exception as exc:
+            log.warning(
+                "agent.goal_evaluation_failed", error=str(exc), exc_info=True,
+            )
             evaluation = {
                 "satisfied": False,
                 "evidence": "",
@@ -953,6 +976,9 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
             metadata=metadata,
         )
     except Exception as e:
+        log.warning(
+            "agent.assistant_message_save_failed", error=str(e), exc_info=True,
+        )
         yield {
             "type": "error",
             "category": "backend",
@@ -974,6 +1000,7 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
             "memory.candidate_extraction_failed",
             conversation_id=request.conversation_id,
             error=str(exc),
+            exc_info=True,
         )
     try:
         reflection = (
@@ -995,7 +1022,7 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
     except Exception as exc:
         log.warning(
             "memory.reflection_failed", conversation_id=request.conversation_id,
-            error=str(exc),
+            error=str(exc), exc_info=True,
         )
         yield {"type": "memory_reflection_error", "detail": str(exc)}
     await agent._emit_hook(

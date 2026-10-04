@@ -390,6 +390,7 @@ class AgentOrchestrator:
                 category=f"agent-{kind}", memory_type=memory_type,
             )
         except Exception as exc:
+            log.warning("agent.remember.failed", error=str(exc), exc_info=True)
             message = f"remember failed: {exc}"
             return {
                 "data": {"error": message},
@@ -422,6 +423,7 @@ class AgentOrchestrator:
                     conversation_ids=conversation_ids,
                 )
             except Exception:
+                log.debug("agent.project_session_search_failed", exc_info=True)
                 hits = []
         parts = [
             f"Active project: {project.name} (status: {project.status})",
@@ -456,7 +458,7 @@ class AgentOrchestrator:
             content = await self._skills.activate(name.strip())
         except Exception as exc:
             content = None
-            log.warning("agent.use_skill.failed", name=name, error=str(exc))
+            log.warning("agent.use_skill.failed", name=name, error=str(exc), exc_info=True)
         if not content:
             message = f"Unknown skill: {name}"
             return {

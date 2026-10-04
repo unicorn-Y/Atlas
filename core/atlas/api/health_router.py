@@ -38,8 +38,19 @@ def _service(name: str, services: AppServices) -> Any:
 @router.get("/api/health")
 async def health(
     services: Annotated[AppServices, Depends(get_app_services)],
-) -> dict[str, str]:
-    return {"status": "ok", "version": "0.1.0"}
+) -> dict[str, Any]:
+    """Liveness plus per-component startup state (H8 §10.2 S4).
+
+    ``status`` is ``ok`` only when every registered component is ``ready``;
+    any other response means "contact, but starting" (the desktop shows
+    startup progress and never kills the backend for slowness within its cap).
+    Apps mounted without the server lifespan report no components and stay
+    ``ok`` — the historical contract.
+    """
+    startup = getattr(services, "startup", None)
+    components: dict[str, str] = startup.snapshot() if startup is not None else {}
+    status = "ok" if all(state == "ready" for state in components.values()) else "starting"
+    return {"status": status, "version": "0.1.0", "components": components}
 
 
 @router.get("/api/sandbox/status")

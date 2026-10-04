@@ -25,7 +25,12 @@ def test_atlas_mcp_http_oauth_config_is_preserved_for_hermes():
     assert adapted["stdio"]["enabled"] is False
 
 
-def test_atlas_compression_model_setting_maps_to_hermes_without_copying_credentials(monkeypatch):
+def test_atlas_compression_model_setting_maps_to_bare_wire_id(monkeypatch):
+    """Host-shaped config (prefixed litellm id) -> compressor pins the BARE id.
+
+    The compressor sends ``summary_model`` verbatim to the provider; the
+    litellm-style routing prefix 404s on real relays (H10.2-DEFECT-1 residual).
+    """
     from types import SimpleNamespace
 
     monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"compression_model": "cheap"})
@@ -37,7 +42,89 @@ def test_atlas_compression_model_setting_maps_to_hermes_without_copying_credenti
 
     HermesRuntime._apply_compression_model_setting(agent, models)
 
+    assert compressor.summary_model == "cheap-model"
+    assert "api_key" not in str(compressor.summary_model)
+
+
+def test_atlas_compression_model_setting_honors_native_model(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"compression_model": "cheap"})
+    compressor = SimpleNamespace(summary_model="")
+    agent = SimpleNamespace(context_compressor=compressor)
+    models = SimpleNamespace(list_models=lambda: [
+        {"id": "cheap", "litellm_model": "anthropic/cheap-model",
+         "native_model": "cheap-model-native"},
+    ])
+
+    HermesRuntime._apply_compression_model_setting(agent, models)
+
+    assert compressor.summary_model == "cheap-model-native"
+
+
+def test_atlas_compression_model_setting_falls_back_without_router_surface(monkeypatch):
+    """No router surface -> legacy litellm id (documented fallback contract)."""
+    import sys
+    from types import SimpleNamespace
+
+    monkeypatch.setattr("atlas.config.load_user_settings", lambda: {"compression_model": "cheap"})
+    monkeypatch.setitem(sys.modules, "atlas.models.router", None)
+    compressor = SimpleNamespace(summary_model="")
+    agent = SimpleNamespace(context_compressor=compressor)
+    models = SimpleNamespace(list_models=lambda: [
+        {"id": "cheap", "litellm_model": "openai/cheap-model"},
+    ])
+
+    HermesRuntime._apply_compression_model_setting(agent, models)
+
     assert compressor.summary_model == "openai/cheap-model"
+
+
+def test_compaction_agent_pins_bare_wire_id_from_host_shaped_config(tmp_path, monkeypatch):
+    """Manual compaction builds its Hermes agent on the bare wire id.
+
+    ``_compact_session_sync`` used to pass ``settings.current_litellm_model``
+    (the prefixed routing label) straight to the agent transport — real relays
+    404 the whole compaction (H10.2-DEFECT-1 residual).
+    """
+    from types import SimpleNamespace
+
+    history = [{"role": "user", "content": "你好"}, {"role": "assistant", "content": "done"}]
+
+    class FakeSessionDB:
+        def get_messages_as_conversation(self, conversation_id, include_ancestors=True):
+            return list(history)
+
+        def get_session(self, conversation_id):
+            return {"system_prompt": "system-prompt-from-session"}
+
+    built_kwargs: dict = {}
+
+    def fake_agent_factory(**kwargs):
+        built_kwargs.update(kwargs)
+        return SimpleNamespace(
+            context_compressor=None,
+            _session_db=FakeSessionDB(),
+            _compress_context=lambda hist, prompt, **kw: (list(hist), None),
+            close=lambda: None,
+        )
+
+    monkeypatch.setattr("atlas.config.load_user_settings", lambda: {})
+    models = SimpleNamespace(
+        current_model="main",
+        current_litellm_model="openai/deepseek-v4.1-flash",
+        list_models=lambda: [
+            {"id": "main", "litellm_model": "openai/deepseek-v4.1-flash"},
+        ],
+    )
+    runtime = HermesRuntime(
+        data_dir=tmp_path, model_manager=models, agent_factory=fake_agent_factory,
+    )
+
+    result = runtime._compact_session_sync("conv-1", str(tmp_path), None)
+
+    assert built_kwargs["model"] == "deepseek-v4.1-flash"
+    assert result["compressed"] is False  # unchanged transcript: wiring-only probe
 
 
 def test_hermes_policy_recognizes_atlas_state_and_workspace_mutations():

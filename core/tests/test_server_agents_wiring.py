@@ -70,6 +70,13 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_llm: FakeLLMSer
     from atlas.server import app
 
     with TestClient(app) as tc:
+        # H8 S2: component starts (DBOS/MCP/automation/...) run as the deferred
+        # task after the lifespan yields; wait so tests see the started graph.
+        startup = app.state.services.startup
+        if startup is not None:
+            assert startup.wait_all_ready_sync(timeout=120.0), (
+                f"deferred startup did not become ready: {startup.snapshot()}"
+            )
         yield tc
 
 

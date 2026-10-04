@@ -9,14 +9,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import FastAPI
 
 from atlas.agent.capabilities import (
     AgentCapabilityRegistry,
-    register_skill_capabilities,
     register_skill_catalog_capabilities,
     register_skill_dependency_capability,
     register_skill_discovery_capability,
@@ -31,6 +30,8 @@ from atlas.agent.enrichment import (
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.api.app_services import AppServices
 from atlas.api.application import create_app
+from atlas.api.deferred_startup import run_deferred_startup
+from atlas.api.startup_components import COMPONENT_NAMES, StartupComponents
 from atlas.api.models_settings_router import (
     _model_supports_reasoning,  # noqa: F401,E402 — compat re-export
 )
@@ -79,7 +80,6 @@ from atlas.runtime.external_agents import (
     external_agent_status,  # noqa: F401 — read/patched via atlas.server
 )
 from atlas.sandbox import DockerSandboxManager
-from atlas.scheduler import AtlasScheduler
 from atlas.skills import (
     PROJECT_ROOT,
     SKILLS_DIR,
@@ -97,14 +97,64 @@ from atlas.skills.lifecycle import (
 from atlas.skills.registry import SkillRegistry
 from atlas.ssh import ssh_workspaces
 from atlas.telegram import TelegramService
-from atlas.tools.computer_use import ComputerUseRuntime
-from atlas.tools.custom_tools import CustomToolStore
-from atlas.tools.local_execution import LocalExecutionRuntime
-from atlas.tools.mcp_client import MCPClient
-from atlas.tools.node_runtime import get_node_runtime_status  # noqa: F401 — read via atlas.server
-from atlas.tools.web import WebRuntime
-from atlas.tools.web_extract import extract_web
 from atlas.usage import UsageLedger
+
+if TYPE_CHECKING:  # H8 O1/S2: annotations are strings (PEP 563); the heavy
+    # mcp/tools modules are resolved lazily (_LAZY_TOOL_EXPORTS / module
+    # __getattr__) so importing atlas.server — and therefore every cold start
+    # — no longer pays the ~1.1 s mcp import chain on the critical path.
+    from atlas.scheduler import AtlasScheduler
+    from atlas.tools.computer_use import ComputerUseRuntime
+    from atlas.tools.custom_tools import CustomToolStore
+    from atlas.tools.local_execution import LocalExecutionRuntime
+    from atlas.tools.mcp_client import MCPClient
+    from atlas.tools.node_runtime import get_node_runtime_status  # noqa: F401
+    from atlas.tools.web import WebRuntime
+    from atlas.tools.web_extract import extract_web
+
+# PEP 562: keep the historical ``atlas.server.<name>`` surface resolvable
+# (attribute access and ``from atlas.server import <name>``) without the
+# eager imports. ``atlas.server.subprocess`` and the run-drive re-exports
+# below are unaffected.
+_LAZY_TOOL_EXPORTS = {
+    "ComputerUseRuntime": "atlas.tools.computer_use",
+    "CustomToolStore": "atlas.tools.custom_tools",
+    "LocalExecutionRuntime": "atlas.tools.local_execution",
+    "MCPClient": "atlas.tools.mcp_client",
+    "WebRuntime": "atlas.tools.web",
+    "extract_web": "atlas.tools.web_extract",
+    "get_node_runtime_status": "atlas.tools.node_runtime",
+}
+
+
+def __getattr__(name: str):
+    module_name = _LAZY_TOOL_EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from importlib import import_module
+
+    value = getattr(import_module(module_name), name)
+    globals()[name] = value  # cache: subsequent lookups skip the hook
+    return value
+
+
+class _DeferredMCPClient:
+    """S2 stand-in for the real MCPClient while the deferred ``mcp``
+    component starts. First attribute access binds (or re-binds — test
+    patches of ``atlas.server.mcp_client`` keep working) the module-level
+    client and forwards, so the critical-path consumers (capability lambdas,
+    the orchestrator's tool bridge, /api/tools) behave exactly as with an
+    un-started client: empty tool index until the component is ready (S3's
+    documented degraded window)."""
+
+    def __getattr__(self, name: str) -> Any:
+        client = globals().get("mcp_client")
+        if client is None or client is self:
+            from atlas.tools.mcp_client import MCPClient
+
+            client = MCPClient()
+            globals()["mcp_client"] = client
+        return getattr(client, name)
 
 log = structlog.get_logger()
 
@@ -154,7 +204,17 @@ heartbeat_service: HeartbeatService | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Startup / shutdown lifecycle."""
+    """Startup / shutdown lifecycle.
+
+    H8 §10.2 split (S1/S2): everything the first request needs — managers,
+    small DB inits, runtime constructors, capability registration, the
+    orchestrator, and all W10 service wiring — runs on the critical path
+    before ``yield``. The expensive component *starts* (DBOS launch, MCP
+    connect, skill scan, plugin load, engine registrations, channel start,
+    automation, scheduler, telegram poll, /init + /review registration) run
+    as one deferred task after ``yield``; per-component state lives on
+    ``services.startup`` for /api/health (S4) and S3's bounded MCP gate.
+    """
     services = app.state.services
     manager = services.runtime_mgr
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
@@ -165,6 +225,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # W10 persistent-always-on singletons (module-level, reset per lifespan).
     global channel_manager, gateway_bridge, heartbeat_service
 
+    # S1: fresh per-lifespan component registry (restarts must not inherit a
+    # previous run's states); created before anything can mark.
+    startup = StartupComponents()
+    services.startup = startup
+    for component_name in COMPONENT_NAMES:
+        startup.mark(component_name, "starting")
+
     model_mgr = ModelManager()
     memory = MemoryStore()
     await memory.init()
@@ -172,38 +239,41 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await usage_ledger.init()
     projects = ProjectStore(get_config().db_path.parent / "projects.db")
     await projects.init()
-    durable = DurableBackend(get_config().db_path.parent / "dbos.sqlite")
+    cfg = get_config()
+    durable = DurableBackend(cfg.db_path.parent / "dbos.sqlite")
     durable.set_dispatcher(_durable_dispatcher, asyncio.get_running_loop())
-    durable.start()
-    # W10: durable.start() constructed + launched the process-global DBOS
-    # singleton; the automation engine reuses that same instance (never a second
-    # DBOS per process). NOTE: _dbos_global_instance lives on the dbos._dbos
-    # MODULE, not on the DBOS class — a class-level getattr always misses.
-    from dbos import _dbos as _dbos_module
-
-    dbos_instance = getattr(_dbos_module, "_dbos_global_instance", None)
+    # S2.1/S5: durable.start() — the DBOS launch + system-DB migrations — is
+    # the deferred ``dbos`` component; the lifespan continues meanwhile.
 
     # W6: pin HERMES_HOME before the hermes engine initializes — importing this
     # module pins the machine-level local-runtime home exactly once (setdefault).
     import atlas.engine.local_runtime_adapter  # noqa: F401  # W6 integration touchpoint
 
-    await manager.init(get_config().db_path)
+    await manager.init(cfg.db_path)
 
-    mcp_client = MCPClient()
-    await mcp_client.start()
+    # S2.2: the real MCPClient is constructed + started by the deferred ``mcp``
+    # component (the heavy mcp import chain is paid after uvicorn binds). The
+    # proxy keeps every existing consumer working in the meantime.
+    mcp_client = _DeferredMCPClient()
+
+    # S2: the runtime constructors stay on the critical path; only their
+    # modules' imports are function-local so module import stays light.
+    from atlas.tools.computer_use import ComputerUseRuntime
+    from atlas.tools.custom_tools import CustomToolStore
+    from atlas.tools.local_execution import LocalExecutionRuntime
+    from atlas.tools.web import WebRuntime
+
     local_execution = LocalExecutionRuntime()
     cua_backend = CuaBackend()
     computer_use = ComputerUseRuntime(cua_backend=cua_backend)
-    capability_bus = CapabilityBus(dict(get_config().raw.get("integrations", {})))
+    capability_bus = CapabilityBus(dict(cfg.raw.get("integrations", {})))
     browser_use = BrowserUseAdapter()
     agent_backend_host = AgentBackendHost()
 
     skill_mgr = SkillManager()
-    cfg = get_config()
     # E2: feed the one shared skill index from every source. Hermes skills are
-    # strictly opt-in via `extensions.hermes_skills = "<hermes skills dir>"` in
-    # atlas.toml; plugin skill dirs join through _refresh_extension_sources
-    # once plugin_runtime exists below.
+    # strictly opt-in via `extensions.hermes_skills` in atlas.toml; plugin skill
+    # dirs join through _refresh_extension_sources once plugin_runtime exists.
     hermes_skills = cfg.get("extensions.hermes_skills")
     for source in default_skill_sources(
         workspace=_default_workspace(),
@@ -212,12 +282,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ),
     ):
         skill_mgr.register_skill_source(source)
-    await skill_mgr.scan_skills()
+    # S2.3: skill_mgr.scan_skills() is the deferred ``skills`` component; the
+    # SkillManager object and its sources exist from here on.
     custom_tools = CustomToolStore(cfg.db_path.parent / "tools")
     skill_registry = SkillRegistry(cfg.db_path.parent / "skill-registry.db")
     _register_local_skills(skill_mgr, skill_registry)
     capabilities = AgentCapabilityRegistry()
-    register_skill_capabilities(capabilities, skill_mgr, skill_registry, mcp_client)
+    # S2.3: the per-skill capability loop (iterates skill_mgr.list_skills())
+    # moved to the deferred ``skills`` component; the handlers below read the
+    # manager/registry lazily and stay critical.
     register_skill_dependency_capability(capabilities, skill_mgr, skill_registry, mcp_client)
     register_skill_discovery_capability(capabilities, skill_registry)
     register_skill_catalog_capabilities(capabilities, skill_catalog_provider, skill_registry)
@@ -407,35 +480,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # One store: the Agent's automatic snapshots must be the ones restore and diff read.
         checkpoint_store=checkpoints,
         custom_tools=custom_tools,
-        web_extractor=extract_web,
+        # web_extractor omitted (H8): the orchestrator falls back to its lazy
+        # _default_web_extractor(), so the web_extract import only happens on
+        # first use instead of on the critical path.
     )
 
     plugin_runtime = PluginRuntime(
         [PROJECT_ROOT / "plugins", get_config().db_path.parent / "plugins"],
         get_config().db_path.parent / "plugins" / "state.json",
     )
-    plugin_load_report = await plugin_runtime.load_all(
-        hook_bus=orchestrator.hooks,
-        mcp_client=mcp_client,
-        capabilities=capabilities,
-    )
-    _refresh_extension_sources()
+    # S2.4: plugin_runtime.load_all(...) + _refresh_extension_sources() are the
+    # deferred ``plugins`` component (after the initial skill scan).
 
-    # H3/H5 seam: run the once-per-process registrations (Atlas policy plugin +
-    # Hermes MCP servers) at startup so the first user turn does not pay for
-    # them. Idempotent and fingerprint-checked; a failure only means the first
-    # turn re-runs the registration, so it must never break startup.
-    try:
-        from atlas.config import DATA_ROOT
-        from atlas.engine import HermesRuntime
-
-        HermesRuntime(data_dir=DATA_ROOT, model_manager=model_mgr).startup_registrations()
-    except Exception:  # noqa: BLE001 — degraded to a warning; first turn retries
-        log.exception("engine.startup_registrations_failed")
+    # (S2.5) H3/H5 seam: the once-per-process engine registrations moved to the
+    # deferred ``engine_registrations`` component.
 
     notifications = NotificationBus()
-    if plugin_load_report.get("errors"):
-        log.warning("plugins.load_errors", errors=plugin_load_report["errors"])
 
     # -- W10 persistent-always-on wiring (agents / channels / heartbeat / automation) --
     agents_service = PersistentAgentService()
@@ -507,13 +567,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         deliver=_automation_deliver,
     )
     set_automation_engine(automation_engine)
-    if dbos_instance is not None:
-        await automation_engine.start_async(dbos_instance)
-        await _reconcile_agent_heartbeats(agents_service, automation_engine)
-    else:
-        # durable.start() failed: automation CRUD keeps working (store only),
-        # but triggers/runs report 503 until the next restart.
-        log.warning("automation.engine_not_started", reason="dbos_instance_unavailable")
+    # S2.7: the engine start + heartbeat reconcile are the deferred
+    # ``automation`` component, gated on the ``dbos`` component (W10).
 
     from atlas.api import agent_skills_router, device_router, local_models_router
     from atlas.engine.local_runtime_adapter import LocalRuntimeAdapter
@@ -541,9 +596,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ))
     # -- end W10 wiring --
 
-    if cfg.scheduler_enabled:
-        scheduler = AtlasScheduler(agent_callback=_scheduled_goal)
-        await scheduler.start()
+    # S2.8/S2.9/S2.6: scheduler start, the telegram fallback poll and
+    # channel_manager.start() are deferred components.
 
     # DEPRECATED (W10): the legacy TelegramService polling loop is retired in
     # favour of the channel gateway's telegram adapter (atlas.channels.adapters
@@ -557,31 +611,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         submit_task=_telegram_submit_task,
         command_handler=_telegram_command,
     )
-    if not (channel_manager.configs.get("telegram") or {}).get("enabled"):
-        telegram_service.start()
-
-    await channel_manager.start()
-
-    # C6:注册 /init 与 /review 的路由和工具。这些模块由独立子模块提供,可能晚于
-    # 服务启动落地——注册失败只降级告警,绝不能拖垮 Atlas 本体启动。
-    try:
-        from atlas.commands.init import register_init_routes
-
-        register_init_routes(app)
-    except Exception as exc:  # noqa: BLE001 — /init 模块缺失或注册失败只降级
-        log.warning("C6 启动注册 /init 路由失败，/init 功能暂不可用", error=str(exc))
-    try:
-        from atlas.review.engine import register_review_tools
-
-        register_review_tools()
-    except Exception as exc:  # noqa: BLE001 — review 模块缺失或注册失败只降级
-        log.warning("C6 启动注册审查工具失败，/review 功能暂不可用", error=str(exc))
-    try:
-        from atlas.review.engine import register_review_routes
-
-        register_review_routes(app)
-    except Exception as exc:  # noqa: BLE001 — review 路由注册失败只降级
-        log.warning("C6 启动注册 /review 路由失败，/review 功能暂不可用", error=str(exc))
+    # (telegram_service.start() — the deferred ``telegram`` component.)
 
     # Keep request and WebSocket dependencies bound to this lifespan's service root.
     services.config = get_config()
@@ -603,7 +633,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     services.group_orchestrator = group_orchestrator
     manager.services = services
 
+    # S2: everything deferred starts from here — after uvicorn binds, so
+    # /api/health answers while the components come up.
+    deferred_startup = asyncio.create_task(
+        run_deferred_startup(app, services, startup),
+        name="atlas-deferred-startup",
+    )
+
     yield  # app is running
+
+    # Shutdown — first let the deferred startup settle so the singletons it
+    # owns (DBOS, MCP, channels, ...) exist before the reverse teardown below
+    # touches them. Bounded: a stuck component must not hang shutdown.
+    try:
+        await asyncio.wait_for(deferred_startup, timeout=10.0)
+    except asyncio.TimeoutError:
+        log.error("startup.deferred_shutdown_timeout")
+    except asyncio.CancelledError:
+        raise
+    except Exception:  # noqa: BLE001 — a failed component must not block teardown
+        log.exception("startup.deferred_shutdown_error")
 
     # Shutdown
     if telegram_service:
@@ -628,7 +677,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     _group_router.set_group_orchestrator(None)
     _group_router.set_group_service(None)
-    if mcp_client:
+    if mcp_client is not None and not isinstance(mcp_client, _DeferredMCPClient):
+        # Only a bound real client needs stopping; stopping the proxy would
+        # pointlessly construct (and import) a client during shutdown.
         await mcp_client.stop()
     if local_execution:
         await local_execution.shutdown()

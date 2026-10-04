@@ -1,0 +1,1 @@
+这个小 TypeScript 仓库需要加一个工具函数：在 string_utils.ts 中新增导出函数 kebabCase，把驼峰或帕斯卡命名转成中划线小写（例如 kebabCase("helloWorld") 应返回 "hello-world"，kebabCase("ParseHTTPResponse") 应返回 "parse-http-response"）。然后在 string_utils.test.ts 里为 kebabCase 补至少三个断言测试。不要改动已有的 camelCase 函数和它的测试。改完后运行 node string_utils.test.ts，确认输出 TS-TESTS-OK。

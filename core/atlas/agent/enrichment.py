@@ -70,7 +70,7 @@ class HookBus:
             except Exception as exc:
                 item = {"hook": getattr(handler, "__name__", repr(handler)), "error": str(exc)}
                 errors.append(item)
-                log.warning("agent.hook.failed", point=point, **item)
+                log.warning("agent.hook.failed", point=point, exc_info=True, **item)
         return errors
 
 
@@ -241,7 +241,10 @@ class AtlasToolBridge:
                         conversation_id=conversation_id,
                     )
                 except Exception as exc:
-                    log.warning("agent.checkpoint.failed", path=str(target), error=str(exc))
+                    log.warning(
+                        "agent.checkpoint.failed", path=str(target),
+                        error=str(exc), exc_info=True,
+                    )
 
 
 class CodeActRuntime:
@@ -285,6 +288,9 @@ class CodeActRuntime:
                 )
                 await writer.drain()
             except Exception as exc:
+                log.debug(
+                    "agent.codeact.bridge_request_failed", error=str(exc), exc_info=True,
+                )
                 payload = json.dumps({"error": str(exc), "is_error": True}).encode()
                 response_body = len(payload).to_bytes(4, "big") + payload
                 writer.write(
@@ -393,6 +399,7 @@ class DelegationService:
             available = {item["id"] for item in status["agents"] if item["available"]}
             known = set(AGENT_COMMANDS)
         except Exception:
+            log.debug("agent.external_backend_status_unavailable", exc_info=True)
             return "hermes" if "hermes" in names else names[0]
         ordered = sorted(names, key=lambda name: (name != "hermes", names.index(name)))
         for name in ordered:
@@ -485,6 +492,10 @@ class DelegationService:
                     record.update({"status": "cancelled", "result": "子任务已取消。"})
                     raise
                 except Exception as exc:
+                    log.warning(
+                        "agent.background_subtask_failed",
+                        subtask_id=subtask_id, error=str(exc), exc_info=True,
+                    )
                     record.update({"status": "failed", "result": str(exc)[:1000]})
                 finally:
                     if record.get("status") == "running":
@@ -757,6 +768,10 @@ class DelegationService:
                     record.update({"status": "cancelled", "result": "后台 Worker 组已取消。"})
                     raise
                 except Exception as exc:
+                    log.warning(
+                        "agent.background_group_failed",
+                        group_id=group_id, error=str(exc), exc_info=True,
+                    )
                     record.update({"status": "failed", "result": str(exc)[:1000]})
 
             self._background_tasks[group_id] = asyncio.create_task(
@@ -907,6 +922,7 @@ class DelegationService:
                 except asyncio.CancelledError:
                     status, summary, result = "cancelled", "Worker cancelled.", {}
                 except Exception as exc:
+                    log.warning("agent.parallel_worker_failed", error=str(exc), exc_info=True)
                     status, summary, result = "failed", str(exc)[:1000], {}
 
                 changed_files: list[str] = []

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from atlas.api.agent_backends_router import router as agent_backends_router
 from atlas.api.agent_skills_router import router as agent_skills_router
 from atlas.api.app_services import AppServices
+from atlas.api.startup_components import StartupComponents
 from atlas.api.automation_router import automation_router
 from atlas.api.browser_router import router as browser_router
 from atlas.api.channel_router import router as channel_router
@@ -50,6 +51,10 @@ def create_app(
     app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
     if services.runtime_mgr is None:
         services.runtime_mgr = RuntimeManager()
+    if services.startup is None:
+        # H8 S1: /api/health can always reach a component registry, even for
+        # apps mounted without the server lifespan (no components → ok).
+        services.startup = StartupComponents()
     app.state.services = services
     services.runtime_mgr.services = services
     origins = get_config().get("server.allowed_origins", [])

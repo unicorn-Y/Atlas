@@ -76,7 +76,14 @@ class DurableBackend:
         self._dispatcher = dispatcher
         self._loop = loop
 
-    def start(self) -> dict[str, Any]:
+    def start(self, *, run_migrations: bool = True) -> dict[str, Any]:
+        """Launch the process-global DBOS instance.
+
+        ``run_migrations=False`` tells DBOS to verify the already-migrated
+        system database instead of running the migration ladder (H8 S5: the
+        server lifespan passes this when its recorded version record shows
+        nothing changed). Default ``True`` keeps the historical behavior.
+        """
         if self._started:
             return self.status()
         if self._dispatcher is None or self._loop is None:
@@ -89,6 +96,7 @@ class DurableBackend:
             dbos = DBOS(config={
                 "name": "atlas",
                 "system_database_url": f"sqlite:///{self._system_db_path.as_posix()}",
+                "run_migrations": run_migrations,
                 "db_engine_kwargs": {
                     "connect_args": {"timeout": 30},
                 },

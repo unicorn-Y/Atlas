@@ -145,34 +145,53 @@ class LiveSession:
         run_dir = self.evidence / name
         run_dir.mkdir(parents=True, exist_ok=True)
         started = time.monotonic()
-        proc = subprocess.run(
-            [sys.executable, "-m", "atlas.cli", *args],
-            cwd=str(cwd), env=self.child_env(), capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=timeout,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
+        timed_out = False
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "atlas.cli", *args],
+                cwd=str(cwd), env=self.child_env(), capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=timeout,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except subprocess.TimeoutExpired as exc:
+            # A hang is evidence too: kill the child and keep whatever it printed
+            # so the timeout is diagnosable from the evidence directory.
+            timed_out = True
+            proc = exc  # type: ignore[assignment]
+            stdout = exc.stdout or ""
+            stderr = exc.stderr or ""
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode("utf-8", errors="replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", errors="replace")
+            returncode = 124
+        else:
+            stdout, stderr, returncode = proc.stdout, proc.stderr, proc.returncode
         wall = round(time.monotonic() - started, 3)
         events: list[dict[str, Any]] = []
-        for line in proc.stdout.splitlines():
+        for line in (stdout or "").splitlines():
             if line.strip():
                 try:
                     events.append(json.loads(line))
                 except json.JSONDecodeError:
                     events.append({"type": "unparsable", "line": line})
+        if timed_out:
+            stderr = (stderr or "") + f"\n[atlas-live-harness] CLI timed out after {timeout}s"
         (run_dir / "stream.jsonl").write_text(
-            _redact(proc.stdout), encoding="utf-8")
+            _redact(stdout or ""), encoding="utf-8")
         (run_dir / "stderr.log").write_text(
-            _redact(proc.stderr), encoding="utf-8")
+            _redact(stderr or ""), encoding="utf-8")
         (run_dir / "meta.json").write_text(json.dumps({
             "name": name,
-            "exit_code": proc.returncode,
+            "exit_code": returncode,
+            "timed_out": timed_out,
             "wall_seconds": wall,
             "model": self.model,
             "gateway_base_url": self.gateway_base_url,
             "cwd": str(cwd),
             "args": [_redact(a) for a in args],
         }, ensure_ascii=False, indent=2), encoding="utf-8")
-        return proc.returncode, events, proc.stderr
+        return returncode, events, stderr or ""
 
     def workspace(self, name: str) -> Path:
         path = self._workspace_root / f"{name}-{uuid.uuid4().hex[:8]}"

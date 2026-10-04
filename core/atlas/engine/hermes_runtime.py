@@ -82,6 +82,28 @@ def _history_tokens(history: list[dict[str, Any]], *, model: str = "") -> int:
     )
 
 
+def _wire_model_for_config(model: dict[str, Any], fallback: str = "") -> str:
+    """The bare/native model id the Hermes wire transport must actually send.
+
+    H10.2-DEFECT-1 residual: the registry's litellm-style id
+    (``openai/deepseek-...``) is a routing label only — relays 404 it on the
+    wire. This reuses the shared model router's own derivation
+    (``atlas.models.router._model_for_provider``: explicit ``native_model``
+    wins, else the first litellm path segment is stripped), the exact function
+    every ``RouteSpec.wire_model`` is built from, so the compression summary
+    call and the manual-compaction agent pin the same id the conversation
+    agent does. ``fallback`` (the pre-fix behavior) is returned when the
+    router surface is unavailable or derives nothing.
+    """
+    try:
+        from atlas.models.router import _model_for_provider
+
+        wire = str(_model_for_provider(model or {}, native=True) or "")
+    except ImportError:  # no router surface — keep the legacy id
+        wire = ""
+    return wire or fallback
+
+
 def _model_family_guidance(model: str) -> str:
     name = str(model or "").lower()
     families = (
@@ -153,7 +175,7 @@ class HermesRuntime:
                 size = int(config.get("agent.agent_cache_size", 16) or 16)
                 idle_seconds = float(config.get("agent.agent_cache_idle_seconds", 1800.0) or 0.0)
             except Exception:  # noqa: BLE001 — cache sizing must never break a turn
-                pass
+                logger.debug("hermes_runtime.cache_limits_unavailable", exc_info=True)
             self._cache_limits_resolved = (max(1, size), max(0.0, idle_seconds))
         return self._cache_limits_resolved
 
@@ -362,6 +384,10 @@ class HermesRuntime:
                     answer = result.text
                 return {"model": item["id"], "text": answer[:6000]}
             except Exception as exc:
+                logger.warning(
+                    "hermes_runtime.reference_consult_failed", model=item["id"],
+                    error=str(exc), exc_info=True,
+                )
                 return {"model": item["id"],
                         "text": f"参考模型调用失败：{type(exc).__name__}"}
 
@@ -493,8 +519,11 @@ class HermesRuntime:
     def _apply_compression_model_setting(agent: Any, model_manager: Any) -> None:
         """Apply Atlas' optional compression model to Hermes' ContextCompressor.
 
-        Empty setting leaves Hermes on the current run model. Atlas model IDs are
-        translated to their LiteLLM name without copying credentials into Hermes config.
+        Empty setting leaves Hermes on the current run model. The selected
+        model's id is translated to its bare wire id (H10.2-DEFECT-1) — the
+        compressor sends ``summary_model`` verbatim to the provider, so the
+        litellm-style routing prefix would 404 on real relays. No credentials
+        are copied into Hermes config.
         """
         from atlas.config import load_user_settings
 
@@ -506,7 +535,9 @@ class HermesRuntime:
         )
         compressor = getattr(agent, "context_compressor", None)
         if model is not None and compressor is not None:
-            compressor.summary_model = str(model.get("litellm_model") or selected)
+            compressor.summary_model = _wire_model_for_config(
+                model, fallback=str(model.get("litellm_model") or selected),
+            )
 
     async def compact_session(
         self, *, conversation_id: str, workspace: str | None,
@@ -557,7 +588,13 @@ class HermesRuntime:
             (item for item in settings.list_models() if item.get("id") == current), {},
         )
         agent = self._agent_factory()(
-            model=settings.current_litellm_model, provider="openai", api_mode="openai",
+            # The compaction agent's transport sends ``model`` verbatim on the
+            # wire: pin the bare wire id, not the litellm-style routing label
+            # (H10.2-DEFECT-1 residual, same fix as the conversation agent).
+            model=_wire_model_for_config(
+                model_config, fallback=settings.current_litellm_model,
+            ),
+            provider="openai", api_mode="openai",
             base_url=getattr(settings, "gateway_base_url", None),
             api_key=getattr(settings, "_api_key", None), session_id=conversation_id,
             cwd=workspace, skip_memory=True, checkpoints_enabled=False,
@@ -777,6 +814,7 @@ class HermesRuntime:
             try:
                 from agent.conversation_compression import COMPACTION_STATUS_MARKER
             except Exception:  # noqa: BLE001 — marker constant unavailable in odd engine builds
+                logger.debug("hermes_runtime.compaction_marker_unavailable", exc_info=True)
                 marker = "Compacting context"
             else:
                 marker = str(COMPACTION_STATUS_MARKER)
@@ -858,6 +896,10 @@ class HermesRuntime:
 
                 initial_notices = await consume_notifications(conversation_id)
             except Exception as exc:
+                logger.warning(
+                    "hermes_runtime.notification_consume_failed",
+                    conversation_id=conversation_id, error=str(exc), exc_info=True,
+                )
                 initial_notices = []
                 emit({"type": "run.recovery.notice", "data": {
                     "message": "后台通知读取失败。", "detail": str(exc),
@@ -1157,7 +1199,9 @@ class HermesRuntime:
                             messages = result.get("messages", turn_history) if isinstance(result, dict) else turn_history
                             usage_payload["context_breakdown"] = compute_session_context_breakdown(agent, messages)
                         except Exception as exc:
-                            logger.warning("context breakdown unavailable: %s", exc)
+                            logger.warning(
+                                "context breakdown unavailable: %s", exc, exc_info=True,
+                            )
                         emit({"type": "run_usage", "usage": usage_payload})
                     return result
                 finally:
@@ -1225,6 +1269,11 @@ class HermesRuntime:
                         try:
                             notices = await consume_notifications(conversation_id)
                         except Exception as exc:
+                            logger.warning(
+                                "hermes_runtime.notification_watcher_consume_failed",
+                                conversation_id=conversation_id,
+                                error=str(exc), exc_info=True,
+                            )
                             emit({"type": "run.recovery.notice", "data": {
                                 "message": "后台通知读取失败。", "detail": str(exc),
                             }})

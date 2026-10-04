@@ -61,3 +61,6 @@ class AppServices:
     group_orchestrator: Any = None
     local_runtime_adapter: Any = None
     skills_market_supplier: Any = None
+    # H8 S1/S2: per-component startup state (starting/ready/failed) reported by
+    # /api/health and used by S3's bounded wait_ready gates on request paths.
+    startup: Any = None

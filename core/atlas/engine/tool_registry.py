@@ -6,12 +6,15 @@ import asyncio
 import hashlib
 import inspect
 import json
+import logging
 import math
 import os
 from pathlib import Path
 import threading
 import uuid
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _context = threading.local()
 _lock = threading.Lock()
@@ -107,6 +110,7 @@ def _v4a_touched_paths(args: dict[str, Any], runtime: Any) -> list[str]:
 
         collected = _collect_v4a_header_paths(str(args["patch"]))
     except Exception:  # noqa: BLE001
+        logger.debug("tool_registry.v4a_header_paths_unavailable", exc_info=True)
         return []
     if isinstance(collected, str) or not collected:
         return []
@@ -141,6 +145,7 @@ def _lsp_pre_write(args: dict[str, Any], runtime: Any) -> Any:
                 pre[key] = _read_text_for_lsp(resolved, runtime)
                 snapshot_before_write(resolved)
         except Exception:  # noqa: BLE001
+            logger.debug("tool_registry.lsp_pre_write_snapshot_failed", exc_info=True)
             pass
         return pre or _LSP_SKIP
     pre = _read_text_for_lsp(path, runtime)
@@ -149,6 +154,7 @@ def _lsp_pre_write(args: dict[str, Any], runtime: Any) -> Any:
 
         snapshot_before_write(path)
     except Exception:  # noqa: BLE001
+        logger.debug("tool_registry.lsp_snapshot_failed", exc_info=True)
         pass
     return pre
 
@@ -178,6 +184,7 @@ def _lsp_attach_report(
         if report:
             return result + "\n\n" + report
     except Exception:  # noqa: BLE001
+        logger.debug("tool_registry.lsp_attach_report_failed", exc_info=True)
         pass
     return result
 

@@ -113,7 +113,9 @@ async def execute_tools_node(
                         "notification_type": str(event["type"]), "message": content,
                     })
                 except Exception as exc:
-                    log.warning("agent.notification.persist_failed", error=str(exc))
+                    log.warning(
+                        "agent.notification.persist_failed", error=str(exc), exc_info=True,
+                    )
 
     atlas_options = {
         "model": getattr(ctx, "model", None) or agent._model_mgr.current_model,
@@ -346,6 +348,7 @@ async def execute_tools_node(
                             model=str(reviewer_model), timeout=15,
                         )
                     except Exception:
+                        log.debug("agent.safety_reviewer_unavailable", exc_info=True)
                         decision = "ask"
                     stage = "model"
                 else:
@@ -935,6 +938,10 @@ async def execute_tools_node(
                             "tool": fn_name,
                         })
                     except Exception as exc:
+                        log.warning(
+                            "agent.checkpoint_failed", tool=fn_name,
+                            error=str(exc), exc_info=True,
+                        )
                         await ctx.event_queue.put({
                             "type": "checkpoint_error", "tool": fn_name,
                             "detail": str(exc),
@@ -994,6 +1001,9 @@ async def execute_tools_node(
             else:
                 raise RuntimeError("No executor is available for this tool")
         except Exception as exc:
+            log.debug(
+                "agent.tool_call_failed", tool=fn_name, error=str(exc), exc_info=True,
+            )
             result = {
                 "data": {"error": str(exc)},
                 "content": [{"type": "text", "text": f"Tool call failed: {exc}"}],
@@ -1147,7 +1157,7 @@ async def execute_tools_node(
                 "decision": "continue", "guidance": None, "enabled": True,
                 "error": str(exc),
             }
-            log.warning("agent.trajectory_review_failed", error=str(exc))
+            log.warning("agent.trajectory_review_failed", error=str(exc), exc_info=True)
             await ctx.event_queue.put({"type": "trajectory_review_error", "detail": str(exc)})
         if review["decision"] == "corrective_guidance" and review.get("guidance"):
             guidance = str(review["guidance"])[:1000]
@@ -1166,7 +1176,7 @@ async def execute_tools_node(
                     source_run_id=ctx.run_id, model=agent._model_mgr.current_litellm_model,
                 )
             except Exception as exc:
-                log.warning("agent.trajectory_evidence_failed", error=str(exc))
+                log.warning("agent.trajectory_evidence_failed", error=str(exc), exc_info=True)
 
     return {
         "messages": tool_messages,

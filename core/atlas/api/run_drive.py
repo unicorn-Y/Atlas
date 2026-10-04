@@ -25,6 +25,7 @@ from contextlib import suppress
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import structlog
 from fastapi import HTTPException, Request
 
 from atlas.api.models_settings_router import _model_supports_reasoning
@@ -43,6 +44,8 @@ from atlas.skills.registry import SkillRegistry
 from atlas.ssh import ssh_workspaces
 from atlas.task_artifacts import TomlRecordStore, WorktreeService, seed_profiles
 from atlas.telegram import TelegramService
+
+log = structlog.get_logger()
 
 
 def _server() -> Any:
@@ -202,8 +205,8 @@ async def _scheduled_goal(task_id: str, message: str) -> None:
                     f"Scheduled task {task_id} completed. Message: {message[:200]}",
                 )
             return
-        except Exception as exc:
-            _server().log.error("durable.agent_task_failed", task_id=task_id, error=str(exc))
+        except Exception:
+            log.exception("durable.agent_task_failed", task_id=task_id)
             if _server().notifications is not None:
                 await _server().notifications.notify(
                     "Atlas task failed",
@@ -251,8 +254,8 @@ async def _persist_hermes_goal_outcome(task_id: str, session_id: str, run_id: st
             evaluation=evaluation, steps=[], source_conversation_id=session_id,
             source_run_id=run_id,
         )
-    except Exception as exc:
-        _server().log.warning("goal.outcome_persist_failed", task_id=task_id, error=str(exc))
+    except Exception:
+        log.exception("goal.outcome_persist_failed", task_id=task_id)
 
 
 async def _ensure_goal_migrated(task: ScheduledTask) -> None:
@@ -363,6 +366,7 @@ async def _run_scheduled_goal(task_id: str, message: str = "") -> None:
                     if event_type == "done":
                         message_id = str(event.get("message_id") or "")
             except Exception:
+                log.exception("goal.execution_failed")
                 failed = True
                 failure_detail = "Goal execution raised an exception."
             if failed:
@@ -423,7 +427,7 @@ async def _record_goal_failure(
             model=getattr(getattr(_server().orchestrator, "_model_mgr", None), "current_model", None),
         )
     except Exception:
-        pass
+        log.exception("goal.failure_reflection_unavailable", task_id=task_id)
 
 
 def _agent_service() -> PersistentAgentService:
@@ -445,8 +449,8 @@ def _set_agent_status_quiet(agent_id: str, status: str, error: str = "") -> None
     """Persistent-agent status projection that never breaks a run."""
     try:
         _server()._agent_service().set_status(agent_id, status, error)
-    except Exception as exc:  # noqa: BLE001 — projection is best-effort
-        _server().log.debug("agent.status_projection_failed", agent_id=agent_id, error=str(exc))
+    except Exception:  # projection is best-effort
+        log.exception("agent.status_projection_failed", agent_id=agent_id)
 
 
 def _channel_agent_profile(agent_id: str) -> dict[str, Any] | None:
@@ -519,8 +523,8 @@ async def _deliver_agent_notification(text: str, target: str) -> None:
         return
     try:
         await _server().channel_manager.send(channel, chat_id, text)
-    except Exception as exc:  # noqa: BLE001 — delivery failure must not crash the tick
-        _server().log.warning("heartbeat.channel_delivery_failed", channel=channel, error=str(exc))
+    except Exception:  # delivery failure must not crash the tick
+        log.exception("heartbeat.channel_delivery_failed", channel=channel)
 
 
 async def _collect_orchestrator_text(
@@ -657,10 +661,10 @@ async def _reconcile_agent_heartbeats(
                 continue
             saved = engine.store.put(desired)
             await engine.sync_automation(saved)
-            _server().log.info("heartbeat.automation_reconciled", agent_id=agent_id,
+            log.info("heartbeat.automation_reconciled", agent_id=agent_id,
                      every_seconds=every_seconds)
-        except Exception as exc:  # noqa: BLE001 — one bad agent never blocks startup
-            _server().log.warning("heartbeat.reconcile_failed", agent_id=agent_id, error=str(exc))
+        except Exception:  # one bad agent never blocks startup
+            log.exception("heartbeat.reconcile_failed", agent_id=agent_id)
 
 
 async def _create_channel_conversation(session: str, event: Any) -> str:
@@ -691,9 +695,8 @@ async def _conversation_summary(conversation_id: str) -> dict[str, Any] | None:
         return None
     try:
         return await _server().memory.get_conversation(conversation_id)
-    except Exception as exc:  # noqa: BLE001 — metadata is best-effort in a listing
-        _server().log.debug("agent.conversation_summary_failed", conversation_id=conversation_id,
-                  error=str(exc))
+    except Exception:  # metadata is best-effort in a listing
+        log.exception("agent.conversation_summary_failed", conversation_id=conversation_id)
         return None
 
 
@@ -717,8 +720,8 @@ def _merge_agent_collection_skills(agent_id: str, base: Any) -> Any:
 
     try:
         rows = get_collections().effective_skills(agent_id)
-    except Exception as exc:  # noqa: BLE001 — the bridge must never fail a run
-        _server().log.warning("agent.skills_bridge_unavailable", agent_id=agent_id, error=str(exc))
+    except Exception:  # the bridge must never fail a run
+        log.exception("agent.skills_bridge_unavailable", agent_id=agent_id)
         return list(dict.fromkeys(str(item) for item in base))
     merged = [str(item) for item in base]
     for row in rows:
@@ -860,7 +863,8 @@ async def _start_group_turn_run(
             await _server().runtime_mgr.send_run(run, run.next_envelope("run.failed", {
                 "category": "validation", "detail": str(exc),
             }), conn_id)
-        except Exception as exc:  # noqa: BLE001 — drive failure reports in-band
+        except Exception as exc:  # drive failure reports in-band
+            log.exception("group_turn.drive_failed")
             run.status = "failed"
             await _server().runtime_mgr.send_run(run, run.next_envelope("run.failed", {
                 "category": "backend", "detail": str(exc),
@@ -1148,11 +1152,22 @@ def _refresh_extension_sources() -> None:
 
     Hooks flow through the lazy ``_plugin_hooks`` supplier and MCP/capabilities
     through ``load_all``; here only the skill index needs re-assembly, always
-    via ``register_skill_source`` — never a second registry.
+    via ``register_skill_source`` — never a second registry. When the plugin
+    source set is unchanged (the common reload), the full index rebuild is
+    skipped — a cold start pays one scan, not two (H8).
     """
-    if _server().skill_mgr is None:
+    skill_mgr = _server().skill_mgr
+    if skill_mgr is None:
         return
-    _server().skill_mgr.replace_skill_sources("plugin:", plugin_skill_sources(_server()._plugin_skill_sources()))
+    sources = plugin_skill_sources(_server()._plugin_skill_sources())
+    if not sources and not any(
+        name.startswith("plugin:") and name != "atlas"
+        for name in skill_mgr._sources
+    ):
+        # No plugin contributes skills on either side: replace+rebuild would
+        # reproduce the identical index — skip the redundant full rescan (H8).
+        return
+    skill_mgr.replace_skill_sources("plugin:", sources)
 
 
 def _plugin_command_sources() -> list[CommandSource]:
@@ -1423,8 +1438,8 @@ async def _handle_run_start(
             is_review_request,
             parse_scope,
         )
-    except Exception as exc:  # noqa: BLE001 — review 模块未就绪时按普通消息放行
-        _server().log.warning("C6 /review 拦截模块不可用，按普通消息处理", error=str(exc))
+    except Exception:  # review 模块未就绪时按普通消息放行
+        log.exception("C6 /review 拦截模块不可用，按普通消息处理")
     else:
         if is_review_request(content):
             review_conv = None
@@ -1432,6 +1447,7 @@ async def _handle_run_start(
                 try:
                     review_conv = await memory.get_conversation(conv_id)
                 except Exception:
+                    log.exception("review.conversation_lookup_failed", conv_id=conv_id)
                     review_conv = None
             review_workspace = (requested_workspace
                                 or (review_conv or {}).get("workspace")
@@ -1448,6 +1464,7 @@ async def _handle_run_start(
                     review_row = await review_cursor.fetchone()
                     review_workspace = review_row["workspace_path"] if review_row else None
                 except Exception:
+                    log.exception("review.workspace_lookup_failed", conv_id=conv_id)
                     review_workspace = None
             if review_conv and review_conv.get("worktree_path"):
                 review_worktree = str(review_conv["worktree_path"])
@@ -1479,7 +1496,7 @@ async def _handle_run_start(
             run_tool_allow = ["delegate_task", "submit_findings", "local_file", "review_command",
                               "coding.repo_map", "coding.ast_grep.run", "read_office"]
             run_tool_deny = []
-            _server().log.info("review.intercepted", run_id=run_id,
+            log.info("review.intercepted", run_id=run_id,
                      workspace=str(review_workspace), scope=review_scope.get("scope"))
     assert model_mgr is not None
     run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
@@ -1611,6 +1628,7 @@ async def _handle_run_start(
             project_row = await cursor.fetchone()
             workspace = project_row["workspace_path"] if project_row else None
         except Exception:
+            log.exception("run.project_workspace_lookup_failed", conv_id=conv_id)
             workspace = None
     # Project instructions are extra context: if the project store can't answer, run without them
     # rather than failing the run.
@@ -1619,8 +1637,8 @@ async def _handle_run_start(
         try:
             project = await projects.find_by_conversation(conv_id)
             source_data = await projects.get_sources(project.project_id) if project is not None else None
-        except Exception as exc:
-            _server().log.warning("run.project_context_unavailable", error=str(exc))
+        except Exception:
+            log.exception("run.project_context_unavailable")
             project, source_data = None, None
         if project is not None:
             run.project_id = project.project_id
@@ -1822,6 +1840,17 @@ async def _handle_run_start(
     manager.runs[run_id] = run
     manager.conn_runs[conn_id] = run_id
     await manager.persist_run(run)
+
+    # S3 (§10.4): a run arriving before the deferred MCP component is ready
+    # waits briefly, then proceeds degraded — without MCP tools, never a 503
+    # and never a dropped turn. The client sees the recovery notice envelope.
+    startup = getattr(services, "startup", None)
+    if startup is not None and "mcp" in startup.snapshot():
+        if not await startup.wait_ready("mcp", timeout=10.0):
+            notice = run.next_envelope("run.recovery.notice", {
+                "message": "MCP 仍在启动，本次运行先以无 MCP 工具的降级模式继续。",
+            })
+            await manager.send(conn_id, notice)
 
     # Start the run in background so we can keep receiving messages
     execute = _server()._execute_run(
@@ -2163,8 +2192,8 @@ async def _execute_run(
                 source_run_id=run.run_id,
                 model=run.model,
             )
-        except Exception as exc:
-            _server().log.warning("agent.reflection_record_failed", run_id=run.run_id, error=str(exc))
+        except Exception:
+            log.exception("agent.reflection_record_failed", run_id=run.run_id)
 
     async def mark_reflections_recovered() -> None:
         marker = getattr(memory, "mark_agent_reflections_recovered", None)
@@ -2172,8 +2201,8 @@ async def _execute_run(
             return
         try:
             await marker(run.run_id)
-        except Exception as exc:
-            _server().log.warning("agent.reflection_recovery_failed", run_id=run.run_id, error=str(exc))
+        except Exception:
+            log.exception("agent.reflection_recovery_failed", run_id=run.run_id)
 
     async def cancel_local_foreground() -> None:
         if local_execution is not None:
@@ -2224,6 +2253,7 @@ async def _execute_run(
                     metadata={"run_id": run.run_id},
                 )
         except Exception as e:
+            log.exception("run.user_message_save_failed")
             run.status = "failed"
             await emit("run.failed", {
                 "category": "backend",
@@ -2245,6 +2275,7 @@ async def _execute_run(
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                log.exception("run.external_agent_failed")
                 run.status = "failed"
                 await emit("run.failed", {
                     "category": "external_agent", "detail": str(exc),
@@ -2709,9 +2740,9 @@ async def _execute_run(
                     evaluate_goal_after_turn, DATA_ROOT / "engine",
                     run.conversation_id, full_response,
                 )
-            except Exception as exc:
-                _server().log.warning("conversation.goal_evaluation_failed",
-                            conversation_id=run.conversation_id, error=str(exc))
+            except Exception:
+                log.exception("conversation.goal_evaluation_failed",
+                            conversation_id=run.conversation_id)
                 goal_decision = None
             if goal_decision is not None:
                 if goal_decision.get("message"):
@@ -2747,6 +2778,7 @@ async def _execute_run(
         run.status = "cancelled"
         await emit("run.cancelled", {})
     except Exception as e:
+        log.exception("run.runtime_failed")
         run.status = "failed"
         await record_reflection(
             "runtime", "runtime", str(e),

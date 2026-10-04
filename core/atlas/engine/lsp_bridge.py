@@ -47,7 +47,7 @@ def _neutralize_hermes_lsp() -> None:
         if getattr(hermes_lsp, "get_service", None) is not _hermes_lsp_disabled:
             hermes_lsp.get_service = _hermes_lsp_disabled
     except Exception as e:  # noqa: BLE001
-        logger.debug("Hermes LSP neutralization skipped: %s", e)
+        logger.debug("Hermes LSP neutralization skipped: %s", e, exc_info=e)
 
 
 def set_event_loop(loop: Optional[asyncio.AbstractEventLoop]) -> None:
@@ -69,7 +69,7 @@ def snapshot_before_write(path: str) -> None:
 
         lsp_facade.snapshot_baseline(path)
     except Exception as e:  # noqa: BLE001
-        logger.debug("LSP snapshot_before_write failed for %s: %s", path, e)
+        logger.debug("LSP snapshot_before_write failed for %s: %s", path, e, exc_info=e)
 
 
 def report_after_edit(
@@ -104,7 +104,7 @@ def report_after_edit(
         _emit_event(runtime, path, diags, loop=loop)
         return block
     except Exception as e:  # noqa: BLE001
-        logger.debug("LSP report_after_edit failed for %s: %s", path, e)
+        logger.debug("LSP report_after_edit failed for %s: %s", path, e, exc_info=e)
         return ""
 
 

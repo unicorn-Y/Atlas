@@ -47,6 +47,14 @@ async def client(monkeypatch):
         from atlas.server import lifespan
 
         async with lifespan(app):
+            # H8 S2: component starts (DBOS/MCP/channels/...) run as the
+            # deferred task after the lifespan yields. Wait for them so the
+            # tests observe the fully started service graph deterministically.
+            startup = app.state.services.startup
+            if startup is not None:
+                assert await startup.wait_all_ready(timeout=120.0), (
+                    f"deferred startup did not become ready: {startup.snapshot()}"
+                )
             yield ac
 
     current_task = asyncio.current_task()

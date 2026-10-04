@@ -245,8 +245,12 @@ class _JobRegistry:
             except DownloadPaused:
                 status = "paused"
             except Exception as exc:  # noqa: BLE001 — job body's failure is the job's error
+                log.debug("atlas.local_runtime.job_failed", error=str(exc), exc_info=True)
                 if fail_msg:
-                    log.warning("atlas.local_runtime.job", msg=fail_msg, error=str(exc))
+                    log.warning(
+                        "atlas.local_runtime.job", msg=fail_msg,
+                        error=str(exc), exc_info=True,
+                    )
                 status = "error"
                 job["error"] = str(exc)
             finally:
@@ -449,7 +453,7 @@ class LocalRuntimeAdapter:
         try:
             return fn()
         except Exception as exc:  # noqa: BLE001 — garnish must never 500
-            log.debug("atlas.local_runtime.quiet", error=str(exc))
+            log.debug("atlas.local_runtime.quiet", error=str(exc), exc_info=True)
             return default
 
     # ── status / hardware / backends ────────────────────────
@@ -536,6 +540,10 @@ class LocalRuntimeAdapter:
         try:
             recommended = binaries.resolve_backend(self.config.get("backend", "auto"))
         except Exception as exc:  # noqa: BLE001 — BinaryResolutionError or probe failure
+            log.debug(
+                "atlas.local_runtime.recommended_backend_unavailable",
+                error=str(exc), exc_info=True,
+            )
             reason = str(exc)
         return {"backends": rows, "recommended": recommended, "recommended_unavailable_reason": reason}
 
@@ -822,6 +830,10 @@ class LocalRuntimeAdapter:
             with urllib.request.urlopen(req, timeout=timeout_s) as r:
                 resp = json.loads(r.read())
         except Exception as exc:  # noqa: BLE001 — transport failures are probe failures
+            log.debug(
+                "atlas.local_runtime.probe_request_failed",
+                url=url, error=str(exc), exc_info=True,
+            )
             return {"ok": False, "reason": f"probe request failed: {exc}", "url": url}
         try:
             message = resp["choices"][0]["message"]
@@ -934,12 +946,20 @@ class LocalRuntimeAdapter:
             except KeyError:
                 return False, f"model {model_id} not present in the models dir"
             except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "atlas.local_runtime.model_ready_failed",
+                    model=model_id, error=str(exc), exc_info=True,
+                )
                 return False, str(exc)
         statuses = self._http_models(endpoint)
         if statuses.get(model_id) not in ("loaded", "ready"):
             try:
                 self._managed_post(endpoint, "/models/load", {"model": model_id}, timeout_s=600)
             except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "atlas.local_runtime.model_load_failed",
+                    model=model_id, error=str(exc), exc_info=True,
+                )
                 return False, f"model load failed: {exc}"
             statuses = self._http_models(endpoint)
             if statuses.get(model_id) not in ("loaded", "ready"):
@@ -958,7 +978,10 @@ class LocalRuntimeAdapter:
             blob = (msg.get("content") or "") + " " + (msg.get("reasoning_content") or "")
             return "paris" in blob.lower()
         except Exception as exc:  # noqa: BLE001
-            log.warning("atlas.local_runtime.touch", model=model_id, error=str(exc))
+            log.warning(
+                "atlas.local_runtime.touch", model=model_id,
+                error=str(exc), exc_info=True,
+            )
             return False
 
     def _bounce(self) -> bool:
@@ -976,7 +999,7 @@ class LocalRuntimeAdapter:
             return bootstrap.ensure_local_runtime(self._hermes_config(), force=True) is not None \
                 or self._endpoint_state() is not None
         except Exception as exc:  # noqa: BLE001
-            log.warning("atlas.local_runtime.bounce", error=str(exc))
+            log.warning("atlas.local_runtime.bounce", error=str(exc), exc_info=True)
             return False
 
     # HTTP helpers against the managed router (shared-server path)

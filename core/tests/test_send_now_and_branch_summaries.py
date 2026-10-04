@@ -135,7 +135,8 @@ class _RuntimeSteerableAgent:
         self.worker_tid = threading.get_ident() + 7_711_000
         self._started, self._release = started, release
 
-    def run_conversation(self, *, user_message, system_message, conversation_history):
+    def run_conversation(self, *, user_message, system_message, conversation_history,
+                         task_id=None):
         # Simulate one long-running (backgroundable terminal) tool execution.
         self._executing_tools = True
         with self._tool_worker_threads_lock:

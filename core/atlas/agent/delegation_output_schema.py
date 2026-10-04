@@ -28,6 +28,7 @@ def coerce_output_schema(raw: Any) -> tuple[dict[str, Any] | None, str | None]:
 
         validator_for(raw).check_schema(raw)
     except Exception as exc:
+        logger.debug("delegation.output_schema_invalid", error=str(exc), exc_info=True)
         return None, f"output_schema 不是有效的 JSON Schema：{exc}"
     return raw, None
 
