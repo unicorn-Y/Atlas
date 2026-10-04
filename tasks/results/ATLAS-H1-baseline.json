@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-10-04T11:52:10.117584+00:00",
+  "source": {
+    "repo": {
+      "root": "D:\\Atlas-h1-baseline",
+      "commit": "9adfeb88acfd260b566ca75ef64bf6b8a6ccfbb1",
+      "dirty": true,
+      "dirty_paths": [
+        "tasks/results/ATLAS-H1-baseline.json"
+      ],
+      "post_capture_git_dirty": true,
+      "post_capture_dirty_paths": [
+        "tasks/results/ATLAS-H1-baseline.json"
+      ],
+      "dirty_state_note": "the only post-capture change is this generated measurement artifact"
+    },
+    "hermes": {
+      "root": "D:\\hermes-agent-h1-baseline",
+      "commit": "ef4571dec5f8a00faf5fa36ab2df93927434f1b8",
+      "dirty": false,
+      "dirty_paths": []
+    },
+    "python": "D:\\Atlas\\core\\.venv\\Scripts\\python.exe"
+  },
+  "metrics": {
+    "source_structure": {
+      "except_exception_total": 356,
+      "except_exception_silent_pass_or_continue": 30,
+      "server_py_lines": 8609,
+      "server_direct_routes": 257,
+      "registered_http_routes": 391,
+      "registered_websocket_routes": 3,
+      "status": "measured",
+      "registered_routes": 394
+    },
+    "backend_cold_start": {
+      "samples_seconds": [
+        10.174551499978406,
+        10.157677999988664,
+        9.04670880001504
+      ],
+      "median_seconds": 10.157677999988664,
+      "health_statuses": [
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "status": "measured"
+    },
+    "runtime_probe": {
+      "agent_construction_seconds": 1.1063929999945685,
+      "agent_construction_samples_seconds": [
+        1.1063929999945685,
+        0.02506740001263097,
+        0.02410710000549443,
+        0.024436799983959645,
+        0.024158699990948662,
+        0.024100700014969334,
+        0.02226979998522438,
+        0.022790799994254485,
+        0.02354140000534244,
+        0.02341700001852587,
+        0.024145300005329773,
+        0.023980099998880178,
+        0.023072800016961992,
+        0.024095100001432,
+        0.024299399985466152,
+        0.023601900000358,
+        0.02392960002180189,
+        0.024113399995258078,
+        0.02488650000304915,
+        0.024915000016335398,
+        0.02536230001715012,
+        0.023391000024275854
+      ],
+      "agent_construction_count_total": 22,
+      "mcp_registration_seconds": 9.200011845678091e-06,
+      "mcp_registration_samples_seconds": [
+        9.200011845678091e-06,
+        6.699992809444666e-06,
+        5.3000112529844046e-06,
+        5.799985956400633e-06,
+        5.0000089686363935e-06,
+        5.0000089686363935e-06,
+        4.9000082071870565e-06,
+        4.9000082071870565e-06,
+        5.600013537332416e-06,
+        1.5900004655122757e-05,
+        5.3000112529844046e-06,
+        5.700014298781753e-06,
+        6.099988240748644e-06,
+        4.7000066842883825e-06,
+        5.80001506023109e-06,
+        5.599984433501959e-06,
+        5.900015821680427e-06,
+        5.4000120144337416e-06,
+        5.3000112529844046e-06,
+        5.2000104915350676e-06,
+        5.599984433501959e-06,
+        4.8000074457377195e-06
+      ],
+      "mcp_toolsets": [],
+      "mcp_registration_count": 22,
+      "turn_started_unix": 1791114773.049694,
+      "five_second_wait_elapsed_seconds": 5.002451100008329,
+      "five_second_wait_event_loop_iterations": 197,
+      "five_second_wait_process_cpu_seconds": 0.0625,
+      "five_second_wait_cpu_samples_seconds": [
+        0.0625
+      ],
+      "five_second_wait_elapsed_samples_seconds": [
+        5.002451100008329
+      ],
+      "five_second_wait_model_request_count": 1,
+      "resident_memory_before_20_turns_bytes": 361660416,
+      "resident_memory_after_20_turns_bytes": 361910272,
+      "resident_memory_delta_bytes": 249856,
+      "resident_memory_method": "psutil_rss",
+      "cleanup_status": "closed",
+      "cleanup_errors": [],
+      "runtime_turns_completed": 22,
+      "registered_http_routes": 391,
+      "registered_websocket_routes": 3,
+      "first_model_request_seconds": 8.317405223846436,
+      "first_model_request_stream": true,
+      "model_wait_request_received_unix": 1791114782.5774002,
+      "model_wait_request_stream": true,
+      "model_wait_response_ready_unix": 1791114787.5776525,
+      "model_wait_server_seconds": 5.0002522468566895,
+      "fake_model_main_request_count": 22,
+      "model_wait_note": "HTTP send wait is timed in the Atlas worker; fake server records request and response-ready times",
+      "status": "measured",
+      "registered_routes": 394,
+      "initial_route_count_error": "ImportError: cannot import name 'WebSocketRoute' from 'fastapi.routing' (D:\\Atlas\\core\\.venv\\Lib\\site-packages\\fastapi\\routing.py)",
+      "route_count_error": null,
+      "route_count_revalidation": "app.openapi() followed by FastAPI effective_route_contexts() expansion"
+    }
+  },
+  "test_times": {
+    "backend_full_pytest": {
+      "elapsed_seconds": 1970.7610992,
+      "exit_code": 1,
+      "log_path": "D:\\Atlas-h1-core-hardening\\artifacts\\h0-baseline\\backend-full.log",
+      "junit_xml": "D:\\Atlas-h1-core-hardening\\artifacts\\h0-baseline\\backend-full.xml",
+      "status": "imported",
+      "junit_counts": {
+        "tests": 2027,
+        "failures": 9,
+        "errors": 0,
+        "skipped": 9,
+        "passed": 2009
+      },
+      "hermes_source": {
+        "root": "D:\\hermes-agent",
+        "commit": "ef4571dec5f8a00faf5fa36ab2df93927434f1b8",
+        "dirty": true,
+        "dirty_paths": [
+          "gent/chat_completion_helpers.py",
+          "agent/turn_recovery_autorecover.py",
+          "tests/agent/test_turn_recovery_autorecover.py"
+        ]
+      },
+      "execution_environment_note": "full pytest ran against the supplied Hermes checkout; runtime probes use hermes-root above",
+      "pytest_report_elapsed_seconds": 1963.88,
+      "junit_suite_elapsed_seconds": 1963.691
+    },
+    "frontend": {
+      "elapsed_seconds": 5.9,
+      "exit_code": 0,
+      "log_path": null,
+      "junit_xml": null,
+      "status": "imported",
+      "junit_counts": null
+    },
+    "backend_full_pytest_external_basetemp_recheck": {
+      "elapsed_seconds": 6.66,
+      "exit_code": 0,
+      "junit_counts": {
+        "tests": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "status": "controller_imported",
+      "scope": "two baseline failures suspected to depend on in-repository basetemp",
+      "environment_note": "rerun used an external basetemp outside the Git checkout"
+    }
+  },
+  "errors": []
+}

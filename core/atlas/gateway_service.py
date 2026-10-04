@@ -25,15 +25,18 @@ import asyncio
 import contextlib
 import sqlite3
 import threading
+import time
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 import structlog
 
 from atlas.channels import ChannelManager
 from atlas.channels.contract import MessageEvent
+from atlas.channels.routing import resolve_binding, validate_permission_mode
 from atlas.persistent_agents import session_key
 
 log = structlog.get_logger()
@@ -113,6 +116,9 @@ class GatewayBridge:
         create_conversation: CreateConversation,
         default_workspace: str | None = None,
         set_agent_status: SetAgentStatus | None = None,
+        default_permission_mode: str = "ask_writes",
+        approval_timeout_seconds: float = 600,
+        get_agent: Callable[[str], dict[str, Any] | None] | None = None,
     ) -> None:
         self.manager = manager
         self.sessions = SessionMapper(db_path)
@@ -122,6 +128,108 @@ class GatewayBridge:
         self._create_conversation = create_conversation
         self._default_workspace = default_workspace
         self._set_agent_status = set_agent_status
+        self._default_permission_mode = validate_permission_mode(default_permission_mode)
+        if approval_timeout_seconds <= 0:
+            raise ValueError("approval timeout must be positive")
+        self._approval_timeout_seconds = approval_timeout_seconds
+        self._get_agent = get_agent
+        self._origins: dict[str, MessageEvent] = {}
+        self._approvals: dict[tuple[str, str], tuple[MessageEvent, asyncio.Future[str]]] = {}
+        self._channel_decisions: set[tuple[str, str]] = set()
+        self._recent_approvals: dict[tuple[str, ...], tuple[float, str]] = {}
+        self.manager.set_control_handler(self.handle_approval_reply)
+
+    def permission_mode(self, event: MessageEvent, agent_id: str | None) -> str:
+        binding = resolve_binding(self.manager.bindings, event, agent_ids=self.manager.agent_ids)
+        if binding and binding.get("permission_mode") is not None:
+            return validate_permission_mode(binding["permission_mode"])
+        profile = self._get_agent(agent_id) if agent_id and self._get_agent else None
+        mode = (profile or {}).get("agent", {}).get("permission_mode")
+        return validate_permission_mode(mode) if mode is not None else self._default_permission_mode
+
+    def owns_run(self, run_id: str) -> bool:
+        return run_id in self._origins
+
+    async def request_approval(
+        self, run: Any, approval_id: str, description: str,
+    ) -> str:
+        """Share the desktop's future; the first channel/desktop answer wins."""
+        origin = self._origins[run.run_id]
+        key = (run.run_id, approval_id)
+        future = run.approval_futures.get(approval_id)
+        if future is None:
+            future = asyncio.get_running_loop().create_future()
+            run.approval_futures[approval_id] = future
+        self._approvals[key] = (origin, future)
+        cancel_waiter = asyncio.create_task(run.cancel_event.wait())
+        try:
+            await self._reply(
+                origin, f"需要审批：{description}\n回复“允许”或“拒绝”（审批 {approval_id}）。",
+            )
+            done, _ = await asyncio.wait(
+                {future, cancel_waiter}, timeout=self._approval_timeout_seconds,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if future in done:
+                choice = future.result()
+                if key not in self._channel_decisions:
+                    await self._reply(
+                        origin, "已在桌面批准。" if choice == "allow" else "已在桌面拒绝。",
+                    )
+                return choice
+            if not future.done():
+                future.set_result("deny")
+            await self._reply(origin, "任务已停止，审批已拒绝。" if run.cancel_event.is_set()
+                              else "审批超时，已拒绝执行。")
+            return "deny"
+        finally:
+            cancel_waiter.cancel()
+            await asyncio.gather(cancel_waiter, return_exceptions=True)
+            self._approvals.pop(key, None)
+            self._channel_decisions.discard(key)
+            run.approval_futures.pop(approval_id, None)
+            self._recent_approvals[(*self._origin_key(origin), approval_id)] = (
+                time.monotonic() + 1200, future.result() if future.done() and not future.cancelled()
+                else "deny",
+            )
+            while len(self._recent_approvals) > 512:
+                self._recent_approvals.pop(next(iter(self._recent_approvals)))
+
+    @staticmethod
+    def _origin_key(event: MessageEvent) -> tuple[str, ...]:
+        return (event.channel, event.account, event.chat_id, event.thread_id, event.sender_id)
+
+    async def handle_approval_reply(self, event: MessageEvent) -> bool:
+        parts = event.text.strip().split()
+        if not parts or parts[0] not in {"允许", "拒绝"}:
+            return False
+        matches = [
+            (key, future) for key, (origin, future) in self._approvals.items()
+            if self._origin_key(origin) == self._origin_key(event)
+            and (len(parts) == 1 or parts[1] == key[1])
+        ]
+        if not matches:
+            now = time.monotonic()
+            self._recent_approvals = {
+                key: value for key, value in self._recent_approvals.items() if value[0] > now
+            }
+            if any(key[:-1] == self._origin_key(event)
+                   and (len(parts) == 1 or parts[1] == key[-1])
+                   for key in self._recent_approvals):
+                await self._reply(event, "审批已处理，先前的回复已生效。")
+                return True
+            return False
+        if len(matches) != 1:
+            await self._reply(event, "有多个待审批项，请回复“允许 审批编号”或“拒绝 审批编号”。")
+            return True
+        key, future = matches[0]
+        if future.done():
+            await self._reply(event, "审批已处理，先前的回复已生效。")
+            return True
+        self._channel_decisions.add(key)
+        future.set_result("allow" if parts[0] == "允许" else "deny")
+        await self._reply(event, "已允许执行。" if parts[0] == "允许" else "已拒绝执行。")
+        return True
 
     # -- session lineage ------------------------------------------------------
 
@@ -158,6 +266,8 @@ class GatewayBridge:
         summary, so the gateway's retry queue does not replay a permanently
         rejected event forever.
         """
+        if await self.handle_approval_reply(event):
+            return
         try:
             await self._dispatch(event, agent_id)
         except asyncio.CancelledError:
@@ -191,10 +301,22 @@ class GatewayBridge:
             "content": content,
             "workspace": None if agent_id else self._default_workspace,
             "source": "channel",
+            "permission_mode": self.permission_mode(event, agent_id),
         }
         if agent_id:
             data["agent_id"] = str(agent_id)
         await self._project_status(agent_id, "working")
+        run_id = str(data["run_id"])
+        self._origins[run_id] = event
+        try:
+            await self._submit_and_wait(event, agent_id, conversation_id, data)
+        finally:
+            self._origins.pop(run_id, None)
+
+    async def _submit_and_wait(
+        self, event: MessageEvent, agent_id: str | None, conversation_id: str,
+        data: dict[str, Any],
+    ) -> None:
         await self._submit_run("channel", data)
 
         run = self._get_run(str(data["run_id"]))

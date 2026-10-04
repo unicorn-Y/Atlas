@@ -89,22 +89,33 @@ def _match_parent_peer(match: dict[str, Any], event: MessageEvent) -> bool:
     return bool(event.reply_to_event_id) and parent == event.chat_id
 
 
-def _layer_bindings(bindings: list[dict[str, Any]], predicate) -> str | None:
+PERMISSION_MODES = frozenset({
+    "full_access", "ask_each", "ask_writes", "auto_file", "plan", "read_only",
+})
+
+
+def validate_permission_mode(value: Any) -> str:
+    if value not in PERMISSION_MODES:
+        raise ValueError("invalid channel permission_mode")
+    return str(value)
+
+
+def _layer_bindings(bindings: list[dict[str, Any]], predicate) -> dict[str, Any] | None:
     for binding in bindings:
         agent = _binding_agent(binding)
         if not agent:
             continue
         if predicate(_binding_match(binding)):
-            return agent
+            return binding
     return None
 
 
-def resolve_route(
+def resolve_binding(
     bindings: list[dict[str, Any]],
     event: MessageEvent,
     *,
     agent_ids: list[str] | None = None,
-) -> str | None:
+) -> dict[str, Any] | None:
     """Resolve the agent for one inbound event, or ``None`` (fail closed).
 
     ``agent_ids`` is the full agent roster; when given and exactly one agent
@@ -117,7 +128,7 @@ def resolve_route(
         if _match_channel(match, event):
             usable.append((binding, match))
 
-    def scoped(predicate) -> str | None:
+    def scoped(predicate) -> dict[str, Any] | None:
         def check(match: dict[str, Any]) -> bool:
             return (
                 _match_account(match, event)
@@ -158,15 +169,22 @@ def resolve_route(
             continue
         account = str(match.get("account", match.get("accountId", "")) or "")
         if not _has_peer_scope(match) and account == "*":
-            return agent
+            return binding
 
     # 6. unique agent fallback
     roster = list(agent_ids) if agent_ids else sorted({
         _binding_agent(b) for b, _ in usable if _binding_agent(b)
     })
     if len(roster) == 1:
-        return roster[0]
+        return {"agent_id": roster[0]}
     return None
 
 
-__all__ = ["resolve_route"]
+def resolve_route(
+    bindings: list[dict[str, Any]], event: MessageEvent, *, agent_ids: list[str] | None = None,
+) -> str | None:
+    binding = resolve_binding(bindings, event, agent_ids=agent_ids)
+    return _binding_agent(binding) if binding else None
+
+
+__all__ = ["resolve_route", "resolve_binding", "validate_permission_mode"]

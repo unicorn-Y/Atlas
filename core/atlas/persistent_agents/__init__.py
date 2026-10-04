@@ -204,10 +204,14 @@ class PersistentAgentService:
 
     def add_channel(
         self, agent_id: str, channel: str, target: str, account: str = "",
+        permission_mode: str | None = None,
     ) -> list[dict[str, str]]:
         record = self._require_persistent(agent_id)
         bindings = [dict(row) for row in record["agent"]["channels"]]
-        bindings.append({"channel": channel, "target": target, "account": account})
+        binding = {"channel": channel, "target": target, "account": account}
+        if permission_mode is not None:
+            binding["permission_mode"] = permission_mode
+        bindings.append(binding)
         agent = {**record["agent"], "channels": bindings}
         updated = self._store.put({**record, "agent": agent})
         return [dict(row) for row in updated["agent"]["channels"]]

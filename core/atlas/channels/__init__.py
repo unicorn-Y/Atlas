@@ -136,6 +136,7 @@ class ChannelManager:
         self.agent_ids: list[str] | None = None
         self.policies: dict[str, dict[str, Any]] = {}
         self._dispatcher = dispatcher
+        self._control_handler: Callable[[MessageEvent], Awaitable[bool]] | None = None
         self._backoff = (backoff_initial, backoff_factor, backoff_cap, backoff_jitter)
         self._stable_reset_seconds = stable_reset_seconds
         self._delivery_interval = delivery_interval
@@ -183,6 +184,10 @@ class ChannelManager:
 
     def set_dispatcher(self, dispatcher: DispatchHandler | None) -> None:
         self._dispatcher = dispatcher
+
+    def set_control_handler(self, handler: Callable[[MessageEvent], Awaitable[bool]]) -> None:
+        """Handle admitted approval replies even when a run occupies the drain."""
+        self._control_handler = handler
 
     def _state(self, name: str) -> ChannelState:
         return self.states.setdefault(name, ChannelState(name))
@@ -299,6 +304,10 @@ class ChannelManager:
             if not accepted:
                 logger.debug("丢弃重复入站事件 %s/%s", event.channel, event.event_id)
                 return
+            if self._control_handler is not None and self._admit(event):
+                if await self._control_handler(event):
+                    self.ingress.ack_event(event)
+                    return
             self._schedule_drain()
 
         return sink

@@ -87,6 +87,19 @@ class AtlasConfig:
     def raw(self) -> dict[str, Any]:
         return self._data
 
+    @property
+    def gateway_default_permission_mode(self) -> str:
+        from atlas.channels.routing import validate_permission_mode
+
+        return validate_permission_mode(self.get("gateway.default_permission_mode", "ask_writes"))
+
+    @property
+    def gateway_approval_timeout_seconds(self) -> float:
+        value = float(self.get("gateway.approval_timeout_seconds", 600))
+        if value <= 0:
+            raise ValueError("gateway.approval_timeout_seconds must be positive")
+        return value
+
     # -- server --
 
     @property

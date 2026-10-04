@@ -26,6 +26,7 @@ PROFILE_FIELDS: frozenset[str] = frozenset({
 AGENT_FIELDS: frozenset[str] = frozenset({
     "enabled", "workspace", "heartbeat", "channels", "automations",
     "device_preference", "browser_profile", "last_status", "last_activity_at", "last_error",
+    "permission_mode",
 })
 
 HEARTBEAT_FIELDS: frozenset[str] = frozenset({
@@ -40,7 +41,9 @@ AGENT_STATUSES: frozenset[str] = frozenset({"idle", "working", "waiting_user", "
 
 BUILTIN_ROLE_IDS: frozenset[str] = frozenset({"default", "architect", "reviewer"})
 
-_CHANNEL_BINDING_KEYS: frozenset[str] = frozenset({"channel", "target", "account"})
+_CHANNEL_BINDING_KEYS: frozenset[str] = frozenset({
+    "channel", "target", "account", "permission_mode",
+})
 
 _ACTIVE_HOURS_RE = re.compile(r"^(\d{2}):(\d{2})-(\d{2}):(\d{2})$")
 _DELIVERY_RE = re.compile(r"^[^:\s]+:[^:\s]+$")
@@ -184,6 +187,10 @@ def _validate_agent_table(value: dict[str, Any]) -> dict[str, Any]:
         "heartbeat": validate_heartbeat_table(value.get("heartbeat") or {}),
         "channels": _validate_channels(value.get("channels", [])),
     }
+    if "permission_mode" in value:
+        from atlas.channels.routing import validate_permission_mode
+
+        agent["permission_mode"] = validate_permission_mode(value["permission_mode"])
     return agent
 
 
@@ -255,5 +262,10 @@ def _validate_channels(value: Any) -> list[dict[str, str]]:
         if key in seen:
             continue
         seen.add(key)
-        bindings.append({"channel": channel, "target": target, "account": account})
+        binding = {"channel": channel, "target": target, "account": account}
+        if "permission_mode" in row:
+            from atlas.channels.routing import validate_permission_mode
+
+            binding["permission_mode"] = validate_permission_mode(row["permission_mode"])
+        bindings.append(binding)
     return bindings

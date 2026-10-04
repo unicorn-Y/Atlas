@@ -230,6 +230,14 @@ class IngressQueue:
             self._db.execute("DELETE FROM inbound_events WHERE id=?", (record_id,))
             return True
 
+    def ack_event(self, event: MessageEvent) -> bool:
+        """Complete an admitted control reply while the ordinary drain is busy."""
+        row = self._db.execute(
+            "SELECT id FROM inbound_events WHERE channel=? AND account=? AND event_id=?",
+            (event.channel, event.account, event.event_id),
+        ).fetchone()
+        return self.ack(int(row[0])) if row else False
+
     def fail(
         self,
         record_id: int,

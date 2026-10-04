@@ -130,6 +130,10 @@ command = "serena"
 args = ["start-mcp-server", "--project-from-cwd", "--context", "claude-code", "--open-web-dashboard", "false"]
 enabled = true
 
+[gateway]
+default_permission_mode = "ask_writes"
+approval_timeout_seconds = 600
+
 [local_execution]
 # Local CLI, filesystem, process, and Git tools are unrestricted by default.
 # Change this explicitly to deny to opt into a blocked mode.
