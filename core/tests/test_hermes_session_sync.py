@@ -10,12 +10,10 @@ from atlas.engine.session_sync import (
     capture_session,
     delete_session,
     evaluate_goal_after_turn,
-    fork_session,
     fork_session_through_turn,
     goal_command,
     list_branch_tree,
     restore_session,
-    rewind_to_atlas_message,
     rewind_user_turn,
 )
 
@@ -50,13 +48,8 @@ def test_rewind_and_redo_restore_complete_hermes_transcript(tmp_path):
     home = tmp_path / "engine"
     home.mkdir()
     _seed_session(home)
-    atlas = [
-        {"id": "u1", "role": "user", "content": "first"},
-        {"id": "a1", "role": "assistant", "content": "first answer"},
-        {"id": "u2", "role": "user", "content": "second"},
-    ]
 
-    snapshot = rewind_to_atlas_message(home, "source", atlas, "u2")
+    snapshot = rewind_user_turn(home, "source", 1)
     rewound = _history(home, "source")
     assert [item["content"] for item in rewound if item["role"] == "user"] == ["first"]
     assert any(item["role"] == "tool" and item["content"] == "fixture result" for item in rewound)
@@ -71,14 +64,8 @@ def test_fork_copies_selected_turn_and_delete_removes_hermes_history(tmp_path):
     home = tmp_path / "engine"
     home.mkdir()
     _seed_session(home)
-    atlas = [
-        {"id": "u1", "role": "user", "content": "first"},
-        {"id": "a1", "role": "assistant", "content": "first answer"},
-        {"id": "u2", "role": "user", "content": "second"},
-        {"id": "a2", "role": "assistant", "content": "second answer"},
-    ]
 
-    fork_session(home, "source", "forked", atlas, "a1")
+    fork_session_through_turn(home, "source", "forked", 1, branch_message_id="a1")
     fork = _history(home, "forked")
     assert [item["content"] for item in fork if item["role"] == "user"] == ["first"]
     assert any(item["role"] == "tool" and item["content"] == "fixture result" for item in fork)
@@ -172,31 +159,6 @@ def test_rewind_user_turn_direct_op_needs_no_atlas_state(tmp_path):
     assert any(item["role"] == "tool" and item["content"] == "fixture result" for item in restored)
 
 
-def test_rewind_adapter_is_a_pure_resolver_over_the_direct_op(tmp_path, monkeypatch):
-    atlas = [
-        {"id": "u1", "role": "user", "content": "first"},
-        {"id": "a1", "role": "assistant", "content": "first answer"},
-        {"id": "u2", "role": "user", "content": "second"},
-    ]
-    homes = []
-    for name in ("adapter", "direct"):
-        home = tmp_path / name
-        home.mkdir()
-        _seed_session(home)
-        homes.append(home)
-
-    snapshot = rewind_to_atlas_message(homes[0], "source", atlas, "u2")
-    direct_snapshot = rewind_user_turn(homes[1], "source", 1)
-    assert [m["content"] for m in _history(homes[0], "source")] == [
-        m["content"] for m in _history(homes[1], "source")]
-    assert snapshot["id"] == direct_snapshot["id"] == "source"
-
-    # Unknown message id: unchanged transcript, no snapshot, no write.
-    untouched = _history(homes[0], "source")
-    assert rewind_to_atlas_message(homes[0], "source", atlas, "nope") is None
-    assert _history(homes[0], "source") == untouched
-
-
 def test_fork_session_through_turn_direct_cuts_from_sessiondb_transcript(tmp_path):
     home = tmp_path / "engine"
     home.mkdir()
@@ -218,30 +180,6 @@ def test_fork_session_through_turn_direct_cuts_from_sessiondb_transcript(tmp_pat
     # The source transcript is untouched by the fork.
     assert [item["content"] for item in _history(home, "source") if item["role"] == "user"] == [
         "first", "second"]
-
-
-def test_fork_adapter_is_a_pure_resolver_over_the_direct_op(tmp_path):
-    atlas = [
-        {"id": "u1", "role": "user", "content": "first"},
-        {"id": "a1", "role": "assistant", "content": "first answer"},
-        {"id": "u2", "role": "user", "content": "second"},
-        {"id": "a2", "role": "assistant", "content": "second answer"},
-    ]
-    homes = []
-    for name in ("adapter", "direct"):
-        home = tmp_path / name
-        home.mkdir()
-        _seed_session(home)
-        homes.append(home)
-
-    fork_session(homes[0], "source", "forked", atlas, "a1")
-    fork_session_through_turn(homes[1], "source", "forked", 1, branch_message_id="a1")
-    assert [m["content"] for m in _history(homes[0], "forked")] == [
-        m["content"] for m in _history(homes[1], "forked")]
-
-    # Unknown fork point: no fork session is created.
-    fork_session(homes[0], "source", "forked2", atlas, "nope")
-    assert capture_session(homes[0], "forked2") is None
 
 
 def test_history_mutations_keep_doctor_sessions_consistent(tmp_path, monkeypatch):

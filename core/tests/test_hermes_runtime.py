@@ -24,7 +24,7 @@ class FakeHermesAgent:
             "total_tokens": 49,
         }
 
-    def run_conversation(self, *, user_message, system_message, conversation_history):
+    def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
         assert user_message == "continue"
         assert system_message == "Atlas rules"
         assert conversation_history[-1]["role"] == "tool"
@@ -189,7 +189,7 @@ async def test_runtime_moa_uses_atlas_models_and_fake_reference_consult(tmp_path
     captured = {}
 
     class CapturingAgent(FakeHermesAgent):
-        def run_conversation(self, *, user_message, system_message, conversation_history):
+        def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
             captured["system_message"] = system_message
             return {"final_response": "primary answer", "messages": conversation_history}
 
@@ -253,7 +253,7 @@ async def test_runtime_bridges_atlas_run_budget_reminders(tmp_path, monkeypatch)
             super().__init__(**kwargs)
             agents.append(self)
 
-        def run_conversation(self, *, user_message, system_message, conversation_history):
+        def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
             return {"final_response": "budget answer", "messages": conversation_history}
 
     runtime = HermesRuntime(

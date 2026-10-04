@@ -139,7 +139,7 @@ class _FakeHermesAgent:
         if registry is not None:
             registry.append(self)
 
-    def run_conversation(self, *, user_message, system_message, conversation_history):
+    def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
         return {"final_response": f"reply:{user_message}", "messages": conversation_history}
 
     def close(self) -> None:
@@ -190,9 +190,11 @@ async def test_moa_reference_consult_routes_through_router_without_gateway(
         assert moa["references"][0]["text"] == "reference opinion"
         aux_requests = [r for r in fake.requests if r["kind"] == "aux"]
         assert len(aux_requests) == 1
-        # provider credentials and the routed model reached the wire
+        # provider credentials and the routed model reached the wire — the BARE
+        # wire id: the litellm routing prefix never reaches a provider
+        # (H10.2-DEFECT-1: real relays 404 the prefixed form).
         assert aux_requests[0]["auth"] == "Bearer sk-provider-secret"
-        assert aux_requests[0]["body"]["model"] == "openai/ref-model"
+        assert aux_requests[0]["body"]["model"] == "ref-model"
         assert "参考模型调用失败" not in moa["references"][0]["text"]
 
 
@@ -230,7 +232,7 @@ async def test_context_handoff_summary_routes_through_router(tmp_path, monkeypat
         assert len(aux_requests) == 1
         request = aux_requests[0]
         assert request["auth"] == "Bearer sk-provider-secret"
-        assert request["body"]["model"] == "openai/main-model"
+        assert request["body"]["model"] == "main-model"  # bare wire id (H10.2-DEFECT-1)
         assert "交接摘要" in request["body"]["messages"][0]["content"]
         assert "ship it" in request["body"]["messages"][1]["content"]
 

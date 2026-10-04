@@ -26,6 +26,7 @@ from click.testing import CliRunner
 
 from atlas.cli import main
 from tests.fakes.fake_llm_provider import (
+    Error,
     FakeLLMServer,
     Text,
     ToolCall,
@@ -101,11 +102,11 @@ def _clean_child_env(root: Path, fake_url: str, **extra: str) -> dict[str, str]:
 
 
 def _run_cli(env: dict[str, str], *args: str, timeout: float = CLI_TIMEOUT,
-             ) -> subprocess.CompletedProcess[str]:
+             cwd: str | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "atlas.cli", *args],
         env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=timeout,
+        timeout=timeout, cwd=cwd,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
@@ -339,6 +340,87 @@ def test_run_max_turns_cancels_and_exits_0(cli_backend):
     summary = [e for e in events if e.get("type") == "summary"][-1]
     assert summary["result"] == "cancelled"
     assert summary["stop_reason"] == "max_turns"
+
+
+@pytest.mark.integration
+def test_run_reports_permanent_model_failure_as_failed_exit_1(cli_backend):
+    """H10.2-DEFECT-2: a non-retryable provider 404 must fail the run.
+
+    The engine used to emit recovery notices and then `run.completed` with an
+    empty message and null usage, so `atlas run` exited 0 on a turn that never
+    produced any model output.
+    """
+    backend = cli_backend
+    workspace = backend.root / "workspace"
+    workspace.mkdir()
+    # The engine makes api_max_retries+1 attempts even for a non-retryable
+    # verdict; fail every attempt so the turn ends terminally failed.
+    backend.fake.push(*[
+        Error(
+            status=404,
+            message='Model "openai/fake-model" is not supported by any '
+                    'configured account in this group',
+        )
+        for _ in range(3)
+    ])
+
+    proc = _run_cli(
+        backend.env, "run",
+        "-p", "在工作区创建 failure-probe.txt，内容为 unreachable。",
+        "--workspace", str(workspace),
+        "--model", "fake-model",
+        "--output-format", "stream-json",
+    )
+
+    assert proc.returncode == 1, f"stdout={proc.stdout[-1500:]} stderr={proc.stderr[-1500:]}"
+    events = _parse_stream(proc.stdout)
+    kinds = [e.get("event") for e in events if e.get("type") == "agent_event"]
+    assert "run.failed" in kinds
+    assert "run.completed" not in kinds
+    summary = [e for e in events if e.get("type") == "summary"][-1]
+    assert summary["result"] == "failed"
+    assert summary["detail"]
+    assert not (workspace / "failure-probe.txt").exists()
+
+
+@pytest.mark.integration
+def test_run_relative_write_lands_in_workspace_not_launch_dir(cli_backend):
+    """H10.2-DEFECT-3: a relative-path write anchors to --workspace.
+
+    The real-model smoke wrote `hello.txt` into the process launch dir because
+    neither the engine prompt nor the file tools knew the workspace. The CLI
+    now runs with cwd=<launch dir> — deliberately NOT the workspace.
+    """
+    backend = cli_backend
+    workspace = backend.root / "ws-relative"
+    workspace.mkdir()
+    launch_dir = backend.root / "launch-dir"
+    launch_dir.mkdir()
+    calls = {"n": 0}
+
+    def responder(record):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return ToolCall("write_file",
+                            {"path": "relative-probe.txt", "content": "D3-ANCHOR"})
+        return Text("已写入 relative-probe.txt")
+
+    backend.fake._responder = responder
+
+    proc = _run_cli(
+        backend.env, "run",
+        "-p", "在当前工作区创建 relative-probe.txt，内容为 D3-ANCHOR。",
+        "--workspace", str(workspace),
+        "--model", "fake-model",
+        "--output-format", "stream-json",
+        cwd=str(launch_dir),
+    )
+
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert (workspace / "relative-probe.txt").read_text(encoding="utf-8") == "D3-ANCHOR"
+    assert not (launch_dir / "relative-probe.txt").exists(), (
+        "the relative write leaked into the process launch dir"
+    )
 
 
 @pytest.mark.integration

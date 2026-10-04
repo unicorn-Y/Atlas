@@ -15,10 +15,18 @@ home; build one with artifacts/h10-live-smoke/build_live_root.py). If no
 working credential is configured the suite FAILS with the exact missing piece —
 it never fakes a pass.
 
-Every CLI subprocess launches with ``cwd=<workspace>`` and names the workspace
-absolute in the prompt. Both are harness accommodations for H10.2-DEFECT-3
-(the engine system prompt leaks the process launch dir instead of the
-workspace; see artifacts/h10-live-smoke/runs/01-probe-defect3-record.json).
+Every CLI subprocess launches with ``cwd=<live root>`` — deliberately NOT the
+workspace — and scenario 01 names no absolute path at all: the model must
+discover the workspace from the engine's anchored working directory (the
+``Current working directory`` block of the system prompt) and the relative
+write must land inside ``--workspace``. That is the regression proof for
+H10.2-DEFECT-3 (the pre-fix engine leaked the process launch dir into the
+prompt and relative writes — see
+artifacts/h10-live-smoke/runs/01-probe-defect3-record.json; the pre-fix suite
+had to launch inside the workspace and name it absolute as a harness
+accommodation). The scratch config keeps the host-shaped prefixed
+``litellm_model`` (``openai/...``) verbatim: since the H10.2-DEFECT-1 router
+fix, the engine derives the bare wire id itself.
 Evidence written next to the run is redacted (gateway key and any ``sk-*``
 token shape) before it touches disk.
 """
@@ -207,15 +215,18 @@ def live() -> LiveSession:
 def test_live_01_write_file_exact_content(live: LiveSession) -> None:
     workspace = live.workspace("write")
     target = workspace / "hello.txt"
+    # No absolute path in the prompt: the model must locate the workspace via
+    # the engine's anchored working directory (H10.2-DEFECT-3 regression proof),
+    # and the process cwd is the live root, never the workspace.
     code, events, stderr = live.run_cli(
         "01-write-file", "run",
-        "-p", f"在工作区 {workspace} 创建文件 hello.txt，内容为一行："
+        "-p", "在工作区创建文件 hello.txt，内容为一行："
               "ATLAS-LIVE-SMOKE-OK。除该行外不要写入任何其他内容。",
         "--workspace", str(workspace),
         "--model", live.model,
         "--output-format", "stream-json",
         "--timeout", "480",
-        cwd=workspace,
+        cwd=live.root,
     )
     summary = live.summary(events)
     assert code == 0, f"exit={code} stderr={_redact(stderr)[-1500:]}"
@@ -227,6 +238,9 @@ def test_live_01_write_file_exact_content(live: LiveSession) -> None:
     assert (summary.get("changes") or {}).get("files", 0) >= 1
     content = target.read_text(encoding="utf-8")
     assert content.strip() == "ATLAS-LIVE-SMOKE-OK", repr(content)
+    # H10.2-DEFECT-3 regression: the file landed inside --workspace, and the
+    # process launch dir (the live root) stayed clean.
+    assert not (live.root / "hello.txt").exists()
     assert any(
         e.get("event") == "tool.completed" and e.get("data", {}).get("name") == "write_file"
         and not e.get("data", {}).get("is_error")
@@ -253,7 +267,7 @@ def test_live_02_read_and_answer(live: LiveSession) -> None:
         "--model", live.model,
         "--output-format", "stream-json",
         "--timeout", "480",
-        cwd=workspace,
+        cwd=live.root,
     )
     summary = live.summary(events)
     assert code == 0, f"exit={code} stderr={_redact(stderr)[-1500:]}"
@@ -284,7 +298,7 @@ def test_live_03_ask_writes_auto_deny_exit_3(live: LiveSession) -> None:
         "--permission-mode", "ask_writes",
         "--output-format", "stream-json",
         "--timeout", "480",
-        cwd=workspace,
+        cwd=live.root,
     )
     summary = live.summary(events)
     kinds = [e.get("event") for e in events if e.get("type") == "agent_event"]

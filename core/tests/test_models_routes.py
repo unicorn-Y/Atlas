@@ -391,7 +391,9 @@ async def test_model_test_uses_provider_key_and_base_url(
 
     assert len(calls) == 1
     kwargs = calls[0]
-    assert kwargs["model"] == "deepseek/deepseek-chat"
+    # bare wire id on the transport call: the litellm routing prefix never
+    # reaches a provider (H10.2-DEFECT-1 — real relays 404 the prefixed form)
+    assert kwargs["model"] == "deepseek-chat"
     assert kwargs["api_key"] == secret  # keyring 里的原文，请求内只此一处
     assert kwargs["max_tokens"] == 2
     assert kwargs["stream"] is False

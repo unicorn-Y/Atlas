@@ -247,6 +247,9 @@ async def test_targeted_cua_observation_returns_snapshot_handles_and_image() -> 
 @pytest.mark.asyncio
 async def test_integrations_api_keeps_unconfigured_agent_misconfigured(monkeypatch) -> None:
     from atlas import server
+    # H5: integrations handlers live on the integrations router now; the bus
+    # seams are still resolved through atlas.server.
+    from atlas.api.integrations_router import list_integrations
 
     class Bus:
         def status(self, _refresh=False):
@@ -271,7 +274,7 @@ async def test_integrations_api_keeps_unconfigured_agent_misconfigured(monkeypat
     monkeypatch.setattr(server, "capability_bus", Bus())
     monkeypatch.setattr(server, "agent_backend_host", Host())
 
-    result = await server.list_integrations()
+    result = await list_integrations(SimpleNamespace())
 
     assert result["capabilities"][0]["status"] == "misconfigured"
     assert result["capabilities"][0]["configured"] is False
@@ -280,6 +283,9 @@ async def test_integrations_api_keeps_unconfigured_agent_misconfigured(monkeypat
 @pytest.mark.asyncio
 async def test_blocking_integration_probe_does_not_block_health(monkeypatch) -> None:
     from atlas import server
+    # H5: integrations/health handlers live on their routers now.
+    from atlas.api.health_router import health
+    from atlas.api.integrations_router import list_integrations
 
     class SlowBus:
         def status(self, _refresh=False):
@@ -288,9 +294,9 @@ async def test_blocking_integration_probe_does_not_block_health(monkeypatch) -> 
 
     monkeypatch.setattr(server, "capability_bus", SlowBus())
     started = time.monotonic()
-    task = asyncio.create_task(server.list_integrations())
+    task = asyncio.create_task(list_integrations(SimpleNamespace()))
     await asyncio.sleep(0.01)
-    assert (await server.health())["status"] == "ok"
+    assert (await health(SimpleNamespace()))["status"] == "ok"
     assert time.monotonic() - started < 0.15
     await task
 

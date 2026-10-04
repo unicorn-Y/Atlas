@@ -8,7 +8,7 @@ import pytest
 
 from atlas.models.router import ModelRouter
 from atlas.models.tokens import count_tokens
-from tests.fakes.fake_llm_provider import AnthropicReply, FakeLLMServer
+from tests.fakes.fake_llm_provider import AnthropicReply, FakeLLMServer, Text
 
 PURPOSES = (
     "conversation", "compression", "handoff_summary", "moa", "title", "planning",
@@ -277,6 +277,100 @@ async def test_gateway_probe_uses_real_http_and_caches_result() -> None:
             again = await router.resolve("claude-sonnet-4", "compression")
             assert again.api_mode == expected_mode
             assert len(server.anthropic_requests()) == probe_count  # probe result cached
+
+
+class _RelayModelManager:
+    """Host-shaped custom relay model: prefixed litellm id, no explicit native id.
+
+    This is exactly the H10.2 live-smoke configuration: a ChatCompletions
+    relay that 404s the litellm-prefixed wire id (H10.2-DEFECT-1).
+    """
+
+    def __init__(self, *, native_model: str | None = None) -> None:
+        entry = {
+            "id": "deepseek-v4.1-flash", "provider": "openai", "hermes_provider": "openai",
+            "litellm_model": "openai/deepseek-v4.1-flash",
+        }
+        if native_model is not None:
+            entry["native_model"] = native_model
+        self.models = [entry]
+        self.gateway_base_url = ""
+        self.gateway_api_key = ""
+
+    def list_models(self):
+        return list(self.models)
+
+    def provider_config(self, _provider_id: str) -> dict:
+        return {}
+
+    def resolve_api_key(self, _provider_id: str):
+        return None
+
+    def credential_pool(self, _provider_id: str):
+        return None
+
+    def get_api_mode_override(self, _provider_id: str):
+        return None
+
+    def get_api_mode_probe(self, _provider_id: str):
+        return None
+
+    def set_api_mode_probe(self, _provider_id: str, _probe: dict) -> None:
+        pass
+
+
+async def _relay_route(native_model: str | None = None):
+    manager = _RelayModelManager(native_model=native_model)
+    manager.gateway_base_url = "https://relay.example/v1"
+    manager.gateway_api_key = "sk-relay-secret"
+    return await ModelRouter(manager).resolve("deepseek-v4.1-flash", "conversation")
+
+
+async def test_chat_completions_route_keeps_registry_id_but_exposes_bare_wire_model() -> None:
+    """H10.2-DEFECT-1: the litellm routing prefix must never reach the wire."""
+    route = await _relay_route()
+
+    assert route.api_mode == "chat_completions"
+    # The registry's litellm-style id stays on the spec for litellm-style consumers.
+    assert route.model == "openai/deepseek-v4.1-flash"
+    # The wire model is the bare id the relay actually exposes.
+    assert route.wire_model == "deepseek-v4.1-flash"
+
+
+async def test_hermes_agent_kwargs_carry_the_wire_model_not_the_litellm_prefix() -> None:
+    """The pinned AIAgent must receive the bare wire id on chat_completions routes."""
+    kwargs = ModelRouter.hermes_agent_kwargs(await _relay_route())
+
+    assert kwargs["model"] == "deepseek-v4.1-flash"
+    assert kwargs["api_mode"] == "chat_completions"
+
+
+async def test_explicit_native_model_wins_for_the_wire_id() -> None:
+    route = await _relay_route(native_model="deepseek-chat-wire-alias")
+
+    assert route.wire_model == "deepseek-chat-wire-alias"
+    assert ModelRouter.hermes_agent_kwargs(route)["model"] == "deepseek-chat-wire-alias"
+
+
+async def test_auxiliary_complete_sends_bare_wire_model_over_http() -> None:
+    """``complete()`` rides the same raw wire as the agent: bare id, no prefix."""
+    route = await _relay_route()
+    assert route.wire_model == "deepseek-v4.1-flash"
+
+    # The gateway fallback route points at the relay; point it at the fake instead.
+    from dataclasses import replace
+
+    with FakeLLMServer(aux=lambda _req: Text("relay reply"), api_key="sk-relay-secret") as server:
+        route = replace(route, base_url=server.base_url, key="sk-relay-secret")
+        result = await ModelRouter(_RelayModelManager()).complete(
+            route, [{"role": "user", "content": "hello"}],
+        )
+
+        assert result.text == "relay reply"
+        requests = server.aux_requests()
+        assert len(requests) == 1
+        assert requests[0]["model"] == "deepseek-v4.1-flash"
+        assert server.requests[0]["auth"] == "Bearer sk-relay-secret"
 
 
 def test_ast_no_acompletion_outside_router() -> None:

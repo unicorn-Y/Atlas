@@ -1,0 +1,12 @@
+{
+  "name": "00-doctor",
+  "exit_code": 0,
+  "wall_seconds": 3.245,
+  "model": "deepseek-v4.1-flash",
+  "gateway_base_url": "https://cnapi.pleasure.cc.cd:8443/v1",
+  "cwd": "C:\\Users\\25011\\AppData\\Local\\Temp\\h1-k-ws\\live-root",
+  "args": [
+    "doctor",
+    "--json"
+  ]
+}

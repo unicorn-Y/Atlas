@@ -135,6 +135,10 @@ class _RunState:
     goal_experiences: list[dict[str, Any]] = field(default_factory=list)
     initial_messages: list[BaseMessage] = field(default_factory=list)
     result: dict[str, Any] = field(default_factory=dict)
+    # Detail of a Hermes terminal failed-turn verdict ("" when the turn ended
+    # without one). A turn that produced no model output because the provider
+    # terminally failed must end as a run failure, never as success (H10.2-2).
+    turn_error: str = ""
     abort: bool = False
     cancelled: bool = False
 
@@ -636,6 +640,23 @@ def _fit_advisory_blocks(
 
 # -- engine turn ----------------------------------------------------------
 
+_FAILURE_NO_DETAIL = "模型轮次失败：提供方在未产生任何输出的情况下终止了本轮。"
+
+
+def _terminal_failure_detail(result: Any) -> str:
+    """Detail for a Hermes terminal failed-turn verdict; "" when the turn succeeded.
+
+    Hermes stamps every terminal result the turn loop returns with ``failed`` /
+    ``interrupted`` (``agent/turn_finalizer.py``): a provider that rejects the
+    request without a retryable path (e.g. a 404 wire model) still returns a
+    result dict — with an empty ``final_response`` and no usage. Reporting that
+    as ``run.completed`` turned permanent model failures into silent successes
+    (H10.2-DEFECT-2), so the Atlas run path treats the verdict as an error.
+    """
+    if not isinstance(result, dict) or not result.get("failed") or result.get("interrupted"):
+        return ""
+    return str(result.get("error") or "").strip() or _FAILURE_NO_DETAIL
+
 
 async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
     """Run one engine turn to completion, forwarding its events to the queue."""
@@ -763,6 +784,16 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
                 continue
             await runtime.event_queue.put(event)
         final_text = final_result.get("final_response", "")
+        # A terminal provider failure (e.g. a non-retryable 404 for the wire
+        # model) still returns a result — empty response, null usage. Surface
+        # it as a run error so the engine reports run.failed and `atlas run`
+        # exits 1, instead of a success with no output (H10.2-DEFECT-2).
+        turn_error = _terminal_failure_detail(final_result)
+        if turn_error:
+            state.turn_error = turn_error
+            await runtime.event_queue.put({
+                "type": "error", "category": "model", "detail": turn_error,
+            })
         for usage in final_result.get("usage", []) if isinstance(
             final_result.get("usage"), list
         ) else []:
@@ -824,11 +855,18 @@ async def _turn(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
         async with aclosing(_pump_events(state, hermes_task)) as pump:
             async for event in pump:
                 yield event
-        if not state.cancelled:
-            state.result = await hermes_task
-            async with aclosing(_phase_finalize(agent, state)) as finalize:
-                async for event in finalize:
-                    yield event
+        if state.cancelled:
+            return
+        if state.turn_error:
+            # The engine turn terminally failed: the error event above already
+            # reported it, so the success-finalizer (assistant persistence +
+            # `done`) must not run — a failed turn has no assistant reply to
+            # finalize and must never end in `done` (H10.2-DEFECT-2).
+            return
+        state.result = await hermes_task
+        async with aclosing(_phase_finalize(agent, state)) as finalize:
+            async for event in finalize:
+                yield event
     except Exception as e:
         log.error("agent.run.error", error=str(e))
         yield {

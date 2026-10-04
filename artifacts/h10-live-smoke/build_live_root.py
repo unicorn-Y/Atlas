@@ -38,21 +38,18 @@ def main() -> int:
 
     custom_blocks: list[str] = []
     for model in custom_models:
+        # Host-shaped custom entry, verbatim: the litellm-style prefixed id
+        # stays prefixed. The router fix (Lane M, H10.2-DEFECT-1) derives the
+        # bare wire id for the Hermes transport, so the scratch root now
+        # exercises the exact host configuration instead of a bare-id
+        # workaround.
         litellm_model = str(model.get("litellm_model") or model.get("id") or "")
-        # ACCOMMODATION (documented, smoke-harness only): H10.2 DEFECT-1 — the
-        # router passes the litellm-prefixed id ("openai/...") to the Hermes
-        # agent on chat_completions routes and the relay 404s it (see
-        # artifacts/h10-live-smoke/runs/00-wire-model-probe.json). The host
-        # config shape is preserved in the defect evidence; the scratch copy
-        # strips the provider prefix so the remaining scenarios exercise the
-        # rest of the stack. This is NOT a product fix.
-        wire_model = litellm_model.split("/", 1)[1] if litellm_model.count("/") == 1 else litellm_model
         custom_blocks.append(
             "[[models.custom]]\n"
             f'id = "{model.get("id")}"\n'
             f'name = "{model.get("name")}"\n'
             f'provider = "{model.get("provider")}"\n'
-            f'litellm_model = "{wire_model}"\n'
+            f'litellm_model = "{litellm_model}"\n'
             f'category = "{model.get("category", "custom")}"\n'
         )
 

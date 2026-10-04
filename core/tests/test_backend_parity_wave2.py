@@ -185,26 +185,38 @@ async def test_subtask_cancel_endpoint_sets_child_cancellation_only() -> None:
 
 
 async def test_recipe_storage_render_and_missing_parameters(tmp_path: Path, monkeypatch) -> None:
+    # H5: recipe/profile handlers live on the records router now; their TOML
+    # store seam is still monkeypatched through atlas.server.
+    from atlas.api.records_router import (
+        create_recipe,
+        delete_recipe,
+        list_recipes,
+        render_recipe,
+        update_recipe,
+    )
+
     monkeypatch.setattr(server, "_task_store", lambda kind: TomlRecordStore(tmp_path, kind))
-    recipe = await server.create_recipe({
+    recipe = await create_recipe(SimpleNamespace(), {
         "name": "Review", "description": "Review a module", "prompt": "Review {{target}}",
         "params": [{"name": "target", "label": "Target"}], "active_skills": ["code-review"],
         "mode": "plan",
     })
-    rendered = await server.render_recipe(recipe["id"], {"params": {"target": "core"}})
+    rendered = await render_recipe(SimpleNamespace(), recipe["id"], {"params": {"target": "core"}})
     assert rendered["prompt"] == "Review core"
     assert rendered["mode"] == "plan"
-    updated = await server.update_recipe(recipe["id"], {"description": "Updated"})
+    updated = await update_recipe(SimpleNamespace(), recipe["id"], {"description": "Updated"})
     assert updated["description"] == "Updated"
-    assert len((await server.list_recipes())["recipes"]) == 1
+    assert len((await list_recipes(SimpleNamespace()))["recipes"]) == 1
     with pytest.raises(HTTPException) as error:
-        await server.render_recipe(recipe["id"], {"params": {}})
+        await render_recipe(SimpleNamespace(), recipe["id"], {"params": {}})
     assert error.value.status_code == 422
     assert error.value.detail == {"missing": ["target"]}
-    assert (await server.delete_recipe(recipe["id"]))["status"] == "deleted"
+    assert (await delete_recipe(SimpleNamespace(), recipe["id"]))["status"] == "deleted"
 
 
 async def test_recipe_from_run_keeps_input_skills_mode_and_workspace(tmp_path: Path, monkeypatch) -> None:
+    from atlas.api.records_router import recipe_from_run
+
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
     conversation_id = await store.create_conversation("saved run")
@@ -218,7 +230,8 @@ async def test_recipe_from_run_keeps_input_skills_mode_and_workspace(tmp_path: P
     run.workspace = str(tmp_path)
     run.profile_id = "architect"
     monkeypatch.setitem(server.runtime_mgr.runs, run.run_id, run)
-    recipe = await server.recipe_from_run({"run_id": run.run_id, "name": "Reusable"})
+    recipe = await recipe_from_run(
+        SimpleNamespace(memory=None, runtime_mgr=None), {"run_id": run.run_id, "name": "Reusable"})
     assert recipe["prompt"] == "input with context"
     assert recipe["active_skills"] == ["skill-one"]
     assert recipe["mode"] == "plan" and recipe["workspace"] == str(tmp_path)
@@ -227,20 +240,29 @@ async def test_recipe_from_run_keeps_input_skills_mode_and_workspace(tmp_path: P
 
 
 async def test_profile_builtins_and_validation(tmp_path: Path, monkeypatch) -> None:
+    # H5: profile handlers live on the records router now; their store seam is
+    # still monkeypatched through atlas.server.
+    from atlas.api.records_router import (
+        create_profile,
+        delete_profile,
+        list_profiles,
+        update_profile,
+    )
+
     monkeypatch.setattr(server, "_task_store", lambda kind: TomlRecordStore(tmp_path, kind))
-    profiles = (await server.list_profiles())["profiles"]
+    profiles = (await list_profiles(SimpleNamespace()))["profiles"]
     assert {p["id"] for p in profiles} >= {"default", "architect", "reviewer"}
     architect = next(p for p in profiles if p["id"] == "architect")
     assert architect["mode"] == "plan" and architect["tools"]["allow"]
-    created = await server.create_profile({"name": "Read only", "tools": {"allow": ["local_file"]}})
+    created = await create_profile(SimpleNamespace(), {"name": "Read only", "tools": {"allow": ["local_file"]}})
     assert created["tools"]["allow"] == ["local_file"]
-    assert (await server.update_profile(created["id"], {"name": "Renamed"}))["name"] == "Renamed"
-    assert (await server.delete_profile(created["id"]))["status"] == "deleted"
+    assert (await update_profile(SimpleNamespace(), created["id"], {"name": "Renamed"}))["name"] == "Renamed"
+    assert (await delete_profile(SimpleNamespace(), created["id"]))["status"] == "deleted"
     with pytest.raises(HTTPException) as error:
-        await server.delete_profile("default")
+        await delete_profile(SimpleNamespace(), "default")
     assert error.value.status_code == 409
     with pytest.raises(HTTPException) as invalid:
-        await server.create_profile({"name": "Broken", "mode": "unsafe"})
+        await create_profile(SimpleNamespace(), {"name": "Broken", "mode": "unsafe"})
     assert invalid.value.status_code == 422
     bridge = AtlasToolBridge(local=SimpleNamespace(call_tool=lambda *args: None))
     with pytest.raises(PermissionError):
@@ -259,6 +281,10 @@ def test_reasoning_support_probe_uses_litellm_capability_and_fails_closed(monkey
 
 
 async def test_workspace_search_respects_gitignore_and_fuzzy_filename(tmp_path: Path) -> None:
+    # H5: workspace handlers live on the workspace router now; their path seams
+    # are still resolved through atlas.server.
+    from atlas.api.workspace_router import workspace_search
+
     repo = tmp_path / "repo"
     _git_repo(repo)
     (repo / ".gitignore").write_text("secret/\n", encoding="utf-8")
@@ -266,7 +292,7 @@ async def test_workspace_search_respects_gitignore_and_fuzzy_filename(tmp_path: 
     (repo / "src" / "AgentConfig.py").write_text("x", encoding="utf-8")
     (repo / "secret").mkdir()
     (repo / "secret" / "AgentConfig.py").write_text("x", encoding="utf-8")
-    result = await server.workspace_search(str(repo), "agcfg")
+    result = await workspace_search(SimpleNamespace(), str(repo), "agcfg")
     assert result["files"] == [{"path": "src/AgentConfig.py", "name": "AgentConfig.py", "type": "file"}]
 
 
@@ -274,6 +300,8 @@ async def test_workspace_search_honors_gitignore_without_repository() -> None:
     # tempfile, not tmp_path: the search treats an *untracked* dir inside the
     # Atlas repo as git-listed (empty output, exit 0) and skips the manual
     # gitignore fallback — the scenario must live outside any repository.
+    from atlas.api.workspace_router import workspace_search
+
     with tempfile.TemporaryDirectory() as td:
         root = Path(td) / "plain"
         (root / "secret").mkdir(parents=True)
@@ -281,7 +309,7 @@ async def test_workspace_search_honors_gitignore_without_repository() -> None:
         (root / "visible").mkdir()
         (root / "visible" / "Token.txt").write_text("x", encoding="utf-8")
         (root / ".gitignore").write_text("secret/\n", encoding="utf-8")
-        results = await server.workspace_search(str(root), "token")
+        results = await workspace_search(SimpleNamespace(), str(root), "token")
         assert [item["path"] for item in results["files"]] == ["visible/Token.txt"]
 
 
@@ -321,12 +349,17 @@ async def test_ephemeral_run_does_not_change_source_conversation(tmp_path: Path,
 
 
 async def test_fork_persists_parent_and_message_link(tmp_path: Path, monkeypatch) -> None:
+    from atlas.api.conversations_router import fork_conversation
+
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
     parent = await store.create_conversation("parent")
     message_id = await store.save_message(parent, "user", "question")
     monkeypatch.setattr(server, "memory", store)
-    forked = await server.fork_conversation(parent, {"through_message_id": message_id})
+    # H5: fork_conversation lives on the conversations router now; its store
+    # seam is still resolved through atlas.server.
+    forked = await fork_conversation(
+        SimpleNamespace(memory=None), parent, {"through_message_id": message_id})
     saved = await store.get_conversation(forked["id"])
     assert saved["parent_conversation_id"] == parent
     assert saved["fork_message_id"] == message_id
@@ -334,6 +367,8 @@ async def test_fork_persists_parent_and_message_link(tmp_path: Path, monkeypatch
 
 
 async def test_fork_summary_is_first_system_message_and_duplicate_copies_all(tmp_path: Path, monkeypatch) -> None:
+    from atlas.api.conversations_router import duplicate_conversation, fork_conversation
+
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
     parent = await store.create_conversation("summary parent")
@@ -341,16 +376,25 @@ async def test_fork_summary_is_first_system_message_and_duplicate_copies_all(tmp
     await store.save_message(parent, "assistant", "answer")
     monkeypatch.setattr(server, "memory", store)
     monkeypatch.setattr(server, "orchestrator", None)
-    forked = await server.fork_conversation(parent, {"through_message_id": first, "summarize": True})
+    forked = await fork_conversation(
+        SimpleNamespace(memory=None, orchestrator=None), parent,
+        {"through_message_id": first, "summarize": True})
     messages = await store.get_conversation_messages(forked["id"], limit=10)
     assert messages[0]["role"] == "system" and messages[0]["metadata"]["kind"] == "fork_summary"
-    duplicate = await server.duplicate_conversation(parent)
+    duplicate = await duplicate_conversation(SimpleNamespace(memory=None), parent)
     duplicate_messages = await store.get_conversation_messages(duplicate["id"], limit=10)
     assert [m["content"] for m in duplicate_messages] == ["first", "answer"]
     await store.close()
 
 
 async def test_run_start_reuses_profile_and_assigns_worktree(tmp_path: Path, monkeypatch) -> None:
+    # H5: worktree status handlers live on the workspace router now.
+    from atlas.api.workspace_router import (
+        conversation_worktree,
+        delete_conversation_worktree,
+        git_branches,
+    )
+
     root = tmp_path / "repo"
     _git_repo(root)
     store = MemoryStore(tmp_path / "memory.db")
@@ -378,11 +422,12 @@ async def test_run_start_reuses_profile_and_assigns_worktree(tmp_path: Path, mon
     assert run.read_only and run.tool_allow
     conversation = await store.get_conversation(conversation_id)
     assert conversation["worktree_branch"] == "atlas/" + conversation_id.replace("-", "")[:8]
-    status = await server.conversation_worktree(conversation_id)
+    status = await conversation_worktree(SimpleNamespace(memory=None), conversation_id)
     assert status["branch"] == conversation["worktree_branch"]
-    branches = await server.git_branches(str(root))
+    branches = await git_branches(SimpleNamespace(), str(root))
     assert branches["current"] == "main"
-    assert (await server.delete_conversation_worktree(conversation_id))["status"] == "removed"
+    assert (await delete_conversation_worktree(
+        SimpleNamespace(memory=None), conversation_id))["status"] == "removed"
     assert await store.get_conversation(conversation_id) is not None
     await store.close()
 
@@ -392,7 +437,15 @@ async def test_goal_replace_pause_resume(tmp_path: Path, monkeypatch) -> None:
     # its paused/active status live in the Hermes GoalManager, keyed by a derived
     # session id. Pause no longer flips the task status, and the pause gate sits in
     # server._run_scheduled_goal, not in the scheduler.
+    # H5: goal CRUD handlers live on the scheduling router now; the scheduler
+    # seam is still resolved through atlas.server.
     from atlas import config
+    from atlas.api.scheduling_router import (
+        get_goal_trace,
+        pause_goal,
+        resume_goal,
+        update_goal,
+    )
     from atlas.engine.session_sync import goal_state, set_goal
 
     data_root = tmp_path / "atlas-data"
@@ -414,11 +467,11 @@ async def test_goal_replace_pause_resume(tmp_path: Path, monkeypatch) -> None:
     )
     monkeypatch.setattr(server, "scheduler", scheduler)
 
-    result = await server.update_goal("g", {"goal": "new"})
+    result = await update_goal(SimpleNamespace(scheduler=None), "g", {"goal": "new"})
     assert result["goal"] == "new" and result["goal_status"] == "active"
-    assert (await server.get_goal_trace("g", run_id=None))["events"][-1]["event"] == "goal.replaced"
+    assert (await get_goal_trace(SimpleNamespace(scheduler=None), "g", run_id=None))["events"][-1]["event"] == "goal.replaced"
 
-    paused = await server.pause_goal("g")
+    paused = await pause_goal(SimpleNamespace(scheduler=None), "g")
     assert paused["goal_status"] == "paused"
     assert paused["status"] == "active"
 
@@ -431,7 +484,7 @@ async def test_goal_replace_pause_resume(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(server, "orchestrator", _NoRunOrchestrator())
     await server._run_scheduled_goal("g")
 
-    resumed = await server.resume_goal("g")
+    resumed = await resume_goal(SimpleNamespace(scheduler=None), "g")
     assert resumed["goal_status"] == "active"
 
     # After resume the same firing path reaches the orchestrator once; the fake marks
@@ -459,15 +512,18 @@ async def test_goal_replace_pause_resume(tmp_path: Path, monkeypatch) -> None:
 
 
 async def test_workspace_raw_content_type_and_escape(tmp_path: Path) -> None:
+    # H5: workspace_raw lives on the workspace router now.
+    from atlas.api.workspace_router import workspace_raw
+
     root = tmp_path / "workspace"
     root.mkdir()
     sample = root / "preview.html"
     sample.write_text("<h1>preview</h1>", encoding="utf-8")
-    response = await server.workspace_raw(str(root), "preview.html")
+    response = await workspace_raw(SimpleNamespace(), str(root), "preview.html")
     body = b"".join([chunk async for chunk in response.body_iterator])
     assert response.media_type == "text/html" and body == b"<h1>preview</h1>"
     with pytest.raises(HTTPException):
-        await server.workspace_raw(str(root), "../outside.html")
+        await workspace_raw(SimpleNamespace(), str(root), "../outside.html")
 
 
 def test_large_tool_result_is_externalized_with_bounded_preview(tmp_path: Path) -> None:
@@ -489,4 +545,7 @@ def test_worktree_placement_is_outside_workspace_and_protocol_is_18(tmp_path: Pa
     record = WorktreeService(tmp_path).create(repo, "session-0001")
     assert Path(record["worktree_path"]).is_relative_to(repo.parent / ".atlas-worktrees" / repo.name)
     WorktreeService(tmp_path).remove(repo, Path(record["worktree_path"]), record["worktree_branch"])
-    assert asyncio.run(server.runtime_protocol()) == {"version": "1.10"}
+    # H5: runtime_protocol lives on the usage router now.
+    from atlas.api.usage_router import runtime_protocol
+
+    assert asyncio.run(runtime_protocol(SimpleNamespace())) == {"version": "1.10"}

@@ -325,10 +325,14 @@ async def truncate_conversation(
         raise HTTPException(status_code=400, detail="from_message_id is required")
     messages = await memory.get_messages_with_rowid(conversation_id)
     from atlas.config import DATA_ROOT
-    from atlas.engine.session_sync import rewind_to_atlas_message, restore_session
+    from atlas.engine.session_sync import atlas_turn_ordinal, restore_session, rewind_user_turn
 
-    snapshot = await asyncio.to_thread(
-        rewind_to_atlas_message, DATA_ROOT / "engine", conversation_id, messages, message_id,
+    ordinal = atlas_turn_ordinal(messages, message_id, through_target=False)
+    snapshot = (
+        None if ordinal is None
+        else await asyncio.to_thread(
+            rewind_user_turn, DATA_ROOT / "engine", conversation_id, ordinal,
+        )
     )
     if not await memory.truncate_conversation(conversation_id, message_id):
         if snapshot:
@@ -344,7 +348,6 @@ def _conversation_has_active_run(conversation_id: str) -> bool:
 
 
 async def _snapshot_rewind_files(
-    services: Annotated[AppServices, Depends(get_app_services)],
     run_ids: list[str], roots: list[str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     snapshots: dict[tuple[str, str], dict[str, Any]] = {}
@@ -396,7 +399,6 @@ async def _snapshot_rewind_files(
 
 
 async def _restore_rewind_files(
-    services: Annotated[AppServices, Depends(get_app_services)],
     files: list[dict[str, Any]],
 ) -> None:
     for item in files:
@@ -424,7 +426,6 @@ async def _restore_rewind_files(
 
 
 async def _restore_run_checkpoints(
-    services: Annotated[AppServices, Depends(get_app_services)],
     checkpoints: list[dict[str, str]],
 ) -> tuple[list[str], list[dict[str, str]]]:
     restored: list[str] = []
@@ -482,10 +483,11 @@ async def rewind_conversation(
     snapshot = {"messages": messages, "files": file_snapshot,
                 "checkpoints": checkpoints, "files_requested": req["files"]}
     from atlas.config import DATA_ROOT
-    from atlas.engine.session_sync import capture_session, restore_session, rewind_to_atlas_message
+    from atlas.engine.session_sync import atlas_turn_ordinal, restore_session, rewind_user_turn
 
+    user_ordinal = atlas_turn_ordinal(messages, message_id, through_target=False)
     hermes_snapshot = await asyncio.to_thread(
-        capture_session, DATA_ROOT / "engine", conversation_id,
+        rewind_user_turn, DATA_ROOT / "engine", conversation_id, user_ordinal,
     )
     if hermes_snapshot:
         snapshot["hermes_session"] = hermes_snapshot
@@ -505,10 +507,6 @@ async def rewind_conversation(
             if hermes_snapshot:
                 await asyncio.to_thread(restore_session, DATA_ROOT / "engine", hermes_snapshot)
             raise HTTPException(status_code=404, detail="找不到指定消息。")
-        if hermes_snapshot:
-            await asyncio.to_thread(
-                rewind_to_atlas_message, DATA_ROOT / "engine", conversation_id, messages, message_id,
-            )
     except HTTPException:
         raise
     except Exception:
@@ -597,12 +595,14 @@ async def fork_conversation(
     if result is None:
         raise HTTPException(status_code=404, detail="Conversation or message not found")
     from atlas.config import DATA_ROOT
-    from atlas.engine.session_sync import fork_session
+    from atlas.engine.session_sync import atlas_turn_ordinal, fork_session_through_turn
 
-    await asyncio.to_thread(
-        fork_session, DATA_ROOT / "engine", conversation_id, str(result["id"]),
-        source_messages, message_id,
-    )
+    user_turns = atlas_turn_ordinal(source_messages, message_id, through_target=True)
+    if user_turns is not None:
+        await asyncio.to_thread(
+            fork_session_through_turn, DATA_ROOT / "engine", conversation_id, str(result["id"]),
+            user_turns, branch_message_id=message_id,
+        )
     await memory.update_conversation(
         result["id"], parent_conversation_id=conversation_id, fork_message_id=message_id,
         workspace=(await memory.get_conversation(conversation_id) or {}).get("workspace"),
@@ -644,12 +644,14 @@ async def duplicate_conversation(
     if result is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     from atlas.config import DATA_ROOT
-    from atlas.engine.session_sync import fork_session
+    from atlas.engine.session_sync import atlas_turn_ordinal, fork_session_through_turn
 
-    await asyncio.to_thread(
-        fork_session, DATA_ROOT / "engine", conversation_id, str(result["id"]),
-        messages, str(messages[-1]["id"]),
-    )
+    user_turns = atlas_turn_ordinal(messages, str(messages[-1]["id"]), through_target=True)
+    if user_turns is not None:
+        await asyncio.to_thread(
+            fork_session_through_turn, DATA_ROOT / "engine", conversation_id, str(result["id"]),
+            user_turns, branch_message_id=str(messages[-1]["id"]),
+        )
     source = await memory.get_conversation(conversation_id) or {}
     await memory.update_conversation(result["id"], parent_conversation_id=conversation_id,
                                      fork_message_id=messages[-1]["id"],

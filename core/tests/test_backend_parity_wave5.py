@@ -317,21 +317,30 @@ async def test_rewind_restores_messages_and_files_then_redo_restores_both(tmp_pa
     monkeypatch.setattr(server, "memory", memory)
     monkeypatch.setattr(server, "orchestrator", SimpleNamespace(checkpoints=checkpoint_store))
     monkeypatch.setattr(server.runtime_mgr, "runs", {})
+    # H5: rewind/redo/list live on the conversations router now; their store
+    # and checkpoint seams are still resolved through atlas.server.
+    from atlas.api.conversations_router import (
+        list_conversation_rewinds,
+        redo_conversation_rewind,
+        rewind_conversation,
+    )
+
+    services = SimpleNamespace(memory=None)
     try:
-        result = await server.rewind_conversation(
-            conversation_id, {"message_id": first, "files": True},
+        result = await rewind_conversation(
+            services, conversation_id, {"message_id": first, "files": True},
         )
         assert result["removed_messages"] == 4
         assert target.read_text(encoding="utf-8") == "before"
         assert await memory.get_conversation_messages(conversation_id) == []
 
-        await server.redo_conversation_rewind(conversation_id, result["rewind_id"])
+        await redo_conversation_rewind(services, conversation_id, result["rewind_id"])
         assert target.read_text(encoding="utf-8") == "round two"
         messages = await memory.get_conversation_messages(conversation_id)
         assert [item["content"] for item in messages] == [
             "first", "first done", "second", "second done",
         ]
-        assert (await server.list_conversation_rewinds(conversation_id))[0]["redone"] is True
+        assert (await list_conversation_rewinds(services, conversation_id))[0]["redone"] is True
     finally:
         await memory.close()
 

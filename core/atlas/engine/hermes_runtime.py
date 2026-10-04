@@ -600,6 +600,46 @@ class HermesRuntime:
             if callable(close):
                 close()
 
+    @staticmethod
+    def _session_workspace(hermes_cwd: Any) -> str:
+        """The local workspace path to anchor engine cwd surfaces to, "" when none.
+
+        ssh:// workspaces resolve to a REMOTE path: their cwd policy already
+        rides the terminal scope (``_ssh_workspace_terminal_policy``), and the
+        path does not exist on this host, so it must not enter the local
+        session-cwd records.
+        """
+        if not isinstance(hermes_cwd, str):
+            return ""
+        candidate = hermes_cwd.strip()
+        if not candidate or candidate.startswith("ssh://"):
+            return ""
+        return candidate
+
+    @staticmethod
+    def _register_session_workspace(conversation_id: str, hermes_cwd: Any) -> None:
+        """Record the workspace as the conversation's session cwd (H10.2-DEFECT-3).
+
+        The fork's file/terminal path resolution anchors relative paths at the
+        session's recorded cwd (``tools.terminal_tool.get_session_cwd``) and
+        only falls back to the process launch dir when no record exists. Atlas
+        turns never passed a ``task_id``, so every turn got a throwaway id and
+        the record was always empty: a model writing ``hello.txt`` landed the
+        file next to the CLI process launch dir instead of ``--workspace``.
+        Registering the workspace under the conversation id (the same key the
+        turn now passes as ``task_id``) pins relative paths to the workspace,
+        matching the fork's own cron/gateway behavior.
+        """
+        workspace = HermesRuntime._session_workspace(hermes_cwd)
+        if not workspace:
+            return
+        try:
+            from tools.terminal_tool import record_session_cwd
+
+            record_session_cwd(conversation_id, workspace)
+        except Exception:  # noqa: BLE001 — a cwd record must never break a turn
+            logger.warning("Recording session workspace cwd failed", exc_info=True)
+
     async def run_turn(
         self,
         *,
@@ -872,6 +912,10 @@ class HermesRuntime:
 
                 hermes_cwd, terminal_policy = self._ssh_workspace_terminal_policy(workspace)
                 terminal_scope_token = set_terminal_scope(terminal_policy)
+            else:
+                # Local workspace: pin the engine's cwd surfaces to it
+                # (file/terminal relative paths + the system prompt cwd).
+                self._register_session_workspace(conversation_id, hermes_cwd)
             factory = self._agent_factory()
             if atlas_agent is not None and atlas_context is not None:
                 from atlas.engine.tool_registry import bind_atlas_tools
@@ -1042,6 +1086,16 @@ class HermesRuntime:
                 open_session_db()
 
             def run_sync() -> dict[str, Any]:
+                # H10.2-DEFECT-3: pin the logical session cwd for THIS turn's
+                # worker thread so the system prompt's ``resolve_agent_cwd()``
+                # reports the workspace (the fork's public
+                # ``agent.runtime_cwd`` seam), never the process launch dir.
+                session_cwd = self._session_workspace(hermes_cwd)
+                cwd_token = None
+                if session_cwd:
+                    from agent.runtime_cwd import set_session_cwd
+
+                    cwd_token = set_session_cwd(session_cwd)
                 if atlas_agent is not None and atlas_context is not None:
                     from atlas.engine.tool_registry import activate_atlas_tool_context
 
@@ -1064,6 +1118,12 @@ class HermesRuntime:
                         user_message=message if user_content is None else user_content,
                         system_message=system_message,
                         conversation_history=turn_history,
+                        # A stable per-conversation task id: the fork keys
+                        # file/terminal cwd records, checkpoints and terminal
+                        # environments by it (the gateway passes its session id
+                        # the same way). The previous random-per-turn id made
+                        # every cwd record unfindable (H10.2-DEFECT-3).
+                        task_id=conversation_id,
                     )
                     usage = getattr(agent, "_last_turn_usage", None)
                     if isinstance(usage, dict):
@@ -1101,6 +1161,10 @@ class HermesRuntime:
                         emit({"type": "run_usage", "usage": usage_payload})
                     return result
                 finally:
+                    if cwd_token is not None:
+                        from agent.runtime_cwd import reset_session_cwd
+
+                        reset_session_cwd(cwd_token)
                     if atlas_agent is not None:
                         from atlas.engine.tool_registry import clear_atlas_tool_context
 

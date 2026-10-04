@@ -1,0 +1,77 @@
+2026-10-05 02:03:15 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-h8-startup-kwekfrce\config\atlas.toml
+Atlas server starting on 127.0.0.1:59906...
+INFO:     Started server process [22512]
+INFO:     Waiting for application startup.
+2026-10-05 02:03:18 [info     ] model_manager.init             api_base=http://127.0.0.1:9 default=fake-model
+2026-10-05 02:03:18 [info     ] memory.init                    db=C:\Users\25011\AppData\Local\Temp\atlas-h8-startup-kwekfrce\data\atlas.db
+02:03:19 [    INFO] (dbos:_dbos.py:509) Initializing DBOS (v3.0.0)
+02:03:19 [    INFO] (dbos:_dbos.py:549) Executor ID: local
+02:03:19 [    INFO] (dbos:_dbos.py:550) Application version: 072afa0aa56a88508e42ee86daf8014a
+02:03:19 [    INFO] (dbos:_dbos.py:551) Application name: atlas
+02:03:19 [    INFO] (dbos:_sys_db.py:675) Initializing DBOS system database with URL: sqlite:///C%3A/Users/25011/AppData/Local/Temp/atlas-h8-startup-kwekfrce/data/dbos.sqlite (schema: dbos)
+02:03:19 [    INFO] (dbos:_sys_db.py:679) Using SQLite as a system database. The SQLite system database is for development and testing. PostgreSQL is recommended for production use.
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 1
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 2
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 3
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 4
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 5
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 6
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 7
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 8
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 9
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 10
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 11
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 12
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 13
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 14
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 15
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 16
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 17
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 18
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 19
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 20
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 21
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 22
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 23
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 24
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 25
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 26
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 27
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 28
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 29
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 30
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 31
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 32
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 33
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 34
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 35
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 36
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 37
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 38
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 39
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 40
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 100
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 101
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 102
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 103
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 104
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 106
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 107
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 108
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 109
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 110
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 111
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 112
+02:03:19 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 114
+02:03:19 [    INFO] (dbos:_dbos.py:634) No workflows to recover from application version 072afa0aa56a88508e42ee86daf8014a
+02:03:19 [    INFO] (dbos:_dbos.py:735) DBOS launched!
+02:03:19 [    INFO] (dbos:_dbos.py:743) To view and manage workflows, connect to DBOS Conductor at: https://console.dbos.dev/self-host?appname=atlas
+02:03:19 [    INFO] (dbos:_queue.py:944) Listening to 0 queues:
+2026-10-05 02:03:19 [info     ] mcp.no_servers_configured
+2026-10-05 02:03:19 [info     ] skills.scanned                 count=12 sources=2
+2026-10-05 02:03:19 [info     ] skills.scanned                 count=12 sources=2
+02:03:20 [    INFO] (dbos:_dbos.py:997) Registered and listening to new queue:
+02:03:20 [    INFO] (dbos:_queue.py:919) Queue: atlas-automation (concurrency=2)
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:59906 (Press CTRL+C to quit)
+INFO:     127.0.0.1:59926 - "GET /api/health HTTP/1.1" 200 OK

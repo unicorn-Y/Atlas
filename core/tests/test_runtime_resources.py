@@ -38,7 +38,7 @@ class FakeHermesAgent:
         if registry is not None:
             registry.append(self)
 
-    def run_conversation(self, *, user_message, system_message, conversation_history):
+    def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
         return {"final_response": f"reply:{user_message}", "messages": conversation_history}
 
     def steer(self, text: str) -> bool:
@@ -320,7 +320,7 @@ async def test_automatic_compaction_futures_do_not_leak(tmp_path):
         agents: list[FakeHermesAgent] = []
 
         class CompressingAgent(FakeHermesAgent):
-            def run_conversation(self, *, user_message, system_message, conversation_history):
+            def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
                 self.kwargs["event_callback"]("session:compress", {"compression_count": 1})
                 return {"final_response": "compressed", "messages": []}
 
@@ -368,7 +368,7 @@ async def test_event_driven_notifications_reach_running_turn(tmp_path, monkeypat
         agents: list[FakeHermesAgent] = []
 
         class SlowAgent(FakeHermesAgent):
-            def run_conversation(self, *, user_message, system_message, conversation_history):
+            def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
                 started.set()
                 release.wait(timeout=5)
                 return {"final_response": "done", "messages": []}

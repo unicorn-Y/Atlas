@@ -193,6 +193,85 @@ async def test_cancel_watcher_is_cleaned_up_after_done(monkeypatch) -> None:
     assert watchers == [], "cancel watcher leaked past the run"
 
 
+# -- H10.2-DEFECT-2: a terminal engine-turn failure is never a success --------
+
+
+class _ScriptedHermesRuntime:
+    """HermesRuntime double yielding pre-scripted events, incl. hermes.result."""
+
+    result: dict[str, Any] = {}
+
+    def __init__(self, *, data_dir, model_manager, **_kwargs) -> None:
+        self.event_queue = asyncio.Queue()
+
+    async def run_turn(self, **_kwargs):
+        yield {"type": "run.recovery.notice", "data": {"message": "provider hard-failed"}}
+        yield {"type": "hermes.result", "result": dict(self.result)}
+
+
+async def _events_for_scripted_result(monkeypatch, result: dict[str, Any]) -> list[dict]:
+    monkeypatch.setattr(
+        "atlas.engine.HermesRuntime",
+        type("_Runtime", (_ScriptedHermesRuntime,), {"result": result}),
+    )
+    agent = _orchestrator()
+    agent._reflection = SimpleNamespace(reflect=AsyncMock(return_value=None))
+    return [event async for event in agent.run("hello", "conv-fail")]
+
+
+async def test_terminal_failed_turn_yields_error_and_never_done(monkeypatch) -> None:
+    """A 404-style terminal provider failure must end the run as failed (H10.2-2).
+
+    Hermes returns a result dict (empty response, null usage) even when the
+    provider rejected the request with no retryable path; reporting that as
+    `done` made `atlas run` exit 0 with no output.
+    """
+    events = await _events_for_scripted_result(monkeypatch, {
+        "final_response": "", "messages": [], "api_calls": 1,
+        "completed": False, "failed": True,
+        "error": 'HTTP 404: Model "openai/deepseek-v4.1-flash" is not supported',
+        "failure_reason": "model_not_found", "failure_retryable": False,
+    })
+
+    error = next(event for event in events if event["type"] == "error")
+    assert error["category"] == "model"
+    assert "404" in error["detail"]
+    assert [event["type"] for event in events][-1] != "done"
+    assert "done" not in [event["type"] for event in events]
+
+
+async def test_failed_turn_without_error_detail_still_fails(monkeypatch) -> None:
+    events = await _events_for_scripted_result(monkeypatch, {
+        "final_response": "", "messages": [], "failed": True, "completed": False,
+    })
+
+    error = next(event for event in events if event["type"] == "error")
+    assert error["category"] == "model"
+    assert error["detail"]
+    assert "done" not in [event["type"] for event in events]
+
+
+async def test_interrupted_turn_is_not_reported_as_failure(monkeypatch) -> None:
+    """The cancel path owns interrupts; a `failed` interrupt verdict stays out."""
+    events = await _events_for_scripted_result(monkeypatch, {
+        "final_response": "", "messages": [], "failed": True, "interrupted": True,
+        "completed": False, "error": "user interrupt",
+    })
+
+    assert "error" not in [event["type"] for event in events]
+    assert events[-1]["type"] == "done"
+
+
+async def test_successful_turn_still_ends_in_done(monkeypatch) -> None:
+    events = await _events_for_scripted_result(monkeypatch, {
+        "final_response": "完成", "messages": [{"role": "assistant", "content": "完成"}],
+        "completed": True, "failed": False, "api_calls": 1,
+    })
+
+    assert "error" not in [event["type"] for event in events]
+    assert events[-1]["type"] == "done"
+
+
 # -- H2.3: injection budget ---------------------------------------------------
 
 

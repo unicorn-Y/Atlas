@@ -357,7 +357,7 @@ async def test_hermes_policy_plugin_enforces_read_only_approval_and_workspace(tm
 @pytest.mark.asyncio
 async def test_write_snapshot_and_rewind_restore_file_and_hermes_session(tmp_path, monkeypatch):
     _disable_external_mcp(monkeypatch)
-    from atlas.engine.session_sync import rewind_to_atlas_message
+    from atlas.engine.session_sync import rewind_user_turn
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -395,10 +395,8 @@ async def test_write_snapshot_and_rewind_restore_file_and_hermes_session(tmp_pat
         checkpoints = agent.checkpoints.list_checkpoints(workspace, run_id="rewind-run")
         assert checkpoints and checkpoints[0]["files"][0]["exists"] is False
 
-        rewind_to_atlas_message(
-            runtime.home, "rewind-session", [{"id": "atlas-user-1", "role": "user"}],
-            "atlas-user-1",
-        )
+        # The fixture turn has exactly one user message: rewind just before it.
+        rewind_user_turn(runtime.home, "rewind-session", 0)
         agent.checkpoints.restore_checkpoint(checkpoints[0]["id"])
         assert not target.exists()
         from atlas.engine.session_sync import capture_session

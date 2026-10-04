@@ -38,4 +38,55 @@ medians of 3 are reported, consistent across both methods.
 
 * `before.json` / `after.json` — probe reports (source commit, samples, importtime tops)
 * `logs-before/` / `logs-after/` — preserved server logs per cold start + `importtime.txt`
+
+---
+
+# Lane N — O1/O2 import deferral evidence (2026-10-04)
+
+Landed spec §3 O1 (`core/atlas/agent/__init__.py`: the four `atlas.tools.*`
+imports are now `TYPE_CHECKING`-only with PEP 562 module `__getattr__`
+re-exports + `_default_web_extractor()` for the one runtime default) and O2
+(`core/atlas/tools/__init__.py`: PEP 562 lazy `MCPClient`/`ToolInfo`
+re-export — required because `atlas.agent.results` eagerly imports
+`atlas.tools.output_limits`, which executed the package `__init__` and pulled
+the whole mcp chain).
+
+## `import atlas.agent` component (the O1 target)
+
+| metric | before | after |
+|---|---|---|
+| importtime cumulative (us) | 2,534,079 | 1,215,186 (**−1.32 s**) |
+| subprocess wall, median of 3 (s) | 2.310 (2.041/2.31/2.475) | 1.208 (1.192/1.208/1.297) (**−1.10 s**) |
+| mcp/tools modules loaded | 125 | 4 (only `atlas.tools`, `output_limits`, `output_truncate`, `web`) |
+| `mcp.*` modules loaded | 107 | 0 |
+
+Raw dumps: `importtime-agent-before.txt` / `importtime-agent-after.txt`;
+pristine+lazy file copies used for the A/B wall measurement in
+`o1-orig-backup/`. The deferred chain still imports on demand
+(`from atlas.agent import MCPClient` pulls 115 mcp modules lazily).
+
+## Server cold path (probe runs, 3 starts each, same harness as above)
+
+| metric | o1-before.json | o1-after.json |
+|---|---|---|
+| `import atlas.server` median (s) | 3.825 | 3.926 |
+| cold start median (s), health ok x3 | 6.326 | 7.072 |
+
+Load context: concurrent H1 crew lanes (server/api + models/engine/cli) were
+active for both passes; medians of 3 are within noise. Attribution of the flat
+cold-start number: on this tree `server.py:100-106` **eagerly imports the same
+four heavy modules** (`atlas.tools.computer_use/local_execution/mcp_client/web_extract`),
+so the server import graph pays the mcp chain (1.17 s cumulative in
+`logs-o1-after/importtime.txt`) regardless of the agent package. Before O1 the
+chain entered via `atlas.agent` (1.60 s cum, 1.08 s mcp nested); after O1
+`atlas.agent` is 0.44 s and the chain enters via server.py instead — net cold
+path unchanged until the **server lane** applies the same deferral there
+(`MCPClient` construction is already slated for the deferred `mcp` component,
+spec §1 S2 item 2). O1's −1.1…−1.3 s is banked for every other entry point
+that imports `atlas.agent`/`atlas.tools` submodules without the server module.
+
+Gate: `core/tests/test_h8_lazy_tool_imports.py` (2 unit tests: hermetic
+subprocess probe asserts no eager mcp/tools import + all lazy names resolve +
+AttributeError contract; public `__all__` surfaces unchanged).
+
 * `../results/ATLAS-H1-H8-lifespan-spec.md` — the lifespan + import-chain spec

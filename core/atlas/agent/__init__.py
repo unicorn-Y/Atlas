@@ -20,7 +20,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from langchain_core.messages import (
@@ -77,10 +77,44 @@ from atlas.office import (
     read_office,
 )
 from atlas.ssh import ssh_workspaces
-from atlas.tools.computer_use import ComputerUseRuntime
-from atlas.tools.local_execution import LocalExecutionRuntime
-from atlas.tools.mcp_client import MCPClient
-from atlas.tools.web_extract import extract_web
+if TYPE_CHECKING:  # O1 (H8): annotations are strings (PEP 563), so these are
+    # import-time only for type checkers; the runtime imports are deferred
+    # (_LAZY_TOOL_EXPORTS / _default_web_extractor) and importing atlas.agent
+    # no longer pulls the heavy mcp/tools chain.
+    from atlas.tools.computer_use import ComputerUseRuntime
+    from atlas.tools.local_execution import LocalExecutionRuntime
+    from atlas.tools.mcp_client import MCPClient
+    from atlas.tools.web_extract import extract_web
+
+# PEP 562: keep the historical ``atlas.agent.<name>`` re-exports resolvable
+# (attribute access and ``from atlas.agent import MCPClient`` importers).
+_LAZY_TOOL_EXPORTS = {
+    "ComputerUseRuntime": "atlas.tools.computer_use",
+    "LocalExecutionRuntime": "atlas.tools.local_execution",
+    "MCPClient": "atlas.tools.mcp_client",
+    "extract_web": "atlas.tools.web_extract",
+}
+
+
+def __getattr__(name: str):
+    module_name = _LAZY_TOOL_EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from importlib import import_module
+
+    value = getattr(import_module(module_name), name)
+    globals()[name] = value  # cache: subsequent lookups skip the hook
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(globals().keys() | _LAZY_TOOL_EXPORTS.keys())
+
+
+def _default_web_extractor():
+    from atlas.tools.web_extract import extract_web
+
+    return extract_web
 
 
 def _ssh_paths_allowed(workspace: str, allowed_paths: list[str], candidates: list[str]) -> bool:
@@ -314,7 +348,7 @@ class AgentOrchestrator:
         self._skills = skill_manager
         self._projects = projects
         self._custom_tools = custom_tools
-        self._web_extractor = web_extractor or extract_web
+        self._web_extractor = web_extractor or _default_web_extractor()
         self.hooks = hooks or HookBus()
         self.context_maintenance = ContextMaintenance(self.hooks)
         self.reminder_policy = reminder_policy or ReminderPolicy()

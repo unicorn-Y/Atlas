@@ -1,0 +1,23 @@
+{
+  "name": "03-approval-deny",
+  "exit_code": 3,
+  "wall_seconds": 23.513,
+  "model": "deepseek-v4.1-flash",
+  "gateway_base_url": "https://cnapi.pleasure.cc.cd:8443/v1",
+  "cwd": "C:\\Users\\25011\\AppData\\Local\\Temp\\h1-k-ws\\live-root",
+  "args": [
+    "run",
+    "-p",
+    "把字符串 denied-marker 写入文件 C:\\Users\\25011\\AppData\\Local\\Temp\\h1-k-ws\\live-root\\workspaces\\approve-96c5a0c4\\forbidden.txt。",
+    "--workspace",
+    "C:\\Users\\25011\\AppData\\Local\\Temp\\h1-k-ws\\live-root\\workspaces\\approve-96c5a0c4",
+    "--model",
+    "deepseek-v4.1-flash",
+    "--permission-mode",
+    "ask_writes",
+    "--output-format",
+    "stream-json",
+    "--timeout",
+    "480"
+  ]
+}

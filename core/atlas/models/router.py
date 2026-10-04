@@ -34,6 +34,11 @@ class RouteSpec:
     credential_pool: Any | None = field(default=None, repr=False, compare=False)
     purpose: str = "conversation"
     fallback_reason: str | None = None
+    # The model id the Hermes wire transport must actually send (H10.2-DEFECT-1).
+    # ``model`` keeps the registry's litellm-style id (``openai/deepseek-...``);
+    # the wire never sees that routing prefix — relays 404 it — so every Hermes
+    # transport consumer sends ``wire_model`` (the bare/native id) instead.
+    wire_model: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,19 +139,19 @@ class ModelRouter:
                 return self._route(
                     selected, provider_id, native_model, provider_base if use_provider_credentials else gateway_base,
                     provider_key if use_provider_credentials else gateway_key, pool if use_provider_credentials else None,
-                    "anthropic_messages", purpose,
+                    "anthropic_messages", purpose, wire_model=native_model,
                 )
             base_url = provider_base if provider_key else gateway_base
             key = provider_key or gateway_key or None
             return self._route(
                 selected, provider_id, litellm_model, base_url or None, key, pool if provider_key else None,
-                self._canonical_mode(override), purpose,
+                self._canonical_mode(override), purpose, wire_model=native_model,
             )
 
         if native_supported and provider_key:
             return self._route(
                 selected, provider_id, native_model, provider_base, provider_key, pool,
-                "anthropic_messages", purpose,
+                "anthropic_messages", purpose, wire_model=native_model,
             )
 
         if native_supported and gateway_base and gateway_key:
@@ -156,26 +161,26 @@ class ModelRouter:
             if supported:
                 return self._route(
                     selected, provider_id, native_model, gateway_base, gateway_key, None,
-                    "anthropic_messages", purpose,
+                    "anthropic_messages", purpose, wire_model=native_model,
                 )
             return self._route(
                 selected, provider_id, litellm_model, gateway_base, gateway_key, None,
-                "chat_completions", purpose, fallback_reason=reason,
+                "chat_completions", purpose, fallback_reason=reason, wire_model=native_model,
             )
 
         if provider_key:
             return self._route(
                 selected, provider_id, litellm_model, provider_base, provider_key, pool,
-                "chat_completions", purpose,
+                "chat_completions", purpose, wire_model=native_model,
             )
         if gateway_base and gateway_key:
             return self._route(
                 selected, provider_id, litellm_model, gateway_base, gateway_key, None,
-                "chat_completions", purpose,
+                "chat_completions", purpose, wire_model=native_model,
             )
         return self._route(
             selected, provider_id, litellm_model, provider_base or None, None, pool,
-            "chat_completions", purpose,
+            "chat_completions", purpose, wire_model=native_model,
         )
 
     async def _gateway_native_support(
@@ -217,11 +222,12 @@ class ModelRouter:
     def _route(
         model_data: dict[str, Any], provider: str, model: str, base_url: str | None,
         key: str | None, pool: Any | None, api_mode: str, purpose: str,
-        fallback_reason: str | None = None,
+        fallback_reason: str | None = None, wire_model: str = "",
     ) -> RouteSpec:
         return RouteSpec(
             provider=provider, api_mode=api_mode, model=model, base_url=base_url,
             key=key, credential_pool=pool, purpose=purpose, fallback_reason=fallback_reason,
+            wire_model=wire_model or model,
         )
 
     async def complete(self, route: RouteSpec, messages: list[dict[str, Any]], **kwargs: Any) -> CompletionResult:
@@ -237,17 +243,22 @@ class ModelRouter:
         """
         from agent.auxiliary_client import call_llm
 
+        # The Hermes transport sends ``model`` verbatim on the wire: the
+        # litellm-style routing prefix in ``route.model`` never reaches a
+        # provider untouched (H10.2-DEFECT-1), so auxiliary calls send
+        # ``wire_model`` — the bare id the endpoint actually exposes.
+        wire_model = route.wire_model or route.model
         response = await asyncio.to_thread(
             call_llm,
             task=route.purpose,
             provider=route.provider,
-            model=route.model,
+            model=wire_model,
             base_url=route.base_url,
             api_key=route.key,
             api_mode=route.api_mode,
             main_runtime={
                 "provider": route.provider,
-                "model": route.model,
+                "model": wire_model,
                 "base_url": route.base_url,
                 "api_key": route.key,
                 "api_mode": route.api_mode,
@@ -268,10 +279,16 @@ class ModelRouter:
 
     @staticmethod
     def hermes_agent_kwargs(route: RouteSpec) -> dict[str, Any]:
-        """Kwargs accepted by the pinned Hermes AIAgent constructor, including its public pool seam."""
+        """Kwargs accepted by the pinned Hermes AIAgent constructor, including its public pool seam.
+
+        The agent's transport sends ``model`` verbatim on the wire (no litellm
+        indirection), so the agent is pinned to ``wire_model`` — the bare id the
+        endpoint exposes. Passing the registry's litellm-style id here made real
+        relays 404 every conversation turn (H10.2-DEFECT-1).
+        """
         return {
             "provider": route.provider,
-            "model": route.model,
+            "model": route.wire_model or route.model,
             "base_url": route.base_url,
             "api_key": route.key,
             "api_mode": route.api_mode,

@@ -42,6 +42,9 @@ async def test_wave3_fork_and_duplicate_keep_original_workspace(
     tmp_path: Path, monkeypatch
 ) -> None:
     from atlas import server
+    # H5: fork/duplicate live on the conversations router now; the store seam
+    # is still resolved through atlas.server.
+    from atlas.api.conversations_router import duplicate_conversation, fork_conversation
 
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
@@ -50,9 +53,10 @@ async def test_wave3_fork_and_duplicate_keep_original_workspace(
     await store.update_conversation(conversation_id, workspace=r"D:\Atlas")
     assert (await store.get_conversation(conversation_id))["workspace"] == r"D:\Atlas"
     message_id = await store.save_message(conversation_id, "user", "task")
-    fork = await server.fork_conversation(conversation_id, {"through_message_id": message_id})
+    fork = await fork_conversation(
+        types.SimpleNamespace(memory=None), conversation_id, {"through_message_id": message_id})
     assert fork["workspace"] == r"D:\Atlas"
-    duplicate = await server.duplicate_conversation(conversation_id)
+    duplicate = await duplicate_conversation(types.SimpleNamespace(memory=None), conversation_id)
     assert duplicate["workspace"] == r"D:\Atlas"
     await store.close()
 
@@ -62,6 +66,8 @@ async def test_wave3_recipe_from_worktree_keeps_original_workspace(
     tmp_path: Path, monkeypatch
 ) -> None:
     from atlas import server
+    # H5: recipe_from_run lives on the records router now.
+    from atlas.api.records_router import recipe_from_run
 
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
@@ -81,7 +87,8 @@ async def test_wave3_recipe_from_worktree_keeps_original_workspace(
 
     monkeypatch.setattr(server, "_task_store", lambda _name: RecipeStore())
     try:
-        result = await server.recipe_from_run({"run_id": run.run_id})
+        result = await recipe_from_run(
+            types.SimpleNamespace(memory=None, runtime_mgr=None), {"run_id": run.run_id})
         assert result["description"] == "从一次任务生成"
         assert result["workspace"] == str(tmp_path / "workspace")
     finally:
@@ -94,10 +101,13 @@ async def test_wave3_recipe_from_worktree_keeps_original_workspace(
 async def test_wave3_recipe_from_run_rejects_unknown_run(monkeypatch) -> None:
     from fastapi import HTTPException
     from atlas import server
+    # H5: recipe_from_run lives on the records router now.
+    from atlas.api.records_router import recipe_from_run
 
     monkeypatch.setattr(server, "memory", object())
     with pytest.raises(HTTPException) as error:
-        await server.recipe_from_run({"run_id": "missing"})
+        await recipe_from_run(
+            types.SimpleNamespace(memory=None, runtime_mgr=None), {"run_id": "missing"})
     assert error.value.status_code == 404
 
 
@@ -454,21 +464,27 @@ def test_wave3_workspace_trust_can_be_granted_and_revoked(tmp_path: Path, monkey
 async def test_wave3_ssh_test_rejects_unknown_host_alias(monkeypatch) -> None:
     from fastapi import HTTPException
     from atlas import server
+    # H5: ssh_test lives on the workspace router now.
+    from atlas.api.workspace_router import ssh_test
 
     monkeypatch.setattr(server.ssh_workspaces, "hosts", lambda: [])
     with pytest.raises(HTTPException) as error:
-        await server.ssh_test({"host": "unknown"})
+        await ssh_test(types.SimpleNamespace(), {"host": "unknown"})
     assert error.value.status_code == 400
 
 
 @pytest.mark.asyncio
 async def test_wave3_runtime_protocol_is_1_8() -> None:
-    assert await runtime_protocol() == {"version": "1.10"}
+    assert await runtime_protocol(types.SimpleNamespace()) == {"version": "1.10"}
 
 
 @pytest.mark.asyncio
 async def test_wave3_create_pr_pushes_and_returns_gh_pr(monkeypatch, tmp_path: Path) -> None:
     from atlas import server
+    # H5: create_git_pr and its gh helpers live on the workspace router now;
+    # _workspace_path stays monkeypatched through the atlas.server seam.
+    from atlas.api import workspace_router
+    from atlas.api.workspace_router import create_git_pr
 
     from types import SimpleNamespace
 
@@ -481,7 +497,7 @@ async def test_wave3_create_pr_pushes_and_returns_gh_pr(monkeypatch, tmp_path: P
     monkeypatch.setattr(server, "_workspace_path", lambda _root: (tmp_path, tmp_path))
     monkeypatch.setattr(server.subprocess, "run", run)
     monkeypatch.setattr(
-        server,
+        workspace_router,
         "_gh_json",
         lambda *_args: {
             "number": 7,
@@ -495,13 +511,14 @@ async def test_wave3_create_pr_pushes_and_returns_gh_pr(monkeypatch, tmp_path: P
         },
     )
 
-    result = await server.create_git_pr(
+    result = await create_git_pr(
+        SimpleNamespace(),
         {
             "root": str(tmp_path),
             "title": "Parity",
             "body": "Details",
             "draft": True,
-        }
+        },
     )
 
     assert result["pr"]["number"] == 7
@@ -513,6 +530,8 @@ async def test_wave3_create_pr_pushes_and_returns_gh_pr(monkeypatch, tmp_path: P
 async def test_wave3_create_pr_rejects_unauthenticated_gh(monkeypatch, tmp_path: Path) -> None:
     from fastapi import HTTPException
     from atlas import server
+    # H5: create_git_pr lives on the workspace router now.
+    from atlas.api.workspace_router import create_git_pr
     from types import SimpleNamespace
 
     monkeypatch.setattr(server, "_workspace_path", lambda _root: (tmp_path, tmp_path))
@@ -527,12 +546,13 @@ async def test_wave3_create_pr_rejects_unauthenticated_gh(monkeypatch, tmp_path:
     )
 
     with pytest.raises(HTTPException) as error:
-        await server.create_git_pr(
+        await create_git_pr(
+            SimpleNamespace(),
             {
                 "root": str(tmp_path),
                 "title": "Parity",
                 "body": "Details",
-            }
+            },
         )
     assert error.value.status_code == 503
 

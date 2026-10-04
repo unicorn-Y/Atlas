@@ -5,14 +5,9 @@ rewinds, forks) has ONE owner — Hermes ``SessionDB`` — and this module is th
 only place outside the engine turn loop that writes to it. Truncate, rewind,
 fork, delete and import/export operate DIRECTLY on ``SessionDB``: targets are
 SessionDB-native (user-turn ordinals), no Atlas message state is read to decide
-what gets written.
-
-The ``*_atlas_message`` adapters exist only for callers that still locate the
-target turn from an Atlas message list (the un-migrated server routes). They
-are pure ``message_id -> user-turn ordinal`` resolvers around the direct
-operations below and carry no sync logic of their own; once the server routes
-read SessionDB (DATA-OWNERS step 1) they pass ordinals directly and the
-adapters go away.
+what gets written. Callers that still address turns by Atlas message id resolve
+the ordinal themselves with :func:`atlas_turn_ordinal` and pass it to
+:func:`rewind_user_turn` / :func:`fork_session_through_turn`.
 
 Hermes source: ``hermes_state.py::SessionDB``, ``hermes_state_rewind.py`` and
 ``hermes_state_portability.py`` at unicorn-Y/hermes-agent@562ad75 (MIT).
@@ -93,17 +88,6 @@ def rewind_user_turn(
         return snapshot
 
 
-def rewind_to_atlas_message(
-    home: str | Path, conversation_id: str, atlas_messages: list[dict[str, Any]], message_id: str,
-) -> dict[str, Any] | None:
-    """Adapter (transition only): locate the Atlas message, then rewind
-    SessionDB at the same user turn. No sync logic — see :func:`rewind_user_turn`."""
-    user_ordinal = atlas_turn_ordinal(atlas_messages, message_id, through_target=False)
-    if user_ordinal is None:
-        return None
-    return rewind_user_turn(home, conversation_id, user_ordinal)
-
-
 def fork_session_through_turn(
     home: str | Path, source_id: str, fork_id: str, user_turns: int, *,
     branch_message_id: str | None = None,
@@ -140,21 +124,6 @@ def fork_session_through_turn(
         result = db.import_sessions([cloned])
         if not result.get("ok") or result.get("imported") != 1:
             raise RuntimeError(f"Hermes session fork failed: {result.get('errors', result)}")
-
-
-def fork_session(
-    home: str | Path, source_id: str, fork_id: str,
-    atlas_messages: list[dict[str, Any]], through_message_id: str,
-) -> None:
-    """Adapter (transition only): locate the Atlas fork point, then clone the
-    SessionDB transcript through that user turn. No sync logic — see
-    :func:`fork_session_through_turn`."""
-    users_through = atlas_turn_ordinal(atlas_messages, through_message_id, through_target=True)
-    if users_through is None:
-        return
-    fork_session_through_turn(
-        home, source_id, fork_id, users_through, branch_message_id=through_message_id,
-    )
 
 
 def list_branch_tree(home: str | Path, conversation_id: str) -> list[dict[str, Any]]:
