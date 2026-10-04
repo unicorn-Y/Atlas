@@ -374,7 +374,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     hermes_agent = getattr(bound_runtime, "hermes_agent", None)
                     if hermes_agent is None:
                         return "无法切换上下文：当前会话没有可用的 Hermes Agent。"
-                    hermes_agent._atlas_context_handoff_summary = str(summary)
+                    hermes_agent.set_context_handoff_summary(str(summary))
                     event_queue = getattr(bound_runtime, "event_queue", None)
                     if event_queue is not None:
                         asyncio.run_coroutine_threadsafe(event_queue.put({

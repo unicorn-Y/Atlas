@@ -489,6 +489,11 @@ class HermesRuntime:
         def on_status(kind: str, text: str | None = None) -> None:
             from gateway.warning_notifications import DiagnosticText
             detail = text if isinstance(text, str) else str(text or "")
+            if isinstance(text, DiagnosticText):
+                for index, reported in enumerate(reported_diagnostics):
+                    if reported is text:
+                        del reported_diagnostics[index]
+                        return
             if _is_compaction_status(detail):
                 emit({"type": "run.compaction.progress",
                       "data": {"phase": "summarizing", "detail": detail}})
@@ -497,6 +502,16 @@ class HermesRuntime:
                 emit({"type": "run.recovery.notice", "data": {"message": text or str(kind)}})
             else:
                 emit({"type": "run.status", "status": str(kind), "text": text or ""})
+
+        def on_diagnostic(text: str) -> None:
+            from gateway.warning_notifications import DiagnosticText
+            if isinstance(text, DiagnosticText):
+                reported_diagnostics.append(text)
+            emit({"type": "run.recovery.notice", "data": {
+                "message": "模型正在恢复并继续。", "detail": str(text),
+            }})
+
+        reported_diagnostics: list[Any] = []
 
         def on_session_title(title: str, title_source: str = "") -> None:
             if title_callback is None:
@@ -628,6 +643,53 @@ class HermesRuntime:
             stage_cfg = load_stage_config()
             phase = "planning" if (plan_mode or not history) else "execution"
             reasoning_effort = effort_for_phase(stage_cfg, phase) or reasoning_effort
+            volatile_prompt = "\n\n".join(
+                str(section).strip() for section in (volatile_context or []) if str(section).strip()
+            )
+            prompt_suffix = "\n\n".join(filter(None, (
+                "Atlas session-start context:\n" + volatile_prompt if volatile_prompt else "",
+                "Model-family guidance: " + _model_family_guidance(
+                    str(model_config.get("litellm_model") or current)
+                ),
+            )))
+            from agent.agent_hooks import AgentHooks
+
+            def system_prompt_suffix(_stable_prompt: str) -> str:
+                return prompt_suffix
+
+            before_model_request = None
+            if atlas_context is not None:
+                from atlas.engine.hermes_policy import wait_before_model_request
+
+                def before_model_request() -> bool:
+                    blocked = wait_before_model_request(atlas_context, loop)
+                    if (stage_cfg.get("enabled")
+                            and getattr(agent, "_verification_stop_nudges", 0)
+                            + getattr(agent, "_pre_verify_nudges", 0) > 0
+                            and (verify_effort := effort_for_phase(stage_cfg, "verification"))):
+                        agent.reasoning_config = {"effort": verify_effort}
+                    return blocked
+
+            delegate_dispatcher = None
+            if atlas_agent is not None and atlas_context is not None:
+                from tools.registry import registry
+
+                def delegate_dispatcher(args: dict[str, Any]) -> str:
+                    if getattr(atlas_agent, "_delegation", None) is None:
+                        return json.dumps(
+                            {"error": "当前运行没有可用的 Atlas 子任务执行器。"}, ensure_ascii=False,
+                        )
+                    return registry.get_entry("delegate_task").handler(
+                        args, session_id=conversation_id,
+                    )
+
+            hooks = AgentHooks(
+                before_model_request=before_model_request,
+                on_diagnostic=on_diagnostic,
+                delegate_dispatcher=delegate_dispatcher,
+                on_session_title=on_session_title,
+                system_prompt_suffix=system_prompt_suffix,
+            )
             agent = factory(
                 **route_kwargs,
                 session_id=conversation_id,
@@ -648,21 +710,9 @@ class HermesRuntime:
                 clarify_callback=on_clarify,
                 status_callback=on_status,
                 event_callback=on_event,
+                hooks=hooks,
+                identity="You are Atlas, the AI assistant for this workspace.",
             )
-            if atlas_context is not None:
-                from atlas.engine.hermes_policy import wait_before_model_request
-
-                def before_model_request() -> bool:
-                    blocked = wait_before_model_request(atlas_context, loop)
-                    # 每次模型请求前都会调用；stop-gate 验证轮已发 nudge 时切 verification 档。
-                    if (stage_cfg.get("enabled")
-                            and getattr(agent, "_verification_stop_nudges", 0)
-                            + getattr(agent, "_pre_verify_nudges", 0) > 0
-                            and (verify_effort := effort_for_phase(stage_cfg, "verification"))):
-                        agent.reasoning_config = {"effort": verify_effort}
-                    return blocked
-                agent._atlas_before_model_request = before_model_request
-            agent._on_session_title = on_session_title
             # Hermes' turn-context and iteration-prep hooks read these attributes
             # directly to inject its one-shot time-budget reminder.
             agent.run_budget_seconds = run_budget_seconds
@@ -701,56 +751,11 @@ class HermesRuntime:
                     summary = str(response.choices[0].message.content or "").strip()
                     if not summary:
                         raise RuntimeError("上下文交接摘要为空。")
-                    atlas_context.hermes_agent._atlas_context_handoff_summary = summary
                     return summary
 
                 atlas_context.new_context_window_callback = create_context_handoff
-                from tools.registry import registry
-                def atlas_delegate(args: dict[str, Any]) -> str:
-                    if getattr(atlas_agent, "_delegation", None) is None:
-                        return json.dumps({"error": "当前运行没有可用的 Atlas 子任务执行器。"}, ensure_ascii=False)
-                    return registry.get_entry("delegate_task").handler(args, session_id=conversation_id)
-                agent._dispatch_delegate_task = atlas_delegate
             agent.budget_warning_ratio = budget_warning_ratio
-            # Continuation/empty-response recovery uses diagnostic _vprint calls,
-            # while transport recovery uses the diagnostic lifecycle callback.
-            original_vprint = getattr(agent, "_vprint", None)
-            if callable(original_vprint):
-                def atlas_vprint(*args: Any, **kwargs: Any) -> None:
-                    if kwargs.get("diagnostic"):
-                        emit({"type": "run.recovery.notice", "data": {
-                            "message": "模型正在恢复并继续。", "detail": " ".join(map(str, args)),
-                        }})
-                    original_vprint(*args, **kwargs)
-                agent._vprint = atlas_vprint
-            buffer_diagnostic = getattr(agent, "_buffer_diagnostic_status", None)
-            if callable(buffer_diagnostic):
-                def atlas_buffer_diagnostic(text: str) -> None:
-                    emit({"type": "run.recovery.notice", "data": {"message": "模型正在恢复并继续。", "detail": str(text)}})
-                    buffer_diagnostic(text)
-                agent._buffer_diagnostic_status = atlas_buffer_diagnostic
             self._apply_compression_model_setting(agent, settings)
-            volatile_prompt = "\n\n".join(
-                str(section).strip() for section in (volatile_context or []) if str(section).strip()
-            )
-            build_system_prompt = getattr(
-                agent, "_build_system_prompt", lambda text=None: str(text or ""),
-            )
-
-            def build_atlas_layer(system_message: str | None = None) -> str:
-                prompt = build_system_prompt(system_message)
-                prompt = prompt.replace(
-                    "You are Hermes Agent, built by Nous Research.",
-                    "You are Atlas, the AI assistant for this workspace.", 1,
-                )
-                if volatile_prompt and "Atlas session-start context:" not in prompt:
-                    prompt += "\n\nAtlas session-start context:\n" + volatile_prompt
-                prompt += "\n\nModel-family guidance: " + _model_family_guidance(
-                    str(model_config.get("litellm_model") or current)
-                )
-                return prompt
-
-            agent._build_system_prompt = build_atlas_layer
             # Hermes opens SessionDB lazily for tools when no gateway supplied one. Atlas
             # always needs its durable turn transcript, even with Hermes memory disabled.
             open_session_db = getattr(agent, "_get_session_db_for_recall", None)
