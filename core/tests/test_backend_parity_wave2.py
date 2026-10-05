@@ -342,6 +342,13 @@ async def test_ephemeral_run_does_not_change_source_conversation(tmp_path: Path,
 
     monkeypatch.setattr(server, "memory", store)
     monkeypatch.setattr(server, "orchestrator", Orchestrator())
+    # H5: _execute_run reads the run manager's AppServices first and only falls
+    # back to the atlas.server globals, so the doubles must sit on that seam too.
+    monkeypatch.setattr(server.runtime_mgr, "services", SimpleNamespace(
+        memory=store, orchestrator=Orchestrator(), model_mgr=None,
+        local_execution=None, sandbox_manager=None, scheduler=None,
+        usage_ledger=None,
+    ))
     run = server.RunState("ephemeral-run", temp_id, "model")
     run.ephemeral = True
     run.ephemeral_source = temp_id
@@ -387,10 +394,16 @@ async def test_fork_summary_is_first_system_message_and_duplicate_copies_all(tmp
     forked = await fork_conversation(
         SimpleNamespace(memory=None, orchestrator=None), parent,
         {"through_message_id": first, "summarize": True})
-    messages = await store.get_conversation_messages(forked["id"], limit=10)
+    # H2: the canonical transcript lives in the SessionDB (the messages API reads
+    # it through session_sync), so fork outputs are asserted there.
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+
+    engine_home = DATA_ROOT / "engine"
+    messages = read_session_all_messages(engine_home, forked["id"])
     assert messages[0]["role"] == "system" and messages[0]["metadata"]["kind"] == "fork_summary"
     duplicate = await duplicate_conversation(SimpleNamespace(memory=None), parent)
-    duplicate_messages = await store.get_conversation_messages(duplicate["id"], limit=10)
+    duplicate_messages = read_session_all_messages(engine_home, duplicate["id"])
     assert [m["content"] for m in duplicate_messages] == ["first", "answer"]
     await store.close()
 

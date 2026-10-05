@@ -326,7 +326,12 @@ async def test_rewind_restores_messages_and_files_then_redo_restores_both(tmp_pa
         redo_conversation_rewind,
         rewind_conversation,
     )
+    # H2: the SessionDB owns the transcript, so rewind/redo effects on messages
+    # are asserted through the canonical store, not the legacy Memory mirror.
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
 
+    engine_home = DATA_ROOT / "engine"
     services = SimpleNamespace(memory=None)
     try:
         result = await rewind_conversation(
@@ -334,11 +339,11 @@ async def test_rewind_restores_messages_and_files_then_redo_restores_both(tmp_pa
         )
         assert result["removed_messages"] == 4
         assert target.read_text(encoding="utf-8") == "before"
-        assert await memory.get_conversation_messages(conversation_id) == []
+        assert read_session_all_messages(engine_home, conversation_id) == []
 
         await redo_conversation_rewind(services, conversation_id, result["rewind_id"])
         assert target.read_text(encoding="utf-8") == "round two"
-        messages = await memory.get_conversation_messages(conversation_id)
+        messages = read_session_all_messages(engine_home, conversation_id)
         assert [item["content"] for item in messages] == [
             "first", "first done", "second", "second done",
         ]
