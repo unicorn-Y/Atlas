@@ -851,7 +851,9 @@ def _check_sessions() -> dict[str, Any]:
     from atlas.config import DATA_ROOT, get_config
 
     atlas_db = get_config().db_path
-    hermes_home = Path(os.environ.get("HERMES_HOME", "") or (DATA_ROOT / "engine"))
+    # The engine home is always <data>/engine (HermesRuntime pins it); a user-level
+    # HERMES_HOME belongs to a standalone Hermes install and must not be audited here.
+    hermes_home = DATA_ROOT / "engine"
     state_db = hermes_home / "state.db"
     metadata_ids: set[str] = set()
     atlas_ids: set[str] = set()
