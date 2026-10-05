@@ -122,6 +122,42 @@ def _model_family_guidance(model: str) -> str:
     return "Default: follow the tool descriptions and verify edits before finishing."
 
 
+def system_browser_candidates() -> list[Path]:
+    """Installed Chromium-based browsers Hermes' browser tool can drive (Windows/macOS/Linux)."""
+    if os.name == "nt":
+        roots = [os.environ.get(k, "") for k in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA")]
+        relative = ("Microsoft/Edge/Application/msedge.exe", "Google/Chrome/Application/chrome.exe")
+        return [Path(root) / rel for root in roots if root for rel in relative]
+    return [Path(p) for p in (
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser",
+        "/usr/bin/microsoft-edge",
+    )]
+
+
+def _use_system_browser() -> None:
+    """Point Hermes' browser tool at an installed Edge/Chrome when it has no Chromium.
+
+    Without it the browser tool tries to download its own pinned Chromium, which failed in
+    the packaged app ("Chromium browser is missing"), so every browser_* call errored. An
+    explicit AGENT_BROWSER_EXECUTABLE_PATH, or a Chromium Hermes already installed, wins.
+    """
+    if os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH"):
+        return
+    try:
+        from hermes_cli.browser_runtime import chromium_executable
+
+        if chromium_executable(allow_override=False):
+            return
+    except Exception:
+        logger.debug("hermes_runtime.browser_runtime_unavailable", exc_info=True)
+    found = next((path for path in system_browser_candidates() if path.is_file()), None)
+    if found is not None:
+        os.environ["AGENT_BROWSER_EXECUTABLE_PATH"] = str(found)
+        logger.info("Atlas browser tool uses the installed browser %s", found)
+
+
 class HermesRuntime:
     """Adapt Hermes callbacks and its blocking turn API to Atlas async events."""
 
@@ -162,6 +198,7 @@ class HermesRuntime:
             return
         self.home.mkdir(parents=True, exist_ok=True)
         os.environ["HERMES_HOME"] = str(self.home)
+        _use_system_browser()
         self._hermes_home_ready = True
 
     def _cache_limits(self) -> tuple[int, float]:
@@ -443,6 +480,11 @@ class HermesRuntime:
             if not isinstance(value, dict):
                 continue
             enabled = bool(value.get("enabled", True)) and (not selected or name in selected)
+            if enabled:
+                from atlas.tools.mcp_client import missing_credentials
+
+                if missing_credentials(value.get("env")):
+                    enabled = False  # see missing_credentials: would crash-loop
             transport = str(value.get("transport", "stdio")).lower()
             if transport == "stdio" or transport == "sse" or transport in {"http", "streamable-http"}:
                 item = dict(value)

@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from atlas.tools.ssrf_transport import create_ssrf_safe_async_client
+from atlas.tools.ssrf_transport import create_ssrf_safe_async_client, is_public_address
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_TEXT_LENGTH = 60_000
@@ -57,7 +57,7 @@ def _validate_url(url: str, allow_local: bool) -> str:
         except OSError as exc:
             raise ValueError("无法解析这个网址。") from exc
         addresses = [ipaddress.ip_address(record[4][0]) for record in records]
-    if not local_exception and any(not address.is_global for address in addresses):
+    if not local_exception and any(not is_public_address(address) for address in addresses):
         raise ValueError("出于安全考虑，不能读取内网或本机地址。")
     return url
 

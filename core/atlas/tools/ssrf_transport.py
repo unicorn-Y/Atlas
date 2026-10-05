@@ -13,6 +13,18 @@ import socket
 from typing import Any
 
 
+# RFC 2544 benchmarking range. Clash/Mihomo, sing-box, Surge and similar proxies answer
+# every DNS query with an address here in fake-IP mode and route the connection
+# themselves, so on such machines every public site "resolves" into it. It is never a
+# real LAN, so treating it as public keeps web tools working without opening the LAN.
+PROXY_FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
+
+
+def is_public_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Public internet address, including a proxy's fake-IP answer for a public host."""
+    return address.is_global or (address.version == 4 and address in PROXY_FAKE_IP_NETWORK)
+
+
 class SSRFConnectionBlocked(ValueError):
     """A target resolved to an address Atlas must not connect to."""
 
@@ -32,7 +44,7 @@ def _resolved_connect_ips(host: str, port: int, allow_local: bool) -> list[str]:
             address = ipaddress.ip_address(result[4][0])
         except (IndexError, ValueError) as exc:
             raise SSRFConnectionBlocked("DNS returned an invalid IP address") from exc
-        if not address.is_global and not (local_exception and address.is_loopback):
+        if not is_public_address(address) and not (local_exception and address.is_loopback):
             raise SSRFConnectionBlocked("DNS resolved to a private or local address")
         value = str(address)
         if value not in safe and len(safe) < 8:

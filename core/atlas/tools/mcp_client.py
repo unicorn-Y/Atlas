@@ -140,8 +140,28 @@ def _parse_server_configs() -> list[MCPServerConfig]:
         # (unless auto_start is empty, meaning "start all configured")
         if auto_start and name not in auto_start:
             sc.enabled = False
+        if sc.enabled and (missing := missing_credentials(sc.env)):
+            log.warning("mcp.server_skipped_missing_credentials", server=name, missing=missing)
+            sc.enabled = False
         configs.append(sc)
     return configs
+
+
+_CREDENTIAL_SUFFIXES = ("_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
+
+
+def missing_credentials(env: dict[str, Any] | None) -> list[str]:
+    """Credential-looking env vars configured empty and not provided by the process.
+
+    A server such as brave-search configured with ``BRAVE_API_KEY = ""`` exits at once;
+    auto-starting it only produced an endless crash/restart loop in mcp-stderr.log.
+    """
+    missing = []
+    for key, value in (env or {}).items():
+        name = str(key).upper()
+        if name.endswith(_CREDENTIAL_SUFFIXES) and not str(value or "").strip()                 and not os.environ.get(str(key), "").strip():
+            missing.append(str(key))
+    return missing
 
 
 # ---------------------------------------------------------------------------
