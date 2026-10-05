@@ -266,6 +266,38 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
   ]);
 }
 
+/**
+ * An external backend is only usable if it accepts this session's API token: the
+ * renderer's requests carry ``Origin: null`` plus the token Electron injects. A stale
+ * dev backend (or another Atlas) on the port answers /api/health but rejects every
+ * real request, which used to surface only as "cannot reach the backend".
+ */
+async function externalAcceptsSessionToken(): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3_000);
+  try {
+    const response = await fetch(HEALTH_URL.replace('/api/health', '/api/configuration'), {
+      signal: controller.signal,
+      headers: { Origin: 'null', 'X-Atlas-Api-Token': process.env.ATLAS_API_TOKEN ?? '' },
+    });
+    return response.status !== 401 && response.status !== 403;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function attachExternal(): Promise<BackendLaunchResult> {
+  if (!(await externalAcceptsSessionToken())) {
+    throw new Error(
+      `端口 ${new URL(HEALTH_URL).port} 已被另一个 Atlas 后端占用，它不接受本窗口的访问令牌`
+      + '（通常是没关掉的开发版后端）。请关闭那个进程后重新打开 Atlas。',
+    );
+  }
+  return { ready: true, managed: false };
+}
+
 export { BACKEND_STARTUP_CHANNEL };
 
 export async function ensureBackendRunning(options?: EnsureBackendOptions): Promise<BackendLaunchResult> {
@@ -286,8 +318,9 @@ export async function ensureBackendRunning(options?: EnsureBackendOptions): Prom
     const probeStartedAt = Date.now();
     const contact = await probeHealth();
     if (contact?.ready) {
+      const attached = await attachExternal();
       emit('ready', false);
-      return { ready: true, managed: false };
+      return attached;
     }
     if (contact && isAtlasHealthPayload(contact.payload)) {
       externalContact = true;
@@ -304,8 +337,9 @@ export async function ensureBackendRunning(options?: EnsureBackendOptions): Prom
     while (Date.now() < deadline) {
       const contact = await probeHealth();
       if (contact?.ready) {
+        const attached = await attachExternal();
         emit('ready', false);
-        return { ready: true, managed: false };
+        return attached;
       }
       emit('starting', false, contact ? progressDetail(contact.payload) : '等待已运行的后端响应');
       await sleep(PROBE_INTERVAL_MS);

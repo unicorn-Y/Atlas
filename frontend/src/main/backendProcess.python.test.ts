@@ -156,4 +156,17 @@ describe('external backend already starting', () => {
     await expect(starting).resolves.toEqual({ ready: true, managed: false });
     expect(spawnMock).not.toHaveBeenCalled();
   });
+  it('refuses to attach to a backend that rejects this window's token', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      String(url).endsWith('/api/health')
+        ? { status: 200, json: async () => ({ status: 'ok' }) }
+        : { status: 403, json: async () => ({ detail: 'forbidden' }) }
+    )));
+    const { ensureBackendRunning } = await import('./backendProcess.js');
+    const starting = ensureBackendRunning();
+    const failure = expect(starting).rejects.toThrow(/不接受本窗口的访问令牌/);
+    await vi.runAllTimersAsync();
+    await failure;
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
 });
