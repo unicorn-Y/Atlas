@@ -26,7 +26,7 @@ core/.venv/Scripts/python.exe -m uvicorn atlas.server:app --host 127.0.0.1 --por
 cd frontend && npx vite --host 127.0.0.1
 cd frontend && npx tsc -p tsconfig.electron.json && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 ATLAS_PYTHON=../core/.venv/Scripts/python.exe ../node_modules/electron/dist/electron.exe . --remote-debugging-port=9335
 
-# 后端默认快测（unit；H10.1 分层后）
+# 后端默认快测（unit lane，dev 快查；验收计时用 core/scripts/run_h1r_r6_gates.ps1，见第八节）
 cd core && .venv/Scripts/python.exe -m pytest -q -n auto --dist loadscope
 
 # 前端检查
@@ -186,7 +186,7 @@ git -C D:\hermes-agent merge upstream/main
    - 没有启用 MCP server 时，MCP 组件可直接就绪；共享 proxy 在首次 MCP 使用（含动态新增）时才构造客户端。
    - 冷启动耗时只按冷启动探针和 `test_startup_time.py` 的实测结果记录。
 
-## 八、后端测试分层（H10.1）
+## 八、后端测试分层（H10.1 分层；H1R2 Lane I 归层收紧）
 
 在 `D:\Atlas\core` 的 PowerShell 中运行。一次性安装开发测试依赖：
 
@@ -194,34 +194,75 @@ git -C D:\hermes-agent merge upstream/main
 uv sync --extra dev
 ```
 
-pytest 默认选择 `unit`。未显式标注的测试按 unit 收集；跨 Atlas 服务、持久化、进程、协议或打包边界的模块在 `tests/conftest.py` 显式列为 integration。真实桌面用例归 `desktop`，真实模型调用归 `live`。新写的跨边界测试应显式添加 `@pytest.mark.integration`；真实模型测试必须添加 `@pytest.mark.live`，并且只有 `ATLAS_LIVE=1` 时才会执行。
+### 分组与选择机制
 
-以下选择均保留对应分组内的全部测试。`-n auto --dist loadscope` 在不同模块间并行，同一模块留在同一 worker；保存 junit 结果并用墙钟计时，墙钟包括收集、worker 启动和 teardown。
+pytest 默认选择 `unit`（`core/pyproject.toml` 的 `addopts = "-m unit"`）。分层判定在 `tests/conftest.py`：
+
+- 未显式标注的测试按 unit 收集：只许 fake、进程内协作件和真实文件系统临时目录。
+- 跨真实边界的整模块 / 整类（起真 uvicorn 子进程、真 git、真 LSP 子进程、真 Playwright 浏览器、真打包脚本等）在 `_INTEGRATION_MODULES` / `_INTEGRATION_CLASSES` 里显式列为 integration。
+- 单个用例跨真实边界时，在该用例上写 `@pytest.mark.integration`（惯例见 `tests/test_cli_headless.py`；不要整模块挪，除非模块里所有用例都跨边界）。
+- 真实桌面用例归 `desktop`（失败只自动重试一次）；真实模型调用归 `live`，必须显式 `@pytest.mark.live`，且只有 `ATLAS_LIVE=1` 时才会执行。
+
+归层判据（诚实归层）：测试真正起了「真服务 / 真子进程 / 真浏览器 / 真 git」就归 integration；**慢不是归层理由**——只是慢但没有真实外部资源的用例留在 unit，用 `-Parallel` 压墙钟。
+
+### 标准分组命令（gates 脚本，推荐）
+
+```powershell
+# 仓库根目录。默认全串行——这是验收证据模式。
+core/scripts/run_h1r_r6_gates.ps1 -Gates unit
+core/scripts/run_h1r_r6_gates.ps1 -Gates unit-integration
+
+# 可选并行：-Parallel N 给 unit / unit-integration 两个 gate 加 -n N --dist loadscope；
+# 输出写 unit-parN.log / unit-parN.xml（unit-integration 同理加 -parN 后缀），
+# 与串行证据文件互不覆盖；并行模式下单测超时放宽为 600s（串行保持 300s）。
+# 脚本开头会探测 pytest-xdist：venv 里没有时打印警告并自动退回串行，不会崩。
+# desktop / frontend 两个 gate 永远串行。
+core/scripts/run_h1r_r6_gates.ps1 -Gates unit,unit-integration -Parallel 8
+
+# 其他参数：-OutputDirectory <dir> 改输出目录（默认 artifacts\h1r-r6）；
+# -BasetempRoot <dir> 改 pytest basetemp；-ContinueOnFailure 失败不中断后续 gate。
+```
+
+每次运行会把各 gate 的 markers、墙钟、退出码和 junit 计数合并写进 `artifacts/h1r-r6/summary.json`（按 gate 名去重更新；并行模式因 gate 名带 `-parN` 后缀而与串行条目共存）。
+
+### 每层的预算
+
+| 层 | 选择表达式 | 墙钟预算 |
+| --- | --- | --- |
+| unit | `-m unit` | ≤ 180s |
+| unit + integration | `-m "unit or integration"` | ≤ 600s |
+| desktop | `-m desktop`（只在交互式 Windows 会话） | 不设预算，失败重试 1 次 |
+| live | `-m live` + `ATLAS_LIVE=1` | 手动，无预算 |
+
+超时或失败时保留相同选择的完整日志，先检查 `--durations=30` 和失败根因，再优化 setup、共享状态或串行瓶颈；不能通过删测试或加 skip 缩短数字。
+
+### 计时纪律
+
+验收计时由 controller 在无其他负载的空闲机器上**串行实测**（`-Parallel` 的并行结果只作吞吐参考，不是验收证据；并行输出文件名带 `-parN`，不会污染串行证据）。
+
+TODO(controller): 串行实测后在此填入——unit=___s、unit+integration=___s（改动前诊断：unit 层 365.4s，见 artifacts/h1r-r6-diagnostic/summary.json）。
+
+### 手动等价命令（不经过 gates 脚本时）
+
+选择表达式必须与上表一致；串行是默认，加 `-n N --dist loadscope` 才并行。
 
 ```powershell
 $run = Get-Date -Format 'yyyyMMdd-HHmmss'
 $out = "..\artifacts\test-runs\$run"
 New-Item -ItemType Directory -Force $out | Out-Null
 $timer = [Diagnostics.Stopwatch]::StartNew()
-python -m pytest -q -n auto --dist loadscope --timeout=300 --durations=30 `
-  --junitxml="$out\unit.xml" 2>&1 | Tee-Object "$out\unit.log"
+python -m pytest -q -m unit --timeout=300 --durations=30 `
+  --junitxml="$out\unit.xml" --basetemp="$env:TEMP\atlas-gate-$run\unit" 2>&1 | Tee-Object "$out\unit.log"
 $exitCode = $LASTEXITCODE
 $timer.Stop()
 "exit=$exitCode wall_seconds=$([math]::Round($timer.Elapsed.TotalSeconds, 1))"
 ```
 
-`unit` 的目标墙钟时间不超过 180 秒：
+`unit + integration` 的目标墙钟时间不超过 600 秒：
 
 ```powershell
-python -m pytest -q -n auto --dist loadscope -m unit --timeout=300 --durations=30 `
-  --junitxml="$out\unit.xml" 2>&1 | Tee-Object "$out\unit.log"
-```
-
-`unit + integration` 的目标墙钟时间不超过 600 秒。超时或失败时保留相同选择的完整日志，先检查 `--durations=30` 和失败根因，再优化 setup、共享状态或串行瓶颈；不能通过排除测试缩短数字。
-
-```powershell
-python -m pytest -q -n auto --dist loadscope -m "unit or integration" `
-  --timeout=300 --durations=30 --junitxml="$out\unit-integration.xml" `
+python -m pytest -q -m "unit or integration" --timeout=300 --durations=30 `
+  --junitxml="$out\unit-integration.xml" --basetemp="$env:TEMP\atlas-gate-$run\unit-integration" `
   2>&1 | Tee-Object "$out\unit-integration.log"
 ```
 

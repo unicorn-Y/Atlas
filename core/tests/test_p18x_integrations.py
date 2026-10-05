@@ -38,7 +38,10 @@ def test_capability_bus_reports_normalized_records_and_upstream_metadata() -> No
     assert result["ready"] > 0
 
 
+@pytest.mark.integration
 def test_capability_bus_can_disable_and_reenable_optional_integrations() -> None:
+    # set_enabled() runs an unpatched discover() below, which probes real CLIs
+    # (codex/zcode/hermes version + auth subprocesses) found on PATH.
     bus = CapabilityBus()
     assert bus.set_enabled("coding.ast_grep", False)
     with (

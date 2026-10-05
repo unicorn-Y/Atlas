@@ -4,7 +4,8 @@ param(
     [string]$BasetempRoot = '',
     [ValidateSet('unit', 'unit-integration', 'desktop', 'frontend')]
     [string[]]$Gates = @('unit', 'unit-integration', 'desktop', 'frontend'),
-    [switch]$ContinueOnFailure
+    [switch]$ContinueOnFailure,
+    [int]$Parallel = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,6 +23,20 @@ $basetempRoot = if ($BasetempRoot) {
 if (-not (Test-Path -LiteralPath $python)) { throw "Python venv not found: $python" }
 if (-not (Test-Path -LiteralPath $HermesRoot)) { throw "Pinned Hermes checkout not found: $HermesRoot" }
 if ($env:ATLAS_LIVE -eq '1') { throw 'Unset ATLAS_LIVE before running non-live R6 gates.' }
+
+# Optional xdist parallelism for the pytest layer gates (-Gates unit / unit-integration).
+# Default 0 = serial, which stays the acceptance-evidence mode. When -Parallel N is
+# given, gates run with "-n N --dist loadscope" under distinct "<gate>-parN" output
+# names so serial evidence files are never overwritten. If pytest-xdist is not
+# importable in the venv, warn and fall back to serial instead of failing.
+if ($Parallel -gt 0) {
+    $xdistProbe = & $python -c "import importlib.util; print('yes' if importlib.util.find_spec('xdist') else 'no')" 2>$null
+    if ("$xdistProbe".Trim() -ne 'yes') {
+        Write-Warning "pytest-xdist is not importable in $python; -Parallel ignored, running serial. Install pytest-xdist into core/.venv to enable it."
+        $Parallel = 0
+    }
+}
+
 $env:PYTHONPATH = "$HermesRoot;$coreRoot"
 New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $basetempRoot -Force | Out-Null
@@ -78,18 +93,22 @@ function Invoke-PytestGate {
         [string]$Name,
         [string]$MarkerExpression,
         [int]$WallBudgetSeconds,
-        [bool]$UseXdist
+        [int]$ParallelWorkers = 0
     )
     $log = Join-Path $outputRoot "$Name.log"
     $junit = Join-Path $outputRoot "$Name.xml"
     $base = Join-Path $basetempRoot $Name
     New-Item -ItemType Directory -Path $base -Force | Out-Null
+    # Serial mode keeps the historical per-test timeout. Parallel mode relaxes it:
+    # worker contention can roughly double a single test's wall time and the
+    # per-test timeout is not the wall budget.
+    $perTestTimeout = if ($ParallelWorkers -gt 0) { 600 } else { 300 }
     $pytestArgs = @(
         '-m', 'pytest', 'tests', '-m', $MarkerExpression,
-        '--timeout=300', '--show-capture=no', '--tb=short', '-q', '--durations=30',
+        "--timeout=$perTestTimeout", '--show-capture=no', '--tb=short', '-q', '--durations=30',
         "--junitxml=$junit", '--basetemp', $base
     )
-    if ($UseXdist) { $pytestArgs += @('-n', 'auto', '--dist', 'loadscope') }
+    if ($ParallelWorkers -gt 0) { $pytestArgs += @('-n', "$ParallelWorkers", '--dist', 'loadscope') }
     Push-Location $coreRoot
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     try {
@@ -126,13 +145,15 @@ function Invoke-PytestGate {
 }
 
 if ($Gates -contains 'unit') {
-    Invoke-PytestGate -Name 'unit' -MarkerExpression 'unit' -WallBudgetSeconds 180 -UseXdist $true
+    $unitGateName = if ($Parallel -gt 0) { "unit-par$Parallel" } else { 'unit' }
+    Invoke-PytestGate -Name $unitGateName -MarkerExpression 'unit' -WallBudgetSeconds 180 -ParallelWorkers $Parallel
 }
 if ($Gates -contains 'unit-integration') {
-    Invoke-PytestGate -Name 'unit-integration' -MarkerExpression 'unit or integration' -WallBudgetSeconds 600 -UseXdist $true
+    $layeredGateName = if ($Parallel -gt 0) { "unit-integration-par$Parallel" } else { 'unit-integration' }
+    Invoke-PytestGate -Name $layeredGateName -MarkerExpression 'unit or integration' -WallBudgetSeconds 600 -ParallelWorkers $Parallel
 }
 if ($Gates -contains 'desktop') {
-    Invoke-PytestGate -Name 'desktop' -MarkerExpression 'desktop' -WallBudgetSeconds 0 -UseXdist $false
+    Invoke-PytestGate -Name 'desktop' -MarkerExpression 'desktop' -WallBudgetSeconds 0 -ParallelWorkers 0
 }
 
 if ($Gates -contains 'frontend') {
