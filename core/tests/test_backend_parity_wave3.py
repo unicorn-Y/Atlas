@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from atlas.memory import MemoryStore
+from atlas.runtime import hooks as hooks_module
 from atlas.runtime.hooks import HookStore
 from atlas.scheduler import (
     AtlasScheduler,
@@ -573,6 +574,40 @@ def test_wave3_hook_store_validates_event_and_serializes(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("bash_path", "expected_executable"),
+    [
+        (r"C:\Windows\System32\bash.exe", "powershell.exe"),
+        (r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files\Git\bin\bash.exe"),
+    ],
+)
+async def test_wave3_windows_hook_shell_skips_wsl_bash_shim(
+    monkeypatch, bash_path: str, expected_executable: str,
+) -> None:
+    calls = []
+
+    class Process:
+        returncode = 0
+
+        async def communicate(self, _input):
+            return b"", b""
+
+    async def create_process(*args, **_kwargs):
+        calls.append(args)
+        return Process()
+
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+    monkeypatch.setattr(hooks_module, "os", types.SimpleNamespace(name="nt", environ=os.environ))
+    monkeypatch.setattr(hooks_module.shutil, "which", lambda name: bash_path if name == "bash" else None)
+    monkeypatch.setattr(hooks_module.asyncio, "create_subprocess_exec", create_process)
+
+    await hooks_module._run_command({"command": "exit 2"}, {}, cwd=None, plugin_root=None)
+
+    assert calls[0][0] == expected_executable
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_wave3_hook_error_does_not_raise_or_block(tmp_path: Path) -> None:
     store = HookStore(tmp_path / "hooks.toml")
     store.save(
@@ -591,13 +626,15 @@ async def test_wave3_hook_error_does_not_raise_or_block(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_wave3_hook_exit_two_blocks_tool_call(tmp_path: Path) -> None:
     store = HookStore(tmp_path / "hooks.toml")
-    command = f'"{sys.executable}" -c "import sys; sys.exit(2)"'
     store.save(
-        [{"id": "pre", "event": "tool.before", "command": command, "timeout_s": 2, "enabled": True}]
+        [{"id": "pre", "event": "tool.before", "command": "exit 2", "timeout_s": 2, "enabled": True}]
     )
     result = await store.execute("tool.before", {"tool_name": "local_file"})
+    log = result["logs"][0]
+    assert log["exit_code"] == 2, log["stderr"]
     assert result["blocked"] is True
 
 

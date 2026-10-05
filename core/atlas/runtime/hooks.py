@@ -253,7 +253,11 @@ async def _run_command(
                 argv = [shutil.which("pwsh") or "powershell.exe", "-NoProfile", "-Command", command]
             else:
                 bash = shutil.which("bash")
-                argv = [bash, "-lc", command] if bash else ["powershell.exe", "-NoProfile", "-Command", command]
+                wsl_bash = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "bash.exe"
+                if bash and Path(bash).resolve() != wsl_bash.resolve():
+                    argv = [bash, "-lc", command]
+                else:
+                    argv = ["powershell.exe", "-NoProfile", "-Command", command]
         else:
             argv = ["sh", "-lc", command]
     proc = None

@@ -143,6 +143,8 @@ def wave_script(item: dict, wave: int, workspaces: dict[int, str]) -> list:
     ]
 
 
+# Crosses HermesRuntime, SessionDB persistence, fake HTTP provider, and workspace tools.
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_eight_concurrent_sessions_isolated_across_repeated_waves(
     tmp_path, monkeypatch,
@@ -191,14 +193,14 @@ async def test_eight_concurrent_sessions_isolated_across_repeated_waves(
                 return Text(f"done-{item['key']}")
         return Text("done-unmatched")
 
+    from http.server import ThreadingHTTPServer
+    from tools.registry import registry
+
+    # FakeLLMServer binds and activates its listener on entry, so configure its
+    # listen backlog before constructing the server.
+    monkeypatch.setattr(ThreadingHTTPServer, "request_queue_size", 64)
+
     with FakeLLMServer(responder) as fake:
-        from http.server import ThreadingHTTPServer
-
-        from tools.registry import registry
-
-        # 8 sessions open keep-alive connections simultaneously; the stdlib default
-        # listen backlog (5) refuses the tail under Windows, so widen it for this test.
-        monkeypatch.setattr(ThreadingHTTPServer, "request_queue_size", 64)
 
         class FixtureConfig(dict):
             db_path = tmp_path / "config.db"

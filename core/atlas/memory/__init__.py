@@ -4327,6 +4327,13 @@ class MemoryStore:
     # ----- Cleanup -----
 
     async def close(self) -> None:
-        if self._db:
-            await self._db.close()
-            self._db = None
+        db = self._db
+        if db is None:
+            return
+        worker = getattr(db, "_thread", db)
+        await db.close()
+        # aiosqlite resolves its stop future before the worker executes its
+        # final loop break. Join off-loop so callers can rely on close()
+        # having actually stopped the SQLite thread when it returns.
+        await asyncio.to_thread(worker.join)
+        self._db = None
