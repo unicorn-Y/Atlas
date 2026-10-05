@@ -286,9 +286,13 @@ async def test_slow_agent_construction_does_not_block_the_event_loop(tmp_path):
     loop; on a busy machine that stalled WebSocket keepalive past its timeout."""
     import time
 
+    class QuietAgent(FakeHermesAgent):
+        def run_conversation(self, **_kwargs):
+            return {"final_response": "ok", "messages": []}
+
     def slow_factory(**kwargs):
         time.sleep(1.0)  # stands in for the multi-second first Hermes import/build
-        return FakeHermesAgent(**kwargs)
+        return QuietAgent(**kwargs)
 
     models = SimpleNamespace(
         current_model="test-model", current_litellm_model="openai/test-model",
