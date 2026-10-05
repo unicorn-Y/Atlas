@@ -30,6 +30,7 @@ const electronMocks = vi.hoisted(() => {
     BrowserWindow,
     app: {
       isPackaged: false,
+      getAppPath: vi.fn(() => '/atlas-frontend'),
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
       quit: vi.fn(),
@@ -37,6 +38,7 @@ const electronMocks = vi.hoisted(() => {
     dialog: { showOpenDialog: vi.fn() },
     ipcMain: { on: vi.fn(), handle: vi.fn() },
     Menu: { setApplicationMenu: vi.fn() },
+    nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => true })) },
     session: { defaultSession: { webRequest: { onBeforeSendHeaders: vi.fn() } } },
     shell: { openExternal: vi.fn(), openPath: vi.fn(), showItemInFolder: vi.fn() },
   };
