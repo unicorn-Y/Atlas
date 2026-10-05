@@ -12,6 +12,15 @@ from atlas.skills.discovery import SkillDiscovery
 from atlas.skills.registry import SkillRegistry
 
 
+@pytest.fixture(autouse=True)
+def clear_stale_app_skill_services(monkeypatch) -> None:
+    """Keep global-singleton fallback tests independent of prior app lifespans."""
+    services = getattr(server.app.state, "services", None)
+    if services is not None:
+        monkeypatch.setattr(services, "skill_mgr", None)
+        monkeypatch.setattr(services, "skill_registry", None)
+
+
 def _register(registry: SkillRegistry, name: str, **extra: object) -> dict[str, object]:
     metadata: dict[str, object] = {
         "name": name, "version": "1.0.0", "description": f"Find {name} information",

@@ -11,6 +11,15 @@ from atlas.skills import SkillManager
 from atlas.skills.registry import SkillRegistry
 
 
+@pytest.fixture(autouse=True)
+def clear_stale_app_skill_services(monkeypatch) -> None:
+    """Keep module-singleton API test seams isolated from prior app lifespans."""
+    services = getattr(server.app.state, "services", None)
+    if services is not None:
+        monkeypatch.setattr(services, "skill_mgr", None)
+        monkeypatch.setattr(services, "skill_registry", None)
+
+
 @pytest.mark.asyncio
 async def test_registry_api_registers_queries_disables_and_removes(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(server, "skill_registry", SkillRegistry(tmp_path / "skills.db"))

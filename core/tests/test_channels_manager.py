@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import pytest
@@ -172,17 +173,45 @@ async def test_transient_failure_reconnects_with_backoff(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stable_run_resets_backoff_ladder(tmp_path):
-    # each run stays stable 60ms then dies; with a 50ms stable-reset the ladder
-    # never grows past the initial 20ms, so restarts keep coming quickly.
+async def test_stable_run_resets_backoff_ladder(tmp_path, monkeypatch):
+    # Each fake run advances the supervisor's clock by 60ms before failing. With a
+    # 50ms stable reset, every retry decision must use the first ladder step.
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(
+        "atlas.channels.time", SimpleNamespace(monotonic=lambda: clock.now),
+    )
+
+    async def fail_after_virtual_stable_run(adapter):
+        clock.now += float(adapter.config.get("run_seconds", 0.06))
+        raise RuntimeError("run failed after stable window")
+
+    monkeypatch.setattr(FakeAdapter, "_idle", fail_after_virtual_stable_run)
+    attempts: list[int] = []
+    delays: list[float] = []
+    decisions_ready = asyncio.Event()
+    real_compute_backoff = compute_backoff
+
+    def record_attempt(attempt, *args, **kwargs):
+        attempts.append(attempt)
+        delay = real_compute_backoff(attempt, *args, **kwargs)
+        delays.append(delay)
+        if len(attempts) >= 2:
+            decisions_ready.set()
+        return delay
+
+    monkeypatch.setattr("atlas.channels.compute_backoff", record_attempt)
     manager = make_manager(tmp_path, stable_reset_seconds=0.05)
     manager.configure(
         "fake", {"enabled": True, "behaviour": "run", "run_seconds": 0.06}, persist=False
     )
     await manager.start()
-    await asyncio.sleep(0.4)
-    assert FakeAdapter.total_started >= 5  # would be ~3 if the ladder kept growing
-    await manager.stop()
+    try:
+        await asyncio.wait_for(decisions_ready.wait(), timeout=2.0)
+        assert len(attempts) >= 2, "expected to observe at least two reconnect decisions"
+        assert attempts == [1] * len(attempts), f"stable runs did not reset backoff: {attempts}"
+        assert delays == [0.02] * len(delays), f"stable runs used a later backoff delay: {delays}"
+    finally:
+        await manager.stop()
 
 
 # --- inbound pipeline ---------------------------------------------------------------

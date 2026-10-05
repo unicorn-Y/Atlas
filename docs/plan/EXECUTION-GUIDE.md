@@ -4,7 +4,7 @@
 
 - 仓库：`github.com/unicorn-Y/Atlas`，分支 `main`。
 - 结构：
-  - `core/`：Python 后端（FastAPI + uvicorn，端口 8765；litellm 调模型；LangGraph；DBOS；APScheduler）。
+  - `core/`：Python 后端（FastAPI + uvicorn，端口 8765；Atlas `ModelRouter` 路由模型，Hermes runtime adapter 执行对话；DBOS；APScheduler）。
   - `frontend/`：Electron + React + Vite（Tailwind v4 + Radix）。
   - `backend-adapter/`：前端调用后端的 TypeScript 客户端。
 - 用户的两台机器（细节见 `tasks/HANDOFF.md`）：
@@ -40,16 +40,17 @@ cd frontend && npx tsc -p tsconfig.renderer.json --noEmit && npx tsc -p tsconfig
 
 | 要改什么 | 看哪里 |
 | --- | --- |
-| **新内核（C1 起）** | `core/atlas/engine/`（适配层、Atlas 工具注册、权限插件）+ fork `D:\hermes-agent`（`run_agent.py`、`agent/`、`tools/`），见第三点六节 |
-| 旧 Agent 主循环（C2 删除） | `core/atlas/agent/__init__.py`：`acompletion(**kwargs, stream=True)` 在第 940 行附近；系统消息在第 1952 行起拼装；工具执行和审批在第 1050–1240 行 |
-| 权限判断 | 同上：`permission_mode`（`full_access` / `ask_writes` / `read_only`）、`is_write` 集合、`APPROVAL_REQUIRED_TOOLS` |
-| 工具输出截断 | 同上第 1590 行附近 `externalize_tool_output` |
+| **Hermes 对话运行时** | Atlas 接线：`core/atlas/engine/hermes_runtime.py`、`local_runtime_adapter.py`；公开 Atlas pin 见 `core/pyproject.toml`，fork API 源见该 pin 的 `run_agent.py` / `agent/`，见第三点六节 |
+| Atlas Agent run API | `core/atlas/agent/__init__.py::run()` 是薄适配；`core/atlas/agent/run_phases.py` 定义 `RunRequest`、`RunCallbacks` 与 `execute_run()` |
+| 模型路由与配置 | `core/atlas/models/router.py::ModelRouter`；`core/atlas/models/__init__.py::ModelManager` |
+| 权限判断 | `core/atlas/agent/tool_node.py`、`core/atlas/engine/tool_permissions.py`：`permission_mode`（`full_access` / `ask_writes` / `read_only`）、写操作判断和审批接线 |
+| 工具输出截断 | `core/atlas/agent/results.py::externalize_tool_output` |
 | 子任务 / Worker | `_run_atlas_subtask`、`run(worker=True)`（`agent/__init__.py`）；`agent/orchestrator.py` |
 | 工具 | `core/atlas/tools/`：`local_execution.py`（文件、命令、git、进程）、`computer_use.py`、`web_extract.py`、`mcp_client.py`、`custom_tools.py` |
 | 浏览器 | `core/atlas/capabilities/browser/browser_use.py`；chrome-devtools / playwright MCP |
 | 调度和事件触发 | `core/atlas/scheduler/__init__.py`（`TriggerType.EVENT`、`dispatch_event`、文件监控 `_start_file_watchers`） |
 | Hooks | `core/atlas/runtime/hooks.py` |
-| HTTP / WS 接口 | `core/atlas/server.py`（6800+ 行）；WS 在 `/ws/chat` |
+| HTTP / WS 接口 | `core/atlas/server.py` 负责 FastAPI 组合与 lifespan；功能路由在 `core/atlas/api/`；WS 接线在 `core/atlas/api/runtime_ws_router.py`，路径为 `/ws/chat` |
 | 本机接口安全 | `core/atlas/origin_guard.py` |
 | 记忆（冻结） | `core/atlas/memory/` |
 | 凭据 | `keyring`（参考 `core/atlas/telegram.py` 的写法） |

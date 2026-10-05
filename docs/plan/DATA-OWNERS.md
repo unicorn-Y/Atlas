@@ -9,7 +9,9 @@
 | 数据 | 唯一 owner | 读方（只读） | 状态 |
 |---|---|---|---|
 | 对话记录（消息、工具调用、工具结果、分叉、回退） | Hermes `SessionDB`（`state.db`，经 `atlas.engine` 的 hermes runtime） | Atlas 元数据库仅存预览所需的元数据；消息分页/搜索/导出/分叉树读 SessionDB | ✅ H1R 已切换；旧 Atlas 消息行只读 |
-| 对话元数据（标题、工作区、权限模式、置顶、项目关联、run 记录、用量） | Atlas SQLite（`MemoryStore` 的 conversations/metadata 表） | 前端、渠道网关 | ✅ 已是唯一写方（标题由引擎回调 `on_session_title` 写回 Atlas，见 `agent/run_phases.py::_hermes_turn`） |
+| 对话元数据（标题、工作区、权限模式、置顶、项目关联、预览） | Atlas SQLite（`MemoryStore` 的 conversations/metadata 表） | 前端、渠道网关 | ✅ 已是唯一写方（标题由引擎回调 `on_session_title` 写回 Atlas，见 `agent/run_phases.py::_hermes_turn`） |
+| 用量与成本汇总（run、model、input/output/cache token、估算成本） | Atlas SQLite（`UsageLedger` 的 `usage_records` 表，`core/atlas/usage.py`） | usage API / 前端 | ✅ 独立 owner；不与 `MemoryStore` 对话元数据表混写 |
+| Live run token-budget audit（逐请求 request id、usage/cache 字段） | 验证 harness 指定的外部临时 JSONL（`ATLAS_RUN_USAGE_AUDIT_FILE`，由 `ATLAS_LIVE_BUDGET_DIR` 控制） | 本地验证控制器 | 仅验证证据；不是 Atlas 持久用量来源，不写入仓库或产品数据目录 |
 | 长期记忆（facts、reflections、goal knowledge） | Atlas SQLite（`MemoryStore`） | 运行路径注入 | ✅ 用户已冻结记忆架构，本波只做 H2.3 止血（注入上限） |
 | 定时/队列/回执 | DBOS（`DurableBackend`） | automation/heartbeat | ✅ |
 | 渠道游标/去重 | 各 channel adapter 自己的 state db | 渠道网关 | ✅（保留，登记即可） |
