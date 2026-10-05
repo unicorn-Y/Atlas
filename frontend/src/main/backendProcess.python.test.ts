@@ -156,7 +156,8 @@ describe('external backend already starting', () => {
     await expect(starting).resolves.toEqual({ ready: true, managed: false });
     expect(spawnMock).not.toHaveBeenCalled();
   });
-  it('refuses to attach to a backend that rejects this window's token', async () => {
+
+  it('refuses to attach to a backend that rejects this window token', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (
       String(url).endsWith('/api/health')
         ? { status: 200, json: async () => ({ status: 'ok' }) }
