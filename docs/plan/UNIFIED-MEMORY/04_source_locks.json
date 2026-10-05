@@ -1,0 +1,533 @@
+{
+  "research_date": "2026-10-06",
+  "external_sources": [
+    {
+      "name": "Graphiti",
+      "repository": "https://github.com/getzep/graphiti",
+      "revision": "2a85bbbf27f3d0d07dd3a8bf6dc8700c5193c066",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "graphiti_core/edges.py",
+          "sha256": "6715bbe5763d30aa58134fc601ad21c761aaf4a7b5785809f507146b5f821af2",
+          "url": "https://github.com/getzep/graphiti/blob/2a85bbbf27f3d0d07dd3a8bf6dc8700c5193c066/graphiti_core/edges.py"
+        },
+        {
+          "path": "graphiti_core/utils/maintenance/edge_operations.py",
+          "sha256": "5f9ff2a5cc3ce5cc0bac4aee202ad6fadb7172464aa7af33e26bc2bcd6cb5d6e",
+          "url": "https://github.com/getzep/graphiti/blob/2a85bbbf27f3d0d07dd3a8bf6dc8700c5193c066/graphiti_core/utils/maintenance/edge_operations.py"
+        },
+        {
+          "path": "graphiti_core/search/search_filters.py",
+          "sha256": "ad26e1ca011a52d433d993d4165d08ce66e211b9cfe3dbf3626467db21430065",
+          "url": "https://github.com/getzep/graphiti/blob/2a85bbbf27f3d0d07dd3a8bf6dc8700c5193c066/graphiti_core/search/search_filters.py"
+        },
+        {
+          "path": "graphiti_core/utils/datetime_utils.py",
+          "sha256": "b6b029185344a6a74937e91759b6cfbc966cad6df0cfda0498075765bac82d15",
+          "url": "https://github.com/getzep/graphiti/blob/2a85bbbf27f3d0d07dd3a8bf6dc8700c5193c066/graphiti_core/utils/datetime_utils.py"
+        }
+      ],
+      "mechanism": "Episode references and valid/invalid/system expiry timestamps; contradiction resolution includes LLM semantic decisions",
+      "adaptation_limit": "No graph database or LLM execution; naive timestamps are assumed UTC",
+      "id": "S01",
+      "mode": "ADAPT",
+      "waves": "UM03",
+      "target": "service/unified/identity.py; service/unified/temporal.py",
+      "parity_required": true
+    },
+    {
+      "name": "Hindsight",
+      "repository": "https://github.com/vectorize-io/hindsight",
+      "revision": "b89ce287464fe10790d67ba86bfabe29d8926253",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "hindsight-api-slim/hindsight_api/engine/consolidation/consolidator.py",
+          "sha256": "b6958ada908fcc74a0f2c7173b9b1ca96b2cb87a83fbaf3e8d8547900c0d4c01",
+          "url": "https://github.com/vectorize-io/hindsight/blob/b89ce287464fe10790d67ba86bfabe29d8926253/hindsight-api-slim/hindsight_api/engine/consolidation/consolidator.py"
+        },
+        {
+          "path": "hindsight-api-slim/hindsight_api/engine/memory_engine.py",
+          "sha256": "38d2504b970cb06f6da458f4d57199284ab62586cf0135f2912a11cf79e01aae",
+          "url": "https://github.com/vectorize-io/hindsight/blob/b89ce287464fe10790d67ba86bfabe29d8926253/hindsight-api-slim/hindsight_api/engine/memory_engine.py"
+        }
+      ],
+      "mechanism": "观察整理、来源 memory IDs、时间信息和 mental-model 派生知识。",
+      "adaptation_limit": "只审查相关路径；不以事实问答能力推定技能或行动学习能力，不引入其独立存储。",
+      "id": "S02",
+      "mode": "ADAPT",
+      "waves": "UM04",
+      "target": "service/unified/formation.py; service/unified/dependencies.py",
+      "parity_required": true
+    },
+    {
+      "name": "TiMem",
+      "repository": "https://github.com/TiMEM-AI/timem",
+      "revision": "6d279a5f5d40ee229e1995df15c182cb2062c71c",
+      "license": "Apache-2.0 + MIT (directory specific)",
+      "files": [
+        {
+          "path": "timem/memory/memory_generator.py",
+          "sha256": "870bfaa2d243eefad3cd685c03be5010b6f9d3dd310606af31ea0c46a5204452",
+          "url": "https://github.com/TiMEM-AI/timem/blob/6d279a5f5d40ee229e1995df15c182cb2062c71c/timem/memory/memory_generator.py"
+        },
+        {
+          "path": "timem/workflows/memory_retrieval.py",
+          "sha256": "247c5c1ff7c45874fcbc1219f07f92ae2c6bb95b6b0ee25f566ffdedd14324a0",
+          "url": "https://github.com/TiMEM-AI/timem/blob/6d279a5f5d40ee229e1995df15c182cb2062c71c/timem/workflows/memory_retrieval.py"
+        },
+        {
+          "path": "timem/workflows/retrieval_nodes/llm_retrieval_planner.py",
+          "sha256": "3f4792ee519ecb144f197f2f48ebf90c3469362663f6faf332e528c6700676f9",
+          "url": "https://github.com/TiMEM-AI/timem/blob/6d279a5f5d40ee229e1995df15c182cb2062c71c/timem/workflows/retrieval_nodes/llm_retrieval_planner.py"
+        }
+      ],
+      "mechanism": "分层时间整理与按复杂度规划检索。",
+      "adaptation_limit": "核心与工具目录许可证不同；多层摘要仍需保留原始来源和冲突，不让 persona 推断变成事实。",
+      "id": "S03",
+      "mode": "ADAPT",
+      "waves": "UM04;UM07",
+      "target": "service/unified/consolidation.py; service/unified/query_planner.py",
+      "parity_required": true
+    },
+    {
+      "name": "Myelin",
+      "repository": "https://github.com/myelinagent/Myelin-AI",
+      "revision": "48b1f47a2b634678ece45adcc71a3b20764b8a04",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "myelin/client.py",
+          "sha256": "d9f9fd3b4b172b1c308755cd4dec45c7ecb782edd6d033804ccaa30ddd6d4349",
+          "url": "https://github.com/myelinagent/Myelin-AI/blob/48b1f47a2b634678ece45adcc71a3b20764b8a04/myelin/client.py"
+        },
+        {
+          "path": "myelin/_internal/dream.py",
+          "sha256": "3336ef540f7d5a80382a697f7acd76f7b1a1f59fe3528f87b20df5ec363dcb7d",
+          "url": "https://github.com/myelinagent/Myelin-AI/blob/48b1f47a2b634678ece45adcc71a3b20764b8a04/myelin/_internal/dream.py"
+        },
+        {
+          "path": "myelin/_internal/health.py",
+          "sha256": "544d0fee3f8d044a7463e9ecb5eac2a6ea107b3b3000ee13ceb41afe9d665f46",
+          "url": "https://github.com/myelinagent/Myelin-AI/blob/48b1f47a2b634678ece45adcc71a3b20764b8a04/myelin/_internal/health.py"
+        }
+      ],
+      "mechanism": "引用结果反馈、quarantine/tombstone、工作记忆与绑定检索的自测接口。",
+      "adaptation_limit": "69 项局部测试通过；答案键命中不能验证完整推理，墓碑不是物理删除。",
+      "id": "S04",
+      "mode": "ADAPT",
+      "waves": "UM06;UM11",
+      "target": "service/unified/working_set.py; service/unified/self_probe.py",
+      "parity_required": true
+    },
+    {
+      "name": "M3-Agent",
+      "repository": "https://github.com/ByteDance-Seed/m3-agent",
+      "revision": "0e3e41939bd8a0b66d756e7b7eb8d5fe9992da5c",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "mmagent/videograph.py",
+          "sha256": "80b4aa8adc5867f90530e636ce70a4d7cfc89c0e71cfceb69eaf5c13e141f613",
+          "url": "https://github.com/ByteDance-Seed/m3-agent/blob/0e3e41939bd8a0b66d756e7b7eb8d5fe9992da5c/mmagent/videograph.py"
+        },
+        {
+          "path": "mmagent/retrieve.py",
+          "sha256": "1571169038f40b5766376cfdd2f4096c8dd063ca460d9f036a4ae016bec45ff7",
+          "url": "https://github.com/ByteDance-Seed/m3-agent/blob/0e3e41939bd8a0b66d756e7b7eb8d5fe9992da5c/mmagent/retrieve.py"
+        }
+      ],
+      "mechanism": "文本、图像、语音节点与实体绑定，检索和多跳关系访问。",
+      "adaptation_limit": "研究包含训练、多模态服务与视频环境；未证明能直接处理 Atlas 的真实桌面任务。",
+      "id": "S05",
+      "mode": "ADAPT",
+      "waves": "UM05",
+      "target": "service/unified/multimodal.py",
+      "parity_required": true
+    },
+    {
+      "name": "A-mem",
+      "repository": "https://github.com/agiresearch/A-mem",
+      "revision": "ceffb860f0712bbae97b184d440df62bc910ca8d",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "agentic_memory/memory_system.py",
+          "sha256": "22e5bfd1c98060e1e87704aa771e3ab29952d23a1f9e3c1a4b6fed148020e5d1",
+          "url": "https://github.com/agiresearch/A-mem/blob/ceffb860f0712bbae97b184d440df62bc910ca8d/agentic_memory/memory_system.py"
+        }
+      ],
+      "mechanism": "新记忆关联旧记忆，扩展邻接检索并调整邻居标签与上下文。",
+      "adaptation_limit": "LLM 生成的连接与邻居更新不等于经过证据验证的知识；先作为派生索引。",
+      "id": "S06",
+      "mode": "ADAPT",
+      "waves": "UM07",
+      "target": "service/unified/associations.py",
+      "parity_required": true
+    },
+    {
+      "name": "HippoRAG",
+      "repository": "https://github.com/OSU-NLP-Group/HippoRAG",
+      "revision": "2bfd831417202b49cda9da7973e141a456e16872",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "src/hipporag/HippoRAG.py",
+          "sha256": "63374f66c2e92056026e4f9df27bd417621a2bd70ff045a91094bc90a0830293",
+          "url": "https://github.com/OSU-NLP-Group/HippoRAG/blob/2bfd831417202b49cda9da7973e141a456e16872/src/hipporag/HippoRAG.py"
+        }
+      ],
+      "mechanism": "事实筛选、passage 信号与 Personalized PageRank 关联检索。",
+      "adaptation_limit": "依赖抽取图质量；不是仅换排序算法就能解决低质量关系与过时依据。",
+      "id": "S07",
+      "mode": "ADAPT",
+      "waves": "UM07",
+      "target": "service/unified/graph_retriever.py",
+      "parity_required": true
+    },
+    {
+      "name": "ReasoningBank",
+      "repository": "https://github.com/google-research/reasoning-bank",
+      "revision": "ed80611788292ea739f1effd31f16c53823b8a0d",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "WebArena/induce_memory.py",
+          "sha256": "9efa53164f22772f1716476667577bd222597bdcba24a210ee1f6cb5c2eae169",
+          "url": "https://github.com/google-research/reasoning-bank/blob/ed80611788292ea739f1effd31f16c53823b8a0d/WebArena/induce_memory.py"
+        },
+        {
+          "path": "WebArena/memory_management.py",
+          "sha256": "ac40e71d216668ed5af49bb5c94b77cf7906ef0149c74e4e55ade792e88fd4e2",
+          "url": "https://github.com/google-research/reasoning-bank/blob/ed80611788292ea739f1effd31f16c53823b8a0d/WebArena/memory_management.py"
+        }
+      ],
+      "mechanism": "从成功与失败轨迹抽取可复用策略，再选择相关策略。",
+      "adaptation_limit": "自判成败需与外部结果区分；框架适配和本地成本没有验证。",
+      "id": "S08",
+      "mode": "ADAPT",
+      "waves": "UM09",
+      "target": "service/unified/experience_distiller.py",
+      "parity_required": true
+    },
+    {
+      "name": "ACE",
+      "repository": "https://github.com/ace-agent/ace",
+      "revision": "82709de050e1db6e6ef2f07bcb0393560b94992a",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "ace/core/curator.py",
+          "sha256": "dafe08bb9392ab5ba66b567921e6b6f38a16f0b5c08a89db61f1cb00e00187a7",
+          "url": "https://github.com/ace-agent/ace/blob/82709de050e1db6e6ef2f07bcb0393560b94992a/ace/core/curator.py"
+        },
+        {
+          "path": "playbook_utils.py",
+          "sha256": "2819e089427e73e6f247715abf9bcaa704df968c1dab9408a84b90057c3b31f4",
+          "url": "https://github.com/ace-agent/ace/blob/82709de050e1db6e6ef2f07bcb0393560b94992a/playbook_utils.py"
+        }
+      ],
+      "mechanism": "把策略整理为可增量 ADD/UPDATE/MERGE/DELETE 的 playbook。",
+      "adaptation_limit": "可借鉴增量修订，不能把 curator 输出直接升级为权威事实或用户指令。",
+      "id": "S09",
+      "mode": "ADAPT",
+      "waves": "UM09;UM11",
+      "target": "service/unified/strategy_updates.py",
+      "parity_required": true
+    },
+    {
+      "name": "MemRL",
+      "repository": "https://github.com/MemTensor/MemRL",
+      "revision": "c1b322ca43de36ddf64c6712f89d0095bfc35ce0",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "memrl/service/value_driven.py",
+          "sha256": "d9b3fc1f9792bf641d4bf615ca53e3893622e1d0ea1268ea836989c54b482079",
+          "url": "https://github.com/MemTensor/MemRL/blob/c1b322ca43de36ddf64c6712f89d0095bfc35ce0/memrl/service/value_driven.py"
+        },
+        {
+          "path": "memrl/service/retrievers.py",
+          "sha256": "35ae5e0aae26fdd3d36f887ccb972ca275dbb7103d280188715635d390ff21cf",
+          "url": "https://github.com/MemTensor/MemRL/blob/c1b322ca43de36ddf64c6712f89d0095bfc35ce0/memrl/service/retrievers.py"
+        }
+      ],
+      "mechanism": "相关性筛选与效用排序分离，按反馈更新 Q 值。",
+      "adaptation_limit": "奖励与贡献归因、任务条件和模型消费者需区分；未复现训练/论文结果。",
+      "id": "S10",
+      "mode": "ADAPT",
+      "waves": "UM09",
+      "target": "service/unified/utility.py",
+      "parity_required": true
+    },
+    {
+      "name": "WorldMind",
+      "repository": "https://github.com/zjunlp/WorldMind",
+      "revision": "712b0fd53b4bd6a1948603f087a1e9f25a5adaea",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "Plugin/worldmind_plugin/experience_refiner.py",
+          "sha256": "d589d4cce3d514571c65c5dde74da3144bc92363892384130f878999fffe141f",
+          "url": "https://github.com/zjunlp/WorldMind/blob/712b0fd53b4bd6a1948603f087a1e9f25a5adaea/Plugin/worldmind_plugin/experience_refiner.py"
+        },
+        {
+          "path": "Plugin/worldmind_plugin/knowledge_manager.py",
+          "sha256": "dae67ab0c8079a37254120341ffb0534cc218cd6168325b0bddf79c59a704989",
+          "url": "https://github.com/zjunlp/WorldMind/blob/712b0fd53b4bd6a1948603f087a1e9f25a5adaea/Plugin/worldmind_plugin/knowledge_manager.py"
+        }
+      ],
+      "mechanism": "成功轨迹与预测误差产生 Goal/Process Experience，并检索用于当前任务。",
+      "adaptation_limit": "管理器自带保存路径；Atlas 应接现有权威读写，且要重新验证软件/桌面场景。",
+      "id": "S11",
+      "mode": "ADAPT",
+      "waves": "UM10",
+      "target": "service/unified/prediction.py",
+      "parity_required": true
+    },
+    {
+      "name": "Memento-Skills",
+      "repository": "https://github.com/Memento-Teams/Memento-Skills",
+      "revision": "ee9b9a45efd093d669c06fe318b4b1dceb246d19",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "core/skill/evolution/engine.py",
+          "sha256": "3d4db783a3ecbe28bcf6cec4b7ec10211ca3b0bc82400e36a7cfe303e59bd89f",
+          "url": "https://github.com/Memento-Teams/Memento-Skills/blob/ee9b9a45efd093d669c06fe318b4b1dceb246d19/core/skill/evolution/engine.py"
+        }
+      ],
+      "mechanism": "失败归因、隔离修改、结构/局部/合成验证、原子部署和回滚。",
+      "adaptation_limit": "测试通过与泛化收益分开，合成判定的独立性要核查；只借相关机制。",
+      "id": "S12",
+      "mode": "ADAPT",
+      "waves": "UM10",
+      "target": "core/atlas/memory/skill_evolution.py",
+      "parity_required": true
+    },
+    {
+      "name": "Recuris",
+      "repository": "https://github.com/Gen-Verse/Recuris",
+      "revision": "7d3745ab787b1206ccd981cb1511100476097266",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "src/recuris/skillmemory.py",
+          "sha256": "435ca3b0d7da473c1da40f0bbba45e7ccd5646d827172d1becbe5e2070a3ca42",
+          "url": "https://github.com/Gen-Verse/Recuris/blob/7d3745ab787b1206ccd981cb1511100476097266/src/recuris/skillmemory.py"
+        },
+        {
+          "path": "src/recuris/metaagent/gate.py",
+          "sha256": "0e6a937f2fc72fe0807d26d9fbeb523e2985791b836539feb6ad1f609313af10",
+          "url": "https://github.com/Gen-Verse/Recuris/blob/7d3745ab787b1206ccd981cb1511100476097266/src/recuris/metaagent/gate.py"
+        }
+      ],
+      "mechanism": "经验与工作状态耦合、针对部件修订与配对 held-out gate。",
+      "adaptation_limit": "gate.py 中 ACCEPT 与统计显著性分开；不能声称每次接受都已显著。",
+      "id": "S13",
+      "mode": "ADAPT",
+      "waves": "UM10;UM13",
+      "target": "service/unified/learning_gate.py",
+      "parity_required": true
+    },
+    {
+      "name": "OpenSkill",
+      "repository": "https://github.com/OpenLAIR/OpenSkill",
+      "revision": "84ca182da055fafb6453dcec4a6defdbbfd987c1",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "libs/openskill/targeted_dr.py",
+          "sha256": "0149fab1259cbe75051e78cb9564b12f5797c4ba1146a05c71064ce3ddf23484",
+          "url": "https://github.com/OpenLAIR/OpenSkill/blob/84ca182da055fafb6453dcec4a6defdbbfd987c1/libs/openskill/targeted_dr.py"
+        },
+        {
+          "path": "libs/openskill/pipeline.py",
+          "sha256": "a1f989d224204ef8c862020a01445cc1f926eda660e7046b8bd40213e9fb06fa",
+          "url": "https://github.com/OpenLAIR/OpenSkill/blob/84ca182da055fafb6453dcec4a6defdbbfd987c1/libs/openskill/pipeline.py"
+        },
+        {
+          "path": "libs/terminus_agent/evolution/independent_verifier.py",
+          "sha256": "a956048e88348e4ebbaa062969c895cabd291909d95ace0cf52c7c994e7dde82",
+          "url": "https://github.com/OpenLAIR/OpenSkill/blob/84ca182da055fafb6453dcec4a6defdbbfd987c1/libs/terminus_agent/evolution/independent_verifier.py"
+        }
+      ],
+      "mechanism": "判断能力缺口与实现错误，定向研究，隔离会话生成并运行代理验证。",
+      "adaptation_limit": "代理测试与真实目标验收分开；Docker 管线未在本机完整执行，不等于 Windows 原生可用。",
+      "id": "S14",
+      "mode": "ADAPT",
+      "waves": "UM10",
+      "target": "core/atlas/memory/targeted_learning.py",
+      "parity_required": true
+    },
+    {
+      "name": "Mem0",
+      "repository": "https://github.com/mem0ai/mem0",
+      "revision": "c93420c49a6b14c3d446bdb156d96811908fd90a",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "mem0/memory/main.py",
+          "sha256": "f63b856ff86b2b9da3730548116bfbc023560fe941dbfbd34075519b855c46d3",
+          "url": "https://github.com/mem0ai/mem0/blob/c93420c49a6b14c3d446bdb156d96811908fd90a/mem0/memory/main.py"
+        },
+        {
+          "path": "integrations/agent-plugin-core/python/mcp_server.py",
+          "sha256": "5ef21e016e7c38a713331c9237671f29a4da016b4dd6470243ffd67ce8c4ae5a",
+          "url": "https://github.com/mem0ai/mem0/blob/c93420c49a6b14c3d446bdb156d96811908fd90a/integrations/agent-plugin-core/python/mcp_server.py"
+        }
+      ],
+      "mechanism": "Memory identity filters, inference/raw add modes, search and lifecycle operations; selected MCP adapter exposes search_memories",
+      "adaptation_limit": "No hosted API calls or application integration; identity filters are not authentication proof",
+      "id": "S15",
+      "mode": "REFERENCE_ONLY",
+      "waves": "UM01;UM07",
+      "target": "No copied whole memory store; compare lifecycle/filter design only",
+      "parity_required": false
+    },
+    {
+      "name": "MemoryAgentBench",
+      "repository": "https://github.com/HUST-AI-HYZ/MemoryAgentBench",
+      "revision": "538026089d1a8a8eff05121d0db89b388f360eba",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "agent.py",
+          "sha256": "fb313eea68abaab01aec5d29a09b8e7f9bddee1ea71e96689becf83d747bf747",
+          "url": "https://github.com/HUST-AI-HYZ/MemoryAgentBench/blob/538026089d1a8a8eff05121d0db89b388f360eba/agent.py"
+        },
+        {
+          "path": "main.py",
+          "sha256": "809c44650730ad64cc93757f56980330c5db4de19c2abde5a2aef059210e7677",
+          "url": "https://github.com/HUST-AI-HYZ/MemoryAgentBench/blob/538026089d1a8a8eff05121d0db89b388f360eba/main.py"
+        }
+      ],
+      "mechanism": "多种记忆方法的增量交互包装与基准入口。",
+      "adaptation_limit": "外部方法依赖和模型评测未执行；现有适配器不代表 Atlas 已可直接运行。",
+      "id": "S16",
+      "mode": "EVALUATION_ADAPTER",
+      "waves": "UM13",
+      "target": "tests/unified_memory/public_benchmark_adapter.py",
+      "parity_required": true
+    }
+  ],
+  "local_baselines": [
+    {
+      "name": "Atlas",
+      "root": "D:/Atlas",
+      "head": "32d681bdf548318a0be69fd396653645d78f8148",
+      "uncommitted_item_count": 9,
+      "files": [
+        {
+          "path": "core/atlas/memory/memoryos_adapter.py",
+          "working_tree_sha256": "aafd3ab311b03ea8c9e6ca70a5f0c80a6c59f8c02cd96c94a416641c7659d3d5"
+        },
+        {
+          "path": "core/atlas/memory/__init__.py",
+          "working_tree_sha256": "82c8d6058746e19a3ded28ef632447afe7cbbde7ab8ae65154774b73c493b831"
+        },
+        {
+          "path": "core/atlas/agent/run_phases.py",
+          "working_tree_sha256": "0550e453acf4cfafa8607a00f87296d71ad95d33591253fa4d10e99091de4df8"
+        },
+        {
+          "path": "core/atlas/api/memory_router.py",
+          "working_tree_sha256": "7536624aeb5425f5817002f017aec48a92d22c788ca99a81b9daf65b79d30a8a"
+        },
+        {
+          "path": "core/atlas/server.py",
+          "working_tree_sha256": "dbc5f74b1fd90954aa3f044c2c34321505574cded5297f883abd4ef62a07acc9"
+        },
+        {
+          "path": "core/atlas/cli.py",
+          "working_tree_sha256": "8f4737f768bd896cd336e3c75c32fbf0faf9ced4d8f0e1f62c1e42153e15312c"
+        },
+        {
+          "path": "core/atlas/runtime/hub.py",
+          "working_tree_sha256": "9f49261ed701b9e911fad7afb3f89233d9513d57e456b4a4f7608f511d41e01a"
+        },
+        {
+          "path": "core/atlas/engine/hermes_runtime.py",
+          "working_tree_sha256": "7685c544f3351825a9fdb6c8bc0e4a10d5baef7a19fa191a33b39692607ac782"
+        },
+        {
+          "path": "core/atlas/automation/engine.py",
+          "working_tree_sha256": "14482d433c7cfc70243f5460877c07bbafd0122c9f526cc820c01c12df34159d"
+        },
+        {
+          "path": "core/atlas/automation/triggers.py",
+          "working_tree_sha256": "ce4fa171c52a9f8b0d5fa23c65a046bec19da992e0ac70dbf178dd71459265fb"
+        },
+        {
+          "path": "core/atlas/tools/x2/computer.py",
+          "working_tree_sha256": "490bad3d863515d11b660099dc5f65d78df83e9a8ff1ea29f3547da1b6971e2c"
+        },
+        {
+          "path": "frontend/src/renderer/pages/MemoryPage.tsx",
+          "working_tree_sha256": "34d09811659ef790a65a50a8bf5f43c2c3d0b5d18262be7d7a315afdc7bfe2be"
+        },
+        {
+          "path": "core/pyproject.toml",
+          "working_tree_sha256": "50dfcb9b8241519043cb36a4c40c1a0b1650ec670479e7e19b5e83080abd14cf"
+        }
+      ]
+    },
+    {
+      "name": "MemoryOS",
+      "root": "D:/MemoryOS",
+      "head": "702f702bf9c0c1fa552132930843aaca4923f139",
+      "uncommitted_item_count": 128,
+      "files": [
+        {
+          "path": "service/app.py",
+          "working_tree_sha256": "9e4eae9dbb9e48b1c60b07e841fced89e3af6c925f7b263ef1d5c1e2feca0621"
+        },
+        {
+          "path": "service/db.py",
+          "working_tree_sha256": "62a9b2ed0fc999f8791a6507542b298a292838a86953cd526c92de5358700406"
+        },
+        {
+          "path": "service/storage.py",
+          "working_tree_sha256": "7028ec9edf2686b5ecbe9911bd8427d29c34b5f169ec3b191b57261299a3f0ed"
+        },
+        {
+          "path": "service/recall.py",
+          "working_tree_sha256": "d4855895abced28f9cf62b39a6e3039969863b48d5d4701da61229baabbe9651"
+        },
+        {
+          "path": "service/episode_ingest.py",
+          "working_tree_sha256": "820b2f35c2c415d761ba0b3f046e4bd0ed45763a04ec725e450ecdb155d0cda6"
+        },
+        {
+          "path": "service/compaction.py",
+          "working_tree_sha256": "a3036ed6d3074f3ebe5ee5eb2edf6c6de382ef2b279e32304785b5c06f9bea4c"
+        },
+        {
+          "path": "service/protected_state.py",
+          "working_tree_sha256": "9359bb3e2ca8297d85ffe6bf1633f6b77d6e18d70cab145a667554b1060ba249"
+        },
+        {
+          "path": "service/erasure.py",
+          "working_tree_sha256": "49ec10fd768d9197050aad9b5ec65f7c237ae7f2c7a975acf6accafa57cb3647"
+        },
+        {
+          "path": "service/graph_store.py",
+          "working_tree_sha256": "4e282eccc3f5b0b6c49cdc434da7eeefbfc08ab383079ac6c11bc227bfb82f9d"
+        },
+        {
+          "path": "service/graph_types.py",
+          "working_tree_sha256": "24546b0597ba49b1493e03ff30eeb2f9876a867505835b9b73ded5de32bc8c4d"
+        }
+      ]
+    }
+  ],
+  "scope": {
+    "primary": "Windows Atlas",
+    "external_agents": "Tools invoked by Atlas; no independent memory authority",
+    "deferred": "Other devices and standalone app integrations"
+  },
+  "status": "PLAN_SOURCE_LOCK; copying and integration not performed",
+  "final_revalidation": {"date":"2026-10-06","atlas_head":"aa6196f550098cc46081dc6db2c376cb87ddffa5","memoryos_head":"702f702bf9c0c1fa552132930843aaca4923f139","changed_files":[{"repository":"Atlas","path":"core/pyproject.toml","current_sha256":"41a0f5027f2578464a5bce7800779b4323bbf69490effe6c9032e0f53bf579ce","hermes_commit_unchanged":"e0866de014e6fa99721ccaf4f848e1316a58148a"}],"interpretation":"Preserve research snapshot; implementation must recheck latest HEAD, interfaces, working tree and writer ownership in UM00."}
+}
+

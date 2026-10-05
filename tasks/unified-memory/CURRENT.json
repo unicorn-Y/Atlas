@@ -1,0 +1,34 @@
+{
+  "project": "ATLAS-UNIFIED-MEMORY-WINDOWS",
+  "branch": "unified-memory/waves",
+  "updated_at": "2026-10-06",
+  "atlas_head_base": "aa6196f550098cc46081dc6db2c376cb87ddffa5",
+  "memoryos_head_base": "702f702bf9c0c1fa552132930843aaca4923f139",
+  "status_enum": [
+    "NOT_STARTED",
+    "IN_PROGRESS",
+    "PARTIAL",
+    "COMPONENT_VERIFIED",
+    "INTEGRATED",
+    "ACCEPTED",
+    "BLOCKED_EXTERNAL"
+  ],
+  "tasks": {},
+  "waves": {
+    "UM00": "NOT_STARTED",
+    "UM01": "NOT_STARTED",
+    "UM02": "NOT_STARTED",
+    "UM03": "NOT_STARTED",
+    "UM04": "NOT_STARTED",
+    "UM05": "NOT_STARTED",
+    "UM06": "NOT_STARTED",
+    "UM07": "NOT_STARTED",
+    "UM08": "NOT_STARTED",
+    "UM09": "NOT_STARTED",
+    "UM10": "NOT_STARTED",
+    "UM11": "NOT_STARTED",
+    "UM12": "NOT_STARTED",
+    "UM13": "NOT_STARTED"
+  },
+  "notes": "Status follows docs/plan/UNIFIED-MEMORY/02_wave_tasks.md. No ACCEPTED without real-model + real-Windows evidence. Protected: others uncommitted files (see authority-map)."
+}
