@@ -57,11 +57,13 @@ keys out of release artifacts and source control.
 Atlas/
 ├── core/               # Python backend (Agent, Memory, Model Manager)
 │   ├── atlas/
-│   │   ├── agent/      # LangGraph orchestrator
-│   │   ├── memory/     # SQLite + FTS5 memory system
-│   │   ├── models/     # LiteLLM model manager
+│   │   ├── agent/      # RunRequest / RunCallbacks orchestration and run phases
+│   │   ├── engine/     # Hermes adapter and canonical SessionDB transcripts
+│   │   ├── memory/     # Atlas metadata, long-term memory and FTS5
+│   │   ├── models/     # Shared native-first provider router and model manager
+│   │   ├── api/        # FastAPI routers and per-application services
 │   │   ├── tools/      # MCP tool integrations
-│   │   └── server.py   # FastAPI + WebSocket server
+│   │   └── server.py   # FastAPI composition and startup lifecycle
 │   ├── pyproject.toml
 │   └── tests/
 ├── frontend/           # Electron + React UI

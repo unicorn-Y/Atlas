@@ -116,3 +116,4 @@ data/devices/
 /artifacts/h8-startup/
 /artifacts/h10-live-smoke/
 /artifacts/h1r-*/
+/artifacts/pytest-*

@@ -23,6 +23,9 @@ def test_capability_bus_reports_normalized_records_and_upstream_metadata() -> No
         patch.object(bus, "_package_version", return_value="1.2.3"),
         patch.object(bus, "_node_version", return_value="4.5.6"),
         patch.object(bus, "_command_version", return_value=("7.8.9", None)),
+        patch("atlas.runtime.capability_bus.subprocess.run", return_value=SimpleNamespace(
+            returncode=0, stdout="", stderr="",
+        )),
     ):
         result = bus.status()
 
@@ -42,6 +45,9 @@ def test_capability_bus_can_disable_and_reenable_optional_integrations() -> None
         patch.object(bus, "_package_version", return_value="1.0"),
         patch.object(bus, "_node_version", return_value="1.0"),
         patch.object(bus, "_command_version", return_value=("1.0", None)),
+        patch("atlas.runtime.capability_bus.subprocess.run", return_value=SimpleNamespace(
+            returncode=0, stdout="", stderr="",
+        )),
     ):
         item = next(row for row in bus.status()["capabilities"] if row["id"] == "coding.ast_grep")
         assert item["status"] == "disabled"

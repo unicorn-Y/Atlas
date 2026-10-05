@@ -42,15 +42,22 @@ _INTEGRATION_MODULES = {
     "test_automation_router.py",
     "test_c1_websocket_acceptance.py",
     "test_c6_lsp_e2e.py",
+    "test_c6_main_chain.py",
+    "test_c6_lsp_wiring.py",
     "test_gateway_integration.py",
     "test_hermes_runtime_e2e.py",
     "test_long_lived_agent_e2e.py",
+    "test_k1_daily_paths.py",
+    "test_k1_daily_paths_x2x4x5.py",
     "test_lsp_lifecycle.py",
     "test_mcp_runtime_live.py",
     "test_release_acceptance.py",
     "test_release_build_scripts.py",
     "test_server.py",
     "test_server_agents_wiring.py",
+    "test_hermes_session_sync.py",
+    "test_run_usage_aggregation_e2e.py",
+    "test_session_migration.py",
 }
 _DESKTOP_TESTS = {
     (
@@ -58,6 +65,7 @@ _DESKTOP_TESTS = {
         "test_real_desktop_observe_input_clipboard_and_window_management",
     ),
 }
+_INTEGRATION_CLASSES = {("test_evolution.py", "TestWatcher")}
 _LANE_MARKERS = ("unit", "integration", "desktop", "live")
 
 
@@ -75,6 +83,9 @@ def _test_lane(item) -> str:
     if (module, test_name) in _DESKTOP_TESTS:
         return "desktop"
     if module in _INTEGRATION_MODULES:
+        return "integration"
+    cls = getattr(item, "cls", None)
+    if cls is not None and (module, cls.__name__) in _INTEGRATION_CLASSES:
         return "integration"
     return "unit"
 
