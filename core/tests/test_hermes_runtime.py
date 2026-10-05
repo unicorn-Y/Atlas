@@ -313,6 +313,8 @@ async def test_slow_agent_construction_does_not_block_the_event_loop(tmp_path):
             last = now
 
     ticking = asyncio.create_task(ticker())
+    while not gaps:  # the ticker must already be running before the turn starts
+        await asyncio.sleep(0.01)
     stream = runtime.run_turn(message="x", conversation_id="c", workspace=None, history=[])
     async for event in stream:
         if event["type"] == "hermes.result":
