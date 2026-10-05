@@ -514,6 +514,7 @@ async def _drive_turn(
     started = time.monotonic()
     approvals_denied = 0
     trust_denied = False
+    plan_denied = False
     usage_events = 0
     usage_rows: list[dict[str, Any]] = []
     usage_request_ids: set[str] = set()
@@ -584,6 +585,20 @@ async def _drive_turn(
                     f"（退出码将取 {EXIT_APPROVAL}）"
                 )
                 await _send({"type": "rules.trust", "run_id": run_id, "trust": False})
+            elif event == "run.plan.proposed":
+                # Non-interactive: nobody can approve the proposed plan, so per
+                # the taskbook the proposal is treated as rejected. The run is
+                # parked server-side (run_drive waits on plan_future, polling
+                # cancel_event), so `run.cancel` is the sanctioned way to end it:
+                # the backend emits a clean run.cancelled instead of this CLI
+                # sitting silent until --timeout (the scenario-08 live hang).
+                plan_denied = True
+                stop_reason = "plan_needs_approval"
+                renderer.notice(
+                    "plan: 已收到计划（run.plan.proposed）；非交互模式无人审批，"
+                    f"按拒绝处理并结束本轮（退出码将取 {EXIT_APPROVAL}）"
+                )
+                await _send({"type": "run.cancel", "run_id": run_id})
             elif event == "run.usage":
                 if isinstance(data, dict):
                     row = dict(data)
@@ -641,6 +656,7 @@ async def _drive_turn(
         "changes": changes,
         "approvals_denied": approvals_denied,
         "trust_denied": trust_denied,
+        "plan_denied": plan_denied,
         "message": final_message,
     }
     if detail:
@@ -650,10 +666,10 @@ async def _drive_turn(
         _error_line("run", detail or "run failed")
     elif result == "timeout":
         _error_line("run", f"turn exceeded --timeout {timeout}s")
-    elif result == "cancelled" and stop_reason != "max_turns":
+    elif result == "cancelled" and stop_reason not in ("max_turns", "plan_needs_approval"):
         _error_line("run", "run was cancelled")
 
-    if approvals_denied or trust_denied:
+    if approvals_denied or trust_denied or (plan_denied and result == "cancelled"):
         return EXIT_APPROVAL, summary
     if result == "completed" or (result == "cancelled" and stop_reason == "max_turns"):
         return EXIT_OK, summary

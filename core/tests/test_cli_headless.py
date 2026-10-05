@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -451,3 +454,263 @@ def test_doctor_reports_all_checks_and_models_probe(cli_backend):
     bad_report = json.loads(bad_proc.stdout)
     assert bad_report["ok"] is False
     assert bad_report["checks"]["models"]["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# Regression (h1r2 Lane G): the CLI process must end by itself once the turn
+# is over. The h10 live round showed `atlas run` outliving its own summary
+# (scenario 08: engine printed "Conversation completed", the CLI then sat in
+# _drive_turn's ws.recv until the harness killed it at 600s — plan mode has no
+# terminal event a headless client could wait for). These tests spawn the real
+# CLI subprocess against the fake model stack and assert the process exits
+# within 30s of the completion event, in both runtime topologies; a kill only
+# ever happens on the failure path, never to fake a pass.
+# ---------------------------------------------------------------------------
+
+_EXIT_BUDGET_SECONDS = 30.0
+_TERMINAL_OR_PLAN_EVENTS = {"run.completed", "run.failed", "run.cancelled",
+                            "run.plan.proposed"}
+
+
+def _run_cli_observed(env: dict[str, str], *args: str,
+                      timeout: float = CLI_TIMEOUT) -> SimpleNamespace:
+    """Run the CLI subprocess, timing how long it lives past its completion event.
+
+    Returns returncode, parsed stdout events, stderr, the first completion-kind
+    event seen and the seconds between that event and process exit (None when
+    the process died before any completion event). Exceeding the exit budget
+    kills the child and fails — the kill is the diagnostic, not the assertion.
+    """
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "atlas.cli", *args],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace",
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    events: list[dict[str, Any]] = []
+    stderr_lines: list[str] = []
+    observed: dict[str, Any] = {"kind": "", "at": None}
+
+    def _pump_err() -> None:
+        assert proc.stderr is not None
+        stderr_lines.extend(proc.stderr)
+
+    def _pump_out() -> None:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(item, dict):
+                continue
+            events.append(item)
+            kind = str(item.get("event") or "")
+            if item.get("type") == "summary" or kind in _TERMINAL_OR_PLAN_EVENTS:
+                if observed["at"] is None:
+                    observed["kind"] = kind or "summary"
+                    observed["at"] = time.monotonic()
+
+    out_thread = threading.Thread(target=_pump_out, daemon=True)
+    err_thread = threading.Thread(target=_pump_err, daemon=True)
+    out_thread.start()
+    err_thread.start()
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if observed["at"] is not None or proc.poll() is not None:
+            break
+        time.sleep(0.05)
+    else:
+        proc.kill()
+        proc.wait(timeout=30)
+        pytest.fail(
+            f"CLI never reached a completion event in {timeout}s; "
+            f"tail={events[-5:]} stderr={''.join(stderr_lines)[-1500:]}"
+        )
+
+    exit_latency: float | None = None
+    if observed["at"] is not None:
+        budget = observed["at"] + _EXIT_BUDGET_SECONDS - time.monotonic()
+        try:
+            proc.wait(timeout=max(budget, 0.0))
+            exit_latency = time.monotonic() - observed["at"]
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=30)
+            pytest.fail(
+                f"CLI was still alive {_EXIT_BUDGET_SECONDS}s after {observed['kind']}; "
+                f"events_tail={events[-5:]} stderr={''.join(stderr_lines)[-1500:]}"
+            )
+    else:
+        proc.wait(timeout=30)
+    out_thread.join(timeout=30)
+    err_thread.join(timeout=30)
+    assert not out_thread.is_alive() and not err_thread.is_alive(), "CLI pipes did not close"
+    return SimpleNamespace(
+        returncode=int(proc.returncode), events=events,
+        stderr="".join(stderr_lines), completion_kind=observed["kind"],
+        exit_after_completion=exit_latency,
+    )
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+@pytest.fixture
+def external_backend(cli_backend):
+    """cli_backend plus the regular Atlas app served by a real uvicorn subprocess.
+
+    Same topology as the h10 live Backend: the backend is its own process; the
+    CLI child connects with ``--server`` instead of booting the in-process
+    runtime. Both processes share the one isolated data root, like production.
+    """
+    import httpx
+
+    port = _free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    log_path = cli_backend.root / "backend.log"
+    with log_path.open("w", encoding="utf-8") as log:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "atlas.server:app",
+             "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning"],
+            env=cli_backend.env, cwd=str(CORE_ROOT), stdout=log,
+            stderr=subprocess.STDOUT,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        deadline = time.monotonic() + 90.0
+        last = ""
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                raise AssertionError(
+                    f"backend exited early rc={proc.returncode}: "
+                    f"{log_path.read_text(encoding='utf-8', errors='replace')[-800:]}"
+                )
+            try:
+                response = httpx.get(f"{base_url}/api/health", timeout=2.0)
+                if response.status_code == 200 and response.json().get("status") == "ok":
+                    break
+                last = f"HTTP {response.status_code}"
+            except httpx.HTTPError as exc:
+                last = type(exc).__name__
+            time.sleep(0.25)
+        else:
+            proc.terminate()
+            proc.wait(timeout=30)
+            raise AssertionError(f"backend not healthy in 90s: {last}")
+        try:
+            yield SimpleNamespace(
+                fake=cli_backend.fake, env=cli_backend.env, root=cli_backend.root,
+                base_url=base_url, proc=proc,
+            )
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=10)
+
+
+def _assert_prompt_exit(observed: SimpleNamespace, expected_code: int) -> dict[str, Any]:
+    assert observed.completion_kind == "run.completed", (
+        f"completion={observed.completion_kind} stderr={observed.stderr[-1500:]}"
+    )
+    assert observed.returncode == expected_code, (
+        f"exit={observed.returncode} stderr={observed.stderr[-2000:]}"
+    )
+    assert observed.exit_after_completion is not None
+    assert observed.exit_after_completion <= _EXIT_BUDGET_SECONDS
+    summaries = [e for e in observed.events if e.get("type") == "summary"]
+    assert summaries, observed.stderr[-1500:]
+    return summaries[-1]
+
+
+@pytest.mark.integration
+def test_run_exits_within_30s_of_completion_in_process_mode(cli_backend):
+    """Default topology: the headless runtime boots in the CLI process itself."""
+    backend = cli_backend
+    workspace = backend.root / "ws-exit-inproc"
+    workspace.mkdir()
+    observed = _run_cli_observed(
+        backend.env, "run",
+        "-p", "请直接回复两个字母：ok",
+        "--workspace", str(workspace),
+        "--model", "fake-model",
+        "--output-format", "stream-json",
+    )
+    summary = _assert_prompt_exit(observed, 0)
+    assert summary["result"] == "completed"
+    assert summary["plan_denied"] is False
+
+
+@pytest.mark.integration
+def test_run_exits_within_30s_of_completion_server_mode(external_backend):
+    """External topology: the CLI connects to an already-running backend."""
+    backend = external_backend
+    workspace = backend.root / "ws-exit-server"
+    workspace.mkdir()
+    observed = _run_cli_observed(
+        backend.env, "run",
+        "-p", "请直接回复两个字母：ok",
+        "--workspace", str(workspace),
+        "--model", "fake-model",
+        "--output-format", "stream-json",
+        "--server", backend.base_url,
+    )
+    summary = _assert_prompt_exit(observed, 0)
+    assert summary["result"] == "completed"
+
+
+@pytest.mark.integration
+def test_run_plan_mode_ends_deterministically_with_exit_3_after_plan_proposed(cli_backend):
+    """Scenario-08 regression: plan mode must not outlive its own proposal.
+
+    The engine parks the run in `waiting` for a plan approval after emitting
+    run.plan.proposed; headless has nobody to approve, so the CLI cancels the
+    parked run (run.cancel -> run.cancelled) and exits 3 — it used to sit in
+    ws.recv until --timeout, which the live harness reported as a 600s hang.
+    """
+    backend = cli_backend
+    workspace = backend.root / "ws-exit-plan"
+    workspace.mkdir()
+
+    def aux(record: dict[str, Any]) -> Text:
+        dumped = json.dumps(record.get("messages", []), ensure_ascii=False)
+        if "Verify each pending subtask" in dumped:
+            return Text(json.dumps({"results": [
+                {"id": "s1", "completed": True, "evidence": "plan proposed"}]}))
+        return Text(json.dumps({
+            "goal": "创建 greet.py",
+            "subtasks": [{"id": "s1", "title": "写 greet.py",
+                          "verification": "greet.py 存在且可运行"}],
+        }, ensure_ascii=False))
+
+    backend.fake._aux = aux
+    observed = _run_cli_observed(
+        backend.env, "run",
+        "-p", "第一阶段：只做计划，创建 greet.py，定义 greet(name)。",
+        "--workspace", str(workspace),
+        "--model", "fake-model",
+        "--permission-mode", "plan",
+        "--output-format", "stream-json",
+    )
+    kinds = [e.get("event") for e in observed.events if e.get("type") == "agent_event"]
+    assert "run.plan.proposed" in kinds, f"events={kinds} stderr={observed.stderr[-1500:]}"
+    assert "run.cancelled" in kinds, f"the parked run was never cancelled: {kinds}"
+    assert "run.completed" not in kinds, "plan phase must not execute the task"
+
+    assert observed.completion_kind == "run.plan.proposed"
+    assert observed.returncode == 3, (
+        f"exit={observed.returncode} stderr={observed.stderr[-2000:]}"
+    )
+    assert observed.exit_after_completion is not None
+    assert observed.exit_after_completion <= _EXIT_BUDGET_SECONDS
+    summary = [e for e in observed.events if e.get("type") == "summary"][-1]
+    assert summary["result"] == "cancelled"
+    assert summary["stop_reason"] == "plan_needs_approval"
+    assert summary["plan_denied"] is True
