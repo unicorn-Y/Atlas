@@ -357,6 +357,10 @@ def _engine_startup_registrations(model_manager: Any) -> None:
     HermesRuntime(data_dir=DATA_ROOT, model_manager=model_manager).startup_registrations()
     for module in _ENGINE_WARM_IMPORTS:
         importlib.import_module(module)
+    # Token estimates need the tiktoken BPE file, which may have to be downloaded.
+    from atlas.models.tokens import prefetch
+
+    prefetch()
 
 
 async def _start_channels(services: Any) -> None:

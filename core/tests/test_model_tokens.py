@@ -5,7 +5,15 @@ from types import SimpleNamespace
 import pytest
 import tiktoken
 
-from atlas.models.tokens import count_tokens, estimate_tokens
+from atlas.models import tokens
+from atlas.models.tokens import count_tokens, estimate_tokens, prefetch
+
+
+@pytest.fixture(autouse=True)
+def _fresh_encoding_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tokens, "_ENCODINGS", {})
+    monkeypatch.setattr(tokens, "_UNAVAILABLE", set())
+    monkeypatch.setattr(tokens, "_LOADING", set())
 
 # Request-sized 中英文混合样本. 短文本被每条消息的固定开销主导，不是估算器的合同；
 # 估算器消费场景（压缩触发、预算检查）都是整个请求载荷，±15% 门禁按这个尺度校验。
@@ -37,11 +45,13 @@ def test_estimate_tokens_uses_tiktoken_for_mixed_english_and_chinese() -> None:
     sample = "Plan the migration carefully, then 验证每个接口的实际结果。"
     expected = len(tiktoken.encoding_for_model("gpt-4o").encode(sample))
 
+    prefetch("gpt-4o")
     assert estimate_tokens(sample, model="gpt-4o") == expected
 
 
 @pytest.mark.parametrize("sample", _MIXED_SAMPLES)
 def test_estimate_tokens_matches_tiktoken_for_request_sized_mixed_samples(sample: str) -> None:
+    prefetch()
     assert estimate_tokens(sample) == len(tiktoken.get_encoding("cl100k_base").encode(sample))
 
 
@@ -53,6 +63,7 @@ def test_estimate_tokens_falls_back_to_hermes_estimator_without_tiktoken(
 
     sample = _MIXED_SAMPLES[0]
     expected = estimate_request_tokens_rough([{"role": "user", "content": sample}])
+    prefetch()  # ImportError -> marked unavailable, never retried on the caller thread
     assert estimate_tokens(sample) == expected
 
 
@@ -65,3 +76,43 @@ def test_fallback_estimator_stays_within_15_percent_of_tiktoken(sample: str) -> 
     reference = len(tiktoken.get_encoding("cl100k_base").encode(sample))
     estimate = estimate_request_tokens_rough([{"role": "user", "content": sample}])
     assert abs(estimate - reference) <= 0.15 * reference
+
+
+def test_estimate_never_waits_for_the_tokenizer_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The first use of an encoding downloads its BPE file. That used to run inside the
+    first plan/compaction on the event loop and stalled the backend; estimates must
+    answer immediately with the fallback while the encoding loads in the background."""
+    import threading
+    import time
+
+    from agent.model_metadata import estimate_request_tokens_rough
+
+    release = threading.Event()
+    real_get_encoding = tiktoken.get_encoding
+
+    def slow_get_encoding(name: str):
+        release.wait(10)
+        return real_get_encoding(name)
+
+    monkeypatch.setattr(tiktoken, "get_encoding", slow_get_encoding)
+    sample = _MIXED_SAMPLES[1]
+    started = time.perf_counter()
+    first = estimate_tokens(sample)
+    assert time.perf_counter() - started < 1.0
+    assert first == estimate_request_tokens_rough([{"role": "user", "content": sample}])
+
+    release.set()
+    deadline = time.perf_counter() + 10
+    while "cl100k_base" not in tokens._ENCODINGS and time.perf_counter() < deadline:
+        time.sleep(0.01)
+    assert estimate_tokens(sample) == len(real_get_encoding("cl100k_base").encode(sample))
+
+
+def test_tokenizer_download_failure_keeps_the_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    def offline(_name: str):
+        raise ConnectionError("no route to openaipublic.blob.core.windows.net")
+
+    monkeypatch.setattr(tiktoken, "get_encoding", offline)
+    prefetch()
+    assert "cl100k_base" in tokens._UNAVAILABLE
+    assert estimate_tokens("你好 world") > 0
