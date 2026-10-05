@@ -4,6 +4,11 @@ import type { ConversationSummary } from '@atlas/backend-adapter';
 import { backend } from '../store/useAtlasStore';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '../ui/Menu';
 
+export const loadConversationBranches = (
+  activeId: string,
+  load: typeof backend.getConversationBranches = (id) => backend.getConversationBranches(id),
+) => activeId ? load(activeId) : Promise.resolve([]);
+
 /** The family of conversations forked from one another, with the open one marked; pick any to jump. */
 export default function ForkTree({ conversations, activeId, onOpen }: {
   conversations: ConversationSummary[]; activeId: string; onOpen: (conversation: ConversationSummary) => void;
@@ -12,7 +17,7 @@ export default function ForkTree({ conversations, activeId, onOpen }: {
   useEffect(() => {
     let stale = false;
     setTree(null);
-    void backend.getConversationBranches(activeId).then((value) => { if (!stale) setTree(value); })
+    void loadConversationBranches(activeId).then((value) => { if (!stale) setTree(value); })
       .catch(() => { if (!stale) setTree([]); });
     return () => { stale = true; };
   }, [activeId]);

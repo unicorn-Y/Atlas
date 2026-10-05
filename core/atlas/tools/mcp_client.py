@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -74,7 +75,9 @@ class MCPServerHandle:
     transport: str  # "stdio" | "sse"
     session: ClientSession | None = None
     tools: list[ToolInfo] = field(default_factory=list)
-    _cleanup: Any = None  # async context manager exit
+    _stderr_log: Any = None
+    _owner_task: asyncio.Task[None] | None = None
+    _owner_stop: asyncio.Event | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -204,8 +207,7 @@ class MCPClient:
         """Disconnect all MCP servers."""
         for name, handle in list(self._servers.items()):
             try:
-                if handle._cleanup:
-                    await handle._cleanup.__aexit__(None, None, None)
+                await self._stop_handle(handle)
                 self._server_status.setdefault(name, {"name": name}).update({
                     "connected": False, "state": "stopped",
                 })
@@ -263,13 +265,27 @@ class MCPClient:
             })
             log.info("mcp.server_ready", server=cfg.name,
                      tools=[t.name for t in handle.tools])
+        except asyncio.CancelledError:
+            try:
+                await asyncio.shield(self._stop_handle(handle))
+            except Exception as cleanup_exc:
+                log.warning("mcp.stop_error", server=cfg.name, error=str(cleanup_exc))
+            raise
         except Exception as exc:
-            if handle._cleanup:
-                await handle._cleanup.__aexit__(None, None, None)
+            diagnostic = _stdio_startup_diagnostic(handle._stderr_log)
+            try:
+                await self._stop_handle(handle)
+            except Exception as cleanup_exc:
+                log.warning("mcp.stop_error", server=cfg.name, error=str(cleanup_exc))
+            finally:
+                if handle._stderr_log is not None:
+                    handle._stderr_log.close()
             status.update({
                 "state": "failed", "connected": False,
-                "tool_discovery": "failed", "blocking_reason": _failure_reason(exc),
+                "tool_discovery": "failed", "blocking_reason": diagnostic or _failure_reason(exc),
             })
+            if diagnostic:
+                raise _MCPStartupError(diagnostic) from exc
             raise
 
     async def _connect_stdio(self, cfg: MCPServerConfig,
@@ -292,28 +308,80 @@ class MCPClient:
             cwd=cfg.cwd,
         )
 
-        # stdio_client is an async context manager that yields (read, write)
-        transport_cm = stdio_client(params)
-        read_stream, write_stream = await transport_cm.__aenter__()
-
-        # ClientSession wraps the streams
-        session = ClientSession(read_stream, write_stream)
-        await session.__aenter__()
-
-        handle.session = session
-        handle._cleanup = _StackedCleanup(session, transport_cm)
+        # Keep child stderr private; expose only recognized, safe startup diagnostics.
+        handle._stderr_log = tempfile.TemporaryFile(mode="w+b")
+        transport_cm = stdio_client(params, errlog=handle._stderr_log)
+        await self._start_transport_owner(handle, transport_cm)
 
     async def _connect_sse(self, cfg: MCPServerConfig,
                            handle: MCPServerHandle) -> None:
         """Set up SSE transport."""
         transport_cm = sse_client(cfg.url)
-        read_stream, write_stream = await transport_cm.__aenter__()
+        await self._start_transport_owner(handle, transport_cm)
 
-        session = ClientSession(read_stream, write_stream)
-        await session.__aenter__()
+    async def _start_transport_owner(self, handle: MCPServerHandle, transport_cm: Any) -> None:
+        """Enter, hold, and exit MCP contexts in one dedicated owner task."""
+        loop = asyncio.get_running_loop()
+        ready: asyncio.Future[None] = loop.create_future()
+        stop_event = asyncio.Event()
+        handle._owner_stop = stop_event
 
-        handle.session = session
-        handle._cleanup = _StackedCleanup(session, transport_cm)
+        async def own_connection() -> None:
+            session: ClientSession | None = None
+            transport_entered = False
+            session_entered = False
+            try:
+                read_stream, write_stream = await transport_cm.__aenter__()
+                transport_entered = True
+                session = ClientSession(read_stream, write_stream)
+                await session.__aenter__()
+                session_entered = True
+                handle.session = session
+                if not ready.done():
+                    ready.set_result(None)
+                await stop_event.wait()
+            except BaseException as exc:
+                if not ready.done():
+                    ready.set_exception(exc)
+                else:
+                    raise
+            finally:
+                handle.session = None
+                try:
+                    if session_entered and session is not None:
+                        await session.__aexit__(None, None, None)
+                finally:
+                    if transport_entered:
+                        await transport_cm.__aexit__(None, None, None)
+
+        handle._owner_task = asyncio.create_task(own_connection(), name=f"mcp-owner:{handle.name}")
+        await ready
+
+    async def _stop_handle(self, handle: MCPServerHandle) -> None:
+        """Request owner-task cleanup and wait until all transport resources exit."""
+        owner_task = handle._owner_task
+        try:
+            if handle._owner_stop is not None:
+                handle._owner_stop.set()
+            if owner_task is not None:
+                try:
+                    await asyncio.shield(owner_task)
+                except asyncio.CancelledError:
+                    current_task = asyncio.current_task()
+                    if not owner_task.cancelled() or (
+                        current_task is not None and current_task.cancelling()
+                    ):
+                        raise
+                    log.warning("mcp.owner_cancelled", server=handle.name)
+                if owner_task.done():
+                    handle._owner_task = None
+        finally:
+            if owner_task is None or owner_task.done():
+                handle.session = None
+                handle._owner_task = None
+                if handle._stderr_log is not None:
+                    handle._stderr_log.close()
+                    handle._stderr_log = None
 
     # -- tool operations -----------------------------------------------------
 
@@ -466,10 +534,9 @@ class MCPClient:
         # Remove tools from index
         for tool in handle.tools:
             self._tool_index.pop(tool.qualified_name, None)
-        # Clean up transport
+        # Stop the task that owns the transport and its cancellation scopes.
         try:
-            if handle._cleanup:
-                await handle._cleanup.__aexit__(None, None, None)
+            await self._stop_handle(handle)
             log.info("mcp.server_stopped", server=server_name)
         except Exception as e:
             log.warning("mcp.stop_error", server=server_name, error=str(e))
@@ -500,22 +567,25 @@ class MCPClient:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-class _StackedCleanup:
-    """Holds two async context managers so we can exit them in reverse order."""
+class _MCPStartupError(RuntimeError):
+    """A safe diagnostic derived from the child process rather than its raw stderr."""
 
-    def __init__(self, session_cm: Any, transport_cm: Any) -> None:
-        self._session = session_cm
-        self._transport = transport_cm
 
-    async def __aexit__(self, *args: Any) -> None:
-        try:
-            await self._session.__aexit__(None, None, None)
-        except Exception:
-            pass
-        try:
-            await self._transport.__aexit__(None, None, None)
-        except Exception:
-            pass
+def _stdio_startup_diagnostic(stderr_log: Any) -> str | None:
+    if stderr_log is None:
+        return None
+    try:
+        stderr_log.seek(0, os.SEEK_END)
+        stderr_log.seek(max(0, stderr_log.tell() - 8192))
+        tail = stderr_log.read(8192).decode("utf-8", errors="replace")
+    except (OSError, ValueError):
+        return None
+    if "ERR_TLS_CERT_ALTNAME_INVALID" in tail:
+        return (
+            "MCP dependency download failed: TLS certificate hostname mismatch "
+            "(ERR_TLS_CERT_ALTNAME_INVALID). Check the package registry or proxy certificate."
+        )
+    return None
 
 
 def _resolve_stdio_command(command: str, args: list[str]) -> tuple[str, list[str]]:
@@ -546,6 +616,8 @@ def _resolve_stdio_command(command: str, args: list[str]) -> tuple[str, list[str
 def _failure_reason(exc: Exception) -> str:
     """Keep actionable failure status without reflecting configured arguments or secrets."""
     message = str(exc)
+    if isinstance(exc, _MCPStartupError):
+        return message
     if isinstance(exc, FileNotFoundError) and (
         "Node-based MCP server" in message or "Atlas bundled Node" in message
     ):

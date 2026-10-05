@@ -348,6 +348,9 @@ async def request_runtime_shutdown(
     callback = getattr(request.app.state, "desktop_shutdown_callback", None)
     if not expected or not secrets.compare_digest(supplied, expected) or not callable(callback):
         raise HTTPException(status_code=403, detail="Backend shutdown is not authorized")
+    from atlas.api.skills_market_router import get_market
+
+    await get_market().cancel_pending_searches()
     asyncio.get_running_loop().call_soon(callback)
     return {"status": "shutting_down"}
 
@@ -386,6 +389,23 @@ async def add_mcp_server(
         log.exception("mcp.server_connect_failed", server=req.name)
         raise HTTPException(status_code=500, detail=f"Failed to connect: {e}")
 
+    try:
+        _persist_mcp_server_config(req.name, {
+            "transport": req.transport,
+            "command": req.command,
+            "args": req.args,
+            "env": req.env,
+            "cwd": req.cwd,
+            "url": req.url,
+            "enabled": True,
+        })
+    except Exception as exc:
+        await mcp_client.disconnect_server(req.name)
+        log.exception("mcp.config_persist_failed", server=req.name)
+        raise HTTPException(
+            status_code=500, detail="MCP server connected but configuration could not be saved",
+        ) from exc
+
     tools = mcp_client.get_server_tools(req.name)
     return {
         "name": req.name,
@@ -410,8 +430,82 @@ async def remove_mcp_server(
     if server_name not in mcp_client.get_server_names():
         raise HTTPException(status_code=404, detail=f"Server not found: {server_name}")
 
+    from atlas.config import get_config
+
+    saved_config = get_config().get("tools.servers", {}) or {}
+    server_config = saved_config.get(server_name)
+    runtime_config = mcp_client.get_server_config(server_name)
+    runtime_tool_names = {
+        tool.qualified_name for tool in mcp_client.get_server_tools(server_name)
+    }
     await mcp_client.disconnect_server(server_name)
+    try:
+        _persist_mcp_server_config(server_name, None)
+    except Exception as exc:
+        if server_config:
+            from atlas.tools.mcp_client import MCPServerConfig
+
+            await mcp_client._connect_server(MCPServerConfig(name=server_name, **server_config))
+        elif runtime_config is not None:
+            await mcp_client._connect_server(runtime_config)
+        log.exception("mcp.config_remove_failed", server=server_name)
+        raise HTTPException(
+            status_code=500, detail="MCP server configuration could not be removed",
+        ) from exc
+
+    try:
+        from atlas.engine.hermes_runtime import HermesRuntime
+
+        await asyncio.to_thread(
+            HermesRuntime.unregister_atlas_mcp_server, server_name, runtime_tool_names,
+        )
+    except Exception as exc:
+        log.exception("mcp.hermes_unregister_failed", server=server_name)
+        raise HTTPException(
+            status_code=500,
+            detail="MCP server was removed from API but chat registry cleanup failed",
+        ) from exc
     return {"status": "ok", "server": server_name}
+
+
+def _persist_mcp_server_config(name: str, server_config: dict[str, Any] | None) -> None:
+    """Persist API-managed MCP servers in the same TOML config Hermes loads per run."""
+    import copy
+
+    import tomli_w
+
+    from atlas import config as config_module
+    from atlas.config import get_config
+
+    config = get_config()
+    data = copy.deepcopy(config.raw)
+    tools = data.setdefault("tools", {})
+    servers = tools.setdefault("servers", {})
+    auto_start = list(tools.get("auto_start", []) or [])
+    if server_config is None:
+        servers.pop(name, None)
+        if auto_start:
+            auto_start = [item for item in auto_start if item != name]
+            if not auto_start:
+                # Empty means "all enabled servers" to Hermes. Preserve a non-empty
+                # selection that has just become empty by disabling previously excluded
+                # servers before switching back to that meaning.
+                for remaining in servers.values():
+                    if isinstance(remaining, dict) and remaining.get("enabled", True):
+                        remaining["enabled"] = False
+    else:
+        servers[name] = {key: value for key, value in server_config.items() if value is not None}
+        if auto_start and name not in auto_start:
+            auto_start.append(name)
+    tools["auto_start"] = auto_start
+
+    config_path = config_module.CONFIG_PATH
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = config_path.with_suffix(config_path.suffix + ".tmp")
+    temporary.write_text(tomli_w.dumps(data), encoding="utf-8")
+    temporary.replace(config_path)
+    config.raw.clear()
+    config.raw.update(data)
 
 
 @router.post("/api/mcp/servers/{server_name}/restart")

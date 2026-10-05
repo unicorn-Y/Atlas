@@ -25,9 +25,10 @@ Integration note for the owner of ``atlas/server.py``:
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 from atlas.skills.acquisition import _parse_manifest, payload_sha256
@@ -144,15 +145,27 @@ def save_local_skill_bundle(
 
 @router.get("/api/skills/market/search", dependencies=[Depends(_require_trusted_origin)])
 async def market_search(
+    request: Request,
     q: str = "",
     source: str | None = None,
     limit: int = 20,
-) -> dict[str, Any]:
+) -> Any:
     """Search every enabled market source; failures degrade, never block the UI."""
+    search_task = asyncio.create_task(get_market().search(query=q, source=source, limit=limit))
     try:
-        return await get_market().search(query=q, source=source, limit=limit)
+        while not search_task.done():
+            await asyncio.wait({search_task}, timeout=0.1)
+            if not search_task.done() and await request.is_disconnected():
+                search_task.cancel()
+                await asyncio.gather(search_task, return_exceptions=True)
+                return Response(status_code=499)
+        return await search_task
     except MarketError as exc:
         raise _http_error(exc) from None
+    finally:
+        if not search_task.done():
+            search_task.cancel()
+            await asyncio.gather(search_task, return_exceptions=True)
 
 
 @router.get("/api/skills/market/sources", dependencies=[Depends(_require_trusted_origin)])

@@ -91,9 +91,21 @@ class ModelManager:
             custom_models = []
         self._current: str = default_model or str(settings.get("selected_model") or cfg.default_model)
         self._favorites: set[str] = {"claude-opus-4", "claude-sonnet-4", "gpt-4o"}
-        self._api_base = str(settings.get("gateway_base_url") or cfg.gateway_base_url)
+        settings_base = str(settings.get("gateway_base_url") or "")
+        self._api_base = settings_base or cfg.gateway_base_url
         self._api_key = str(settings.get("api_key") or cfg.gateway_api_key)
         self._model_router = None
+        self._gateway_source = "user-settings" if settings_base else "atlas.toml"
+        self._toml_gateway_base_url = cfg.gateway_base_url
+        if settings_base and cfg.gateway_base_url \
+                and settings_base.rstrip("/") != cfg.gateway_base_url.rstrip("/"):
+            # The settings UI silently wins over atlas.toml; surface that or an edited
+            # toml appears ignored (2026-10-04: desktop pointed at a dead gateway for a day).
+            log.warning(
+                "model_manager.gateway_source_conflict",
+                effective=settings_base, effective_source="user-settings.json",
+                ignored=cfg.gateway_base_url, ignored_source="atlas.toml",
+            )
         # 服务商配置（base_url 覆盖 + 密钥元数据；密钥原文在系统凭据库，见 add_key）。
         self._providers: dict[str, dict[str, Any]] = self._load_providers(settings)
 
@@ -105,11 +117,21 @@ class ModelManager:
             if custom.get("id") and not any(model["id"] == custom["id"] for model in self._models):
                 self.add_model(custom, persist=False)
 
-        log.info("model_manager.init", default=self._current, api_base=self._api_base)
+        log.info("model_manager.init", default=self._current, api_base=self._api_base,
+                 source=self._gateway_source)
 
     @property
     def gateway_base_url(self) -> str:
         return self._api_base
+
+    @property
+    def gateway_source(self) -> str:
+        """Where the effective gateway base_url came from: ``user-settings`` or ``atlas.toml``."""
+        return self._gateway_source
+
+    @property
+    def atlas_toml_gateway_base_url(self) -> str:
+        return self._toml_gateway_base_url
 
     @property
     def api_key_configured(self) -> bool:
@@ -137,6 +159,7 @@ class ModelManager:
             self._api_key = api_key
             for entry in self._providers.values():
                 entry.pop("api_mode_probe", None)
+        self._gateway_source = "user-settings"
         self._persist_settings()
 
     def _persist_settings(self) -> None:

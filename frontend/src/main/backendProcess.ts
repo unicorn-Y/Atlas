@@ -73,6 +73,12 @@ async function probeHealth(): Promise<HealthContact | null> {
 }
 
 /** Back-compat helper: is a backend fully ready right now? */
+/** An Atlas health body (as opposed to some other service answering on the port). */
+function isAtlasHealthPayload(payload: unknown): boolean {
+  return typeof payload === 'object' && payload !== null
+    && ('status' in payload || 'components' in payload);
+}
+
 async function isBackendHealthy(): Promise<boolean> {
   return (await probeHealth())?.ready ?? false;
 }
@@ -114,9 +120,13 @@ function resolveCoreDir(): string {
   return coreDir;
 }
 
-function pythonCandidates(): Array<{ command: string; args: string[] }> {
+function pythonCandidates(coreDir: string): Array<{ command: string; args: string[] }> {
   const candidates: Array<{ command: string; args: string[] }> = [];
   if (process.env.ATLAS_PYTHON) candidates.push({ command: process.env.ATLAS_PYTHON, args: [] });
+  const virtualenvPython = process.platform === 'win32'
+    ? path.join(coreDir, '.venv', 'Scripts', 'python.exe')
+    : path.join(coreDir, '.venv', 'bin', 'python');
+  if (fs.existsSync(virtualenvPython)) candidates.push({ command: virtualenvPython, args: [] });
   candidates.push({ command: 'python', args: [] });
   if (process.platform === 'win32') candidates.push({ command: 'py', args: ['-3'] });
   return candidates;
@@ -266,10 +276,39 @@ export async function ensureBackendRunning(options?: EnsureBackendOptions): Prom
   };
 
   emit('probing', false);
-  const external = await probeHealth();
-  if (external?.ready) {
-    emit('ready', false);
-    return { ready: true, managed: false };
+  // A busy backend (mid model-switch engine rebuild, heartbeat/automation tick
+  // burst) can miss one probe, and an external backend may still be starting
+  // its deferred components. Spawning a second backend then dies on the occupied
+  // port and takes the window down with it, so: re-probe a few times, and once
+  // an external backend answers at all, wait for it instead of spawning.
+  let externalContact = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const contact = await probeHealth();
+    if (contact?.ready) {
+      emit('ready', false);
+      return { ready: true, managed: false };
+    }
+    if (contact && isAtlasHealthPayload(contact.payload)) {
+      externalContact = true;
+      break;
+    }
+    if (attempt < 2) await sleep(600);
+  }
+  if (externalContact) {
+    const deadline = startedAt + STARTUP_MAX_WAIT_MS;
+    while (Date.now() < deadline) {
+      const contact = await probeHealth();
+      if (contact?.ready) {
+        emit('ready', false);
+        return { ready: true, managed: false };
+      }
+      emit('starting', false, contact ? progressDetail(contact.payload) : '等待已运行的后端响应');
+      await sleep(PROBE_INTERVAL_MS);
+    }
+    emit('failed', false, `external backend not healthy within ${STARTUP_MAX_WAIT_MS / 1000}s`);
+    throw new Error(
+      `An Atlas backend is already running but did not become healthy within ${STARTUP_MAX_WAIT_MS / 1000} seconds.`,
+    );
   }
 
   const packagedBackend = process.env.ATLAS_BACKEND_EXECUTABLE;
@@ -279,9 +318,9 @@ export async function ensureBackendRunning(options?: EnsureBackendOptions): Prom
   const coreDir = packagedBackend ? rootDir : resolveCoreDir();
   const candidates: BackendCandidate[] = packagedBackend
     ? [{ command: packagedBackend, args: [], cwd: rootDir }]
-    : pythonCandidates().map((candidate) => ({
+    : pythonCandidates(coreDir).map((candidate) => ({
       command: candidate.command,
-      args: [...candidate.args, '-m', 'uvicorn', 'atlas.server:app', '--host', '127.0.0.1', '--port', process.env.ATLAS_PORT ?? '8765'],
+      args: [...candidate.args, '-m', 'atlas.desktop_entry'],
       cwd: coreDir,
     }));
   let lastNotFound: NodeJS.ErrnoException | null = null;

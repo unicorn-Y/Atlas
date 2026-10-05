@@ -134,6 +134,8 @@ def _configuration_payload(model_mgr) -> dict[str, Any]:
     settings = _server().load_user_settings()
     return {
         "gateway_base_url": model_mgr.gateway_base_url,
+        "gateway_source": model_mgr.gateway_source,
+        "atlas_toml_gateway_base_url": model_mgr.atlas_toml_gateway_base_url,
         "api_key_configured": model_mgr.api_key_configured,
         "models": model_mgr.list_models(),
         "current": model_mgr.current_model,

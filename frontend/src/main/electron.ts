@@ -77,7 +77,14 @@ function createWindow() {
   // never become a window onto someone else's page: links open in the system browser instead,
   // and navigation away from the app is refused.
   const appUrl = devUrl ? new URL(devUrl).origin : pathToFileURL(path.join(here, '../../dist/index.html')).href;
-  const isAppUrl = (target: string) => devUrl ? target.startsWith(appUrl) : target.split('#')[0] === appUrl;
+  const isAppUrl = (target: string) => {
+    if (!devUrl) return target.split('#')[0] === appUrl;
+    try {
+      return new URL(target).origin === appUrl;
+    } catch {
+      return false;
+    }
+  };
   windowRef.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
@@ -87,8 +94,26 @@ function createWindow() {
     event.preventDefault();
     if (/^https?:/i.test(url)) void shell.openExternal(url);
   });
-  if (devUrl) void windowRef.loadURL(devUrl);
-  else void windowRef.loadFile(path.join(here, '../../dist/index.html'));
+  const win = windowRef;
+  const loadApp = () => {
+    if (devUrl) void win.loadURL(devUrl);
+    else void win.loadFile(path.join(here, '../../dist/index.html'));
+  };
+  loadApp();
+  // A dead renderer or a failed first paint would otherwise leave an all-white
+  // window until the user manually restarts: bring the page back on its own.
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit') return;
+    win.webContents.reload();
+  });
+  let loadRetries = 0;
+  win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
+    if (!isMainFrame || code === -3) return; // -3: aborted by a newer navigation
+    if (loadRetries >= 5) return;
+    loadRetries += 1;
+    setTimeout(() => loadApp(), 500 * loadRetries);
+  });
+  win.webContents.on('did-finish-load', () => { loadRetries = 0; });
   windowRef.on('closed', () => { windowRef = null; });
 }
 

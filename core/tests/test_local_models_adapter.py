@@ -4,13 +4,16 @@ No real llama.cpp is ever started: an in-process stub HTTP server speaks just en
 llama-server (/health /models /props /v1/chat/completions /models/load /models/unload)
 to exercise the probe/activate gate and the shared-server HTTP paths (same pattern as
 hermes's tests/hermes_cli/test_local_runtime.py). Long downloads are stubbed at the
-``pm.downloader.Download`` seam. The hermes fork itself is import smoke-tested only.
+``pm.downloader.Download`` seam. Hermes module imports are real; a cold subprocess
+regression covers concurrent imports without starting a model server.
 """
 from __future__ import annotations
 
 import importlib
 import json
 import os
+import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -54,6 +57,86 @@ def test_hermes_local_runtime_public_surface():
 
     assert callable(bootstrap.staged_models) and callable(bootstrap.refresh_local_runtime)
     assert callable(devices.probe_devices)
+
+
+def test_cold_parallel_runtime_endpoint_imports_are_safe(tmp_path):
+    """Exercise the first Hermes imports as concurrent API worker threads in a new process."""
+    script = r"""
+import concurrent.futures
+import importlib
+import sys
+import threading
+import types
+
+from atlas.engine.local_runtime_adapter import LocalRuntimeAdapter, _mod
+
+real_import_module = importlib.import_module
+def require_host_imports_first(name, package=None):
+    if name.startswith("hermes_cli.local_runtime."):
+        required = {
+            "hermes_platform.host",
+            "hermes_platform.host.facts",
+            "hermes_platform.host.products",
+        }
+        missing = required - sys.modules.keys()
+        assert not missing, f"host imports not preloaded: {missing}"
+    return real_import_module(name, package)
+
+importlib.import_module = require_host_imports_first
+
+adapter = LocalRuntimeAdapter()
+barrier = threading.Barrier(12)
+operations = (
+    adapter.backends,
+    adapter.status,
+    adapter.hardware,
+    lambda: _mod("hermes_cli.local_runtime.catalog"),
+    lambda: adapter.search_hf(""),
+)
+
+def call(operation):
+    barrier.wait(timeout=10)
+    return operation()
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+    futures = [pool.submit(call, operations[index % len(operations)]) for index in range(12)]
+    results = [future.result(timeout=20) for future in futures]
+
+assert all(isinstance(item, (dict, types.ModuleType)) for item in results)
+assert all("backends" in results[index] for index in (0, 5, 10))
+assert all("models_dir" in results[index] for index in (1, 6, 11))
+assert all("engine_devices" in results[index] for index in (2, 7))
+assert all(getattr(results[index], "CATALOG", None) for index in (3, 8))
+assert all(results[index] == {"hits": []} for index in (4, 9))
+print("cold parallel local-runtime calls completed")
+"""
+    isolated = tmp_path / "profile"
+    isolated.mkdir()
+    env = os.environ.copy()
+    for key, directory in {
+        "HOME": isolated / "home",
+        "USERPROFILE": isolated / "userprofile",
+        "APPDATA": isolated / "appdata",
+        "LOCALAPPDATA": isolated / "localappdata",
+        "HERMES_HOME": isolated / "hermes",
+        "ATLAS_DATA_DIR": isolated / "atlas",
+    }.items():
+        directory.mkdir(parents=True, exist_ok=True)
+        env[key] = str(directory)
+    for key in tuple(env):
+        if key.endswith(("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_CREDENTIALS")):
+            env.pop(key)
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1],
+            env=env, capture_output=True, text=True, timeout=30, check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        pytest.fail(f"cold parallel local-runtime imports did not finish: {exc}")
+    detail = (result.stdout + "\n" + result.stderr)[-2000:]
+    assert result.returncode == 0, detail
+    assert "cold parallel local-runtime calls completed" in result.stdout, detail
 
 
 def test_hermes_home_pinned_once(monkeypatch, tmp_path):

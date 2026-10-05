@@ -1,0 +1,1265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas · 玻璃原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1B2232; --ink2:#4B5467; --ink3:#7F8799;
+  --line:rgba(27,34,50,.08); --line2:rgba(27,34,50,.14);
+  --glass:rgba(255,255,255,.46); --glass2:rgba(255,255,255,.68); --glass3:rgba(255,255,255,.86);
+  --edge:rgba(255,255,255,.75);
+  --brass:#9C6A26; --brass-2:#B8873F; --brass-soft:rgba(176,124,52,.13);
+  --ether:#4E68C2; --ether-soft:rgba(78,104,194,.11);
+  --ok:#2F8261; --ok-soft:rgba(47,130,97,.12); --danger:#C2413B;
+  --shadow:0 1px 0 var(--edge) inset, 0 24px 60px -30px rgba(38,50,82,.35), 0 2px 6px -2px rgba(38,50,82,.08);
+  --f-ui:"Geist","PingFang SC","Microsoft YaHei UI","Noto Sans SC",system-ui,sans-serif;
+  --f-display:"Noto Serif SC","Source Han Serif SC","Songti SC",serif;
+  --f-mono:"Geist Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --r-shell:22px; --r-block:14px; --r-ctl:10px;
+  --canvas-w:0px;
+  color-scheme:light;
+}
+[data-theme=dark]{
+  --ink:#E8ECF4; --ink2:#AAB3C5; --ink3:#747E93;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.13);
+  --glass:rgba(22,29,48,.5); --glass2:rgba(30,38,62,.7); --glass3:rgba(38,47,74,.9);
+  --edge:rgba(255,255,255,.07);
+  --brass:#D8A660; --brass-2:#E6BA78; --brass-soft:rgba(216,166,96,.14);
+  --ether:#91A6F2; --ether-soft:rgba(145,166,242,.13);
+  --ok:#62C49A; --ok-soft:rgba(98,196,154,.13);
+  --shadow:0 1px 0 var(--edge) inset, 0 30px 70px -24px rgba(0,0,0,.65);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font:14.5px/1.65 var(--f-ui);color:var(--ink);background:#E6ECF4;overflow:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--ether);outline-offset:2px;border-radius:8px}
+svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+svg.i.sm{width:15px;height:15px}
+
+/* ---------- sky ---------- */
+.sky{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.sky i{position:absolute;inset:-2%;opacity:0;transition:opacity 1.4s ease}
+.sky .dawn{background:
+  radial-gradient(90% 55% at 78% 108%,#F5D3B8 0%,rgba(245,211,184,0) 62%),
+  radial-gradient(60% 45% at 8% 0%,#C9D8EE 0%,rgba(201,216,238,0) 70%),
+  linear-gradient(180deg,#DFE7F2 0%,#ECEFF3 58%,#F2E4D8 100%)}
+.sky .cool{background:
+  radial-gradient(70% 50% at 100% 0%,#CCD7EE 0%,rgba(204,215,238,0) 70%),
+  radial-gradient(80% 50% at 0% 110%,#DCE0EC 0%,rgba(220,224,236,0) 70%),
+  linear-gradient(180deg,#E2E8F1 0%,#E9ECF1 100%)}
+.sky .warm{background:
+  radial-gradient(80% 60% at 20% 105%,#F2C9B4 0%,rgba(242,201,180,0) 65%),
+  radial-gradient(60% 50% at 95% 10%,#DCD3EE 0%,rgba(220,211,238,0) 70%),
+  linear-gradient(180deg,#EDE6EE 0%,#F1E9E4 100%)}
+.sky .night{background:
+  radial-gradient(70% 38% at 50% 112%,#4B3C5E 0%,rgba(75,60,94,0) 70%),
+  radial-gradient(55% 45% at 85% 0%,#1F2C52 0%,rgba(31,44,82,0) 70%),
+  linear-gradient(180deg,#0B1120 0%,#131A30 55%,#1E2238 100%)}
+.sky .stars{background-image:radial-gradient(1px 1px at 12% 18%,#fff8 50%,transparent 51%),radial-gradient(1px 1px at 32% 8%,#fff6 50%,transparent 51%),radial-gradient(1.4px 1.4px at 71% 22%,#fff9 50%,transparent 51%),radial-gradient(1px 1px at 88% 12%,#fff5 50%,transparent 51%),radial-gradient(1px 1px at 55% 35%,#fff4 50%,transparent 51%),radial-gradient(1.2px 1.2px at 20% 44%,#fff5 50%,transparent 51%),radial-gradient(1px 1px at 93% 40%,#fff4 50%,transparent 51%),radial-gradient(1px 1px at 44% 14%,#fff7 50%,transparent 51%)}
+.sky .grain{opacity:.28;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E")}
+body[data-view=home] .sky .dawn,
+body[data-view=chat] .sky .dawn,
+body[data-view=code] .sky .cool,
+body[data-view=create] .sky .warm{opacity:1}
+[data-theme=dark] .sky i:not(.grain){opacity:0}
+[data-theme=dark] .sky i.night,[data-theme=dark] .sky i.stars{opacity:1}
+body.voice-on .sky .night,body.voice-on .sky .stars{opacity:1}
+
+/* ---------- shell ---------- */
+.app{position:relative;z-index:1;height:100vh;display:grid;grid-template-columns:268px minmax(0,1fr);gap:10px;padding:10px;transition:filter .6s,opacity .6s}
+body.voice-on .app{filter:blur(18px) saturate(.8);opacity:.35;pointer-events:none}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(30px) saturate(1.5);backdrop-filter:blur(30px) saturate(1.5);border:1px solid var(--line);box-shadow:var(--shadow)}
+
+/* sidebar */
+.side{border-radius:var(--r-shell);display:flex;flex-direction:column;min-height:0;padding:14px 12px 12px}
+.brand{display:flex;align-items:center;gap:10px;padding:2px 6px 14px;-webkit-app-region:drag}
+.brand b{font:600 18px/1 var(--f-display);letter-spacing:.04em}
+.brand .mark{width:30px;height:30px}
+.brand .collapse{margin-left:auto;-webkit-app-region:no-drag}
+.iconbtn{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:var(--r-ctl);color:var(--ink2);transition:background .15s,color .15s}
+.iconbtn:hover{background:var(--glass2);color:var(--ink)}
+.newrow{display:flex;gap:6px;margin-bottom:14px}
+.newbtn{flex:1;display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-radius:12px;background:var(--glass3);border:1px solid var(--line);box-shadow:0 1px 0 var(--edge) inset;font-weight:500}
+.newbtn svg{color:var(--brass)}
+.newbtn:hover{border-color:var(--line2)}
+.newbtn kbd,.search kbd{margin-left:auto;font:500 11px var(--f-mono);color:var(--ink3);padding:1px 6px;border:1px solid var(--line2);border-radius:6px}
+.search{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:var(--ink2);border:1px solid var(--line)}
+.search:hover{background:var(--glass2)}
+.nav{display:grid;gap:2px}
+.nav button{display:flex;align-items:center;gap:11px;height:38px;padding:0 10px;border-radius:11px;color:var(--ink2);text-align:left;font-weight:500;transition:background .15s,color .15s}
+.nav button:hover{background:var(--glass2);color:var(--ink)}
+.nav button[aria-current=page]{background:var(--glass3);color:var(--ink);box-shadow:0 1px 0 var(--edge) inset,0 1px 2px rgba(27,34,50,.06)}
+.nav button[aria-current=page] svg{color:var(--brass)}
+.nav .count{margin-left:auto;font-size:12px;color:var(--ether);background:var(--ether-soft);padding:0 8px;border-radius:99px;line-height:20px}
+.recents{flex:1;overflow:auto;margin-top:18px;padding-right:2px;scrollbar-width:thin}
+.recents h4{font-size:12px;font-weight:500;color:var(--ink3);padding:10px 10px 4px}
+.recents button{width:100%;display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:10px;color:var(--ink2);text-align:left;font-size:13.5px}
+.recents button span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.recents button svg{color:var(--ink3)}
+.recents button:hover{background:var(--glass2);color:var(--ink)}
+.recents button.on{color:var(--ink);background:var(--glass2)}
+.me{display:flex;align-items:center;gap:10px;padding:10px 8px 2px;border-top:1px solid var(--line);margin-top:8px}
+.avatar{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:13px;color:#fff;background:linear-gradient(145deg,#C79A5B,#8E5F24)}
+.me div{line-height:1.3}
+.me small{display:block;font-size:12px;color:var(--ink3)}
+.me .iconbtn:first-of-type{margin-left:auto}
+
+/* main */
+.main{display:grid;grid-template-rows:48px minmax(0,1fr);min-width:0;min-height:0}
+.top{display:flex;align-items:center;gap:6px;padding:0 4px 0 14px;-webkit-app-region:drag}
+.top > *{-webkit-app-region:no-drag}
+.top .title{-webkit-app-region:drag;display:flex;align-items:center;gap:10px;min-width:0;font-weight:500}
+.top .title span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;color:var(--ink3)}
+.status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
+.top .spacer{flex:1;align-self:stretch;-webkit-app-region:drag}
+.bell{position:relative}
+.bell::after{content:"";position:absolute;top:8px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--brass)}
+.winctl{display:flex;margin-left:6px;padding-left:6px;border-left:1px solid var(--line)}
+.winctl button{width:40px;height:32px;display:grid;place-items:center;color:var(--ink3);border-radius:8px}
+.winctl button:hover{background:var(--glass2);color:var(--ink)}
+.winctl button.x:hover{background:#E0463F;color:#fff}
+
+.stage{display:grid;grid-template-columns:minmax(0,1fr) var(--canvas-w);gap:10px;min-height:0;transition:grid-template-columns .45s cubic-bezier(.3,.7,.2,1)}
+body.canvas-open{--canvas-w:min(46%,660px)}
+body[data-view=home]{--canvas-w:0px}
+.screen{display:none;min-height:0;min-width:0}
+body[data-view=home] .screen.home,
+body[data-view=chat] .screen.chat,
+body[data-view=code] .screen.code,
+body[data-view=create] .screen.create{display:flex;flex-direction:column}
+
+/* ---------- home ---------- */
+.home{overflow:auto;align-items:center;padding:0 24px}
+.home-inner{width:min(720px,100%);padding:9vh 0 48px}
+.hello{display:flex;align-items:center;gap:18px;margin-bottom:10px}
+.hello .mark{width:52px;height:52px}
+.hello h1{font:600 42px/1.2 var(--f-display);letter-spacing:.02em}
+.lede{color:var(--ink2);font-size:16px;margin:0 0 28px 70px}
+.lede a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:4px;cursor:pointer}
+.home .composer{margin-bottom:40px}
+.section-h{display:flex;align-items:baseline;justify-content:space-between;margin:0 4px 10px}
+.section-h h2{font-size:14px;font-weight:600}
+.section-h button{font-size:13px;color:var(--ink3)}
+.section-h button:hover{color:var(--ink)}
+.resume{border-radius:18px;overflow:hidden}
+.resume > div{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:14px;align-items:center;padding:16px 18px}
+.resume > div + div{border-top:1px solid var(--line)}
+.resume .ico{width:36px;height:36px;border-radius:11px;display:grid;place-items:center}
+.ico.ether{background:var(--ether-soft);color:var(--ether)}
+.ico.brass{background:var(--brass-soft);color:var(--brass)}
+.ico.ok{background:var(--ok-soft);color:var(--ok)}
+.resume p{font-weight:500}
+.resume small{display:block;color:var(--ink3);font-size:13px;margin-top:1px}
+.meter{height:3px;border-radius:3px;background:var(--line);margin-top:8px;overflow:hidden;max-width:280px}
+.meter i{display:block;height:100%;width:64%;background:var(--ether);border-radius:inherit;animation:meter 3.2s ease-in-out infinite alternate}
+@keyframes meter{from{width:52%}to{width:71%}}
+.btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 13px;border-radius:var(--r-ctl);font-size:13px;font-weight:500;border:1px solid var(--line2);background:var(--glass2);white-space:nowrap}
+.btn:hover{background:var(--glass3)}
+.btn.primary{background:var(--ink);color:var(--glass3);border-color:transparent}
+[data-theme=dark] .btn.primary{color:#141A2A}
+.btn.primary:hover{opacity:.9}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--ink2)}
+.btn.ghost:hover{background:var(--glass2);color:var(--ink)}
+.btns{display:flex;gap:6px}
+.memo{margin-top:26px;padding:0 4px;color:var(--ink3);font-size:13px;display:flex;gap:8px;align-items:flex-start}
+.memo svg{margin-top:3px}
+.lede-link{color:var(--ink2);text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px;cursor:pointer;margin-left:6px}
+
+/* ---------- composer ---------- */
+.composer{border-radius:20px;padding:14px 14px 10px 18px;background:var(--glass3);border:1px solid var(--line);box-shadow:var(--shadow);transition:border-color .2s,box-shadow .2s}
+.composer:focus-within{border-color:var(--line2);box-shadow:var(--shadow),0 0 0 4px var(--brass-soft)}
+.composer textarea{display:block;width:100%;border:0;outline:0;background:none;resize:none;min-height:26px;max-height:180px;font-size:15px;line-height:1.6}
+.composer textarea::placeholder{color:var(--ink3)}
+.crow{display:flex;align-items:center;gap:4px;margin-top:10px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:99px;font-size:13px;color:var(--ink2);border:1px solid var(--line);white-space:nowrap;min-width:0}
+.pill:hover{color:var(--ink);border-color:var(--line2)}
+.pill.intent{color:var(--ink)}
+.pill.intent em{font-style:normal;color:var(--ink3)}
+.pill.intent.guessed{border-color:transparent;background:var(--ether-soft);color:var(--ether)}
+.pill.intent.guessed em{color:inherit;opacity:.75}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.crow .grow{flex:1}
+.mic{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--ink2);border:1px solid var(--line2)}
+.mic:hover{color:var(--ink);background:var(--glass2)}
+.send{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--glass3);transition:opacity .15s,transform .15s}
+[data-theme=dark] .send{color:#141A2A}
+.send:disabled{opacity:.25;cursor:default}
+.send:not(:disabled):hover{transform:translateY(-1px)}
+.menu{position:absolute;z-index:40;min-width:220px;padding:6px;border-radius:14px;background:var(--glass3);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);border:1px solid var(--line2);box-shadow:0 20px 50px -18px rgba(20,28,50,.35);display:none}
+.menu.open{display:block}
+.menu button{width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;text-align:left;font-size:13.5px}
+.menu button:hover{background:var(--glass2)}
+.menu button small{margin-left:auto;color:var(--ink3);font-size:12px}
+.menu hr{border:0;border-top:1px solid var(--line);margin:5px 4px}
+.menu .check{margin-left:auto;color:var(--brass)}
+
+/* ---------- thread ---------- */
+.thread{flex:1;overflow:auto;padding:12px 24px 0;scrollbar-width:thin}
+.thread-inner{width:min(720px,100%);margin:0 auto;padding-bottom:28px}
+.dock{padding:0 24px 16px}
+.dock .composer{width:min(720px,100%);margin:0 auto}
+.msg-user{display:flex;justify-content:flex-end;margin:18px 0 22px}
+.msg-user p{max-width:78%;padding:11px 16px;border-radius:18px 18px 6px 18px;background:var(--glass2);border:1px solid var(--line);box-shadow:0 1px 0 var(--edge) inset}
+.msg-atlas{display:grid;grid-template-columns:28px minmax(0,1fr);gap:14px}
+.msg-atlas .mark{width:28px;height:28px;margin-top:2px}
+.msg-atlas .body > p{margin:12px 0}
+.msg-atlas ul{padding-left:20px;margin:10px 0}
+.msg-atlas li{margin:6px 0}
+.msg-atlas li::marker{color:var(--brass)}
+.msg-atlas strong{font-weight:600}
+.run{border:1px solid var(--line);border-radius:var(--r-block);background:var(--glass);overflow:hidden}
+.run > button{width:100%;display:flex;align-items:center;gap:10px;padding:9px 12px;font-size:13px;color:var(--ink2);text-align:left}
+.run > button:hover{color:var(--ink)}
+.run > button .chev{margin-left:auto;transition:transform .2s}
+.run.open > button .chev{transform:rotate(180deg)}
+.run ol{list-style:none;padding:2px 12px 10px 12px;display:none}
+.run.open ol{display:block}
+.run li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:start;padding:5px 0;font-size:13px;color:var(--ink2);position:relative}
+.run li:not(:last-child)::after{content:"";position:absolute;left:8px;top:24px;bottom:-6px;width:1px;background:var(--line2)}
+.run li svg{color:var(--ok);margin-top:3px}
+.run li code,.inline-code{font:12.5px var(--f-mono);padding:1px 5px;border-radius:5px;background:var(--line);color:var(--ink)}
+.run li small{color:var(--ink3);font-size:12px;font-variant-numeric:tabular-nums}
+.done-mark{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:var(--ok-soft);color:var(--ok)}
+.artifact{display:flex;align-items:center;gap:12px;padding:10px 12px 10px 10px;margin:14px 0;border-radius:var(--r-block);border:1px solid var(--line);background:var(--glass2);width:max-content;max-width:100%;text-align:left}
+.artifact:hover{border-color:var(--line2)}
+.artifact b{display:block;font-weight:500}
+.artifact small{color:var(--ink3);font-size:12.5px}
+.artifact .ico{width:38px;height:38px;border-radius:10px;display:grid;place-items:center}
+.followups{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.typing{display:inline-flex;gap:4px;padding:6px 0}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--ink3);animation:blink 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+
+/* ---------- canvas ---------- */
+.canvas{border-radius:var(--r-shell);min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;opacity:0;transform:translateX(12px);transition:opacity .35s,transform .45s cubic-bezier(.3,.7,.2,1)}
+body.canvas-open:not([data-view=home]) .canvas{opacity:1;transform:none}
+.canvas-panel{display:none;flex:1;min-height:0;flex-direction:column}
+body[data-view=chat] .canvas-panel.chat,
+body[data-view=code] .canvas-panel.code,
+body[data-view=create] .canvas-panel.create{display:flex}
+.chead{display:flex;align-items:center;gap:4px;padding:10px 10px 10px 16px;border-bottom:1px solid var(--line)}
+.chead h3{font-size:13.5px;font-weight:600;margin-right:10px;white-space:nowrap}
+.tabs{display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--line)}
+.tabs button{height:26px;padding:0 10px;border-radius:7px;font-size:12.5px;color:var(--ink2)}
+.tabs button[aria-selected=true]{background:var(--glass3);color:var(--ink);box-shadow:0 1px 2px rgba(20,28,50,.1)}
+.chead .grow{flex:1}
+.tabpane{display:none;flex:1;min-height:0;overflow:auto}
+.tabpane.on{display:block}
+
+/* doc */
+.doc{padding:34px 40px 48px;max-width:62ch}
+.doc .kicker{font-size:13px;color:var(--ink3)}
+.doc h1{font:700 28px/1.35 var(--f-display);margin:6px 0 20px;letter-spacing:.01em}
+.doc h2{font:600 17px/1.5 var(--f-display);margin:26px 0 8px}
+.doc p{margin:8px 0;line-height:1.85;color:var(--ink2)}
+.doc p b{color:var(--ink);font-weight:600}
+.doc .src{font-size:12px;color:var(--ether);vertical-align:super;margin-left:1px}
+.sources{padding:16px}
+.sources a{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;padding:12px;border-radius:12px;color:inherit;text-decoration:none}
+.sources a:hover{background:var(--glass2)}
+.sources a b{display:block;font-weight:500;font-size:13.5px}
+.sources a small{color:var(--ink3);font-size:12.5px}
+.sources .n{font:500 12px var(--f-mono);color:var(--ether);padding-top:2px}
+
+/* code */
+.canvas-panel.code{background:#121828;color:#D6DCEA;--line:rgba(255,255,255,.07);--ink:#E8ECF4;--ink2:#A7B0C3;--ink3:#6F7990;--glass3:rgba(255,255,255,.1);--glass2:rgba(255,255,255,.06)}
+.canvas-panel.code .chead{border-color:rgba(255,255,255,.07)}
+.files{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.files button{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px 8px 0 0;font:12.5px var(--f-mono);color:#8A94AB}
+.files button.on{background:rgba(255,255,255,.06);color:#E8ECF4}
+.files .plus{color:#6FCB9E}.files .minus{color:#EC8A84}
+pre.diff{font:12.8px/1.75 var(--f-mono);padding:12px 0 24px;tab-size:2;counter-reset:ln}
+pre.diff span{display:block;padding:0 18px 0 0;white-space:pre}
+pre.diff span::before{display:inline-block;width:52px;padding-right:14px;text-align:right;color:#4E5870;content:attr(data-n)}
+pre.diff .hunk{color:#7D8FC9;background:rgba(125,143,201,.08)}
+pre.diff .add{background:rgba(98,196,154,.11);color:#C7F0DB}
+pre.diff .add::before{color:#62C49A}
+pre.diff .del{background:rgba(236,138,132,.1);color:#F1C3BF}
+pre.diff .del::before{color:#EC8A84}
+pre.diff .cm{color:#7F8AA3;font-style:italic}
+pre.diff .kw{color:#C6A0F6}
+pre.diff .str{color:#E6BA78}
+.term{font:12.8px/1.8 var(--f-mono);padding:16px 18px;color:#B9C2D6}
+.term .p{color:#E6BA78}.term .ok{color:#62C49A}.term .dim{color:#5E6880}
+.codebar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);font-size:12.5px;color:#8A94AB}
+.codebar .btn{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#E8ECF4}
+.codebar .btn.primary{background:#E8ECF4;color:#121828}
+
+/* create */
+.gallery{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px}
+.shot{position:relative;border-radius:14px;overflow:hidden;aspect-ratio:4/3;border:1px solid var(--line);transition:transform .2s,box-shadow .2s}
+.shot svg{display:block;width:100%;height:100%}
+.shot.on{box-shadow:0 0 0 2px var(--glass3),0 0 0 4px var(--brass)}
+.shot:hover{transform:translateY(-1px)}
+.shot figcaption{position:absolute;left:10px;bottom:8px;font-size:12px;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.4)}
+.shot-actions{display:flex;gap:6px;padding:0 14px 16px;flex-wrap:wrap}
+.player{margin:14px;border-radius:14px;overflow:hidden;position:relative;aspect-ratio:16/9;border:1px solid var(--line)}
+.player svg{width:100%;height:100%;display:block;animation:kenburns 14s ease-in-out infinite alternate}
+@keyframes kenburns{from{transform:scale(1)}to{transform:scale(1.08) translate(-1.5%,-1%)}}
+.player .play{position:absolute;inset:0;margin:auto;width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.35);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:#fff;border:1px solid rgba(255,255,255,.5)}
+.player .gen{position:absolute;left:12px;top:12px;font-size:12px;color:#fff;padding:3px 10px;border-radius:99px;background:rgba(20,26,40,.35);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.timeline{margin:0 14px;padding:10px;border-radius:12px;background:var(--glass2);border:1px solid var(--line)}
+.frames{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;height:46px;position:relative}
+.frames div{border-radius:6px;overflow:hidden}
+.frames div svg{width:100%;height:100%;display:block}
+.frames .head{position:absolute;top:-4px;bottom:-4px;left:38%;width:2px;background:var(--brass);border-radius:2px}
+.tl-meta{display:flex;justify-content:space-between;font:12px var(--f-mono);color:var(--ink3);margin-top:8px}
+.shots-list{padding:14px;display:grid;gap:8px}
+.shots-list div{display:flex;gap:12px;align-items:center;font-size:13px;color:var(--ink2)}
+.shots-list b{font-weight:500;color:var(--ink)}
+
+/* ---------- voice ---------- */
+.voice{position:fixed;inset:0;z-index:50;display:grid;grid-template-rows:64px 1fr auto auto;justify-items:center;color:#E8ECF4;opacity:0;visibility:hidden;transition:opacity .6s,visibility .6s}
+body.voice-on .voice{opacity:1;visibility:visible}
+.vtop{width:100%;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:13px;color:#98A2B8}
+.vtop b{color:#E8ECF4;font-weight:500;font-variant-numeric:tabular-nums}
+.vtop .live{display:inline-flex;align-items:center;gap:8px}
+.vtop .live::before{content:"";width:7px;height:7px;border-radius:50%;background:#62C49A;box-shadow:0 0 0 4px rgba(98,196,154,.2)}
+.orb{width:min(360px,58vmin);aspect-ratio:1;align-self:center;position:relative}
+.orb svg{width:100%;height:100%;overflow:visible}
+.orb .ring{transform-origin:200px 200px;transform-box:view-box}
+.orb .r1{animation:spin 26s linear infinite}
+.orb .r2{animation:spin 38s linear infinite reverse}
+.orb .r3{animation:spin 54s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.orb .core{transform-origin:200px 200px;transform-box:view-box;transform:scale(calc(.9 + var(--lvl,0)*.18));transition:transform .12s}
+.orb .halo{transform-origin:200px 200px;transform-box:view-box;opacity:calc(.35 + var(--lvl,0)*.6);transform:scale(calc(1 + var(--lvl,0)*.12));transition:transform .15s,opacity .15s}
+.captions{width:min(640px,88vw);text-align:center;min-height:120px}
+.captions .you{color:#8C96AE;font-size:14px;margin-bottom:10px}
+.captions .atlas{font:500 21px/1.7 var(--f-display);color:#F1F3F8;letter-spacing:.01em}
+.captions .atlas .cur{display:inline-block;width:2px;height:1em;background:#E6BA78;vertical-align:-3px;margin-left:2px;animation:blink 1s infinite}
+.vact{display:flex;gap:8px;justify-content:center;margin:18px 0 10px;min-height:38px}
+.vact div{display:flex;align-items:center;gap:8px;padding:7px 14px 7px 10px;border-radius:99px;font-size:13px;color:#C9D0DE;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.vact div svg{color:#91A6F2}
+.vctl{display:flex;gap:14px;padding:18px 0 40px}
+.vctl button{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;color:#E8ECF4;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);transition:background .15s}
+.vctl button:hover{background:rgba(255,255,255,.16)}
+.vctl button[aria-pressed=true]{background:#E8ECF4;color:#131A2C}
+.vctl .end{background:#D2453E;border-color:transparent;width:72px;border-radius:28px}
+.vctl .end:hover{background:#E0544C}
+.vctl svg.i{width:22px;height:22px}
+.vlabel{display:grid;justify-items:center;gap:6px;font-size:12px;color:#8C96AE}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:28px;z-index:60;transform:translate(-50%,20px);opacity:0;padding:10px 16px;border-radius:12px;font-size:13.5px;background:var(--glass3);border:1px solid var(--line2);box-shadow:var(--shadow);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);transition:opacity .25s,transform .25s;pointer-events:none}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- pages: automation / memory ---------- */
+body[data-view=auto] .screen.auto,body[data-view=memory] .screen.memory{display:flex;flex-direction:column}
+body[data-view=auto] .sky .cool,body[data-view=memory] .sky .dawn{opacity:1}
+body[data-view=auto],body[data-view=memory]{--canvas-w:0px}
+.page{overflow:auto;padding:14px 28px 48px;scrollbar-width:thin}
+.page-inner{width:min(1040px,100%);margin:0 auto}
+.page-inner.narrow{width:min(860px,100%)}
+.page-head{display:flex;align-items:flex-end;gap:16px;margin:10px 0 22px}
+.page-head h1{font:600 30px/1.3 var(--f-display);letter-spacing:.02em}
+.page-head p{color:var(--ink2);margin-top:4px}
+.page-head .btns{margin-left:auto}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px;align-items:start}
+.list{border-radius:18px;overflow:hidden}
+.row{display:grid;grid-template-columns:36px minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:14px 16px;cursor:pointer;border-top:1px solid var(--line);transition:background .15s}
+.row:first-child{border-top:0}
+.row:hover{background:var(--glass)}
+.row[aria-selected=true]{background:var(--glass2);box-shadow:inset 3px 0 0 var(--brass)}
+.row .ico{width:36px;height:36px;border-radius:11px;display:grid;place-items:center}
+.row p{font-weight:500}
+.row small{display:block;color:var(--ink3);font-size:13px}
+.row .when{font-size:12.5px;color:var(--ink3);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.row .when b{display:block;color:var(--ink2);font-weight:500}
+.row.off p,.row.off .ico{opacity:.5}
+.live-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ether);font-weight:500}
+.live-tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;animation:blink 1.4s infinite}
+.switch{position:relative;width:36px;height:21px;border-radius:99px;background:var(--line2);transition:background .2s;flex:none}
+.switch::after{content:"";position:absolute;left:2px;top:2px;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(20,28,50,.25);transition:transform .2s}
+.switch[aria-checked=true]{background:var(--ok)}
+.switch[aria-checked=true]::after{transform:translateX(15px)}
+.detail{border-radius:18px;padding:20px;position:sticky;top:0}
+.detail h2{font:600 19px/1.4 var(--f-display);margin-bottom:4px}
+.detail .sub{color:var(--ink3);font-size:13px}
+.detail dl{margin:18px 0;display:grid;gap:12px}
+.detail dt{font-size:12.5px;color:var(--ink3)}
+.detail dd{margin:2px 0 0;line-height:1.7}
+.detail h3{font-size:13px;font-weight:600;margin:20px 0 6px}
+.history{list-style:none;padding:0}
+.history li{display:grid;grid-template-columns:14px minmax(0,1fr);gap:10px;padding:8px 0;position:relative}
+.history li:not(:last-child)::after{content:"";position:absolute;left:4px;top:22px;bottom:-8px;width:1px;background:var(--line2)}
+.history .dot{width:9px;height:9px;border-radius:50%;margin-top:7px;background:var(--ok)}
+.history .dot.fail{background:var(--danger)}
+.history .dot.running{background:var(--ether);box-shadow:0 0 0 4px var(--ether-soft)}
+.history b{font-weight:500;font-size:13.5px;font-variant-numeric:tabular-nums}
+.history small{display:block;color:var(--ink3);font-size:12.5px}
+.detail .btns{margin-top:16px;flex-wrap:wrap}
+.filterbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.field{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:12px;background:var(--glass2);border:1px solid var(--line);color:var(--ink3)}
+.field input{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--ink)}
+.field:focus-within{border-color:var(--line2);box-shadow:0 0 0 4px var(--brass-soft)}
+.mem-group{margin-bottom:22px}
+.mem-group h3{font-size:13px;font-weight:600;color:var(--ink2);margin:0 4px 8px;display:flex;gap:8px}
+.mem-group h3 span{color:var(--ink3);font-weight:400}
+.fact{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:13px 16px;border-top:1px solid var(--line)}
+.fact:first-child{border-top:0}
+.fact small{display:block;color:var(--ink3);font-size:12.5px;margin-top:1px}
+.fact .btn.ghost{opacity:.55}
+.fact:hover .btn.ghost,.fact .btn:focus-visible{opacity:1}
+.fact.gone > div:first-child{opacity:.4;text-decoration:line-through}
+.files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.fcard{display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;align-items:center;padding:14px;border-radius:14px;text-align:left}
+.fcard b{display:block;font-weight:500;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.fcard small{color:var(--ink3);font-size:12.5px}
+.fcard .ico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center}
+.mem-pane{display:none}.mem-pane.on{display:block}
+.empty-note{color:var(--ink3);font-size:13px;padding:6px 4px}
+mark{background:none;color:var(--brass);font-weight:600}
+
+/* ---------- overlays: settings / palette ---------- */
+.scrim{position:fixed;inset:0;z-index:45;background:rgba(20,26,42,.18);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);display:grid;place-items:center;opacity:0;visibility:hidden;transition:opacity .2s,visibility .2s}
+[data-theme=dark] .scrim{background:rgba(0,0,0,.4)}
+.scrim.open{opacity:1;visibility:visible}
+.sheet{width:min(900px,calc(100vw - 32px));height:min(640px,calc(100vh - 48px));border-radius:22px;display:grid;grid-template-columns:210px minmax(0,1fr);overflow:hidden;background:var(--glass3);transform:translateY(8px) scale(.99);transition:transform .25s}
+.scrim.open .sheet,.scrim.open .palette{transform:none}
+.sheet nav{padding:18px 10px;border-right:1px solid var(--line);background:var(--glass)}
+.sheet nav h2{font:600 17px var(--f-display);padding:0 10px 12px}
+.sheet nav button{width:100%;display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:10px;color:var(--ink2);text-align:left}
+.sheet nav button:hover{background:var(--glass2);color:var(--ink)}
+.sheet nav button[aria-current=true]{background:var(--glass3);color:var(--ink);box-shadow:0 1px 2px rgba(20,28,50,.08)}
+.sheet-body{overflow:auto;padding:24px 28px 32px;position:relative}
+.sheet-body .close{position:absolute;right:14px;top:14px}
+.set-pane{display:none}.set-pane.on{display:block}
+.set-pane h3{font-size:16px;font-weight:600}
+.set-pane > p{color:var(--ink3);font-size:13px;margin:2px 0 16px}
+.set-pane h4{font-size:13px;font-weight:600;margin:22px 0 8px}
+.set-list{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--glass)}
+.set-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
+.set-row:first-child{border-top:0}
+.set-row small{display:block;color:var(--ink3);font-size:12.5px}
+.set-row code{font:12px var(--f-mono);color:var(--ink3)}
+.set-row .btns{align-items:center}
+.state{font-size:12.5px;display:inline-flex;align-items:center;gap:6px;color:var(--ok)}
+.state::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.state.none{color:var(--ink3)}
+.pill .dot.none{background:var(--ink3)}
+.seg{display:inline-flex;padding:3px;border-radius:10px;background:var(--line);gap:2px}
+.seg button{height:28px;padding:0 12px;border-radius:7px;font-size:13px;color:var(--ink2)}
+.seg button[aria-pressed=true]{background:var(--glass3);color:var(--ink);box-shadow:0 1px 2px rgba(20,28,50,.1)}
+.palette{width:min(620px,calc(100vw - 32px));align-self:start;margin-top:14vh;border-radius:18px;overflow:hidden;background:var(--glass3);transform:translateY(-6px);transition:transform .2s}
+.palette .field{border:0;border-bottom:1px solid var(--line);border-radius:0;height:54px;background:none;box-shadow:none;font-size:15px}
+.palette .res{max-height:52vh;overflow:auto;padding:6px}
+.palette h5{font-size:12px;font-weight:500;color:var(--ink3);padding:10px 10px 4px}
+.palette .it{width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;text-align:left}
+.palette .it small{margin-left:auto;color:var(--ink3);font-size:12px}
+.palette .it[aria-selected=true]{background:var(--brass-soft)}
+.palette .it svg{color:var(--ink3)}
+.palette .foot{display:flex;gap:14px;padding:9px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
+.palette kbd{font:11px var(--f-mono);padding:1px 5px;border:1px solid var(--line2);border-radius:5px;margin-right:4px}
+
+/* ---------- mini sidebar ---------- */
+body.side-mini .app{grid-template-columns:64px minmax(0,1fr)}
+body.side-mini .side{padding:14px 8px 12px;align-items:center}
+body.side-mini .brand{flex-direction:column;padding:2px 0 12px}
+body.side-mini .brand b,body.side-mini .recents,body.side-mini .me div,body.side-mini .me .iconbtn,body.side-mini .newbtn kbd,body.side-mini .nav .count{display:none}
+body.side-mini .newrow{flex-direction:column}
+body.side-mini .newbtn{font-size:0;width:40px;justify-content:center;padding:0;flex:none}
+body.side-mini .nav button{font-size:0;width:40px;justify-content:center;padding:0;position:relative}
+body.side-mini .nav [data-go=auto]::after{content:"";position:absolute;top:8px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--ether)}
+body.side-mini .me{margin-top:auto;border:0;justify-content:center}
+
+/* responsive */
+@media (max-width:980px){.split{grid-template-columns:1fr}.detail{position:static}}
+@media (max-width:1180px){
+  body.canvas-open{--canvas-w:0px}
+  .canvas{position:fixed;right:10px;top:58px;bottom:10px;width:min(560px,calc(100vw - 20px));z-index:30;pointer-events:none}
+  body.canvas-open:not([data-view=home]) .canvas{pointer-events:auto}
+}
+.menu-toggle{display:none!important}
+@media (max-width:820px){
+  .app,body.side-mini .app{grid-template-columns:1fr;padding:6px}
+  .sheet{grid-template-columns:1fr}.sheet nav{display:none}
+  .page{padding:10px 14px 40px}
+  .page-head{flex-wrap:wrap}
+  .side{position:fixed;left:6px;top:6px;bottom:6px;width:268px;z-index:35;transform:translateX(-110%);transition:transform .3s}
+  body.side-open .side{transform:none}
+  body .menu-toggle{display:inline-grid!important}
+  .composer .pill.model .lbl{max-width:92px;overflow:hidden;text-overflow:ellipsis}
+  .lede{margin-left:0}
+  .hello h1{font-size:32px}
+  .winctl{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body data-view="home" data-theme="light">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <radialGradient id="gm-glass" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#E9EEF7"/><stop offset="1" stop-color="#B9C6DE"/></radialGradient>
+    <linearGradient id="gm-brass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D9AE6C"/><stop offset="1" stop-color="#8E5F24"/></linearGradient>
+  </defs>
+  <symbol id="mark" viewBox="0 0 32 32"><circle cx="16" cy="16" r="11.5" fill="url(#gm-glass)" stroke="rgba(27,34,50,.18)" stroke-width=".8"/><ellipse cx="16" cy="16" rx="15" ry="5.2" fill="none" stroke="url(#gm-brass)" stroke-width="1.5" transform="rotate(-24 16 16)"/><ellipse cx="16" cy="16" rx="5.2" ry="15" fill="none" stroke="url(#gm-brass)" stroke-width="1" opacity=".7" transform="rotate(-24 16 16)"/><circle cx="12.3" cy="11.8" r="2.4" fill="#fff" opacity=".9"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m20.5 16-5-5-9 8.5"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="m16 10.5 5-3v9l-5-3"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></symbol>
+  <symbol id="i-library" viewBox="0 0 24 24"><path d="M5 4v16M9.5 4v16M14 5l4.5 15"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+  <symbol id="i-micoff" viewBox="0 0 24 24"><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 5.1 2.1M18.5 11a6.5 6.5 0 0 1-.9 3.3M5.5 11a6.5 6.5 0 0 0 10.6 5M12 17.5V21M3 3l18 18"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14 4.5v15"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20.5a2.2 2.2 0 0 0 4 0"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2.5 12h2M19.5 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="m20 11.5-8.2 8.2a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.6 5.5 3.6 8.5s-1.1 5.9-3.6 8.5c-2.5-2.6-3.6-5.5-3.6-8.5S9.5 6.1 12 3.5z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3.5V8h4.5M9 12.5h6M9 16h4"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-min" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+  <symbol id="i-max" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M3.5 13.5c4.8-4.4 12.2-4.4 17 0l-1.8 2.6-3.6-1.3v-2.4a11 11 0 0 0-6.2 0v2.4l-3.6 1.3z"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3.5 13.8 10 20.5 12l-6.7 2L12 20.5 10.2 14 3.5 12l6.7-2z"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24"><path d="M9 4.5a3 3 0 0 0-3 3 3 3 0 0 0-2 5.2A3 3 0 0 0 6.5 18 3 3 0 0 0 12 19V6a2.5 2.5 0 0 0-3-1.5zM15 4.5a3 3 0 0 1 3 3 3 3 0 0 1 2 5.2 3 3 0 0 1-2.5 5.3A3 3 0 0 1 12 19"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4.2l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 17z"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m5 8 4 4-4 4M11.5 16.5H19"/></symbol>
+  <symbol id="i-wand" viewBox="0 0 24 24"><path d="m4 20 11-11M14 4.5V7M19.5 10H17M17.8 6.2 16 8M11 5.5l1 1M18.5 13l1 1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></symbol>
+  <symbol id="i-captions" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M7.5 13.5h3M13 13.5h3.5M7.5 10.5h5"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6.5" cy="6" r="2"/><circle cx="6.5" cy="18" r="2"/><circle cx="17.5" cy="8" r="2"/><path d="M6.5 8v8M17.5 10c0 4-5 3.5-9.5 6.5"/></symbol>
+</svg>
+
+<div class="sky" aria-hidden="true"><i class="dawn"></i><i class="cool"></i><i class="warm"></i><i class="night"></i><i class="stars"></i><i class="grain"></i></div>
+
+<div class="app">
+  <!-- ============ sidebar ============ -->
+  <aside class="side glass" aria-label="导航">
+    <div class="brand">
+      <svg class="mark"><use href="#mark"/></svg><b>Atlas</b>
+      <button class="iconbtn collapse" aria-label="收起侧栏" data-act="side-close"><svg class="i sm"><use href="#i-panel"/></svg></button>
+    </div>
+    <div class="newrow">
+      <button class="newbtn" data-act="new"><svg class="i sm"><use href="#i-plus"/></svg>新对话<kbd>Ctrl N</kbd></button>
+      <button class="search" aria-label="搜索（Ctrl K）" data-act="search"><svg class="i sm"><use href="#i-search"/></svg></button>
+    </div>
+    <nav class="nav">
+      <button data-go="home" aria-current="page"><svg class="i"><use href="#i-sparkle"/></svg>今天</button>
+      <button data-go="chat"><svg class="i"><use href="#i-chat"/></svg>对话</button>
+      <button data-go="code"><svg class="i"><use href="#i-code"/></svg>项目与代码</button>
+      <button data-go="create"><svg class="i"><use href="#i-image"/></svg>创作</button>
+      <button data-go="auto"><svg class="i"><use href="#i-zap"/></svg>自动化<span class="count">2 运行中</span></button>
+      <button data-go="memory"><svg class="i"><use href="#i-library"/></svg>记忆与资料</button>
+    </nav>
+    <div class="recents">
+      <h4>今天</h4>
+      <button data-go="chat"><svg class="i sm"><use href="#i-chat"/></svg><span>本周 AI 行业简报</span></button>
+      <button data-go="code"><svg class="i sm"><use href="#i-code"/></svg><span>修复控制台 Hub 报错</span></button>
+      <button data-go="create"><svg class="i sm"><use href="#i-image"/></svg><span>启动页插画：天球与云海</span></button>
+      <h4>本周</h4>
+      <button data-go="chat"><svg class="i sm"><use href="#i-chat"/></svg><span>下周工作计划</span></button>
+      <button data-go="code"><svg class="i sm"><use href="#i-code"/></svg><span>Atlas 前端重构方案</span></button>
+      <button data-go="auto"><svg class="i sm"><use href="#i-zap"/></svg><span>每天早上整理行业资讯</span></button>
+      <button data-go="code"><svg class="i sm"><use href="#i-code"/></svg><span>MongoDB 聚合查询优化</span></button>
+      <button data-go="chat"><svg class="i sm"><use href="#i-chat"/></svg><span>实时语音延迟怎么压到 300ms</span></button>
+    </div>
+    <div class="me">
+      <span class="avatar">A</span>
+      <div>个人空间<small>数据只存本机</small></div>
+      <button class="iconbtn" aria-label="切换明暗" data-act="theme"><svg class="i sm"><use href="#i-moon"/></svg></button>
+      <button class="iconbtn" aria-label="设置" data-act="settings"><svg class="i sm"><use href="#i-settings"/></svg></button>
+    </div>
+  </aside>
+
+  <!-- ============ main ============ -->
+  <main class="main">
+    <header class="top">
+      <button class="iconbtn menu-toggle" aria-label="打开侧栏" data-act="side-open"><svg class="i"><use href="#i-menu"/></svg></button>
+      <div class="title"><span id="title">今天</span><span class="status" id="status">已连接</span></div>
+      <div class="spacer"></div>
+      <button class="iconbtn" aria-label="开始语音通话" data-act="voice"><svg class="i"><use href="#i-mic"/></svg></button>
+      <button class="iconbtn bell" aria-label="通知，1 条未读" data-soon="通知"><svg class="i"><use href="#i-bell"/></svg></button>
+      <button class="iconbtn" aria-label="显示或隐藏画布" data-act="canvas" id="canvasBtn"><svg class="i"><use href="#i-panel"/></svg></button>
+      <div class="winctl"><button aria-label="最小化"><svg class="i sm"><use href="#i-min"/></svg></button><button aria-label="最大化"><svg class="i sm"><use href="#i-max"/></svg></button><button class="x" aria-label="关闭"><svg class="i sm"><use href="#i-x"/></svg></button></div>
+    </header>
+
+    <div class="stage">
+      <!-- ===== home ===== -->
+      <section class="screen home">
+        <div class="home-inner">
+          <div class="hello"><svg class="mark"><use href="#mark"/></svg><h1 id="greet">晚上好</h1></div>
+          <p class="lede">两个后台任务在跑，<a data-scroll="resume">有一件事等你确认</a>。今天想做点什么？</p>
+          <div class="composer-slot" data-ph="问问题、写代码、画图，或者交给 Atlas 去办一件事"></div>
+
+          <div class="section-h" id="resume"><h2>接着做</h2><button data-go="auto">查看全部</button></div>
+          <div class="resume glass">
+            <div>
+              <span class="ico ether"><svg class="i"><use href="#i-zap"/></svg></span>
+              <div><p>每天早上整理行业资讯</p><small>正在读取第 14 篇来源，预计 3 分钟后完成</small><div class="meter"><i></i></div></div>
+              <button class="btn ghost" data-go="auto">查看进度</button>
+            </div>
+            <div>
+              <span class="ico brass"><svg class="i"><use href="#i-brain"/></svg></span>
+              <div><p>要记住这条偏好吗？</p><small>“简报用简体中文，先给结论，每条不超过两句。”来自昨天的对话</small></div>
+              <div class="btns"><button class="btn ghost" data-toast="已忽略，这条不会写入长期记忆">忽略</button><button class="btn primary" data-toast="已记住。之后的简报都会按这个格式写">记住</button></div>
+            </div>
+            <div>
+              <span class="ico ok"><svg class="i"><use href="#i-branch"/></svg></span>
+              <div><p>Atlas 前端重构</p><small>上次修好了控制台的 Hub 报错，还有 2 个文件没提交</small></div>
+              <button class="btn" data-go="code">继续</button>
+            </div>
+          </div>
+          <p class="memo"><svg class="i sm"><use href="#i-brain"/></svg>Atlas 记得 128 件关于你的事，最近一条是“周末不安排工作提醒”。<a class="lede-link" data-go="memory">查看和管理</a></p>
+        </div>
+      </section>
+
+      <!-- ===== chat ===== -->
+      <section class="screen chat">
+        <div class="thread"><div class="thread-inner">
+          <div class="msg-user"><p>帮我整理这周 AI 行业的重要动态，做成一页简报。重点看模型发布和实时语音交互。</p></div>
+          <div class="msg-atlas"><svg class="mark"><use href="#mark"/></svg><div class="body">
+            <div class="run">
+              <button data-act="run"><span class="done-mark"><svg class="i sm"><use href="#i-check"/></svg></span>查了 6 个来源，用时 42 秒<svg class="i sm chev"><use href="#i-down"/></svg></button>
+              <ol>
+                <li><svg class="i sm"><use href="#i-globe"/></svg><span>联网搜索 <code>本周 AI 模型发布</code> 和 <code>实时语音 延迟</code></span><small>6 条结果</small></li>
+                <li><svg class="i sm"><use href="#i-file"/></svg><span>读完 5 篇文章，跳过 1 篇付费内容</span><small>18 秒</small></li>
+                <li><svg class="i sm"><use href="#i-brain"/></svg><span>按你的关注点筛选：你在做实时双向语音助手</span><small>记忆</small></li>
+                <li><svg class="i sm"><use href="#i-sparkle"/></svg><span>写成一页简报</span><small>9 秒</small></li>
+              </ol>
+            </div>
+            <p>简报放在右边了。这周和你最相关的是三件事：</p>
+            <ul>
+              <li><strong>两家厂商发布了可以随时打断的语音模型</strong>，端到端延迟都在 300ms 以内，正好是你给 Atlas 定的目标。</li>
+              <li><strong>开源侧出现了能在单张消费级显卡上跑的语音模型</strong>，可以作为本地备选。</li>
+              <li><strong>视频生成开始支持首尾帧控制</strong>，以后给 Atlas 接视频时，可以直接用生图结果当首帧。</li>
+            </ul>
+            <button class="artifact" data-act="canvas-show"><span class="ico brass"><svg class="i"><use href="#i-file"/></svg></span><span><b>本周 AI 行业简报</b><small>文档，1 页，6 个来源</small></span></button>
+            <div class="followups"><button class="btn">导出为 PDF</button><button class="btn">每周一自动生成</button><button class="btn ghost">展开讲讲语音那条</button></div>
+          </div></div>
+        </div></div>
+        <div class="dock"><div class="composer-slot" data-ph="继续问，或者让 Atlas 改简报"></div></div>
+      </section>
+
+      <!-- ===== code ===== -->
+      <section class="screen code">
+        <div class="thread"><div class="thread-inner">
+          <div class="msg-user"><p>控制台里后台 Hub 那块一直显示 <span class="inline-code">TypeError: Failed to fetch</span>，修一下。</p></div>
+          <div class="msg-atlas"><svg class="mark"><use href="#mark"/></svg><div class="body">
+            <div class="run open">
+              <button data-act="run"><span class="done-mark"><svg class="i sm"><use href="#i-check"/></svg></span>改了 2 个文件，测试全部通过<svg class="i sm chev"><use href="#i-down"/></svg></button>
+              <ol>
+                <li><svg class="i sm"><use href="#i-file"/></svg><span>读取 <code>pages/ConsolePage.tsx</code></span><small>392 行</small></li>
+                <li><svg class="i sm"><use href="#i-search"/></svg><span>查找 Hub 状态的调用方 <code>getHubStatus</code></span><small>3 处</small></li>
+                <li><svg class="i sm"><use href="#i-code"/></svg><span>修改 <code>ConsolePage.tsx</code> 和 <code>backend-adapter/client.ts</code></span><small>+14 −3</small></li>
+                <li><svg class="i sm"><use href="#i-terminal"/></svg><span>运行 <code>npm --prefix frontend test</code></span><small>23 通过</small></li>
+              </ol>
+            </div>
+            <p>原因是 Hub 没启动时连接会被拒绝，页面把这个网络错误原样显示了出来。其实 Hub 没启动是正常状态，不算错误。</p>
+            <p>现在改成：连接被拒绝时只显示<strong>“后台 Hub 未启动”</strong>和启动按钮，只有真正的异常才会提示。改动在右边，还没提交。</p>
+            <div class="followups"><button class="btn primary" data-toast="已提交到 main：fix(console): treat stopped Hub as a state, not an error">提交改动</button><button class="btn">在桌面端预览</button><button class="btn ghost" data-toast="已撤销这 2 个文件的改动">撤销</button></div>
+          </div></div>
+        </div></div>
+        <div class="dock"><div class="composer-slot" data-ph="继续改，或者问这段代码"></div></div>
+      </section>
+
+      <!-- ===== create ===== -->
+      <section class="screen create">
+        <div class="thread"><div class="thread-inner">
+          <div class="msg-user"><p>给 Atlas 做一张启动页插画：一颗玻璃天球悬在黎明的云海上，安静一点。</p></div>
+          <div class="msg-atlas"><svg class="mark"><use href="#mark"/></svg><div class="body">
+            <div class="run">
+              <button data-act="run"><span class="done-mark"><svg class="i sm"><use href="#i-check"/></svg></span>生成了 4 张，用时 21 秒<svg class="i sm chev"><use href="#i-down"/></svg></button>
+              <ol>
+                <li><svg class="i sm"><use href="#i-wand"/></svg><span>把描述扩写成画面提示词，加上“低饱和、大留白”</span><small>2 秒</small></li>
+                <li><svg class="i sm"><use href="#i-image"/></svg><span>生成 4 张 1600×1200 的图</span><small>19 秒</small></li>
+              </ol>
+            </div>
+            <p>四个版本在右边，从黎明到入夜各一张。我比较推荐<strong>第 2 张</strong>：天球的高光和地平线的暖色最协调，放在浅色启动页上不会抢字。</p>
+            <p>要不要用它做首帧，生成一段 6 秒的慢推镜头？</p>
+            <div class="followups"><button class="btn primary" data-act="to-video">做成 6 秒视频</button><button class="btn">再来 4 张</button><button class="btn ghost">换成竖版</button></div>
+          </div></div>
+        </div></div>
+        <div class="dock"><div class="composer-slot" data-ph="描述你想改的地方，比如“云再少一点”"></div></div>
+      </section>
+
+      <!-- ===== automation ===== -->
+      <section class="screen auto page">
+        <div class="page-inner">
+          <div class="page-head"><div><h1>自动化</h1><p>Atlas 会按时去做这些事，做完通知你。关掉窗口也会继续跑。</p></div><div class="btns"><button class="btn primary" data-act="new-auto"><svg class="i sm"><use href="#i-plus"/></svg>新建自动化</button></div></div>
+          <div class="split">
+            <div class="list glass" role="listbox" aria-label="自动化列表" id="autoList"></div>
+            <aside class="detail glass" id="autoDetail" aria-live="polite"></aside>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== memory ===== -->
+      <section class="screen memory page">
+        <div class="page-inner narrow">
+          <div class="page-head"><div><h1>记忆与资料</h1><p>Atlas 记住的事和你给它的文件都在这里，可以随时修改或让它忘掉。</p></div></div>
+          <div class="filterbar">
+            <label class="field"><svg class="i sm"><use href="#i-search"/></svg><input id="memSearch" placeholder="搜索记忆和资料" aria-label="搜索记忆和资料"></label>
+            <div class="tabs" role="tablist"><button role="tab" aria-selected="true" data-mem="m-facts">关于你 <span id="factN"></span></button><button role="tab" aria-selected="false" data-mem="m-pending">待确认 <span id="pendN"></span></button><button role="tab" aria-selected="false" data-mem="m-files">资料 <span id="fileN"></span></button></div>
+          </div>
+          <div class="mem-pane on" id="m-facts"></div>
+          <div class="mem-pane" id="m-pending"></div>
+          <div class="mem-pane" id="m-files"><div class="files-grid" id="fileGrid"></div></div>
+        </div>
+      </section>
+
+      <!-- ===== canvas ===== -->
+      <aside class="canvas glass" aria-label="画布">
+        <div class="canvas-panel chat">
+          <div class="chead"><h3>本周 AI 行业简报</h3><div class="tabs" role="tablist"><button role="tab" aria-selected="true" data-tab="c-doc">简报</button><button role="tab" aria-selected="false" data-tab="c-src">来源 6</button></div><span class="grow"></span><button class="iconbtn" aria-label="关闭画布" data-act="canvas"><svg class="i sm"><use href="#i-x"/></svg></button></div>
+          <div class="tabpane on" id="c-doc"><article class="doc">
+            <p class="kicker">9 月第 4 周，为你筛选</p>
+            <h1>本周 AI 行业简报</h1>
+            <p><b>结论先说：</b>实时语音进入“可打断、300ms 以内”的阶段，本地部署也有了可用选项。Atlas 的语音通话可以按这个标准来做。</p>
+            <h2>模型发布</h2>
+            <p><b>两家厂商更新了旗舰模型</b>，长上下文的检索准确率明显提高。<span class="src">1</span> 代码类任务上，新版在多文件修改的成功率比上一代高出一截。<span class="src">2</span></p>
+            <h2>实时语音</h2>
+            <p><b>全双工语音成了标配。</b>新发布的语音模型支持说话中途打断，并能在对方停顿时插话确认。<span class="src">3</span> 开源侧有一个能在单张消费级显卡上运行的版本，适合作为 Atlas 的本地备选。<span class="src">4</span></p>
+            <h2>图像与视频</h2>
+            <p><b>视频生成开始支持首尾帧控制</b>，也就是先生图、再用图做视频的工作流被正式支持了。<span class="src">5</span> 生成时长仍以 5 到 10 秒为主。<span class="src">6</span></p>
+            <h2>对 Atlas 的建议</h2>
+            <p>语音通话先接云端全双工模型，把本地模型作为离线兜底；创作区把“生图”和“做视频”串成一条流程，而不是两个独立功能。</p>
+          </article></div>
+          <div class="tabpane" id="c-src"><div class="sources">
+            <a><span class="n">1</span><span><b>旗舰模型更新说明</b><small>官方博客，9 月 23 日</small></span></a>
+            <a><span class="n">2</span><span><b>多文件代码修改评测结果</b><small>评测榜单，9 月 24 日</small></span></a>
+            <a><span class="n">3</span><span><b>全双工语音模型发布</b><small>官方博客，9 月 25 日</small></span></a>
+            <a><span class="n">4</span><span><b>开源实时语音模型仓库</b><small>GitHub，9 月 22 日</small></span></a>
+            <a><span class="n">5</span><span><b>视频生成首尾帧控制</b><small>产品更新日志，9 月 26 日</small></span></a>
+            <a><span class="n">6</span><span><b>视频生成模型横评</b><small>技术媒体，9 月 27 日</small></span></a>
+          </div></div>
+        </div>
+
+        <div class="canvas-panel code">
+          <div class="chead"><h3>Atlas</h3><div class="tabs" role="tablist"><button role="tab" aria-selected="true" data-tab="k-diff">改动 2</button><button role="tab" aria-selected="false" data-tab="k-term">终端</button></div><span class="grow"></span><button class="iconbtn" aria-label="关闭画布" data-act="canvas"><svg class="i sm"><use href="#i-x"/></svg></button></div>
+          <div class="tabpane on" id="k-diff">
+            <div class="files"><button class="on">ConsolePage.tsx <span class="plus">+11</span> <span class="minus">−2</span></button><button>client.ts <span class="plus">+3</span> <span class="minus">−1</span></button></div>
+<pre class="diff"><span class="hunk" data-n="">@@ -118,9 +118,14 @@ export function ConsolePage()</span><span data-n="118">  <i class="kw">const</i> [hub, setHub] = useState&lt;HubStatus | <i class="kw">null</i>&gt;(<i class="kw">null</i>);</span><span class="del" data-n="119">  <i class="kw">const</i> [hubError, setHubError] = useState&lt;string | <i class="kw">null</i>&gt;(<i class="kw">null</i>);</span><span class="add" data-n="119">  <i class="kw">const</i> [hubState, setHubState] = useState&lt;HubState&gt;(<i class="str">'unknown'</i>);</span><span data-n="120"></span><span data-n="121">  <i class="kw">async function</i> refreshHub() {</span><span data-n="122">    <i class="kw">try</i> {</span><span data-n="123">      setHub(<i class="kw">await</i> backend.getHubStatus());</span><span class="add" data-n="124">      setHubState(<i class="str">'running'</i>);</span><span class="del" data-n="125">    } <i class="kw">catch</i> (err) { setHubError(String(err)); }</span><span class="add" data-n="125">    } <i class="kw">catch</i> (err) {</span><span class="add" data-n="126"><i class="cm">      // Hub 未启动时连接会被拒绝，这是正常状态</i></span><span class="add" data-n="127">      setHubState(isConnectionRefused(err) ? <i class="str">'stopped'</i> : <i class="str">'error'</i>);</span><span class="add" data-n="128">    }</span><span data-n="129">  }</span><span data-n="130"></span><span class="hunk" data-n="">@@ -214,7 +219,10 @@</span><span class="del" data-n="214">  {hubError &amp;&amp; &lt;p className={styles.error}&gt;{hubError}&lt;/p&gt;}</span><span class="add" data-n="219">  {hubState === <i class="str">'stopped'</i> &amp;&amp; (</span><span class="add" data-n="220">    &lt;p className={styles.muted}&gt;后台 Hub 未启动&lt;/p&gt;</span><span class="add" data-n="221">  )}</span><span class="add" data-n="222">  {hubState === <i class="str">'error'</i> &amp;&amp; &lt;HubErrorNotice onRetry={refreshHub} /&gt;}</span></pre>
+          </div>
+          <div class="tabpane" id="k-term"><div class="term">
+<div><span class="p">D:\Atlas&gt;</span> npm --prefix frontend test</div>
+<div class="dim">&gt; @atlas/frontend@0.1.0 test</div>
+<div class="dim">&gt; vitest run --root .</div>
+<br>
+<div><span class="ok">✓</span> src/renderer/pages/ConsolePage.test.tsx <span class="dim">(4 tests) 38ms</span></div>
+<div><span class="ok">✓</span> src/renderer/store/useAtlasStore.test.ts <span class="dim">(9 tests) 61ms</span></div>
+<div><span class="ok">✓</span> src/renderer/pages/SkillDiscoveryPage.test.tsx <span class="dim">(5 tests) 112ms</span></div>
+<div><span class="ok">✓</span> src/renderer/components/MarkdownContent.test.tsx <span class="dim">(3 tests) 24ms</span></div>
+<div><span class="ok">✓</span> src/renderer/components/ConversationMessage.test.tsx <span class="dim">(1 test) 9ms</span></div>
+<div><span class="ok">✓</span> src/renderer/pages/DependencyCheckPanel.test.tsx <span class="dim">(1 test) 7ms</span></div>
+<br>
+<div> Test Files  <span class="ok">6 passed</span> (6)</div>
+<div>      Tests  <span class="ok">23 passed</span> (23)</div>
+<div class="dim">   Duration  1.84s</div>
+          </div></div>
+          <div class="codebar"><svg class="i sm"><use href="#i-branch"/></svg>main，2 个文件未提交<span class="grow" style="flex:1"></span><button class="btn">撤销</button><button class="btn primary" data-toast="已提交到 main：fix(console): treat stopped Hub as a state, not an error">提交改动</button></div>
+        </div>
+
+        <div class="canvas-panel create">
+          <div class="chead"><h3>天球与云海</h3><div class="tabs" role="tablist"><button role="tab" aria-selected="true" data-tab="g-img">图像 4</button><button role="tab" aria-selected="false" data-tab="g-vid" id="vidTab">视频</button></div><span class="grow"></span><button class="iconbtn" aria-label="关闭画布" data-act="canvas"><svg class="i sm"><use href="#i-x"/></svg></button></div>
+          <div class="tabpane on" id="g-img">
+            <div class="gallery" id="gallery"></div>
+            <div class="shot-actions"><button class="btn primary" data-act="to-video"><svg class="i sm"><use href="#i-video"/></svg>用第 <span id="pickN">2</span> 张做视频</button><button class="btn"><svg class="i sm"><use href="#i-wand"/></svg>基于它出变体</button><button class="btn ghost">放大到 4K</button><button class="btn ghost">保存到资料库</button></div>
+          </div>
+          <div class="tabpane" id="g-vid">
+            <div class="player" id="player"><span class="gen">生成中 62%，约 40 秒</span><button class="play" aria-label="播放预览"><svg class="i"><use href="#i-play"/></svg></button></div>
+            <div class="timeline"><div class="frames" id="frames"><span class="head"></span></div><div class="tl-meta"><span>00:02.3</span><span>00:06.0</span></div></div>
+            <div class="shots-list">
+              <div><span class="ico brass" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center"><svg class="i sm"><use href="#i-video"/></svg></span><span><b>慢推镜头</b>，镜头向天球缓慢推进，云层轻微流动</span></div>
+              <div><span class="ico ether" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center"><svg class="i sm"><use href="#i-image"/></svg></span><span><b>首帧</b>使用第 2 张图，尾帧由模型补全</span></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<!-- ============ voice ============ -->
+<section class="voice" aria-label="语音通话" aria-hidden="true">
+  <div class="vtop"><span class="live">正在和 Atlas 通话</span><b id="vtime">00:00</b><span>Claude Opus 4 实时语音</span></div>
+  <div class="orb" id="orb">
+    <svg viewBox="0 0 400 400" aria-hidden="true">
+      <defs>
+        <radialGradient id="vg-core" cx="38%" cy="30%" r="80%"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".95"/><stop offset=".35" stop-color="#C9D5F2" stop-opacity=".55"/><stop offset=".8" stop-color="#5E6FA8" stop-opacity=".25"/><stop offset="1" stop-color="#2A335A" stop-opacity=".4"/></radialGradient>
+        <radialGradient id="vg-halo" cx="50%" cy="50%" r="50%"><stop offset=".55" stop-color="#E6BA78" stop-opacity=".35"/><stop offset="1" stop-color="#E6BA78" stop-opacity="0"/></radialGradient>
+        <linearGradient id="vg-ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3D29D"/><stop offset=".5" stop-color="#C08A45" stop-opacity=".6"/><stop offset="1" stop-color="#F3D29D"/></linearGradient>
+      </defs>
+      <circle class="halo" cx="200" cy="200" r="200" fill="url(#vg-halo)"/>
+      <g class="ring r1"><ellipse cx="200" cy="200" rx="178" ry="58" fill="none" stroke="url(#vg-ring)" stroke-width="2" transform="rotate(-22 200 200)"/></g>
+      <g class="ring r2"><ellipse cx="200" cy="200" rx="58" ry="178" fill="none" stroke="url(#vg-ring)" stroke-width="1.2" opacity=".7" transform="rotate(-22 200 200)"/></g>
+      <g class="ring r3"><ellipse cx="200" cy="200" rx="160" ry="160" fill="none" stroke="#F3D29D" stroke-width=".8" stroke-dasharray="2 7" opacity=".5"/></g>
+      <g class="core"><circle cx="200" cy="200" r="112" fill="url(#vg-core)" stroke="rgba(255,255,255,.35)" stroke-width="1"/><ellipse cx="160" cy="150" rx="34" ry="22" fill="#fff" opacity=".55" transform="rotate(-30 160 150)"/></g>
+    </svg>
+  </div>
+  <div class="captions" aria-live="polite"><p class="you" id="vyou">“明天下午有空吗？帮我约个时间过一下语音方案。”</p><p class="atlas" id="vatlas"></p></div>
+  <div class="vact" id="vact"></div>
+  <div class="vctl">
+    <div class="vlabel"><button aria-pressed="false" aria-label="静音" data-act="mute"><svg class="i"><use href="#i-micoff"/></svg></button>静音</div>
+    <div class="vlabel"><button aria-label="打断 Atlas" data-act="interrupt"><svg class="i"><use href="#i-sparkle"/></svg></button>打断</div>
+    <div class="vlabel"><button class="end" aria-label="挂断" data-act="voice-end"><svg class="i"><use href="#i-phone"/></svg></button>挂断</div>
+    <div class="vlabel"><button aria-pressed="true" aria-label="显示字幕" data-act="cc"><svg class="i"><use href="#i-captions"/></svg></button>字幕</div>
+    <div class="vlabel"><button aria-label="转成文字对话" data-act="voice-end"><svg class="i"><use href="#i-chat"/></svg></button>转文字</div>
+  </div>
+</section>
+
+<div class="scrim" id="settings" aria-hidden="true">
+  <div class="sheet glass" role="dialog" aria-modal="true" aria-label="设置">
+    <nav>
+      <h2>设置</h2>
+      <button data-set="s-models" aria-current="true"><svg class="i sm"><use href="#i-sparkle"/></svg>模型与服务</button>
+      <button data-set="s-voice" aria-current="false"><svg class="i sm"><use href="#i-mic"/></svg>语音</button>
+      <button data-set="s-look" aria-current="false"><svg class="i sm"><use href="#i-sun"/></svg>外观</button>
+      <button data-set="s-tools" aria-current="false"><svg class="i sm"><use href="#i-wand"/></svg>工具与插件</button>
+      <button data-set="s-notify" aria-current="false"><svg class="i sm"><use href="#i-bell"/></svg>通知</button>
+      <button data-set="s-data" aria-current="false"><svg class="i sm"><use href="#i-folder"/></svg>数据与隐私</button>
+    </nav>
+    <div class="sheet-body">
+      <button class="iconbtn close" aria-label="关闭设置" data-act="settings-close"><svg class="i sm"><use href="#i-x"/></svg></button>
+      <section class="set-pane on" id="s-models">
+        <h3>模型与服务</h3><p>不同的事交给不同的模型。选“自动”时，Atlas 按这里的分工来选。</p>
+        <h4>按用途分工</h4>
+        <div class="set-list">
+          <div class="set-row"><div>日常对话<small>回答问题、整理资料、写东西</small></div><button class="pill" data-menu="modelMenu"><span class="dot"></span>Claude Opus 4<svg class="i sm"><use href="#i-down"/></svg></button></div>
+          <div class="set-row"><div>写代码<small>读项目、改文件、跑测试</small></div><button class="pill" data-menu="modelMenu"><span class="dot"></span>Claude Sonnet 4<svg class="i sm"><use href="#i-down"/></svg></button></div>
+          <div class="set-row"><div>简单任务<small>起标题、分类、自动化里的小步骤</small></div><button class="pill" data-menu="modelMenu"><span class="dot"></span>DeepSeek v4.1 Flash<svg class="i sm"><use href="#i-down"/></svg></button></div>
+          <div class="set-row"><div>生成图像<small>还没有配置生图服务</small></div><button class="btn">选择服务</button></div>
+          <div class="set-row"><div>生成视频<small>还没有配置视频服务</small></div><button class="btn">选择服务</button></div>
+          <div class="set-row"><div>实时语音通话<small>需要支持全双工的语音模型，才能随时打断</small></div><button class="btn">选择服务</button></div>
+        </div>
+        <h4>服务商</h4>
+        <div class="set-list">
+          <div class="set-row"><div>OpenAI 兼容网关<small><code>https://api.monkeyapi.net/v1</code></small></div><div class="btns"><span class="state">已连接</span><button class="btn ghost">编辑</button></div></div>
+          <div class="set-row"><div>Anthropic<small>直连，作为网关的备用</small></div><div class="btns"><span class="state none">未配置</span><button class="btn">添加密钥</button></div></div>
+          <div class="set-row"><div>本地模型<small>Ollama 或 LM Studio，断网时使用</small></div><div class="btns"><span class="state none">未检测到</span><button class="btn">重新检测</button></div></div>
+        </div>
+      </section>
+      <section class="set-pane" id="s-voice">
+        <h3>语音</h3><p>实时通话和语音输入。</p>
+        <div class="set-list">
+          <div class="set-row"><div>开始通话的快捷键<small>在任何窗口按下都能叫出 Atlas</small></div><code>Ctrl + Shift + Space</code></div>
+          <div class="set-row"><div>Atlas 的声音</div><div class="seg"><button aria-pressed="true">温和</button><button aria-pressed="false">清亮</button><button aria-pressed="false">低沉</button></div></div>
+          <div class="set-row"><div>允许打断<small>你一开口，Atlas 就停下来听</small></div><button class="switch" role="switch" aria-checked="true" aria-label="允许打断"></button></div>
+          <div class="set-row"><div>通话字幕</div><button class="switch" role="switch" aria-checked="true" aria-label="通话字幕"></button></div>
+          <div class="set-row"><div>通话结束后保存文字记录</div><button class="switch" role="switch" aria-checked="true" aria-label="保存文字记录"></button></div>
+        </div>
+      </section>
+      <section class="set-pane" id="s-look">
+        <h3>外观</h3><p>界面的明暗和背景。</p>
+        <div class="set-list">
+          <div class="set-row"><div>主题</div><div class="seg"><button aria-pressed="true" data-theme-set="light">浅色</button><button aria-pressed="false" data-theme-set="dark">深色</button><button aria-pressed="false" data-theme-set="auto">跟随系统</button></div></div>
+          <div class="set-row"><div>背景随场景变化<small>对话是黎明，代码偏冷，创作偏暖，通话是夜空</small></div><button class="switch" role="switch" aria-checked="true" aria-label="背景随场景变化"></button></div>
+          <div class="set-row"><div>减少透明效果<small>电脑较慢或看不清文字时打开</small></div><button class="switch" role="switch" aria-checked="false" aria-label="减少透明效果" data-solid></button></div>
+        </div>
+      </section>
+      <section class="set-pane" id="s-tools">
+        <h3>工具与插件</h3><p>打开的工具，Atlas 会在需要时自己调用。</p>
+        <div class="set-list">
+          <div class="set-row"><div>文件<small>读写你允许的文件夹：文档、D:\Atlas</small></div><button class="switch" role="switch" aria-checked="true" aria-label="文件"></button></div>
+          <div class="set-row"><div>Git<small>查看改动、提交代码</small></div><button class="switch" role="switch" aria-checked="true" aria-label="Git"></button></div>
+          <div class="set-row"><div>联网搜索和读网页</div><button class="switch" role="switch" aria-checked="true" aria-label="联网搜索"></button></div>
+          <div class="set-row"><div>操作电脑<small>看屏幕、点击和输入</small></div><button class="switch" role="switch" aria-checked="true" aria-label="操作电脑"></button></div>
+          <div class="set-row"><div>浏览器自动化</div><button class="switch" role="switch" aria-checked="true" aria-label="浏览器自动化"></button></div>
+        </div>
+        <h4>插件</h4>
+        <div class="set-list"><div class="set-row"><div>还没有安装插件<small>把含 plugin.json 的文件夹放进 plugins，或从本地选择</small></div><button class="btn">从本地安装</button></div></div>
+      </section>
+      <section class="set-pane" id="s-notify">
+        <h3>通知</h3><p>后台任务完成或失败时，Atlas 从这些地方告诉你。</p>
+        <div class="set-list">
+          <div class="set-row"><div>Windows 通知</div><button class="switch" role="switch" aria-checked="true" aria-label="Windows 通知"></button></div>
+          <div class="set-row"><div>Telegram<small>手机上也能收到</small></div><button class="btn">连接 Telegram</button></div>
+          <div class="set-row"><div>勿扰时段<small>这段时间只记录，不提醒</small></div><code>23:00 – 08:00</code></div>
+        </div>
+        <div class="btns" style="margin-top:14px"><button class="btn" data-toast="已发送测试通知">发送测试通知</button></div>
+      </section>
+      <section class="set-pane" id="s-data">
+        <h3>数据与隐私</h3><p>对话、记忆和文件都只存在这台电脑上。</p>
+        <div class="set-list">
+          <div class="set-row"><div>数据文件夹<small><code>D:\Atlas\data</code></small></div><button class="btn">打开文件夹</button></div>
+          <div class="set-row"><div>导出全部数据<small>对话、记忆和设置打包成一个文件</small></div><button class="btn">导出</button></div>
+          <div class="set-row"><div>新记忆先问我<small>关闭后，Atlas 会直接记住它发现的偏好</small></div><button class="switch" role="switch" aria-checked="true" aria-label="新记忆先问我"></button></div>
+          <div class="set-row"><div>清空所有记忆<small>对话记录会保留</small></div><button class="btn" style="color:var(--danger)">清空记忆</button></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="paletteScrim" aria-hidden="true">
+  <div class="palette glass" role="dialog" aria-modal="true" aria-label="搜索">
+    <label class="field"><svg class="i"><use href="#i-search"/></svg><input id="palInput" placeholder="搜索对话、记忆、文件，或者直接说要做的事" aria-label="搜索" autocomplete="off"></label>
+    <div class="res" id="palRes" role="listbox"></div>
+    <div class="foot"><span><kbd>↑</kbd><kbd>↓</kbd>选择</span><span><kbd>Enter</kbd>打开</span><span><kbd>Esc</kbd>关闭</span></div>
+  </div>
+</div>
+
+<div class="menu" id="intentMenu" role="menu">
+  <button data-intent="自动"><svg class="i sm"><use href="#i-sparkle"/></svg>自动<small>Atlas 自己判断</small></button>
+  <hr>
+  <button data-intent="联网搜索"><svg class="i sm"><use href="#i-globe"/></svg>联网搜索</button>
+  <button data-intent="深度思考"><svg class="i sm"><use href="#i-brain"/></svg>深度思考</button>
+  <button data-intent="写代码"><svg class="i sm"><use href="#i-code"/></svg>写代码</button>
+  <button data-intent="生成图像"><svg class="i sm"><use href="#i-image"/></svg>生成图像</button>
+  <button data-intent="生成视频"><svg class="i sm"><use href="#i-video"/></svg>生成视频</button>
+  <button data-intent="自动化"><svg class="i sm"><use href="#i-zap"/></svg>设成自动化</button>
+</div>
+<div class="menu" id="modelMenu" role="menu">
+  <button data-model="Claude Opus 4">Claude Opus 4<small>最强</small></button>
+  <button data-model="Claude Sonnet 4">Claude Sonnet 4<small>均衡</small></button>
+  <button data-model="GPT-4o">GPT-4o</button>
+  <button data-model="DeepSeek v4.1 Flash">DeepSeek v4.1 Flash<small>便宜快速</small></button>
+  <button data-model="Gemini 3.8 Flash">Gemini 3.8 Flash</button>
+  <hr>
+  <button data-act="settings"><svg class="i sm"><use href="#i-settings"/></svg>管理模型和密钥</button>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const body = document.body;
+const state = { model: 'Claude Opus 4', intent: '自动', guessed: null };
+
+/* ---------- composer ---------- */
+const composerHTML = ph => `
+<form class="composer">
+  <textarea rows="1" placeholder="${ph}" aria-label="消息"></textarea>
+  <div class="crow">
+    <button type="button" class="iconbtn" aria-label="添加文件"><svg class="i"><use href="#i-clip"/></svg></button>
+    <button type="button" class="pill intent" data-menu="intentMenu"><svg class="i sm"><use href="#i-sparkle"/></svg><span class="lbl">自动</span><svg class="i sm"><use href="#i-down"/></svg></button>
+    <button type="button" class="pill model" data-menu="modelMenu"><span class="dot"></span><span class="lbl">${state.model}</span><svg class="i sm"><use href="#i-down"/></svg></button>
+    <span class="grow"></span>
+    <button type="button" class="mic" aria-label="开始语音通话" data-act="voice"><svg class="i"><use href="#i-mic"/></svg></button>
+    <button type="submit" class="send" aria-label="发送" disabled><svg class="i"><use href="#i-up"/></svg></button>
+  </div>
+</form>`;
+$$('.composer-slot').forEach(s => s.innerHTML = composerHTML(s.dataset.ph));
+
+const rules = [
+  [/画|图|插画|海报|头像|logo|壁纸/i, '生成图像', 'create'],
+  [/视频|动画|镜头|剪辑/, '生成视频', 'create'],
+  [/代码|bug|报错|函数|修复|重构|接口|组件|\.tsx?|python|sql/i, '写代码', 'code'],
+  [/每天|每周|定时|提醒我|自动/, '自动化', 'chat'],
+  [/搜|新闻|最新|动态|资讯|查一下/, '联网搜索', 'chat'],
+];
+function guess(text){ for (const [re, label, view] of rules) if (re.test(text)) return { label, view }; return null; }
+function renderIntent(form){
+  const pill = $('.pill.intent', form), lbl = $('.lbl', pill);
+  if (state.intent !== '自动') { lbl.textContent = state.intent; pill.classList.remove('guessed'); return; }
+  const g = guess($('textarea', form).value);
+  pill.classList.toggle('guessed', !!g);
+  lbl.innerHTML = g ? `自动<em>：${g.label}</em>` : '自动';
+}
+document.addEventListener('input', e => {
+  if (!e.target.matches('.composer textarea')) return;
+  const ta = e.target, form = ta.form;
+  ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 180) + 'px';
+  $('.send', form).disabled = !ta.value.trim();
+  renderIntent(form);
+});
+document.addEventListener('keydown', e => {
+  if (e.target.matches('.composer textarea') && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); e.target.form.requestSubmit(); }
+  if (e.key === 'Escape') { if (body.classList.contains('voice-on')) endVoice(); closeMenus(); closeOverlays(); body.classList.remove('side-open'); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); openSettings(); }
+});
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  const ta = $('textarea', e.target), text = ta.value.trim(); if (!text) return;
+  const g = state.intent !== '自动' ? rules.find(r => r[1] === state.intent) : null;
+  const view = g ? g[2] : (guess(text)?.view || 'chat');
+  ta.value = ''; ta.style.height = 'auto'; $('.send', e.target).disabled = true; renderIntent(e.target);
+  if (body.dataset.view === 'home') { go(view); pushMessage(view, text); } else pushMessage(body.dataset.view, text);
+});
+function pushMessage(view, text){
+  const inner = $(`.screen.${view} .thread-inner`);
+  const u = document.createElement('div'); u.className = 'msg-user'; u.innerHTML = `<p></p>`; u.firstChild.textContent = text;
+  const a = document.createElement('div'); a.className = 'msg-atlas'; a.innerHTML = `<svg class="mark"><use href="#mark"/></svg><div class="body"><div class="typing" aria-label="Atlas 正在思考"><i></i><i></i><i></i></div></div>`;
+  inner.append(u, a); const th = inner.parentElement; th.scrollTo({ top: th.scrollHeight, behavior: 'smooth' });
+  setTimeout(() => { $('.body', a).innerHTML = '<p>这是原型，还没有接后端。真正的回复会在这里流式出现，过程会像上面一样折叠成一行。</p>'; th.scrollTo({ top: th.scrollHeight, behavior: 'smooth' }); }, 1400);
+}
+
+/* ---------- menus ---------- */
+let menuOwner = null;
+function closeMenus(){ $$('.menu').forEach(m => m.classList.remove('open')); menuOwner = null; }
+document.addEventListener('click', e => {
+  const opener = e.target.closest('[data-menu]');
+  if (opener) {
+    const m = $('#' + opener.dataset.menu); const was = m.classList.contains('open') && menuOwner === opener;
+    closeMenus(); if (was) return;
+    m.classList.add('open'); menuOwner = opener;
+    const r = opener.getBoundingClientRect(), mh = m.offsetHeight;
+    const top = r.top - mh - 8 > 8 ? r.top - mh - 8 : r.bottom + 8;
+    m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 10) + 'px'; m.style.top = top + 'px';
+    return;
+  }
+  const it = e.target.closest('[data-intent]');
+  if (it) { state.intent = it.dataset.intent; $$('.composer').forEach(renderIntent); closeMenus(); return; }
+  const mo = e.target.closest('[data-model]');
+  if (mo) { state.model = mo.dataset.model; $$('.pill.model .lbl').forEach(l => l.textContent = state.model); $('.vtop span:last-child').textContent = state.model + ' 实时语音'; closeMenus(); toast('之后的消息会使用 ' + state.model); return; }
+  if (!e.target.closest('.menu')) closeMenus();
+});
+
+/* ---------- navigation ---------- */
+const titles = { home: '今天', chat: '本周 AI 行业简报', code: '修复控制台 Hub 报错', create: '启动页插画：天球与云海', auto: '自动化', memory: '记忆与资料' };
+const workViews = ['chat', 'code', 'create'];
+function go(view){
+  body.dataset.view = view;
+  $('#title').textContent = titles[view];
+  $$('.nav [data-go]').forEach(b => b.dataset.go === view ? b.setAttribute('aria-current','page') : b.removeAttribute('aria-current'));
+  $$('.recents button').forEach(b => b.classList.toggle('on', b.dataset.go === view && b === $(`.recents [data-go="${view}"]`)));
+  body.classList.toggle('canvas-open', workViews.includes(view) && innerWidth > 1180);
+  $('#canvasBtn').style.visibility = workViews.includes(view) ? 'visible' : 'hidden';
+  body.classList.remove('side-open');
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-go],[data-act],[data-soon],[data-toast],[data-tab],[data-scroll]'); if (!t) return;
+  if (t.dataset.go) return go(t.dataset.go);
+  if (t.dataset.soon) return toast(`「${t.dataset.soon}」这一屏在下一轮原型中设计`);
+  if (t.dataset.toast) return toast(t.dataset.toast);
+  if (t.dataset.scroll) return $('#' + t.dataset.scroll).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (t.dataset.tab) {
+    const bar = t.parentElement; $$('[data-tab]', bar).forEach(b => { b.setAttribute('aria-selected', b === t); $('#' + b.dataset.tab).classList.toggle('on', b === t); });
+    return;
+  }
+  const a = t.dataset.act;
+  if (a === 'theme') { const d = body.dataset.theme === 'dark'; body.dataset.theme = d ? 'light' : 'dark'; $('use', t).setAttribute('href', d ? '#i-moon' : '#i-sun'); }
+  if (a === 'canvas') body.classList.toggle('canvas-open');
+  if (a === 'canvas-show') body.classList.add('canvas-open');
+  if (a === 'run') t.parentElement.classList.toggle('open');
+  if (a === 'new') { go('home'); $('.home textarea').focus(); }
+  if (a === 'search') openPalette();
+  if (a === 'settings') openSettings();
+  if (a === 'settings-close') closeOverlays();
+  if (a === 'new-auto') { go('home'); const ta = $('.home textarea'); ta.value = '每周五下午五点提醒我写周报，把这周的对话和提交整理成要点'; ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); }
+  if (a === 'side-open') body.classList.add('side-open');
+  if (a === 'side-close') innerWidth <= 820 ? body.classList.remove('side-open') : body.classList.toggle('side-mini');
+  if (a === 'to-video') { if (body.dataset.view !== 'create') go('create'); body.classList.add('canvas-open'); $('#vidTab').click(); }
+  if (a === 'voice') startVoice();
+  if (a === 'voice-end') endVoice();
+  if (a === 'mute' || a === 'cc') t.setAttribute('aria-pressed', t.getAttribute('aria-pressed') !== 'true');
+  if (a === 'interrupt') { voice.idx = voice.text.length; $('#vatlas').innerHTML = '好的，你说。<span class="cur"></span>'; }
+});
+
+/* ---------- automation ---------- */
+const autos = [
+  { name: '每天早上整理行业资讯', when: '每天 08:00', next: '明天 08:00', on: true, running: true, icon: 'i-globe', tone: 'ether',
+    task: '搜索 AI 模型、实时语音、视频生成三个方向的新闻，按我的偏好写成一页简报。', out: 'Windows 通知，并存成一段对话', model: 'Claude Opus 4',
+    runs: [['running', '今天 08:00', '正在读取第 14 篇来源'], ['ok', '昨天 08:00', '简报 9 条，用时 3 分 12 秒'], ['ok', '9 月 27 日 08:00', '简报 7 条，用时 2 分 48 秒'], ['fail', '9 月 26 日 08:00', '网络不可用，08:30 自动重试后完成']] },
+  { name: 'Atlas 仓库每晚跑测试', when: '每天 23:30', next: '今晚 23:30', on: true, running: true, icon: 'i-terminal', tone: 'ok',
+    task: '拉取 D:\\Atlas 最新代码，运行前后端测试。失败时找出原因，写一份修复建议，不直接改代码。', out: '只在失败时通知', model: 'Claude Sonnet 4',
+    runs: [['running', '今天 23:30', '前端测试已通过，正在跑后端测试'], ['ok', '昨天 23:30', '全部通过'], ['fail', '9 月 27 日 23:30', '2 个测试失败，已写修复建议']] },
+  { name: '工作日下班前汇总待办', when: '周一到周五 18:00', next: '明天 18:00', on: true, icon: 'i-check', tone: 'brass',
+    task: '从今天的对话、提交记录和日程里找出没做完的事，列成明天的待办。', out: 'Windows 通知', model: 'DeepSeek v4.1 Flash',
+    runs: [['ok', '今天 18:00', '6 条待办，2 条标为紧急'], ['ok', '昨天 18:00', '4 条待办']] },
+  { name: '每周一生成 AI 周报', when: '每周一 09:00', next: '10 月 5 日 09:00', on: true, icon: 'i-file', tone: 'brass',
+    task: '汇总上周每天的行业资讯，挑出和 Atlas 有关的 5 件事，写成一份周报。', out: '存成一段对话', model: 'Claude Opus 4',
+    runs: [['ok', '9 月 28 日 09:00', '周报 1 页，6 个来源']] },
+  { name: '显卡降价提醒', when: '每 6 小时', next: '', on: false, icon: 'i-bell', tone: 'ether',
+    task: '查看 RTX 5090 在三家商城的价格，低于 14000 元时提醒我。', out: 'Windows 通知和 Telegram', model: 'DeepSeek v4.1 Flash',
+    runs: [['ok', '9 月 20 日 12:00', '最低 15299 元，未到提醒价']] },
+];
+let autoSel = 0;
+function renderAutos(){
+  $('#autoList').innerHTML = autos.map((a, i) => `
+    <div class="row${a.on ? '' : ' off'}" role="option" tabindex="0" aria-selected="${i === autoSel}" data-auto="${i}">
+      <span class="ico ${a.tone}"><svg class="i"><use href="#${a.icon}"/></svg></span>
+      <div><p>${a.name}</p><small>${a.when}</small></div>
+      <div class="when">${!a.on ? '已暂停' : a.running ? '<span class="live-tag">运行中</span>' : `<b>下次</b>${a.next}`}</div>
+      <button class="switch" role="switch" aria-checked="${a.on}" aria-label="启用${a.name}" data-auto-toggle="${i}"></button>
+    </div>`).join('');
+  const a = autos[autoSel];
+  $('#autoDetail').innerHTML = `
+    <h2>${a.name}</h2><p class="sub">${a.when}，${!a.on ? '已暂停' : a.running ? '正在运行' : '下次 ' + a.next}</p>
+    <dl><div><dt>要做的事</dt><dd>${a.task}</dd></div><div><dt>结果发到</dt><dd>${a.out}</dd></div><div><dt>使用的模型</dt><dd>${a.model}</dd></div></dl>
+    <h3>运行记录</h3>
+    <ol class="history">${a.runs.map(r => `<li><span class="dot ${r[0]}"></span><div><b>${r[1]}</b><small>${r[2]}</small></div></li>`).join('')}</ol>
+    <div class="btns"><button class="btn primary" data-toast="已开始运行：${a.name}">立即运行</button><button class="btn">编辑</button><button class="btn ghost" data-toast="打开了最近一次运行的结果">查看结果</button></div>`;
+  $('.nav .count').textContent = autos.filter(x => x.on && x.running).length + ' 运行中';
+}
+document.addEventListener('click', e => {
+  const tg = e.target.closest('[data-auto-toggle]');
+  if (tg) { const a = autos[+tg.dataset.autoToggle]; a.on = !a.on; if (!a.on) a.running = false; else if (!a.next) a.next = '6 小时后'; renderAutos(); toast(a.on ? `已开启：${a.name}` : `已暂停：${a.name}`); return; }
+  const r = e.target.closest('[data-auto]'); if (r) { autoSel = +r.dataset.auto; renderAutos(); }
+});
+document.addEventListener('keydown', e => { const r = e.target.closest?.('[data-auto]'); if (r && e.key === 'Enter' && e.target === r) r.click(); });
+renderAutos();
+
+/* ---------- memory ---------- */
+const facts = [
+  ['偏好', [['简报用简体中文，先给结论，每条不超过两句', '9 月 27 日的对话'], ['代码注释写中文，提交信息写英文', '9 月 20 日的对话'], ['周末不安排工作提醒', '今天的对话'], ['界面喜欢通透、安静的风格，不喜欢堆满功能卡片', '9 月 28 日的对话']]],
+  ['项目', [['Atlas 是本地优先的全能助理：日常、代码、生图、视频、实时语音都要', '项目 Atlas'], ['前端 Electron + React，后端 Python + FastAPI + LangGraph', '项目 Atlas'], ['实时语音的目标延迟是 300ms 以内', '9 月 25 日的对话'], ['开发按任务书交给 Luna 执行，完成后评审', '项目 Atlas']]],
+  ['环境', [['用 Windows 11，项目放在 D:\\Atlas', '系统信息'], ['模型走 OpenAI 兼容网关，Anthropic 直连作备用', '设置'], ['便宜的小任务常用 DeepSeek v4.1 Flash', '9 月 22 日的对话'], ['晚上 11 点以后经常还在写代码', '使用习惯']]],
+];
+const pending = [['改代码时先给 diff，确认后再提交', '今天的对话'], ['生图默认 4:3 横版，低饱和', '9 月 28 日的对话'], ['“周报”指每周一的 AI 行业周报，不是工作周报', '9 月 28 日的对话']];
+const fileList = [['PLAN.md', 'Markdown，33 KB', '引用 18 次', 'i-file', 'brass'], ['Atlas竞品对比报告.docx', 'Word，16 KB', '引用 3 次', 'i-file', 'ether'], ['api-protocol-v1.2.md', 'Markdown，12 KB', '引用 7 次', 'i-file', 'brass'], ['atlas-workspace-v1.png', '图片，97 KB', '引用 2 次', 'i-image', 'ok'], ['语音延迟测试结果.xlsx', '表格，48 KB', '引用 4 次', 'i-file', 'ok'], ['启动页插画 第 2 张.png', '图片，1.2 MB', '今天生成', 'i-image', 'ok']];
+const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function hl(t, q){ t = esc(t); if (!q) return t; q = esc(q); const i = t.toLowerCase().indexOf(q.toLowerCase()); return i < 0 ? t : t.slice(0, i) + '<mark>' + t.slice(i, i + q.length) + '</mark>' + t.slice(i + q.length); }
+function renderMemory(){
+  const q = $('#memSearch').value.trim(), has = s => !q || s.toLowerCase().includes(q.toLowerCase());
+  const groups = facts.map(([g, items]) => [g, items.filter(f => has(f[0]) || has(f[1]))]).filter(([, it]) => it.length);
+  $('#m-facts').innerHTML = groups.length ? groups.map(([g, items]) => `<div class="mem-group"><h3>${g}<span>${items.length}</span></h3><div class="list glass">${items.map(f => `<div class="fact"><div>${hl(f[0], q)}<small>来自${esc(f[1])}</small></div><div class="btns"><button class="btn ghost">修改</button><button class="btn ghost" data-forget>忘掉</button></div></div>`).join('')}</div></div>`).join('') : `<p class="empty-note">没有和“${esc(q)}”有关的记忆。换个说法，或者直接问 Atlas。</p>`;
+  $('#m-pending').innerHTML = pending.length ? `<div class="list glass">${pending.map((f, i) => `<div class="fact"><div>${esc(f[0])}<small>来自${esc(f[1])}</small></div><div class="btns"><button class="btn ghost" data-pend="${i}" data-keep="0">忽略</button><button class="btn primary" data-pend="${i}" data-keep="1">记住</button></div></div>`).join('')}</div>` : '<p class="empty-note">都处理完了。Atlas 发现新的偏好时，会先放到这里等你确认。</p>';
+  const files = fileList.filter(f => has(f[0]));
+  $('#fileGrid').innerHTML = files.length ? files.map(f => `<button class="fcard glass"><span class="ico ${f[4]}"><svg class="i"><use href="#${f[3]}"/></svg></span><span><b>${hl(f[0], q)}</b><small>${f[1]}，${f[2]}</small></span></button>`).join('') : `<p class="empty-note">没有找到“${esc(q)}”。把文件拖进对话框，Atlas 会把它存到这里。</p>`;
+  $('#factN').textContent = facts.reduce((n, [, it]) => n + it.length, 0);
+  $('#pendN').textContent = pending.length;
+  $('#fileN').textContent = fileList.length;
+}
+$('#memSearch').addEventListener('input', renderMemory);
+document.addEventListener('click', e => {
+  const m = e.target.closest('[data-mem]');
+  if (m) { $$('[data-mem]').forEach(b => { b.setAttribute('aria-selected', b === m); $('#' + b.dataset.mem).classList.toggle('on', b === m); }); return; }
+  const f = e.target.closest('[data-forget]');
+  if (f) { f.closest('.fact').classList.add('gone'); f.textContent = '已忘掉'; f.disabled = true; toast('已忘掉，Atlas 之后不会再用这条信息'); return; }
+  const p = e.target.closest('[data-pend]');
+  if (p) { const [item] = pending.splice(+p.dataset.pend, 1); if (p.dataset.keep === '1') facts[0][1].unshift(item); renderMemory(); toast(p.dataset.keep === '1' ? '已记住' : '已忽略'); }
+});
+renderMemory();
+
+/* ---------- overlays ---------- */
+let lastFocus = null;
+function openScrim(id){ closeMenus(); lastFocus = document.activeElement; const s = $('#' + id); s.classList.add('open'); s.setAttribute('aria-hidden', 'false'); }
+function closeOverlays(){ const open = $$('.scrim.open'); open.forEach(s => { s.classList.remove('open'); s.setAttribute('aria-hidden', 'true'); }); if (open.length) lastFocus?.focus?.(); }
+function openSettings(){ openScrim('settings'); setTimeout(() => $('#settings [aria-current=true]').focus(), 50); }
+$$('.scrim').forEach(s => s.addEventListener('mousedown', e => { if (e.target === s) closeOverlays(); }));
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-set]');
+  if (b) { $$('[data-set]').forEach(x => { x.setAttribute('aria-current', x === b); $('#' + x.dataset.set).classList.toggle('on', x === b); }); return; }
+  const sw = e.target.closest('.set-row .switch');
+  if (sw) { const on = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', on); if (sw.hasAttribute('data-solid')) document.documentElement.style.setProperty('--glass', on ? 'var(--glass3)' : ''); }
+  const sg = e.target.closest('.seg button'); if (sg) $$('button', sg.parentElement).forEach(x => x.setAttribute('aria-pressed', x === sg));
+  const th = e.target.closest('[data-theme-set]');
+  if (th) setTheme(th.dataset.themeSet === 'dark' || (th.dataset.themeSet === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches));
+});
+function setTheme(dark){ body.dataset.theme = dark ? 'dark' : 'light'; $('[data-act=theme] use').setAttribute('href', dark ? '#i-sun' : '#i-moon'); }
+
+/* palette */
+const palItems = [
+  ['对话', 'i-chat', '本周 AI 行业简报', '今天', () => go('chat')],
+  ['对话', 'i-code', '修复控制台 Hub 报错', '今天', () => go('code')],
+  ['对话', 'i-image', '启动页插画：天球与云海', '今天', () => go('create')],
+  ['对话', 'i-chat', '实时语音延迟怎么压到 300ms', '本周', () => go('chat')],
+  ['记忆', 'i-brain', '实时语音的目标延迟是 300ms 以内', '项目', () => go('memory')],
+  ['记忆', 'i-brain', '简报用简体中文，先给结论', '偏好', () => go('memory')],
+  ['文件', 'i-file', 'PLAN.md', 'D:\\Atlas', () => go('memory')],
+  ['文件', 'i-file', '语音延迟测试结果.xlsx', '资料', () => go('memory')],
+  ['操作', 'i-mic', '开始语音通话', 'Ctrl Shift Space', () => startVoice()],
+  ['操作', 'i-zap', '新建自动化', '', () => $('[data-act=new-auto]').click()],
+  ['操作', 'i-settings', '打开设置', 'Ctrl ,', () => openSettings()],
+  ['操作', 'i-moon', '切换明暗', '', () => setTheme(body.dataset.theme !== 'dark')],
+];
+let palSel = 0, palShown = [];
+function renderPal(){
+  const q = $('#palInput').value.trim();
+  palShown = palItems.filter(i => !q || i[2].toLowerCase().includes(q.toLowerCase()));
+  if (q) palShown.push(['让 Atlas 去做', 'i-sparkle', q, 'Enter', () => { go('home'); const ta = $('.home textarea'); ta.value = q; ta.form.requestSubmit(); }]);
+  palSel = Math.max(0, Math.min(palSel, palShown.length - 1));
+  let last = '';
+  $('#palRes').innerHTML = palShown.map((it, i) => { const h = it[0] !== last ? `<h5>${it[0]}</h5>` : ''; last = it[0];
+    return `${h}<button class="it" role="option" aria-selected="${i === palSel}" data-pal="${i}"><svg class="i sm"><use href="#${it[1]}"/></svg><span>${hl(it[2], it[0] === '让 Atlas 去做' ? '' : q)}</span><small>${it[3]}</small></button>`; }).join('');
+}
+function openPalette(){ openScrim('paletteScrim'); $('#palInput').value = ''; palSel = 0; renderPal(); setTimeout(() => $('#palInput').focus(), 30); }
+function runPal(i){ const it = palShown[i]; if (!it) return; closeOverlays(); it[4](); }
+$('#palInput').addEventListener('input', () => { palSel = 0; renderPal(); });
+$('#palInput').addEventListener('keydown', e => {
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palShown.length) { e.preventDefault(); palSel = (palSel + (e.key === 'ArrowDown' ? 1 : -1) + palShown.length) % palShown.length; renderPal(); $('#palRes [aria-selected=true]')?.scrollIntoView({ block: 'nearest' }); }
+  if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); runPal(palSel); }
+});
+document.addEventListener('click', e => { const p = e.target.closest('[data-pal]'); if (p) runPal(+p.dataset.pal); });
+
+/* ---------- toast ---------- */
+let tt; function toast(msg){ const el = $('#toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => el.classList.remove('on'), 2600); }
+
+/* ---------- generative art ---------- */
+const palettes = [
+  { n: '黎明', sky: ['#C9D6EC', '#F1E4D6'], sun: '#FFE9CC', cloud: ['#FFFFFF', '#EEE6E3'], ring: '#C9A26A' },
+  { n: '晨光', sky: ['#AFC3E6', '#F5D7BF'], sun: '#FFF3DE', cloud: ['#FDF7F1', '#F0DCCD'], ring: '#B8873F' },
+  { n: '薄暮', sky: ['#8E93C3', '#F0B99E'], sun: '#FFD7B0', cloud: ['#E9D9DE', '#C8A8B6'], ring: '#E6BA78' },
+  { n: '入夜', sky: ['#141C36', '#4B3C5E'], sun: '#E6BA78', cloud: ['#3B4468', '#2A3152'], ring: '#E6BA78' },
+];
+function art(p, id, zoom = 1){
+  return `<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs>
+    <linearGradient id="s${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.sky[0]}"/><stop offset="1" stop-color="${p.sky[1]}"/></linearGradient>
+    <radialGradient id="g${id}" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".5" stop-color="${p.cloud[0]}" stop-opacity=".45"/><stop offset="1" stop-color="${p.sky[0]}" stop-opacity=".5"/></radialGradient>
+    <radialGradient id="h${id}"><stop offset="0" stop-color="${p.sun}" stop-opacity=".9"/><stop offset="1" stop-color="${p.sun}" stop-opacity="0"/></radialGradient></defs>
+    <g transform="translate(200 150) scale(${zoom}) translate(-200 -150)">
+    <rect width="400" height="300" fill="url(#s${id})"/>
+    <circle cx="200" cy="205" r="150" fill="url(#h${id})"/>
+    <circle cx="200" cy="125" r="46" fill="url(#g${id})" stroke="#fff" stroke-opacity=".5"/>
+    <ellipse cx="200" cy="125" rx="72" ry="20" fill="none" stroke="${p.ring}" stroke-width="1.6" transform="rotate(-20 200 125)"/>
+    <ellipse cx="200" cy="125" rx="20" ry="72" fill="none" stroke="${p.ring}" stroke-width="1" opacity=".6" transform="rotate(-20 200 125)"/>
+    <path d="M0 212 C60 196 110 206 160 200 S260 188 310 198 S380 204 400 198 V300 H0Z" fill="${p.cloud[1]}" opacity=".9"/>
+    <path d="M0 236 C70 220 130 232 200 226 S330 214 400 228 V300 H0Z" fill="${p.cloud[0]}" opacity=".95"/>
+    <path d="M0 262 C90 250 170 260 240 254 S350 246 400 256 V300 H0Z" fill="${p.cloud[1]}" opacity=".6"/></g></svg>`;
+}
+let pick = 1;
+function renderGallery(){
+  $('#gallery').innerHTML = palettes.map((p, i) => `<figure class="shot${i === pick ? ' on' : ''}" tabindex="0" role="button" aria-pressed="${i === pick}" data-pick="${i}">${art(p, 'a' + i)}<figcaption>${i + 1}　${p.n}</figcaption></figure>`).join('');
+  $('#pickN').textContent = pick + 1;
+  $('#player').insertAdjacentHTML('afterbegin', '');
+  $('#player svg')?.remove(); $('#player').insertAdjacentHTML('afterbegin', art(palettes[pick], 'v'));
+  $('#frames').innerHTML = [1, 1.03, 1.06, 1.09, 1.12, 1.15].map((z, i) => `<div>${art(palettes[pick], 'f' + i, z)}</div>`).join('') + '<span class="head"></span>';
+}
+document.addEventListener('click', e => { const f = e.target.closest('[data-pick]'); if (f) { pick = +f.dataset.pick; renderGallery(); } });
+document.addEventListener('keydown', e => { const f = e.target.closest?.('[data-pick]'); if (f && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); f.click(); } });
+renderGallery();
+
+/* ---------- voice ---------- */
+const voice = { text: '明天下午两点到四点你都空着。我先帮你约在三点，四十五分钟，标题叫“Atlas 语音方案评审”。需要我把上周那份延迟测试的结果一起附上吗？', idx: 0, t0: 0, timers: [] };
+function startVoice(){
+  closeMenus(); body.classList.add('voice-on'); $('.voice').setAttribute('aria-hidden', 'false');
+  voice.idx = 0; voice.t0 = Date.now(); $('#vatlas').textContent = ''; $('#vact').innerHTML = '';
+  const cal = setTimeout(() => $('#vact').innerHTML = '<div><svg class="i sm"><use href="#i-cal"/></svg>查看了明天的日程</div>', 700);
+  const cal2 = setTimeout(() => $('#vact').insertAdjacentHTML('beforeend', '<div><svg class="i sm"><use href="#i-check"/></svg>已预留 15:00 到 15:45</div>'), 3600);
+  voice.timers.push(cal, cal2);
+  voice.timers.push(setInterval(() => {
+    const s = Math.floor((Date.now() - voice.t0) / 1000);
+    $('#vtime').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }, 500));
+  voice.timers.push(setInterval(() => {
+    if (voice.idx < voice.text.length) { voice.idx++; $('#vatlas').innerHTML = voice.text.slice(0, voice.idx) + '<span class="cur"></span>'; }
+  }, 90));
+  let ph = 0;
+  (function tick(){ if (!body.classList.contains('voice-on')) return; ph += .18;
+    const speaking = voice.idx < voice.text.length;
+    const lvl = speaking ? Math.abs(Math.sin(ph) * .6 + Math.sin(ph * 2.7) * .4) : .08 + Math.sin(ph * .3) * .05;
+    $('#orb').style.setProperty('--lvl', lvl.toFixed(3)); requestAnimationFrame(() => setTimeout(tick, 60)); })();
+}
+function endVoice(){ body.classList.remove('voice-on'); $('.voice').setAttribute('aria-hidden', 'true'); voice.timers.forEach(t => { clearTimeout(t); clearInterval(t); }); voice.timers = []; }
+
+/* ---------- greeting ---------- */
+const h = new Date().getHours();
+$('#greet').textContent = h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 14 ? '中午好' : h < 18 ? '下午好' : '晚上好';
+
+/* deep link: #chat #code #create #voice #dark */
+function applyHash(){
+  const hash = location.hash.slice(1).split(',');
+  body.dataset.theme = hash.includes('dark') ? 'dark' : 'light';
+  $('[data-act=theme] use').setAttribute('href', hash.includes('dark') ? '#i-sun' : '#i-moon');
+  go(hash.find(x => titles[x]) || 'home');
+  hash.includes('voice') ? startVoice() : endVoice();
+}
+addEventListener('hashchange', applyHash); applyHash();
+</script>
+</body>
+</html>

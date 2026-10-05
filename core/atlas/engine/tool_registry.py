@@ -20,6 +20,7 @@ _context = threading.local()
 _lock = threading.Lock()
 _registered: set[str] = set()
 _plan_registered: set[str] = set()
+_atlas_mcp_registered: dict[str, set[str]] = {}
 _active_contexts: dict[str, tuple[Any, Any, asyncio.AbstractEventLoop]] = {}
 _hermes_fallback_handlers: dict[str, Any] = {}
 _hermes_entries: dict[str, Any] = {}
@@ -307,8 +308,27 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
     plan_mode = getattr(runtime, "mode", "act") == "plan"
     atlas_toolset = "atlas-plan" if plan_mode else "atlas"
     registered = _plan_registered if plan_mode else _registered
+    mcp_client = getattr(agent, "_mcp", None)
+    mcp_names = {
+        str(item.get("function", {}).get("name", ""))
+        for item in (mcp_client.get_tools_for_llm() if mcp_client else [])
+        if str(item.get("function", {}).get("name", ""))
+    }
+    scope = registry.current_scope_key()
     plan_tools = {"read_file", "search_files", "terminal", "web_fetch", "web_search", "web_extract"}
     with _lock:
+        # Atlas copies MCP schemas into its own toolset so every call passes through
+        # Atlas approval/checkpoint policy. Remove copies whose source server vanished.
+        if not plan_mode:
+            previous_mcp_names = _atlas_mcp_registered.get(scope, set())
+            stale_mcp_names = previous_mcp_names - mcp_names
+            for stale_name in stale_mcp_names:
+                entry = registry.get_entry(stale_name, scope=scope)
+                if entry is not None and entry.toolset == "atlas":
+                    registry.deregister(stale_name, scope=scope)
+                if not any(stale_name in other for key, other in _atlas_mcp_registered.items() if key != scope):
+                    _registered.discard(stale_name)
+            _atlas_mcp_registered[scope] = set(mcp_names)
         _bind_inline_atlas_tools()
         indexed = {
             str(item.get("function", {}).get("name", "")): item
@@ -478,6 +498,35 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
             "tools": sorted(registered),
             "includes": [],
         }
+
+
+def unregister_atlas_mcp_tools(names: set[str], scopes: set[str | None]) -> None:
+    """Remove only Atlas registry copies of the specified MCP tools and scopes."""
+    if not names or not scopes:
+        return
+    from tools.registry import registry
+
+    with _lock:
+        scopes = set(scopes)
+        scopes.update(
+            scope for scope, tracked in _atlas_mcp_registered.items()
+            if tracked.intersection(names)
+        )
+        scopes.add(registry.current_scope_key())
+        for scope in scopes:
+            for name in names:
+                entry = registry.get_entry(name, scope=scope)
+                if entry is not None and entry.toolset == "atlas":
+                    registry.deregister(name, scope=scope)
+            tracked = _atlas_mcp_registered.get(scope)
+            if tracked is not None:
+                tracked.difference_update(names)
+                if not tracked:
+                    _atlas_mcp_registered.pop(scope, None)
+        still_tracked = (
+            set().union(*_atlas_mcp_registered.values()) if _atlas_mcp_registered else set()
+        )
+        _registered.difference_update(names - still_tracked)
 
 
 def _bind_inline_atlas_tools() -> None:

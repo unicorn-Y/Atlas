@@ -60,6 +60,9 @@ async def test_parallel_runs_keep_model_snapshots_without_changing_selection(tmp
 
         await asyncio.gather(run("parent-model", "parent-turn"), run("worker-model", "worker-turn"))
 
+        # The wire model is the bare gateway id; the openai/ prefix is a routing
+        # hint that strict OpenAI-compatible resellers reject (see hermes
+        # chat_completion_helpers wire-model strip).
         assert {request["model"] for request in fake.main_requests()} == {
             "parent-model", "worker-model",
         }
