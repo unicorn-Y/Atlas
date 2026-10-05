@@ -1,0 +1,120 @@
+{
+  "research_date": "2026-10-03",
+  "atlas_base": "9e6d6fde949a0f581ba7e0031004b1f6c4fdd2f4",
+  "sources": [
+    {
+      "repo": "https://github.com/renovatebot/renovate",
+      "commit": "ae4be1695755a20b1fe88fc94f23e2bf83d23e8d",
+      "date": "2026-10-02",
+      "license": "AGPL-3.0",
+      "local_root": "D:/Atlas-x-prep-sources/Renovate",
+      "files": [
+        "lib/workers/repository/updates/generate.ts",
+        "lib/workers/repository/updates/branchify.ts",
+        "lib/workers/repository/update/pr/index.ts",
+        "docs/usage/faq.md"
+      ]
+    },
+    {
+      "repo": "https://github.com/All-Hands-AI/OpenHands",
+      "commit": "a8c8fb377761fc7c562f19db1d9da75bba413cb9",
+      "date": "2026-10-02",
+      "license": "MIT",
+      "local_root": "D:/Atlas-x-prep-sources/OpenHands",
+      "files": [
+        "src/api/conversation-service/agent-server-conversation-service.api.ts",
+        "src/api/conversation-service/agent-server-conversation-service.types.ts"
+      ]
+    },
+    {
+      "repo": "https://github.com/openai/codex",
+      "commit": "50b4c5e58c1b89f3d1b74155cc1cc1716c2be208",
+      "date": "2026-10-02",
+      "license": "Apache-2.0 with component-specific licenses",
+      "local_root": "D:/Atlas-x-prep-sources/Codex",
+      "files": [
+        "codex-rs/worktree/src/lib.rs",
+        "codex-rs/worktree/src/git.rs",
+        "docs/sandbox.md",
+        "docs/execpolicy.md",
+        "codex-rs/windows-sandbox-service/src/service.rs",
+        "codex-rs/windows-sandbox-service/src/service/runtime_lifecycle.rs"
+      ]
+    },
+    {
+      "repo": "https://github.com/NousResearch/hermes-agent",
+      "commit": "84892e5bd6652f7b04f3a76366d78953fe81ee68",
+      "date": "2026-10-02",
+      "license": "MIT",
+      "local_root": "D:/Atlas-x-prep-sources/HermesAgentUpstream",
+      "files": [
+        "hermes_cli/goals.py",
+        "hermes_cli/gateway_windows.py",
+        "hermes_cli/service_manager.py",
+        "hermes_cli/gateway_supervised_restart.py",
+        "hermes_state_sessions.py",
+        "hermes_state_compression.py",
+        "hermes_state_gateway.py",
+        "gateway/run_goals.py",
+        "gateway/slash_commands_goals.py",
+        "cron/monitor.py",
+        "cron/scheduler.py",
+        "cron/scheduler_detached_worker.py"
+      ]
+    },
+    {
+      "repo": "https://github.com/openclaw/openclaw",
+      "commit": "331a6f0d1d262dcc7bdfb23c94f9b0a97ae9a5fa",
+      "date": "2026-10-02",
+      "license": "MIT",
+      "local_root": "D:/Atlas-x-prep-sources/OpenClaw",
+      "files": [
+        "docs/tools/skill-workshop.md",
+        "ui/src/pages/skill-workshop/self-learning.ts",
+        "src/worker/skills-worker-entry.ts"
+      ]
+    },
+    {
+      "repo": "https://github.com/unicorn-Y/hermes-agent",
+      "commit": "e287231d7906bcce5bc373d20fb2e3e1e6427220",
+      "date": "2026-10-02",
+      "license": "MIT",
+      "local_root": "D:/hermes-agent",
+      "files": [
+        "hermes_cli/goals.py",
+        "hermes_cli/gateway_windows.py",
+        "hermes_cli/service_manager.py",
+        "hermes_state_sessions.py",
+        "hermes_state_compression.py",
+        "cron/monitor.py",
+        "cron/scheduler.py"
+      ]
+    },
+    {
+      "repo": "file:///D:/Atlas-x-prep",
+      "commit": "9e6d6fde949a0f581ba7e0031004b1f6c4fdd2f4",
+      "date": "2026-10-02",
+      "license": "Atlas repository license",
+      "local_root": "D:/Atlas-x-prep",
+      "files": [
+        "core/atlas/server.py",
+        "core/atlas/capabilities/durable/dbos_backend.py",
+        "core/atlas/scheduler/__init__.py",
+        "core/atlas/engine/session_sync.py",
+        "core/atlas/agent/__init__.py",
+        "core/atlas/agent/subagent_worktree.py",
+        "core/atlas/task_artifacts.py",
+        "core/atlas/skills/__init__.py",
+        "core/atlas/skills/registry.py",
+        "core/atlas/models/credentials.py",
+        "core/atlas/capabilities/computer/uia_backend.py",
+        "core/atlas/capabilities/computer/cua_backend.py",
+        "core/atlas/capabilities/browser/browser_use.py",
+        "core/atlas/notifications/__init__.py",
+        "core/atlas/telegram.py",
+        "core/pyproject.toml",
+        "docs/plan/VENDORED.md"
+      ]
+    }
+  ]
+}

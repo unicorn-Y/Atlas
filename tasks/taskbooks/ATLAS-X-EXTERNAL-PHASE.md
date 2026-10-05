@@ -1,100 +1,34 @@
-# ATLAS-X：外部功能阶段（X1–X6）
+# ATLAS-X：外部功能阶段（X1–X7）
 
-> 前提：T1 和 T1F 完成，主体在实测里不输。
-> 这一阶段把冻结的外部功能逐项解冻。**原来的任务书（W08–W13）是按旧内核写的**，所以每一波都分两步：
-> 1. **重写任务书**：Sol 主控先对照 Hermes 内核里已经有的东西，把对应的旧任务书改写成 `tasks/taskbooks/ATLAS-Xn-*.md`。这一步只写任务书、不写代码，写完提交，**用户看过再继续**。
-> 2. **施工和验收**：照常用 Sol 主控 + 独立验收。
+更新：2026-10-03，ATLAS-X-PREP 文档准备。**不是施工授权；本轮不开始 X1–X7。**
 
-## 一、通用规则（每一波都适用）
+前提：T1/T1F 完成并验收，用户审查本轮七份任务书后逐波授权。每波完成、交付独立验收结果后停止，不自动开始下一波。旧 W08–W13 不再作为新 Hermes 内核的直接施工依据。
 
-1. **先查 Hermes 有没有**：Hermes 内核里已经有大量外部能力，见下表。有的话，优先接通 Hermes 的实现，再看还差什么、别家（OpenClaw、cua、Stagehand 等）哪里更强。
-2. 旧任务书里的「从 H 搬」，现在多半变成「在 fork 里启用并接到 Atlas 的界面和事件上」，工作量会小很多。
-3. 安全审查依旧由用户亲自做；不要沙箱；不做视频生成。
-4. 每波都要在 CORE-PARITY 里新开一节「外部功能」，逐行写谁最强、从哪里拿、Atlas 现状，照主体部分的格式。
-5. 每波都要用真实场景验收一次（用户的账号和设备，要用户配合），因为外部功能用假服务测不出真实问题。验收前先问用户可不可以。
+## 正式任务书
 
-## 二、各波内容
+| 波 | 唯一施工入口 | 责任 |
+|---|---|---|
+| X1 | [ATLAS-X1-CONNECT-WORLD](ATLAS-X1-CONNECT-WORLD.md) | MCP/OAuth/Tasks/Apps、连接器、单一 channel gateway、trigger/monitor |
+| X2 | [ATLAS-X2-COMPUTER-BROWSER](ATLAS-X2-COMPUTER-BROWSER.md) | computer/browser lifecycle、持久 profile、vault/handoff、示范捕获与安全 replay |
+| X3 | [ATLAS-X3-DEVICES-DELIVERABLES](ATLAS-X3-DEVICES-DELIVERABLES.md) | device trust/pairing、A2A transport、phone/web、artifact editing/share/sync |
+| X4 | [ATLAS-X4-SKILL-MARKET](ATLAS-X4-SKILL-MARKET.md) | 来源市场接入、版本/provenance/dependencies/scopes；C4 SkillManager 唯一 registry |
+| X5 | [ATLAS-X5-SELF-EVOLUTION](ATLAS-X5-SELF-EVOLUTION.md) | upstream/diff/parity建议、taskbook草稿、候选技能审核、隔离实现/merge proposal |
+| X6 | [ATLAS-X6-VOICE-UNIFIED](ATLAS-X6-VOICE-UNIFIED.md) | Pipecat实时语音、统一session入口、bounded collaboration、图像/音频（无视频） |
+| X7 | [ATLAS-X7-ALWAYS-ON-PERSONAL-AGENT](ATLAS-X7-ALWAYS-ON-PERSONAL-AGENT.md) | 专用笔记本常驻、durable工作、主动性/自主权、身份运营、crash/restart/remote handoff |
 
-### X1：连接外部世界（原 W08，`ATLAS-W08-CONNECT-WORLD.md`）
+## 来源与产品事实 authority
 
-| 内容 | Hermes 现有 | 还要做 |
-| --- | --- | --- |
-| MCP 新规范：HTTP、OAuth、Tasks | `tools/mcp_tool*.py`、`mcp_oauth*.py`（C1 已接入客户端） | 远端 HTTP 和 OAuth 的真实服务验收；设置页接入授权流程 |
-| MCP Apps（对话里的交互界面） | 没有 | 照旧任务书，依赖 MCP 官方的 ext-apps SDK |
-| 连接器目录（国内优先） | `tools/connectors/`（目录、账号、授权）、`optional-mcps/`、`plugin-catalog/` | 补国内条目：飞书文档、钉钉、企业微信、语雀、腾讯文档等；做目录页 |
-| 聊天渠道：飞书、钉钉、邮件、企业微信 | `plugins/platforms/`：feishu、dingtalk、email、wecom、telegram、slack 等二十多个；`gateway/` | 接通 Hermes 的网关；Atlas 现有的 Telegram 渠道改成走 Hermes 的；设置页统一管理 |
-| 触发器：Webhook、新邮件、条件触发、网页监控 | `gateway/platforms/webhook*.py`；`cron/`（有 monitor 模式：没有变化时不调用模型） | 和 Atlas 的调度器（`core/atlas/scheduler`）合成一套，前端用 Atlas 的自动化页 |
+[本轮研究总览](../../docs/research/2026-10-03-x-prep/00-summary.md)、[产品对比](../../docs/research/2026-10-03-x-prep/07-x7-products.md)、[X7 架构](../../docs/research/2026-10-03-x-prep/08-x7-architecture.md)、[总 source map](../../docs/research/2026-10-03-x-prep/09-source-map.md) 提供官方证据、锁定 repo/file、Atlas/Hermes已有、可搬模块、薄接线与所属波。旧版总览中的产品发布日期、数量和架构描述均已被本轮核实材料取代；闭源产品不被当作可搬源代码。
 
-### X2：电脑与浏览器（原 W09，`ATLAS-W09-COMPUTER-BROWSER.md`）
+当前基线为 `sol/x-prep@9e6d6fde949a0f581ba7e0031004b1f6c4fdd2f4`；Hermes 以 `core/pyproject.toml` 锁定的 `unicorn-Y/hermes-agent@e287231d7906bcce5bc373d20fb2e3e1e6427220` 为准。后续接入变更若发生在 T1/T1F 或 C6 之后，按任务书启动检查重新比对接口及版本，不把历史注释当当前来源。
 
-| 内容 | Hermes 现有 | 还要做 |
-| --- | --- | --- |
-| 后台电脑操作（不抢鼠标） | `tools/computer_use/`（cua 后端：驱动、截图、输入、守护进程） | 和 Atlas 现有的 UIA/CUA 操作（`core/atlas/tools/computer_use.py`）比较，择优合一；在 Windows 上真机验收 |
-| 浏览器全套 | `tools/browser_tool*.py`（CDP、快照、视觉、对话框、真实配置、camofox、lightpanda） | 接到 Atlas 的浏览器面板；和现有的 Playwright / chrome-devtools MCP 去重 |
-| 模型看不见的密码自动填写 | `tools/browser_vault_tool.py`、`agent/vault_*` | 接系统凭据库；设置页管理 |
-| 登录和验证码交还给人 | 旧任务书 | 照旧任务书；配合浏览器面板 |
-| 操作缓存、演示录制成技能 | 没有（Stagehand 的思路） | 照旧任务书，参考 Stagehand v3 的源码 |
+## 全阶段约束
 
-### X3：跨设备与产出物（原 W10，`ATLAS-W10-DEVICES-DELIVERABLES.md`）
+1. 复用现有 HermesRuntime/AIAgent、GoalManager/SessionDB、AtlasScheduler/DBOS、C4 SkillManager、Atlas permission modes 与配置 API，不创建第二套同类 authority。
+2. X7 将专用笔记本作为 Atlas 的电脑，主机/手机/IM/语音只派活和审查。Windows service 与交互桌面 worker 分层；sleep/offline/锁屏/缺登录/重启有明确状态，不虚称与云 VM 的可用性相同。
+3. X1提供事件/channel/auth，X2提供computer/browser及示范记录，X3提供device trust与transport，X4管理skill版本，X5审核候选，X6统一入口/协作，X7负责常驻运营与恢复。不能重复施工同一能力。
+4. 用户负责安装安全审查；不额外建设scanner，不新增沙箱，不做视频生成。现有 permission、trust、OriginGuard 和审批链仍按正式任务书接线，不因去掉额外scanner就绕过已有authority。
+5. 真实账号、专属邮箱/IM/电话、设备电源/自启配置、付费服务必须在该波获得用户选择与授权后验收。本轮只记录需要什么，不改变用户账户/设置。
+6. 每波在 CORE-PARITY 的“外部功能”节新增 `EXT-Xn-*` 行，保留主体已有同名 X 分类；真实验收结果写对应 result。fake不代替真实服务、产品官方描述不代替 Atlas 实测。
 
-| 内容 | Hermes 现有 | 还要做 |
-| --- | --- | --- |
-| 局域网网页版和扫码配对 | `web/`（仪表盘前端）、`tui_gateway/hosted_room_*`、`gateway/platforms/api_server*.py` | 用 Atlas 自己的前端做网页版（同一套 React 代码），配对和凭据照 OpenClaw 的设计；必须过 OriginGuard |
-| 主机和笔记本两台 Atlas 互联 | `plugins/platforms/a2a` | 设备卡片；任务交给另一台机器去跑 |
-| 导出网页、只读分享链接 | 旧任务书 | 照旧任务书 |
-| Atlas 操作自己的界面 | `tools/desktop_ui.py`、`focus_pane_tool.py`、`read_window_tool.py`、`preview_tool.py` 等 | 接到 Atlas 的 Electron 界面 |
-| 产出物直接编辑（Univer）、自动刷新的仪表盘 | 没有 | 照旧任务书 |
-
-### X4：技能市场（原 W11 第 3 节）
-
-| 内容 | Hermes 现有 | 还要做 |
-| --- | --- | --- |
-| 技能市场 | `tools/skills_hub*.py`（clawhub、GitHub、skills.sh、官方源）、`skills_sync*.py` | 接到 C4 合并后的技能体系；前端做市场页。安装前的安全扫描由用户负责 |
-
-### X5：自我进化（原 W12，`ATLAS-W12-SELF-EVOLUTION.md`）
-
-| 内容 | Hermes 现有 | 还要做 |
-| --- | --- | --- |
-| 跟踪上游代码 | 没有 | Atlas 自己定期 `git fetch` Hermes 上游和其他参考仓库，看已搬入文件的变化，生成「建议合并」的报告和任务书草稿，用户批准后执行（照 ROADMAP 第七节的手动流程做成自动） |
-| 跟踪各家产品动态 | 没有 | 按 `docs/research/2026-09-30-landscape/10-tracking-sources.md` 的信息源，定期抓取和总结，对照 CORE-PARITY 生成「新增行」的建议 |
-| 技能自学 | `agent/curator.py`、`learn_prompt.py`、`background_review.py`、`skill_manager_tool.py` | 接通；用户确认后才保存成技能。安全阀由用户负责 |
-
-### X6：补全（原 W13，`ATLAS-W13-COMPLETION.md`）
-
-| 内容 | Hermes 现有 | 还要做 |
-| --- | --- | --- |
-| 语音：说话输入、边说边干、朗读 | `tools/voice_mode.py`、`voice_live.py`、`wake_word*.py`、`tts_*`、`transcription_*`；Atlas W06 已有 sherpa-onnx 后端 | 前端接入；本地优先 |
-| 统一入口（自动判断是聊天还是干活） | 旧任务书 | 照旧任务书 |
-| 远程子 Agent（A2A，主机和笔记本） | `plugins/platforms/a2a` | 和 X3 的设备互联一起做 |
-| 群聊接任务、多人协作 | Hermes Bot Mode、bot 之间互发消息 | 只做用户自己用得上的部分 |
-| 图像和音频创作 | `tools/image_generation*.py`、`tts_*` | 接入；不做视频 |
-| 命令行无界面运行（F210）、共享状态（F201） | Hermes 的 CLI 和 TUI | Atlas 的 `cli.py` 改成走新内核，和桌面端共用同一个后端 |
-
-### X7：常驻个人 Agent（2026-10-02 用户决定：主体能用后，把这一类全部抄过来）
-
-对标对象（都是 2026 年 5–9 月的新品，做之前按当月资料重查一遍）：OpenAI **dots**（9-29）、Meta **Muse**（9-08）、xAI **Grok Bot**（8-11）、Google **Gemini Spark**（5-19，后续更新）、Microsoft **Autopilot**（原 Scout）、Manus **Cue**、Perplexity **Computer**、Claude Cowork 的云端定时任务和后台电脑操作。
-
-**Atlas 自己的电脑**：用户的**笔记本**专门给 Atlas 用，作为它常驻的「自己的电脑」，相当于各家的云端虚拟机。主机是用户日常工作和开发的机器，通过 X3 的设备互联、聊天渠道、手机给笔记本上的 Atlas 派活。笔记本上的 Atlas 用安装包版（R1 之后）或固定的开发版常驻运行，开机自启、断线自动重连。
-
-| 要抄的能力 | 最强的是谁 | 说明 |
-| --- | --- | --- |
-| 一直在线，追长期目标，关掉界面也接着干 | dots、Spark、Grok Bot | 接 Atlas 现有的后台常驻（Hub）和 Goal；笔记本当执行机 |
-| 三档自主权：自己办 / 要批准 / 禁止 | dots | 按事情的类别（花钱、发消息、删东西、对外发布……）设定，和权限档位并存 |
-| 多渠道派活：IM、邮件、电话 | dots（能打电话）、Spark（有专属 Gmail 地址）、Muse（WhatsApp）、Cue（有自己的邮箱和电话） | 给 Atlas 一个专属邮箱（X1 的邮件渠道）；国内 IM 走 X1；语音通话走 X6 |
-| 录一遍屏就学会 | Grok Bot（录屏 → 可以重复执行的技能，带决策逻辑和审批阈值） | 和 X2 的「演示录制成技能」合并 |
-| 多个 Agent 拉群协作 | Grok Bot（2–6 个 Bot 互发消息、交接任务，各有角色记忆）、Hermes Bot Mode | 和 X6 的「群聊接任务」合并 |
-| 用你自己的浏览器和已登录的账号 | Spark（Chrome）、Muse（自带浏览器） | 和 X2 合并：用笔记本上专给 Atlas 的浏览器配置 |
-| 技能可以叠加，可以带参考文件 | Gemini Skills（9-30） | 补进 C4 合并后的技能体系 |
-| 接很多应用 | dots（4000 多个）、Muse（六大类生活服务） | 和 X1 的连接器目录合并，国内优先 |
-| 主动性：盯着事情变化，自己提醒或者自己去办 | Autopilot（盯频道、跟进讨论、准备会议）、dots | 接 X1 的触发器和监控 |
-| 凭据保护：模型只拿替身令牌，出口再填真凭据；验证码和重置链接对模型不可见；花钱必须人确认 | Muse 的 Sentinel 设计 | **属于安全设计，按约定由用户亲自决定做不做、怎么做**；这里只登记，不施工 |
-
-顺序：放在 X1–X6 之后，或者和对应的那一波合并着做（表里写了合并到哪一波）。开工前同样先写任务书，写清每项「对方怎么做的」和出处，用户看过再施工。
-
-## 三、顺序
-
-X1 → X2 → X3 → X4 → X5 → X6 → X7（X7 有不少项可以并进前面对应的波次）。如果用户更急着要某一项，可以调整顺序，但 X5 最好放在 X4 之后，因为技能自学要用到技能体系。
-
-## 四、阶段验收
-
-六波都做完以后，跑一次精简版的 T1：只跑和外部功能有关的新任务，比如「收到一封邮件后自动整理成飞书文档」「从手机给主机派一个活」，确认这些功能真的能用。
+默认顺序 X1 → X2 → X3 → X4 → X5 → X6 → X7；用户可授权独立子能力提前施工，但不可省略依赖或复制前置系统。准备结果见 [ATLAS-X-PREP.result](../results/ATLAS-X-PREP.result.md)。

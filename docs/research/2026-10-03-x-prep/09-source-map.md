@@ -1,0 +1,44 @@
+# 总 source map：搬什么、接哪里、哪波负责
+
+核实日 2026-10-03。Atlas baseline `9e6d6fde949a0f581ba7e0031004b1f6c4fdd2f4`；Hermes（下表 HM）为 `unicorn-Y/hermes-agent@e287231d7906bcce5bc373d20fb2e3e1e6427220`。外部仓库完整 commit/date/license 与精确文件列表见三份 `evidence-*.json`；各波 sources 提供正文解释。下表目录表示模块边界，不能代替 evidence 的逐文件锁定。
+
+“直接搬”分为启用现有依赖、保留 attribution 的小模块移植、合同参考、薄 adapter。不能将整个第三方 runtime 或云服务代码嫁接为第二 authority。闭源产品仅证明能力目标，repo/file 一栏绝不虚构其内部源码。
+
+| 能力 | 最佳来源（适配 Atlas 约束） | repo/file | Atlas 已有 | Hermes 已有 | 直接搬什么 / 可搬性 | 最薄接线点 | 所属波 |
+|---|---|---|---|---|---|---|---|
+| Streamable HTTP / OAuth / MCP health | HM + 官方 MCP SDK | HM `tools/mcp_tool_transport.py`, `mcp_oauth_manager.py`, `mcp_tool_health.py`；SDK exact paths 见 X1 | `engine/hermes_runtime.py::_adapt_atlas_mcp_servers`, `_register_atlas_mcp` | transport、auth、discovery/liveness | 优先启用 HM；SDK 只补协议缺口 | 既有 MCP settings → HM 客户端 → Atlas 会话 events | X1 |
+| MCP Tasks / Apps | 官方 SDK / ext-apps | `modelcontextprotocol/python-sdk`, `modelcontextprotocol/ext-apps`；X1 evidence | MCP tool registry / 会话渲染 | 客户端能力须按 pin 核实 | 协议与 UI adapter；不搬第二客户端 registry | 现有工具事件与 renderer host | X1 |
+| 国内外 connectors 与 auth lifecycle | HM catalog + Nango 可核查适配 | HM `tools/connectors/`, `optional-mcps/`, `plugin-catalog/`；Nango X1 source list | 配置 API / 工具 registry | connector目录、账号、OAuth | 直接启用现有；国内缺项写 adapter，记录 unsupported | 统一连接器管理、refresh/revoke/reconnect | X1 |
+| 单一 channel gateway / 自己邮箱 IM | HM gateway/plugins | HM `gateway/run.py`, `plugins/platforms/`；X1 文件清单 | `server.py` Telegram callback、Hub Telegram | 多平台消息接入 | 启用 gateway，把旧 Telegram 改 adapter；账号由用户创建 | ingress 统一 task/session ID，不开 channel 专属 agent | X1 提供，X7运营 |
+| webhook / recurring / file/calendar/mail/page monitor | HM monitor + Atlas Scheduler | HM `cron/monitor.py`, `cron/scheduler.py`；Atlas `scheduler/__init__.py` | cron/interval/date/event + lease | hash检测、detached worker | 搬确定性检查，保留 Atlas 触发 authority | `AtlasScheduler.dispatch_event` → scheduled goal | X1 |
+| UIA/CUA/vision、DPI、多屏 | 当前 Atlas/HM driver | Atlas `tools/computer_use.py`, `capabilities/computer/`；HM `tools/computer_use/` | Windows UIA/CUA、输入/截图 | capture/input/session/driver | 择优合一的 backend adapter；原有 tool contracts保留 | 同一 computer runtime、target window、状态读回 | X2 |
+| 持久 browser/profile、CDP、tabs/dialog/files | HM + Playwright / browser-use | HM `tools/browser_tool_real_profile.py`, `browser_tool_session.py`, `browser_tool_snapshot.py`, `browser_dialog_tool.py`；X2 evidence | browser-use adapter、BrowserPanel | CDP/profile/supervisor生命周期 | 优先接 HM profile 生命周期；其他作为 driver/strategy | 既有工具 registry + profile lock + session events | X2 |
+| browser vault / human login handoff | HM vault + 既有审批 | HM `tools/browser_vault_tool.py`；X2核对 vault helper | permission callback、UI artifacts | vault工具、profile/backend接口 | 接凭据句柄，不将cookie/密码送入模型或events | X2 runtime → credential ref →手动登录继续 | X2 |
+| demonstration → workflow/skill | Grok官方合同 + Stagehand局部机制 | Grok闭源无repo；Stagehand exact cache/action文件见X2 | C4 SkillManager、task artifacts | skill包/curator | 不搬“录屏自动泛化”；capture→reviewed draft→safe replay | X2 trace，X5审核，X4唯一注册 | X2/X5/X4；X7复用 |
+| device pairing/trust/online、远端派活 | A2A规范 + HM平台 + OpenClaw合同 | HM `plugins/platforms/a2a/`；A2A X3 evidence | workspace/run/session/OriginGuard | A2A adapter；DM pairing仅消息用户trust | 搬A2A transport，设备trust需薄glue，DM pairing不能充当设备配对 | 现有会话后端、设备卡、task handoff receipts | X3 |
+| LAN/phone/web、QR、artifact分享/同步 | Atlas同一frontend + X3来源 | Atlas `frontend/src/renderer/`, `core/atlas/task_artifacts.py`；Univer来源见X3 | renderer与artifact store | web/API、scoped browser artifacts | 不开第二前端或history DB；产出物editing library用依赖 | 同backend/session，带trust/只读分享合同 | X3 |
+| skill market / provenance / scopes / dependencies | HM hub + Agent Skills / skills.sh / ClawHub | HM `tools/skills_hub.py`, `skills_hub_install.py`, `skill_provenance.py`；X4 evidence | `core/atlas/skills/__init__.py::SkillManager` | market providers/sync | 搬source providers/install workflow；不搬第二registry/额外scanner | C4唯一SkillManager与现有plugin/approval链 | X4 |
+| upstream/diff/parity/taskbook proposal | git + Renovate/OpenHands局部实现 | X5 evidence；Atlas `docs/plan/VENDORED.md`, `CORE-PARITY.md` | worktrees/task artifacts/hooks | 当前goal/cron/curator | 仅diff/proposal/approval/隔离实现合同；不自动merge | 已有scheduler与taskbook/git工具 | X5 |
+| experience → approved skill/rule | HM curator + Atlas memory | HM `agent/curator.py`, `agent/learn_prompt.py`, `agent/background_review.py`, `tools/skill_manager_tool.py` | `core/atlas/memory/__init__.py`, SkillManager | review/learn candidates | 候选审核接线，不能自动改active knowledge | approval →现有memory/SkillManager写入 | X5 |
+| 实时语音、partial merge、duplex/barge-in | Pipecat + LiveKit对照 | `pipecat-ai/pipecat` exact transport/frame/service文件见X6 | voice-demo / existing voice capability | `tools/voice_live.py`, `voice_mode.py`, transcription/TTS | Pipecat帧/transport链依赖与adapter；不回到整句串行ASR | 同Atlas run/session、interrupt_control、output queue | X6 |
+| unified entry / CLI/web/desktop shared state | Atlas/HM runtime | Atlas `engine/hermes_runtime.py`, `engine/session_sync.py`；HM `run_agent.py` | 同后端与会话链 | AIAgent/SessionDB | 入口router与headless adapter，不复制runtime | AgentOrchestrator.run / HermesRuntime.run_turn | X6 |
+| image/audio creation（无video） | HM image/TTS tools | X6 pin/source list | image API、tool registry | image generation / TTS | 启用provider adapter和产出物投递 | 统一task artifact/event流 | X6 |
+| bounded multi-agent collaboration | Atlas delegate + HM/A2A | Atlas `agent/__init__.py::delegate_task`, `agent/subagent_worktree.py`；HM A2A | 权限继承、worktree、预算/委派 | delegate/roles/context机制 | persistent role identity与receipt薄glue；不允许无限递归 | 共享task/owner、parent permission/budget | X6提供，X7运营 |
+| always-on runtime / startup / watchdog | Atlas Hub + HM service + OpenClaw | Atlas `runtime/hub.py`, `hub_control.py`；HM `hermes_cli/service_manager.py`；OpenClaw exact文件见X7 | Hub进程、health、scheduler lease | daemon/service生命周期 | service监督合同与Windows wrapper；保留同一后端 | Hub health +用户会话worker IPC | X7 |
+| durable goal/task/wait/approval state | HM GoalManager/SessionDB + Atlas DBOS | HM `hermes_cli/goals.py`, `hermes_state.py`, `hermes_state_sessions.py`；Atlas `engine/session_sync.py`, `capabilities/durable/dbos_backend.py` | `_run_scheduled_goal`明确唯一authority | durable目标、session/lease | 启用/扩展canonical metadata，不造另一queue DB | 既有GoalManager lifecycle + DBOS dispatch | X7 |
+| proactive dedupe/cooldown/relevance/notification | HM monitor + OpenClaw heartbeat合同 | HM `cron/monitor.py`；OpenClaw X7 source list | Scheduler event/lease | zero-change suppression | 确定性检测/状态机，必要变化才模型；unknown不是unchanged | X1 normalized events → X7 goal policy | X7 |
+| autonomy auto/ask/forbid、spend/send/destructive/account/presence | Atlas既有policy + dots/Muse公开合同 | Atlas `engine/hermes_policy.py`, `agent/__init__.py`, `engine/tool_permissions.py`；闭源无源码 | permission modes与callback | pre/post tool hooks | 动作分类metadata +现有审批gate；禁止旁路 | 每次工具执行与remote delegated动作使用同一gate | X7 |
+| 专属身份/credentials/profile/workspace | HM identity/context + X1/X2/X3 | HM email/IM adapters、browser_vault；Atlas既有config与workspace | 配置/credential refs/profile接线 | channel auth、vault、identity机制 | 角色→账号/凭据引用映射；不自动开户/买号 | X1授权 / X2profile / X3device trust | X7运营 |
+| crash/restart/update/recovery | Atlas DBOS/lease + HM fencing | Atlas `scheduler/__init__.py`, `capabilities/durable/dbos_backend.py`；HM `hermes_state_sessions.py`, `cron/scheduler_detached_worker.py` | durable at-least-once dispatch、scheduler token | turn leases、detached execution | stale lease reconciliation、idempotency、external outcome unknown处理 | 当前task/session/lease + action receipts | X7 |
+| remote device handoff、结果通知 | X3 trust/A2A + HM platforms | HM `plugins/platforms/a2a/`, `gateway/run_goals.py`；Atlas task artifacts | run/event/conversation公共接口 | gateway goal通知 | route/receipt/notification adapters，不复制任务状态 | same task ID、single owner、ack后释放lease | X7（X3前置） |
+| laptop = cloud-VM-equivalent execution machine | Windows官方 + X7 supervision | [interactive services](https://learn.microsoft.com/en-us/windows/win32/services/interactive-services)、[power API](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate)；X7代码来源见evidence | 持久文件/本机apps/Windows控制 | 本地daemon/driver | 电源/网络/boot/update glue，service与desktop worker分层 | dedicated laptop、AC policy、interactive readiness、恢复审计 | X7 |
+
+## 去重规则
+
+X1创建事件/连接器/channel机制；X7只消费和运营。X2拥有computer/browser和示范捕获，不注册第二技能中心。X3拥有设备信任与transport，X6使用其执行入口，X7使用其长期交接。X4拥有skill版本/安装，X5拥有候选建议和审核，X7拥有长期使用与失败反馈。X6统一session与协作，X7不再实现另一个multi-agent engine。
+
+X波编号不得与 `CORE-PARITY.md` 主体上下文分类中已有 X1/X2 等行号混淆；新增行以 `EXT-Xn-*` 标识并放“外部功能”节，不覆盖旧主体条目。
+
+## 复验
+
+运行 `python -X utf8 docs/research/2026-10-03-x-prep/validate_sources.py`，检查三份来源清单的commit、文件与hash、七份任务书、十份研究文档、本地链接和改动allowlist。最终核验结果见 `validation.json`。这只证明准备产物与锁定路径，不证明功能施工或真实账号/设备验收。
