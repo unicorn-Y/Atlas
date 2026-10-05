@@ -272,5 +272,4 @@ __all__ = [
     "automation_router",
     "install_automation_engine",
     "get_automation_engine",
-    "AutomationStore",
 ]

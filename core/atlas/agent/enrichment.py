@@ -788,7 +788,6 @@ class DelegationService:
         worker_cancels: dict[int, asyncio.Event] = {}
         is_git = False
         git_root: Path | None = None
-        base_commit: str | None = None
         if cwd:
             probe = await asyncio.to_thread(
                 subprocess.run,
@@ -798,13 +797,6 @@ class DelegationService:
             if probe.returncode == 0:
                 git_root = Path(probe.stdout.strip()).resolve()
                 is_git = True
-                head = await asyncio.to_thread(
-                    subprocess.run,
-                    ["git", "-C", str(git_root), "rev-parse", "HEAD"],
-                    capture_output=True, text=True, check=False,
-                )
-                if head.returncode == 0:
-                    base_commit = head.stdout.strip()
 
         async def call(callback: Callable[..., Any] | None, *args: Any) -> Any:
             if callback is None:

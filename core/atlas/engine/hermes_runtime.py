@@ -550,7 +550,7 @@ class HermesRuntime:
             return []
         from tools.mcp_tool_discovery import register_mcp_servers
 
-        mcp_tool_names = register_mcp_servers(servers)
+        register_mcp_servers(servers)
         toolsets = {f"mcp-{name}" for name in enabled_names}
         return sorted(toolsets)
 

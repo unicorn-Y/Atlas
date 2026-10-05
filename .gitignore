@@ -33,6 +33,12 @@ data/hooks.toml
 data/scheduler.lock
 data/trusted-workspaces.json
 data/hub.json
+data/channel-configs.json
+data/channels.sqlite-wal
+data/channels.sqlite-shm
+data/dbos-startup.json
+data/backup/
+data/skills-hub/
 
 # Config with secrets
 config/atlas.toml
@@ -107,12 +113,18 @@ desktop.ini
 
 # Hermes engine runtime home (X2/U0 sync writes here)
 data/engine/
+# Top-level D:\Atlas\engine is the live Hermes home (config.yaml/logs/installs/
+# auth.lock) — machine-local runtime state, never source.
+/engine/
 .tmp/
 data/*.sqlite
 data/devices/
 
 # H1 measurement junk (never commit)
 **/pytest-temp/
+# Whole artifacts/ tree is machine-local measurement output; tracked exceptions
+# can be re-included below with !/artifacts/<name>/.
+/artifacts/
 /artifacts/h8-startup/
 /artifacts/h10-live-smoke/
 /artifacts/h1r-*/

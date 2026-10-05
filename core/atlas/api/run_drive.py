@@ -48,6 +48,18 @@ from atlas.usage import aggregate_run_usage
 
 log = structlog.get_logger()
 
+# Strong references to fire-and-forget tasks so the event loop cannot
+# garbage-collect them mid-flight; each task drops itself on completion (RUF006).
+_background_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _spawn_background(coro: Any) -> asyncio.Task[Any]:
+    """Schedule ``coro`` and keep it alive until it finishes."""
+    task = asyncio.get_running_loop().create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
 
 def _server() -> Any:
     """Late-bound ``atlas.server``: its module globals stay the seam tests patch."""
@@ -215,7 +227,7 @@ async def _scheduled_goal(task_id: str, message: str) -> None:
                     f"Scheduled task {task_id} completed. Message: {message[:200]}",
                 )
             return
-        except Exception:
+        except Exception as exc:
             log.exception("durable.agent_task_failed", task_id=task_id)
             if _server().notifications is not None:
                 await _server().notifications.notify(
@@ -2162,12 +2174,12 @@ async def _execute_run(
         await manager.send_run(run, env, fallback_conn_id=conn_id)
         if event in {"run.started", "run.completed", "run.failed"}:
             hooks = _server()._hook_store()
-            asyncio.create_task(hooks.execute(event, {
+            _spawn_background(hooks.execute(event, {
                 "run_id": run.run_id, "conversation_id": run.conversation_id,
                 "tool_name": "", "parameters": {}, "result": data,
             }, cwd=workspace, emit=emit))
         if event in {"run.completed", "run.failed"} and scheduler is not None:
-            asyncio.create_task(scheduler.dispatch_event(event, {
+            _spawn_background(scheduler.dispatch_event(event, {
                 "run_id": run.run_id, "conversation_id": run.conversation_id,
                 "workspace": workspace or "",
             }))

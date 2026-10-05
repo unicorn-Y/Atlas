@@ -488,14 +488,17 @@ async def execute_tools_node(
 
         async def report_process_output(
             execution_id: str, stream_name: str, text: str,
+            _tc_id: str = tc_id, _fn_name: str = fn_name,
         ) -> None:
+            # ``_tc_id``/``_fn_name`` are bound as defaults so the callback keeps
+            # this tool call's identity after the loop advances (B023).
             if hasattr(ctx, "maintenance_context"):
                 refs = ctx.maintenance_context.setdefault("active_process_refs", [])
                 if execution_id not in refs:
                     refs.append(execution_id)
             if ctx.event_queue is not None:
                 await ctx.event_queue.put({
-                    "type": "tool_output", "id": tc_id, "name": fn_name,
+                    "type": "tool_output", "id": _tc_id, "name": _fn_name,
                     "execution_id": execution_id, "stream": stream_name,
                     "text": text,
                 })

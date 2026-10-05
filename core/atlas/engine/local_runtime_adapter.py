@@ -688,7 +688,7 @@ class LocalRuntimeAdapter:
         return self.jobs.view(job)
 
     def delete_model(self, model_id: str) -> dict[str, Any]:
-        bootstrap = _bootstrap()
+        _bootstrap()
         files = self._variant_files_on_disk(model_id)
         if not files:
             raise NotFoundError("model not found")
