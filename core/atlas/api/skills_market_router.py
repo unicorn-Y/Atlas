@@ -143,7 +143,12 @@ def save_local_skill_bundle(
     return {**result, "saved": True, "skill": name, "path": str(dest)}
 
 
-@router.get("/api/skills/market/search", dependencies=[Depends(_require_trusted_origin)])
+@router.get(
+    "/api/skills/market/search", dependencies=[Depends(_require_trusted_origin)],
+    # A cancelled search returns a bare 499 Response, which FastAPI passes through
+    # unvalidated; the declared model keeps the public contract an object.
+    response_model=dict[str, Any],
+)
 async def market_search(
     request: Request,
     q: str = "",

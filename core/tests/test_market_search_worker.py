@@ -26,10 +26,11 @@ def _market(tmp_path: Path) -> SkillMarket:
 
 
 async def _wait_for_file(path: Path) -> None:
+    """Wait until the child has written its pid (existence alone races the write)."""
     deadline = asyncio.get_running_loop().time() + 8
-    while not path.exists():
+    while not (path.exists() and path.read_text(encoding="utf-8").strip()):
         if asyncio.get_running_loop().time() >= deadline:
-            raise TimeoutError(f"worker did not create {path}")
+            raise TimeoutError(f"worker did not write {path}")
         await asyncio.sleep(0.02)
 
 
