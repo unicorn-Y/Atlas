@@ -72,7 +72,10 @@ def _remaining_live_input_budget(directory: Path, scenario: str) -> int:
             total += tokens
             if path.stem == scenario:
                 scene_total += tokens
-    remaining = min(3_000_000 - total, 500_000 - scene_total)
+    # Per-scene cap defaults to 500k; heavy scenes (06 reads a large file across a
+    # compaction) may raise it explicitly. The 3M total stays fixed.
+    scene_cap = int(os.environ.get("ATLAS_LIVE_SCENE_INPUT_CAP", "500000"))
+    remaining = min(3_000_000 - total, scene_cap - scene_total)
     if remaining <= 0:
         raise AssertionError("R7 input-token budget exhausted; no further requests authorized")
     return remaining
