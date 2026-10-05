@@ -337,6 +337,14 @@ async def _start_engine_registrations(services: Any) -> None:
     re-runs the registration. The engine import + registration work is CPU
     heavy and thread-safe; off the loop it overlaps the DBOS worker."""
     await asyncio.to_thread(_engine_startup_registrations, services.model_mgr)
+    # Warming is not a readiness condition: /api/health must not wait seconds for it.
+    # A first turn that arrives earlier simply waits on the import lock in its own
+    # worker thread, never on the event loop.
+    task = asyncio.get_running_loop().create_task(
+        asyncio.to_thread(_warm_engine), name="startup-engine-warmup",
+    )
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
 
 
 # Modules the first turn needs. Importing them here, on a worker thread, keeps the
@@ -348,19 +356,29 @@ _ENGINE_WARM_IMPORTS = (
 )
 
 
-def _engine_startup_registrations(model_manager: Any) -> None:
-    import importlib
+_BACKGROUND: set[asyncio.Task[Any]] = set()
 
+
+def _engine_startup_registrations(model_manager: Any) -> None:
     from atlas.config import DATA_ROOT
     from atlas.engine import HermesRuntime
 
     HermesRuntime(data_dir=DATA_ROOT, model_manager=model_manager).startup_registrations()
-    for module in _ENGINE_WARM_IMPORTS:
-        importlib.import_module(module)
-    # Token estimates need the tiktoken BPE file, which may have to be downloaded.
-    from atlas.models.tokens import prefetch
 
-    prefetch()
+
+def _warm_engine() -> None:
+    import importlib
+
+    try:
+        for module in _ENGINE_WARM_IMPORTS:
+            importlib.import_module(module)
+        # Token estimates need the tiktoken BPE file, which may have to be downloaded.
+        from atlas.models.tokens import prefetch
+
+        prefetch()
+    except Exception:
+        # Warming is an optimisation; the first turn imports whatever is missing.
+        log.exception("startup.engine_warmup_failed")
 
 
 async def _start_channels(services: Any) -> None:
