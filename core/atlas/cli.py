@@ -836,6 +836,13 @@ def _check_config() -> dict[str, Any]:
     }
 
 
+def _check_hermes() -> dict[str, Any]:
+    """The installed Hermes checkout is the commit pinned in pyproject.toml."""
+    from atlas.hermes_pin import check
+
+    return check()
+
+
 def _check_sessions() -> dict[str, Any]:
     """Read-only audit of transcript ownership, counts and tool-call pairing."""
     from contextlib import closing
@@ -1009,7 +1016,7 @@ def doctor(as_json: bool, check: str | None) -> None:
     Exit codes: 0 全部检查通过；1 存在未通过的检查。
     """
     checks = {"sessions": _check_sessions()} if check == "sessions" else {
-        "config": _check_config(), "sessions": _check_sessions(),
+        "config": _check_config(), "hermes": _check_hermes(), "sessions": _check_sessions(),
         "models": _check_models(), "mcp": _check_mcp(),
     }
     all_ok = all(item.get("ok") is True for item in checks.values())

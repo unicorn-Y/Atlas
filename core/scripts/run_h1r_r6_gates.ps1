@@ -117,7 +117,7 @@ function Invoke-PytestGate {
         if ($LASTEXITCODE -ne 0 -or [IO.Path]::GetFullPath("$origin".Trim()) -ne [IO.Path]::GetFullPath($expectedOrigin)) {
             throw "Hermes import source mismatch: $origin (expected $expectedOrigin)"
         }
-        & $python -c "import pathlib, subprocess, tomllib; deps=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['dependencies']; pin=next(d.rsplit('@',1)[1] for d in deps if d.startswith('hermes-agent @')); head=subprocess.check_output(['git','-C',r'$HermesRoot','rev-parse','HEAD'],text=True).strip(); assert head == pin, (head,pin)"
+        & $python -c "import pathlib, subprocess, tomllib; pin=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['tool']['atlas']['hermes']['commit']; head=subprocess.check_output(['git','-C',r'$HermesRoot','rev-parse','HEAD'],text=True).strip(); assert head == pin, (head,pin)"
         if ($LASTEXITCODE -ne 0) { throw 'Hermes checkout does not match pyproject pin' }
         & $python @pytestArgs > $log 2>&1
         $code = $LASTEXITCODE

@@ -45,7 +45,6 @@ dependencies = [
     "pypdf>=5.0",
     "trafilatura>=2.0",
     "youtube-transcript-api>=1.2",
-    "hermes-agent @ git+https://github.com/unicorn-Y/hermes-agent.git@ab4209b05490ad5abc700b6674e1a2768ca5c8f4",
 ]
 
 [project.optional-dependencies]
@@ -83,6 +82,13 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["atlas"]
+
+[tool.atlas.hermes]
+# Hermes is installed editable from a checkout of this fork commit, not as a pip
+# dependency: the fork refuses wheel/sdist builds. core/scripts/setup_hermes.py
+# clones/updates the checkout (with Windows long paths) and installs it.
+repository = "https://github.com/unicorn-Y/hermes-agent.git"
+commit = "e0866de014e6fa99721ccaf4f848e1316a58148a"
 
 [tool.ruff]
 target-version = "py311"

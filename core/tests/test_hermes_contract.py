@@ -23,15 +23,10 @@ ATLAS_ROOT = Path(__file__).resolve().parents[1] / "atlas"
 
 @pytest.mark.integration
 def test_pinned_hermes_commit_is_on_the_fork_atlas_branch(tmp_path):
-    project = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
-        encoding="utf-8",
-    )
-    match = re.search(
-        r"hermes-agent\s*@\s*git\+https://github\.com/unicorn-Y/hermes-agent\.git@([0-9a-f]{40})",
-        project,
-    )
-    assert match, "pyproject.toml must pin Hermes to a full commit hash"
-    pinned = match.group(1)
+    from atlas.hermes_pin import read_pin
+
+    pinned = read_pin()["commit"]
+    assert re.fullmatch(r"[0-9a-f]{40}", pinned), "pyproject.toml must pin Hermes to a full commit hash"
     gh = shutil.which("gh")
     if gh:
         try:
