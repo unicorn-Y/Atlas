@@ -334,10 +334,14 @@ async def test_rewind_restores_messages_and_files_then_redo_restores_both(tmp_pa
     engine_home = DATA_ROOT / "engine"
     services = SimpleNamespace(memory=None)
     try:
+        assert target.read_text(encoding="utf-8") == "round two"
         result = await rewind_conversation(
             services, conversation_id, {"message_id": first, "files": True},
         )
         assert result["removed_messages"] == 4
+        # Assert the real workspace bytes: message rollback alone did not
+        # prove the H2 metadata-dict regression had restored run checkpoints.
+        assert "result.txt" in result["restored_files"]
         assert target.read_text(encoding="utf-8") == "before"
         assert read_session_all_messages(engine_home, conversation_id) == []
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -106,6 +107,86 @@ class TestRuntimeProtocol:
         assert resp.status_code == 200
         data = resp.json()
         assert data["version"] == "1.10"
+
+
+class TestH1R3LifecycleAndForkRegressions:
+    async def test_lifespan_clears_runtime_services_after_shutdown(self) -> None:
+        from atlas.server import lifespan
+
+        async with lifespan(app):
+            assert server.runtime_mgr.services is app.state.services
+        assert server.runtime_mgr.services is None
+
+    async def test_failed_fork_summary_does_not_create_orphan_conversation(
+        self, client: AsyncClient,
+    ) -> None:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import append_session_message
+
+        conversation_id = (await client.post(
+            "/api/conversations", json={"title": "Fork summary failure"},
+        )).json()["id"]
+        cut_id = append_session_message(
+            DATA_ROOT / "engine", conversation_id, "user", "keep this turn",
+        )
+        memory = server.app.state.services.memory
+        before_ids = {item["id"] for item in await memory.list_conversations()}
+
+        class BrokenContextMaintenance:
+            async def compact(self, _context):
+                raise RuntimeError("summary unavailable")
+
+        server.app.state.services.orchestrator = SimpleNamespace(
+            context_maintenance=BrokenContextMaintenance(),
+        )
+        with pytest.raises(RuntimeError, match="summary unavailable"):
+            await client.post(
+                f"/api/conversations/{conversation_id}/fork",
+                json={"through_message_id": cut_id, "summarize": True},
+            )
+
+        after_ids = {item["id"] for item in await memory.list_conversations()}
+        assert after_ids == before_ids
+
+    async def test_summarized_fork_preamble_precedes_exact_carried_transcript(
+        self, client: AsyncClient,
+    ) -> None:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import append_session_message, read_session_all_messages
+
+        conversation_id = (await client.post(
+            "/api/conversations", json={"title": "Fork order"},
+        )).json()["id"]
+        append_session_message(DATA_ROOT / "engine", conversation_id, "user", "first request")
+        append_session_message(DATA_ROOT / "engine", conversation_id, "assistant", "first reply")
+        cut_id = append_session_message(
+            DATA_ROOT / "engine", conversation_id, "user", "second request",
+        )
+        append_session_message(DATA_ROOT / "engine", conversation_id, "assistant", "second reply")
+        append_session_message(DATA_ROOT / "engine", conversation_id, "user", "after cut")
+
+        class ContextMaintenance:
+            async def compact(self, _context):
+                return {"session_summary": "summary through second request"}
+
+        server.app.state.services.orchestrator = SimpleNamespace(
+            context_maintenance=ContextMaintenance(),
+        )
+        response = await client.post(
+            f"/api/conversations/{conversation_id}/fork",
+            json={"through_message_id": cut_id, "summarize": True},
+        )
+        assert response.status_code == 201
+        fork_messages = read_session_all_messages(
+            DATA_ROOT / "engine", response.json()["id"],
+        )
+        assert [(item["role"], item["content"]) for item in fork_messages] == [
+            ("system", "summary through second request"),
+            ("user", "first request"),
+            ("assistant", "first reply"),
+            ("user", "second request"),
+            ("assistant", "second reply"),
+        ]
 
 
 class TestWave7WorkspaceOrchestration:

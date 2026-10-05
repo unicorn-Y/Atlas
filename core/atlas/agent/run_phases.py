@@ -430,6 +430,13 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
                     knowledge["id"], "execution", request.conversation_id,
                     request.source_run_id,
                 )
+        context_memories = state.context.get("memories", [])
+        if inspect.iscoroutine(context_memories):
+            # Defensive: the context payload must be a plain list; an unexpected
+            # coroutine is closed explicitly so it never lingers un-awaited
+            # (RuntimeWarning: coroutine never awaited) before the run aborts.
+            context_memories.close()
+            raise TypeError("Agent context memories must be a list, not a coroutine")
         runtime.maintenance_context = {
             "project_state": state.plan.to_dict() if state.plan else None,
             "unresolved_work": [
@@ -442,7 +449,7 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             ],
             "memory_refs": [
                 item.get("key") or item.get("id")
-                for item in state.context.get("memories", [])
+                for item in context_memories
                 if isinstance(item, dict) and (item.get("key") or item.get("id"))
             ],
             "active_tool_refs": [],

@@ -9,6 +9,7 @@ wiring of every auxiliary model call in ``atlas.agent`` through
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import time
 from types import SimpleNamespace
@@ -26,6 +27,7 @@ from atlas.agent.injection_budget import (
 from atlas.agent.run_phases import (
     RunCallbacks,
     RunRequest,
+    _phase_context,
     _build_messages,
     _RunState,
 )
@@ -101,6 +103,35 @@ async def test_run_kwargs_pack_request_and_callbacks(monkeypatch) -> None:
     # defaults survive the packing
     assert request.read_only is False
     assert callbacks.approval_callback is None
+
+
+async def test_context_phase_closes_unexpected_memories_coroutine(monkeypatch) -> None:
+    from atlas.engine import session_sync
+
+    async def unexpected_memories():
+        return []
+
+    memories = unexpected_memories()
+    memory = AsyncMock()
+    memory.get_agent_context_with_trace.return_value = {"memories": memories}
+    memory.apply_knowledge_consolidated_insights.return_value = []
+    memory.retrieve_agent_reflections.return_value = []
+    memory.retrieve_approved_goal_experiences.return_value = []
+    monkeypatch.setattr(session_sync, "read_session_messages", lambda *_args, **_kwargs: [])
+
+    agent = SimpleNamespace(_memory=memory)
+    state = _RunState(
+        request=RunRequest(message="hello", conversation_id="conversation"),
+        callbacks=RunCallbacks(),
+        message="hello",
+        runtime=SimpleNamespace(),
+    )
+    events = [event async for event in _phase_context(agent, state)]
+
+    assert events and events[0]["type"] == "error"
+    assert "must be a list" in events[0]["detail"]
+    assert state.abort is True
+    assert inspect.getcoroutinestate(memories) == inspect.CORO_CLOSED
 
 
 async def test_unknown_model_still_yields_single_error_event() -> None:

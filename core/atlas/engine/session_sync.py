@@ -574,10 +574,16 @@ def rewind_user_turn(
 def fork_session_through_turn(
     home: str | Path, source_id: str, fork_id: str, user_turns: int, *,
     branch_message_id: str | None = None,
+    preamble: dict[str, Any] | None = None,
 ) -> None:
     """Direct SessionDB write: clone the durable transcript through the first
     ``user_turns`` user turns. The cut point is computed from the SessionDB
-    transcript itself, never from Atlas state."""
+    transcript itself, never from Atlas state.
+
+    ``preamble`` (an optional raw SessionDB message dict) is imported as the
+    clone's FIRST message — the fork's context summary must sit ahead of the
+    carried-over transcript, before the next user message.
+    """
     with _open_db(home) as db:
         payload = db.export_session(source_id, include_inactive=True)
         if payload is None:
@@ -602,7 +608,7 @@ def fork_session_through_turn(
             "title": f"{str(payload.get('title') or '对话')[:80]} · 分支 {fork_id[:6]}",
             "model_config": {**model_config, "_branched_from": source_id,
                              "_branch_message_id": branch_message_id},
-            "messages": transcript[:stop],
+            "messages": ([preamble] if preamble else []) + transcript[:stop],
         }
         result = db.import_sessions([cloned])
         if not result.get("ok") or result.get("imported") != 1:

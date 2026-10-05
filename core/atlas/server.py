@@ -682,9 +682,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         from atlas.api.deferred_startup import shutdown_lifespan_components
 
-        await shutdown_lifespan_components(
-            app, locals(), routes_before_lifespan_extensions,
-        )
+        try:
+            await shutdown_lifespan_components(
+                app, locals(), routes_before_lifespan_extensions,
+            )
+        finally:
+            # Teardown hygiene: a stopped runtime must not keep advertising its
+            # services. Leaving ``manager.services`` pointing at the closed stores
+            # let late readers (and later TestClient lifespans in-process) consume
+            # dead components silently instead of failing on the missing seam.
+            manager.services = None
         if cancelled:
             raise asyncio.CancelledError
 

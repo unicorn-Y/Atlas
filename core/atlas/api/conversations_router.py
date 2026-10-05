@@ -482,10 +482,18 @@ async def rewind_conversation(
     removed = messages[boundary:]
     run_ids = []
     for item in removed:
-        with suppress(TypeError, ValueError):
-            run_id = json.loads(item.get("metadata") or "{}").get("run_id")
-            if run_id and run_id not in run_ids:
-                run_ids.append(str(run_id))
+        # H2 regression fix: SessionDB reads return ``metadata`` as a dict (the
+        # legacy Atlas mirror stored a JSON string); decode only what is a
+        # string so checkpoint file restore sees the run ids again.
+        metadata = item.get("metadata")
+        if isinstance(metadata, str):
+            with suppress(TypeError, ValueError):
+                metadata = json.loads(metadata or "{}")
+        if not isinstance(metadata, dict):
+            continue
+        run_id = metadata.get("run_id")
+        if run_id and run_id not in run_ids:
+            run_ids.append(str(run_id))
     conversation = await memory.get_conversation(conversation_id) or {}
     roots = [*([conversation["workspace"]] if conversation.get("workspace") else []),
              *conversation.get("extra_roots", [])]
@@ -601,14 +609,31 @@ async def fork_conversation(
     user_turns = atlas_turn_ordinal(source_messages, message_id, through_target=True)
     if user_turns is None:
         raise HTTPException(status_code=404, detail="Conversation or message not found")
+    # The fork's context summary must be the clone's FIRST message (H2
+    # regression fix: it used to be appended last, landing at the transcript
+    # tail), so it is computed before the clone and imported as a preamble.
+    # Compute it before creating fork metadata too, so a summarizer failure
+    # cannot leave an orphan conversation row.
+    fork_summary: dict[str, Any] | None = None
+    if req.get("summarize") is True:
+        boundary = next((i for i, item in enumerate(source_messages) if item["id"] == message_id), -1)
+        before = source_messages[:boundary + 1]
+        source_conversation = await memory.get_conversation(conversation_id) or {}
+        compacted = await orchestrator.context_maintenance.compact({
+            "goal": source_conversation.get("title", "Conversation fork"),
+            "session_summary": "\n".join(f"{m['role']}: {m['content'][:1000]}" for m in before[-20:]),
+        }) if orchestrator else {"session_summary": "\n".join(m["content"][:300] for m in before[-10:])}
+        fork_summary = {
+            "role": "system", "content": compacted.get("session_summary", ""),
+            "display_metadata": {"kind": "fork_summary", "source_conversation_id": conversation_id},
+        }
     result = await memory.fork_conversation_metadata(conversation_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
-
     try:
         await asyncio.to_thread(
             fork_session_through_turn, DATA_ROOT / "engine", conversation_id, str(result["id"]),
-            user_turns, branch_message_id=message_id,
+            user_turns, branch_message_id=message_id, preamble=fork_summary,
         )
     except Exception:
         await memory.delete_conversation(str(result["id"]))
@@ -621,21 +646,6 @@ async def fork_conversation(
     if persisted is not None:
         result = {**persisted, **{key: result[key] for key in ("files_shared",) if key in result}}
     if req.get("summarize") is True:
-        source_messages = await asyncio.to_thread(
-            read_session_all_messages, DATA_ROOT / "engine", conversation_id,
-        )
-        boundary = next((i for i, item in enumerate(source_messages) if item["id"] == message_id), -1)
-        before = source_messages[:boundary + 1]
-        compacted = await orchestrator.context_maintenance.compact({
-            "goal": result.get("title", "Conversation fork"),
-            "session_summary": "\n".join(f"{m['role']}: {m['content'][:1000]}" for m in before[-20:]),
-        }) if orchestrator else {"session_summary": "\n".join(m["content"][:300] for m in before[-10:])}
-        from atlas.engine.session_sync import append_session_message
-        await asyncio.to_thread(
-            append_session_message, DATA_ROOT / "engine", result["id"], "system",
-            compacted.get("session_summary", ""),
-            {"kind": "fork_summary", "source_conversation_id": conversation_id},
-        )
         result = await memory.get_conversation(result["id"]) or result
     return result
 
