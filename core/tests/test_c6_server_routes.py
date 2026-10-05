@@ -23,6 +23,26 @@ from atlas.task_artifacts import TomlRecordStore
 _init_routes_registered = False
 
 
+@pytest.fixture(autouse=True)
+def _restore_manual_init_routes():
+    """Keep lifespan-free route setup local to each C6 test.
+
+    ASGITransport skips lifespan, so the tests mount /init routes directly on
+    the shared server app. Preserve that seam during each test and undo both
+    the route additions and any OpenAPI cache they may create afterwards.
+    """
+    global _init_routes_registered
+    original_routes = list(server.app.router.routes)
+    original_openapi_schema = server.app.openapi_schema
+    original_registered = _init_routes_registered
+    try:
+        yield
+    finally:
+        server.app.router.routes[:] = original_routes
+        server.app.openapi_schema = original_openapi_schema
+        _init_routes_registered = original_registered
+
+
 def _ensure_init_routes() -> None:
     """镜像 lifespan 启动注册：ASGITransport 不跑 lifespan，测试里手动挂一次。"""
     global _init_routes_registered
