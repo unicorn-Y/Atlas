@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -7,6 +7,14 @@ import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
 import { BACKEND_STARTUP_CHANNEL, type BackendStartupProgress } from '../shared/ipc.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+/** Window/taskbar icon per UI theme (assets/icon/icon-<theme>.png); the exe icon stays 夜航. */
+const THEME_ICONS = new Set(['light', 'aurora', 'dark']);
+function themeIcon(theme: string): Electron.NativeImage | undefined {
+  if (!THEME_ICONS.has(theme)) return undefined;
+  const image = nativeImage.createFromPath(path.join(app.getAppPath(), 'assets', 'icon', `icon-${theme}.png`));
+  return image.isEmpty() ? undefined : image;
+}
 let windowRef: BrowserWindow | null = null;
 process.env.ATLAS_SKILL_CENTER_TOKEN ??= randomBytes(32).toString('base64url');
 // Proves to the backend that a request comes from this app rather than some web page.
@@ -58,6 +66,7 @@ function createWindow() {
     minHeight: 680,
     backgroundColor: '#faf9f6',
     title: 'Atlas · Agent Workspace',
+    icon: themeIcon('dark'),
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: 14, y: 13 },
     webPreferences: {
@@ -124,6 +133,10 @@ ipcMain.on('window:maximize', () => {
   else windowRef.maximize();
 });
 ipcMain.on('window:close', () => windowRef?.close());
+ipcMain.on('window:theme', (_event, theme: unknown) => {
+  const icon = typeof theme === 'string' ? themeIcon(theme) : undefined;
+  if (icon && windowRef && !windowRef.isDestroyed()) windowRef.setIcon(icon);
+});
 ipcMain.handle('dialog:open-directory', async (event, defaultPath?: unknown) => {
   const owner = BrowserWindow.fromWebContents(event.sender);
   const options = { title: '选择工作目录', properties: ['openDirectory' as const], defaultPath: typeof defaultPath === 'string' ? defaultPath : undefined };

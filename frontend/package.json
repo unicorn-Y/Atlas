@@ -89,7 +89,8 @@
     "files": [
       "dist/**",
       "dist-electron/**",
-      "package.json"
+      "package.json",
+      "assets/icon/icon-*.png"
     ],
     "extraResources": [
       {
@@ -140,6 +141,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Atlas"
-    }
+    },
+    "afterPack": "scripts/after-pack-icon.cjs"
   }
 }

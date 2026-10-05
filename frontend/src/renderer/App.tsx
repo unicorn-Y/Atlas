@@ -274,6 +274,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name=theme-color]')?.setAttribute('content', themeInfo(theme).windowColor);
+    window.atlasDesktop?.setTheme?.(theme);
   }, [theme]);
 
   // Streamed read-aloud. Events are always consumed so switching it on later never replays a backlog;

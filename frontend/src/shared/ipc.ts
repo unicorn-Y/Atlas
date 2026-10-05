@@ -23,6 +23,8 @@ export interface AtlasDesktopApi {
   /** Open a file with its default app; programs and scripts are only revealed in Explorer, never run. */
   openPath(path: string): Promise<'opened' | 'revealed' | string>;
   onMaximizeChange(callback: (maximized: boolean) => void): () => void;
+  /** Follow the UI theme with the window/taskbar icon ('light' | 'aurora' | 'dark'). */
+  setTheme?(theme: string): void;
   /** Backend startup progress (H8 §10.3): fires during boot; `ready`/`failed` are terminal. */
   onBackendStartupProgress(callback: (progress: BackendStartupProgress) => void): () => void;
 }

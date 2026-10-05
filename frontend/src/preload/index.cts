@@ -8,6 +8,7 @@ const desktopApi: AtlasDesktopApi = {
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
+  setTheme: (theme) => ipcRenderer.send('window:theme', theme),
   getSkillCenterToken: () => ipcRenderer.invoke('skill-center:token') as Promise<string | undefined>,
   selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:open-directory', defaultPath) as Promise<string | null>,
   openPath: (target) => ipcRenderer.invoke('shell:open-path', target) as Promise<string>,
