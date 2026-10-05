@@ -5,6 +5,11 @@ Every adapter implements the frozen :mod:`atlas.channels.contract`. The gateway
 
 - registers adapter factories (:meth:`register_channel`) and starts/stops every
   enabled channel;
+- reconciles runtime :meth:`ChannelManager.configure` changes per channel: an
+  enabled/disabled/url edit restarts only that channel's supervisor;
+- reads channel secrets from configs first, then the credential store
+  (:mod:`atlas.channels.credentials`) so ``POST /api/channels/credential``
+  values work for both webhook verification and outbound signing;
 - supervises each adapter with reconnect backoff (1s ×2, cap 30s, jittered) and
   pauses on unrecoverable :class:`AdapterAuthError`;
 - funnels inbound events through the durable ingress queue
@@ -145,7 +150,14 @@ class ChannelManager:
         self._delivery_interval = delivery_interval
         self._rng = rng
         self._stopping = False
+        self._started = False
         self._supervisor_tasks: dict[str, asyncio.Task[None]] = {}
+        self._reconcile_task: asyncio.Task[None] | None = None
+        self._pending_reconcile: set[str] = set()
+        # Config snapshot each running adapter was constructed with — lets the
+        # runtime reconcile tell "already running this exact config" apart from
+        # "config changed, reconnect this one channel".
+        self._adapter_configs: dict[str, dict[str, Any]] = {}
         self._delivery_task: asyncio.Task[None] | None = None
         self._drain_task: asyncio.Task[None] | None = None
         self._drain_requested = False
@@ -163,15 +175,95 @@ class ChannelManager:
     def configure(
         self, name: str, config: dict[str, Any], *, persist: bool = True
     ) -> dict[str, Any]:
-        """Merge non-secret channel config (secrets go through credentials)."""
-        current = dict(self.configs.get(name) or {})
+        """Merge non-secret channel config (secrets go through credentials).
+
+        While the gateway is running, a change to the channel's connection
+        shape (enabled flag or any other adapter-visible value) incrementally
+        restarts only that channel's supervisor/adapter; other channels keep
+        running untouched and a write that changes nothing reconnects nothing.
+        Before ``start()`` (or after ``stop()``) there is nothing to reconcile:
+        ``start()`` reads the already-updated config.
+        """
+        previous = dict(self.configs.get(name) or {})
+        current = dict(previous)
         current.update(config or {})
         self.configs[name] = current
         state = self._state(name)
         state.enabled = bool(current.get("enabled", False))
+        if self._started and self._connection_changed(previous, current):
+            self._schedule_reconcile(name)
         if persist:
             self._save_configs()
         return dict(current)
+
+    @staticmethod
+    def _connection_changed(previous: dict[str, Any], current: dict[str, Any]) -> bool:
+        """Whether the adapter must be (re)started to apply the new config."""
+        if bool(previous.get("enabled", False)) != bool(current.get("enabled", False)):
+            return True
+        if not current.get("enabled", False):
+            return False
+        return any(
+            key != "enabled" and previous.get(key) != value
+            for key, value in current.items()
+        )
+
+    def _schedule_reconcile(self, name: str) -> None:
+        """Queue one incremental supervisor restart for a configured channel.
+
+        Safe under deferred startup: the task only exists while the gateway is
+        started, and a sync caller without a running loop keeps the config
+        change (it still applies on the channel's next natural reconnect).
+        """
+        self._pending_reconcile.add(name)
+        if self._reconcile_task is not None and not self._reconcile_task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._pending_reconcile.discard(name)
+            logger.warning(
+                "渠道 %s 配置变更落在无事件循环的调用里，将在下次重连时生效", name
+            )
+            return
+        self._reconcile_task = loop.create_task(
+            self._reconcile_loop(), name="atlas-channel-reconcile"
+        )
+
+    async def _reconcile_loop(self) -> None:
+        while self._pending_reconcile and not self._stopping:
+            name = next(iter(self._pending_reconcile))
+            self._pending_reconcile.discard(name)
+            await self._reconcile_channel(name)
+
+    async def _reconcile_channel(self, name: str) -> None:
+        """Start/stop/restart at most one channel's supervisor — never the gateway."""
+        if name not in self.registry:
+            return
+        config = dict(self.configs.get(name) or {})
+        enabled = bool(config.get("enabled", False))
+        if (
+            not self._stopping
+            and enabled
+            and name in self._supervisor_tasks
+            and self._adapter_configs.get(name) == config
+        ):
+            return  # already running exactly this config
+        old = self._supervisor_tasks.get(name)
+        if old is not None:
+            old.cancel()
+            await asyncio.gather(old, return_exceptions=True)
+            self._supervisor_tasks.pop(name, None)
+        stale = self.adapters.pop(name, None)
+        if stale is not None:
+            with contextlib.suppress(Exception):
+                await stale.stop()
+        self._adapter_configs.pop(name, None)
+        if self._stopping or not self._started or not enabled:
+            return
+        self._supervisor_tasks[name] = asyncio.create_task(
+            self._supervise(name), name=f"atlas-channel-supervisor-{name}"
+        )
 
     def set_policy(self, channel: str, policy: dict[str, Any]) -> None:
         merged = dict(DEFAULT_POLICY)
@@ -231,6 +323,9 @@ class ChannelManager:
 
     async def start(self) -> None:
         self._stopping = False
+        self._started = True
+        self._pending_reconcile.clear()
+        self._reconcile_task = None
         for name in self.registry:
             config = self.configs.get(name) or {}
             state = self._state(name)
@@ -247,6 +342,14 @@ class ChannelManager:
 
     async def stop(self) -> None:
         self._stopping = True
+        self._started = False
+        self._pending_reconcile.clear()
+        # Stop the reconciler first so it cannot spawn a supervisor after the
+        # snapshot below (deferred startup/shutdown safety).
+        if self._reconcile_task is not None and not self._reconcile_task.done():
+            self._reconcile_task.cancel()
+            await asyncio.gather(self._reconcile_task, return_exceptions=True)
+        self._reconcile_task = None
         tasks = list(self._supervisor_tasks.values())
         if self._delivery_task is not None:
             tasks.append(self._delivery_task)
@@ -262,6 +365,7 @@ class ChannelManager:
             with contextlib.suppress(Exception):
                 await adapter.stop()
         self.adapters.clear()
+        self._adapter_configs.clear()
 
     async def _supervise(self, name: str) -> None:
         initial, factor, cap, jitter = self._backoff
@@ -269,6 +373,13 @@ class ChannelManager:
         attempt = 0
         while not self._stopping:
             config = dict(self.configs.get(name) or {})
+            if not config.get("secret"):
+                stored = self._credential_secret(name)
+                if stored:
+                    # Secrets live in the credential store, not configs: hand
+                    # the adapter the same effective secret handle_webhook uses.
+                    config["secret"] = stored
+            self._adapter_configs[name] = dict(config)
             factory = self.registry.get(name)
             if factory is None:
                 return
@@ -486,6 +597,22 @@ class ChannelManager:
 
     # -- webhook ingress ------------------------------------------------------------------
 
+    def _credential_secret(self, name: str) -> str:
+        """Secret kept in the credential store for one channel (never logged)."""
+        try:
+            stored = self.credentials.get(name, "secret")
+        except Exception:
+            logger.exception("渠道 %s 凭据读取失败", name)
+            return ""
+        return str(stored or "")
+
+    def _effective_secret(self, name: str) -> str:
+        """Explicit ``configs["secret"]`` wins; the credential store fills the gap."""
+        configured = str((self.configs.get(name) or {}).get("secret") or "")
+        if configured:
+            return configured
+        return self._credential_secret(name)
+
     async def handle_webhook(
         self,
         channel: str,
@@ -496,7 +623,7 @@ class ChannelManager:
     ) -> dict[str, Any]:
         """Verify + normalize one webhook request and push it through the pipeline."""
         config = self.configs.get(channel) or {}
-        secret = str(config.get("secret") or "")
+        secret = self._effective_secret(channel)
         if secret:
             from atlas.channels.adapters.webhook import verify_hmac
 

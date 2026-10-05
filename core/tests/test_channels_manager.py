@@ -458,5 +458,151 @@ async def test_handle_webhook_without_secret_rejects_unsigned(tmp_path):
     await manager.stop()
 
 
+# --- GAP-1: /credential secrets are read back by the webhook path ---------------------
+#
+# REST shape under test: PUT /accounts configures the channel WITHOUT a secret
+# (the router strips secret fields), POST /credential stores it in the OS
+# credential store, and handle_webhook must verify the HMAC against that stored
+# value instead of answering 403 「该渠道未配置 webhook secret」.
+
+
+class _DictStore:
+    def __init__(self, values=None):
+        self.values = dict(values or {})
+
+    def get(self, key):
+        return self.values.get(key)
+
+    def set(self, key, value):
+        self.values[key] = value
+
+    def delete(self, key):
+        self.values.pop(key, None)
+
+
+def make_store():
+    from atlas.channels.credentials import ChannelCredentialStore
+
+    return ChannelCredentialStore(_DictStore(), environ={})  # isolate from real env/keyring
+
+
+@pytest.mark.asyncio
+async def test_handle_webhook_reads_secret_from_credential_store(tmp_path):
+    from atlas.channels import WebhookError
+    from atlas.channels.adapters.webhook import sign_payload
+
+    seen: list = []
+
+    async def dispatcher(event, agent_id):
+        seen.append(event.event_id)
+
+    manager = make_manager(tmp_path, dispatcher=dispatcher, credentials=make_store())
+    manager.configure("fake", {"enabled": True}, persist=False)  # no secret in configs
+    manager.credentials.set("fake", "secret", "stored-s3cret")  # what POST /credential does
+    payload = json_dumps({"event_id": "w9", "chat_id": "cart-9", "text": "hi"})
+    signed = {"x-atlas-signature": sign_payload("stored-s3cret", int(time.time()), payload)}
+    result = await manager.handle_webhook("fake", signed, payload)
+    assert result["ok"] is True
+    assert await wait_for(lambda: seen == ["w9"])
+    # a wrong-key signature is still rejected against the stored secret
+    wrong = {"x-atlas-signature": sign_payload("not-the-secret", int(time.time()), payload)}
+    with pytest.raises(WebhookError) as exc:
+        await manager.handle_webhook("fake", wrong, payload)
+    assert exc.value.status_code == 401
+    # with no secret anywhere, unsigned ingress is still a 403
+    manager.credentials.delete("fake", "secret")
+    with pytest.raises(WebhookError) as exc:
+        await manager.handle_webhook("fake", {}, payload)
+    assert exc.value.status_code == 403
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_configured_secret_overrides_credential_store(tmp_path):
+    from atlas.channels import WebhookError
+    from atlas.channels.adapters.webhook import sign_payload
+
+    manager = make_manager(tmp_path, credentials=make_store())
+    manager.credentials.set("fake", "secret", "stored-s3cret")
+    manager.configure("fake", {"enabled": True, "secret": "config-s3cret"}, persist=False)
+    payload = json_dumps({"event_id": "w2", "chat_id": "cart-9"})
+    good = {"x-atlas-signature": sign_payload("config-s3cret", int(time.time()), payload)}
+    assert (await manager.handle_webhook("fake", good, payload))["ok"] is True
+    stale = {"x-atlas-signature": sign_payload("stored-s3cret", int(time.time()), payload)}
+    with pytest.raises(WebhookError) as exc:
+        await manager.handle_webhook("fake", stale, payload)
+    assert exc.value.status_code == 401  # explicit configs value keeps priority
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_started_adapter_receives_credential_store_secret(tmp_path):
+    manager = make_manager(tmp_path, credentials=make_store())
+    manager.credentials.set("fake", "secret", "stored-s3cret")
+    await manager.start()
+    assert await wait_for(lambda: "fake" in manager.adapters)
+    assert manager.adapters["fake"].config.get("secret") == "stored-s3cret"
+    await manager.stop()
+
+
+# --- GAP-2: runtime configure starts/stops/reconnects only the changed channel --------
+
+
+@pytest.mark.asyncio
+async def test_runtime_enable_starts_adapter_and_disable_stops_it(tmp_path):
+    manager = make_manager(tmp_path)
+    manager.configure("fake", {"enabled": False}, persist=False)
+    await manager.start()
+    await asyncio.sleep(0.05)
+    assert manager.adapters == {}  # disabled at boot: nothing running
+    manager.configure("fake", {"enabled": True}, persist=False)
+    assert await wait_for(lambda: "fake" in manager.adapters)
+    assert await wait_for(lambda: manager.status()["channels"][0]["running"] is True)
+    adapter = manager.adapters["fake"]
+    # outbound works right after the runtime enable (approval receipts flow)
+    await manager.send("fake", "100", "运行时启用后的第一封")
+    assert await wait_for(lambda: adapter.sent == [("100", "运行时启用后的第一封", {})])
+    stopped_before = FakeAdapter.total_stopped
+    manager.configure("fake", {"enabled": False}, persist=False)
+    assert await wait_for(lambda: "fake" not in manager.adapters)
+    assert await wait_for(lambda: "fake" not in manager._supervisor_tasks)
+    assert FakeAdapter.total_stopped >= stopped_before + 1
+    status = manager.status()["channels"][0]
+    assert status["running"] is False and status["enabled"] is False
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_runtime_config_change_reconnects_only_changed_channel(tmp_path):
+    manager = make_manager(tmp_path)
+    manager.register_channel("other", FakeAdapter)
+    manager.configure("other", {"enabled": True}, persist=False)
+    await manager.start()
+    assert await wait_for(lambda: "fake" in manager.adapters and "other" in manager.adapters)
+    fake_before, other_before = manager.adapters["fake"], manager.adapters["other"]
+    manager.configure("fake", {"enabled": True, "url": "http://changed"}, persist=False)
+    assert await wait_for(
+        lambda: manager.adapters.get("fake") is not fake_before
+        and manager.adapters["fake"].config.get("url") == "http://changed"
+    )
+    await asyncio.sleep(0.08)
+    assert manager.adapters.get("other") is other_before  # untouched channel keeps its adapter
+    assert FakeAdapter.total_started == 3  # fake+other at start, one targeted reconnect
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_noop_configure_keeps_running_adapter(tmp_path):
+    manager = make_manager(tmp_path)
+    await manager.start()
+    assert await wait_for(lambda: "fake" in manager.adapters)
+    adapter = manager.adapters["fake"]
+    manager.configure("fake", {"enabled": True}, persist=False)  # identical values
+    await asyncio.sleep(0.08)
+    assert manager.adapters.get("fake") is adapter
+    assert FakeAdapter.total_started == 1  # a write that changes nothing reconnects nothing
+    await manager.stop()
+
+
 def json_dumps(payload):
     return json.dumps(payload).encode("utf-8")
