@@ -119,3 +119,4 @@ data/devices/
 /artifacts/pytest-*
 data/logs/
 data/update-status.json
+data/build-stamp.json

@@ -66,28 +66,37 @@ function pull() {
   return { pulled: before !== after, before, after, changed: changedFiles(before, after) };
 }
 
-function rebuild(changed, { force = false } = {}) {
-  const touched = (prefix) => changed.some((file) => file === prefix || file.startsWith(prefix));
+// What the last successful rebuild was built from; changes are measured against it, so a
+// first switch to source mode, a failed build or a manual pull are all caught up.
+const stampFile = path.join(root, 'data', 'build-stamp.json');
+const readStamp = () => { try { return JSON.parse(fs.readFileSync(stampFile, 'utf8')).commit; } catch { return null; } };
+
+function rebuild() {
+  const head = sh('git', ['rev-parse', 'HEAD']);
+  const stamp = readStamp();
+  let changed = null; // null = unknown baseline: rebuild everything that has a build step
+  if (stamp) {
+    try { changed = changedFiles(stamp, head); } catch { changed = null; }
+  }
+  const touched = (prefix) => changed === null || changed.some((file) => file === prefix || file.startsWith(prefix));
   const steps = [];
-  // Hermes pin / Python deps.
-  if (force || touched('core/pyproject.toml') || !fs.existsSync(python)) {
-    sh(python, ['core/scripts/setup_hermes.py']);
+  sh(python, ['core/scripts/setup_hermes.py']); // no-op when already at the pin
+  if (touched('core/pyproject.toml') || !fs.existsSync(python)) {
     sh(python, ['-m', 'pip', 'install', '-q', '-e', 'core']);
     steps.push('python');
-  } else {
-    sh(python, ['core/scripts/setup_hermes.py']); // no-op when already at the pin
   }
-  if (force || touched('package-lock.json') || touched('frontend/package.json')
+  if ((changed !== null && (touched('package-lock.json') || touched('frontend/package.json')))
       || !fs.existsSync(path.join(root, 'node_modules', 'electron'))) {
     sh(npm, ['ci', '--no-audit', '--no-fund']);
     steps.push('npm');
   }
   const built = fs.existsSync(path.join(root, 'frontend', 'dist', 'index.html'))
     && fs.existsSync(path.join(root, 'frontend', 'dist-electron', 'preload', 'index.cjs'));
-  if (force || !built || touched('frontend/') || touched('backend-adapter/')) {
+  if (!built || touched('frontend/') || touched('backend-adapter/')) {
     sh(npm, ['--prefix', 'frontend', 'run', 'build']);
     steps.push('frontend');
   }
+  fs.writeFileSync(stampFile, JSON.stringify({ commit: head, at: new Date().toISOString(), steps }, null, 2), 'utf8');
   return steps;
 }
 
@@ -105,12 +114,12 @@ const waitPid = Number(option('--wait-pid'));
 try {
   if (waitPid) await waitForExit(waitPid);
   if (flag('--launch-only')) {
-    rebuild([], { force: false });
+    rebuild();
   } else {
     const result = pull();
     log(result.pulled ? `pulled ${result.before?.slice(0, 7)}..${result.after?.slice(0, 7)} (${result.changed.length} files)`
       : (result.reason ?? 'already up to date'));
-    const steps = rebuild(result.changed);
+    const steps = rebuild();
     status({ ok: true, pulled: result.pulled, reason: result.reason, steps, head: sh('git', ['rev-parse', '--short', 'HEAD']) });
   }
 } catch (error) {
