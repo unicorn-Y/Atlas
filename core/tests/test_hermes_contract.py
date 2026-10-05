@@ -5,6 +5,9 @@ from __future__ import annotations
 import ast
 import asyncio
 import json
+import re
+import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,6 +19,120 @@ from atlas.engine.hermes_runtime import HermesRuntime
 from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
 
 ATLAS_ROOT = Path(__file__).resolve().parents[1] / "atlas"
+
+
+@pytest.mark.integration
+def test_pinned_hermes_commit_is_on_the_fork_atlas_branch(tmp_path):
+    project = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+        encoding="utf-8",
+    )
+    match = re.search(
+        r"hermes-agent\s*@\s*git\+https://github\.com/unicorn-Y/hermes-agent\.git@([0-9a-f]{40})",
+        project,
+    )
+    assert match, "pyproject.toml must pin Hermes to a full commit hash"
+    pinned = match.group(1)
+    gh = shutil.which("gh")
+    if gh:
+        try:
+            comparison = subprocess.run(
+                [
+                    gh, "api", "--jq", ".status",
+                    f"repos/unicorn-Y/hermes-agent/compare/{pinned}...atlas",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            comparison = None
+        if comparison is not None and comparison.returncode == 0:
+            status = comparison.stdout.strip()
+            assert status in {"ahead", "identical"}, (
+                f"pinned Hermes commit {pinned} is not an ancestor of fork atlas: status={status!r}"
+            )
+            return
+
+    remote = "https://github.com/unicorn-Y/hermes-agent.git"
+    try:
+        advertised = subprocess.run(
+            ["git", "ls-remote", remote, "refs/heads/atlas"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.skip("Hermes atlas ancestry check unavailable: git ls-remote timed out after 20 seconds")
+    if advertised.returncode:
+        error = advertised.stderr.lower()
+        network_unavailable = any(
+            marker in error for marker in (
+                "could not resolve host", "failed to connect", "connection timed out",
+                "operation timed out", "connection reset", "connection was reset",
+                "recv failure", "network is unreachable", "could not connect",
+            )
+        )
+        if network_unavailable:
+            pytest.skip("Hermes atlas ancestry check unavailable: remote network lookup failed")
+        pytest.fail(f"Could not query fork atlas ref: {advertised.stderr.strip()}")
+    refs = [line.split() for line in advertised.stdout.splitlines() if line.strip()]
+    assert len(refs) == 1 and len(refs[0]) == 2, "Fork atlas branch was not returned by git ls-remote"
+    atlas_tip = refs[0][0]
+    if atlas_tip == pinned:
+        return
+
+    ancestry_repo = tmp_path / "hermes-atlas-ancestry.git"
+    initialized = subprocess.run(
+        ["git", "init", "--bare", "--quiet", str(ancestry_repo)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert initialized.returncode == 0, initialized.stderr.strip()
+    try:
+        fetched = subprocess.run(
+            [
+                "git", "-C", str(ancestry_repo),
+                "fetch", "--quiet", "--no-tags", "--filter=tree:0",
+                "--depth=256", remote, "refs/heads/atlas",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.skip("Hermes atlas ancestry check unavailable: git fetch timed out after 120 seconds")
+    if fetched.returncode:
+        error = fetched.stderr.lower()
+        network_unavailable = any(
+            marker in error for marker in (
+                "could not resolve host", "failed to connect", "connection timed out",
+                "operation timed out", "connection reset", "network is unreachable",
+                "connection was reset", "recv failure", "could not connect",
+                "could not read from remote repository", "failed to receive data",
+            )
+        )
+        if network_unavailable:
+            pytest.skip("Hermes atlas ancestry check unavailable: remote network fetch failed")
+        pytest.fail(f"Could not fetch fork atlas for ancestry check: {fetched.stderr.strip()}")
+
+    ancestry = subprocess.run(
+        [
+            "git", "-C", str(ancestry_repo),
+            "merge-base", "--is-ancestor", pinned, "FETCH_HEAD",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert ancestry.returncode == 0, (
+        f"pinned Hermes commit {pinned} is not an ancestor of fork atlas"
+        if ancestry.returncode == 1
+        else f"Could not verify fork atlas ancestry: {ancestry.stderr.strip()}"
+    )
 
 
 def _attribute_path(node: ast.AST) -> list[str]:
