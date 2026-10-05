@@ -339,11 +339,24 @@ async def _start_engine_registrations(services: Any) -> None:
     await asyncio.to_thread(_engine_startup_registrations, services.model_mgr)
 
 
+# Modules the first turn needs. Importing them here, on a worker thread, keeps the
+# multi-second Hermes import off the event loop (it used to run inside the first
+# user turn and stall every WebSocket long enough to trip keepalive).
+_ENGINE_WARM_IMPORTS = (
+    "run_agent", "agent.agent_hooks", "agent.plan_prompt", "tools.registry",
+    "atlas.engine.tool_registry", "atlas.engine.hermes_policy",
+)
+
+
 def _engine_startup_registrations(model_manager: Any) -> None:
+    import importlib
+
     from atlas.config import DATA_ROOT
     from atlas.engine import HermesRuntime
 
     HermesRuntime(data_dir=DATA_ROOT, model_manager=model_manager).startup_registrations()
+    for module in _ENGINE_WARM_IMPORTS:
+        importlib.import_module(module)
 
 
 async def _start_channels(services: Any) -> None:

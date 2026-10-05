@@ -278,3 +278,42 @@ async def test_runtime_bridges_atlas_run_budget_reminders(tmp_path, monkeypatch)
     assert agents[0].run_budget_seconds == 120
     assert agents[0].budget_warning_ratio == 0.8
     assert events[-1]["result"]["final_response"] == "budget answer"
+
+
+@pytest.mark.asyncio
+async def test_slow_agent_construction_does_not_block_the_event_loop(tmp_path):
+    """Building the Hermes agent (imports, tool discovery) used to run on the event
+    loop; on a busy machine that stalled WebSocket keepalive past its timeout."""
+    import time
+
+    def slow_factory(**kwargs):
+        time.sleep(1.0)  # stands in for the multi-second first Hermes import/build
+        return FakeHermesAgent(**kwargs)
+
+    models = SimpleNamespace(
+        current_model="test-model", current_litellm_model="openai/test-model",
+        gateway_base_url="http://fake.invalid/v1", _api_key="fake-key",
+        list_models=lambda: [{"id": "test-model"}],
+    )
+    runtime = HermesRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
+                            agent_factory=slow_factory)
+    gaps: list[float] = []
+    stop = asyncio.Event()
+
+    async def ticker() -> None:
+        last = time.perf_counter()
+        while not stop.is_set():
+            await asyncio.sleep(0.02)
+            now = time.perf_counter()
+            gaps.append(now - last)
+            last = now
+
+    ticking = asyncio.create_task(ticker())
+    stream = runtime.run_turn(message="x", conversation_id="c", workspace=None, history=[])
+    async for event in stream:
+        if event["type"] == "hermes.result":
+            break
+    await stream.aclose()
+    stop.set()
+    await ticking
+    assert max(gaps) < 0.5, f"event loop stalled for {max(gaps):.2f}s"

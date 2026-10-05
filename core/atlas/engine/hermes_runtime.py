@@ -1120,14 +1120,19 @@ class HermesRuntime:
                 # Local workspace: pin the engine's cwd surfaces to it
                 # (file/terminal relative paths + the system prompt cwd).
                 self._register_session_workspace(conversation_id, hermes_cwd)
-            factory = self._agent_factory()
+            # Importing Hermes (run_agent pulls in the whole engine) takes seconds;
+            # doing it on the event loop stalled every socket long enough for
+            # WebSocket keepalive to drop the connection on a busy machine.
+            factory = await asyncio.to_thread(self._agent_factory)
             if atlas_agent is not None and atlas_context is not None:
                 from atlas.engine.tool_registry import bind_atlas_tools
                 from atlas.engine.hermes_policy import install_atlas_policy_plugin
 
                 install_atlas_policy_plugin()
                 bind_atlas_tools(atlas_agent, atlas_context, loop)
-            mcp_toolsets = self._ensure_atlas_mcp_registered() if atlas_agent is not None else []
+            # MCP registration may connect servers (config changed): never on the loop.
+            mcp_toolsets = (await asyncio.to_thread(self._ensure_atlas_mcp_registered)
+                            if atlas_agent is not None else [])
             plan_mode = getattr(atlas_context, "mode", "act") == "plan"
             if plan_mode:
                 from agent.plan_prompt import build_plan_prompt
@@ -1214,7 +1219,8 @@ class HermesRuntime:
                 agent = entry["agent"]
                 entry["last_used"] = time.monotonic()
             else:
-                agent = factory(
+                # AIAgent construction resolves tools and opens stores: off the loop.
+                agent = await asyncio.to_thread(lambda: factory(
                     **route_kwargs,
                     session_id=conversation_id,
                     cwd=hermes_cwd,
@@ -1233,7 +1239,7 @@ class HermesRuntime:
                     event_callback=on_event,
                     hooks=hooks,
                     identity="You are Atlas, the AI assistant for this workspace.",
-                )
+                ))
             # Turn-scoped rebind (applies equally to a fresh or a reused agent):
             # callbacks, hooks and run limits are per-turn Atlas closures bound to
             # this turn's queue/loop; every target is a public Hermes attribute.
