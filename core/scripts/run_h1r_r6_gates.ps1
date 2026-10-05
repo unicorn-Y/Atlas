@@ -104,15 +104,22 @@ function Invoke-PytestGate {
     # per-test timeout is not the wall budget.
     $perTestTimeout = if ($ParallelWorkers -gt 0) { 600 } else { 300 }
     $pytestArgs = @(
-        '-m', 'pytest', 'tests', '-m', $MarkerExpression,
-        "--timeout=$perTestTimeout", '--show-capture=no', '--tb=short', '-q', '--durations=30',
+        '-c', 'import faulthandler, sys, pytest; faulthandler.dump_traceback_later(600, exit=True); sys.exit(pytest.main(sys.argv[1:]))', 'tests', '-m', $MarkerExpression,
+        "--timeout=$perTestTimeout", '--show-capture=no', '--tb=short', '-q', '-rs', '--durations=30',
         "--junitxml=$junit", '--basetemp', $base
     )
     if ($ParallelWorkers -gt 0) { $pytestArgs += @('-n', "$ParallelWorkers", '--dist', 'loadscope') }
     Push-Location $coreRoot
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        & $python @pytestArgs 2>&1 | Out-File -LiteralPath $log -Encoding utf8
+        $origin = & $python -c "import importlib.util; print(importlib.util.find_spec('run_agent').origin)"
+        $expectedOrigin = Join-Path $HermesRoot 'run_agent.py'
+        if ($LASTEXITCODE -ne 0 -or [IO.Path]::GetFullPath("$origin".Trim()) -ne [IO.Path]::GetFullPath($expectedOrigin)) {
+            throw "Hermes import source mismatch: $origin (expected $expectedOrigin)"
+        }
+        & $python -c "import pathlib, subprocess, tomllib; deps=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['dependencies']; pin=next(d.rsplit('@',1)[1] for d in deps if d.startswith('hermes-agent @')); head=subprocess.check_output(['git','-C',r'$HermesRoot','rev-parse','HEAD'],text=True).strip(); assert head == pin, (head,pin)"
+        if ($LASTEXITCODE -ne 0) { throw 'Hermes checkout does not match pyproject pin' }
+        & $python @pytestArgs > $log 2>&1
         $code = $LASTEXITCODE
     } finally {
         $watch.Stop()

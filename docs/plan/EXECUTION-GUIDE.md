@@ -208,7 +208,7 @@ pytest 默认选择 `unit`（`core/pyproject.toml` 的 `addopts = "-m unit"`）�
 ### 标准分组命令（gates 脚本，推荐）
 
 ```powershell
-# 仓库根目录。默认全串行——这是验收证据模式。
+# 仓库根目录。默认串行；H1R3 的 A14 验收按下面的显式并行命令计时。
 core/scripts/run_h1r_r6_gates.ps1 -Gates unit
 core/scripts/run_h1r_r6_gates.ps1 -Gates unit-integration
 
@@ -238,9 +238,9 @@ core/scripts/run_h1r_r6_gates.ps1 -Gates unit,unit-integration -Parallel 8
 
 ### 计时纪律
 
-验收计时由 controller 在无其他负载的空闲机器上**串行实测**（`-Parallel` 的并行结果只作吞吐参考，不是验收证据；并行输出文件名带 `-parN`，不会污染串行证据）。
+验收计时由 controller 在无其他 pytest 进程、无其他重负载时逐项运行。H1R3 任务书允许 `-Parallel N` 作为 A14 验收口径：unit 必须连续三次全绿且每次 ≤180 秒，unit+integration 必须全绿且 ≤600 秒。desktop / frontend 仍逐项串行。并行输出文件名带 `-parN`，不覆盖串行记录。
 
-TODO(controller): 串行实测后在此填入——unit=___s、unit+integration=___s（改动前诊断：unit 层 365.4s，见 artifacts/h1r-r6-diagnostic/summary.json）。
+最终实测尚待 H1R3 controller 填入；改动前诊断 unit 层 365.4s（见 artifacts/h1r-r6-diagnostic/summary.json）。运行器保留 600 秒 `faulthandler.dump_traceback_later(600, exit=True)` 硬退出保护；每次先核对 `run_agent` 来自当前钉住的隔离 fork，只有进程正常退出且退出码 0 才算通过。
 
 ### 手动等价命令（不经过 gates 脚本时）
 
