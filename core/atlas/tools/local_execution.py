@@ -1107,6 +1107,29 @@ class LocalExecutionRuntime:
         if record.state != "running":
             return
         record.cancelled = True
+        if os.name == "nt":
+            try:
+                killer = await asyncio.create_subprocess_exec(
+                    "taskkill.exe",
+                    "/PID",
+                    str(record.process.pid),
+                    "/T",
+                    "/F",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                await killer.wait()
+                if killer.returncode == 0:
+                    await record.wait_task
+                    record.state = "cancelled"
+                    return
+            except OSError as exc:
+                log.warning(
+                    "local_execution.tree_termination_failed",
+                    execution_id=record.execution_id,
+                    error=str(exc),
+                )
         try:
             if os.name == "nt":
                 record.process.send_signal(signal.CTRL_BREAK_EVENT)

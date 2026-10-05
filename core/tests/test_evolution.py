@@ -595,12 +595,22 @@ class TestBranchFlow:
 def client(evo_root, tmp_path, monkeypatch):
     from fastapi import FastAPI
 
+    from atlas.api import skills_market_router
     from atlas.api.evolution_router import evolution_router
+    from atlas.skills.market import SkillMarket
+    from atlas.skills.registry import SkillRegistry
 
     monkeypatch.setattr("atlas.evolution.taskbook_draft.drafts_root",
                         lambda: tmp_path / "taskbooks")
     monkeypatch.setattr("atlas.evolution.branch_flow._default_repo",
                         lambda: _atlas_repo_holder["repo"])
+    registry = SkillRegistry(tmp_path / "skills" / "registry.db")
+    market = SkillMarket(
+        registry,
+        data_dir=tmp_path / "market-data",
+        user_skills_dir=tmp_path / "skills" / "user",
+    )
+    monkeypatch.setattr(skills_market_router, "_market_supplier", lambda: market)
     _atlas_repo_holder["repo"] = None
     app = FastAPI()
     app.include_router(evolution_router)

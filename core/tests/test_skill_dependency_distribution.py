@@ -506,6 +506,7 @@ async def test_failed_package_import_is_atomic(tmp_path, monkeypatch):
     from httpx import ASGITransport, AsyncClient
 
     from atlas import server
+    from atlas.api import skills_router
 
     registry = SkillRegistry(tmp_path / "registry.db")
     skills_dir = tmp_path / "skills"
@@ -514,7 +515,7 @@ async def test_failed_package_import_is_atomic(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", "p15e-test-token")
     async def fail_install(*args, **kwargs):
         raise RuntimeError("controlled installation failure")
-    monkeypatch.setattr(server, "install_acquisition", fail_install)
+    monkeypatch.setattr(skills_router, "install_acquisition", fail_install)
     server.skill_acquisitions.clear()
     transport = ASGITransport(app=server.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -618,6 +619,7 @@ async def test_failed_version_update_preserves_registry_and_files(tmp_path, monk
     from httpx import ASGITransport, AsyncClient
 
     from atlas import server
+    from atlas.api import skills_router
     from atlas.skills import dependencies
 
     monkeypatch.setattr(dependencies, "_installed_package_version", lambda _name: "2.31.0")
@@ -626,7 +628,7 @@ async def test_failed_version_update_preserves_registry_and_files(tmp_path, monk
     monkeypatch.setattr(server, "skill_registry", registry)
     monkeypatch.setattr(server, "skill_mgr", SkillManager(skills_dir))
     monkeypatch.setattr(server, "SKILL_CENTER_TOKEN", "p15e-test-token")
-    original_update = server.update_lifecycle_skill
+    original_update = skills_router.update_lifecycle_skill
 
     async def controlled_failure(*args, **kwargs):
         raise ValueError("controlled update failure")
@@ -659,12 +661,12 @@ async def test_failed_version_update_preserves_registry_and_files(tmp_path, monk
         auth = await client.post("/api/skills/lifecycle/approve", headers=_headers(), json={
             "decision_id": choice.json()["decision_id"],
         })
-        monkeypatch.setattr(server, "update_lifecycle_skill", controlled_failure)
+        monkeypatch.setattr(skills_router, "update_lifecycle_skill", controlled_failure)
         response = await client.post("/api/skills/lifecycle/update", json={
             "acquisition_id": second["acquisition_id"], "version": "1.0.0",
             "approval_token": auth.json()["approval_token"],
         })
-    monkeypatch.setattr(server, "update_lifecycle_skill", original_update)
+    monkeypatch.setattr(skills_router, "update_lifecycle_skill", original_update)
     assert response.status_code == 409
     assert registry.get("packaged-sample", "1.0.0") == old_record
     assert registry.get("packaged-sample", "2.0.0") is None

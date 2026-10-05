@@ -97,8 +97,13 @@ def test_server_lifespan_populates_every_appservices_field() -> None:
 
     declared = {field.name for field in dataclasses.fields(AppServices)}
     unpopulated = declared - assigned - _LIFESPAN_WIRED_ELSEWHERE
-    assert unpopulated <= _LIFESPAN_LEGACY_SINGLETON_FIELDS, (
-        f"lifespan never populates AppServices fields: {sorted(unpopulated)}"
+    lazy_fields = {"asr_manager"}
+    assert unpopulated & lazy_fields == lazy_fields, (
+        "ASRManager should remain lazy until an ASR endpoint needs it"
+    )
+    assert unpopulated - lazy_fields <= _LIFESPAN_LEGACY_SINGLETON_FIELDS, (
+        f"lifespan never populates non-lazy AppServices fields: "
+        f"{sorted(unpopulated - lazy_fields)}"
     )
 
 
