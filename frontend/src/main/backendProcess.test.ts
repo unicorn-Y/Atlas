@@ -54,6 +54,14 @@ function stubHealth(body: () => unknown, status = 200): void {
   vi.stubGlobal('fetch', vi.fn(async () => ({ status, json: async () => body() })));
 }
 
+/** Health for a backend this session spawns: nothing listens on the port until spawn. */
+function stubManagedHealth(body: () => unknown, status = 200): void {
+  vi.stubGlobal('fetch', vi.fn(async () => {
+    if (h.spawn.mock.calls.length === 0) throw new Error('ECONNREFUSED');
+    return { status, json: async () => body() };
+  }));
+}
+
 describe('backendProcess startup (H8 §10.3)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -79,7 +87,7 @@ describe('backendProcess startup (H8 §10.3)', () => {
 
   it('keeps waiting through a slow 30-second start and kills nothing', async () => {
     let health: unknown = { status: 'starting', components: { mcp: { status: 'starting' } } };
-    stubHealth(() => health);
+    stubManagedHealth(() => health);
     const child = makeChild();
     stubSpawn(child);
     const progress: BackendStartupProgress[] = [];
@@ -101,7 +109,7 @@ describe('backendProcess startup (H8 §10.3)', () => {
 
   it('reports progress details while health components are still starting', async () => {
     let health: unknown = { status: 'starting', components: { mcp: { status: 'starting' }, lsp: { status: 'starting' } } };
-    stubHealth(() => health);
+    stubManagedHealth(() => health);
     const child = makeChild();
     stubSpawn(child);
     const progress: BackendStartupProgress[] = [];
@@ -123,7 +131,7 @@ describe('backendProcess startup (H8 §10.3)', () => {
       components: { session_migration: 'failed', mcp: 'starting' },
       component_errors: { session_migration: 'legacy import failed' },
     };
-    stubHealth(() => health);
+    stubManagedHealth(() => health);
     const child = makeChild();
     stubSpawn(child);
     const progress: BackendStartupProgress[] = [];
@@ -139,7 +147,7 @@ describe('backendProcess startup (H8 §10.3)', () => {
   });
 
   it('fails immediately when the process exits, with the last 50 log lines', async () => {
-    stubHealth(() => null);
+    stubManagedHealth(() => null);
     const child = makeChild();
     stubSpawn(child);
 
@@ -160,8 +168,19 @@ describe('backendProcess startup (H8 §10.3)', () => {
     expect(error.message).not.toContain('FIRST-LINE');
   });
 
+  it('waits for an external backend that is still starting instead of spawning a second one', async () => {
+    let health: unknown = { status: 'starting', components: { mcp: 'starting' } };
+    stubHealth(() => health);
+    const promise = ensureBackendRunning();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(h.spawn).not.toHaveBeenCalled();
+    health = { status: 'ok' };
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(promise).resolves.toEqual({ ready: true, managed: false });
+  });
+
   it('still gives up at the 120-second total cap, with the log tail', async () => {
-    stubHealth(() => ({ status: 'starting' }));
+    stubManagedHealth(() => ({ status: 'starting' }));
     const child = makeChild();
     stubSpawn(child);
     child.stderr.emit('data', 'booting\n');

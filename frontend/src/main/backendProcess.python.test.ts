@@ -140,10 +140,15 @@ describe('external backend already starting', () => {
 
   it('re-probes a briefly unresponsive backend before spawning', async () => {
     let calls = 0;
-    vi.stubGlobal('fetch', vi.fn(async () => {
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: { signal?: AbortSignal }) => {
       calls += 1;
-      if (calls === 1) throw new Error('timeout');
-      return { status: 200, json: async () => ({ status: 'ok' }) };
+      if (calls === 1) {
+        // A busy backend: the request hangs until the probe's own timeout aborts it.
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        });
+      }
+      return Promise.resolve({ status: 200, json: async () => ({ status: 'ok' }) });
     }));
     const { ensureBackendRunning } = await import('./backendProcess.js');
     const starting = ensureBackendRunning();

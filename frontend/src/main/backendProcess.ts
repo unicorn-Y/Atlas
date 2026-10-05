@@ -283,6 +283,7 @@ export async function ensureBackendRunning(options?: EnsureBackendOptions): Prom
   // an external backend answers at all, wait for it instead of spawning.
   let externalContact = false;
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const probeStartedAt = Date.now();
     const contact = await probeHealth();
     if (contact?.ready) {
       emit('ready', false);
@@ -292,6 +293,10 @@ export async function ensureBackendRunning(options?: EnsureBackendOptions): Prom
       externalContact = true;
       break;
     }
+    // Only a probe that ran into its timeout suggests a busy backend worth re-probing;
+    // a refused connection means nothing is listening, so spawn right away.
+    const timedOut = contact === null && Date.now() - probeStartedAt >= PROBE_TIMEOUT_MS;
+    if (!timedOut) break;
     if (attempt < 2) await sleep(600);
   }
   if (externalContact) {
