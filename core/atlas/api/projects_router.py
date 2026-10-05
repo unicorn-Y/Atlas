@@ -6,6 +6,8 @@ injection — never a module-level singleton — so two app instances stay isola
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 from typing import Annotated, Any
 

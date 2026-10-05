@@ -33,6 +33,27 @@ def isolated_atlas_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(config, "_config", None)
 
 
+@pytest.fixture(autouse=True)
+def restore_app_services():
+    """Snapshot ``app.state.services`` around every test.
+
+    Several tests swap fakes directly into the shared AppServices container
+    (``server.app.state.services.<field> = ...``) instead of using monkeypatch.
+    Without a restore, live service instances and fakes leak into later tests
+    in this file and into standalone files that run afterwards (which assume
+    unset container fields and patch only ``atlas.server`` module globals).
+    """
+    from dataclasses import fields
+
+    from atlas.api.app_services import AppServices
+
+    services = app.state.services
+    snapshot = {f.name: getattr(services, f.name) for f in fields(AppServices)}
+    yield
+    for field in fields(AppServices):
+        setattr(services, field.name, snapshot[field.name])
+
+
 @pytest.fixture
 async def client(monkeypatch):
     """Async test client using httpx + ASGI transport with lifespan."""
@@ -503,12 +524,15 @@ class TestConversations:
         assert resp.status_code == 404
 
     async def test_get_conversation_messages(self, client: AsyncClient) -> None:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import append_session_message
         from atlas.server import memory
 
         assert memory is not None
         conversation_id = await memory.create_conversation("History test")
-        await memory.save_message(conversation_id, "user", "hello")
-        await memory.save_message(conversation_id, "assistant", "hi")
+        # SessionDB owns the transcript; the Atlas store keeps conversation metadata.
+        append_session_message(DATA_ROOT / "engine", conversation_id, "user", "hello")
+        append_session_message(DATA_ROOT / "engine", conversation_id, "assistant", "hi")
 
         resp = await client.get(f"/api/conversations/{conversation_id}/messages")
 
@@ -597,9 +621,15 @@ class TestFacts:
         await isolated_memory.init()
         server.memory = app.state.services.memory = isolated_memory
         try:
+            from atlas.config import DATA_ROOT
+            from atlas.engine.session_sync import append_session_message
+
             conversation_id = await isolated_memory.create_conversation()
-            await isolated_memory.save_message(
-                conversation_id, "user", "I prefer concise answers."
+            # SessionDB is the authoritative transcript; promotion verifies the
+            # candidate against it as source evidence.
+            append_session_message(
+                DATA_ROOT / "engine", conversation_id, "user",
+                "I prefer concise answers.",
             )
             [candidate] = await isolated_memory.extract_conversation_candidates(
                 conversation_id
@@ -1282,7 +1312,9 @@ class TestWebSocketProtocol:
         conn_id = "backend-failure-test"
         run = server.RunState("backend-failure-run", "conv-1", "test-model")
         memory_mock = SimpleNamespace(
-            save_message=AsyncMock(side_effect=OSError("database unavailable"))
+            save_conversation_metadata=AsyncMock(
+                side_effect=OSError("database unavailable")
+            ),
         )
         monkeypatch.setattr(server, "memory", memory_mock)
         server.app.state.services.memory = memory_mock
@@ -1325,7 +1357,7 @@ class TestWebSocketProtocol:
         conn_id = "tool-failure-test"
         run = server.RunState("tool-failure-run", "conv-2", "test-model")
         memory_mock = SimpleNamespace(
-            save_message=AsyncMock(),
+            save_conversation_metadata=AsyncMock(),
             record_agent_reflection=AsyncMock(),
             mark_agent_reflections_recovered=AsyncMock(),
         )
@@ -1372,7 +1404,7 @@ class TestWebSocketProtocol:
             yield {"type": "done"}
 
         memory_mock = SimpleNamespace(
-            save_message=AsyncMock(),
+            save_conversation_metadata=AsyncMock(),
             record_agent_reflection=AsyncMock(),
             mark_agent_reflections_recovered=AsyncMock(),
         )
@@ -1402,7 +1434,7 @@ class TestWebSocketProtocol:
                 self.events.append(event)
 
         memory_mock = SimpleNamespace(
-            save_message=AsyncMock(),
+            save_conversation_metadata=AsyncMock(),
             record_agent_reflection=AsyncMock(),
             mark_agent_reflections_recovered=AsyncMock(),
         )
@@ -1582,7 +1614,7 @@ class TestBackendParityWave1:
         socket = Socket()
         run = server.RunState("ask-user-run", "ask-user-conv", "model")
         memory_mock = SimpleNamespace(
-            save_message=AsyncMock(), record_agent_reflection=AsyncMock(),
+            save_conversation_metadata=AsyncMock(), record_agent_reflection=AsyncMock(),
             mark_agent_reflections_recovered=AsyncMock(),
         )
         monkeypatch.setattr(server, "memory", memory_mock)
@@ -1775,27 +1807,43 @@ class TestBackendParityWave1:
         assert len(tools) == 3
 
     async def test_fork_truncate_and_missing_message(self, client: AsyncClient) -> None:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import append_session_message
+
         conv_id = (await client.post("/api/conversations", json={"title": "Branch"})).json()["id"]
-        first = await server.memory.save_message(conv_id, "user", "first")
-        second = await server.memory.save_message(conv_id, "assistant", "second")
+        # SessionDB owns the transcript; fork/truncate address it by message uid
+        # and cut on user-turn boundaries (a fork through a turn keeps the
+        # whole turn, including its assistant reply).
+        first = append_session_message(DATA_ROOT / "engine", conv_id, "user", "first")
+        second = append_session_message(DATA_ROOT / "engine", conv_id, "assistant", "second")
+        third = append_session_message(DATA_ROOT / "engine", conv_id, "user", "third")
         fork = await client.post(f"/api/conversations/{conv_id}/fork", json={
             "through_message_id": first,
         })
-        assert fork.status_code == 201 and fork.json()["files_shared"] is True
+        assert fork.status_code == 201
+        # SessionDB-owned branches link back to their parent instead of copying
+        # legacy body rows, so the response carries the linkage, not files_shared.
+        assert fork.json()["parent_conversation_id"] == conv_id
         forked_messages = await client.get(f"/api/conversations/{fork.json()['id']}/messages")
-        assert [item["content"] for item in forked_messages.json()] == ["first"]
+        assert [item["content"] for item in forked_messages.json()] == ["first", "second"]
         truncated = await client.post(f"/api/conversations/{conv_id}/truncate", json={
-            "from_message_id": second,
+            "from_message_id": third,
         })
         assert truncated.status_code == 200
-        assert (await client.get(f"/api/conversations/{conv_id}/messages")).json()[0]["content"] == "first"
+        assert [
+            item["content"]
+            for item in (await client.get(f"/api/conversations/{conv_id}/messages")).json()
+        ] == ["first", "second"]
         assert (await client.post(f"/api/conversations/{conv_id}/fork", json={
             "through_message_id": "absent",
         })).status_code == 404
 
     async def test_chinese_trigram_and_short_like_search(self, client: AsyncClient) -> None:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import append_session_message
+
         conv_id = (await client.post("/api/conversations", json={"title": "中文会话"})).json()["id"]
-        await server.memory.save_message(conv_id, "user", "请记住工作区规则注入")
+        append_session_message(DATA_ROOT / "engine", conv_id, "user", "请记住工作区规则注入")
         long_query = await client.get("/api/search", params={"q": "工作区规则"})
         short_query = await client.get("/api/search", params={"q": "规则"})
         assert long_query.status_code == short_query.status_code == 200
