@@ -13,7 +13,11 @@
 - 12 Webhook 渠道入站任务（ask_writes）→ 审批 → 执行 → 渠道回执: signed inbound
   webhook event, the H7 approval request lands on the channel, the 「允许」
   channel reply unblocks the real model write, the receipt is POSTed back to a
-  local receiver.
+  local receiver. The webhook channel (enabled + secret) is seeded into the
+  manager's own ``channel-configs.json`` before the backend boots, because
+  adapters are only created at ``ChannelManager.start()`` for already-enabled
+  channels and the /credential keyring value is never read back by
+  ``handle_webhook`` (production gaps, see the H1R2 lane report).
 
 The backend is the regular Atlas app (same one the desktop / ``atlas run``
 in-process mode serve) started once per scenario on an ephemeral loopback port,
@@ -91,11 +95,27 @@ class Backend:
         self.proc: subprocess.Popen | None = None
         self.log_path = live.evidence / "backend.log"
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        # Optional channel-gateway config seeded before uvicorn boots (scenario
+        # 12). ``ChannelManager`` loads this file once at construction and only
+        # starts adapters for channels already enabled in it, so runtime-only
+        # ``PUT /accounts`` enabling cannot produce a working outbound channel.
+        self.seed_channel_configs: dict[str, dict[str, Any]] | None = None
 
     def start(self) -> None:
         env = self.live.child_env()
         env.pop("ATLAS_LIVE_SMOKE_ROOT", None)  # harness knob, not for the backend
         env["PYTHONUNBUFFERED"] = "1"
+        if self.seed_channel_configs:
+            # Same path expression server.py uses (cfg.db_path.parent /
+            # "channel-configs.json") under the same ATLAS_DATA_DIR env.
+            from atlas.config import get_config
+
+            seed_path = get_config().db_path.parent / "channel-configs.json"
+            seed_path.parent.mkdir(parents=True, exist_ok=True)
+            seed_path.write_text(
+                json.dumps(self.seed_channel_configs, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
         self._log = open(self.log_path, "w", encoding="utf-8", errors="replace")  # noqa: SIM115
         self.proc = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "atlas.server:app",
@@ -148,7 +168,8 @@ def server_live() -> tuple[LiveSession, Backend]:
     )
     backend = Backend(session)
     try:
-        backend.start()
+        # Not started here: tests that need pre-boot state (scenario 12 seeds
+        # the channel-gateway config file) set it up, then call backend.start().
         yield session, backend
     finally:
         session.close()
@@ -193,7 +214,8 @@ def _messages(live: LiveSession, backend: Backend, conversation_id: str) -> list
     return payload.get("messages") if isinstance(payload, dict) else payload
 
 
-def _observe_run_line(line: str, state: dict[str, str], tool_started: threading.Event) -> None:
+def _observe_run_line(line: str, state: dict[str, str], tool_started: threading.Event,
+                      run_finished: threading.Event | None = None) -> None:
     """Observe every event, including tools arriving after run.started."""
     try:
         event = json.loads(line)
@@ -207,6 +229,8 @@ def _observe_run_line(line: str, state: dict[str, str], tool_started: threading.
     data = event.get("data") or {}
     if kind in {"tool_start", "tool.started", "run.tool.started"} and isinstance(data, dict):
         tool_started.set()
+    if run_finished is not None and kind in {"run.completed", "run.failed", "run.cancelled"}:
+        run_finished.set()
 
 
 def _pump_stderr(process: subprocess.Popen) -> tuple[list[str], threading.Thread]:
@@ -223,16 +247,25 @@ def _pump_stderr(process: subprocess.Popen) -> tuple[list[str], threading.Thread
 
 
 def _finish_observed_process(process: subprocess.Popen, stdout_thread: threading.Thread,
-                             stderr_thread: threading.Thread, timeout: float) -> int:
+                             stderr_thread: threading.Thread,
+                             timeout: float) -> tuple[int, bool]:
+    """Wait for the CLI; returns (exit_code, cli_hang).
+
+    ``cli_hang`` is True when the timeout expired and the harness had to kill
+    the process — recorded in meta.json so the next evidence round can tell a
+    CLI teardown hang apart from a real non-zero exit.
+    """
+    hung = False
     try:
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
+        hung = True
         process.kill()
         process.wait(timeout=30)
     stdout_thread.join(timeout=30)
     stderr_thread.join(timeout=30)
     assert not stdout_thread.is_alive() and not stderr_thread.is_alive(), "CLI pipes did not close"
-    return int(process.returncode)
+    return int(process.returncode), hung
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +276,7 @@ def _finish_observed_process(process: subprocess.Popen, stdout_thread: threading
 @pytest.mark.live
 def test_full_08_plan_propose_approve_then_execute(server_live) -> None:
     live, backend = server_live
+    backend.start()
     scenario = "08-plan-execute"
     workspace = live.workspace("plan")
     prompt = _prompt(scenario)
@@ -307,14 +341,15 @@ def test_full_08_plan_propose_approve_then_execute(server_live) -> None:
             }, ensure_ascii=False))
 
     asyncio.run(_approve())
-    exit_code = _finish_observed_process(process, pump, stderr_pump, 420)
+    exit_code, cli_hang = _finish_observed_process(process, pump, stderr_pump, 420)
     stdout, stderr = "", "".join(stderr_lines)
 
     (run_dir / "stream.jsonl").write_text(_redact("".join(lines) + (stdout or "")),
                                           encoding="utf-8")
     (run_dir / "stderr.log").write_text(_redact(stderr or ""), encoding="utf-8")
     (run_dir / "meta.json").write_text(json.dumps({
-        "name": scenario, "exit_code": exit_code, "model": live.model,
+        "name": scenario, "exit_code": exit_code, "cli_hang": cli_hang,
+        "model": live.model,
         "plan_approved_via": "run.plan.approve (second WS connection)",
         "run_id": proposed.get("run_id"),
     }, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -335,6 +370,7 @@ def test_full_08_plan_propose_approve_then_execute(server_live) -> None:
 @pytest.mark.live
 def test_full_09_rewind_mid_task_then_continue(server_live) -> None:
     live, backend = server_live
+    backend.start()
     scenario = "09-rewind-continue"
     workspace = live.workspace("rewind")
 
@@ -395,6 +431,7 @@ def test_full_09_rewind_mid_task_then_continue(server_live) -> None:
 @pytest.mark.live
 def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
     live, backend = server_live
+    backend.start()
     scenario = "10-steer-midrun"
     workspace = live.workspace("steer")
     prompt = _prompt(scenario)
@@ -403,6 +440,7 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
         "命令跑完后按新要求写入。"
     )
 
+    t0 = time.monotonic()
     process = subprocess.Popen(
         [sys.executable, "-m", "atlas.cli", "run",
          "-p", prompt,
@@ -418,6 +456,7 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
     state: dict[str, str] = {}
     live.processes.append(process)
     tool_started = threading.Event()
+    run_finished = threading.Event()
     lines: list[str] = []
     stderr_lines, stderr_pump = _pump_stderr(process)
 
@@ -425,7 +464,10 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
         assert process.stdout is not None
         for line in process.stdout:
             lines.append(line)
-            _observe_run_line(line, state, tool_started)
+            had_tool = tool_started.is_set()
+            _observe_run_line(line, state, tool_started, run_finished)
+            if not had_tool and tool_started.is_set():
+                state["tool_started_at_s"] = str(round(time.monotonic() - t0, 3))
 
     pump = threading.Thread(target=_pump, daemon=True)
     pump.start()
@@ -439,10 +481,17 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
     async def _steer() -> dict[str, Any]:
         import websockets
 
-        # Wait until the long command actually started before steering.
+        # Steer deterministically mid-run: as soon as the first tool event of
+        # the long command is observed (never a fixed delay), and never after
+        # the run itself finished.
         loop = asyncio.get_running_loop()
-        while not tool_started.is_set() and time.monotonic() < deadline:
+        while (not tool_started.is_set() and not run_finished.is_set()
+               and time.monotonic() < deadline):
             await asyncio.sleep(0.2)
+        assert not run_finished.is_set(), (
+            "run finished before the first tool event; the steer would land late "
+            f"(tool_started={tool_started.is_set()})"
+        )
         assert tool_started.is_set(), "no tool started; refusing to steer after the run ended"
         async with websockets.connect(
             backend.base_url.replace("http", "ws", 1) + "/ws/chat",
@@ -452,6 +501,7 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
             await ws.send(json.dumps({"type": "run.steer", "run_id": run_id,
                                       "content": steer_text, "send_now": True,
                                       "immediate": False}, ensure_ascii=False))
+            state["steer_sent_at_s"] = str(round(time.monotonic() - t0, 3))
             # On acceptance the run_steered event goes to the run's own
             # connection (the CLI), not this one; this socket only learns about
             # rejections. A quiet window therefore means "not rejected".
@@ -469,26 +519,46 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
             return steer_reply
 
     steer_reply = asyncio.run(_steer())
-    exit_code = _finish_observed_process(process, pump, stderr_pump, 600)
+    exit_code, cli_hang = _finish_observed_process(process, pump, stderr_pump, 600)
     stdout, stderr = "", "".join(stderr_lines)
     run_dir = live.evidence / scenario
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "steer-reply.json").write_text(
         _redact(json.dumps(steer_reply, ensure_ascii=False, default=str, indent=2)),
         encoding="utf-8")
-    (run_dir / "stream.jsonl").write_text(_redact("".join(lines) + (stdout or "")),
-                                          encoding="utf-8")
+    stream_text = "".join(lines) + (stdout or "")
+    (run_dir / "stream.jsonl").write_text(_redact(stream_text), encoding="utf-8")
     (run_dir / "stderr.log").write_text(_redact(stderr or ""), encoding="utf-8")
+    # meta.json must reflect what actually happened, never a hardcoded claim:
+    # "steered" is only true when the steer was not rejected AND the CLI stream
+    # shows the run picked it up (run.steered).
+    rejections = {
+        kind: reply for kind, reply in steer_reply.items() if "rejected" in kind
+    }
+    rejection_reasons = [
+        str((reply.get("data") or {}).get("reason") or "unknown")
+        for reply in rejections.values()
+    ]
+    run_steered_observed = '"run.steered"' in stream_text
     (run_dir / "meta.json").write_text(json.dumps({
-        "name": scenario, "exit_code": exit_code, "run_id": run_id,
-        "steered": True, "model": live.model,
+        "name": scenario, "exit_code": exit_code, "cli_hang": cli_hang,
+        "run_id": run_id,
+        "steer_sent": True,
+        "steer_rejected": bool(rejections),
+        "steer_rejection_reasons": rejection_reasons,
+        "run_steered_observed": run_steered_observed,
+        "steered": run_steered_observed and not rejections,
+        "tool_started_at_s": state.get("tool_started_at_s"),
+        "steer_sent_at_s": state.get("steer_sent_at_s"),
+        "model": live.model,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     assert exit_code == 0, f"steered run failed exit={exit_code} stderr={_redact(stderr or '')[-1200:]}"
-    rejected = [k for k in steer_reply if "rejected" in k]
-    assert not rejected, f"steer was rejected: {steer_reply}"
-    stream_text = "".join(lines) + (stdout or "")
-    assert '"run.steered"' in stream_text, (
+    assert not rejections, (
+        "steer was rejected — a run_not_active rejection means it landed after "
+        f"the run ended: {rejections}"
+    )
+    assert run_steered_observed, (
         "no run.steered event in the CLI stream; the steer never reached the turn"
     )
     _check(live, scenario, scenario, workspace)
@@ -563,7 +633,32 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
     workspace = Path(live.root) / "channel-ws"
     done = workspace / "webhook-done.txt"
     done.unlink(missing_ok=True)
+
+    def _record(step: str, response: httpx.Response) -> None:
+        # Evidence lands BEFORE any assert: a failed setup step must leave a
+        # readable trace (status + body), never an empty scenario directory.
+        try:
+            body: Any = response.json()
+        except ValueError:
+            body = response.text[:800]
+        (run_dir / f"{step}.json").write_text(_redact(json.dumps(
+            {"status_code": response.status_code, "body": body},
+            ensure_ascii=False, default=str, indent=2)), encoding="utf-8")
+
+    # The webhook channel must already be enabled (with its secret) when the
+    # backend's channel stack boots: ChannelManager.start() only creates
+    # adapters for channels enabled at startup, and handle_webhook verifies the
+    # HMAC against configs["secret"] — the value POSTed to /credential is never
+    # read back (production gaps, documented in the lane report). Seeding the
+    # manager's own persisted config file (the same file PUT /accounts writes)
+    # is fixture setup: the inbound below is still HMAC-verified, and
+    # approval → execution → receipt stay fully live.
+    backend.seed_channel_configs = {
+        "webhook": {"enabled": True, "url": receiver.url, "account": "live",
+                    "secret": secret},
+    }
     try:
+        backend.start()
         # Configure the webhook channel: non-secret config + secret credential.
         response = httpx.put(
             f"{backend.base_url}/api/channels/accounts",
@@ -571,12 +666,14 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
                                           "account": "live"}}},
             headers=headers, timeout=30,
         )
+        _record("accounts-put", response)
         assert response.status_code == 200, f"accounts PUT failed: {response.text[:300]}"
         response = httpx.post(
             f"{backend.base_url}/api/channels/credential",
             json={"channel": "webhook", "field": "secret", "value": secret},
             headers=headers, timeout=30,
         )
+        _record("credential-post", response)
         assert response.status_code == 200, f"credential POST failed: {response.text[:300]}"
 
         task_text = _prompt(scenario)
@@ -591,10 +688,8 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
             content=body.encode("utf-8"),
             headers=_webhook_headers(secret, body), timeout=30,
         )
+        _record("inbound", response)
         assert response.status_code == 200, f"inbound failed: HTTP {response.status_code} {response.text[:300]}"
-        accepted = response.json()
-        (run_dir / "inbound.json").write_text(
-            _redact(json.dumps(accepted, ensure_ascii=False, indent=2)), encoding="utf-8")
 
         # Wait for the ask_writes approval request to land on the channel…
         deadline = time.monotonic() + 240
@@ -628,6 +723,7 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
             content=reply_body.encode("utf-8"),
             headers=_webhook_headers(secret, reply_body), timeout=30,
         )
+        _record("approval-reply", response)
         assert response.status_code == 200, f"approval reply failed: {response.text[:300]}"
 
         # A fresh receiver belongs to this inbound request; reject failed/stopped
@@ -663,6 +759,14 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
             "approval_id": approval_id,
             "receipt": receipt[:200],
             "gateway_base_url": live.gateway_base_url,
+            "webhook_signed_inbound": True,
+            # How the channel got its secret: seeded via channel-configs.json at
+            # backend boot. POST /api/channels/credential succeeded but its
+            # keyring value is never consulted by ChannelManager.handle_webhook,
+            # and a runtime-only accounts PUT cannot start the adapter either —
+            # both are production gaps owned by the channels lane (H1R2 report).
+            "secret_source": "channel-configs.json seed (pre-boot); "
+                             "credential readback gap tracked separately",
         }, ensure_ascii=False, indent=2), encoding="utf-8")
     finally:
         receiver.stop()

@@ -53,6 +53,17 @@ def test_steer_observes_tool_after_run_id_was_already_received():
     assert started.is_set()
 
 
+def test_steer_observer_flags_a_finished_run_so_the_steer_refuses_to_fire():
+    state = {}
+    started = threading.Event()
+    finished = threading.Event()
+    for event in ("run.started", "tool.started", "run.completed"):
+        line = json.dumps({"event": event, "run_id": "run-1", "data": {}})
+        _observe_run_line(line, state, started, finished)
+    assert state == {"run_id": "run-1"}
+    assert started.is_set() and finished.is_set()
+
+
 def test_observed_cli_drains_both_pipes_without_losing_events():
     process = subprocess.Popen(
         [sys.executable, "-c", "import sys; sys.stderr.write('x'*131072); "
@@ -64,7 +75,7 @@ def test_observed_cli_drains_both_pipes_without_losing_events():
     stdout_thread = threading.Thread(target=lambda: stdout.extend(process.stdout), daemon=True)
     stdout_thread.start()
     try:
-        assert _finish_observed_process(process, stdout_thread, stderr_thread, 10) == 0
+        assert _finish_observed_process(process, stdout_thread, stderr_thread, 10) == (0, False)
         assert stdout == ["first\n", "second\n"]
         assert len("".join(stderr)) == 131072
     finally:
