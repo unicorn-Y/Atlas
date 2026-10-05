@@ -83,9 +83,10 @@ async def test_shutdown_cancels_and_reaps_blocked_source_worker(tmp_path: Path) 
         grandchild_pid = int(grandchild_pid_file.read_text(encoding="utf-8"))
         process = next(iter(state["processes"]))
         shutdown_market = _market(tmp_path / "shutdown-instance")
-        await asyncio.wait_for(shutdown_market.cancel_pending_searches(), timeout=3)
+        # _kill_and_reap_search_worker bounds itself at taskkill 3s + reap 3s; leave slack for load.
+        await asyncio.wait_for(shutdown_market.cancel_pending_searches(), timeout=10)
         with pytest.raises(MarketUnavailableError):
-            await asyncio.wait_for(search, timeout=3)
+            await asyncio.wait_for(search, timeout=10)
         assert search.done()
         assert process.returncode is not None
         assert state["processes"] == set()
