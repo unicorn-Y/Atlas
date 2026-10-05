@@ -41,7 +41,7 @@ def test_pinned_hermes_commit_is_on_the_fork_atlas_branch(tmp_path):
                     f"repos/unicorn-Y/hermes-agent/compare/{pinned}...atlas",
                 ],
                 capture_output=True,
-                text=True,
+                text=True, encoding="utf-8", errors="replace",
                 timeout=15,
                 check=False,
             )
@@ -59,7 +59,7 @@ def test_pinned_hermes_commit_is_on_the_fork_atlas_branch(tmp_path):
         advertised = subprocess.run(
             ["git", "ls-remote", remote, "refs/heads/atlas"],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             timeout=20,
             check=False,
         )
@@ -87,7 +87,7 @@ def test_pinned_hermes_commit_is_on_the_fork_atlas_branch(tmp_path):
     initialized = subprocess.run(
         ["git", "init", "--bare", "--quiet", str(ancestry_repo)],
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8", errors="replace",
         check=False,
     )
     assert initialized.returncode == 0, initialized.stderr.strip()
@@ -99,7 +99,7 @@ def test_pinned_hermes_commit_is_on_the_fork_atlas_branch(tmp_path):
                 "--depth=256", remote, "refs/heads/atlas",
             ],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             timeout=120,
             check=False,
         )
@@ -125,7 +125,7 @@ def test_pinned_hermes_commit_is_on_the_fork_atlas_branch(tmp_path):
             "merge-base", "--is-ancestor", pinned, "FETCH_HEAD",
         ],
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8", errors="replace",
         check=False,
     )
     assert ancestry.returncode == 0, (

@@ -341,7 +341,7 @@ class PluginRuntime:
         if ref:
             args.extend(["--branch", ref])
         args.extend([url, str(target)])
-        subprocess.run(args, check=True, capture_output=True, text=True)
+        subprocess.run(args, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     def install_local(self, source: str | Path) -> dict[str, Any]:
         source_root = self._plugin_root(Path(source))
@@ -524,9 +524,9 @@ class PluginRuntime:
         if repo is None:
             return False
         try:
-            subprocess.run(["git", "-C", str(repo), "fetch", "--quiet"], check=True, capture_output=True, text=True, timeout=60)
-            head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
-            upstream = subprocess.run(["git", "-C", str(repo), "rev-parse", "@{upstream}"], check=True, capture_output=True, text=True).stdout.strip()
+            subprocess.run(["git", "-C", str(repo), "fetch", "--quiet"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+            head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
+            upstream = subprocess.run(["git", "-C", str(repo), "rev-parse", "@{upstream}"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
         except (OSError, subprocess.SubprocessError):
             return False
         return bool(head) and bool(upstream) and head != upstream
@@ -568,7 +568,7 @@ class PluginRuntime:
         repo = self._git_repo(Path(record["path"]))
         if repo is None:
             raise ValueError(f"marketplace checkout is not a git repository: {name}")
-        subprocess.run(["git", "-C", str(repo), "pull", "--ff-only"], check=True, capture_output=True, text=True)
+        subprocess.run(["git", "-C", str(repo), "pull", "--ff-only"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
         record["path"] = str(self._marketplace_root(repo) or repo)
         self._save_state()
         return {"name": name, "updated": True}
@@ -589,7 +589,7 @@ class PluginRuntime:
             return result
         if source.get("source") == "git":
             checkout = Path(source["checkout"])
-            subprocess.run(["git", "-C", str(checkout), "pull", "--ff-only"], check=True, capture_output=True, text=True)
+            subprocess.run(["git", "-C", str(checkout), "pull", "--ff-only"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
             root = self._plugin_root(checkout / source["subdir"] if source.get("subdir") else checkout)
             if root is None:
                 raise ValueError(f"plugin components missing after update: {name}")
@@ -652,7 +652,7 @@ class PluginRuntime:
             argv = [str(arg) for arg in command]
 
             def _handler(_argv: list[str] = argv, **payload: Any) -> None:
-                subprocess.run(_argv, input=json.dumps(payload, ensure_ascii=False, default=str), capture_output=True, text=True, timeout=30, check=False)
+                subprocess.run(_argv, input=json.dumps(payload, ensure_ascii=False, default=str), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False)
 
             if hook_bus is not None:
                 hook_bus.register(point, _handler)

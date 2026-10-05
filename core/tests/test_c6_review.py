@@ -91,7 +91,7 @@ def test_collect_diff_commit(git_repo: Path):
     (git_repo / "app.py").write_text("print('committed')\n", encoding="utf-8")
     _git(git_repo, "commit", "-am", "second")
     sha = subprocess.run(["git", "-C", str(git_repo), "rev-parse", "--short", "HEAD"],
-                         capture_output=True, text=True, check=True).stdout.strip()
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
     result = engine.collect_diff(str(git_repo), {"scope": "commit", "ref": sha})
     assert result["scope_label"] == f"提交 {sha}"
     assert "+print('committed')" in result["diff_text"]

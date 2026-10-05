@@ -146,7 +146,7 @@ def test_finalize_prunes_a_proven_empty_worktree(filter_repo: tuple[Path, Path])
     assert not Path(info["path"]).exists()
     branches = subprocess.run(
         ["git", "-C", str(repo), "branch", "--list", info["branch"]],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
     )
     assert branches.stdout.strip() == ""
     assert _fired(marker) == []

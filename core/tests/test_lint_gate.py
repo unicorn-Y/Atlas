@@ -21,7 +21,7 @@ def test_critical_exception_scopes_are_clean_and_no_baseline_scope_grows():
     completed = subprocess.run(
         [sys.executable, "-m", "ruff", "check", "atlas", "--select", "BLE001,S110,S112",
          "--ignore-noqa", "--output-format=json"],
-        cwd=ROOT, capture_output=True, text=True, timeout=30,
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
     )
     assert completed.returncode in (0, 1), completed.stderr
     rows = json.loads(completed.stdout)

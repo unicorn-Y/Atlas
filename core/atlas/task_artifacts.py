@@ -131,7 +131,7 @@ class WorktreeService:
     @staticmethod
     def _git(root: Path, *args: str) -> str:
         import subprocess
-        result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+        result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode:
             raise ValueError(result.stderr.strip() or "git command failed")
         return result.stdout.strip()
@@ -170,35 +170,35 @@ class WorktreeService:
         if strategy not in {"merge", "squash"}:
             raise ValueError("strategy must be 'merge' or 'squash'")
         import subprocess
-        dirty_base = subprocess.run(["git", "-C", str(workspace), "status", "--porcelain"], capture_output=True, text=True)
+        dirty_base = subprocess.run(["git", "-C", str(workspace), "status", "--porcelain"], capture_output=True, text=True, encoding="utf-8", errors="replace")
         if dirty_base.stdout.strip():
             raise RuntimeError("base workspace has uncommitted changes")
-        checkout = subprocess.run(["git", "-C", str(workspace), "checkout", base_branch], capture_output=True, text=True)
+        checkout = subprocess.run(["git", "-C", str(workspace), "checkout", base_branch], capture_output=True, text=True, encoding="utf-8", errors="replace")
         if checkout.returncode:
             raise ValueError(checkout.stderr.strip())
         args = (["git", "-C", str(workspace), "merge", "--squash", branch]
                 if strategy == "squash" else
                 ["git", "-C", str(workspace), "merge", "--no-edit", branch])
-        merged = subprocess.run(args, capture_output=True, text=True)
+        merged = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if merged.returncode:
-            conflicts = subprocess.run(["git", "-C", str(workspace), "diff", "--name-only", "--diff-filter=U"], capture_output=True, text=True).stdout.splitlines()
-            aborted = subprocess.run(["git", "-C", str(workspace), "merge", "--abort"], capture_output=True, text=True)
+            conflicts = subprocess.run(["git", "-C", str(workspace), "diff", "--name-only", "--diff-filter=U"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.splitlines()
+            aborted = subprocess.run(["git", "-C", str(workspace), "merge", "--abort"], capture_output=True, text=True, encoding="utf-8", errors="replace")
             if aborted.returncode:
-                subprocess.run(["git", "-C", str(workspace), "reset", "--merge"], capture_output=True, text=True)
+                subprocess.run(["git", "-C", str(workspace), "reset", "--merge"], capture_output=True, text=True, encoding="utf-8", errors="replace")
             git_dir_result = subprocess.run(
                 ["git", "-C", str(workspace), "rev-parse", "--git-dir"],
-                capture_output=True, text=True,
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
             git_dir = (workspace / git_dir_result.stdout.strip()).resolve()
             final_state = subprocess.run(
                 ["git", "-C", str(workspace), "status", "--porcelain"],
-                capture_output=True, text=True,
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
             ).stdout.strip()
             if (git_dir / "MERGE_HEAD").exists() or final_state:
                 raise RuntimeError("merge conflict cleanup failed; base workspace remains changed")
             raise FileExistsError("\n".join(conflicts) or merged.stderr.strip())
         if strategy == "squash":
-            commit = subprocess.run(["git", "-C", str(workspace), "commit", "-m", message or f"Merge {branch}"], capture_output=True, text=True)
+            commit = subprocess.run(["git", "-C", str(workspace), "commit", "-m", message or f"Merge {branch}"], capture_output=True, text=True, encoding="utf-8", errors="replace")
             if commit.returncode:
-                subprocess.run(["git", "-C", str(workspace), "reset", "--merge"], capture_output=True, text=True)
+                subprocess.run(["git", "-C", str(workspace), "reset", "--merge"], capture_output=True, text=True, encoding="utf-8", errors="replace")
                 raise ValueError(commit.stderr.strip())

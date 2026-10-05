@@ -26,7 +26,7 @@ def test_node_archive_hash_mismatch_fails_and_clears_staging(tmp_path: Path) -> 
         cwd=repository,
         env=env,
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8", errors="replace",
         timeout=30,
         check=False,
     )

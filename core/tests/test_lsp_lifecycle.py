@@ -157,7 +157,7 @@ def _pid_alive(pid: int) -> bool:
             return True  # 查询被拒 → 视为存活（宁可误报存活也不假通过）
     # 回退探针：taskkill /F 对活进程返回 0（顺带终止它），对已死进程报「不存在」
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    proc = subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True, creationflags=flags)
+    proc = subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=flags)
     if proc.returncode == 0:
         return True
     out = f"{proc.stdout}\n{proc.stderr}"

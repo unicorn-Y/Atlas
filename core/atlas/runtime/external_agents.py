@@ -37,7 +37,7 @@ def external_agent_status(
                 invocation = ["cmd", "/c", executable, *args]
             try:
                 result = subprocess.run(
-                    invocation, capture_output=True, text=True, timeout=5, check=False,
+                    invocation, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5, check=False,
                 )
                 if result.returncode == 0:
                     version = (result.stdout or result.stderr).strip()[:300] or "已安装"

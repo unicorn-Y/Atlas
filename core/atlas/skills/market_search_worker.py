@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -14,6 +15,8 @@ from atlas.skills.market import (
     MarketError,
     SkillMarket,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _search(payload: dict[str, Any]) -> dict[str, Any]:
@@ -78,6 +81,8 @@ def run_stdio() -> None:
                 "error": {"code": "invalid_search", "message": "技能市场搜索请求无效。"},
             }
         except Exception:
+            # Any source failure becomes a structured reply; the traceback goes to stderr.
+            logger.exception("market search worker: source failed")
             response = {
                 "error": {"code": "source_unavailable", "message": "技能市场来源暂时不可用。"},
             }

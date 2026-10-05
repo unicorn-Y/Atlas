@@ -496,7 +496,7 @@ def _windows_node_pids() -> set[str]:
         ["tasklist", "/FI", "IMAGENAME eq node.exe", "/FO", "CSV", "/NH"],
         check=True,
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8", errors="replace",
     )
     rows = csv.reader(io.StringIO(result.stdout))
     return {row[1] for row in rows if len(row) > 1 and row[0].lower() == "node.exe"}

@@ -135,7 +135,7 @@ def parse_pytest_elapsed(log: str, junit_xml: Path | None = None) -> float | Non
 def _git_value(root: Path, *args: str) -> str | None:
     try:
         result = subprocess.run(
-            ["git", *args], cwd=root, capture_output=True, text=True, timeout=10, check=True,
+            ["git", *args], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10, check=True,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -198,7 +198,7 @@ def _stop_owned_process_tree(process: subprocess.Popen[Any]) -> None:
         try:
             subprocess.run(
                 ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                capture_output=True, text=True, errors="replace", timeout=15, check=False,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, check=False,
             )
         except (OSError, subprocess.SubprocessError):
             process.terminate()

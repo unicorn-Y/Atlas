@@ -19,7 +19,7 @@ def test_conftest_replaces_inherited_state_roots_before_collection(tmp_path):
         "m=importlib.util.module_from_spec(s); s.loader.exec_module(m); "
         f"print(json.dumps({{k:os.environ[k] for k in {keys!r}}}))"
     )
-    result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)
+    result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
     roots = json.loads(result.stdout)
     assert all(Path(value).resolve() != inherited.resolve() for value in roots.values())
     assert all(Path(value).is_dir() for value in roots.values())

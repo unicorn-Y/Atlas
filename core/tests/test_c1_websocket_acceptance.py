@@ -858,11 +858,11 @@ async def test_websocket_all_old_git_actions_use_isolated_local_remote(backend):
     outputs = [str(event["data"]) for event in events if event["event"] == "tool.completed"]
     assert len(outputs) == 9
     assert "git-fixture.txt" in outputs[0] and "git evidence" in outputs[2]
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=workspace, text=True).strip()
-    origin_head = subprocess.check_output(["git", "rev-parse", "refs/heads/main"], cwd=remote, text=True).strip()
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=workspace, text=True, encoding="utf-8", errors="replace").strip()
+    origin_head = subprocess.check_output(["git", "rev-parse", "refs/heads/main"], cwd=remote, text=True, encoding="utf-8", errors="replace").strip()
     assert head == origin_head
-    assert subprocess.check_output(["git", "status", "--porcelain"], cwd=workspace, text=True).strip() == ""
-    assert "acceptance-branch" in subprocess.check_output(["git", "branch", "--list"], cwd=workspace, text=True)
+    assert subprocess.check_output(["git", "status", "--porcelain"], cwd=workspace, text=True, encoding="utf-8", errors="replace").strip() == ""
+    assert "acceptance-branch" in subprocess.check_output(["git", "branch", "--list"], cwd=workspace, text=True, encoding="utf-8", errors="replace")
 
 
 @pytest.mark.asyncio

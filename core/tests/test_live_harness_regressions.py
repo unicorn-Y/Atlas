@@ -68,7 +68,7 @@ def test_observed_cli_drains_both_pipes_without_losing_events():
     process = subprocess.Popen(
         [sys.executable, "-c", "import sys; sys.stderr.write('x'*131072); "
          "print('first'); print('second')"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
     )
     stdout = []
     stderr, stderr_thread = _pump_stderr(process)

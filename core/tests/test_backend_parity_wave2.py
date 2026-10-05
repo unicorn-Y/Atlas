@@ -21,7 +21,7 @@ from atlas.task_artifacts import TomlRecordStore, WorktreeService, seed_profiles
 
 
 def _git(root: Path, *args: str) -> str:
-    result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+    result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()
 

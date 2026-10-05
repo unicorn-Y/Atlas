@@ -967,7 +967,7 @@ def _process_pids(name: str) -> set[str]:
         ["tasklist", "/FI", f"IMAGENAME eq {name}", "/FO", "CSV", "/NH"],
         check=True,
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8", errors="replace",
     )
     return {
         row[1]

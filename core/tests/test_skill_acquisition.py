@@ -71,7 +71,7 @@ def test_provider_reference_hash_matches_node_generated_mixed_path_fixture():
         ["node", "-p", "Intl.Collator().resolvedOptions().locale"],
         check=True,
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8", errors="replace",
         timeout=5,
     ).stdout.strip()
     assert locale in fixture["reference_sha256_by_locale"]

@@ -130,7 +130,7 @@ print("cold parallel local-runtime calls completed")
     try:
         result = subprocess.run(
             [sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1],
-            env=env, capture_output=True, text=True, timeout=30, check=False,
+            env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False,
         )
     except subprocess.TimeoutExpired as exc:
         pytest.fail(f"cold parallel local-runtime imports did not finish: {exc}")

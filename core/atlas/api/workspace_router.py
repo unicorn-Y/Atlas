@@ -570,12 +570,12 @@ async def git_branches(
 def _gh_json(root: Path, *args: str) -> dict[str, Any]:
     try:
         auth = subprocess.run(["gh", "auth", "status"], cwd=root, capture_output=True,
-                             text=True, timeout=15)
+                             text=True, encoding="utf-8", errors="replace", timeout=15)
     except (OSError, subprocess.SubprocessError) as exc:
         raise HTTPException(status_code=503, detail="GitHub CLI (gh) is unavailable") from exc
     if auth.returncode:
         raise HTTPException(status_code=503, detail="GitHub CLI is not authenticated")
-    result = subprocess.run(["gh", *args], cwd=root, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(["gh", *args], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     if result.returncode:
         raise HTTPException(status_code=502, detail=result.stderr.strip() or "gh command failed")
     try:
@@ -624,13 +624,13 @@ async def create_git_pr(
         raise HTTPException(status_code=422, detail="title and body are required")
     try:
         auth = subprocess.run(["gh", "auth", "status"], cwd=base, capture_output=True,
-                             text=True, timeout=15)
+                             text=True, encoding="utf-8", errors="replace", timeout=15)
     except OSError as exc:
         raise HTTPException(status_code=503, detail="GitHub CLI (gh) is unavailable") from exc
     if auth.returncode:
         raise HTTPException(status_code=503, detail="GitHub CLI is not authenticated")
     pushed = subprocess.run(["git", "push", "-u", "origin", "HEAD"], cwd=base,
-                            capture_output=True, text=True, timeout=120)
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     if pushed.returncode:
         raise HTTPException(status_code=502, detail=pushed.stderr.strip())
     command = ["gh", "pr", "create", "--title", title, "--body", body]
@@ -638,7 +638,7 @@ async def create_git_pr(
         command.extend(["--base", str(req["base"])])
     if req.get("draft") is True:
         command.append("--draft")
-    created = subprocess.run(command, cwd=base, capture_output=True, text=True, timeout=60)
+    created = subprocess.run(command, cwd=base, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     if created.returncode:
         raise HTTPException(status_code=502, detail=created.stderr.strip())
     result = _gh_json(base, "pr", "view", "--json",
@@ -658,7 +658,7 @@ async def git_pr_check_log(
     if not match or str(match.get("state", "")).upper() not in {"FAILURE", "CANCELLED", "ERROR"}:
         raise HTTPException(status_code=404, detail="failed check not found")
     result = subprocess.run(["gh", "run", "view", str(match["link"]), "--log-failed"],
-                            cwd=base, capture_output=True, text=True, timeout=60)
+                            cwd=base, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     if result.returncode:
         raise HTTPException(status_code=502, detail=result.stderr.strip())
     raw = result.stdout.encode("utf-8")[-65536:].decode("utf-8", errors="replace")

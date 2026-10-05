@@ -69,7 +69,7 @@ def _probe(executable: Path | None, *, timeout: float = 3.0) -> dict[str, Any]:
     try:
         result = subprocess.run(
             [str(executable), "--version"], check=False, capture_output=True,
-            text=True, timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            text=True, encoding="utf-8", errors="replace", timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return {"available": False, "version": None,

@@ -9,6 +9,8 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from atlas.api import tools_router
+
 
 def _set_isolated_atlas_config(tmp_path, monkeypatch):
     from atlas import config as config_module
@@ -288,13 +290,13 @@ def test_mcp_config_mutation_preserves_empty_auto_start_means_all_enabled(tmp_pa
     }
     config.raw["tools"]["auto_start"] = []
 
-    server._persist_mcp_server_config("new", {"enabled": True, "transport": "stdio"})
+    tools_router._persist_mcp_server_config("new", {"enabled": True, "transport": "stdio"})
     added = config_module.load_config(config_path)
     assert added.get("tools.auto_start", []) == []
     assert added.get("tools.servers.existing.enabled") is True
     assert added.get("tools.servers.new.enabled") is True
 
-    server._persist_mcp_server_config("new", None)
+    tools_router._persist_mcp_server_config("new", None)
     removed = config_module.load_config(config_path)
     assert removed.get("tools.auto_start", []) == []
     assert removed.get("tools.servers.existing.enabled") is True
@@ -310,7 +312,7 @@ def test_removing_last_selected_server_keeps_excluded_servers_disabled(tmp_path,
     }
     config.raw["tools"]["auto_start"] = ["selected"]
 
-    server._persist_mcp_server_config("selected", None)
+    tools_router._persist_mcp_server_config("selected", None)
     removed = config_module.load_config(config_path)
     assert removed.get("tools.auto_start", []) == []
     assert removed.get("tools.servers.excluded.enabled") is False
@@ -340,7 +342,7 @@ async def test_runtime_only_mcp_remove_write_failure_reconnects_from_client_conf
     def fail_persist(_name, _value):
         raise OSError("isolated simulated config write failure")
 
-    monkeypatch.setattr(server, "_persist_mcp_server_config", fail_persist)
+    monkeypatch.setattr(tools_router, "_persist_mcp_server_config", fail_persist)
     try:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=server.app), base_url="http://test"
