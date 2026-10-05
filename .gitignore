@@ -117,3 +117,5 @@ data/devices/
 /artifacts/h10-live-smoke/
 /artifacts/h1r-*/
 /artifacts/pytest-*
+data/logs/
+data/update-status.json

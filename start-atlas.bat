@@ -37,8 +37,9 @@ if not exist "node_modules\.package-lock.json" (
 )
 
 set "ATLAS_PYTHON=%CD%\core\.venv\Scripts\python.exe"
-echo [start] Opening Atlas Desktop. First startup may take a little longer.
-call npm run dev
+echo [start] Opening Atlas Desktop. The first start builds the app and takes a little longer.
+rem Source mode: built UI, no Vite dev server. Use "npm run dev" for hot-reload development.
+node scriptstlas-update.mjs --launch-only
 if errorlevel 1 goto :failed
 exit /b 0
 

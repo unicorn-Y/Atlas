@@ -11,6 +11,17 @@ export interface BackendStartupProgress {
 /** IPC channel the main process sends {@link BackendStartupProgress} events on. */
 export const BACKEND_STARTUP_CHANNEL = 'backend:startup-progress';
 
+/** Source-mode update state (Atlas running from a git checkout). */
+export interface SourceUpdateStatus {
+  supported: boolean;
+  available: boolean;
+  behind: number;
+  branch?: string;
+  commits: Array<{ hash: string; subject: string }>;
+  blocked?: string;
+  error?: string;
+}
+
 export interface AtlasDesktopApi {
   platform: string;
   apiBaseUrl: string;
@@ -25,6 +36,10 @@ export interface AtlasDesktopApi {
   onMaximizeChange(callback: (maximized: boolean) => void): () => void;
   /** Follow the UI theme with the window/taskbar icon ('light' | 'aurora' | 'dark'). */
   setTheme?(theme: string): void;
+  /** Source mode only: compare with the remote branch. */
+  checkForUpdate?(): Promise<SourceUpdateStatus>;
+  /** Source mode only: quit, pull, rebuild and relaunch. Resolves false when not possible. */
+  applyUpdate?(): Promise<boolean>;
   /** Backend startup progress (H8 §10.3): fires during boot; `ready`/`failed` are terminal. */
   onBackendStartupProgress(callback: (progress: BackendStartupProgress) => void): () => void;
 }

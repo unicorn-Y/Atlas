@@ -54,6 +54,7 @@ import { THEMES, isTheme, nextTheme, themeInfo, type Theme } from './shell/theme
 import { api, relativeTime } from './services/api';
 import { buildTimeline } from './components/timeline';
 import { ComputerEdgeBar } from './components/x2';
+import UpdateBanner from './components/UpdateBanner';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
@@ -1137,6 +1138,7 @@ export default function App() {
       onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />
     {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}
 
+    <UpdateBanner />
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
 }

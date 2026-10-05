@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
+import { checkSourceUpdate, launchSourceUpdater, sourceRoot } from './sourceUpdate.js';
 import { BACKEND_STARTUP_CHANNEL, type BackendStartupProgress } from '../shared/ipc.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -133,6 +134,17 @@ ipcMain.on('window:maximize', () => {
   else windowRef.maximize();
 });
 ipcMain.on('window:close', () => windowRef?.close());
+// Source mode (running from a git checkout without the Vite dev server): updates are
+// pulled and rebuilt by scripts/atlas-update.mjs instead of reinstalling a package.
+const updateRoot = () => (!app.isPackaged && !process.env.VITE_DEV_SERVER_URL ? sourceRoot(app.getAppPath()) : null);
+ipcMain.handle('update:check', () => checkSourceUpdate(updateRoot()));
+ipcMain.handle('update:apply', () => {
+  const root = updateRoot();
+  if (!root) return false;
+  launchSourceUpdater(root);
+  setImmediate(() => app.quit());
+  return true;
+});
 ipcMain.on('window:theme', (_event, theme: unknown) => {
   const icon = typeof theme === 'string' ? themeIcon(theme) : undefined;
   if (icon && windowRef && !windowRef.isDestroyed()) windowRef.setIcon(icon);
