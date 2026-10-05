@@ -373,17 +373,22 @@ def _not_before(created_at: Any, since: datetime | None) -> bool:
 
 async def _snapshot_rewind_files(
     run_ids: list[str], roots: list[str], since: datetime | None = None,
+    time_filtered: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Checkpoints to restore. Runs named by message metadata are taken whole; runs in
+    ``time_filtered`` (found only via the conversation) contribute checkpoints taken
+    at/after ``since``."""
     snapshots: dict[tuple[str, str], dict[str, Any]] = {}
     checkpoints: list[tuple[str, str, str, str]] = []
     orchestrator = _server().orchestrator
     store = getattr(orchestrator, "checkpoints", None) if orchestrator else None
     for run_id in run_ids:
+        run_since = since if time_filtered and run_id in time_filtered else None
         if store is not None:
             for item in store.list_checkpoints(run_id=run_id):
                 manifest_path = store.storage_dir / item["id"] / "manifest.json"
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                if not _not_before(manifest.get("created_at"), since):
+                if not _not_before(manifest.get("created_at"), run_since):
                     continue
                 root = str(Path(manifest["workspace"]).resolve())
                 checkpoints.append((manifest.get("created_at", ""), "local", root, item["id"]))
@@ -405,7 +410,7 @@ async def _snapshot_rewind_files(
             with suppress(Exception):
                 host, remote_root = ssh_workspaces.parse_workspace(root)
                 for item in await ssh_workspaces.list_checkpoints(root, run_id=run_id):
-                    if not _not_before(item.get("created_at"), since):
+                    if not _not_before(item.get("created_at"), run_since):
                         continue
                     checkpoints.append((str(item.get("created_at", "")), "ssh", root, item["id"]))
                     for entry in item.get("files", []):
@@ -516,9 +521,11 @@ async def rewind_conversation(
     # message metadata above finds nothing for real turns. The runtime keeps every
     # run of this conversation; their checkpoints taken at/after the rewind point
     # are exactly the file changes being undone.
+    discovered: set[str] = set()
     for run in _server().runtime_mgr.runs.values():
         if run.conversation_id == conversation_id and run.run_id not in run_ids:
             run_ids.append(str(run.run_id))
+            discovered.add(str(run.run_id))
     since: datetime | None = None
     with suppress(ValueError, TypeError):
         since = datetime.fromisoformat(str(messages[boundary].get("created_at")).replace("Z", "+00:00"))
@@ -529,7 +536,7 @@ async def rewind_conversation(
              *conversation.get("extra_roots", [])]
     file_snapshot, checkpoints = ([], [])
     if req["files"]:
-        file_snapshot, checkpoints = await _snapshot_rewind_files(run_ids, roots, since)
+        file_snapshot, checkpoints = await _snapshot_rewind_files(run_ids, roots, since, discovered)
     rewind_id = uuid.uuid4().hex
     snapshot = {"messages": messages, "files": file_snapshot,
                 "checkpoints": checkpoints, "files_requested": req["files"]}
