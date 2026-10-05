@@ -99,6 +99,37 @@ def fake_llm():
         yield fake
 
 
+def _snapshot_app_services(app) -> tuple[dict[str, Any], Any]:
+    """Record every ``app.state.services`` slot before the lifespan mutates it."""
+    from dataclasses import fields
+
+    from atlas.api.app_services import AppServices
+
+    services = app.state.services
+    return (
+        {f.name: getattr(services, f.name) for f in fields(AppServices)},
+        services.runtime_mgr,
+    )
+
+
+def _restore_app_services(app, snapshot: dict[str, Any], runtime_manager: Any) -> None:
+    """Put the container back exactly as it was before this module's lifespan.
+
+    The lifespan repopulates ``app.state.services`` in place and its shutdown
+    restores routes but never the container slots (and clears the runtime
+    manager's back-reference), so without this the services built inside this
+    module's tmp dirs leak into every later file in the process.
+    """
+    from dataclasses import fields
+
+    from atlas.api.app_services import AppServices
+
+    services = app.state.services
+    for field in fields(AppServices):
+        setattr(services, field.name, snapshot[field.name])
+    runtime_manager.services = services
+
+
 @pytest.fixture(scope="module")
 async def app_client(tmp_path_factory: pytest.TempPathFactory, fake_llm: FakeLLMServer):
     """The real app under lifespan, with the fake adapter attached to its manager.
@@ -150,10 +181,13 @@ async def app_client(tmp_path_factory: pytest.TempPathFactory, fake_llm: FakeLLM
         mp.delenv(key, raising=False)
     mp.setattr(TelegramService, "start", lambda _self: None)
 
+    services_snapshot: dict[str, Any] | None = None
+    runtime_manager: Any = None
     try:
         import atlas.server as server
 
         FakeAdapter.instances.clear()
+        services_snapshot, runtime_manager = _snapshot_app_services(server.app)
         transport = ASGITransport(app=server.app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             async with server.lifespan(server.app):
@@ -182,6 +216,8 @@ async def app_client(tmp_path_factory: pytest.TempPathFactory, fake_llm: FakeLLM
                 yield SimpleNamespace_(ac, server, fake_llm, FakeAdapter.instances[-1])
         FakeAdapter.instances.clear()
     finally:
+        if services_snapshot is not None:
+            _restore_app_services(server.app, services_snapshot, runtime_manager)
         mp.undo()
         # Belt and braces: leave no process-global DBOS behind for the next
         # file, whatever the lifespan teardown managed to do.

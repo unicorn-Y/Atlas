@@ -180,6 +180,17 @@ async def _install_delete_fixtures(
     _write_project_hooks(tmp_path, "SessionEnd", sys.executable, [str(script)])
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
+    # Shared-state note: the delete endpoint resolves memory from the shared
+    # app's AppServices container FIRST and only falls back to the atlas.server
+    # module global (atlas/api/conversations_router.py delete_conversation).
+    # Sibling modules that run the shared app's lifespan on this xdist worker
+    # (e.g. test_models_routes' ``client`` fixture) leave that slot holding a
+    # CLOSED MemoryStore — lifespan shutdown closes the store
+    # (atlas/api/deferred_startup.py) but never restores the container slots.
+    # Patching ``server.memory`` alone is therefore not enough under a shuffled
+    # full-suite run: bind the store through the SAME seam the endpoint reads.
+    # monkeypatch restores each seam's prior value at teardown.
+    monkeypatch.setattr(server.app.state.services, "memory", store)
     monkeypatch.setattr(server, "memory", store)
     monkeypatch.setattr(server, "_hook_store", lambda: _store(tmp_path))
     return store

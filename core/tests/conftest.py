@@ -119,3 +119,205 @@ def pytest_collection_modifyitems(items):
 @pytest.fixture(autouse=True)
 def _atlas_api_token(monkeypatch):
     monkeypatch.setenv("ATLAS_API_TOKEN", API_TOKEN)
+
+# ---------------------------------------------------------------------------
+# H1R4: shared-app pollution guard. The module-level FastAPI app
+# (``atlas.server.app``) is process-global. A test that mounts routes, swaps
+# services, or runs the server lifespan on it without fully restoring the
+# change makes other, unrelated tests fail later in the run. The autouse
+# fixture below snapshots the shared app's mutable surface before every test;
+# the pytest_runtest_teardown hookwrapper re-checks it AFTER the test's FULL
+# fixture teardown (so monkeypatch undo and every function-scoped fixture's
+# restore run first) and fails the test whose teardown observed a net change —
+# the polluter — naming exactly what changed. Design note:
+# artifacts/h1r4/draft_guard_fixture.py.
+# ---------------------------------------------------------------------------
+
+_WATCH_OPENAPI_SCHEMA = True
+
+_SHARED_APP_GUARD_SNAPSHOT: pytest.StashKey = pytest.StashKey()
+
+
+class _AtlasGuardUnset:
+    """Sentinel for an AppServices slot that is currently unbound."""
+
+
+_ATLAS_GUARD_UNSET = _AtlasGuardUnset()
+
+
+def _atlas_guard_getattr(obj: object, name: str) -> object:
+    try:
+        return getattr(obj, name)
+    except AttributeError:
+        return _ATLAS_GUARD_UNSET
+
+
+def _atlas_guard_callable_signature(value: object) -> str:
+    qualname = getattr(value, "__qualname__", None) or repr(value)
+    return f"{qualname}#{id(value):#x}"
+
+
+def _atlas_guard_route_signature(route: object) -> tuple:
+    # starlette 1.7 / fastapi 0.141: APIRoute has .methods (upper-case set, HEAD
+    # auto-added for GET) and .path; WebSocketRoute and Mount have no .methods
+    # but do have .path. Lazy router wrappers from this FastAPI fork
+    # (_IncludedRouter, appended by include_router) have NO .path and a repr
+    # that mutates when their lazy candidate cache materializes — sign those by
+    # (type, id): they are created once per include_router call and stay
+    # identity-stable, so a mid-test include shows up as a brand-new id while
+    # lazy-cache materialization stays invisible.
+    path = getattr(route, "path", None)
+    if isinstance(path, str):
+        methods = getattr(route, "methods", None) or ()
+        return (type(route).__name__, frozenset(str(m) for m in methods), path)
+    return (type(route).__name__, id(route))
+
+
+def _atlas_guard_route_text(signature: tuple) -> str:
+    if len(signature) == 2 and isinstance(signature[1], int):
+        # (type name, id) fallback signature — lazy router wrapper.
+        return f"{signature[0]}#{signature[1]:#x}"
+    if len(signature) == 1:
+        return str(signature[0])
+    kind, methods, path = signature
+    if methods:
+        return "+".join(sorted(methods)) + f" {path}"
+    return f"{kind} {path}"
+
+
+def _atlas_guard_slot_names(services: object) -> tuple[str, ...]:
+    # AppServices is @dataclass(slots=True): __slots__ lists every field name.
+    slots = getattr(type(services), "__slots__", None)
+    if slots is not None:
+        return tuple(str(name) for name in slots)
+    # Defensive: a test swapped the container for a non-slots object.
+    return tuple(sorted(vars(services)))  # type: ignore[assignment]
+
+
+def _atlas_guard_slot_entry(services: object, name: str) -> tuple[str, str, int]:
+    value = _atlas_guard_getattr(services, name)
+    if value is _ATLAS_GUARD_UNSET:
+        return (name, "<unset>", 0)
+    return (name, type(value).__name__, id(value))
+
+
+def _atlas_guard_app_snapshot(app: object) -> dict:
+    routes = tuple(
+        _atlas_guard_route_signature(route) for route in app.router.routes  # type: ignore[attr-defined]
+    )
+    dependency_overrides = tuple(sorted(
+        f"{_atlas_guard_callable_signature(original)} -> {_atlas_guard_callable_signature(override)}"
+        for original, override in app.dependency_overrides.items()  # type: ignore[attr-defined]
+    ))
+    services = app.state.services  # type: ignore[attr-defined]
+    snapshot = {
+        "routes": routes,
+        "dependency_overrides": dependency_overrides,
+        "services_container": (type(services).__name__, id(services)),
+        "services_slots": tuple(sorted(
+            _atlas_guard_slot_entry(services, name)
+            for name in _atlas_guard_slot_names(services)
+        )),
+        "state_keys": tuple(sorted(app.state._state)),  # type: ignore[attr-defined]
+    }
+    if _WATCH_OPENAPI_SCHEMA:
+        schema = app.openapi_schema  # type: ignore[attr-defined]
+        snapshot["openapi_schema"] = (type(schema).__name__, id(schema))
+    return snapshot
+
+
+def _atlas_guard_diff(before: dict, after: dict) -> list[str]:
+    changes: list[str] = []
+
+    if before["routes"] != after["routes"]:
+        old, new = before["routes"], after["routes"]
+        added = [sig for sig in new if sig not in old]
+        removed = [sig for sig in old if sig not in new]
+        for sig in added[:5]:
+            changes.append(f"route added: {_atlas_guard_route_text(sig)}")
+        for sig in removed[:5]:
+            changes.append(f"route removed: {_atlas_guard_route_text(sig)}")
+        if len(added) > 5:
+            changes.append(f"... and {len(added) - 5} more routes added")
+        if len(removed) > 5:
+            changes.append(f"... and {len(removed) - 5} more routes removed")
+        if not added and not removed:
+            changes.append("route table reordered (same routes, different order)")
+
+    old_overrides, new_overrides = (
+        before["dependency_overrides"], after["dependency_overrides"],
+    )
+    if old_overrides != new_overrides:
+        for signature in [s for s in new_overrides if s not in old_overrides][:5]:
+            changes.append(f"dependency override added for {signature}")
+        for signature in [s for s in old_overrides if s not in new_overrides][:5]:
+            changes.append(f"dependency override removed: {signature}")
+
+    old_container = before["services_container"]
+    new_container = after["services_container"]
+    if (old_container[1] != new_container[1] or old_container[0] != new_container[0]) and (
+        before["services_slots"] != after["services_slots"]
+        or old_container[0] != new_container[0]
+    ):
+        changes.append(
+            f"app.state.services container replaced "
+            f"{old_container[0]}#{old_container[1]:#x} -> "
+            f"{new_container[0]}#{new_container[1]:#x} (slot content differs)"
+        )
+    # Same type, different id, identical slot content (e.g. a dataclasses.replace
+    # copy put back by a test's finally) is treated as fully restored.
+
+    old_slots = {entry[0]: entry[1:] for entry in before["services_slots"]}
+    new_slots = {entry[0]: entry[1:] for entry in after["services_slots"]}
+    for name in sorted(set(old_slots) | set(new_slots)):
+        old_entry, new_entry = old_slots.get(name), new_slots.get(name)
+        if old_entry != new_entry:
+            changes.append(
+                f"app.state.services.{name} replaced "
+                f"{old_entry[0]}#{old_entry[1]:#x} -> {new_entry[0]}#{new_entry[1]:#x}"
+            )
+
+    old_keys, new_keys = before["state_keys"], after["state_keys"]
+    for key in [k for k in new_keys if k not in old_keys][:5]:
+        changes.append(f"app.state key added: {key}")
+    for key in [k for k in old_keys if k not in new_keys][:5]:
+        changes.append(f"app.state key removed: {key}")
+
+    if _WATCH_OPENAPI_SCHEMA and before["openapi_schema"] != after["openapi_schema"]:
+        changes.append(
+            "app.openapi_schema cache changed "
+            f"({before['openapi_schema'][0]} -> {after['openapi_schema'][0]}); "
+            "a stale OpenAPI cache leaks swapped-in routes into later /openapi.json reads"
+        )
+    return changes
+
+
+@pytest.fixture(autouse=True)
+def _atlas_shared_app_guard(request: pytest.FixtureRequest):
+    """Snapshot the shared atlas.server.app; fail the test that changes it."""
+    from atlas import server  # one-time import cost per xdist worker process
+
+    request.node.stash[_SHARED_APP_GUARD_SNAPSHOT] = _atlas_guard_app_snapshot(server.app)
+    yield
+    # The comparison deliberately does NOT happen here: fixture teardown would
+    # run BEFORE monkeypatch undo (the existing _atlas_api_token autouse fixture
+    # hoists monkeypatch's setup, so monkeypatch finalizes after this fixture).
+    # pytest_runtest_teardown below checks after ALL finalizers instead.
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None):
+    result = yield  # inner exceptions propagate; the guard stands down
+    snapshot = item.stash.get(_SHARED_APP_GUARD_SNAPSHOT, None)
+    if snapshot is not None:
+        from atlas import server
+
+        changes = _atlas_guard_diff(snapshot, _atlas_guard_app_snapshot(server.app))
+        if changes:
+            summary = "; ".join(changes[:10])
+            pytest.fail(
+                f"shared atlas.server.app state changed during this test "
+                f"(cross-test pollution guard): {summary}",
+                pytrace=False,
+            )
+    return result

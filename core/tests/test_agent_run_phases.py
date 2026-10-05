@@ -181,6 +181,35 @@ async def test_blocked_prompt_hook_persists_reason_and_stops_before_turn(
 
 
 async def test_cancel_event_ends_run_promptly_without_polling(monkeypatch) -> None:
+    """Cancellation must be woken by the cancel Event itself, never a timer.
+
+    Contract (H3.5): a ``atlas-cancel-watcher`` task parks on the cancel
+    Event and feeds ``_CANCEL_REQUESTED`` into the event queue, so the pump
+    — blocked on ``queue.get()`` — wakes the moment the event is set. The
+    retired implementation had no watcher and polled the queue with
+    ``wait_for(..., timeout=0.2)``, so it only noticed a cancel on a tick.
+
+    Detector design — structural, not wall-clock (a wall-clock bound cannot
+    do this job: a poll tick landing right after ``set()`` notices within
+    ~0ms, so no bound reliably separates polling from a healthy wake, and
+    the pre-turn pipeline (``_phase_context`` session-sync disk I/O)
+    legitimately costs 0.15–0.35s under parallel test load, swamping any
+    tight bound). Detection instead:
+      1. a spy on ``asyncio.Event.wait`` proves the watcher parks on THIS
+         cancel event exactly once — a timer-polling watcher re-enters
+         ``wait`` on every tick, and a retired pump (no watcher) never
+         parks at all;
+      2. within two ``asyncio.sleep(0)`` loop passes after ``cancel.set()``
+         — wall-clock free — the watcher task is already done: its wake was
+         scheduled by the event itself, which a >=0.2s timer could not have
+         delivered yet;
+      3. the generous ``elapsed < 1.0s`` bound is an anti-hang guard for
+         the sentinel path only (event fired but sentinel lost), NOT the
+         polling detector — a 0.2s poll would also pass it, which is why
+         (1) and (2) carry the contract.
+    The clock starts only once the watcher is parked, so the machine-speed
+    dependent startup pipeline stays out of every measurement.
+    """
     agent = _orchestrator()
     stop_hooks: list[dict[str, Any]] = []
     agent.hooks.register("agent_stop", lambda **payload: stop_hooks.append(payload))
@@ -192,20 +221,67 @@ async def test_cancel_event_ends_run_promptly_without_polling(monkeypatch) -> No
     monkeypatch.setattr("atlas.agent.run_phases._hermes_turn", slow_turn)
     cancel = asyncio.Event()
 
-    async def set_cancel_later() -> None:
-        await asyncio.sleep(0.01)
-        cancel.set()
+    watcher_waits: list[str] = []
+    real_event_wait = asyncio.Event.wait
 
-    primer = asyncio.create_task(set_cancel_later())
-    started = time.monotonic()
-    events = [event async for event in agent.run("hello", "conv-1", cancel_event=cancel)]
-    elapsed = time.monotonic() - started
-    await primer
+    async def spy_event_wait(self: asyncio.Event) -> bool:
+        task = asyncio.current_task()
+        name = task.get_name() if task is not None else ""
+        if self is cancel and name.startswith("atlas-cancel-watcher"):
+            watcher_waits.append(name)
+        return await real_event_wait(self)
+
+    monkeypatch.setattr(asyncio.Event, "wait", spy_event_wait)
+
+    async def collect() -> list[dict[str, Any]]:
+        return [event async for event in agent.run("hello", "conv-1", cancel_event=cancel)]
+
+    run_task = asyncio.create_task(collect())
+    try:
+        # Wait until the watcher is actually parked on the event so the wake
+        # clock below contains no startup-pipeline noise.
+        watcher: asyncio.Task[None] | None = None
+        deadline = time.monotonic() + 10
+        while watcher is None or not watcher_waits:
+            assert time.monotonic() < deadline, (
+                "atlas-cancel-watcher never parked on the cancel event — "
+                "cancel wake is not event-driven (retired 0.2s poll?)"
+            )
+            await asyncio.sleep(0.005)
+            for task in asyncio.all_tasks():
+                if task.get_name().startswith("atlas-cancel-watcher"):
+                    watcher = task
+
+        assert watcher_waits == [watcher.get_name()], (
+            f"watcher parked {len(watcher_waits)}x before cancel — polling"
+        )
+        started = time.monotonic()
+        cancel.set()
+        # Two loop passes, no wall clock involved: pass 1 resumes the watcher
+        # (it enqueues the sentinel and finishes), pass 2 is slack. A timer
+        # driven wake (>=0.2s) could not have fired in these microsecond
+        # scale passes.
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert watcher.done(), (
+            "cancel watcher did not wake from the event within one loop pass "
+            "— its wake is timer-driven (polling regression)"
+        )
+        events = await asyncio.wait_for(run_task, timeout=10)
+        elapsed = time.monotonic() - started
+    finally:
+        if not run_task.done():
+            run_task.cancel()
+            await asyncio.gather(run_task, return_exceptions=True)
 
     assert [event["type"] for event in events] == ["cancelled"]
-    # The event-driven watcher fires immediately; the retired implementation
-    # could only notice a cancel on a 0.2s wait_for timeout.
-    assert elapsed < 0.15, f"cancel took {elapsed:.3f}s — pump is polling again"
+    assert len(watcher_waits) == 1, (
+        "cancel watcher re-entered Event.wait — it polls on a timer instead "
+        "of sleeping on the event (retired 0.2s poll behavior)"
+    )
+    # Anti-hang guard only: a 0.2s poll would also pass this; the structural
+    # assertions above are what fails a polling implementation.
+    assert elapsed < 1.0, f"cancel wake took {elapsed:.3f}s — sentinel path hung?"
     assert len(stop_hooks) == 1, "agent_stop hook must run exactly once"
 
 

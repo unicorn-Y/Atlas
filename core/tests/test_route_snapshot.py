@@ -270,7 +270,13 @@ def build_route_snapshot(atlas_root: Path = ATLAS) -> dict[str, Any]:
     atlas_root = atlas_root.resolve()
     app = server.app
 
-    openapi = app.openapi()
+    # app.openapi() caches the generated schema on the shared module-level app;
+    # undo that side effect so later tests see the app exactly as at import.
+    openapi_schema_before = app.openapi_schema
+    try:
+        openapi = app.openapi()
+    finally:
+        app.openapi_schema = openapi_schema_before
     tree = _source_tree(atlas_root)
     routes: list[dict[str, Any]] = []
     ordered_routes = _flatten_routes(app.routes)

@@ -38,6 +38,31 @@ def isolated_atlas_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(config, "_config", None)
 
 
+@pytest.fixture(autouse=True)
+def restore_app_services():
+    """Snapshot ``app.state.services`` around every test.
+
+    The ``client`` fixture drives the shared app's real lifespan, which
+    repopulates the container in place (fresh managers, ``startup``, the W10
+    services) and whose shutdown restores routes but never the container
+    slots. Without this restore every service built inside ``tmp_path`` leaks
+    into later tests in the process — dead stores bound to deleted dirs.
+    """
+    from dataclasses import fields
+
+    from atlas.api.app_services import AppServices
+
+    services = app.state.services
+    snapshot = {f.name: getattr(services, f.name) for f in fields(AppServices)}
+    runtime_manager = services.runtime_mgr
+    yield
+    for field in fields(AppServices):
+        setattr(services, field.name, snapshot[field.name])
+    # create_app bound the container to its runtime manager; the lifespan's
+    # shutdown path clears that back-reference, so restore the import-time one.
+    runtime_manager.services = services
+
+
 @pytest.fixture
 async def client(monkeypatch):
     """Async test client using httpx + ASGI transport with lifespan."""

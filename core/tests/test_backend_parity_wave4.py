@@ -682,7 +682,33 @@ async def test_agent_denies_computer_tools_in_docker_sandbox(tmp_path: Path) -> 
 
 
 
-def test_external_agent_refused_unless_full_access(monkeypatch, tmp_path: Path) -> None:
+@pytest.fixture
+def restore_app_services():
+    """Snapshot ``app.state.services`` around the one TestClient test.
+
+    ``TestClient(atlas.server.app)`` runs the module-level app's lifespan,
+    which repopulates the shared container in place; its shutdown restores
+    routes but never the container slots, so the lifespan-built services
+    (bound to this test's tmp config) would leak into later tests.
+    """
+    from dataclasses import fields
+
+    from atlas.api.app_services import AppServices
+
+    from atlas.server import app
+
+    services = app.state.services
+    snapshot = {f.name: getattr(services, f.name) for f in fields(AppServices)}
+    runtime_manager = services.runtime_mgr
+    yield
+    for field in fields(AppServices):
+        setattr(services, field.name, snapshot[field.name])
+    # create_app bound the container to its runtime manager; the lifespan's
+    # shutdown path clears that back-reference, so restore the import-time one.
+    runtime_manager.services = services
+
+
+def test_external_agent_refused_unless_full_access(monkeypatch, tmp_path: Path, restore_app_services) -> None:
     """External Agents auto-approve their own permission prompts, so only full access may start one."""
     import json as _json
 

@@ -204,9 +204,17 @@ async def test_new_web_extract_route_requires_trusted_origin_or_token(monkeypatc
     credentials = {"atlas.telegram.bot_token": "never-return-this-token"}
     class Credentials:
         def get(self, key): return credentials.get(key)
-    monkeypatch.setattr(server, "telegram_service", TelegramService(
+    fake_telegram = TelegramService(
         tmp_path / "telegram.json", credentials=Credentials(),
-    ))
+    )
+    # The channels handlers resolve their service per-app first:
+    # integrations_router._service reads app.state.services before falling back
+    # to the server module attribute. Any earlier test that runs the shared
+    # app's lifespan repopulates that container slot with a real service
+    # (server.py copies its globals in; shutdown never restores them), so pin
+    # BOTH seams or a tokenless real service wins and bot_token_set is False.
+    monkeypatch.setattr(app.state.services, "telegram_service", fake_telegram)
+    monkeypatch.setattr(server, "telegram_service", fake_telegram)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         denied = await client.post("/api/web/extract", json={"url": "https://example.com"},
                                    headers={"Origin": EVIL})

@@ -1,11 +1,35 @@
 from __future__ import annotations
 
+import pytest
 from starlette.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
 from atlas import server
 from atlas.asr import filter_transcription
 from atlas.server import app
+
+
+@pytest.fixture(autouse=True)
+def restore_app_services():
+    """Snapshot ``app.state.services`` around every test.
+
+    The module-level app's lifespan repopulates the shared container in place
+    and its shutdown never restores the slots, so any slot a test touches must
+    be put back or the leak spreads to every later test in this process.
+    """
+    from dataclasses import fields
+
+    from atlas.api.app_services import AppServices
+
+    services = app.state.services
+    snapshot = {f.name: getattr(services, f.name) for f in fields(AppServices)}
+    runtime_manager = services.runtime_mgr
+    yield
+    for field in fields(AppServices):
+        setattr(services, field.name, snapshot[field.name])
+    # create_app bound the container to its runtime manager; the lifespan's
+    # shutdown path clears that back-reference, so restore the import-time one.
+    runtime_manager.services = services
 
 
 def test_transcription_filter_drops_silence_and_tiny_fragments() -> None:
