@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -116,6 +119,53 @@ def fake_keyring(monkeypatch: pytest.MonkeyPatch) -> dict[tuple[str, str], str]:
         lambda service, account: store.pop((service, account), None),
     )
     return store
+
+
+@pytest.mark.asyncio
+async def test_lifespan_shutdown_drains_app_owned_engine_warmup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from atlas.api import deferred_startup
+
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    other_app = SimpleNamespace(state=SimpleNamespace())
+    other_task = asyncio.create_task(asyncio.Event().wait(), name="other-app-startup")
+    other_app.state._atlas_background_startup_tasks = {other_task}
+
+    def warm_engine() -> None:
+        started.set()
+        release.wait(5)
+        finished.set()
+
+    monkeypatch.setattr(
+        deferred_startup, "_engine_startup_registrations", lambda _manager: None,
+    )
+    monkeypatch.setattr(deferred_startup, "_warm_engine", warm_engine)
+    app = SimpleNamespace(state=SimpleNamespace())
+    try:
+        await deferred_startup._start_engine_registrations(
+            app, SimpleNamespace(model_mgr=None),
+        )
+        assert await asyncio.to_thread(started.wait, 5)
+        tasks = app.state._atlas_background_startup_tasks
+        assert len(tasks) == 1
+
+        await deferred_startup._stop_background_startup_tasks(app)
+
+        assert not tasks
+        assert not hasattr(app.state, "_atlas_background_startup_tasks")
+        assert not other_task.done()
+        assert not [
+            task for task in asyncio.all_tasks()
+            if task.get_name() == "startup-engine-warmup"
+        ]
+    finally:
+        release.set()
+        other_task.cancel()
+        await asyncio.gather(other_task, return_exceptions=True)
+    assert await asyncio.to_thread(finished.wait, 5)
 
 
 def _settings() -> dict[str, Any]:

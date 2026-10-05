@@ -79,33 +79,43 @@ def test_fallback_estimator_stays_within_15_percent_of_tiktoken(sample: str) -> 
 
 
 def test_estimate_never_waits_for_the_tokenizer_download(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The first use of an encoding downloads its BPE file. That used to run inside the
-    first plan/compaction on the event loop and stalled the backend; estimates must
-    answer immediately with the fallback while the encoding loads in the background."""
+    """A slow encoding load falls back immediately, then publishes the ready encoding."""
     import threading
     import time
 
     from agent.model_metadata import estimate_request_tokens_rough
 
+    real_encoding = tiktoken.get_encoding("cl100k_base")
     release = threading.Event()
-    real_get_encoding = tiktoken.get_encoding
+    load_started = threading.Event()
+    load_finished = threading.Event()
+    real_load_encoding = tokens._load_encoding
 
     def slow_get_encoding(name: str):
-        release.wait(10)
-        return real_get_encoding(name)
+        load_started.set()
+        assert release.wait(5)
+        return real_encoding
+
+    def tracked_load_encoding(name: str) -> None:
+        try:
+            real_load_encoding(name)
+        finally:
+            load_finished.set()
 
     monkeypatch.setattr(tiktoken, "get_encoding", slow_get_encoding)
+    monkeypatch.setattr(tokens, "_load_encoding", tracked_load_encoding)
     sample = _MIXED_SAMPLES[1]
     started = time.perf_counter()
-    first = estimate_tokens(sample)
-    assert time.perf_counter() - started < 1.0
-    assert first == estimate_request_tokens_rough([{"role": "user", "content": sample}])
-
-    release.set()
-    deadline = time.perf_counter() + 10
-    while "cl100k_base" not in tokens._ENCODINGS and time.perf_counter() < deadline:
-        time.sleep(0.01)
-    assert estimate_tokens(sample) == len(real_get_encoding("cl100k_base").encode(sample))
+    try:
+        first = estimate_tokens(sample)
+        assert time.perf_counter() - started < 1.0
+        assert first == estimate_request_tokens_rough([{"role": "user", "content": sample}])
+        assert load_started.wait(5)
+    finally:
+        release.set()
+        if load_started.is_set() or "cl100k_base" in tokens._LOADING:
+            assert load_finished.wait(5)
+    assert estimate_tokens(sample) == len(real_encoding.encode(sample))
 
 
 def test_tokenizer_download_failure_keeps_the_fallback(monkeypatch: pytest.MonkeyPatch) -> None:

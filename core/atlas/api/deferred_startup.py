@@ -39,6 +39,8 @@ async def shutdown_lifespan_components(app: Any, state: dict[str, Any], route_co
     from atlas.tools.x2 import browser as x2browser
     from atlas.tools.x2 import computer as x2computer
 
+    await _stop_background_startup_tasks(app)
+
     def resource(name: str) -> Any:
         return state[name] if name in state else getattr(server_module, name, None)
 
@@ -143,7 +145,7 @@ async def run_deferred_startup(app: Any, services: Any, components: StartupCompo
         ),
         asyncio.create_task(
             _component(components, "engine_registrations",
-                       lambda: _start_engine_registrations(services)),
+                       lambda: _start_engine_registrations(app, services)),
             name="startup-engine-registrations",
         ),
         asyncio.create_task(
@@ -330,7 +332,7 @@ async def _start_skills_plugins(services: Any, components: StartupComponents) ->
     await _component(components, "plugins", _load_plugins)
 
 
-async def _start_engine_registrations(services: Any) -> None:
+async def _start_engine_registrations(app: Any, services: Any) -> None:
     """S2.5: H3/H5 seam — once-per-process registrations (Atlas policy plugin
     + Hermes MCP servers) so the first user turn does not pay for them.
     Idempotent and fingerprint-checked; a failure only means the first turn
@@ -343,8 +345,12 @@ async def _start_engine_registrations(services: Any) -> None:
     task = asyncio.get_running_loop().create_task(
         asyncio.to_thread(_warm_engine), name="startup-engine-warmup",
     )
-    _BACKGROUND.add(task)
-    task.add_done_callback(_BACKGROUND.discard)
+    background_tasks = getattr(app.state, "_atlas_background_startup_tasks", None)
+    if background_tasks is None:
+        background_tasks = set()
+        app.state._atlas_background_startup_tasks = background_tasks
+    background_tasks.add(task)
+    task.add_done_callback(background_tasks.discard)
 
 
 # Modules the first turn needs. Importing them here, on a worker thread, keeps the
@@ -356,7 +362,19 @@ _ENGINE_WARM_IMPORTS = (
 )
 
 
-_BACKGROUND: set[asyncio.Task[Any]] = set()
+async def _stop_background_startup_tasks(app: Any) -> None:
+    """Cancel and drain this app's optional warmups without waiting for their threads."""
+    background_tasks = getattr(app.state, "_atlas_background_startup_tasks", None)
+    if background_tasks is None:
+        return
+    tasks = tuple(background_tasks)
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+        background_tasks.difference_update(tasks)
+    if not background_tasks:
+        delattr(app.state, "_atlas_background_startup_tasks")
 
 
 def _engine_startup_registrations(model_manager: Any) -> None:

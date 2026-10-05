@@ -16,6 +16,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import uuid
 
 import pytest
@@ -242,8 +243,17 @@ async def test_daily_steer_queue_and_stop(k1_backend):  # noqa: F811
 async def test_daily_plan_mode_approve_then_execute(k1_backend):  # noqa: F811
     backend = k1_backend
     plan_target = backend.root / "workspace/plan-output.txt"
+    greet_target = backend.root / "workspace/greet.py"
     approved = {"v": False}
     executed = {"v": False}
+    greet_written = {"v": False}
+
+    source = (
+        'def greet(name):\n'
+        '    return f"你好，{name}！"\n\n'
+        'if __name__ == "__main__":\n'
+        '    print(greet("Atlas"))\n'
+    )
 
     after_approval: list[str] = []
 
@@ -255,6 +265,9 @@ async def test_daily_plan_mode_approve_then_execute(k1_backend):  # noqa: F811
             executed["v"] = True
             return ToolCall("write_file", {"path": str(plan_target),
                                            "content": "K1_PLANNED_AND_APPROVED"})
+        if not greet_written["v"]:
+            greet_written["v"] = True
+            return ToolCall("write_file", {"path": str(greet_target), "content": source})
         return Text("K1_PLAN_EXECUTED")
 
     backend.fake._responder = responder
@@ -275,6 +288,19 @@ async def test_daily_plan_mode_approve_then_execute(k1_backend):  # noqa: F811
     assert events[-1]["event"] == "run.completed"
     # Real models only execute when told to: the approval turn must carry the instruction.
     assert after_approval and "plan above is approved" in after_approval[0], after_approval[:1]
+
+    # Exercise the 08 checker at the end of the existing fake plan/approval run.
+    assert greet_target.is_file()
+    checker = os.path.join(os.path.dirname(__file__), "live", "08-plan-execute", "check.py")
+    env = {**os.environ, "PYTHONIOENCODING": "gbk", "PYTHONUTF8": "0"}
+    checked = subprocess.run(
+        [sys.executable, checker, str(backend.root / "workspace")],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=60, cwd=os.path.dirname(checker), env=env,
+    )
+    assert checked.returncode == 0 and checked.stdout.strip() == "CHECK-OK", (
+        checked.stdout, checked.stderr,
+    )
 
 
 # ---------------------------------------------------------------------------

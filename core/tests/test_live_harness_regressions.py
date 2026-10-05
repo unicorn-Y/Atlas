@@ -1,6 +1,7 @@
 """Fake stream checks for live orchestration; these make no model requests."""
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -12,12 +13,46 @@ import pytest
 from tests.test_live_full_run_server import (
     Backend,
     _finish_observed_process,
+    _fixture,
     _observe_run_line,
     _pump_stderr,
 )
 from tests.test_live_model_smoke import _remaining_live_input_budget
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize(
+    ("script", "expected_code"),
+    [
+        ('print("你好，Atlas！")', 0),
+        ("print(chr(0xfffd))", 1),
+        ("import sys; sys.stdout.write('错误'+chr(0xfffd)); "
+         "sys.stderr.write('后台错误'+chr(0xfffd)); sys.exit(3)", 1),
+    ],
+)
+def test_plan_scenario_checker_handles_gbk_child_and_diagnostic_output(
+    tmp_path, script, expected_code,
+):
+    """The 08 fixture checker stays useful under the Windows GBK console encoding."""
+    (tmp_path / "greet.py").write_text(script + "\n", encoding="utf-8")
+    fixture = _fixture("08-plan-execute")
+    env = {**os.environ, "PYTHONIOENCODING": "gbk", "PYTHONUTF8": "0"}
+    proc = subprocess.run(
+        [sys.executable, str(fixture / "check.py"), str(tmp_path)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=60, cwd=str(fixture), env=env,
+    )
+
+    assert proc.returncode == expected_code
+    if expected_code == 0:
+        assert proc.stdout.strip() == "CHECK-OK"
+    else:
+        assert "CHECK-FAIL" in proc.stdout
+        assert r"\ufffd" in proc.stdout
+        assert "UnicodeEncodeError" not in proc.stderr
+        if "sys.exit(3)" in script:
+            assert "rc=3" in proc.stdout
 
 
 def test_live_backend_waits_for_ready_health_body(tmp_path, monkeypatch):
