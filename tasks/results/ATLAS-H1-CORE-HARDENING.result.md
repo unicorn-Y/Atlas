@@ -1,3 +1,35 @@
+# ATLAS-H1-CORE-HARDENING 结果（用户决定收尾）
+
+日期：2026-10-05　状态：**CLOSED_BY_USER — 合入 main，不做剩余正式验收**
+
+用户在 Z5 进行中叫停，决定 H1 就此收住、进入日常使用。合入前，Claude 在主机工作树
+`D:\Atlas-h1-core-hardening`（HEAD `b0c4ac8`）用 `artifacts/h1r3/controller_pytest.py`
+跑全量 unit（`core/tests -n 8 --timeout=300`）：**2011 passed / 4 skipped，exit 0，116 秒，进程正常退出，无残留**。
+
+## 已达成（有证据）
+
+- 内核接口化：Atlas 不再改写 Hermes 私有属性；fork 钉在 `atlas` 分支 `ab4209b0`。
+- `server.py` 8609 → 约 760 行；路由快照 394 项一致。
+- 会话记录以 SessionDB 为唯一来源；真实库副本迁移 59 会话 / 117 消息零不一致。
+- 每会话复用 Agent、MCP 只注册一次、事件驱动；统一模型路由，Claude 原生通道自动探测。
+- 冷启动中位数 3.38 秒；无头 CLI `atlas run` / `atlas doctor`。
+- 测试污染从源头清掉，并加了 autouse 守卫；默认顺序和 3 个随机顺序全量 unit 都全绿。
+- 本波修掉的真实生产 bug：D1/D2/D3（中转站模型名、失败报成成功、工作区 cwd 泄漏）、`/api/search` 500、
+  渠道 GAP-1/GAP-2、CLI 计划模式挂死、回退时文件不恢复、分叉摘要位置错误、用量缓存丢失、
+  Windows hook 的 bash 解析到 WSL、SQLite 工作线程泄漏、部分用量被当成 0。
+
+## 未完成（用户决定不再追）
+
+- A6 并发隔离测试 20 次独立进程连跑（之前 3 整次 20 轮通过过）。
+- A8 原生 Anthropic 四项没有逐项对上测试名。
+- A14 unit+integration 层计时、desktop 层、前端全量没按最终口径跑。
+- A15 真实模型：上一轮 12 个场景里 10 个 CHECK-OK；08/10/12 的脚本已修好，但没重跑。
+- 全量 unit 日志里有一个子进程读取线程的 GBK 解码警告（`subprocess._readerthread`），未定位。
+
+以下为 Codex/ZCode 的阶段性记录，保留作证据。
+
+---
+
 # ATLAS-H1-CORE-HARDENING result checkpoint
 
 Date: 2026-10-05  
