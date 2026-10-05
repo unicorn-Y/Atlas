@@ -13,9 +13,12 @@ require a working OS credential store, mirroring the original behaviour).
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "Atlas"
 KEY_PREFIX = "atlas.channel"
@@ -39,14 +42,25 @@ class KeyringCredentialStore:
             import keyring
         except ImportError:
             return None
-        return keyring.get_password(SERVICE_NAME, key)
+        try:
+            return keyring.get_password(SERVICE_NAME, key)
+        except Exception:
+            # e.g. WinError 1312 when the session has no credential store (service /
+            # remote logon): callers fall back to the environment variable.
+            logger.warning("channel credential store unreadable", exc_info=True)
+            return None
 
     def set(self, key: str, value: str) -> None:
         try:
             import keyring
         except ImportError:
             raise RuntimeError("系统凭据库不可用，请安装 Atlas 的完整依赖后重试。") from None
-        keyring.set_password(SERVICE_NAME, key, value)
+        try:
+            keyring.set_password(SERVICE_NAME, key, value)
+        except Exception as exc:
+            # Surface as the documented RuntimeError (the API turns it into a 503 with
+            # this message) instead of an unexplained 500.
+            raise RuntimeError(f"系统凭据库写入失败：{exc}") from exc
 
     def delete(self, key: str) -> None:
         try:
@@ -56,7 +70,9 @@ class KeyringCredentialStore:
         try:
             keyring.delete_password(SERVICE_NAME, key)
         except keyring.errors.PasswordDeleteError:
-            pass
+            return
+        except Exception as exc:
+            raise RuntimeError(f"系统凭据库删除失败：{exc}") from exc
 
 
 def channel_key(name: str, field: str) -> str:

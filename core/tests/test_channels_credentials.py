@@ -126,3 +126,35 @@ def test_keyring_backed_store_roundtrip(monkeypatch):
     assert store.get("telegram", "bot_token") == "ring-token"
     store.delete("telegram", "bot_token")
     assert store.get("telegram", "bot_token") is None
+
+
+def test_unusable_os_credential_store_degrades_with_clear_errors(monkeypatch):
+    """WinError 1312 (no credential store in this logon session) must not surface as an
+    unexplained 500: reads fall back to the env var, writes raise the documented
+    RuntimeError the API maps to 503."""
+
+    class NoLogonSession(Exception):
+        pass
+
+    def broken(*_args):
+        raise NoLogonSession(1312, "CredRead", "A specified logon session does not exist.")
+
+    fake_errors = types.ModuleType("keyring.errors")
+    fake_errors.PasswordDeleteError = type("PasswordDeleteError", (Exception,), {})
+    fake_keyring = types.ModuleType("keyring")
+    fake_keyring.errors = fake_errors
+    fake_keyring.get_password = broken
+    fake_keyring.set_password = broken
+    fake_keyring.delete_password = broken
+    monkeypatch.setitem(sys.modules, "keyring", fake_keyring)
+    monkeypatch.setitem(sys.modules, "keyring.errors", fake_errors)
+
+    store = ChannelCredentialStore(
+        base=KeyringCredentialStore(),
+        environ={"ATLAS_CHANNEL_WEBHOOK_SECRET": "from-env"},
+    )
+    assert store.get("webhook", "secret") == "from-env"
+    with pytest.raises(RuntimeError, match="系统凭据库写入失败"):
+        store.set("webhook", "secret", "value")
+    with pytest.raises(RuntimeError, match="系统凭据库删除失败"):
+        store.delete("webhook", "secret")
