@@ -33,6 +33,7 @@ data/hooks.toml
 data/scheduler.lock
 data/trusted-workspaces.json
 data/hub.json
+data/evolution/
 data/channel-configs.json
 data/channels.sqlite-wal
 data/channels.sqlite-shm
