@@ -2722,8 +2722,18 @@ async def _execute_run(
                         return
                     run.status = "running"
                     edits = approval.get("edits", "").strip()
+                    # The approval itself must tell the model to act: the continuation
+                    # used to send an empty user message, and real models answered it
+                    # with a summary instead of running a single tool.
+                    instruction = (
+                        "The plan above is approved. Execute it now: carry out every step "
+                        "with the tools (do not only describe it), verify the result, "
+                        "then report what was done."
+                    )
+                    if edits:
+                        instruction += f"\n\nApply these changes to the plan first: {edits}"
                     await _execute_run(
-                        conn_id, run, ("Approved plan. " + edits) if edits else "",
+                        conn_id, run, instruction,
                         model_id, plan_state=run.plan_state,
                         image_attachments=image_attachments,
                         active_skill_instructions=active_skill_instructions,

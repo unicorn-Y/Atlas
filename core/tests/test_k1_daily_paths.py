@@ -245,9 +245,12 @@ async def test_daily_plan_mode_approve_then_execute(k1_backend):  # noqa: F811
     approved = {"v": False}
     executed = {"v": False}
 
+    after_approval: list[str] = []
+
     def responder(record):
         if not approved["v"]:
             return Text("K1_PLAN_READY: 1) write plan-output.txt 2) confirm")
+        after_approval.append(last_user_text(record))
         if not executed["v"]:
             executed["v"] = True
             return ToolCall("write_file", {"path": str(plan_target),
@@ -270,6 +273,8 @@ async def test_daily_plan_mode_approve_then_execute(k1_backend):  # noqa: F811
         "after approval the plan must execute with real write tools"
     assert _has_message(events, "K1_PLAN_EXECUTED")
     assert events[-1]["event"] == "run.completed"
+    # Real models only execute when told to: the approval turn must carry the instruction.
+    assert after_approval and "plan above is approved" in after_approval[0], after_approval[:1]
 
 
 # ---------------------------------------------------------------------------

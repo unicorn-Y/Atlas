@@ -323,3 +323,31 @@ async def test_slow_agent_construction_does_not_block_the_event_loop(tmp_path):
     stop.set()
     await ticking
     assert max(gaps) < 0.5, f"event loop stalled for {max(gaps):.2f}s"
+
+
+@pytest.mark.asyncio
+async def test_budget_stopped_turn_is_reported_as_failed(tmp_path, monkeypatch):
+    """A turn the input-token budget stopped must not look completed (exit 0)."""
+    monkeypatch.setenv("ATLAS_RUN_INPUT_TOKEN_LIMIT", "100")
+    monkeypatch.setenv("ATLAS_RUN_USAGE_AUDIT", str(tmp_path / "audit.jsonl"))
+
+    class BudgetedAgent(FakeHermesAgent):
+        def run_conversation(self, **_kwargs):
+            blocked = self.kwargs["hooks"].before_provider_request(10_000, "req-1")
+            assert blocked is True
+            return {"final_response": "", "messages": []}
+
+    models = SimpleNamespace(
+        current_model="test-model", current_litellm_model="openai/test-model",
+        gateway_base_url="http://fake.invalid/v1", _api_key="fake-key",
+        list_models=lambda: [{"id": "test-model"}],
+    )
+    runtime = HermesRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
+                            agent_factory=BudgetedAgent)
+    result = None
+    async for event in runtime.run_turn(message="x", conversation_id="c", workspace=None,
+                                        history=[]):
+        if event["type"] == "hermes.result":
+            result = event["result"]
+    assert result is not None and result["failed"] is True
+    assert "预算" in result["error"]

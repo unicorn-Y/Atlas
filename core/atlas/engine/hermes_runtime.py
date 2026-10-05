@@ -815,6 +815,7 @@ class HermesRuntime:
         from atlas.usage import env_run_usage_budget
 
         usage_budget = env_run_usage_budget()
+        budget_stopped = {"v": False}
 
         def on_stream_delta(text: Any) -> None:
             # Hermes sends None to clear its temporary pre-tool display buffer;
@@ -923,6 +924,7 @@ class HermesRuntime:
                 model=model_id or current, wire_model=str(route_kwargs.get("model", "")),
             ):
                 return False
+            budget_stopped["v"] = True
             emit({"type": "run.recovery.notice", "data": {
                 "message": "本次运行的预计输入 token 将超过预算上限，已停止发送下一请求。",
                 "limit": usage_budget.limit, "used": usage_budget.used,
@@ -1491,6 +1493,12 @@ class HermesRuntime:
             result = await task
             if not isinstance(result, dict):
                 result = {"final_response": str(result or ""), "messages": []}
+            if budget_stopped["v"] and not result.get("failed"):
+                # The engine ends a budget-blocked turn normally; reporting it as
+                # completed made an unfinished task look done (exit 0).
+                result = {**result, "failed": True, "error": (
+                    "本次运行已达到输入 token 预算上限，任务未完成。"
+                )}
             yield {"type": "hermes.result", "result": result}
             stream_completed = True
         except BaseException:
