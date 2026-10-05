@@ -305,10 +305,33 @@ def _atlas_shared_app_guard(request: pytest.FixtureRequest):
     # pytest_runtest_teardown below checks after ALL finalizers instead.
 
 
+_MODULE_BASELINES: dict[str, dict] = {}
+
+
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_runtest_setup(item: pytest.Item):
+    # Before the first test of a module sets up module-scoped fixtures (e.g. a shared
+    # app lifespan), record the shared-app state they must restore by module end.
+    module = getattr(item, "module", None)
+    key = getattr(module, "__name__", "")
+    if key and key not in _MODULE_BASELINES:
+        from atlas import server
+
+        _MODULE_BASELINES[key] = _atlas_guard_app_snapshot(server.app)
+    return (yield)
+
+
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None):
     result = yield  # inner exceptions propagate; the guard stands down
     snapshot = item.stash.get(_SHARED_APP_GUARD_SNAPSHOT, None)
+    module_name = getattr(getattr(item, "module", None), "__name__", "")
+    leaving_module = nextitem is None or getattr(
+        getattr(nextitem, "module", None), "__name__", "") != module_name
+    if leaving_module and module_name in _MODULE_BASELINES:
+        # Module-scoped fixtures were torn down with this test: judge the module as a
+        # whole against the state before its fixtures existed, not this test's start.
+        snapshot = _MODULE_BASELINES[module_name]
     if snapshot is not None:
         from atlas import server
 
