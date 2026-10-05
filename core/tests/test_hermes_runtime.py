@@ -329,7 +329,7 @@ async def test_slow_agent_construction_does_not_block_the_event_loop(tmp_path):
 async def test_budget_stopped_turn_is_reported_as_failed(tmp_path, monkeypatch):
     """A turn the input-token budget stopped must not look completed (exit 0)."""
     monkeypatch.setenv("ATLAS_RUN_INPUT_TOKEN_LIMIT", "100")
-    monkeypatch.setenv("ATLAS_RUN_USAGE_AUDIT", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("ATLAS_RUN_BUDGET_ID", f"budget-stop-{tmp_path.name}")
 
     class BudgetedAgent(FakeHermesAgent):
         def run_conversation(self, **_kwargs):
