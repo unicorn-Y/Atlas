@@ -8,6 +8,7 @@ import pytest
 
 from atlas.memory import MemoryStore
 from atlas.projects import ProjectStore
+from tests.fakes.session_store import save_memory_fixture_message
 
 
 @pytest.fixture
@@ -86,9 +87,11 @@ async def test_session_search_scopes_to_project_conversations(
     try:
         project = await store.create_project("Atlas")
         inside = await memory.create_conversation("Atlas work")
-        await memory.save_message(inside, "user", "the hybrid router needs a fallback")
+        await save_memory_fixture_message(
+            memory, inside, "user", "the hybrid router needs a fallback",
+        )
         outside = await memory.create_conversation("Random")
-        await memory.save_message(outside, "user", "hybrid cookies recipe")
+        await save_memory_fixture_message(memory, outside, "user", "hybrid cookies recipe")
         await store.attach_conversation(project.project_id, inside)
 
         unscoped = await memory.session_search("hybrid")
@@ -125,7 +128,7 @@ async def test_find_by_conversation_and_orchestrator_context_block(
     memory = MemoryStore(db_path=tmp_path / "ctx-memory.db")
     await memory.init()
     try:
-        await memory.save_message(conv_id, "user", "hub 后台任务上线了")
+        await save_memory_fixture_message(memory, conv_id, "user", "hub 接着干什么")
         orchestrator = AgentOrchestrator(
             model_mgr=MagicMock(), memory=memory, mcp_client=None, projects=store,
         )

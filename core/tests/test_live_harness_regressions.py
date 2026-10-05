@@ -4,10 +4,13 @@ import json
 import subprocess
 import sys
 import threading
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
 from tests.test_live_full_run_server import (
+    Backend,
     _finish_observed_process,
     _observe_run_line,
     _pump_stderr,
@@ -15,6 +18,28 @@ from tests.test_live_full_run_server import (
 from tests.test_live_model_smoke import _remaining_live_input_budget
 
 pytestmark = pytest.mark.unit
+
+
+def test_live_backend_waits_for_ready_health_body(tmp_path, monkeypatch):
+    import httpx
+
+    process = Mock()
+    process.poll.return_value = None
+    monkeypatch.setattr(subprocess, "Popen", Mock(return_value=process))
+    statuses = iter(("starting", "ok"))
+    probe = Mock(side_effect=lambda *_args, **_kwargs: SimpleNamespace(
+        status_code=200, json=lambda: {"status": next(statuses)},
+    ))
+    monkeypatch.setattr(httpx, "get", probe)
+    monkeypatch.setattr("tests.test_live_full_run_server.time.sleep", lambda _seconds: None)
+    backend = Backend(SimpleNamespace(evidence=tmp_path, child_env=lambda: {}))
+    try:
+        backend.start()
+        assert probe.call_count == 2
+    finally:
+        backend.stop()
+    process.terminate.assert_called_once()
+    process.wait.assert_called_once_with(timeout=30)
 
 
 def test_steer_observes_tool_after_run_id_was_already_received():

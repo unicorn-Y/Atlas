@@ -8,6 +8,7 @@ import pytest
 
 from atlas.memory import MemoryStore
 from atlas.memory.memoryos_adapter import MemoryOSAdapter
+from tests.fakes.session_store import save_memory_fixture_message
 
 
 @pytest.fixture
@@ -38,12 +39,15 @@ async def test_commitment_lifecycle_requires_user_evidence(
     assert len(active) == 1
     assert active[0]["commitment_status"] == "active"
 
-    non_user_message = await adapter.store.save_message(
+    non_user_message = await save_memory_fixture_message(
+        adapter.store,
         conversation, "assistant", "好的",
     )
     assert await adapter.fulfill_commitment("weekly-report", non_user_message) is False
 
-    user_message = await adapter.store.save_message(conversation, "user", "周报制度取消")
+    user_message = await save_memory_fixture_message(
+        adapter.store, conversation, "user", "周报制度取消",
+    )
     assert await adapter.cancel_commitment("weekly-report", user_message) is True
     assert await adapter.active_commitments() == []
 
@@ -67,7 +71,9 @@ async def test_project_state_and_decisions(adapter: MemoryOSAdapter) -> None:
 
 async def test_session_search_passthrough(adapter: MemoryOSAdapter) -> None:
     conversation = await adapter.store.create_conversation("recall")
-    await adapter.store.save_message(conversation, "user", "dbos durable 波次已经合并")
+    await save_memory_fixture_message(
+        adapter.store, conversation, "user", "dbos durable 波次已经合并",
+    )
     hits = await adapter.session_search("dbos durable")
     assert hits and "dbos" in hits[0]["content"].lower()
     assert await adapter.session_search("   ") == []

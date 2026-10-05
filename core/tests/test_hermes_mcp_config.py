@@ -71,7 +71,9 @@ async def test_atlas_compression_model_setting_uses_route_wire_model(monkeypatch
     class Router:
         async def resolve(self, model_id, purpose):
             assert (model_id, purpose) == ("cheap", "compression")
-            return SimpleNamespace(wire_model="cheap-wire-model", model="openai/cheap-model")
+            return SimpleNamespace(
+                wire_model="cheap-wire-model", model="openai/cheap-model", model_id="cheap",
+            )
 
     models = SimpleNamespace(model_router=Router())
 

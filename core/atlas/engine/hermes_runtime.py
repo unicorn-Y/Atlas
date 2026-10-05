@@ -93,7 +93,7 @@ async def _route_wire_model(model_manager: Any, model_id: str, purpose: str) -> 
         from atlas.models.router import _model_for_provider
 
         return str(_model_for_provider(model, native=True) or model_id)
-    route = await router.resolve(model_id, purpose)
+        route = await router.resolve(model_id, purpose)
     return str(route.wire_model or route.model)
 
 
@@ -322,6 +322,7 @@ class HermesRuntime:
 
     async def _collect_moa_references(
         self, message: str, history: list[dict[str, Any]], system_message: str | None,
+        usage_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> list[dict[str, str]]:
         """Consult configured Atlas models before the primary Hermes turn.
 
@@ -380,6 +381,7 @@ class HermesRuntime:
                 else:
                     result = await self.model_manager.model_router.complete_for(
                         item["model"], "moa", messages, max_tokens=1200,
+                        usage_callback=usage_callback,
                     )
                     answer = result.text
                 return {"model": item["id"], "text": answer[:6000]}
@@ -516,25 +518,55 @@ class HermesRuntime:
         return self._ensure_atlas_mcp_registered()
 
     @staticmethod
-    async def _apply_compression_model_setting(agent: Any, model_manager: Any) -> None:
+    async def _apply_compression_model_setting(
+        agent: Any, model_manager: Any, primary_route_kwargs: dict[str, Any] | None = None,
+    ) -> None:
         """Apply Atlas' optional compression model to Hermes' ContextCompressor.
 
-        Empty setting leaves Hermes on the current run model. The selected
+        Empty setting restores Hermes to the current run model. The selected
         model's id is translated to its bare wire id (H10.2-DEFECT-1) — the
         compressor sends ``summary_model`` verbatim to the provider, so the
-        litellm-style routing prefix would 404 on real relays. No credentials
-        are copied into Hermes config.
+        litellm-style routing prefix would 404 on real relays. Provider, endpoint,
+        key and API mode are pinned from that same resolved route so a separate
+        compression provider uses its own transport configuration.
         """
         from atlas.config import load_user_settings
 
         selected = str(load_user_settings().get("compression_model", "")).strip()
-        if not selected:
-            return
         compressor = getattr(agent, "context_compressor", None)
         if compressor is not None:
-            compressor.summary_model = await _route_wire_model(
-                model_manager, selected, "compression",
-            )
+            setter = getattr(compressor, "set_summary_request_callback", None)
+            if callable(setter):
+                hooks = getattr(agent, "hooks", None)
+                setter(
+                    getattr(hooks, "on_usage", None),
+                    before_request=getattr(hooks, "before_provider_request", None),
+                    after_request=getattr(hooks, "after_provider_request", None),
+                    disable_provider_retries=bool(getattr(hooks, "disable_provider_retries", False)),
+                )
+        if not selected:
+            if compressor is not None:
+                compressor.summary_model = None
+                compressor.summary_model_id = None
+                for name in ("provider", "base_url", "api_key", "api_mode"):
+                    if primary_route_kwargs is not None and name in primary_route_kwargs:
+                        setattr(compressor, name, primary_route_kwargs[name])
+            return
+        if compressor is not None:
+            router = getattr(model_manager, "model_router", None)
+            if router is None:
+                compressor.summary_model = await _route_wire_model(
+                    model_manager, selected, "compression",
+                )
+                compressor.summary_model_id = selected
+                return
+            route = await router.resolve(selected, "compression")
+            compressor.summary_model = route.wire_model or route.model
+            compressor.summary_model_id = route.model_id or selected
+            compressor.provider = route.provider
+            compressor.base_url = route.base_url
+            compressor.api_key = route.key
+            compressor.api_mode = route.api_mode
 
     async def compact_session(
         self, *, conversation_id: str, workspace: str | None,
@@ -613,7 +645,7 @@ class HermesRuntime:
             fallback_model=model_config.get("fallback"),
             max_tokens=model_config.get("max_output_tokens"),
         )
-        asyncio.run(self._apply_compression_model_setting(agent, settings))
+        asyncio.run(self._apply_compression_model_setting(agent, settings, route_kwargs))
         try:
             open_session_db = getattr(agent, "_get_session_db_for_recall", None)
             if callable(open_session_db) and getattr(agent, "_session_db", None) is None:
@@ -717,6 +749,10 @@ class HermesRuntime:
         def emit(event: dict[str, Any]) -> None:
             loop.call_soon_threadsafe(queue.put_nowait, event)
 
+        from atlas.usage import env_run_usage_budget
+
+        usage_budget = env_run_usage_budget()
+
         def on_stream_delta(text: Any) -> None:
             # Hermes sends None to clear its temporary pre-tool display buffer;
             # Atlas streams append-only chunks and must not render it as "None".
@@ -787,6 +823,45 @@ class HermesRuntime:
                     loop,
                 )
                 _track_lifecycle_future(future)
+
+        usage_rows: list[dict[str, Any]] = []
+
+        def on_usage(data: dict[str, Any]) -> None:
+            row = dict(data)
+            row.setdefault("request_id", uuid.uuid4().hex)
+            row.setdefault("purpose", "conversation")
+            if row["purpose"] == "conversation":
+                row["model"] = model_id or current
+            else:
+                row.setdefault("model", model_id or current)
+            row.setdefault("wire_model", route_kwargs.get("model", ""))
+            context_limit = row.get("context_limit") or model_config.get("context_window")
+            if isinstance(context_limit, int) and context_limit > 0:
+                row.setdefault("context_limit", context_limit)
+            usage_rows.append(row)
+            if usage_budget is not None and not usage_budget.record(row):
+                emit({"type": "run.recovery.notice", "data": {
+                    "message": "本次运行已达到输入 token 预算上限。",
+                    "limit": usage_budget.limit, "used": usage_budget.used,
+                }})
+            emit({"type": "run_usage", "usage": row})
+
+        def before_provider_request(estimated_input_tokens: int, request_id: str) -> bool:
+            if usage_budget is None or usage_budget.reserve(
+                request_id, estimated_input_tokens, purpose="conversation",
+                model=model_id or current, wire_model=str(route_kwargs.get("model", "")),
+            ):
+                return False
+            emit({"type": "run.recovery.notice", "data": {
+                "message": "本次运行的预计输入 token 将超过预算上限，已停止发送下一请求。",
+                "limit": usage_budget.limit, "used": usage_budget.used,
+                "estimated_input_tokens": max(0, int(estimated_input_tokens or 0)),
+            }})
+            return True
+
+        def after_provider_request(request_id: str) -> None:
+            if usage_budget is not None:
+                usage_budget.release(request_id)
 
         def on_clarify(questions: Any) -> None:
             if input_callback is None:
@@ -947,7 +1022,7 @@ class HermesRuntime:
             if moa_enabled:
                 consult_started = time.perf_counter()
                 references = await self._collect_moa_references(
-                    message, history, system_message,
+                    message, history, system_message, usage_callback=on_usage,
                 )
                 if references:
                     reference_prompt = (
@@ -1046,7 +1121,11 @@ class HermesRuntime:
 
             hooks = AgentHooks(
                 before_model_request=before_model_request,
+                before_provider_request=before_provider_request,
+                after_provider_request=after_provider_request,
+                disable_provider_retries=usage_budget is not None,
                 on_diagnostic=on_diagnostic,
+                on_usage=on_usage,
                 delegate_dispatcher=delegate_dispatcher,
                 on_session_title=on_session_title,
                 system_prompt_suffix=system_prompt_suffix,
@@ -1128,6 +1207,7 @@ class HermesRuntime:
                             )},
                         ],
                         max_tokens=1400,
+                        usage_callback=on_usage,
                     )
                     summary = response.text.strip()
                     if not summary:
@@ -1136,7 +1216,20 @@ class HermesRuntime:
 
                 atlas_context.new_context_window_callback = create_context_handoff
             agent.budget_warning_ratio = budget_warning_ratio
-            await self._apply_compression_model_setting(agent, settings)
+            try:
+                await self._apply_compression_model_setting(agent, settings, route_kwargs)
+            except Exception as exc:
+                logger.warning("Compression route setup failed; continuing with the main model", exc_info=True)
+                compressor = getattr(agent, "context_compressor", None)
+                if compressor is not None:
+                    compressor.summary_model = None
+                    compressor.summary_model_id = None
+                    for name in ("provider", "base_url", "api_key", "api_mode"):
+                        if name in route_kwargs:
+                            setattr(compressor, name, route_kwargs[name])
+                emit({"type": "run.recovery.notice", "data": {
+                    "message": "压缩模型路由不可用，将尝试使用主模型继续。", "detail": str(exc),
+                }})
             # Hermes opens SessionDB lazily for tools when no gateway supplied one. Atlas
             # always needs its durable turn transcript, even with Hermes memory disabled.
             open_session_db = getattr(agent, "_get_session_db_for_recall", None)
@@ -1183,12 +1276,20 @@ class HermesRuntime:
                         # every cwd record unfindable (H10.2-DEFECT-3).
                         task_id=conversation_id,
                     )
+                    from agent.title_generator import wait_for_title_upgrades
+
+                    wait_for_title_upgrades(timeout=5.0)
                     usage = getattr(agent, "_last_turn_usage", None)
-                    if isinstance(usage, dict):
+                    if isinstance(usage, dict) and usage_rows:
+                        usage_payload = usage_rows[-1]
                         compressor = getattr(agent, "context_compressor", None)
                         context_limit = getattr(compressor, "context_length", None)
                         if not isinstance(context_limit, int) or context_limit <= 0:
-                            context_limit = getattr(agent, "_config_context_length", None)
+                            context_limit = model_config.get("context_window")
+                        if (not isinstance(context_limit, int) or context_limit <= 0) and isinstance(
+                            usage_payload.get("context_limit"), int,
+                        ):
+                            context_limit = usage_payload["context_limit"]
                         from atlas.models.cache_diagnostics import (
                             explain_cache_drop, record_layer_hashes)
                         tool_signature = json.dumps(getattr(agent, "enabled_toolsets", []))
@@ -1198,17 +1299,11 @@ class HermesRuntime:
                             if turn_history else "0:")
                         reason = explain_cache_drop(
                             conversation_id, hashes,
-                            int(usage.get("cached_input_tokens", 0) or 0),
-                            int(usage.get("prompt_tokens", usage.get("input_tokens")) or 0))
-                        usage_payload = {
-                            "input_tokens": usage.get("prompt_tokens", usage.get("input_tokens")),
-                            "output_tokens": usage.get("completion_tokens", usage.get("output_tokens")),
-                            "cached_input_tokens": usage.get("cached_input_tokens", 0),
-                            "context_tokens": usage.get("total_tokens", usage.get("prompt_tokens")),
-                            "context_limit": context_limit,
-                            "model": getattr(agent, "model", current),
-                            **({"cache_miss_reason": reason} if reason else {}),
-                        }
+                            int(usage_payload.get("cached_input_tokens", 0) or 0),
+                            int(usage_payload.get("context_tokens", 0) or 0))
+                        usage_payload["context_limit"] = context_limit
+                        if reason:
+                            usage_payload["cache_miss_reason"] = reason
                         try:
                             from agent.context_breakdown import compute_session_context_breakdown
 
@@ -1218,6 +1313,8 @@ class HermesRuntime:
                             logger.warning(
                                 "context breakdown unavailable: %s", exc, exc_info=True,
                             )
+                        # Re-emit the latest request with post-run diagnostics. Consumers
+                        # deduplicate token deltas by request_id while enriching metadata.
                         emit({"type": "run_usage", "usage": usage_payload})
                     return result
                 finally:

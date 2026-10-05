@@ -52,7 +52,9 @@ async def test_wave3_fork_and_duplicate_keep_original_workspace(
     conversation_id = await store.create_conversation("source")
     await store.update_conversation(conversation_id, workspace=r"D:\Atlas")
     assert (await store.get_conversation(conversation_id))["workspace"] == r"D:\Atlas"
-    message_id = await store.save_message(conversation_id, "user", "task")
+    from tests.fakes.session_store import save_memory_fixture_message
+
+    message_id = await save_memory_fixture_message(store, conversation_id, "user", "task")
     fork = await fork_conversation(
         types.SimpleNamespace(memory=None), conversation_id, {"through_message_id": message_id})
     assert fork["workspace"] == r"D:\Atlas"
@@ -591,7 +593,7 @@ async def test_wave3_hook_error_does_not_raise_or_block(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_wave3_hook_exit_two_blocks_tool_call(tmp_path: Path) -> None:
     store = HookStore(tmp_path / "hooks.toml")
-    command = "exit 2"
+    command = f'"{sys.executable}" -c "import sys; sys.exit(2)"'
     store.save(
         [{"id": "pre", "event": "tool.before", "command": command, "timeout_s": 2, "enabled": True}]
     )

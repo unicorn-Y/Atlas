@@ -376,7 +376,7 @@ async def test_daily_model_switch_mid_conversation(k1_backend):  # noqa: F811
     backend.fake._responder = lambda record: Text("K1_FIRST_MODEL_TURN")
     conversation, events = await backend.run("turn one on the default model")
     first_request = backend.fake.main_requests()[0]
-    assert first_request["model"] == "openai/fake-model", first_request["model"]
+    assert first_request["model"] == "fake-model", first_request["model"]
     assert _has_message(events, "K1_FIRST_MODEL_TURN")
 
     switched = await backend.http.post("/api/models/select", json={"model": "fake-model-b"})

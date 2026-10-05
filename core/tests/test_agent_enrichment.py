@@ -26,6 +26,7 @@ from atlas.agent.enrichment import (
 )
 from atlas.config import AtlasConfig
 from atlas.memory import MemoryStore
+from tests.fakes.session_store import save_memory_fixture_message
 from atlas.runtime.backends import AgentEvent, AgentSession
 from atlas.skills.bundles import PluginBundleDiscovery, parse_plugin_bundle
 from atlas.tools.local_execution import LocalExecutionRuntime
@@ -316,8 +317,12 @@ async def test_reflection_reaches_real_memoryos_candidate_governance(tmp_path: P
     memory = MemoryStore(tmp_path / "reflection.db")
     await memory.init()
     conversation_id = await memory.create_conversation("Synthetic completed task")
-    await memory.save_message(conversation_id, "user", "I prefer concise answers.")
-    await memory.save_message(conversation_id, "assistant", "Task completed with evidence.")
+    await save_memory_fixture_message(
+        memory, conversation_id, "user", "I prefer concise answers.",
+    )
+    await save_memory_fixture_message(
+        memory, conversation_id, "assistant", "Task completed with evidence.",
+    )
     task_result = (
         "Reusable experience: verify the result\nProject state: migration complete\n"
         "Decision: retain SQLite\nPreference: concise answers\nFact memory: UTC"

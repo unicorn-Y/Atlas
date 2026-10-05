@@ -44,6 +44,7 @@ from atlas.skills.registry import SkillRegistry
 from atlas.ssh import ssh_workspaces
 from atlas.task_artifacts import TomlRecordStore, WorktreeService, seed_profiles
 from atlas.telegram import TelegramService
+from atlas.usage import aggregate_run_usage
 
 log = structlog.get_logger()
 
@@ -57,6 +58,15 @@ def _server() -> Any:
 
 def _task_store(kind: str) -> TomlRecordStore:
     return TomlRecordStore(get_config().db_path.parent, kind)
+
+
+async def _session_messages(conversation_id: str, limit: int = 1000) -> list[dict[str, Any]]:
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_messages
+
+    return await asyncio.to_thread(
+        read_session_messages, DATA_ROOT / "engine", conversation_id, limit=limit,
+    )
 
 
 def _kanban_store():
@@ -101,7 +111,7 @@ async def _telegram_submit_task(text: str, user_id: int, service: TelegramServic
     if run is None or run.task is None:
         raise RuntimeError("任务没有成功启动。")
     await run.task
-    messages = await _server().memory.get_conversation_messages(conversation_id, limit=1000)
+    messages = await _session_messages(conversation_id)
     answer = next((item["content"] for item in reversed(messages)
                    if item["role"] == "assistant"), "")
     summary = str(answer)[:1500]
@@ -383,7 +393,7 @@ async def _run_scheduled_goal(task_id: str, message: str = "") -> None:
             # Reload before evaluating: pause, clear, or replace may have happened while the
             # model was running. Never apply an old response to a replacement goal.
             if not response and _server().memory is not None and message_id:
-                messages = await _server().memory.get_conversation_messages(session_id, limit=1000)
+                messages = await _session_messages(session_id)
                 saved = next((item.get("content", "") for item in reversed(messages)
                               if item.get("id") == message_id and item.get("role") == "assistant"), "")
                 if isinstance(saved, str):
@@ -566,7 +576,7 @@ async def _collect_orchestrator_text(
         # Same fallback as _run_scheduled_goal: a turn that produced no streamed
         # chunks still has its saved assistant message (heartbeat/automation
         # outcomes depend on the model text, not on streaming behaviour).
-        messages = await _server().memory.get_conversation_messages(conversation_id, limit=1000)
+        messages = await _session_messages(conversation_id)
         saved = next((item.get("content", "") for item in reversed(messages)
                       if item.get("id") == message_id and item.get("role") == "assistant"), "")
         if isinstance(saved, str):
@@ -684,7 +694,7 @@ async def _read_conversation_answer(conversation_id: str) -> str:
     """Last assistant message of a conversation (channel reply payload)."""
     if _server().memory is None:
         return ""
-    messages = await _server().memory.get_conversation_messages(conversation_id, limit=1000)
+    messages = await _session_messages(conversation_id)
     return next((item["content"] for item in reversed(messages)
                  if item.get("role") == "assistant"), "")
 
@@ -1089,26 +1099,7 @@ def _run_change_summary(run_id: str) -> dict[str, int]:
 
 
 def _sum_usage(calls: list[dict[str, Any]]) -> dict[str, Any]:
-    keys = ("input_tokens", "output_tokens", "context_tokens")
-    totals = {}
-    for key in keys:
-        values = [item.get(key) for item in calls]
-        totals[key] = sum(values) if values and all(isinstance(value, int) for value in values) else None
-    for key in ("cached_input_tokens", "cache_write_tokens"):
-        present = [item.get(key) for item in calls if item.get(key) is not None]
-        totals[key] = sum(value for value in present if isinstance(value, int)) if present else None
-    totals["cache_hit_rate"] = (
-        round(totals["cached_input_tokens"] / totals["input_tokens"], 4)
-        if isinstance(totals["cached_input_tokens"], int)
-        and isinstance(totals["input_tokens"], int) and totals["input_tokens"] > 0
-        else None
-    )
-    totals["context_limit"] = next(
-        (item.get("context_limit") for item in reversed(calls)
-         if item.get("context_limit") is not None), None,
-    )
-    totals["model"] = next((item.get("model") for item in reversed(calls)), None)
-    return totals
+    return aggregate_run_usage(calls)
 
 
 # ---------------------------------------------------------------------------
@@ -1777,7 +1768,7 @@ async def _handle_run_start(
                     "category": "validation", "detail": f"context conversation not found: {other_id}",
                 }))
                 return
-            messages = (await memory.get_conversation_messages(str(other_id), limit=1000))[-20:]
+            messages = (await _session_messages(str(other_id)))[-20:]
             compacted = await orchestrator.context_maintenance.compact({
                 "goal": other.get("title", "Referenced conversation"),
                 "session_summary": "\n".join(f"{m['role']}: {m['content'][:1000]}" for m in messages),
@@ -1791,10 +1782,18 @@ async def _handle_run_start(
                     "category": "backend", "detail": "memory service unavailable",
                 }))
                 return
-            source_messages = await memory.get_conversation_messages(conv_id, limit=1000)
+            from atlas.config import DATA_ROOT
+            from atlas.engine.session_sync import read_session_all_messages, fork_session_through_turn
+
+            source_messages = await asyncio.to_thread(
+                read_session_all_messages, DATA_ROOT / "engine", conv_id,
+            )
             temp_conversation = await memory.create_conversation("Ephemeral side chat")
-            for message in source_messages:
-                await memory.save_message(temp_conversation, message["role"], message["content"], message.get("metadata"))
+            user_turns = sum(1 for message in source_messages if message.get("role") == "user")
+            await asyncio.to_thread(
+                fork_session_through_turn, DATA_ROOT / "engine", conv_id,
+                temp_conversation, user_turns,
+            )
             run.ephemeral = True
             run.ephemeral_source = temp_conversation
             run.read_only = True
@@ -2176,6 +2175,45 @@ async def _execute_run(
                 "workspace": workspace or "",
             }))
 
+    usage_positions = {
+        str(row.get("request_id")): index for index, row in enumerate(run.usage)
+        if row.get("request_id")
+    }
+
+    async def record_usage(raw_usage: dict[str, Any]) -> None:
+        row = dict(raw_usage)
+        request_id = str(row.get("request_id") or "")
+        duplicate = bool(request_id and request_id in usage_positions)
+        if duplicate:
+            run.usage[usage_positions[request_id]] = row
+        else:
+            if request_id:
+                usage_positions[request_id] = len(run.usage)
+            run.usage.append(row)
+        if run.reasoning_effort and run.reasoning_effort_applied is None:
+            run.reasoning_effort_applied = _model_supports_reasoning(
+                {"litellm_model": model_id or run.model}
+            )
+            row["reasoning_effort_applied"] = run.reasoning_effort_applied
+        if usage_ledger is not None and not duplicate:
+            event_model = str(row.get("model") or model_id or run.model)
+            model_config = next((item for item in model_mgr.list_models()
+                                 if item.get("litellm_model") == event_model
+                                 or item.get("id") == event_model), {}) if model_mgr else {}
+            try:
+                await usage_ledger.record(
+                    run_id=run.run_id, conversation_id=run.conversation_id,
+                    subtask_id=row.get("subtask_id"), model=event_model,
+                    started_at=run.started_at, usage=row,
+                    price=model_config.get("price"),
+                )
+            except Exception:
+                log.exception(
+                    "run.usage_record_failed", run_id=run.run_id,
+                    request_id=request_id,
+                )
+        await emit("run.usage", row)
+
     async def record_reflection(
         category: str, component: str, summary: str, resolution_hint: str,
     ) -> None:
@@ -2239,19 +2277,9 @@ async def _execute_run(
                 "status": "running", "phase": "planning", "content": content,
             })
 
-        # Save user message
+        # Keep only Atlas metadata; Hermes SessionDB owns the transcript.
         try:
-            if continuation:
-                if content.strip():
-                    await memory.save_message(
-                        conversation_id=run.conversation_id, role="user", content=content,
-                        metadata={"run_id": run.run_id},
-                    )
-            else:
-                await memory.save_message(
-                    conversation_id=run.conversation_id, role="user", content=content,
-                    metadata={"run_id": run.run_id},
-                )
+            await memory.save_conversation_metadata(run.conversation_id, title_hint=content)
         except Exception as e:
             log.exception("run.user_message_save_failed")
             run.status = "failed"
@@ -2283,9 +2311,11 @@ async def _execute_run(
                 return
             if response:
                 with suppress(Exception):
-                    await memory.save_message(
-                        conversation_id=run.conversation_id, role="assistant", content=response,
-                        metadata={"executor": run.executor, "run_id": run.run_id},
+                    from atlas.config import DATA_ROOT
+                    from atlas.engine.session_sync import append_session_message
+                    await asyncio.to_thread(
+                        append_session_message, DATA_ROOT / "engine", run.conversation_id,
+                        "assistant", response, {"executor": run.executor, "run_id": run.run_id},
                     )
                 await emit("message.completed", {"content": response})
             run.status = "completed"
@@ -2438,9 +2468,11 @@ async def _execute_run(
             if entry and entry.get("background") and not entry.get("group_id"):
                 if memory is not None and run.conversation_id:
                     with suppress(Exception):
-                        await memory.save_message(
-                            run.conversation_id, "assistant",
-                            f"后台子 Agent {subtask_id} 已完成：\n{summary}",
+                        from atlas.config import DATA_ROOT
+                        from atlas.engine.session_sync import append_session_message
+                        await asyncio.to_thread(
+                            append_session_message, DATA_ROOT / "engine", run.conversation_id,
+                            "assistant", f"后台子 Agent {subtask_id} 已完成：\n{summary}",
                             {"kind": "subtask.background_completed", "subtask_id": subtask_id},
                         )
                 await emit("subtask.background_completed", {
@@ -2453,9 +2485,11 @@ async def _execute_run(
                 summary = str(payload.get("summary", ""))[:2000]
                 if memory is not None and run.conversation_id:
                     with suppress(Exception):
-                        await memory.save_message(
-                            run.conversation_id, "assistant",
-                            f"后台 Worker 组 {payload.get('subtask_id', '')} 已完成：\n{summary}",
+                        from atlas.config import DATA_ROOT
+                        from atlas.engine.session_sync import append_session_message
+                        await asyncio.to_thread(
+                            append_session_message, DATA_ROOT / "engine", run.conversation_id,
+                            "assistant", f"后台 Worker 组 {payload.get('subtask_id', '')} 已完成：\n{summary}",
                             {"kind": "subtask.background_completed",
                              "subtask_id": payload.get("subtask_id", "")},
                         )
@@ -2476,6 +2510,10 @@ async def _execute_run(
                     "title_source": event.get("title_source", ""),
                     "accepted": bool(event.get("accepted", False)),
                 })
+            elif event.get("type") == "run_usage":
+                usage = event.get("usage")
+                if isinstance(usage, dict):
+                    await record_usage(usage)
 
         async def ssh_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             if not workspace or not workspace.startswith("ssh://"):
@@ -2640,24 +2678,8 @@ async def _execute_run(
 
             elif etype == "run_usage":
                 usage = event.get("usage", {})
-                if run.reasoning_effort and run.reasoning_effort_applied is None:
-                    run.reasoning_effort_applied = _model_supports_reasoning(
-                        {"litellm_model": model_id or run.model}
-                    )
-                    usage["reasoning_effort_applied"] = run.reasoning_effort_applied
-                run.usage.append(usage)
-                if usage_ledger is not None:
-                    event_model = str(usage.get("model") or model_id or run.model)
-                    model_config = next((item for item in model_mgr.list_models()
-                                         if item.get("litellm_model") == event_model
-                                         or item.get("id") == event_model), {}) if model_mgr else {}
-                    with suppress(Exception):
-                        await usage_ledger.record(
-                            run_id=run.run_id, conversation_id=run.conversation_id,
-                            subtask_id=None, model=event_model, started_at=run.started_at,
-                            usage=usage, price=model_config.get("price"),
-                        )
-                await emit("run.usage", usage)
+                if isinstance(usage, dict):
+                    await record_usage(usage)
 
             elif etype == "context.window.switched":
                 await emit("context.window.switched", event.get("data", {}))

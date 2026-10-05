@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from atlas.memory import MemoryStore
+from tests.fakes.session_store import save_memory_fixture_message
 from atlas.memory.quality import (
     evaluate_consolidated_knowledge_insights,
     evaluate_knowledge_consolidation_proposals,
@@ -491,7 +492,8 @@ async def test_knowledge_retrieval_golden_cases_measure_ranking_and_evidence(
 
 async def test_candidate_approval_preserves_quality_provenance(store: MemoryStore) -> None:
     conversation_id = await store.create_conversation()
-    message_id = await store.save_message(
+    message_id = await save_memory_fixture_message(
+        store,
         conversation_id, "user", "My timezone is Asia/Hong_Kong."
     )
     [candidate] = await store.extract_conversation_candidates(conversation_id)
@@ -819,7 +821,9 @@ async def test_maturity_report_tracks_approved_fact_evidence_without_mutation(
     store: MemoryStore,
 ) -> None:
     conversation_id = await store.create_conversation()
-    await store.save_message(conversation_id, "user", "I prefer concise answers.")
+    await save_memory_fixture_message(
+        store, conversation_id, "user", "I prefer concise answers.",
+    )
     [candidate] = await store.extract_conversation_candidates(conversation_id)
     assert await store.promote_memory_candidate(candidate["id"])
     for _ in range(25):
@@ -854,7 +858,8 @@ async def test_optimization_reports_preserve_recommendation_audit_history(
     database_path = store._db_path
     await store.set_fact("user_preference", "concise answers")
     conversation_id = await store.create_conversation()
-    await store.save_message(
+    await save_memory_fixture_message(
+        store,
         conversation_id, "user", "I prefer concise answers."
     )
     [candidate] = await store.extract_conversation_candidates(conversation_id)

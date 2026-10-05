@@ -23,7 +23,8 @@ def isolated_atlas_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     config_path = tmp_path / "config" / "atlas.toml"
     config_path.parent.mkdir(parents=True)
     config_path.write_text(
-        "[scheduler]\nenabled = false\n\n[tools]\nauto_start = []\n",
+        "[scheduler]\nenabled = false\n\n[tools]\nauto_start = []\n\n"
+        "[computer_use]\npermission_mode = \"full_access\"\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(config, "CONFIG_PATH", config_path)
@@ -1702,16 +1703,26 @@ class TestBackendParityWave1:
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         total = server._sum_usage([
-            {"input_tokens": 2, "output_tokens": 3, "context_tokens": 5,
+            {"request_id": "main-1", "purpose": "conversation", "request_count": 1,
+             "input_tokens": 2, "output_tokens": 3, "context_tokens": 5,
              "cached_input_tokens": 1, "cache_write_tokens": 2,
              "context_limit": None, "model": "m"},
-            {"input_tokens": 4, "output_tokens": 1, "context_tokens": 5,
+            {"request_id": "main-2", "purpose": "conversation", "request_count": 1,
+             "input_tokens": 4, "output_tokens": 1, "context_tokens": 5,
              "cached_input_tokens": 2, "cache_write_tokens": 0,
              "context_limit": None, "model": "m"},
+            {"request_id": "child-1", "purpose": "subagent", "request_count": 1,
+             "input_tokens": 3, "output_tokens": 2, "context_tokens": 7,
+             "cached_input_tokens": 0, "cache_write_tokens": 0,
+             "context_limit": None, "model": "child-model"},
         ])
-        assert total["input_tokens"] == 6 and total["output_tokens"] == 4
+        assert total["input_tokens"] == 9 and total["output_tokens"] == 6
+        assert total["request_count"] == 3
+        assert total["purpose_totals"]["conversation"]["request_count"] == 2
+        assert total["purpose_totals"]["subagent"]["request_count"] == 1
         assert total["cached_input_tokens"] == 3 and total["cache_write_tokens"] == 2
-        assert total["cache_hit_rate"] == 0.5
+        assert total["cache_hit_rate"] == 0.3333
+        assert total["context_tokens"] == 5
         created = await client.post("/api/conversations", json={})
         conv_id = created.json()["id"]
         await server.memory.save_message(conv_id, "user", "A compactable conversation")

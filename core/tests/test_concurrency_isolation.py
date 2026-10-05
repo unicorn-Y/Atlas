@@ -375,8 +375,8 @@ def _assert_wave_isolated(
 
         usage = [event for event in events if event.get("type") == "run_usage"]
         assert usage, f"wave {wave}: {item['key']} missing usage"
-        expected_model = ("openai/worker-model" if item["model"] == "worker-model"
-                          else "openai/main-model")
+        expected_model = ("worker-model" if item["model"] == "worker-model"
+                          else "main-model")
         assert usage[-1]["usage"]["model"] == expected_model, (
             f"wave {wave}: {item['key']} reported {usage[-1]['usage']['model']}"
         )

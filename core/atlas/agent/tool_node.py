@@ -675,7 +675,11 @@ async def execute_tools_node(
                 )}
                 for usage_entry in result["data"].get("evidence", []):
                     if isinstance(usage_entry, dict) and usage_entry.get("input_tokens") is not None:
-                        await ctx.event_queue.put({"type": "run_usage", "usage": usage_entry})
+                        child_usage = dict(usage_entry)
+                        child_usage["original_purpose"] = child_usage.get("purpose", "conversation")
+                        child_usage["purpose"] = "subagent"
+                        child_usage.setdefault("subtask_id", result["data"].get("subtask_id"))
+                        await ctx.event_queue.put({"type": "run_usage", "usage": child_usage})
                 # D2：模型可见文本给子代理结果加结构化头+缩进；result["data"] 保持原始
                 # 结构化字段（usage 提取与前端 schema 不变）。
                 result["content"] = [{"type": "text", "text": json.dumps(

@@ -113,8 +113,12 @@ class Backend:
             try:
                 response = httpx.get(f"{self.base_url}/api/health", timeout=2.0)
                 if response.status_code == 200:
-                    return
-                last = f"HTTP {response.status_code}"
+                    health = response.json()
+                    if health.get("status") == "ok":
+                        return
+                    last = f"health={health.get('status')} components={health.get('components')}"
+                else:
+                    last = f"HTTP {response.status_code}"
             except httpx.HTTPError as exc:
                 last = type(exc).__name__
             time.sleep(0.3)
@@ -127,6 +131,7 @@ class Backend:
                 self.proc.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
+                self.proc.wait(timeout=10)
         self.proc = None
         if hasattr(self, "_log"):
             self._log.close()
@@ -483,8 +488,8 @@ def test_full_10_steer_changes_requirement_mid_run(server_live) -> None:
     rejected = [k for k in steer_reply if "rejected" in k]
     assert not rejected, f"steer was rejected: {steer_reply}"
     stream_text = "".join(lines) + (stdout or "")
-    assert "run_steered" in stream_text, (
-        "no run_steered event in the run stream; the steer never reached the turn"
+    assert '"run.steered"' in stream_text, (
+        "no run.steered event in the CLI stream; the steer never reached the turn"
     )
     _check(live, scenario, scenario, workspace)
 
@@ -531,6 +536,8 @@ class _Receiver:
     def stop(self) -> None:
         self.server.shutdown()
         self.server.server_close()
+        self.thread.join(timeout=10)
+        assert not self.thread.is_alive(), "webhook receiver did not stop"
 
 
 def _webhook_headers(secret: str, body: str) -> dict[str, str]:
@@ -553,6 +560,9 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
     headers = {"x-atlas-api-token": "h10-live-smoke"}
     run_dir = live.evidence / scenario
     run_dir.mkdir(parents=True, exist_ok=True)
+    workspace = Path(live.root) / "channel-ws"
+    done = workspace / "webhook-done.txt"
+    done.unlink(missing_ok=True)
     try:
         # Configure the webhook channel: non-secret config + secret credential.
         response = httpx.put(
@@ -620,8 +630,8 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
         )
         assert response.status_code == 200, f"approval reply failed: {response.text[:300]}"
 
-        # Finally the completion receipt must arrive on the channel: everything
-        # after the approval ack that is not an approval request is the answer.
+        # A fresh receiver belongs to this inbound request; reject failed/stopped
+        # task receipts rather than treating any non-approval text as success.
         deadline = time.monotonic() + 300
         receipt = ""
         while time.monotonic() < deadline:
@@ -629,6 +639,9 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
                 text = str(payload.get("text") or "")
                 if "需要审批" in text or text.startswith("已允许"):
                     continue
+                assert not text.startswith(("任务执行失败", "任务已停止")), (
+                    f"channel task returned a failure receipt: {text}"
+                )
                 receipt = text
                 break
             if receipt:
@@ -640,8 +653,6 @@ def test_full_12_webhook_ask_writes_approval_receipt(server_live) -> None:
         assert receipt, "no completion receipt arrived on the channel"
 
         # …and the write itself must have executed in the gateway workspace.
-        workspace = Path(live.root) / "channel-ws"
-        done = workspace / "webhook-done.txt"
         assert done.is_file(), (
             f"channel task did not write its file in {workspace}; receipts={receiver.payloads!r}"
         )

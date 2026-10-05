@@ -218,7 +218,7 @@ async def test_same_session_reuses_one_agent_and_model_switch_rebuilds(tmp_path)
         assert len(agents) == 2
         assert agents[0].closed is True
         assert agents[1].closed is False
-        assert agents[1].kwargs["model"] == "openai/other-model"
+        assert agents[1].kwargs["model"] == "other-model"
 
         # Switching back builds a third agent (the cached entry was the other model).
         events = [event async for event in runtime.run_turn(
@@ -227,7 +227,7 @@ async def test_same_session_reuses_one_agent_and_model_switch_rebuilds(tmp_path)
         )]
         assert events[-1]["type"] == "hermes.result"
         assert len(agents) == 3
-        assert agents[2].kwargs["model"] == "openai/main-model"
+        assert agents[2].kwargs["model"] == "main-model"
         await runtime.aclose()
         assert all(agent.closed for agent in agents)
 

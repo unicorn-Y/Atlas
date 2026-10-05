@@ -16,6 +16,8 @@ import asyncio
 import hashlib
 import inspect
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -39,6 +41,25 @@ class RouteSpec:
     # the wire never sees that routing prefix — relays 404 it — so every Hermes
     # transport consumer sends ``wire_model`` (the bare/native id) instead.
     wire_model: str = ""
+    model_id: str = ""
+
+
+_USAGE_CALLBACK: ContextVar[Callable[[dict[str, Any]], Any] | None] = ContextVar(
+    "atlas_model_usage_callback", default=None,
+)
+
+
+@contextmanager
+def model_usage_callback(callback: Callable[[dict[str, Any]], Any] | None):
+    """Scope auxiliary provider request rows to the active Atlas run."""
+    if callback is None:
+        yield
+        return
+    token = _USAGE_CALLBACK.set(callback)
+    try:
+        yield
+    finally:
+        _USAGE_CALLBACK.reset(token)
 
 
 @dataclass(frozen=True)
@@ -227,7 +248,7 @@ class ModelRouter:
         return RouteSpec(
             provider=provider, api_mode=api_mode, model=model, base_url=base_url,
             key=key, credential_pool=pool, purpose=purpose, fallback_reason=fallback_reason,
-            wire_model=wire_model or model,
+            wire_model=wire_model or model, model_id=str(model_data.get("id") or ""),
         )
 
     async def complete(self, route: RouteSpec, messages: list[dict[str, Any]], **kwargs: Any) -> CompletionResult:
@@ -248,27 +269,66 @@ class ModelRouter:
         # provider untouched (H10.2-DEFECT-1), so auxiliary calls send
         # ``wire_model`` — the bare id the endpoint actually exposes.
         wire_model = route.wire_model or route.model
-        response = await asyncio.to_thread(
-            call_llm,
-            task=route.purpose,
-            provider=route.provider,
-            model=wire_model,
-            base_url=route.base_url,
-            api_key=route.key,
-            api_mode=route.api_mode,
-            main_runtime={
-                "provider": route.provider,
-                "model": wire_model,
-                "base_url": route.base_url,
-                "api_key": route.key,
-                "api_mode": route.api_mode,
-            },
-            messages=messages,
-            stream=False,
-            **kwargs,
-        )
+        usage_callback = kwargs.pop("usage_callback", None) or _USAGE_CALLBACK.get()
+        from atlas.usage import env_run_usage_budget
+        from atlas.models.tokens import estimate_tokens
+        from agent.turn_usage import new_usage_request_id
+
+        request_id = new_usage_request_id()
+        budget = env_run_usage_budget()
+        request_text = "\n".join(str(item.get("content") or "") for item in messages)
+        estimate = max(1, estimate_tokens(request_text, model=wire_model))
+        if budget is not None and not budget.reserve(
+            request_id, estimate, purpose=route.purpose,
+            model=route.model_id or route.model, wire_model=wire_model,
+        ):
+            raise RuntimeError("Run input-token budget reached; the auxiliary model request was not sent.")
+        try:
+            response = await asyncio.to_thread(
+                call_llm,
+                task=route.purpose,
+                provider=route.provider,
+                model=wire_model,
+                base_url=route.base_url,
+                api_key=route.key,
+                api_mode=route.api_mode,
+                main_runtime={
+                    "provider": route.provider,
+                    "model": wire_model,
+                    "base_url": route.base_url,
+                    "api_key": route.key,
+                    "api_mode": route.api_mode,
+                    "disable_provider_retries": budget is not None,
+                },
+                messages=messages,
+                stream=False,
+                **kwargs,
+            )
+        except BaseException:
+            if budget is not None:
+                budget.release(request_id)
+            raise
         text = _response_text(response)
         usage = response.get("usage") if isinstance(response, dict) else getattr(response, "usage", None)
+        from agent.turn_usage import report_auxiliary_usage
+
+        observed = report_auxiliary_usage(
+            usage_callback, response, purpose=route.purpose,
+            model=route.model_id or route.model, provider=route.provider,
+            api_mode=route.api_mode, wire_model=wire_model, request_id=request_id,
+        )
+        if observed is not None and budget is not None:
+            budget.record(observed[0])
+        elif budget is not None:
+            budget.release(request_id)
+        observed = observed[1] if observed is not None else None
+        if inspect.isawaitable(observed):
+            try:
+                await observed
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).warning("Auxiliary usage observer callback failed", exc_info=True)
         return CompletionResult(text=text, usage=usage, raw=response)
 
     async def complete_for(

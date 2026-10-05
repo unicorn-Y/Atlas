@@ -954,7 +954,7 @@ class MemoryStore:
         if not (query or "").strip():
             return []
         from atlas.config import DATA_ROOT
-        from atlas.engine.session_sync import read_session_all_messages, search_session_messages
+        from atlas.engine.session_sync import search_session_messages
 
         session_home = DATA_ROOT / "engine"
         if (session_home / "state.db").exists():
@@ -4055,7 +4055,7 @@ class MemoryStore:
         return {**(await self.get_conversation(fork_id) or {}), "files_shared": True}
 
     async def delete_conversation(self, conversation_id: str) -> bool:
-        """Delete the SessionDB transcript and Atlas metadata, retaining legacy rows."""
+        """Delete the SessionDB transcript, legacy body rows and Atlas metadata."""
         assert self._db is not None
         if await self.get_conversation(conversation_id) is None:
             return False
@@ -4063,6 +4063,10 @@ class MemoryStore:
         from atlas.engine.session_sync import delete_session
 
         await asyncio.to_thread(delete_session, DATA_ROOT / "engine", conversation_id)
+        await self._db.execute(
+            "DELETE FROM messages WHERE conversation_id = ?",
+            (conversation_id,),
+        )
         cursor = await self._db.execute(
             "DELETE FROM conversations WHERE id = ?",
             (conversation_id,),

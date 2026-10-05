@@ -854,7 +854,7 @@ class AgentOrchestrator:
             subtask_group_completed=subtask_group_completed,
             parent_process_event_callback=parent_process_event_callback,
         )
-        async for event in execute_run(self, request, callbacks):
+        async for event in self.execute(request, callbacks):
             yield event
 
     def execute(
@@ -864,7 +864,22 @@ class AgentOrchestrator:
 
         New callers should prefer this over the historical keyword interface.
         """
-        return execute_run(self, request, callbacks)
+        async def scoped() -> AsyncIterator[dict[str, Any]]:
+            async def publish_auxiliary_usage(usage: dict[str, Any]) -> None:
+                callback = callbacks.runtime_event_callback
+                if callback is None:
+                    return
+                published = callback({"type": "run_usage", "usage": usage})
+                if hasattr(published, "__await__"):
+                    await published
+
+            from atlas.models.router import model_usage_callback
+
+            with model_usage_callback(publish_auxiliary_usage):
+                async for event in execute_run(self, request, callbacks):
+                    yield event
+
+        return scoped()
     # -- helpers -------------------------------------------------------------
 
     @staticmethod

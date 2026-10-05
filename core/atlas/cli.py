@@ -15,11 +15,22 @@ import click
 # to stdout, which would corrupt parsed output, so pin it before anything logs.
 # Only affects processes launched through this module (serve/chat/hub/run/doctor).
 import structlog
-from rich.console import Console
 
 structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
 
-console = Console()
+class _LazyConsole:
+    def __init__(self) -> None:
+        self._console = None
+
+    def __getattr__(self, name: str) -> Any:
+        if self._console is None:
+            from rich.console import Console
+
+            self._console = Console()
+        return getattr(self._console, name)
+
+
+console = _LazyConsole()
 
 
 @click.group()
@@ -65,6 +76,12 @@ def chat(model: str | None) -> None:
 
         memory = MemoryStore()
         await memory.init()
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_migration import migrate_legacy_sessions
+
+        migration = await migrate_legacy_sessions(DATA_ROOT / "engine", memory)
+        if migration.status != "ready":
+            raise RuntimeError(migration.error or "会话迁移失败；历史记录已保护。")
 
         orch = AgentOrchestrator(model_mgr=model_mgr, memory=memory)
 
@@ -106,7 +123,7 @@ def chat(model: str | None) -> None:
                 continue
 
             # Save user message and run agent
-            await memory.save_message(conv_id, "user", user_input)
+            await memory.save_conversation_metadata(conv_id, title_hint=user_input)
 
             console.print(f"[bold]{model_mgr.current_model}[/bold] > ", end="")
             full = ""
@@ -159,6 +176,7 @@ def hub_start(port: int | None) -> None:
     import subprocess
     import sys
     import time
+    import httpx
 
 
     control = _hub_control_file()
@@ -168,7 +186,7 @@ def hub_start(port: int | None) -> None:
             _hub_request("GET", "/health", int(info["port"]), timeout=1.0)
             console.print(f"[yellow]Hub already running on port {info['port']}.[/yellow]")
             return
-        except Exception:
+        except (OSError, httpx.HTTPError, json.JSONDecodeError, KeyError, TypeError, ValueError):
             control.unlink(missing_ok=True)
 
     hub_port = port or int(os.environ.get("ATLAS_HUB_PORT", "8791"))
@@ -186,7 +204,7 @@ def hub_start(port: int | None) -> None:
             control.write_text(json.dumps({"pid": process.pid, "port": hub_port}), encoding="utf-8")
             console.print(f"[green]Hub started[/green] pid={process.pid} port={hub_port}")
             return
-        except Exception:
+        except httpx.HTTPError:
             time.sleep(0.5)
     console.print("[red]Hub did not become healthy in time.[/red]")
 
@@ -195,6 +213,7 @@ def hub_start(port: int | None) -> None:
 def hub_stop() -> None:
     """Stop a running Hub."""
     import json
+    import httpx
 
     control = _hub_control_file()
     if not control.is_file():
@@ -204,7 +223,7 @@ def hub_stop() -> None:
     try:
         _hub_request("POST", "/shutdown", int(info["port"]), timeout=3.0)
         console.print("[green]Hub stopped.[/green]")
-    except Exception:
+    except httpx.HTTPError:
         console.print("[yellow]Hub did not answer; it may have already exited.[/yellow]")
     finally:
         control.unlink(missing_ok=True)
@@ -214,6 +233,7 @@ def hub_stop() -> None:
 def hub_status() -> None:
     """Show Hub health and scheduler status."""
     import json
+    import httpx
 
     control = _hub_control_file()
     if not control.is_file():
@@ -226,7 +246,7 @@ def hub_status() -> None:
         console.print(f"[green]Hub healthy[/green] port={info['port']} pid={info['pid']}")
         console.print(f"scheduler_running={status_body.get('scheduler_running')} "
                       f"tasks={status_body.get('task_count')}")
-    except Exception:
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
         console.print("[red]Hub control file exists but the process is not answering.[/red]")
 
 
@@ -234,6 +254,7 @@ def hub_status() -> None:
 def hub_tasks() -> None:
     """List Hub scheduled tasks."""
     import json
+    import httpx
 
     control = _hub_control_file()
     if not control.is_file():
@@ -247,7 +268,7 @@ def hub_tasks() -> None:
                           f"({task.get('trigger_type')} {task.get('trigger_args')})")
         if not body.get("tasks"):
             console.print("(no hub tasks)")
-    except Exception:
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
         console.print("[red]Hub is not answering.[/red]")
 
 
@@ -397,6 +418,8 @@ class _TurnRenderer:
     """Turn stream output for the three --output-format values."""
 
     def __init__(self, output_format: str, out: TextIO) -> None:
+        from rich.console import Console
+
         self.format = output_format
         self.out = out
         self.console = Console(file=out)
@@ -450,13 +473,20 @@ class _TurnRenderer:
         else:
             changes = summary.get("changes") or {}
             usage = summary.get("usage") or {}
+            by_purpose = usage.get("purpose_totals") or {}
+            purpose_text = ",".join(
+                f"{purpose}:{values.get('request_count')}"
+                for purpose, values in by_purpose.items()
+            )
             self.console.print(
                 f"result={summary.get('result')} stop_reason={summary.get('stop_reason')} "
                 f"conversation={summary.get('conversation_id')} "
                 f"files={changes.get('files', 0)} "
                 f"(+{changes.get('additions', 0)}/-{changes.get('deletions', 0)}) "
                 f"elapsed={summary.get('elapsed_seconds')}s "
-                f"tokens(in/out)={usage.get('input_tokens')}/{usage.get('output_tokens')}"
+                f"tokens(in/out/cache)={usage.get('input_tokens')}/{usage.get('output_tokens')}"
+                f"/{usage.get('cached_input_tokens')} requests={usage.get('request_count')} "
+                f"purposes={purpose_text}"
             )
 
 
@@ -477,6 +507,7 @@ async def _drive_turn(
     import uuid
 
     from websockets.asyncio.client import connect
+    from atlas.usage import aggregate_run_usage
 
     run_id = uuid.uuid4().hex
     renderer = _TurnRenderer(output_format, out)
@@ -484,6 +515,8 @@ async def _drive_turn(
     approvals_denied = 0
     trust_denied = False
     usage_events = 0
+    usage_rows: list[dict[str, Any]] = []
+    usage_request_ids: set[str] = set()
     stop_reason = ""
     result = ""
     detail = ""
@@ -552,9 +585,15 @@ async def _drive_turn(
                 )
                 await _send({"type": "rules.trust", "run_id": run_id, "trust": False})
             elif event == "run.usage":
-                usage_events += 1
                 if isinstance(data, dict):
-                    usage = data
+                    row = dict(data)
+                    usage_rows.append(row)
+                    request_id = str(row.get("request_id") or "")
+                    if not request_id or request_id not in usage_request_ids:
+                        usage_events += 1
+                        if request_id:
+                            usage_request_ids.add(request_id)
+                    usage = aggregate_run_usage(usage_rows)
                 if max_turns is not None and usage_events >= max_turns and not cancel_sent:
                     cancel_sent = True
                     stop_reason = "max_turns"
@@ -566,7 +605,9 @@ async def _drive_turn(
                     final_message = content
             elif event == "run.completed":
                 result = "completed"
-                if isinstance(data.get("usage"), dict):
+                if usage_rows:
+                    usage = aggregate_run_usage(usage_rows)
+                elif isinstance(data.get("usage"), dict):
                     usage = data["usage"]
                 if isinstance(data.get("changes"), dict):
                     changes = data["changes"]
@@ -574,7 +615,9 @@ async def _drive_turn(
             elif event == "run.failed":
                 result = "failed"
                 detail = str(data.get("detail", ""))
-                if isinstance(data.get("usage"), dict):
+                if usage_rows:
+                    usage = aggregate_run_usage(usage_rows)
+                elif isinstance(data.get("usage"), dict):
                     usage = data["usage"]
                 break
             elif event in ("run.cancelled",):
@@ -778,12 +821,8 @@ def _check_config() -> dict[str, Any]:
 
 
 def _check_sessions() -> dict[str, Any]:
-    """Atlas conversations with messages must have a Hermes SessionDB session.
-
-    The full migration/fork/rewind consistency audit lands with H2; this check
-    reads both existing stores read-only (never through ``session_sync``, which
-    mutates ``os.environ``).
-    """
+    """Read-only audit of transcript ownership, counts and tool-call pairing."""
+    from contextlib import closing
     import sqlite3
 
     from atlas.config import DATA_ROOT, get_config
@@ -791,12 +830,14 @@ def _check_sessions() -> dict[str, Any]:
     atlas_db = get_config().db_path
     hermes_home = Path(os.environ.get("HERMES_HOME", "") or (DATA_ROOT / "engine"))
     state_db = hermes_home / "state.db"
+    metadata_ids: set[str] = set()
     atlas_ids: set[str] = set()
     conversations_total = 0
+    atlas_message_count = 0
     db_error = ""
     if atlas_db.exists():
         try:
-            with sqlite3.connect(f"file:{atlas_db.as_posix()}?mode=ro", uri=True) as conn:
+            with closing(sqlite3.connect(f"file:{atlas_db.as_posix()}?mode=ro", uri=True)) as conn:
                 # A fresh store may not have its tables yet: that counts as empty.
                 tables = {
                     str(row[0]) for row in conn.execute(
@@ -805,7 +846,11 @@ def _check_sessions() -> dict[str, Any]:
                 if "conversations" in tables:
                     conversations_total = conn.execute(
                         "SELECT count(*) FROM conversations").fetchone()[0]
+                    metadata_ids = {
+                        str(row[0]) for row in conn.execute("SELECT id FROM conversations")
+                    }
                 if "messages" in tables:
+                    atlas_message_count = int(conn.execute("SELECT count(*) FROM messages").fetchone()[0])
                     atlas_ids = {
                         str(row[0]) for row in conn.execute(
                             "SELECT DISTINCT conversation_id FROM messages")
@@ -813,32 +858,81 @@ def _check_sessions() -> dict[str, Any]:
         except sqlite3.Error as exc:
             db_error = str(exc)
     hermes_ids: set[str] = set()
+    atlas_session_ids: set[str] = set()
+    hermes_message_count = 0
+    count_mismatches: list[str] = []
+    orphan_tool_results = 0
     state_error = ""
     if state_db.exists():
         try:
-            with sqlite3.connect(f"file:{state_db.as_posix()}?mode=ro", uri=True) as conn:
+            with closing(sqlite3.connect(f"file:{state_db.as_posix()}?mode=ro", uri=True)) as conn:
                 tables = {
                     str(row[0]) for row in conn.execute(
                         "SELECT name FROM sqlite_master WHERE type='table'")
                 }
                 if "sessions" in tables:
-                    hermes_ids = {
-                        str(row[0]) for row in conn.execute("SELECT id FROM sessions")
+                    session_rows = conn.execute("SELECT id, source, message_count FROM sessions").fetchall()
+                    hermes_ids = {str(row[0]) for row in session_rows}
+                    atlas_sources = {"api_server", "cli", "channel", "telegram", "atlas_import", "atlas", "hub"}
+                    atlas_session_ids = {
+                        str(row[0]) for row in session_rows if str(row[1] or "") in atlas_sources
                     }
+                    active_counts = {
+                        str(row[0]): int(row[1]) for row in conn.execute(
+                            "SELECT session_id, count(*) FROM messages WHERE active=1 GROUP BY session_id"
+                        )
+                    } if "messages" in tables else {}
+                    if "messages" in tables:
+                        messages = conn.execute(
+                            "SELECT session_id, role, tool_calls, tool_call_id FROM messages WHERE active=1"
+                        ).fetchall()
+                        hermes_message_count = len(messages)
+                        calls_by_session: dict[str, set[str]] = {}
+                        for row in messages:
+                            if row[1] != "assistant" or not row[2]:
+                                continue
+                            try:
+                                calls = json.loads(row[2]) if isinstance(row[2], str) else row[2]
+                            except (TypeError, ValueError):
+                                calls = []
+                            for call in calls if isinstance(calls, list) else []:
+                                call_id = call.get("id") if isinstance(call, dict) else None
+                                if call_id:
+                                    calls_by_session.setdefault(str(row[0]), set()).add(str(call_id))
+                        orphan_tool_results = sum(
+                            1 for row in messages if row[1] == "tool" and row[3]
+                            and str(row[3]) not in calls_by_session.get(str(row[0]), set())
+                        )
+                    count_mismatches = sorted(
+                        str(row[0]) for row in session_rows
+                        if int(row[2] or 0) != active_counts.get(str(row[0]), 0)
+                    )
+                else:
+                    atlas_session_ids = set()
         except sqlite3.Error as exc:
             state_error = str(exc)
-    missing = sorted(atlas_ids - hermes_ids)
-    orphans = sorted(hermes_ids - atlas_ids)
-    ok = not missing and not orphans and not db_error and not state_error
+    # A metadata-only conversation with no transcript is valid. Require SessionDB only
+    # for Atlas conversations whose legacy message rows prove that history exists.
+    # Legacy rows remain read-only for one release, including rows whose metadata
+    # was intentionally deleted. Only live metadata conversations require a session.
+    missing = sorted((atlas_ids & metadata_ids) - hermes_ids)
+    orphans = sorted((hermes_ids - metadata_ids) & atlas_session_ids)
+    ok = not missing and not orphans and not count_mismatches and not orphan_tool_results and not db_error and not state_error
     return {
         "ok": ok,
         "atlas_db": str(atlas_db),
         "conversations_total": conversations_total,
         "conversations_with_messages": len(atlas_ids),
+        "atlas_legacy_messages": atlas_message_count,
         "hermes_home": str(hermes_home),
         "hermes_sessions": len(hermes_ids),
+        "hermes_messages": hermes_message_count,
+        "session_message_count_mismatches": count_mismatches,
+        "unpaired_tool_results": orphan_tool_results,
         "missing_in_hermes": missing,
         "orphans_in_hermes": orphans,
+        "transcript_owner": "SessionDB",
+        "legacy_rows_policy": "保留旧 Atlas 消息行只读；同 ID 的现存 SessionDB 历史具有权威性。",
         "atlas_db_error": db_error,
         "state_db_error": state_error,
     }
@@ -891,17 +985,16 @@ def _check_mcp() -> dict[str, Any]:
 
 
 @main.command()
+@click.argument("check", required=False, type=click.Choice(["sessions"]))
 @click.option("--json", "as_json", is_flag=True, help="输出机器可读 JSON")
-def doctor(as_json: bool) -> None:
+def doctor(as_json: bool, check: str | None) -> None:
     """Diagnose config, sessions, model connectivity and MCP status.
 
     Exit codes: 0 全部检查通过；1 存在未通过的检查。
     """
-    checks = {
-        "config": _check_config(),
-        "sessions": _check_sessions(),
-        "models": _check_models(),
-        "mcp": _check_mcp(),
+    checks = {"sessions": _check_sessions()} if check == "sessions" else {
+        "config": _check_config(), "sessions": _check_sessions(),
+        "models": _check_models(), "mcp": _check_mcp(),
     }
     all_ok = all(item.get("ok") is True for item in checks.values())
     if as_json:

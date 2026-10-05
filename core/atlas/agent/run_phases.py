@@ -178,6 +178,10 @@ async def execute_run(
 async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
     """Normalize the request, build the run context, resolve the model."""
     request, callbacks = state.request, state.callbacks
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import wait_for_session_migration
+
+    await wait_for_session_migration(DATA_ROOT / "engine")
     message = state.message
     moa_enabled = request.moa or message.lstrip().startswith("/moa")
     if message.lstrip().startswith("/moa"):
@@ -253,9 +257,12 @@ async def _phase_prompt_hook(agent, state: _RunState) -> AsyncIterator[dict[str,
         reason = str(hook_outcome.get("reason") or "Blocked by hook")
         yield {"type": "chunk", "content": reason}
         try:
-            msg_id = await agent._memory.save_message(
-                conversation_id=request.conversation_id, role="assistant", content=reason,
-                metadata={"model": state.litellm_model, "hook": "UserPromptSubmit"},
+            from atlas.config import DATA_ROOT
+            from atlas.engine.session_sync import append_session_message
+
+            msg_id = await asyncio.to_thread(
+                append_session_message, DATA_ROOT / "engine", request.conversation_id,
+                "assistant", reason, {"model": state.litellm_model, "hook": "UserPromptSubmit"},
             )
         except Exception as e:
             log.warning(
@@ -393,8 +400,11 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             state.consolidated_insights, state.reflections, state.goal_experiences = [], [], []
         else:
             await agent._memory.extract_memories(request.conversation_id, state.message)
-            state.history = await agent._memory.get_conversation_messages(
-                request.conversation_id,
+            from atlas.config import DATA_ROOT
+            from atlas.engine.session_sync import read_session_messages
+
+            state.history = await asyncio.to_thread(
+                read_session_messages, DATA_ROOT / "engine", request.conversation_id,
                 limit=_agent.get_config().max_context_messages,
             )
             state.context = await agent._memory.get_agent_context_with_trace(state.message)
@@ -814,9 +824,10 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
             await runtime.event_queue.put({
                 "type": "error", "category": "model", "detail": turn_error,
             })
-        for usage in final_result.get("usage", []) if isinstance(
-            final_result.get("usage"), list
-        ) else []:
+        from atlas.usage import deduplicate_run_usage
+
+        final_usage = final_result.get("usage", [])
+        for usage in deduplicate_run_usage(final_usage if isinstance(final_usage, list) else []):
             await runtime.event_queue.put({"type": "run_usage", "usage": usage})
         return {
             "messages": [AIMessage(content=str(final_text or ""))],
@@ -966,14 +977,15 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
         yield {"type": "goal_evaluated", "evaluation": evaluation}
 
     try:
-        metadata = {"model": state.litellm_model}
-        if runtime.run_id is not None:
-            metadata["run_id"] = runtime.run_id
-        msg_id = await agent._memory.save_message(
-            conversation_id=request.conversation_id,
+        await agent._memory.save_conversation_metadata(
+            request.conversation_id, title_hint=state.message,
+        )
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import latest_session_message_id, read_session_all_messages
+
+        msg_id = await asyncio.to_thread(
+            latest_session_message_id, DATA_ROOT / "engine", request.conversation_id,
             role="assistant",
-            content=full_response,
-            metadata=metadata,
         )
     except Exception as e:
         log.warning(
@@ -993,6 +1005,9 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
             else await agent._memory.extract_conversation_candidates(
                 request.conversation_id,
                 provenance="external" if runtime.external_tool_context else "user",
+                transcript=await asyncio.to_thread(
+                    read_session_all_messages, DATA_ROOT / "engine", request.conversation_id,
+                ),
             )
         )
     except Exception as exc:

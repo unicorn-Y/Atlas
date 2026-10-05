@@ -4,13 +4,14 @@ import asyncio
 import ast
 import json
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from tests.fakes.fake_llm_provider import FakeLLMServer, Hang, Text, ToolCall, write_hermes_home
+from tests.fakes.fake_llm_provider import Error, FakeLLMServer, Hang, Text, ToolCall, write_hermes_home
 from atlas.engine.hermes_runtime import HermesRuntime
 from atlas.agent import AgentOrchestrator, AgentRunContext
 from atlas.models.router import ModelRouter
@@ -61,6 +62,220 @@ async def test_notification_read_failure_is_visible_and_does_not_stop_turn(
     notices = [event for event in events if event.get("type") == "run.recovery.notice"]
     assert any("通知读取失败" in event["data"]["message"] for event in notices)
     assert "notification db unavailable" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_budget_hook_exception_blocks_provider_http(tmp_path, monkeypatch):
+    from atlas.usage import RunUsageBudget
+
+    audit_path = tmp_path / "budget-hook-error.jsonl"
+    monkeypatch.setenv("ATLAS_RUN_INPUT_TOKEN_LIMIT", "10000")
+    monkeypatch.setenv("ATLAS_RUN_BUDGET_ID", "budget-hook-error")
+    monkeypatch.setenv("ATLAS_RUN_USAGE_AUDIT_FILE", str(audit_path))
+
+    def fail_reserve(*_args, **_kwargs):
+        raise OSError("budget reservation unavailable")
+
+    monkeypatch.setattr(RunUsageBudget, "reserve", fail_reserve)
+    with FakeLLMServer([Text("must not be requested")]) as fake:
+        home = tmp_path / "engine"
+        write_hermes_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = SimpleNamespace(
+            current_model="fake-model", current_litellm_model="fake-model",
+            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
+            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
+        )
+        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        events = [event async for event in runtime.run_turn(
+            message="reservation failure must stop before HTTP", conversation_id="budget-hook-error",
+            workspace=str(tmp_path), history=[],
+        )]
+        await runtime.aclose()
+
+    assert fake.main_requests() == []
+    assert events[-1]["type"] == "hermes.result"
+
+
+@pytest.mark.asyncio
+async def test_budget_unknown_usage_disables_retries_and_audits_one_send(tmp_path, monkeypatch):
+    audit_path = tmp_path / "budget-unknown.jsonl"
+    monkeypatch.setenv("ATLAS_RUN_INPUT_TOKEN_LIMIT", "10000")
+    monkeypatch.setenv("ATLAS_RUN_BUDGET_ID", "budget-unknown")
+    monkeypatch.setenv("ATLAS_RUN_USAGE_AUDIT_FILE", str(audit_path))
+    with FakeLLMServer([Error(500, "scripted unknown usage")]) as fake:
+        home = tmp_path / "engine"
+        write_hermes_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = SimpleNamespace(
+            current_model="fake-model", current_litellm_model="fake-model",
+            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
+            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
+        )
+        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        events = [event async for event in runtime.run_turn(
+            message="provider error has unknown usage", conversation_id="budget-unknown",
+            workspace=str(tmp_path), history=[],
+        )]
+        await runtime.aclose()
+
+    import json
+
+    rows = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+    assert len(fake.main_requests()) == 1
+    assert len(rows) == 1
+    assert rows[0]["usage_available"] is False
+    assert rows[0]["budget_usage_unknown"] is True
+    assert events[-1]["type"] == "hermes.result"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("budgeted,expected_requests", [(True, 1), (False, 2)])
+async def test_stream_fault_budget_disables_hidden_retry_only_when_opted_in(
+    tmp_path, monkeypatch, budgeted, expected_requests,
+):
+    audit_path = tmp_path / "stream-budget.jsonl"
+    if budgeted:
+        monkeypatch.setenv("ATLAS_RUN_INPUT_TOKEN_LIMIT", "10000")
+        monkeypatch.setenv("ATLAS_RUN_BUDGET_ID", "stream-budgeted")
+        monkeypatch.setenv("ATLAS_RUN_USAGE_AUDIT_FILE", str(audit_path))
+    else:
+        for name in (
+            "ATLAS_RUN_INPUT_TOKEN_LIMIT", "ATLAS_RUN_BUDGET_ID",
+            "ATLAS_RUN_USAGE_AUDIT_FILE",
+        ):
+            monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HERMES_STREAM_RETRIES", "1")
+    with FakeLLMServer([Hang(seconds=0.1), Text("retry reached")]) as fake:
+        home = tmp_path / "engine"
+        write_hermes_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = SimpleNamespace(
+            current_model="fake-model", current_litellm_model="fake-model",
+            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
+            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
+        )
+        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        events = [event async for event in runtime.run_turn(
+            message="exercise stream retry policy", conversation_id=f"stream-budget-{budgeted}",
+            workspace=str(tmp_path), history=[],
+        )]
+        await runtime.aclose()
+
+    assert len(fake.main_requests()) == expected_requests
+    assert events[-1]["type"] == "hermes.result"
+    if budgeted:
+        import json
+
+        rows = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+        assert len(rows) == 1 and rows[0]["budget_usage_unknown"] is True
+    else:
+        assert events[-1]["result"]["final_response"] == "retry reached"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("budgeted,expected_requests", [(True, 1), (False, 2)])
+async def test_stream_options_compat_retry_is_budgeted_only_when_opted_in(
+    tmp_path, monkeypatch, budgeted, expected_requests,
+):
+    audit_path = tmp_path / "stream-options-budget.jsonl"
+    if budgeted:
+        monkeypatch.setenv("ATLAS_RUN_INPUT_TOKEN_LIMIT", "10000")
+        monkeypatch.setenv("ATLAS_RUN_BUDGET_ID", "stream-options-budgeted")
+        monkeypatch.setenv("ATLAS_RUN_USAGE_AUDIT_FILE", str(audit_path))
+    else:
+        for name in (
+            "ATLAS_RUN_INPUT_TOKEN_LIMIT", "ATLAS_RUN_BUDGET_ID",
+            "ATLAS_RUN_USAGE_AUDIT_FILE",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+    with FakeLLMServer([
+        Error(400, "stream_options is an unexpected extra field"),
+        Text("compatibility retry reached"),
+    ]) as fake:
+        home = tmp_path / "engine"
+        write_hermes_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = SimpleNamespace(
+            current_model="fake-model", current_litellm_model="fake-model",
+            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
+            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
+        )
+        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        events = [event async for event in runtime.run_turn(
+            message="exercise stream_options compatibility retry",
+            conversation_id=f"stream-options-budget-{budgeted}",
+            workspace=str(tmp_path), history=[],
+        )]
+        await runtime.aclose()
+
+    requests = fake.main_requests()
+    assert len(requests) == expected_requests
+    assert "stream_options" in requests[0]
+    assert events[-1]["type"] == "hermes.result"
+    if budgeted:
+        import json
+
+        rows = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+        assert len(rows) == 1 and rows[0]["budget_usage_unknown"] is True
+    else:
+        assert events[-1]["result"]["final_response"] == "compatibility retry reached"
+
+
+@pytest.mark.asyncio
+async def test_run_usage_reports_every_provider_request_without_accumulating_context(
+    tmp_path, monkeypatch,
+):
+    with FakeLLMServer([
+        ToolCall("todo_list", {"todos": []}),
+        Text("first step", prompt_tokens=200, completion_tokens=20, cached_tokens=10),
+        ToolCall("todo_list", {"todos": []}),
+        Text("done", prompt_tokens=400, completion_tokens=30, cached_tokens=40),
+    ]) as fake:
+        home = tmp_path / "engine"
+        write_hermes_home(home, fake.base_url, extra_config=(
+            "auxiliary:\n"
+            "  title_generation:\n"
+            "    enabled: false\n"
+        ))
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        models = SimpleNamespace(
+            current_model="fake-model", current_litellm_model="fake-model",
+            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
+            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
+        )
+        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        events = []
+        for message in ("run step one", "run step two"):
+            events.extend([event async for event in runtime.run_turn(
+                message=message, conversation_id="usage-four-requests",
+                workspace=str(tmp_path), history=[],
+            )])
+        await runtime.aclose()
+
+    emitted_rows = [event["usage"] for event in events if event.get("type") == "run_usage"]
+    assert len(fake.main_requests()) == 4, [
+        (request["messages"][-1]["role"], len(request.get("tools", [])))
+        for request in fake.main_requests()
+    ]
+    # The latest request is re-emitted with post-run diagnostics. Request IDs
+    # let the runner enrich the row without charging the same request twice.
+    rows_by_id = {row["request_id"]: row for row in emitted_rows}
+    rows = list(rows_by_id.values())
+    assert len(rows) == 4
+    assert sum(row["input_tokens"] for row in rows) == 800
+    assert sum(row["uncached_input_tokens"] for row in rows) == 750
+    assert sum(row["output_tokens"] for row in rows) == 70
+    assert sum(row["cached_input_tokens"] for row in rows) == 50
+    assert any(row["cache_usage_available"] for row in rows)
+    assert any(not row["cache_usage_available"] for row in rows)
+    assert any(
+        "prompt_tokens_details.cached_tokens" in row["cache_usage_fields"]
+        for row in rows
+    )
+    assert rows[-1]["context_tokens"] == 400
+    assert len({row["request_id"] for row in rows}) == 4
 
 
 @pytest.mark.asyncio
@@ -206,26 +421,34 @@ async def test_real_manual_compression_uses_hermes_and_session_continues(tmp_pat
 async def test_manual_compression_uses_prefixed_routes_wire_models_without_gateway(
     tmp_path, monkeypatch,
 ):
-    with FakeLLMServer(
-        [*[Text("done") for _ in range(24)]], default_text="continued after compaction",
-    ) as fake:
+    with FakeLLMServer([Text("done") for _ in range(24)], api_key="sk-main") as main_fake, \
+            FakeLLMServer(api_key="sk-compression") as compression_fake:
         home = tmp_path / "engine"
         write_hermes_home(
-            home, fake.base_url,
+            home, main_fake.base_url,
             extra_config=(
                 "auxiliary:\n"
                 "  compression:\n"
                 "    provider: custom\n"
                 "    model: main-model\n"
-                f"    base_url: {fake.base_url}\n"
-                "    api_key: sk-provider-secret\n"
+                f"    base_url: {main_fake.base_url}\n"
+                "    api_key: sk-main\n"
             ),
         )
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setattr("atlas.config.load_user_settings", lambda: {
             "compression_model": "ref-model",
         })
-        manager = _ProviderKeyManager(fake.base_url)
+        manager = _ProviderKeyManager(main_fake.base_url)
+        manager._models[1].update(
+            provider="compression-fixture", hermes_provider="compression-fixture",
+            native_model="wire-ref-model",
+        )
+        manager.provider_config = lambda provider: {
+            "base_url": compression_fake.base_url if provider == "compression-fixture" else main_fake.base_url,
+            "keys": [],
+        }
+        manager.resolve_api_key = lambda provider: "sk-compression" if provider == "compression-fixture" else "sk-main"
         manager.gateway_base_url = ""
         manager.gateway_api_key = ""
         runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
@@ -243,10 +466,28 @@ async def test_manual_compression_uses_prefixed_routes_wire_models_without_gatew
         )
 
         assert compressed["compressed"] is True, compressed
-        aux = fake.aux_requests()
-        assert aux
-        assert {request["model"] for request in aux} == {"ref-model"}
-        assert all(request["model"] != "openai/ref-model" for request in aux)
+        aux = compression_fake.aux_requests()
+        assert aux, {"compression": compressed, "main_requests": len(main_fake.requests),
+                     "compression_requests": len(compression_fake.requests)}
+        assert {request["model"] for request in aux} == {"wire-ref-model"}
+        assert main_fake.aux_requests() == []
+
+        # The cached conversation agent must discard the old sidecar endpoint
+        # when the setting is cleared on a later turn.
+        monkeypatch.setattr("atlas.config.load_user_settings", lambda: {})
+        [event async for event in runtime.run_turn(
+            message="continue after clearing compression route",
+            conversation_id=conversation_id, workspace=str(tmp_path), history=[],
+        )]
+        cached_agent = runtime._agent_cache[conversation_id]["agent"]
+        compressor = cached_agent.context_compressor
+        assert compressor.summary_model is None
+        assert compressor.summary_model_id is None
+        assert compressor.provider == cached_agent.provider
+        assert compressor.base_url == main_fake.base_url
+        assert compressor.api_key == cached_agent.api_key
+        compressor._call_summary_llm("Summarize through the restored main route.", time.monotonic())
+        assert main_fake.aux_requests()
 
 
 @pytest.mark.asyncio

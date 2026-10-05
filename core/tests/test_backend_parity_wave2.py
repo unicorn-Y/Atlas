@@ -220,7 +220,9 @@ async def test_recipe_from_run_keeps_input_skills_mode_and_workspace(tmp_path: P
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
     conversation_id = await store.create_conversation("saved run")
-    await store.save_message(conversation_id, "user", "raw message")
+    from tests.fakes.session_store import save_memory_fixture_message
+
+    await save_memory_fixture_message(store, conversation_id, "user", "raw message")
     monkeypatch.setattr(server, "memory", store)
     monkeypatch.setattr(server, "_task_store", lambda kind: TomlRecordStore(tmp_path / "data", kind))
     run = server.RunState("saved-run", conversation_id, "model")
@@ -327,9 +329,11 @@ async def test_ephemeral_run_does_not_change_source_conversation(tmp_path: Path,
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
     conversation_id = await store.create_conversation("source")
-    await store.save_message(conversation_id, "user", "existing")
+    from tests.fakes.session_store import save_memory_fixture_message
+
+    await save_memory_fixture_message(store, conversation_id, "user", "existing")
     temp_id = await store.create_conversation("temporary")
-    await store.save_message(temp_id, "user", "existing")
+    await save_memory_fixture_message(store, temp_id, "user", "existing")
 
     class Orchestrator:
         async def run(self, **kwargs):
@@ -354,7 +358,9 @@ async def test_fork_persists_parent_and_message_link(tmp_path: Path, monkeypatch
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
     parent = await store.create_conversation("parent")
-    message_id = await store.save_message(parent, "user", "question")
+    from tests.fakes.session_store import save_memory_fixture_message
+
+    message_id = await save_memory_fixture_message(store, parent, "user", "question")
     monkeypatch.setattr(server, "memory", store)
     # H5: fork_conversation lives on the conversations router now; its store
     # seam is still resolved through atlas.server.
@@ -372,8 +378,10 @@ async def test_fork_summary_is_first_system_message_and_duplicate_copies_all(tmp
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
     parent = await store.create_conversation("summary parent")
-    first = await store.save_message(parent, "user", "first")
-    await store.save_message(parent, "assistant", "answer")
+    from tests.fakes.session_store import save_memory_fixture_message
+
+    first = await save_memory_fixture_message(store, parent, "user", "first")
+    await save_memory_fixture_message(store, parent, "assistant", "answer")
     monkeypatch.setattr(server, "memory", store)
     monkeypatch.setattr(server, "orchestrator", None)
     forked = await fork_conversation(

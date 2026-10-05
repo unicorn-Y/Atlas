@@ -175,12 +175,16 @@ git -C D:\hermes-agent merge upstream/main
 
 ## 七、踩过的坑
 
-1. Codex 的终端会中断长命令，它的全量测试从来没跑完过——审查方必须自己补跑。
+1. 长测试需要等待进程真正退出并保存日志、JUnit 和墙钟耗时；终端提前返回 session id 不代表命令完成。独立审查仍需亲自重跑验收门槛。
 2. 测试之间会互相污染：单跑能过、全量挂，多半是模块级全局对象被上一个测试关掉或替换了。
 3. Git Bash 的 heredoc 会吃掉反斜杠和中文：复杂改动用编辑工具或先写成 Python 脚本。
 4. 开发版运行时不要 `npm ci`（会删掉正在用的依赖）。
 5. 主机上 `package-lock.json` 常显示改动（只是换行符），拉代码前 `git checkout -- package-lock.json`。
-6. Electron 首次启动后端要 20 秒左右，超过它 15 秒的等待时间：先手动起后端，再起 Electron。
+6. Electron 以 `/api/health.status == "ok"` 作为就绪条件；`starting` 表示仍有组件未就绪，后端存活时继续轮询。
+   - `components` 按组件报告 `starting`、`ready` 或 `failed`；`component_errors` 提供失败诊断。
+   - 等待期间显示进度；失败时显示诊断和重试入口，不因组件仍为 `starting` 提前终止存活的后端进程。
+   - 没有启用 MCP server 时，MCP 组件可直接就绪；共享 proxy 在首次 MCP 使用（含动态新增）时才构造客户端。
+   - 冷启动耗时只按冷启动探针和 `test_startup_time.py` 的实测结果记录。
 
 ## 八、后端测试分层（H10.1）
 
@@ -199,7 +203,7 @@ $run = Get-Date -Format 'yyyyMMdd-HHmmss'
 $out = "..\artifacts\test-runs\$run"
 New-Item -ItemType Directory -Force $out | Out-Null
 $timer = [Diagnostics.Stopwatch]::StartNew()
-python -m pytest -q -n auto --dist loadscope --durations=25 `
+python -m pytest -q -n auto --dist loadscope --timeout=300 --durations=30 `
   --junitxml="$out\unit.xml" 2>&1 | Tee-Object "$out\unit.log"
 $exitCode = $LASTEXITCODE
 $timer.Stop()
@@ -209,22 +213,22 @@ $timer.Stop()
 `unit` 的目标墙钟时间不超过 180 秒：
 
 ```powershell
-python -m pytest -q -n auto --dist loadscope -m unit --durations=25 `
+python -m pytest -q -n auto --dist loadscope -m unit --timeout=300 --durations=30 `
   --junitxml="$out\unit.xml" 2>&1 | Tee-Object "$out\unit.log"
 ```
 
-`unit + integration` 的目标墙钟时间不超过 600 秒。超时或失败时保留相同选择的完整日志，先检查 `--durations=25` 和失败根因，再优化 setup、共享状态或串行瓶颈；不能通过排除测试缩短数字。
+`unit + integration` 的目标墙钟时间不超过 600 秒。超时或失败时保留相同选择的完整日志，先检查 `--durations=30` 和失败根因，再优化 setup、共享状态或串行瓶颈；不能通过排除测试缩短数字。
 
 ```powershell
 python -m pytest -q -n auto --dist loadscope -m "unit or integration" `
-  --durations=25 --junitxml="$out\unit-integration.xml" `
+  --timeout=300 --durations=30 --junitxml="$out\unit-integration.xml" `
   2>&1 | Tee-Object "$out\unit-integration.log"
 ```
 
 桌面 lane 只在用户可见的交互式 Windows 会话运行。目标桌面用例失败时只自动重试一次；其他测试不重试。
 
 ```powershell
-python -m pytest -q -n 1 -m desktop --durations=25 `
+python -m pytest -q -n 1 -m desktop --timeout=300 --durations=30 `
   --junitxml="$out\desktop.xml" 2>&1 | Tee-Object "$out\desktop.log"
 ```
 

@@ -25,7 +25,6 @@ from atlas.engine import HermesRuntime
 from atlas.runtime.hooks import HookStore, _json_decision
 from atlas.tools.local_execution import LocalExecutionRuntime
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: Claude-format settings.json plus real hook executables
 # ---------------------------------------------------------------------------
@@ -263,29 +262,48 @@ def _run_model_mgr() -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_agent_userpromptsubmit_deny_returns_assistant_message() -> None:
-    memory = AsyncMock()
-    memory.save_message.return_value = "msg-1"
-    agent = AgentOrchestrator(_run_model_mgr(), memory)
+async def test_agent_userpromptsubmit_deny_returns_assistant_message(
+    tmp_path, monkeypatch,
+) -> None:
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import delete_session, read_session_all_messages
+    from atlas.memory import MemoryStore
+
+    store = MemoryStore(tmp_path / "memory.db")
+    await store.init()
+    extract_memories = AsyncMock(wraps=store.extract_memories)
+    monkeypatch.setattr(store, "extract_memories", extract_memories)
+    agent = AgentOrchestrator(_run_model_mgr(), store)
+    conversation_id = f"c4-deny-{tmp_path.name}"
+    session_home = DATA_ROOT / "engine"
 
     def hook(event: str, payload: dict[str, Any]) -> dict[str, Any]:
         assert event == "UserPromptSubmit"
         assert payload["prompt"] == "hello"
         return {"blocked": True, "reason": "this prompt is not allowed"}
 
-    events = [
-        event async for event in agent.run(
-            "hello", "conv-deny", user_hook_callback=hook,
-        )
-    ]
-    assert [event["type"] for event in events] == ["chunk", "done"]
-    assert events[0]["content"] == "this prompt is not allowed"
-    assert events[1]["message_id"] == "msg-1"
-    saved = memory.save_message.await_args
-    assert saved.kwargs["role"] == "assistant"
-    assert "this prompt is not allowed" in saved.kwargs["content"]
-    # The blocked round never reached the model layer: no planning memories ran.
-    memory.extract_memories.assert_not_awaited()
+    try:
+        events = [
+            event async for event in agent.run(
+                "hello", conversation_id, user_hook_callback=hook,
+            )
+        ]
+        assert [event["type"] for event in events] == ["chunk", "done"]
+        assert events[0]["content"] == "this prompt is not allowed"
+        persisted = read_session_all_messages(session_home, conversation_id)
+        assert len(persisted) == 1
+        assert persisted[0]["role"] == "assistant"
+        assert persisted[0]["content"] == events[0]["content"]
+        assert events[1]["message_id"] == persisted[0]["id"]
+        extract_memories.assert_not_awaited()
+        assert store._db is not None
+        rows = await (await store._db.execute(
+            "SELECT id FROM messages WHERE conversation_id = ?", (conversation_id,),
+        )).fetchall()
+        assert rows == []
+    finally:
+        await store.close()
+        delete_session(session_home, conversation_id)
 
 
 @pytest.mark.asyncio

@@ -99,10 +99,21 @@ def test_hermes_tool_calls_translate_to_atlas_tools():
 async def test_runtime_bridges_thread_callbacks_and_uses_atlas_session_home(tmp_path, monkeypatch):
     captured = {}
 
+    class UsageReportingFakeHermesAgent(FakeHermesAgent):
+        def run_conversation(self, **kwargs):
+            result = super().run_conversation(**kwargs)
+            self.kwargs["hooks"].on_usage({
+                "input_tokens": 37, "uncached_input_tokens": 37,
+                "output_tokens": 12, "cached_input_tokens": 0,
+                "cache_write_tokens": 0, "context_tokens": 49,
+                "context_limit": 4096, "request_count": 1,
+            })
+            return result
+
     def factory(**kwargs):
         captured.update(kwargs)
         captured["home"] = os.environ.get("HERMES_HOME")
-        return FakeHermesAgent(**kwargs)
+        return UsageReportingFakeHermesAgent(**kwargs)
 
     models = SimpleNamespace(
         current_model="test-model",
@@ -125,7 +136,7 @@ async def test_runtime_bridges_thread_callbacks_and_uses_atlas_session_home(tmp_
 
     assert [event["type"] for event in events] == [
         "chunk", "tool_call", "tool_result", "run.compaction.progress",
-        "run_usage", "hermes.result",
+        "run_usage", "run_usage", "hermes.result",
     ]
     assert captured["home"] == str((tmp_path / "atlas-data" / "engine").resolve())
     assert captured["session_id"] == "conversation-1"
@@ -138,6 +149,7 @@ async def test_runtime_bridges_thread_callbacks_and_uses_atlas_session_home(tmp_
     assert events[-1]["result"]["final_response"] == "reply"
     assert events[-2]["usage"]["context_tokens"] == 49
     assert events[-2]["usage"]["context_limit"] == 4096
+    assert events[-3]["usage"]["request_id"] == events[-2]["usage"]["request_id"]
     assert "fake-key" not in repr(events)
 
 

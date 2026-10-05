@@ -219,6 +219,10 @@ def test_run_writes_file_with_stream_json_and_chinese_workspace(cli_backend):
     assert summary["conversation_id"]
     assert isinstance(summary["elapsed_seconds"], (int, float))
     assert isinstance(summary["usage"], dict) and summary["usage"]
+    assert summary["usage"]["request_count"] >= 2
+    purpose_totals = summary["usage"]["purpose_totals"]
+    assert purpose_totals["conversation"]["request_count"] >= 2
+    assert sum(item["request_count"] for item in purpose_totals.values()) == summary["usage"]["request_count"]
     assert {"files", "additions", "deletions"} <= set(summary["changes"])
     assert "写入完成" in summary["message"]
 

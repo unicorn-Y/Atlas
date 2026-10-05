@@ -297,16 +297,18 @@ async def test_rewind_restores_messages_and_files_then_redo_restores_both(tmp_pa
     target = workspace / "result.txt"
     target.write_text("before", encoding="utf-8")
     conversation_id = await memory.create_conversation("rewind")
-    first = await memory.save_message(conversation_id, "user", "first", {"run_id": "run-1"})
-    await memory.save_message(conversation_id, "assistant", "first done", {"run_id": "run-1"})
+    from tests.fakes.session_store import save_memory_fixture_message
+
+    first = await save_memory_fixture_message(memory, conversation_id, "user", "first", {"run_id": "run-1"})
+    await save_memory_fixture_message(memory, conversation_id, "assistant", "first done", {"run_id": "run-1"})
     checkpoint_one = checkpoint_store.create_checkpoint(workspace, ["result.txt"], run_id="run-1")
     checkpoint_one["created_at"] = "2025-01-01T00:00:00Z"
     (checkpoint_store.storage_dir / checkpoint_one["id"] / "manifest.json").write_text(
         json.dumps(checkpoint_one), encoding="utf-8",
     )
     target.write_text("round one", encoding="utf-8")
-    await memory.save_message(conversation_id, "user", "second", {"run_id": "run-2"})
-    await memory.save_message(conversation_id, "assistant", "second done", {"run_id": "run-2"})
+    await save_memory_fixture_message(memory, conversation_id, "user", "second", {"run_id": "run-2"})
+    await save_memory_fixture_message(memory, conversation_id, "assistant", "second done", {"run_id": "run-2"})
     checkpoint_two = checkpoint_store.create_checkpoint(workspace, ["result.txt"], run_id="run-2")
     checkpoint_two["created_at"] = "2025-01-02T00:00:00Z"
     (checkpoint_store.storage_dir / checkpoint_two["id"] / "manifest.json").write_text(

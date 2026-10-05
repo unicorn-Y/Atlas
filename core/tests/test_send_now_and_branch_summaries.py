@@ -233,14 +233,16 @@ async def _seed_fork(tmp_path, name: str):
 
     memory = MemoryStore(db_path=tmp_path / f"{name}.db")
     await memory.init()
+    from tests.fakes.session_store import save_memory_fixture_message
+
     parent = await memory.create_conversation("base")
-    fork_point = await memory.save_message(parent, "user", "start the refactor")
-    await memory.save_message(parent, "assistant", "refactored the engine half-way")
+    fork_point = await save_memory_fixture_message(memory, parent, "user", "start the refactor")
+    await save_memory_fixture_message(memory, parent, "assistant", "refactored the engine half-way")
     child = str((await memory.fork_conversation(parent, fork_point))["id"])
     await memory.update_conversation(child, parent_conversation_id=parent,
                                      fork_message_id=fork_point)
-    await memory.save_message(child, "user", "switch to sqlite for the branch")
-    await memory.save_message(child, "assistant", "branch done: sqlite migration landed")
+    await save_memory_fixture_message(memory, child, "user", "switch to sqlite for the branch")
+    await save_memory_fixture_message(memory, child, "assistant", "branch done: sqlite migration landed")
     return memory, parent, child, fork_point
 
 
