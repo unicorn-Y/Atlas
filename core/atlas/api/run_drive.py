@@ -1113,9 +1113,6 @@ def _sum_usage(calls: list[dict[str, Any]]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-    return {"urls": _server().notifications.urls}
-
-
 async def _reload_extensions() -> dict[str, Any]:
     assert _server().plugin_runtime is not None
     report = await _server().plugin_runtime.load_all(
@@ -2181,6 +2178,11 @@ async def _execute_run(
     }
 
     async def record_usage(raw_usage: dict[str, Any]) -> None:
+        if raw_usage.get("request_sent") is False:
+            # Failure report for a request that never reached the provider: not a
+            # model request, so it must not enter run.usage (it would inflate
+            # request counts and null the aggregated totals).
+            return
         row = dict(raw_usage)
         request_id = str(row.get("request_id") or "")
         duplicate = bool(request_id and request_id in usage_positions)

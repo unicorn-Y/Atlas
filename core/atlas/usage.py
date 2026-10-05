@@ -171,6 +171,24 @@ class RunUsageBudget:
                 with path.open("a", encoding="utf-8") as stream:
                     stream.write(json.dumps(audit_row, ensure_ascii=False, separators=(",", ":")) + "\n")
 
+    def refund(self, request_id: str) -> None:
+        """Return a never-sent request's reservation: no charge, no audit row.
+
+        A failure report marked ``request_sent: False`` means the request
+        provably never reached a provider (e.g. auxiliary routing refused
+        before any HTTP call). Charging its estimate would both inflate the
+        audit beyond the requests actually sent and latch ``usage_unknown``
+        for the whole run, so the reservation is returned and the identity is
+        settled instead.
+        """
+        with self._lock:
+            pending = self._pending.pop(request_id, None)
+            if pending is None:
+                return
+            self.reserved -= pending["estimate"]
+            if request_id:
+                self._request_ids.add(request_id)
+
     def record(self, usage: dict[str, Any]) -> bool:
         request_id = str(usage.get("request_id") or "")
         with self._lock:

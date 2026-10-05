@@ -258,6 +258,9 @@ async def test_branch_summary_requested_once_and_cached(tmp_path):
 
     async def fake_mirror(parent_id, child_id, fork_id, content):
         mirrored.append((parent_id, child_id, fork_id, content))
+        # The real mirror persists into the canonical SessionDB parent
+        # transcript — the cache the second switch must read.
+        await bs._default_mirror(parent_id, child_id, fork_id, content)
 
     # First switch: nothing cached yet -> returns instantly without the model,
     # generation is scheduled in the background (never blocks the switch).
@@ -272,15 +275,22 @@ async def test_branch_summary_requested_once_and_cached(tmp_path):
     assert mirrored == [(parent, child, fork_point,
                          "分支摘要：把引擎迁移到 SQLite 并验证通过")]
 
-    # Second switch (and a memory-cache miss): served from cache, no new call.
+    # Second switch (and an in-memory-cache miss): served from the canonical
+    # SessionDB transcript the mirror persisted, no new call.
     bs._completed.clear()
     second = await bs.branch_summaries(memory, parent, complete=fake_complete,
                                        mirror=fake_mirror)
     assert second == {child: "分支摘要：把引擎迁移到 SQLite 并验证通过"}
     assert len(calls) == 1
-    persisted = await memory.get_conversation_messages(parent, limit=1000)
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+
+    persisted = await asyncio.to_thread(
+        read_session_all_messages, DATA_ROOT / "engine", parent,
+    )
     summary_rows = [item for item in persisted
-                    if item["metadata"].get("kind") == "branch_summary"]
+                    if item["metadata"].get("kind") == "branch_summary"
+                    or item["metadata"].get("display_kind") == "branch_summary"]
     assert [row["content"] for row in summary_rows] == [
         "分支摘要：把引擎迁移到 SQLite 并验证通过",
     ]
@@ -320,9 +330,14 @@ async def test_branch_summary_skips_non_branch_and_unprogressed_forks(tmp_path):
         return "should not be called"
 
     assert await bs.generate_branch_summary(memory, plain, complete=fake_complete) is None
-    # Child without post-fork progress: strip everything copied into the fork.
-    child_messages = await memory.get_conversation_messages(child, limit=1000)
-    await memory.truncate_conversation(child, child_messages[0]["id"])
+    # Child without post-fork progress: the canonical SessionDB transcript keeps
+    # only the prefix copied at fork time, so the branch delta is empty.
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import delete_session
+    from tests.fakes.session_store import seed_session_messages
+
+    await asyncio.to_thread(delete_session, DATA_ROOT / "engine", child)
+    await seed_session_messages(child, [("user", "start the refactor")])
     assert await bs.generate_branch_summary(memory, child, complete=fake_complete) is None
     assert calls == []
 

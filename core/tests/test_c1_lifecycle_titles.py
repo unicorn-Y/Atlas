@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-import time
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -27,9 +27,14 @@ async def _run_title_turn(
     }))
     monkeypatch.setattr("atlas.config.DATA_ROOT", tmp_path / "atlas-data")
     monkeypatch.setenv("ATLAS_DATA_DIR", str(tmp_path / "atlas-data"))
+    # A delayed aux title must land AFTER the main run finished — that is the
+    # lifecycle under test — so it waits on an explicit gate the fixture
+    # releases once agent.run() has returned (a fixed sleep races the run).
+    title_gate = threading.Event()
+
     def title_response(_request):
-        if delayed_title:
-            time.sleep(1.0)
+        if delayed_title and not title_gate.wait(timeout=15):
+            raise RuntimeError("title gate was never released")
         return Text("Generated session title")
 
     with FakeLLMServer([Text("Session work completed")], aux=title_response) as fake:
@@ -75,6 +80,8 @@ async def _run_title_turn(
                 runtime_event_callback=on_runtime_event if runtime_events is not None else None,
             )]
             run_finished = True
+            if delayed_title:
+                title_gate.set()
             if rename_after_run:
                 await memory.update_conversation_title(conversation_id, "User chosen during title upgrade")
             if delayed_title:
