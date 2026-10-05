@@ -806,7 +806,7 @@ class AtlasScheduler:
                 try:
                     await self._ap_scheduler.remove_schedule(task_id)
                 except Exception:
-                    pass
+                    log.debug("atlas.scheduler: ignored error", exc_info=True)
             elif task.status == TaskStatus.ACTIVE:
                 if old_status == TaskStatus.PAUSED or trigger_changed:
                     # Resume or trigger changed: re-register
@@ -815,7 +815,7 @@ class AtlasScheduler:
                         try:
                             await self._ap_scheduler.remove_schedule(task_id)
                         except Exception:
-                            pass
+                            log.debug("atlas.scheduler: ignored error", exc_info=True)
                     else:
                         trigger = _make_trigger(
                             task.trigger_type, task.trigger_args, cfg.scheduler_timezone
@@ -847,7 +847,7 @@ class AtlasScheduler:
             try:
                 await self._ap_scheduler.remove_schedule(task_id)
             except Exception:
-                pass
+                log.debug("atlas.scheduler: ignored error", exc_info=True)
 
         self._persist()
         log.info("scheduler.task_deleted", task_id=task_id)

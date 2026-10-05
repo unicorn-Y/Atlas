@@ -20,6 +20,10 @@ import httpx
 
 from atlas.config import get_config
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 DEFAULT_PORT = 8791
 
 
@@ -72,7 +76,7 @@ async def status() -> dict[str, Any]:
                 "observability": detail.get("observability", {}),
             })
         except Exception:
-            pass
+            logger.debug("atlas.runtime.hub_control: ignored error", exc_info=True)
     return result
 
 
@@ -110,7 +114,7 @@ async def stop() -> dict[str, Any]:
     try:
         await _request("POST", "/shutdown")
     except Exception:
-        pass
+        logger.debug("atlas.runtime.hub_control: ignored error", exc_info=True)
     control_file().unlink(missing_ok=True)
     return {"running": False, "stopped": True}
 

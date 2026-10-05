@@ -8,6 +8,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class AgentSession:
@@ -107,7 +111,7 @@ class ACPBackend:
             try:
                 await manager.__aexit__(None, None, None)
             except BaseException:
-                pass
+                logger.debug("atlas.runtime.backends: ignored error", exc_info=True)
             raise
         session = AgentSession(
             id=response.session_id,

@@ -407,7 +407,7 @@ class LSPClient:
                 try:
                     await self._send_notification("exit", None)
                 except Exception:  # noqa: BLE001
-                    pass
+                    logger.debug("atlas.lsp.client: ignored error", exc_info=True)
                 # Signalling right after ``exit`` races the server's own exit: needless SIGTERM
                 # noise for well-behaved servers and, on Darwin, a reaped-and-reused PID target.
                 if (proc := self._proc) is not None and proc.returncode is None:

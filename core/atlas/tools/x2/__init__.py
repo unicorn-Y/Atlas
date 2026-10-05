@@ -101,6 +101,7 @@ def shutdown() -> None:
         try:
             mod = importlib.import_module(mod_name)
         except Exception:  # noqa: BLE001
+            log.debug("atlas.tools.x2: ignored error", exc_info=True)
             continue
         stop = getattr(mod, "shutdown", None)
         if callable(stop):

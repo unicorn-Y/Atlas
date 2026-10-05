@@ -13,6 +13,10 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # ---- event names (wire contract with frontend runtimeEvents.ts) -----------
 EVENT_FOREGROUND_REQUIRED = "computer.foreground_required"
 EVENT_FOREGROUND_RESUMED = "computer.foreground_resumed"
@@ -47,7 +51,7 @@ class X2Context:
         try:
             await self.emit(event, data or {})
         except Exception:  # noqa: BLE001 - event emission must never break a tool call
-            pass
+            logger.debug("atlas.tools.x2.context: ignored error", exc_info=True)
 
     async def confirm_foreground(self, reason: str, target: str = "") -> bool:
         """Ask the user via a foreground confirmation card.  Returns True when approved.

@@ -17,6 +17,10 @@ from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class _Connection:
@@ -546,6 +550,7 @@ class SSHWorkspaceManager:
                     ).decode()
                 )
             except Exception:
+                logger.debug("atlas.ssh: ignored error", exc_info=True)
                 continue
             result.append(
                 {

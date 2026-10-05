@@ -18,6 +18,10 @@ from urllib.parse import quote_plus, urljoin
 
 import httpx
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -72,7 +76,7 @@ def extract_text(html: str) -> str:
     try:
         parser.feed(html)
     except Exception:
-        pass
+        logger.debug("atlas.tools.web: ignored error", exc_info=True)
     return re.sub(r"\s+", " ", " ".join(parser.chunks)).strip()
 
 
@@ -82,7 +86,7 @@ def parse_ddg_results(html: str, base_url: str = "https://duckduckgo.com") -> li
     try:
         parser.feed(html)
     except Exception:
-        pass
+        logger.debug("atlas.tools.web: ignored error", exc_info=True)
     results: list[dict[str, str]] = []
     for href, text in parser.links:
         if "uddg=" in href:

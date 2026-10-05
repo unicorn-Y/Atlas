@@ -7,6 +7,10 @@ from typing import Any
 from atlas.agents.backends import create_backends
 from atlas.runtime.backends import AgentBackend, AgentSession
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class AgentBackendHost:
     def __init__(self, backends: dict[str, AgentBackend] | None = None) -> None:
@@ -60,4 +64,5 @@ class AgentBackendHost:
             try:
                 await self.close(session_id)
             except Exception:
+                logger.debug("atlas.runtime.backend_host: ignored error", exc_info=True)
                 continue
