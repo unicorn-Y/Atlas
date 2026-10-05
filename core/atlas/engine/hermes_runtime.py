@@ -829,6 +829,14 @@ class HermesRuntime:
         def on_usage(data: dict[str, Any]) -> None:
             row = dict(data)
             row.setdefault("request_id", uuid.uuid4().hex)
+            if row.get("request_sent") is False:
+                # Failure report for a request that never reached the provider:
+                # refund its budget reservation and keep it out of the run_usage
+                # stream entirely — it is not a model request and would both
+                # inflate request counts and null the run totals.
+                if usage_budget is not None:
+                    usage_budget.refund(str(row["request_id"]))
+                return
             row.setdefault("purpose", "conversation")
             if row["purpose"] == "conversation":
                 row["model"] = model_id or current
