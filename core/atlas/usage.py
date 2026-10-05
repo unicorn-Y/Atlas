@@ -52,6 +52,10 @@ def aggregate_run_usage(rows: list[dict[str, Any]]) -> dict[str, Any]:
     def sum_field(items: list[dict[str, Any]], key: str) -> int | None:
         if key != "request_count" and any(item.get("usage_available") is False for item in items):
             return None
+        if key in {"cached_input_tokens", "cache_write_tokens"} and any(
+            item.get("cache_usage_available") is False for item in items
+        ):
+            return None
         values = [
             item.get(key, 1) if key == "request_count" else item.get(key)
             for item in items

@@ -114,6 +114,42 @@ def test_run_usage_aggregation_marks_missing_usage_unknown() -> None:
     assert totals["request_count"] == 2
 
 
+def test_run_usage_aggregation_keeps_unavailable_cache_buckets_unknown() -> None:
+    totals = aggregate_run_usage([
+        {"request_id": "main", "purpose": "conversation", "usage_available": True,
+         "input_tokens": 100, "uncached_input_tokens": 100, "output_tokens": 4,
+         "cached_input_tokens": 0, "cache_write_tokens": 0,
+         "cache_usage_available": False, "request_count": 1, "context_tokens": 100},
+        {"request_id": "child", "purpose": "subagent", "usage_available": True,
+         "input_tokens": 20, "uncached_input_tokens": 20, "output_tokens": 2,
+         "cached_input_tokens": 0, "cache_write_tokens": 0,
+         "cache_usage_available": True, "request_count": 1, "context_tokens": 20},
+    ])
+
+    assert totals["cached_input_tokens"] is None
+    assert totals["cache_write_tokens"] is None
+    assert totals["cache_hit_rate"] is None
+    assert totals["purpose_totals"]["conversation"]["cached_input_tokens"] is None
+    assert totals["purpose_totals"]["conversation"]["cache_write_tokens"] is None
+    assert totals["purpose_totals"]["subagent"]["cached_input_tokens"] == 0
+    assert totals["purpose_totals"]["subagent"]["cache_write_tokens"] == 0
+
+
+def test_run_usage_aggregation_keeps_reported_zero_cache_buckets() -> None:
+    totals = aggregate_run_usage([
+        {"request_id": "main", "purpose": "conversation", "usage_available": True,
+         "input_tokens": 100, "uncached_input_tokens": 100, "output_tokens": 4,
+         "cached_input_tokens": 0, "cache_write_tokens": 0,
+         "cache_usage_available": True, "request_count": 1, "context_tokens": 100},
+    ])
+
+    assert totals["cached_input_tokens"] == 0
+    assert totals["cache_write_tokens"] == 0
+    assert totals["cache_hit_rate"] == 0.0
+    assert totals["purpose_totals"]["conversation"]["cached_input_tokens"] == 0
+    assert totals["purpose_totals"]["conversation"]["cache_write_tokens"] == 0
+
+
 def test_output_limits_and_head_tail_truncation(monkeypatch) -> None:
     from atlas.tools import output_limits
 
