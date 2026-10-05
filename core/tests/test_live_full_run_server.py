@@ -1,9 +1,12 @@
 """H10.2 §12.2 full live scenarios needing one persistent backend (08/09/10/12).
 
-- 08 计划模式出计划，再按计划执行: a ``--permission-mode plan`` run proposes the
-  plan (``run.plan.proposed``) and parks in ``waiting``; the desktop surface is
-  the ``run.plan.approve`` WS message, so a second ``/ws/chat`` connection plays
-  the desktop: approve → the engine executes the same run → greet.py works.
+- 08 计划模式出计划，再按计划执行: one raw ``/ws/chat`` connection sends
+  ``run.start`` with ``permission_mode=plan`` and the scenario task verbatim;
+  the server proposes the plan (``run.plan.proposed``) and parks the run in
+  ``waiting``. The harness then plays the desktop over the same socket —
+  ``run.plan.approve`` → the engine executes the same run → greet.py works.
+  (The headless CLI can no longer carry this scenario: it now denies the plan
+  by design — run.cancel + exit 3 — see the test_cli_headless plan regression.)
 - 09 做到一半回退到某一步再继续: two ``atlas run --server`` turns, rewind the
   second turn through the production route (``POST /api/conversations/{id}/rewind``,
   files restored from the run checkpoints), retry with the corrected instruction.
@@ -269,12 +272,23 @@ def _finish_observed_process(process: subprocess.Popen, stdout_thread: threading
 
 
 # ---------------------------------------------------------------------------
-# 08 — plan mode proposes, the desktop approves over WS, execution follows
+# 08 — plan mode proposes over raw WS, the harness approves, execution follows
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.live
 def test_full_08_plan_propose_approve_then_execute(server_live) -> None:
+    """08 driven over the raw Runtime Event Protocol (no CLI process).
+
+    The headless CLI now treats ``run.plan.proposed`` as a denial (run.cancel +
+    exit 3, per the H1 exit-code contract; covered by the test_cli_headless
+    plan regression), so the harness itself plays the desktop surface: one
+    ``/ws/chat`` connection sends ``run.start`` (``permission_mode=plan`` +
+    the scenario task verbatim), receives ``run.plan.proposed``, proves the
+    planning phase executed nothing, sends ``run.plan.approve`` (the same
+    server-side contract the desktop uses: run_id + plan event_id + edits),
+    and reads the resumed execution through to ``run.completed``.
+    """
     live, backend = server_live
     backend.start()
     scenario = "08-plan-execute"
@@ -282,83 +296,218 @@ def test_full_08_plan_propose_approve_then_execute(server_live) -> None:
     prompt = _prompt(scenario)
     run_dir = live.evidence / scenario
     run_dir.mkdir(parents=True, exist_ok=True)
+    headers = {"x-atlas-api-token": "h10-live-smoke"}
 
-    process = subprocess.Popen(
-        [sys.executable, "-m", "atlas.cli", "run",
-         "-p", prompt,
-         "--workspace", str(workspace),
-         "--model", live.model,
-         "--permission-mode", "plan",
-         "--output-format", "stream-json",
-         "--timeout", "480",
-         "--server", backend.base_url],
-        cwd=str(live.root), env=live.child_env(),
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-        errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
-    lines: list[str] = []
-    proposed: dict[str, Any] = {}
-    live.processes.append(process)
-    stderr_lines, stderr_pump = _pump_stderr(process)
+    # Conversation id through the same REST seam the CLI headless mode uses.
+    import httpx
 
-    def _pump() -> None:
-        assert process.stdout is not None
-        for line in process.stdout:
-            lines.append(line)
-            if "run.plan.proposed" in line and not proposed:
-                try:
-                    event = json.loads(line)
-                    proposed["run_id"] = str(event.get("run_id") or "")
-                    proposed["event_id"] = str((event.get("data") or {}).get("event_id") or "")
-                except json.JSONDecodeError:
-                    continue
+    response = httpx.post(f"{backend.base_url}/api/conversations",
+                          json={"title": "08 plan-execute"}, headers=headers, timeout=30)
+    assert response.status_code == 200, (
+        f"conversation create failed: HTTP {response.status_code} {response.text[:300]}")
+    conversation_id = str(response.json().get("id", ""))
+    assert conversation_id, "conversation create returned no id"
 
-    pump = threading.Thread(target=_pump, daemon=True)
-    pump.start()
+    trace: dict[str, Any] = {"events": [], "notes": []}
 
-    deadline = time.monotonic() + 420
-    while time.monotonic() < deadline and not proposed:
-        if process.poll() is not None:
-            break
-        time.sleep(0.2)
-    assert proposed, (
-        f"plan was never proposed in 420s: tail={lines[-3:] if lines else 'no output'}"
-    )
-    # Planning phase must not have executed the task.
-    assert not (workspace / "greet.py").exists(), "plan phase executed instead of planning"
+    def _write_evidence(meta_extra: dict[str, Any]) -> None:
+        # Evidence lands BEFORE the strong asserts: a failed drive or a failed
+        # assertion must leave a readable stream + meta, never an empty dir.
+        stream_text = "".join(
+            json.dumps(event, ensure_ascii=False) + "\n" for event in trace["events"])
+        (run_dir / "stream.jsonl").write_text(_redact(stream_text), encoding="utf-8")
+        (run_dir / "stderr.log").write_text(
+            _redact("\n".join(str(note) for note in trace["notes"])), encoding="utf-8")
+        meta = {
+            "name": scenario,
+            # CLI-side plan semantics are covered by the Lane-G fake regression
+            # (test_cli_headless plan tests); this live scenario is WS-driven.
+            "driven_via": "raw ws (CLI headless now denies plan by design; "
+                          "see test_cli_headless plan regression)",
+            "model": live.model,
+            "conversation_id": conversation_id,
+            "workspace": str(workspace),
+            **meta_extra,
+        }
+        (run_dir / "meta.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    async def _approve() -> None:
+    async def _drive() -> dict[str, Any]:
         import websockets
 
+        run_id = uuid.uuid4().hex
+        trace["run_id"] = run_id
+        outcome: dict[str, Any] = {"run_id": run_id}
+        t_start = time.monotonic()
         async with websockets.connect(
             backend.base_url.replace("http", "ws", 1) + "/ws/chat",
-            additional_headers={"x-atlas-api-token": "h10-live-smoke"},
-            max_size=8_000_000,
+            additional_headers=headers, max_size=8_000_000,
         ) as ws:
             await ws.send(json.dumps({
-                "type": "run.plan.approve", "run_id": proposed["run_id"],
-                "event_id": proposed["event_id"], "edits": "",
+                "type": "run.start", "run_id": run_id, "content": prompt,
+                "conversation_id": conversation_id, "workspace": str(workspace),
+                "model": live.model, "permission_mode": "plan",
+            }, ensure_ascii=False))
+            trace["notes"].append(f"run.start sent: run_id={run_id} permission_mode=plan")
+
+            # --- phase 1: planning — read until the plan is proposed ----------
+            plan_deadline = t_start + 420.0
+            while True:
+                remaining = plan_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        "run.plan.proposed never arrived in 420s; "
+                        f"last events: {trace['events'][-3:]}")
+                raw = json.loads(await asyncio.wait_for(ws.recv(), timeout=remaining))
+                if not isinstance(raw, dict):
+                    continue
+                trace["events"].append(raw)
+                kind = str(raw.get("event") or "")
+                if raw.get("type") == "error":
+                    raise AssertionError(f"server rejected the run: {raw}")
+                if raw.get("run_id") != run_id:
+                    trace["notes"].append(f"ignored envelope for foreign run: {kind}")
+                    continue
+                if kind == "run.failed":
+                    raise AssertionError(f"run failed during planning: {raw.get('data')}")
+                if kind == "run.plan.proposed":
+                    outcome["proposed"] = raw
+                    outcome["proposed_at_s"] = round(time.monotonic() - t_start, 3)
+                    break
+
+            proposed = outcome["proposed"]
+            proposed_data = proposed.get("data") or {}
+            # Planning phase must not have executed the task: the workspace
+            # artifact cannot exist before the approval. (Inspecting the
+            # workspace with read-only tools during planning is allowed and
+            # observed in real runs; writing greet.py is not.)
+            assert not (workspace / "greet.py").exists(), (
+                "plan phase executed instead of planning: greet.py already exists")
+            plan = proposed_data.get("plan") or {}
+            assert str(plan.get("goal") or "").strip(), (
+                f"proposed plan has no goal: {proposed_data}")
+            subtasks = plan.get("subtasks")
+            assert isinstance(subtasks, list) and subtasks and all(
+                str(item.get("title") or "").strip() for item in subtasks), (
+                f"proposed plan has no actionable subtasks: {proposed_data}")
+
+            # --- phase 2: approve on this socket, read execution to the end ---
+            outcome["approved_at_s"] = round(time.monotonic() - t_start, 3)
+            outcome["plan_event_id"] = str(proposed_data.get("event_id") or "")
+            trace["notes"].append(
+                f"run.plan.approve sent: event_id={outcome['plan_event_id']}")
+            await ws.send(json.dumps({
+                "type": "run.plan.approve", "run_id": run_id,
+                "event_id": outcome["plan_event_id"], "edits": "",
             }, ensure_ascii=False))
 
-    asyncio.run(_approve())
-    exit_code, cli_hang = _finish_observed_process(process, pump, stderr_pump, 420)
-    stdout, stderr = "", "".join(stderr_lines)
+            execute_deadline = time.monotonic() + 600.0
+            while True:
+                remaining = execute_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        "approved plan run never reached a terminal event in 600s; "
+                        f"last events: {trace['events'][-3:]}")
+                raw = json.loads(await asyncio.wait_for(ws.recv(), timeout=remaining))
+                if not isinstance(raw, dict):
+                    continue
+                trace["events"].append(raw)
+                kind = str(raw.get("event") or "")
+                if raw.get("run_id") != run_id:
+                    trace["notes"].append(f"ignored envelope for foreign run: {kind}")
+                    continue
+                if kind in {"run.completed", "run.failed", "run.cancelled"}:
+                    outcome["terminal"] = raw
+                    outcome["terminal_at_s"] = round(time.monotonic() - t_start, 3)
+                    trace["notes"].append(f"terminal event: {kind}")
+                    break
+        return outcome
 
-    (run_dir / "stream.jsonl").write_text(_redact("".join(lines) + (stdout or "")),
-                                          encoding="utf-8")
-    (run_dir / "stderr.log").write_text(_redact(stderr or ""), encoding="utf-8")
-    (run_dir / "meta.json").write_text(json.dumps({
-        "name": scenario, "exit_code": exit_code, "cli_hang": cli_hang,
-        "model": live.model,
-        "plan_approved_via": "run.plan.approve (second WS connection)",
-        "run_id": proposed.get("run_id"),
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    t0 = time.monotonic()
+    try:
+        outcome = asyncio.run(_drive())
+    except BaseException as exc:  # evidence first, then re-raise
+        _write_evidence({
+            "run_id": trace.get("run_id"),
+            "harness_error": f"{type(exc).__name__}: {exc}"[:1200],
+            "result": "incomplete",
+            "wall_seconds": round(time.monotonic() - t0, 3),
+        })
+        raise
+    run_id = str(outcome["run_id"])
+    proposed = outcome["proposed"]
+    terminal = outcome["terminal"]
+    events = trace["events"]
+    run_events = [e for e in events if e.get("run_id") == run_id]
+    kinds = [str(e.get("event") or "") for e in run_events]
 
-    assert exit_code == 0, (
-        f"approved plan run failed exit={exit_code} stderr={_redact(stderr or '')[-1200:]}"
-    )
-    stream_text = "".join(lines) + (stdout or "")
-    assert "run.completed" in stream_text, "approved plan run never completed"
+    # Snapshot the measured outcome before asserting on it.
+    proposed_data = proposed.get("data") or {}
+    plan = proposed_data.get("plan") or {}
+    completed_data = (terminal.get("data") or {}) if terminal else {}
+    usage = completed_data.get("usage") or {}
+    _write_evidence({
+        "run_id": run_id,
+        "plan_event_id": outcome["plan_event_id"],
+        "plan_goal": str(plan.get("goal") or "")[:300],
+        "plan_subtasks": len(plan.get("subtasks") or []),
+        "proposed_at_s": outcome["proposed_at_s"],
+        "approved_at_s": outcome["approved_at_s"],
+        "completed_at_s": outcome.get("terminal_at_s"),
+        "terminal_event": str(terminal.get("event") or "") if terminal else "",
+        "result": "unverified",
+        "usage": {"input_tokens": usage.get("input_tokens"),
+                  "output_tokens": usage.get("output_tokens")},
+        "changes": completed_data.get("changes"),
+        "wall_seconds": round(time.monotonic() - t0, 3),
+    })
+
+    # --- the old assertions, preserved one-for-one on the WS protocol ---------
+    # (old) plan was proposed within 420s:
+    assert proposed.get("event") == "run.plan.proposed"
+    # (old) exit 0 + "run.completed" in stream → the approved run completed:
+    assert terminal is not None and terminal.get("event") == "run.completed", (
+        f"approved plan run did not complete: terminal={terminal} "
+        f"kinds_tail={kinds[-8:]}")
+    assert completed_data.get("result") == "completed", (
+        f"run.completed did not report success: {completed_data}")
+    # Execution phase really executed the plan (tools ran after the approval):
+    proposed_seq = int(proposed.get("sequence") or 0)
+    executed_tools = [e for e in run_events if e.get("event") == "tool.started"
+                      and int(e.get("sequence") or 0) > proposed_seq]
+    assert executed_tools, (
+        f"no tool ran after the approval; the plan was never executed "
+        f"({len(run_events)} events, tail={kinds[-10:]})")
+    # (old) the execution-phase artifact exists and check.py passes:
+    assert (workspace / "greet.py").is_file(), (
+        f"approved plan run did not produce greet.py: {kinds[-8:]}")
+
+    # --- WS-native strengthening (real-model evidence, planning semantics) ----
+    started = next((e for e in run_events if e.get("event") == "run.started"), None)
+    assert started is not None and (started.get("data") or {}).get("phase") == "planning", (
+        "plan-mode run.start did not open in the planning phase")
+    assert str(plan.get("goal") or "").strip() and plan.get("subtasks"), (
+        f"proposed plan was not a real plan: {proposed_data}")
+    assert usage.get("input_tokens") and usage.get("output_tokens"), (
+        f"no real provider usage on run.completed: {completed_data}")
+    assert (completed_data.get("changes") or {}).get("files", 0) >= 1, (
+        f"approved plan run reported no file changes: {completed_data}")
+
+    _write_evidence({
+        "run_id": run_id,
+        "plan_event_id": outcome["plan_event_id"],
+        "plan_goal": str(plan.get("goal") or "")[:300],
+        "plan_subtasks": len(plan.get("subtasks") or []),
+        "proposed_at_s": outcome["proposed_at_s"],
+        "approved_at_s": outcome["approved_at_s"],
+        "completed_at_s": outcome.get("terminal_at_s"),
+        "terminal_event": "run.completed",
+        "result": "completed",
+        "usage": {"input_tokens": usage.get("input_tokens"),
+                  "output_tokens": usage.get("output_tokens")},
+        "changes": completed_data.get("changes"),
+        "wall_seconds": round(time.monotonic() - t0, 3),
+    })
     _check(live, scenario, scenario, workspace)
 
 
