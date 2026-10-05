@@ -100,7 +100,12 @@ select = ["E", "F", "I", "N", "W", "UP", "BLE001", "S110", "S112"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = "-m unit"
-norecursedirs = ["live"]
+# pytest's built-in defaults, kept because overriding norecursedirs replaces the
+# whole list: without ".*" the stale .pytest_cache/.pytest-wave1-* dirs are
+# scanned and a Windows PermissionError aborts collection for a bare `pytest`.
+norecursedirs = [
+    "live", ".*", "*.egg", "build", "dist", "node_modules", "venv", "_darcs", "{arch}",
+]
 markers = [
     "unit: isolated tests using fakes or in-process components (default)",
     "integration: tests crossing Atlas component, persistence, or process boundaries",
