@@ -126,8 +126,9 @@ def system_browser_candidates() -> list[Path]:
     """Installed Chromium-based browsers Hermes' browser tool can drive (Windows/macOS/Linux)."""
     if os.name == "nt":
         roots = [os.environ.get(k, "") for k in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA")]
-        relative = ("Microsoft/Edge/Application/msedge.exe", "Google/Chrome/Application/chrome.exe")
-        return [Path(root) / rel for root in roots if root for rel in relative]
+        # Chrome first (the user's preferred browser), Edge as the fallback.
+        relative = ("Google/Chrome/Application/chrome.exe", "Microsoft/Edge/Application/msedge.exe")
+        return [Path(root) / rel for rel in relative for root in roots if root]
     return [Path(p) for p in (
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
