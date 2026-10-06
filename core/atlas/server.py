@@ -244,6 +244,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ):
         globals()[resource_name] = None
     deferred_startup: asyncio.Task[None] | None = None
+    capture_flush_task: asyncio.Task[None] | None = None
     routes_before_lifespan_extensions = len(app.routes)
     startup_aborted = False
     cancelled = False
@@ -255,6 +256,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             UnifiedMemoryFacade.from_config()
             if get_config().get("memory.unified.enabled") else None
         )
+        # T02.2：统一记忆真实捕获（对话/工具事件 → ObservationBuilder →
+        # OperationalOutbox → 周期 flush）。capture_mode 缺省 enabled、可配置
+        # 关闭；disabled（含 unified.enabled=false）时不建服务、不起循环，
+        # 聊天/工具主流程零影响。
+        if unified_memory is not None:
+            from atlas.memory.capture import (
+                capture_flush_loop,
+                configure_capture_service,
+            )
+
+            capture_service = configure_capture_service(facade=unified_memory)
+            if capture_service is not None:
+                capture_flush_task = asyncio.create_task(
+                    capture_flush_loop(capture_service),
+                    name="unified-capture-flush",
+                )
         memory = MemoryStore(unified=unified_memory)
         await memory.init()
         usage_ledger = UsageLedger(get_config().db_path)
@@ -666,6 +683,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         startup_aborted = True
         raise
     finally:
+        # T02.2：先停捕获 flush 循环并复位单例，避免跨 lifespan 残留旧服务。
+        if capture_flush_task is not None:
+            capture_flush_task.cancel()
+            await asyncio.gather(capture_flush_task, return_exceptions=True)
+        try:
+            from atlas.memory.capture import reset_capture_service
+
+            reset_capture_service()
+        except Exception:  # noqa: BLE001 — 关停清理不阻塞其余 teardown
+            log.exception("unified.capture_reset_failed")
         if deferred_startup is not None:
             # Let deferred startup settle before reverse teardown; a stuck step is bounded.
             try:

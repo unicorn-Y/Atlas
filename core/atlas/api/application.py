@@ -35,6 +35,7 @@ from atlas.api.runtime_router import router as runtime_router
 from atlas.api.runtime_ws_router import router as runtime_ws_router
 from atlas.api.scheduling_router import router as scheduling_router
 from atlas.api.skills_market_router import router as skills_market_router
+from atlas.api.unified_memory_router import router as unified_memory_router
 from atlas.api.workspace_router import router as workspace_router
 from atlas.api.tools_router import router as tools_router
 from atlas.config import get_config
@@ -99,4 +100,9 @@ def create_app(
         workspace_router,
     ):
         app.include_router(router)
+    # T01.3 UM01 收口：unified-memory 代理路由按配置挂载。默认 disabled →
+    # 完全不挂（既有测试与共享 app 守卫的 routes 快照零影响）；测试/部署在
+    # atlas.toml 写 [memory.unified] enabled=true 才出现 /api/unified-memory/*。
+    if get_config().get("memory.unified.enabled"):
+        app.include_router(unified_memory_router)
     return app

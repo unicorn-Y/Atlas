@@ -424,6 +424,12 @@ class LocalExecutionRuntime:
             and args.get("shell") not in {None, "auto", "powershell", "cmd", "bash"}
         ):
             raise ValueError(f"Unsupported shell: {args['shell']}")
+        if name == "local_shell" and not str(args.get("command") or "").strip():
+            # 空命令不是可执行的工具调用：与其静默启动一个空 shell（退出码 0、
+            # 无输出、看起来"成功"），不如在真实执行前按参数校验失败拒绝 ——
+            # 这样异常工具走 execute_tools_node 的 error result 路径（UM02/T02.2
+            # "异常和取消也记录"判据的场景载体），而不是伪造一次成功执行。
+            raise ValueError("local_shell requires a non-empty command")
         patterns = args.get("watch_patterns", [])
         if patterns is not None and (
             not isinstance(patterns, list) or not all(isinstance(item, str) for item in patterns)

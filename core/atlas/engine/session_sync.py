@@ -106,6 +106,30 @@ def latest_session_message_id(
     return None
 
 
+def latest_session_message(
+    home: str | Path, conversation_id: str, *, role: str | None = None,
+) -> dict[str, Any] | None:
+    """Latest message (Atlas shape) of one session, optionally filtered by role.
+
+    同一套稳定 ID 体系：返回的 ``id`` 是 SessionDB ``message_uid``（legacy 行
+    回落 row id），与 :func:`latest_session_message_id` / run_drive 的
+    ``done.message_id`` 同源 —— UM02/T02.2 真实捕获（memory.capture）用它在
+    消息持久化之后取稳定 ID + 原文 + 发生时间，不另造第二套 ID。
+
+    压缩摘要行（``_compressed_summary``）不是真实发言，显式跳过：只有 summary
+    时不得伪装成有原话（原消息行保留在 SessionDB 中，原始捕获在原消息层早已
+    完成，不受压缩影响）。
+    """
+    with _open_db(home) as db:
+        messages = db.get_messages(conversation_id, limit=50, latest=True, include_compacted=True)
+    for message in reversed(messages):
+        if message.get("_compressed_summary"):
+            continue
+        if role is None or message.get("role") == role:
+            return _message_for_atlas(message)
+    return None
+
+
 def session_message_evidence(
     home: str | Path, conversation_id: str | None, message_id: str,
 ) -> dict[str, Any] | None:

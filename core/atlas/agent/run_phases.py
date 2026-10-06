@@ -695,6 +695,100 @@ def _terminal_failure_detail(result: Any) -> str:
     return str(result.get("error") or "").strip() or _FAILURE_NO_DETAIL
 
 
+# -- unified-memory real capture (UM02 / T02.2) ----------------------------
+#
+# 采集与召回装配互不影响：
+#   * 即使 memory injection / 统一记忆召回被关闭，原始 evidence 捕获照常发生
+#     （证据不因“没被回忆”而丢失）；
+#   * “自己刚写的用户当前消息不作为独立历史再次回忆”是召回装配层的职责
+#     （见 _hermes_turn 里对 history 尾部与当前消息的去重），与这里的采集
+#     互不依赖；
+#   * 用户「忘掉这条」类消息在这里照记原文（纠错/删除路线由统一记忆侧按
+#     语义路由处理，UM08）；Atlas 既有偏好抽取仍走 candidates 机制，不被
+#     采集改变（_phase_context 的 extract_memories / _phase_finalize 的
+#     extract_conversation_candidates 原样保留）。
+#
+# 接线判据：只在原消息拥有稳定 ID（SessionDB message_uid，与 session_sync /
+# run_drive `done.message_id` 同一体系）之后调用 capture；不伪造临时 UUID。
+# worker 子任务目标从不写入 SessionDB（见 _build_messages 注释），因此没有
+# 可捕获的持久化用户消息。所有捕获失败只记日志，绝不打断聊天主流程。
+
+async def _capture_run_user_message(state: _RunState) -> None:
+    """用户原话进入统一记忆：engine turn 落库后按真实 message_uid 捕获一次。
+
+    用户消息由引擎回合写入 SessionDB（H2.1 唯一所有者），Atlas 能拿到稳定
+    message_uid 的最早时刻是回合结束 —— 因此捕获点在 turn 收尾，而不是 UI
+    事件流上的每次重绘。转向（steer）等同回合内追加消息时，优先取与本次
+    run 输入内容一致的持久化用户消息，保证记的是本轮原话。
+    """
+    request = state.request
+    if request.worker:
+        return
+    try:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import latest_session_message, read_session_messages
+        from atlas.memory.capture import get_capture_service
+
+        capture = get_capture_service()
+        if capture is None:
+            return
+        home = DATA_ROOT / "engine"
+        message = await asyncio.to_thread(
+            latest_session_message, home, request.conversation_id, role="user")
+        if message is None:
+            return
+        content = str(message.get("content") or "")
+        if content != state.message:
+            recent = await asyncio.to_thread(
+                read_session_messages, home, request.conversation_id, limit=50)
+            for item in reversed(recent):
+                if (item.get("role") == "user"
+                        and str(item.get("content") or "") == state.message):
+                    message, content = item, str(item.get("content") or "")
+                    break
+        # 入队是毫秒级本地 sqlite 写，直接在事件循环上调用：保持 CaptureService
+        # 的 flush 唤醒（asyncio.Event）在同一线程，语义最简单。
+        capture.capture_user_message(
+            request.conversation_id, str(message.get("id") or ""), content,
+            message.get("created_at") or None)
+    except Exception as exc:  # 护栏：捕获失败不打断聊天主流程
+        log.debug("memory.capture_user_message_failed", error=str(exc))
+
+
+async def _capture_run_assistant_message(state: _RunState, full_response: str) -> None:
+    """assistant 输出定格（final text 已持久化）后按真实 message_uid 捕获一次。
+
+    自报完成不是验证：epistemic_kind=OBSERVED、content 不携带 verification
+    语义（真实验证证据属 ATLAS_VERIFICATION，由工具验证路径另行捕获）。
+    拿不到稳定 ID（assistant 消息未持久化）就不捕获 —— 不伪造对象 ID（§2）。
+    """
+    request = state.request
+    if request.worker:
+        return
+    try:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import latest_session_message
+        from atlas.memory.capture import get_capture_service
+
+        capture = get_capture_service()
+        if capture is None:
+            return
+        home = DATA_ROOT / "engine"
+        message = await asyncio.to_thread(
+            latest_session_message, home, request.conversation_id, role="assistant")
+        if message is None:
+            return
+        capture.capture_assistant_message(
+            request.conversation_id,
+            str(message.get("id") or ""),
+            str(message.get("content") or "") or str(full_response or ""),
+            message.get("created_at") or None,
+            model=state.runtime.model,
+        )
+    except Exception as exc:  # 护栏：捕获失败不打断聊天主流程
+        log.debug("memory.capture_assistant_message_failed", error=str(exc))
+
+
 async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
     """Run one engine turn to completion, forwarding its events to the queue."""
     request, callbacks, runtime = state.request, state.callbacks, state.runtime
@@ -820,6 +914,9 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
                 })
                 continue
             await runtime.event_queue.put(event)
+        # T02.2：turn 结束即捕获用户原话（此刻消息已带稳定 message_uid；
+        # 失败回合同样已落库，原始证据不因回合失败而丢失）。
+        await _capture_run_user_message(state)
         final_text = final_result.get("final_response", "")
         # A terminal provider failure (e.g. a non-retryable 404 for the wire
         # model) still returns a result — empty response, null usage. Surface
@@ -1004,6 +1101,8 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
             "detail": f"Unable to save assistant message: {e}",
         }
         return
+    # T02.2：assistant 输出定格捕获（与上面 done 事件取同一稳定 message_uid）。
+    await _capture_run_assistant_message(state, full_response)
     memory_candidates: list[dict[str, Any]] | None = None
     try:
         # Worker transcripts are internal; nothing in them should become user memory.

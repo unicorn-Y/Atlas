@@ -1354,6 +1354,17 @@ class HermesRuntime:
                 }})
             # Hermes opens SessionDB lazily for tools when no gateway supplied one. Atlas
             # always needs its durable turn transcript, even with Hermes memory disabled.
+            # UM02/T02.2 边界（本模块不接 capture）：
+            #   * Hermes raw history 仍是当前 source-of-use（skip_memory 语义不动）；
+            #     统一记忆的真实捕获发生在 Atlas 层（run_phases._capture_run_* 与
+            #     tool_node._capture_tool_event），读取的是 SessionDB 消息行的
+            #     ``message_uid``（atlas/engine/session_sync 同一 ID 体系），并经
+            #     OperationalOutbox 耐久排队 —— 本模块因此不重复接线。
+            #   * context 压缩只产生带 ``_compressed_summary`` 标记的摘要消息，
+            #     原消息行保留在 SessionDB（read_session_messages 的
+            #     include_compacted 语义）：capture 在原消息层早已完成，不受压缩
+            #     影响；"只有 summary 时不得伪装成有原话" 由 latest_session_message
+            #     跳过摘要行保证。
             open_session_db = getattr(agent, "_get_session_db_for_recall", None)
             if callable(open_session_db) and getattr(agent, "_session_db", None) is None:
                 open_session_db()

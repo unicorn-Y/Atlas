@@ -332,6 +332,9 @@ class UMHarness:
             "OPENAI_API_KEY": FAKE_API_KEY,
             "NO_PROXY": "127.0.0.1,localhost",
             "HERMES_TEST_MODE": "1",
+            # T02.2：Atlas 子进程的统一记忆真实捕获（CaptureService）产生的所有
+            # 观察批次必须用 TEST 事件类（00_master_task.md §8 隔离规则）。
+            "ATLAS_UNIFIED_EVENT_CLASS": "TEST",
             "PYTHONUTF8": "1",
             "PYTHONIOENCODING": "utf-8",
             "PYTHONPATH": str(CORE_DIR),
@@ -561,6 +564,7 @@ class UMHarness:
             "arguments": arguments,
             "receipts": executed,
             "run_id": run["run_id"],
+            "conversation_id": run["conversation_id"],
             "status": run["status"],
             "is_error": any(item["is_error"] for item in executed),
         }
