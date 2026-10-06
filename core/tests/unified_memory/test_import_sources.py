@@ -382,14 +382,17 @@ def _fetch_records(h: Any) -> list[dict[str, Any]]:
 
 
 def _wait_for_records(h: Any, predicate: Any, *, timeout: float = 120.0,
-                      description: str = "") -> list[dict[str, Any]]:
+                      description: str = "", expected: int = 1) -> list[dict[str, Any]]:
+    """轮询直到谓词命中不少于 ``expected`` 条（T03.2 flake 修复：同批多条观察
+    经异步 flush 陆续可见 —— 命中第 1 条就返回会让 ``len(hits) == N`` 断言
+    偶发只看到部分观察；必须等齐预期数量）。"""
     deadline = time.monotonic() + timeout
     seen = 0
     while time.monotonic() < deadline:
         items = _fetch_records(h)
         seen = len(items)
         hits = [item for item in items if predicate(item)]
-        if hits:
+        if len(hits) >= expected:
             return hits
         time.sleep(1.0)
     raise AssertionError(f"等待记录超时（{timeout:.0f}s）: {description}；当前 {seen} 条")
@@ -420,7 +423,7 @@ def test_import_text_files_via_real_atlas_service(um) -> None:
         return (_projection(item).get("source_kind") == "USER_IMPORT"
                 and text.get("file_sha256") == first["file_sha256"])
 
-    hits = _wait_for_records(um, _import_record,
+    hits = _wait_for_records(um, _import_record, expected=2,
                              description="sample.txt 的 USER_IMPORT 观察")
     assert len(hits) == 2
     by_locator = {_projection(item)["locator"]["value"]: item for item in hits}
