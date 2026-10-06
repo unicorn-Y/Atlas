@@ -53,13 +53,28 @@
       "status": "INTEGRATED",
       "evidence": "artifacts/unified-memory/UM02/T02.3/",
       "notes": "agent-tool THIRD_PARTY capture + verification; text import idempotent w/ revisions"
+    },
+    "T03.1": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM03/T03.1/ (both repos)",
+      "notes": "entity/alias disambiguation, Graphiti dedup parity-locked, 0025"
+    },
+    "T03.2": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM03/T03.2/ (both repos)",
+      "notes": "valid intervals + relative time, naive-as-UTC rejected, as-of queries"
+    },
+    "T03.3": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM03/T03.3/ (both repos)",
+      "notes": "four-kind conflicts w/ evidence chains, corrections live"
     }
   },
   "waves": {
     "UM00": "COMPONENT_VERIFIED",
     "UM01": "INTEGRATED",
     "UM02": "INTEGRATED",
-    "UM03": "NOT_STARTED",
+    "UM03": "INTEGRATED",
     "UM04": "NOT_STARTED",
     "UM05": "NOT_STARTED",
     "UM06": "NOT_STARTED",
@@ -75,7 +90,8 @@
   "commits": {
     "atlas_um00": "82745cd",
     "memoryos_um00": "9f81fb2",
-    "atlas_um01": "T01.1=302683b T01.2=9e25181 T01.3=this"
+    "atlas_um01": "T01.1=302683b T01.2=9e25181 T01.3=this",
+    "um03": "Atlas 1443393/c29d77e + MemoryOS 8b7c3dd/6d90e3b + T03.3"
   },
   "notes_um01": "Engineering integration via real dual-service harness (fake model). Desktop/packaged + real-model proofs deferred to UM12/UM13 per task book.",
   "known_issues": [
