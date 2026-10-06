@@ -23,11 +23,26 @@
       "status": "COMPONENT_VERIFIED",
       "evidence": "artifacts/unified-memory/UM00/T00.2/ (both repos)",
       "notes": "UMHarness dual-service green (17+15 passed); WS chat roundtrip via fake LLM; 320-case manifest + 29 seeds frozen"
+    },
+    "T01.1": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM01/T01.1/",
+      "notes": "/v1/unified live (observe/recall/records/evidence/status); 16 routes 501 until their waves; client error taxonomy"
+    },
+    "T01.2": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM01/T01.2/",
+      "notes": "legacy export/import idempotent (replay created=0); 11 write methods delegate; LEGACY_UNGROUNDED preserved"
+    },
+    "T01.3": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM01/T01.3/",
+      "notes": "server/cli/hub single composition; /api/unified-memory proxy; scan_bypass=0; direct _db eliminated"
     }
   },
   "waves": {
     "UM00": "COMPONENT_VERIFIED",
-    "UM01": "NOT_STARTED",
+    "UM01": "INTEGRATED",
     "UM02": "NOT_STARTED",
     "UM03": "NOT_STARTED",
     "UM04": "NOT_STARTED",
@@ -44,6 +59,8 @@
   "notes": "Status follows docs/plan/UNIFIED-MEMORY/02_wave_tasks.md. No ACCEPTED without real-model + real-Windows evidence. Protected: others uncommitted files (see authority-map).",
   "commits": {
     "atlas_um00": "82745cd",
-    "memoryos_um00": "9f81fb2"
-  }
+    "memoryos_um00": "9f81fb2",
+    "atlas_um01": "T01.1=302683b T01.2=9e25181 T01.3=this"
+  },
+  "notes_um01": "Engineering integration via real dual-service harness (fake model). Desktop/packaged + real-model proofs deferred to UM12/UM13 per task book."
 }
