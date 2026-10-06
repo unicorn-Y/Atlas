@@ -589,9 +589,13 @@ def test_chat_capture_user_and_assistant_observations(um) -> None:
             break
         time.sleep(1.0)
     assert total == 4, f"两次聊天应恰好 4 条消息观察，实际 {total}"
-    # 第一次的 USER 观察仍恰好一条（无重复行、无重复事件）
+    # 第一次的 USER 观察仍恰好一条（无重复行、无重复事件）。T04.1 后 records
+    # 另含 FORMED_EPISODE 形成事件，其 source_refs 按设计回指同一原话事件 id
+    # —— 排除形成投影（projection=FORMED_EPISODE），本判据只数观察记录本身
+    #（原始证据投影 RAW_EVIDENCE / memory 行）。
     still_one = [item for item in _fetch_records(um)
-                 if _source_event_id(item) == _source_event_id(user_record)]
+                 if (item.get("content") or {}).get("projection") != "FORMED_EPISODE"
+                 and _source_event_id(item) == _source_event_id(user_record)]
     assert len(still_one) == 1
 
 
