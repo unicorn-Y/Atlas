@@ -202,8 +202,22 @@ class UMHarness:
             "note": "FakeLLMServer 只替代模型供应商；记忆/会话/任务/调度/工具派发均为真实实现",
         }
 
+        # 3. Ports first: the T01.3 unified-memory composition must point the
+        #    Atlas config at THIS instance's MemoryOS port before the process
+        #    starts (config values are read at import time of atlas.server).
+        atlas_port, memoryos_port = _free_port(), _free_port()
+        self.runtime_manifest["atlas_port"] = atlas_port
+        self.runtime_manifest["memoryos_port"] = memoryos_port
+        self.runtime_manifest["unified_memory"] = {
+            "enabled": True,
+            "service_url": f"http://127.0.0.1:{memoryos_port}",
+            "proxy_prefix": "/api/unified-memory",
+            "subject_binding": "atlas-fixture",
+            "config_site": "atlas.toml [memory.unified] (T01.3 全入口组成)",
+        }
+
         # 2. Atlas config + redirected Hermes home pointing at the fake provider.
-        self._write_atlas_toml(atlas_data)
+        self._write_atlas_toml(atlas_data, memoryos_port)
         write_hermes_home(
             atlas_data / "engine", self._fake.base_url, api_key=FAKE_API_KEY,
             extra_config=(
@@ -212,10 +226,7 @@ class UMHarness:
             ),
         )
 
-        # 3. Spawn both real services.
-        atlas_port, memoryos_port = _free_port(), _free_port()
-        self.runtime_manifest["atlas_port"] = atlas_port
-        self.runtime_manifest["memoryos_port"] = memoryos_port
+        # 4. Spawn both real services.
         self._atlas_log_handle = (runtime_root / "logs" / "atlas.log").open("wb")
         self._memoryos_log_handle = (runtime_root / "logs" / "memoryos.log").open("wb")
         self._atlas_proc = subprocess.Popen(
@@ -271,8 +282,13 @@ class UMHarness:
         return [str(python), "-m", "uvicorn", "app:app",
                 "--host", "127.0.0.1", "--port", str(port)]
 
-    def _write_atlas_toml(self, atlas_data: Path) -> None:
-        """Minimal atlas.toml mirroring core/tests/conftest.py:11-31 + fake model."""
+    def _write_atlas_toml(self, atlas_data: Path, memoryos_port: int) -> None:
+        """Minimal atlas.toml mirroring core/tests/conftest.py:11-31 + fake model.
+
+        T01.3: ``[memory.unified]`` wires the spawned Atlas to THIS instance's
+        MemoryOS (service_url + internal token live in the TOML because the
+        harness scrubs *TOKEN* env vars from the child process env).
+        """
         config_dir = atlas_data / "config"
         config_dir.mkdir(parents=True, exist_ok=True)
         assert self._fake is not None
@@ -283,7 +299,12 @@ class UMHarness:
             'provider="openai"\nlitellm_model="openai/fake-model"\nmax_output_tokens=512\n'
             '[agent]\nengine="hermes"\nverify_before_stop=false\n'
             '[tools]\nauto_start=[]\n[tools.servers]\n'
-            '[scheduler]\nenabled=false\n',
+            '[scheduler]\nenabled=false\n'
+            '[memory.unified]\nenabled=true\n'
+            f'service_url="http://127.0.0.1:{memoryos_port}"\n'
+            f'internal_token="{TEST_INTERNAL_TOKEN}"\n'
+            'subject_binding="atlas-fixture"\n'
+            'timeout_seconds=10.0\n',
             encoding="utf-8",
         )
 

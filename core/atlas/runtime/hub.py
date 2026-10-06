@@ -124,7 +124,9 @@ async def hub_main() -> None:
     import uvicorn
 
     from atlas.capabilities.durable.dbos_backend import DurableBackend
+    from atlas.config import get_config
     from atlas.memory import MemoryStore
+    from atlas.memory.unified_facade import UnifiedMemoryFacade
     from atlas.models import ModelManager
     from atlas.scheduler import AtlasScheduler
     from atlas.notifications import NotificationBus
@@ -132,7 +134,13 @@ async def hub_main() -> None:
     from atlas.telegram import TelegramService
 
     cfg = get_config()
-    memory = MemoryStore()
+    # T01.3 全入口组成：与 server lifespan / cli chat 相同的 composition ——
+    # enabled 才构造 facade；disabled（默认）保持旧行为。
+    unified = (
+        UnifiedMemoryFacade.from_config(cfg)
+        if cfg.get("memory.unified.enabled") else None
+    )
+    memory = MemoryStore(unified=unified)
     await memory.init()
     from atlas.config import DATA_ROOT
     from atlas.engine.session_migration import migrate_legacy_sessions
@@ -286,6 +294,8 @@ async def hub_main() -> None:
     durable.stop()
     await local.shutdown()
     await memory.close()
+    if unified is not None:
+        await unified.aclose()
     print("[hub] stopped", flush=True)
 
 

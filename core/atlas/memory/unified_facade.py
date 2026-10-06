@@ -36,6 +36,19 @@ class UnifiedMemoryFacade:
         else:
             self._client = None
 
+    @classmethod
+    def from_config(cls, config: AtlasConfig | None = None) -> "UnifiedMemoryFacade":
+        """从真实 ``AtlasConfig``（默认全局单例）装配 —— T01.3 全入口组成的统一入口。
+
+        server lifespan / cli chat / runtime hub 三个 MemoryStore 构造点都用它；
+        只应在 ``memory.unified.enabled`` 为真时调用（入口各自判断）。
+        """
+        if config is None:
+            from atlas.config import get_config
+
+            config = get_config()
+        return cls(config=config)
+
     # ------------------------------------------------------------------ 配置
 
     @property
@@ -172,6 +185,21 @@ class UnifiedMemoryFacade:
         if not self.enabled:
             return {"enabled": False, "reason": "MEMORY_UNIFIED_DISABLED"}
         return await self.client().get_status()
+
+    async def call(self, method: str, path: str, json: Any = None,
+                   params: dict[str, Any] | None = None) -> Any:
+        """T01.3 通用代理传输：/api/unified-memory/* 透传到 /v1/unified/*。
+
+        disabled 时显式 ServiceUnavailable（绝不本地伪造响应）；错误类映射
+        （403/409/423/422/501/超时）由 :meth:`UnifiedMemoryClient.call` 保持。
+        """
+        from atlas.memory.unified_client import ServiceUnavailable
+
+        if not self.enabled:
+            raise ServiceUnavailable(
+                "unified memory disabled (memory.unified.enabled=false); "
+                f"proxy call {method} {path} refused")
+        return await self.client().call(method, path, json=json, params=params)
 
     async def aclose(self) -> None:
         if self._client is not None:

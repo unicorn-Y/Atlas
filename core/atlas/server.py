@@ -69,6 +69,7 @@ from atlas.groups import GroupOrchestrator
 from atlas.groups.store import GroupService, GroupStore
 from atlas.heartbeat import HeartbeatService
 from atlas.memory.store import MemoryStore
+from atlas.memory.unified_facade import UnifiedMemoryFacade
 from atlas.models.manager import ModelManager
 from atlas.notifications import NotificationBus
 from atlas.persistent_agents import PersistentAgentService
@@ -164,6 +165,8 @@ log = structlog.get_logger()
 
 model_mgr: ModelManager | None = None
 memory: MemoryStore | None = None
+# T01.3：unified-memory facade（enabled=true 时由 lifespan 装配并挂到 services）。
+unified_memory: UnifiedMemoryFacade | None = None
 projects: ProjectStore | None = None
 durable: DurableBackend | None = None
 plugin_runtime: PluginRuntime | None = None
@@ -221,6 +224,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global skill_mgr, skill_registry, scheduler, usage_ledger
     global capability_bus, cua_backend, browser_use, agent_backend_host
     global projects, durable, plugin_runtime, notifications, web_runtime, custom_tools, telegram_service
+    global unified_memory
     # W10 persistent-always-on singletons (module-level, reset per lifespan).
     global channel_manager, gateway_bridge, heartbeat_service
 
@@ -232,7 +236,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         startup.mark(component_name, "starting")
 
     for resource_name in (
-        "model_mgr", "memory", "projects", "durable", "plugin_runtime", "notifications",
+        "model_mgr", "memory", "unified_memory", "projects", "durable", "plugin_runtime", "notifications",
         "orchestrator", "mcp_client", "local_execution", "computer_use", "capability_bus",
         "cua_backend", "browser_use", "agent_backend_host", "web_runtime", "custom_tools",
         "telegram_service", "skill_mgr", "skill_registry", "scheduler", "usage_ledger",
@@ -245,7 +249,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cancelled = False
     try:
         model_mgr = ModelManager()
-        memory = MemoryStore()
+        # T01.3 全入口组成：unified-memory 开关（默认 false → facade=None，
+        # MemoryStore 保持完整旧本地行为，全部旧测试不受影响）。
+        unified_memory = (
+            UnifiedMemoryFacade.from_config()
+            if get_config().get("memory.unified.enabled") else None
+        )
+        memory = MemoryStore(unified=unified_memory)
         await memory.init()
         usage_ledger = UsageLedger(get_config().db_path)
         await usage_ledger.init()
@@ -628,7 +638,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Keep request and WebSocket dependencies bound to this lifespan's service root.
         services.config = get_config()
         for service_name in (
-            "model_mgr", "memory", "orchestrator", "mcp_client", "local_execution",
+            "model_mgr", "memory", "unified_memory", "orchestrator", "mcp_client", "local_execution",
             "computer_use", "skill_mgr", "skill_registry", "scheduler", "capability_bus",
             "cua_backend", "browser_use", "agent_backend_host", "projects", "durable",
             "plugin_runtime", "notifications", "web_runtime", "custom_tools",

@@ -2,6 +2,16 @@
 
 Handlers resolve their services from ``app.state`` through FastAPI dependency
 injection — never a module-level singleton — so two app instances stay isolated.
+
+T01.3 UM01 收口：本文件所有端点都只经 ``services.memory``（MemoryStore）访问
+记忆 —— unified 模式（``memory.unified.enabled=true``，lifespan 组装
+``MemoryStore(unified=facade)``）下写路径已由 T01.2 按 authority-map 1.0
+委托/关闭：POST /api/facts → observe、DELETE /api/facts → corrections、
+candidates approve/reject → corrections（沿用语义，**不直接 insert 本地
+facts**）；candidate/knowledge 的本地只读端点保持 DERIVED_VIEW 只读（active
+回查统一记录由后续波接线）。本路由不存在任何绕过 ``services.memory`` 的
+本地写（scan_bypass.py 静态把关）；rewind 快照的 ``memory._db`` 已改为
+``MemoryStore.update_rewind_restored_files`` 公开方法（RUNTIME_AUTHORITY）。
 """
 
 from __future__ import annotations

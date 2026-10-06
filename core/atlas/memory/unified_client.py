@@ -272,6 +272,25 @@ class UnifiedMemoryClient:
         """GET /v1/unified/status → 接线、水位、outbox、模型/worker 状态。"""
         return await self._request("GET", "/v1/unified/status")
 
+    # ------------------------------------------------------------------
+    # T01.3 通用代理调用（Atlas /api/unified-memory/* 的唯一传输）
+    # ------------------------------------------------------------------
+
+    async def call(self, method: str, path: str, *, json: Any = None,
+                   params: dict[str, Any] | None = None) -> Any:
+        """透传任意 ``/v1/unified/*`` 契约路由；错误类映射与类型化方法一致。
+
+        只允许 ``/v1/unified/`` 前缀（代理不能变成任意路径转发）；成功返回
+        解码后的 JSON body，失败按 _decode 抛对应错误类（501→FeatureNotReady、
+        409→RevisionConflict、423→ErasureBlocked、403→ForbiddenSubject、
+        422→ContractViolation、超时/断连→ServiceUnavailable）。
+        """
+        if not path.startswith("/v1/unified/"):
+            raise UnifiedMemoryError(
+                f"refusing non-unified proxy path: {path!r} "
+                "(the unified-memory transport only forwards /v1/unified/* routes)")
+        return await self._request(method.upper(), path, json_body=json, params=params)
+
     # -- 附加读取（§6 表内 GET 路由，UM01 已接线的两个）--
 
     async def list_records(self, *, facet: str | None = None, status: str | None = None,

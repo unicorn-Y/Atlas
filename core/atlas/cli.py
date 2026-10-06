@@ -66,7 +66,9 @@ def serve(port: int | None, reload: bool) -> None:
 def chat(model: str | None) -> None:
     """Start an interactive chat session in the terminal."""
     from atlas.agent import AgentOrchestrator
+    from atlas.config import get_config
     from atlas.memory import MemoryStore
+    from atlas.memory.unified_facade import UnifiedMemoryFacade
     from atlas.models import ModelManager
 
     async def _chat() -> None:
@@ -74,7 +76,15 @@ def chat(model: str | None) -> None:
         if model:
             model_mgr.select(model)
 
-        memory = MemoryStore()
+        # T01.3 全入口组成：与 server lifespan / hub 完全相同的 composition ——
+        # enabled 才构造 facade 并传给 MemoryStore（写方法委托统一记忆）；
+        # disabled（默认）保持旧行为。
+        cfg = get_config()
+        unified = (
+            UnifiedMemoryFacade.from_config(cfg)
+            if cfg.get("memory.unified.enabled") else None
+        )
+        memory = MemoryStore(unified=unified)
         await memory.init()
         from atlas.config import DATA_ROOT
         from atlas.engine.session_migration import migrate_legacy_sessions
@@ -138,6 +148,8 @@ def chat(model: str | None) -> None:
             print()  # blank line between turns
 
         await memory.close()
+        if unified is not None:
+            await unified.aclose()
 
     asyncio.run(_chat())
 

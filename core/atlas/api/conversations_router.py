@@ -566,13 +566,9 @@ async def rewind_conversation(
         if req["files"]:
             await _restore_rewind_files(file_snapshot)
         raise
-    db = memory._db
-    if db is not None:
-        await db.execute(
-            "UPDATE conversation_rewinds SET restored_files=? WHERE rewind_id=?",
-            (len(restored_files), rewind_id),
-        )
-        await db.commit()
+    # T01.3：经 MemoryStore 公开方法回写运行权威表（authority-map 1.0，
+    # 不再直摸 memory._db）。
+    await memory.update_rewind_restored_files(rewind_id, len(restored_files))
     return {"rewind_id": rewind_id, "removed_messages": len(removed),
             "restored_files": sorted(set(restored_files)), "skipped": skipped}
 

@@ -135,7 +135,15 @@ def test_construction_points_are_enumerated(baseline):
 
 def test_direct_db_consumers_have_replacement_plans(baseline):
     direct = baseline.raw["direct_db_consumers"]
-    assert direct, "必须枚举直摸 ._db 的消费者（conversations_router / session_sync）"
+    # T01.3：authority-map 两处直摸计划（conversations_router rewind 回写、
+    # session_sync 遗留迁移清单）已按 replacement_plan 执行为 MemoryStore 公开
+    # 方法（update_rewind_restored_files / list_conversation_ids），活代码直摸
+    # 应为空；新增直摸仍必须带 replacement_plan（scan_bypass.py 同规则把关）。
+    executed = {entry["file"] for entry in direct}
+    assert not executed & {
+        "core/atlas/api/conversations_router.py",
+        "core/atlas/engine/session_sync.py",
+    }, "T01.3 已执行的直摸替换计划，这两处不得再直摸 _db"
     for entry in direct:
         assert entry["replacement_plan"], entry["file"]
 

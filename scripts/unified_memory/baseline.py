@@ -461,6 +461,8 @@ METHOD_MAP = {
     "list_rewinds": ("RUNTIME_AUTHORITY", "KEEP_RUNTIME", "", ""),
     "get_rewind": ("RUNTIME_AUTHORITY", "KEEP_RUNTIME", "", ""),
     "mark_rewind_redone": ("RUNTIME_AUTHORITY", "KEEP_RUNTIME", "", ""),
+    "update_rewind_restored_files": ("RUNTIME_AUTHORITY", "KEEP_RUNTIME", "", "T01.3：取代 conversations_router rewind_redo 直摸 _db 的 restored_files 回写（与 mark_rewind_redone 同型；direct_db replacement plan 已执行）。"),
+    "list_conversation_ids": ("RUNTIME_AUTHORITY", "KEEP_RUNTIME", "", "T01.3：取代 engine/session_sync 迁移路径直摸 _db 的 DISTINCT 会话清单只读查询（direct_db replacement plan 已执行；迁移退役后随路径删除）。"),
     "close": ("RUNTIME_AUTHORITY", "KEEP_RUNTIME", "", "连接生命周期方法；保留于本地运行存储。"),
     # ----- 记忆权威：事实 / 候选 / 反思 / 目标经验 / 知识（DELEGATE_TO_UNIFIED） -----
     "set_fact": ("MEMORY_AUTHORITY", "DELEGATE_TO_UNIFIED", "POST /v1/unified/observe（显式事实作为来源事件经 formation 形成 ACTIVE/CANDIDATE 记录）", ""),

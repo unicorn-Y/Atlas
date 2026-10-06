@@ -378,12 +378,9 @@ async def migrate_legacy_sessions(home: str | Path, memory_store: Any, *,
     settled = False
     phase = "preflight"
     try:
-        assert memory_store._db is not None
-        cursor = await memory_store._db.execute(
-            "SELECT DISTINCT c.id FROM conversations c "
-            "JOIN messages m ON m.conversation_id=c.id"
-        )
-        atlas_ids = {str(row[0]) for row in await cursor.fetchall()}
+        # T01.3：经 MemoryStore 公开只读方法取 DISTINCT 会话清单
+        # （authority-map 1.0，不再直摸 memory_store._db）。
+        atlas_ids = {str(cid) for cid in await memory_store.list_conversation_ids()}
         original_session_ids = _existing_session_ids(hermes_path)
         pending_ids = atlas_ids - original_session_ids
         ignored_existing = len(atlas_ids & original_session_ids)

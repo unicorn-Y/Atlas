@@ -4405,6 +4405,33 @@ class MemoryStore:
         )
         await self._db.commit()
 
+    async def update_rewind_restored_files(self, rewind_id: str,
+                                           restored_files: int) -> None:
+        """RUNTIME_AUTHORITY（authority-map 1.0）：rewind 恢复文件计数回写。
+
+        T01.3：取代 conversations_router rewind_redo 端点直摸 ``memory._db``
+        的唯一写点（与 mark_rewind_redone 同型）；表为运行权威，保留本地。
+        """
+        assert self._db is not None
+        await self._db.execute(
+            "UPDATE conversation_rewinds SET restored_files=? WHERE rewind_id=?",
+            (restored_files, rewind_id),
+        )
+        await self._db.commit()
+
+    async def list_conversation_ids(self) -> list[str]:
+        """RUNTIME_AUTHORITY（authority-map 1.0）：有消息的会话 ID 清单（只读）。
+
+        T01.3：取代 engine/session_sync.py 遗留会话迁移直摸
+        ``memory_store._db`` 的 DISTINCT 只读查询；迁移退役后本方法随之删除。
+        """
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT DISTINCT c.id FROM conversations c "
+            "JOIN messages m ON m.conversation_id=c.id"
+        )
+        return [str(row[0]) for row in await cursor.fetchall()]
+
     async def delete_fact(self, key: str) -> bool:
         """Delete a fact by key. Returns True if found."""
         # unified-memory: delegated per authority-map 1.0 (POST /v1/unified/corrections

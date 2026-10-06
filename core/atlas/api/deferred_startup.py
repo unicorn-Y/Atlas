@@ -94,6 +94,11 @@ async def shutdown_lifespan_components(app: Any, state: dict[str, Any], route_co
         service = resource(name)
         if service:
             await service.close()
+    # T01.3：unified-memory facade 的 httpx 客户端随 lifespan 释放（惰性创建，
+    # disabled 时为 None，无副作用）。
+    unified_facade = resource("unified_memory")
+    if unified_facade is not None:
+        await unified_facade.aclose()
     restore_lifespan_routes(app, route_count)
 
 
