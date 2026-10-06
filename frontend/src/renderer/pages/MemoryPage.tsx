@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { BookMarked, Brain, Check, LoaderCircle, Plus, RefreshCw, Search, Sparkles, X } from 'lucide-react';
+import { Activity, BookMarked, Brain, Check, GraduationCap, History, ListTodo, LoaderCircle, Plus, RefreshCw, Search, Sparkles, Users, X } from 'lucide-react';
 import { api, relativeTime } from '../services/api';
+import TimelineView, { type TimelineItem } from '../components/memory/TimelineView';
+import EvidencePanel from '../components/memory/EvidencePanel';
+import EntityView from '../components/memory/EntityView';
+import IntentView from '../components/memory/IntentView';
+import LearningView from '../components/memory/LearningView';
+import StatusPanel from '../components/memory/StatusPanel';
+import CorrectionDialog from '../components/memory/CorrectionDialog';
+import { enumLabel, isFeatureDisabled, isNotEnabled, pageOf, str } from '../components/memory/common';
 
 interface Fact { key: string; value: string; category: string; confidence?: number | null; memory_type?: string | null; updated_at?: string }
 interface Candidate { id: string; key: string; value: string; category: string; confidence?: number; status: string; memory_type?: string; created_at?: string }
 interface Knowledge { id: string; content: string; source?: string; category?: string; created_at?: string; score?: number }
-type Tab = 'facts' | 'pending' | 'knowledge';
+/** 主视图：时间线/当前理解/人事/待办/学到的方法/服务状态（T12.1）+ 旧入口 facts/pending/knowledge 兼容保留。 */
+type Tab = 'timeline' | 'understanding' | 'entities' | 'intents' | 'learning' | 'status' | 'facts' | 'pending' | 'knowledge';
 
 const CATEGORY: Record<string, string> = { general: '通用', preference: '偏好', preferences: '偏好', profile: '个人信息', personal: '个人信息', project: '项目', work: '工作', habit: '习惯', contact: '联系人', schedule: '日程' };
 const categoryName = (value?: string) => CATEGORY[value ?? 'general'] ?? value ?? '通用';
@@ -26,8 +35,110 @@ function ConfirmButton({ label, confirm, onConfirm, disabled }: { label: string;
   return <button className={`btn ${armed ? 'danger' : 'ghost'}`} disabled={disabled} onClick={() => { if (armed) { setArmed(false); onConfirm(); } else setArmed(true); }}>{armed ? confirm : label}</button>;
 }
 
+// ---------------------------------------------------------------------------
+// 当前理解：GET /api/unified-memory/records（facet=SUMMARY/PREFERENCE/STATE）。
+// 长期理解、偏好与状态就是 Atlas 对用户的当前理解；每条都能看依据、发起纠错。
+// ---------------------------------------------------------------------------
+
+interface RecordItem { recordRef: string; revision: number | null; facet: string; title: string; text: string; epistemic: string; updatedAt: string }
+
+function normalizeRecordItem(value: unknown): RecordItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const recordRef = str(raw.record_ref ?? raw.id);
+  if (!recordRef) return null;
+  const content = (raw.content && typeof raw.content === 'object' ? raw.content : {}) as Record<string, unknown>;
+  const topic = str(content.topic);
+  return {
+    recordRef,
+    revision: typeof raw.revision === 'number' ? raw.revision : null,
+    facet: str(raw.facet),
+    title: topic.startsWith('raw:') ? topic.slice(4) : topic,
+    text: str(content.text ?? content.summary ?? content.value ?? content),
+    epistemic: str(raw.epistemic_kind),
+    updatedAt: str((raw.valid_time as Record<string, unknown> | undefined)?.valid_from),
+  };
+}
+
+const UNDERSTANDING_FACETS: Array<{ value: string; label: string }> = [
+  { value: 'SUMMARY', label: '长期理解' },
+  { value: 'PREFERENCE', label: '偏好' },
+  { value: 'STATE', label: '当前状态' },
+];
+
+function UnderstandingView({ apiBaseUrl, connected, onOpenEvidence, onCorrect }: {
+  apiBaseUrl: string;
+  connected: boolean;
+  onOpenEvidence: (item: RecordItem) => void;
+  onCorrect: (item: RecordItem) => void;
+}) {
+  const [facet, setFacet] = useState('SUMMARY');
+  const [items, setItems] = useState<RecordItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async (opts: { facet: string; cursor?: string | null }) => {
+    if (!connected) return;
+    if (opts.cursor) setLoadingMore(true); else setLoading(true);
+    try {
+      const params = new URLSearchParams({ facet: opts.facet, limit: '50' });
+      if (opts.cursor) params.set('cursor', opts.cursor);
+      const payload = await api<unknown>(apiBaseUrl, `/api/unified-memory/records?${params}`);
+      const page = pageOf(payload);
+      const next = page.items.map(normalizeRecordItem).filter((item): item is RecordItem => item !== null);
+      setItems((current) => (opts.cursor ? [...current, ...next] : next));
+      setCursor(page.nextCursor);
+      setError('');
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : String(exc));
+    } finally { setLoading(false); setLoadingMore(false); }
+  }, [apiBaseUrl, connected]);
+
+  useEffect(() => { void load({ facet }); }, [facet, load]);
+
+  const degraded = isFeatureDisabled(error) || isNotEnabled(error);
+  if (!connected) return <section aria-label="当前理解"><div className="note">等待 Atlas 后端连接后读取当前理解。</div></section>;
+  const epistemicOf = (item: RecordItem) => enumLabel(item.epistemic, { USER_ASSERTED: '用户亲述', OBSERVED: '实际观察', INFERRED: '推断', DERIVED: '推断' });
+
+  return <section aria-label="当前理解">
+    <div className="filterbar" style={{ marginBottom: 10 }}>
+      <div className="seg" role="tablist" aria-label="理解类别">
+        {UNDERSTANDING_FACETS.map((entry) => <button key={entry.value} aria-pressed={facet === entry.value} onClick={() => setFacet(entry.value)}>{entry.label}</button>)}
+      </div>
+      <span className="empty-note">Atlas 当前对你的理解；每一条都能看依据或直接纠正。</span>
+    </div>
+
+    {loading && <div className="list glass"><div className="empty"><LoaderCircle size={22} className="spin" /><b>正在读取当前理解…</b></div></div>}
+    {!loading && degraded && <div className="note">当前理解功能未启用：服务端尚未接线或统一记忆未开启。这不是错误，等后端启用后会自动可用。</div>}
+    {!loading && !degraded && error && <div className="error-note" role="alert"><span>读取当前理解失败：{error}</span></div>}
+    {!loading && !error && items.length === 0 &&
+      <div className="list glass"><div className="empty"><Brain size={22} /><b>还没有形成理解</b>随着交流积累，Atlas 对你的长期理解、偏好与当前状态会出现在这里。</div></div>}
+
+    {!loading && !error && items.length > 0 && <div className="list glass">{items.map((item) => <div className="fact" key={item.recordRef}>
+      <div>
+        <div>{item.title || item.text || '(无文字内容)'}</div>
+        {item.title && item.text && item.title !== item.text && <small>{item.text}</small>}
+        <small>{[item.updatedAt ? relativeTime(item.updatedAt) : '', enumLabel(item.facet, { SUMMARY: '理解', PREFERENCE: '偏好', STATE: '状态' })].filter(Boolean).join(' · ')}</small>
+        {epistemicOf(item) && <div className="chips" style={{ marginTop: 6 }}><span>{epistemicOf(item)}</span>{item.revision !== null && <span>版本 {item.revision}</span>}</div>}
+      </div>
+      <div className="btns">
+        <button className="btn ghost" onClick={() => onOpenEvidence(item)}>依据</button>
+        <button className="btn ghost" onClick={() => onCorrect(item)}>纠错</button>
+      </div>
+    </div>)}</div>}
+
+    {cursor && !loading && !error && <div style={{ textAlign: 'center', marginTop: 14 }}>
+      <button className="btn" disabled={loadingMore || !connected} onClick={() => void load({ facet, cursor })}>
+        {loadingMore ? <LoaderCircle size={14} className="spin" /> : null}加载更多
+      </button>
+    </div>}
+  </section>;
+}
+
 export default function MemoryPage({ apiBaseUrl, connected, onToast, onPendingChange }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onPendingChange?: (count: number) => void }) {
-  const [tab, setTab] = useState<Tab>('facts');
+  const [tab, setTab] = useState<Tab>('timeline');
   const [facts, setFacts] = useState<Fact[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
@@ -39,6 +150,11 @@ export default function MemoryPage({ apiBaseUrl, connected, onToast, onPendingCh
   const [adding, setAdding] = useState(false);
   const [factForm, setFactForm] = useState({ key: '', value: '', category: 'general' });
   const [docForm, setDocForm] = useState({ content: '', source: '', category: 'general' });
+  // 「依据」面板与纠错对话框（T12.1）：条目点开弹依据；纠错走真实 corrections API。
+  const [evidenceRef, setEvidenceRef] = useState<{ recordRef: string; revision: number | null } | null>(null);
+  const [correctRef, setCorrectRef] = useState<{ recordRef: string; revision: number | null } | null>(null);
+  // 纠错成功后主键自增，重建当前视图以刷新数据（不引入第二套 store）。
+  const [viewKey, setViewKey] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!connected) return;
@@ -80,7 +196,11 @@ export default function MemoryPage({ apiBaseUrl, connected, onToast, onPendingCh
   const saveFact = (event: FormEvent) => { event.preventDefault(); void run(async () => { await api(apiBaseUrl, '/api/facts', { method: 'POST', json: { key: factForm.key.trim(), value: factForm.value.trim(), category: factForm.category.trim() || 'general' } }); setFactForm({ key: '', value: '', category: 'general' }); setAdding(false); }, '已添加记忆'); };
   const saveDoc = (event: FormEvent) => { event.preventDefault(); void run(async () => { await api(apiBaseUrl, '/api/knowledge', { method: 'POST', json: { content: docForm.content.trim(), source: docForm.source.trim(), category: docForm.category.trim() || 'general' } }); setDocForm({ content: '', source: '', category: 'general' }); setAdding(false); }, '已加入资料'); };
 
+  const openEvidence = (recordRef: string, revision: number | null) => setEvidenceRef({ recordRef, revision });
+  const openCorrection = (recordRef: string, revision: number | null) => setCorrectRef({ recordRef, revision });
+
   const q = query.trim().toLowerCase();
+  const showOldSearch = tab === 'facts' || tab === 'pending' || tab === 'knowledge';
   const shownFacts = facts.filter((item) => !q || `${item.key} ${item.value} ${categoryName(item.category)}`.toLowerCase().includes(q));
   const groups = shownFacts.reduce<Record<string, Fact[]>>((all, item) => { (all[categoryName(item.category)] ??= []).push(item); return all; }, {});
   const shownPending = pending.filter((item) => !q || `${item.key} ${item.value}`.toLowerCase().includes(q));
@@ -91,17 +211,24 @@ export default function MemoryPage({ apiBaseUrl, connected, onToast, onPendingCh
       <div><h1>记忆与资料</h1><p>Atlas 记住的关于你的事，以及你交给它的资料。每一条都可以查看、修改或删除。</p></div>
       <div className="btns">
         <button className="btn ghost" onClick={() => void refresh()} disabled={busy || !connected}>{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}刷新</button>
-        {tab !== 'pending' && <button className="btn primary" disabled={!connected} onClick={() => setAdding((value) => !value)}><Plus size={15} />{tab === 'facts' ? '添加记忆' : '添加资料'}</button>}
+        {(tab === 'facts' || tab === 'knowledge') && <button className="btn primary" disabled={!connected} onClick={() => setAdding((value) => !value)}><Plus size={15} />{tab === 'facts' ? '添加记忆' : '添加资料'}</button>}
       </div>
     </header>
 
     <div className="filterbar">
       <div className="seg" role="tablist">
+        <button aria-pressed={tab === 'timeline'} onClick={() => { setTab('timeline'); setAdding(false); }}><History size={14} />时间线</button>
+        <button aria-pressed={tab === 'understanding'} onClick={() => { setTab('understanding'); setAdding(false); }}>当前理解</button>
+        <button aria-pressed={tab === 'entities'} onClick={() => { setTab('entities'); setAdding(false); }}><Users size={14} />人事</button>
+        <button aria-pressed={tab === 'intents'} onClick={() => { setTab('intents'); setAdding(false); }}><ListTodo size={14} />待办</button>
+        <button aria-pressed={tab === 'learning'} onClick={() => { setTab('learning'); setAdding(false); }}><GraduationCap size={14} />学到的方法</button>
+        <button aria-pressed={tab === 'status'} onClick={() => { setTab('status'); setAdding(false); }}><Activity size={14} />服务状态</button>
+        <span aria-hidden style={{ width: 1, background: 'var(--line)', margin: '0 4px' }} />
         <button aria-pressed={tab === 'facts'} onClick={() => { setTab('facts'); setAdding(false); }}>记忆 {facts.length || ''}</button>
         <button aria-pressed={tab === 'pending'} onClick={() => { setTab('pending'); setAdding(false); }}>待确认 {pending.length || ''}</button>
         <button aria-pressed={tab === 'knowledge'} onClick={() => { setTab('knowledge'); setAdding(false); }}>资料 {knowledge.length || ''}</button>
       </div>
-      <label className="field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === 'knowledge' ? '按内容搜索资料' : '搜索记忆'} aria-label="搜索记忆" /></label>
+      {showOldSearch && <label className="field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === 'knowledge' ? '按内容搜索资料' : '搜索记忆'} aria-label="搜索记忆" /></label>}
     </div>
 
     {!connected && <div className="error-note">Atlas 后端未连接，暂时无法读取记忆。</div>}
@@ -139,5 +266,26 @@ export default function MemoryPage({ apiBaseUrl, connected, onToast, onPendingCh
       <div><Highlight text={item.content.length > 280 ? `${item.content.slice(0, 280)}…` : item.content} query={query} /><small>{[item.source, categoryName(item.category), relativeTime(item.created_at)].filter(Boolean).join('，')}</small></div>
       <ConfirmButton label="删除" confirm="确认删除" disabled={busy} onConfirm={() => void run(() => api(apiBaseUrl, `/api/knowledge/${encodeURIComponent(item.id)}`, { method: 'DELETE' }), '已删除资料')} />
     </div>)}</div> : <div className="list glass"><div className="empty"><BookMarked size={22} /><b>{q ? '没有找到相关资料' : '资料库是空的'}</b>{q ? '换个说法试试，搜索会按意思匹配。' : '把常用的说明、笔记加进来，Atlas 回答时会参考它们。'}</div></div>)}
+
+    {/* 统一记忆主视图（T12.1）：条目点开弹依据；纠错走真实 corrections API。 */}
+    {tab !== 'facts' && tab !== 'pending' && tab !== 'knowledge' && <div key={viewKey}>
+      {tab === 'timeline' && <TimelineView
+        apiBaseUrl={apiBaseUrl} connected={connected}
+        onOpenEvidence={(item: TimelineItem) => openEvidence(item.recordRef, item.revision)}
+        onCorrect={(item: TimelineItem) => openCorrection(item.recordRef, item.revision)} />}
+      {tab === 'understanding' && <UnderstandingView
+        apiBaseUrl={apiBaseUrl} connected={connected}
+        onOpenEvidence={(item) => openEvidence(item.recordRef, item.revision)}
+        onCorrect={(item) => openCorrection(item.recordRef, item.revision)} />}
+      {tab === 'entities' && <EntityView apiBaseUrl={apiBaseUrl} connected={connected} />}
+      {tab === 'intents' && <IntentView apiBaseUrl={apiBaseUrl} connected={connected} />}
+      {tab === 'learning' && <LearningView apiBaseUrl={apiBaseUrl} connected={connected} />}
+      {tab === 'status' && <StatusPanel apiBaseUrl={apiBaseUrl} connected={connected} />}
+    </div>}
+
+    {evidenceRef && <EvidencePanel apiBaseUrl={apiBaseUrl} recordRef={evidenceRef.recordRef} revision={evidenceRef.revision} onClose={() => setEvidenceRef(null)} />}
+    {correctRef && <CorrectionDialog apiBaseUrl={apiBaseUrl} targetRef={correctRef.recordRef} expectedRevision={correctRef.revision}
+      onClose={() => setCorrectRef(null)}
+      onCorrected={() => { setViewKey((value) => value + 1); }} />}
   </div></div>;
 }
