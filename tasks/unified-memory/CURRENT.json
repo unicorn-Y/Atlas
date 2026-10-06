@@ -38,12 +38,27 @@
       "status": "INTEGRATED",
       "evidence": "artifacts/unified-memory/UM01/T01.3/",
       "notes": "server/cli/hub single composition; /api/unified-memory proxy; scan_bypass=0; direct _db eliminated"
+    },
+    "T02.1": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM02/T02.1/",
+      "notes": "0024 migration + outbox full state machine; kill-boundary recovery proven"
+    },
+    "T02.2": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM02/T02.2/",
+      "notes": "chat/assistant/tool capture at stable IDs; error branches captured; empty-shell no longer fakes success"
+    },
+    "T02.3": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM02/T02.3/",
+      "notes": "agent-tool THIRD_PARTY capture + verification; text import idempotent w/ revisions"
     }
   },
   "waves": {
     "UM00": "COMPONENT_VERIFIED",
     "UM01": "INTEGRATED",
-    "UM02": "NOT_STARTED",
+    "UM02": "INTEGRATED",
     "UM03": "NOT_STARTED",
     "UM04": "NOT_STARTED",
     "UM05": "NOT_STARTED",
@@ -62,5 +77,8 @@
     "memoryos_um00": "9f81fb2",
     "atlas_um01": "T01.1=302683b T01.2=9e25181 T01.3=this"
   },
-  "notes_um01": "Engineering integration via real dual-service harness (fake model). Desktop/packaged + real-model proofs deferred to UM12/UM13 per task book."
+  "notes_um01": "Engineering integration via real dual-service harness (fake model). Desktop/packaged + real-model proofs deferred to UM12/UM13 per task book.",
+  "known_issues": [
+    "test_preyield_constructor_failure_closes_initialized_memory_store: baseline failure introduced by T01.3 MemoryStore(unified=) signature vs older test stub - fix queued"
+  ]
 }
