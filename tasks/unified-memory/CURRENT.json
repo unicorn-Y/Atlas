@@ -1,7 +1,7 @@
 {
   "project": "ATLAS-UNIFIED-MEMORY-WINDOWS",
   "branch": "unified-memory/waves",
-  "updated_at": "2026-10-06",
+  "updated_at": "2026-10-06 (overnight run 1)",
   "atlas_head_base": "aa6196f550098cc46081dc6db2c376cb87ddffa5",
   "memoryos_head_base": "702f702bf9c0c1fa552132930843aaca4923f139",
   "status_enum": [
@@ -15,22 +15,18 @@
   ],
   "tasks": {
     "T00.1": {
-      "title": "当前权威与安全施工基线（Atlas 侧）",
       "status": "COMPONENT_VERIFIED",
-      "updated_at": "2026-10-06",
-      "owner": "T00.1 施工代理",
-      "files": [
-        "scripts/unified_memory/baseline.py",
-        "docs/plan/UNIFIED-MEMORY/authority-map.json",
-        "core/tests/unified_memory/test_baseline_inventory.py",
-        "artifacts/unified-memory/UM00/T00.1/result.json"
-      ],
-      "summary": "39 表 / 108 方法 / 150 调用点全部映射，unmapped=0；测试 10 passed；test_memory.py 79 passed（既有基线）。",
-      "notes": "MemoryOS HEAD 已从 702f702 前进到 e966aff（801 项脏文件），已记录于 env_manifest；判定：复用 extraction_sessions 扩 job_type，不新建 unified_jobs 表。"
+      "evidence": "artifacts/unified-memory/UM00/T00.1/ (both repos)",
+      "notes": "authority-map 39 tables/108 methods/0 unmapped; memoryos-baseline 63 routes/36 tables/8 gaps"
+    },
+    "T00.2": {
+      "status": "COMPONENT_VERIFIED",
+      "evidence": "artifacts/unified-memory/UM00/T00.2/ (both repos)",
+      "notes": "UMHarness dual-service green (17+15 passed); WS chat roundtrip via fake LLM; 320-case manifest + 29 seeds frozen"
     }
   },
   "waves": {
-    "UM00": "IN_PROGRESS",
+    "UM00": "COMPONENT_VERIFIED",
     "UM01": "NOT_STARTED",
     "UM02": "NOT_STARTED",
     "UM03": "NOT_STARTED",
@@ -45,5 +41,9 @@
     "UM12": "NOT_STARTED",
     "UM13": "NOT_STARTED"
   },
-  "notes": "Status follows docs/plan/UNIFIED-MEMORY/02_wave_tasks.md. No ACCEPTED without real-model + real-Windows evidence. Protected: others uncommitted files (see authority-map)."
+  "notes": "Status follows docs/plan/UNIFIED-MEMORY/02_wave_tasks.md. No ACCEPTED without real-model + real-Windows evidence. Protected: others uncommitted files (see authority-map).",
+  "commits": {
+    "atlas_um00": "82745cd",
+    "memoryos_um00": "9f81fb2"
+  }
 }
