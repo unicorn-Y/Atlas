@@ -13,9 +13,24 @@
     "ACCEPTED",
     "BLOCKED_EXTERNAL"
   ],
-  "tasks": {},
+  "tasks": {
+    "T00.1": {
+      "title": "当前权威与安全施工基线（Atlas 侧）",
+      "status": "COMPONENT_VERIFIED",
+      "updated_at": "2026-10-06",
+      "owner": "T00.1 施工代理",
+      "files": [
+        "scripts/unified_memory/baseline.py",
+        "docs/plan/UNIFIED-MEMORY/authority-map.json",
+        "core/tests/unified_memory/test_baseline_inventory.py",
+        "artifacts/unified-memory/UM00/T00.1/result.json"
+      ],
+      "summary": "39 表 / 108 方法 / 150 调用点全部映射，unmapped=0；测试 10 passed；test_memory.py 79 passed（既有基线）。",
+      "notes": "MemoryOS HEAD 已从 702f702 前进到 e966aff（801 项脏文件），已记录于 env_manifest；判定：复用 extraction_sessions 扩 job_type，不新建 unified_jobs 表。"
+    }
+  },
   "waves": {
-    "UM00": "NOT_STARTED",
+    "UM00": "IN_PROGRESS",
     "UM01": "NOT_STARTED",
     "UM02": "NOT_STARTED",
     "UM03": "NOT_STARTED",
