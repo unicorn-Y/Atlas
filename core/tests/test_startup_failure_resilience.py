@@ -302,10 +302,14 @@ async def test_preyield_constructor_failure_closes_initialized_memory_store(
     original_globals = {name: getattr(server, name) for name in global_names}
     worker_threads: list[threading.Thread] = []
     closed: list[bool] = []
+    constructed_kwargs: list[dict[str, Any]] = []
     memory_type = server.MemoryStore
 
-    def tracked_memory_store() -> Any:
-        store = memory_type()
+    def tracked_memory_store(*args: Any, unified: Any = None, **kwargs: Any) -> Any:
+        # T01.3 起，生产 lifespan 以 MemoryStore(unified=facade_or_None) 构造；
+        # stub 接受并记录 unified kwarg，再原样转发给真实构造函数。
+        constructed_kwargs.append({"unified": unified})
+        store = memory_type(*args, unified=unified, **kwargs)
         initialize = store.init
         close = store.close
 
@@ -332,6 +336,7 @@ async def test_preyield_constructor_failure_closes_initialized_memory_store(
         with pytest.raises(RuntimeError, match="injected pre-yield constructor failure"):
             async with server.lifespan(server.app):
                 pytest.fail("startup must fail before yielding")
+        assert constructed_kwargs == [{"unified": None}]
         assert closed == [True]
         assert len(worker_threads) == 1
         assert not worker_threads[0].is_alive()
