@@ -68,6 +68,21 @@
       "status": "INTEGRATED",
       "evidence": "artifacts/unified-memory/UM03/T03.3/ (both repos)",
       "notes": "four-kind conflicts w/ evidence chains, corrections live"
+    },
+    "T04.1": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM04/T04.1/ (both repos)",
+      "notes": "episode formation parity-locked vs Hindsight; timeline live"
+    },
+    "T04.2": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM04/T04.2/ (both repos)",
+      "notes": "profile policies: bounded states, Wilson-gated habits, no capability labels"
+    },
+    "T04.3": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM04/T04.3/ (both repos)",
+      "notes": "TiMem day/week/long-term summaries w/ dependency snapshots; discard-on-change"
     }
   },
   "waves": {
@@ -75,7 +90,7 @@
     "UM01": "INTEGRATED",
     "UM02": "INTEGRATED",
     "UM03": "INTEGRATED",
-    "UM04": "NOT_STARTED",
+    "UM04": "INTEGRATED",
     "UM05": "NOT_STARTED",
     "UM06": "NOT_STARTED",
     "UM07": "NOT_STARTED",
@@ -91,7 +106,8 @@
     "atlas_um00": "82745cd",
     "memoryos_um00": "9f81fb2",
     "atlas_um01": "T01.1=302683b T01.2=9e25181 T01.3=this",
-    "um03": "Atlas 1443393/c29d77e + MemoryOS 8b7c3dd/6d90e3b + T03.3"
+    "um03": "Atlas 1443393/c29d77e + MemoryOS 8b7c3dd/6d90e3b + T03.3",
+    "um04": "MemoryOS faaacb1 + UM04 commit"
   },
   "notes_um01": "Engineering integration via real dual-service harness (fake model). Desktop/packaged + real-model proofs deferred to UM12/UM13 per task book.",
   "known_issues": [
