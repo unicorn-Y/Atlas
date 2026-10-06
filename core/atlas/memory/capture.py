@@ -655,30 +655,113 @@ class CaptureService:
     def capture_agent_tool_result(self, session_id: str, tool_call_id: str,
                                   actor_id: str, text: str = "", *,
                                   is_error: bool = False, occurred_at: Any = None,
-                                  project_id: str | None = None
+                                  project_id: str | None = None,
+                                  tool_name: str = "agent",
+                                  result_payload: dict[str, Any] | None = None,
+                                  log_refs: dict[str, Any] | list[Any] | None = None,
+                                  atlas_session: bool = True,
                                   ) -> dict[str, Any] | None:
-        """被调用 Agent 的返回（T02.3 接线；本波先落签名与映射）。
+        """被调用 Agent 的返回（T02.3 真实接线：tool_node / agent_backends_router）。
 
         ATLAS_AGENT_TOOL_RESULT / THIRD_PARTY / THIRD_PARTY_ASSERTED：对方自己的
         推理与声明不是 Atlas 的独立事实权威（§1.1），所以按第三方断言记录；
-        ``actor_id`` 区分被调用的 Agent/工具身份。
+        ``only_assistant_claim=True`` 显式标注这只是对方的自报完成 —— **对方的
+        声明不是验证**（验证证据属 ATLAS_VERIFICATION，由 Atlas 独立检查产生，
+        见 :meth:`~atlas.memory.windows_sources.WindowsSourceService.verify_agent_result`）。
+        ``actor_id`` 区分被调用的 Agent/工具身份（如 ``tool-zcode``）；
+        ``log_refs`` 保留原日志定位（受控 blob 路径 / 子任务 ID / 后端会话 ID）。
+
+        ``session_id`` 是 Atlas 对话 ID（tool_node 路径）；agent_backends_router
+        的后端直连路径没有 Atlas 对话，传 ``atlas_session=False`` 并把后端
+        会话 ID 放进 ``log_refs``（locator 用 AGENT_BACKEND_SESSION，避免把后端
+        会话伪造成 Atlas 运行会话）。
         """
         object_id = atlas_message_object_id(tool_call_id)
-        if not object_id or not str(session_id or "").strip():
+        if not object_id:
+            return None
+        if atlas_session and not str(session_id or "").strip():
             return None
         now, tz = _utc_now_iso()
+        content: dict[str, Any] = {"phase": "result", "tool": str(tool_name or "agent"),
+                                   "actor_id": str(actor_id or ""),
+                                   "session_id": str(session_id or ""),
+                                   "text": str(text or ""),
+                                   "is_error": bool(is_error),
+                                   "only_assistant_claim": True}
+        if result_payload:
+            content["result_payload"] = result_payload
+        if log_refs:
+            content["log_refs"] = log_refs
+        if atlas_session:
+            locator: dict[str, Any] = {"kind": "TOOL_CALL",
+                                       "value": f"{session_id}/{object_id}"}
+        else:
+            locator = {"kind": "AGENT_BACKEND_SESSION", "value": str(object_id)}
+        # MemoryContext 完整性（§1 runtime_session_id 必填）：后端直连路径没有
+        # Atlas 对话，用 agent-backend 命名空间的合成会话 ID（locator 已明确
+        # 区分，不把后端会话伪造成 Atlas 运行会话）。
+        overrides = (self._message_context(
+            str(session_id), model_deployment_id=None, project_id=project_id,
+            task_id=None) if atlas_session else
+            {"runtime_session_id": f"agent-backend:{object_id}"})
         return self._capture(
             source_kind="ATLAS_AGENT_TOOL_RESULT", source_object_id=object_id,
-            source_revision=TOOL_REVISION_RESULT,
-            content={"phase": "result", "tool": "agent", "actor_id": str(actor_id or ""),
-                     "session_id": str(session_id), "text": str(text or ""),
-                     "is_error": bool(is_error)},
+            source_revision=TOOL_REVISION_RESULT, content=content,
             speaker_role="THIRD_PARTY", epistemic_kind="THIRD_PARTY_ASSERTED",
             occurred_at=occurred_at or now, source_timezone=tz,
-            locator={"kind": "TOOL_CALL", "value": f"{session_id}/{object_id}"},
-            context_overrides=self._message_context(
-                session_id, model_deployment_id=None, project_id=project_id,
-                task_id=None))
+            locator=locator, context_overrides=overrides)
+
+    def capture_agent_verification(self, session_id: str, tool_call_id: str,
+                                   tool_name: str, checks: list[dict[str, Any]],
+                                   *, verified: bool | None = None,
+                                   occurred_at: Any = None,
+                                   project_id: str | None = None,
+                                   atlas_session: bool = True,
+                                   ) -> dict[str, Any] | None:
+        """被调 Agent 结果的 Atlas 独立验证追加（T02.3）。
+
+        ATLAS_VERIFICATION / ATLAS / OBSERVED：与被调方的 THIRD_PARTY 自报严格
+        分开（§1.1「对方声明不是验证」）。``checks`` 必须来自 Atlas 自己的真实
+        检查（文件存在 / 真实产物 / 可观察结果），同一 ``tool_call_id`` 作
+        source_object_id（revision=3）与 result 观察关联；episode outcome 更新
+        留 UM09，本波只落验证观察。``atlas_session=False``（agent_backends_router
+        直连后端路径没有 Atlas 对话）用 AGENT_BACKEND_SESSION locator，
+        不把后端会话伪造成 Atlas 运行会话。
+        """
+        object_id = atlas_message_object_id(tool_call_id)
+        if not object_id:
+            return None
+        if atlas_session and not str(session_id or "").strip():
+            return None
+        now, tz = _utc_now_iso()
+        check_list = [dict(item) for item in (checks or []) if isinstance(item, dict)]
+        effective_verified = bool(check_list) and all(
+            bool(item.get("passed")) for item in check_list
+        ) if verified is None else bool(verified)
+        locator: dict[str, Any] = (
+            {"kind": "TOOL_CALL", "value": f"{session_id}/{object_id}"}
+            if atlas_session
+            else {"kind": "AGENT_BACKEND_SESSION", "value": str(object_id)})
+        overrides = (self._message_context(
+            str(session_id), model_deployment_id=None, project_id=project_id,
+            task_id=None) if atlas_session else
+            {"runtime_session_id": f"agent-backend:{object_id}"})
+        return self._capture(
+            source_kind="ATLAS_VERIFICATION", source_object_id=object_id,
+            source_revision=TOOL_REVISION_VERIFICATION,
+            content={"phase": "verification", "tool": str(tool_name or "agent"),
+                     "session_id": str(session_id or ""), "checks": check_list,
+                     "verified": effective_verified},
+            speaker_role="ATLAS", epistemic_kind="OBSERVED",
+            occurred_at=occurred_at or now, source_timezone=tz,
+            locator=locator, context_overrides=overrides)
+
+    def enqueue_observation(self, observation: dict[str, Any], *,
+                            context_overrides: dict[str, Any] | None = None,
+                            ) -> dict[str, Any]:
+        """通用观察入库入口（T02.3：USER_IMPORT 等由 WindowsSourceService 构造
+        观察后经同一 outbox 幂等管线入库；同 ID 同内容 created=False）。"""
+        return self._enqueue(observation, context_overrides)
 
     # ------------------------------------------------------------ 读取/flush
 

@@ -54,6 +54,12 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
+#: 被调用 Agent 工具（T02.3）：结果按 ATLAS_AGENT_TOOL_RESULT（THIRD_PARTY）
+#: 另行记录 —— 对方自己的"完成"声明不是 Atlas 的事实权威，也**不是验证**
+#: （§1.1）；Atlas 独立验证由调用方经 /api/unified-memory/verify-agent-result
+#: 追加 ATLAS_VERIFICATION 观察。
+AGENT_RESULT_TOOLS = {"delegate_task", "delegate_parallel"}
+
 
 def _capture_tool_event(
     ctx: Any, *, tool_call_id: str, name: str, phase: str,
@@ -94,6 +100,50 @@ def _capture_tool_event(
                 project_id=project_id)
     except Exception as exc:  # 护栏：捕获失败不打断工具执行
         log.debug("memory.capture_tool_event_failed", tool=name, phase=phase,
+                  error=str(exc))
+
+
+def _capture_agent_tool_event(ctx: Any, *, tool_call_id: str, tool_name: str,
+                              result: dict[str, Any],
+                              full_output_path: str | None = None) -> None:
+    """UM02/T02.3：被调 Agent 工具返回后记录 THIRD_PARTY 自报声明。
+
+    与通用 result 观察（ATLAS_TOOL_OBSERVATION / TOOL）分开：对方的完成声明
+    按 ATLAS_AGENT_TOOL_RESULT / THIRD_PARTY_ASSERTED 记录，
+    ``only_assistant_claim=True`` —— **对方声明不是验证**。actor_id 取真实
+    后端名（``tool-{backend}``，如 tool-zcode / tool-atlas 子代理）；原日志
+    refs（受控 blob / 子任务 ID / 后端会话 ID）随 log_refs 保留。不替对方
+    安装任何全局记忆插件 —— 只记录它进入 Atlas 的这段经历。采集失败只记
+    日志，绝不影响工具执行。
+    """
+    try:
+        from atlas.memory.windows_sources import get_windows_source_service
+
+        service = get_windows_source_service()
+        if service is None:
+            return
+        data = result.get("data") if isinstance(result.get("data"), dict) else {}
+        backend = str(data.get("backend") or "").strip()
+        actor_id = f"tool-{backend or tool_name}"
+        status = str(data.get("status") or (
+            "failed" if result.get("is_error") else "completed"))
+        claim = str(data.get("result") or data.get("summary") or "")
+        subtask_id = str(data.get("subtask_id") or "") or None
+        backend_session_id = str(data.get("session_id") or "") or None
+        log_refs = {key: value for key, value in (
+            ("full_output_path", full_output_path),
+            ("subtask_id", subtask_id),
+            ("backend_session_id", backend_session_id),
+        ) if value}
+        service.record_agent_tool_result(
+            tool_name=tool_name, actor_id=actor_id, tool_call_id=tool_call_id,
+            result_payload={"status": status, "backend": backend or None,
+                            "subtask_id": subtask_id, "claim": claim[:4000]},
+            log_refs=log_refs or None,
+            session_id=str(getattr(ctx, "conversation_id", "") or ""),
+            text=claim[:4000], is_error=bool(result.get("is_error", False)))
+    except Exception as exc:  # 护栏：捕获失败不打断工具执行
+        log.debug("memory.capture_agent_tool_event_failed", tool=tool_name,
                   error=str(exc))
 
 
@@ -1203,6 +1253,12 @@ async def execute_tools_node(
                             text=full_output, is_error=bool(result.get("is_error", False)),
                             error_category="tool" if result.get("is_error") else None,
                             full_output_path=full_output_path)
+        # UM02/T02.3 Agent 工具：对方的"完成"声明按 THIRD_PARTY 另行记录
+        # （ATLAS_AGENT_TOOL_RESULT）；是否真的完成由 Atlas 独立验证说话。
+        if fn_name in AGENT_RESULT_TOOLS:
+            _capture_agent_tool_event(ctx, tool_call_id=tc_id, tool_name=fn_name,
+                                      result=result,
+                                      full_output_path=full_output_path)
 
         # Build ToolMessage for the LLM
         result_text = "\n".join(

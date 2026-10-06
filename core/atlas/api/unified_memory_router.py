@@ -29,6 +29,8 @@ from starlette.requests import Request
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
+from atlas.memory.capture import ContentTooLarge
+from atlas.memory.windows_sources import ImportTooManySegments, ImportUnsupported
 from atlas.memory.unified_client import (
     ContractViolation,
     ErasureBlocked,
@@ -143,3 +145,96 @@ for _method, _suffix in PROXY_ROUTES:
              f"{_suffix.strip('/').replace('/', '_').replace('{', '').replace('}', '').replace(':', '_')}",
         include_in_schema=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Atlas 本地路由（T02.3）—— 与 §6.1 的 capture/start|pause|stop 同类：不代理
+# MemoryOS，由 Atlas 本地采集控制器（WindowsSourceService → CaptureService →
+# outbox）处理；观察随后经既有 flush 管线落统一记忆服务。
+# ---------------------------------------------------------------------------
+
+
+def _windows_sources() -> Any:
+    """取 WindowsSourceService；capture 未启用（disabled/未装配）→ 显式 503。"""
+    from atlas.memory.windows_sources import get_windows_source_service
+
+    service = get_windows_source_service()
+    if service is None:
+        raise HTTPException(status_code=503, detail={
+            "error": "CAPTURE_NOT_COMPOSED",
+            "message": "unified memory capture is disabled "
+                       "(memory.unified.enabled/capture_mode)",
+        })
+    return service
+
+
+@router.post("/import")
+async def import_text_file(request: Request) -> JSONResponse:
+    """POST /api/unified-memory/import — 本地 txt/md/json/pdf 文本导入（T02.3）。
+
+    body: ``{"path": str, "root"?: str, "task_id"?: str}``；走真实文件系统读取
+    （UI 不直接访问原文件路径的边界由调用方/UI 层保证 —— 本路由是 Atlas 本机
+    导入入口，返回观察批次入库回执：created/duplicates/revision/locator）。
+    幂等：同 hash 重导 created=0；内容修改新 revision；移动不制造新事实。
+    """
+    body = await request.json()
+    path = str(body.get("path") or "").strip()
+    if not path:
+        raise HTTPException(status_code=422, detail={
+            "error": "IMPORT_PATH_REQUIRED", "message": "body.path 必填"})
+    root = str(body.get("root") or "").strip() or None
+    task_id = str(body.get("task_id") or "").strip() or None
+    service = _windows_sources()
+    try:
+        result = service.import_text_file(path, task_id=task_id, root=root)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={
+            "error": "IMPORT_FILE_NOT_FOUND", "message": str(exc)}) from exc
+    except IsADirectoryError as exc:
+        raise HTTPException(status_code=422, detail={
+            "error": "IMPORT_NOT_A_FILE", "message": str(exc)}) from exc
+    except ContentTooLarge as exc:
+        # §2 超限：显式 CONTENT_TOO_LARGE（T02.1 服务端语义），不静默截断。
+        raise HTTPException(status_code=413, detail={
+            "error": "CONTENT_TOO_LARGE", "message": str(exc),
+            "size_bytes": exc.size_bytes}) from exc
+    except ImportUnsupported as exc:
+        raise HTTPException(status_code=415, detail={
+            "error": exc.code, "message": str(exc), "details": exc.details}) from exc
+    except ImportTooManySegments as exc:
+        raise HTTPException(status_code=413, detail={
+            "error": exc.code, "message": str(exc),
+            "segments": exc.count, "limit": exc.limit}) from exc
+    return JSONResponse(content=result)
+
+
+@router.post("/verify-agent-result")
+async def verify_agent_result(request: Request) -> JSONResponse:
+    """POST /api/unified-memory/verify-agent-result — Atlas 独立验证追加（T02.3）。
+
+    body: ``{"tool_call_id": str, "checks": [{"kind","target","passed","detail"...}],
+    "session_id"?: str, "tool_name"?: str}``。checks 必须来自 Atlas 自己的真实
+    检查（文件存在/真实产物/可观察结果）—— 被调 Agent 的自报声明**不是验证**；
+    追加 ATLAS_VERIFICATION 观察（同一 source_object_id，revision=3）。
+    episode outcome 更新留 UM09。
+    """
+    body = await request.json()
+    tool_call_id = str(body.get("tool_call_id") or "").strip()
+    checks = body.get("checks")
+    if not tool_call_id:
+        raise HTTPException(status_code=422, detail={
+            "error": "TOOL_CALL_ID_REQUIRED", "message": "body.tool_call_id 必填"})
+    if not isinstance(checks, list) or not checks:
+        raise HTTPException(status_code=422, detail={
+            "error": "CHECKS_REQUIRED",
+            "message": "body.checks 必须是非空数组（无真实检查不产生验证观察）"})
+    service = _windows_sources()
+    result = service.verify_agent_result(
+        tool_call_id, [item for item in checks if isinstance(item, dict)],
+        session_id=str(body.get("session_id") or "").strip() or None,
+        tool_name=str(body.get("tool_name") or "agent"))
+    if result is None:
+        raise HTTPException(status_code=422, detail={
+            "error": "VERIFICATION_NOT_RECORDED",
+            "message": "tool_call_id / session_id 无法构成稳定观察对象"})
+    return JSONResponse(content=result)
