@@ -266,6 +266,34 @@ def _summary_from(result: dict[str, Any]) -> str:
     return text[:_SUMMARY_LIMIT]
 
 
+def _receipt_service() -> Any:
+    """WindowsSourceService（capture disabled / 未装配 → None，收据静默跳过）。"""
+    try:
+        from atlas.memory.windows_sources import get_windows_source_service
+
+        return get_windows_source_service()
+    except Exception as exc:  # noqa: BLE001 - capture plumbing must never raise
+        log.debug("x2.receipt_service_unavailable", extra={"error": str(exc)})
+        return None
+
+
+def _receipt_action(name: str, args: dict[str, Any]) -> str:
+    """收据的动作文案：legacy 工具名 + 关键参数（如 click@120,80 / observe:desktop）。"""
+    if name == "computer_observe":
+        return f"observe:{args.get('target') or 'desktop'}"
+    if name == "computer_mouse":
+        action = str(args.get("action") or "")
+        if args.get("x") is not None and args.get("y") is not None:
+            return f"{action}@{args.get('x')},{args.get('y')}"
+        return action
+    if name == "computer_keyboard":
+        return str(args.get("action") or "") + (
+            f":{args.get('key') or args.get('keys') or ''}" if args.get("action") == "press" or args.get("keys") else "")
+    if name == "computer_window":
+        return f"window:{args.get('action') or ''}"
+    return name
+
+
 # ---------------------------------------------------------------------------
 # Runtime
 # ---------------------------------------------------------------------------
@@ -374,8 +402,11 @@ class X2ComputerRuntime:
                 result = await self._call_hermes(translated[0], translated[1], legacy_name=name, ctx=ctx)
                 if result is not None:
                     await self._emit_step(ctx, name, result)
+                    await self._capture_receipt(ctx, name, args, result)
                     return result
-            return await self._call_legacy(name, args, ctx=ctx)
+            result = await self._call_legacy(name, args, ctx=ctx)
+            await self._capture_receipt(ctx, name, args, result)
+            return result
         except Exception as exc:  # noqa: BLE001 - mirror the legacy tool contract
             log.exception("x2.computer_call_failed", extra={"tool": name})
             return _error(f"{name} 执行失败：{exc}")
@@ -483,6 +514,37 @@ class X2ComputerRuntime:
         result = await runtime.call_tool(name, args)
         await self._emit_step(ctx, name, result)
         return result
+
+    async def _capture_receipt(self, ctx: X2Context, name: str, args: dict[str, Any],
+                               result: dict[str, Any]) -> None:
+        """T05.3：工具已经产生的真实收据 → 统一记忆（与 T02.2 dispatch/result 互补）。
+
+        截图数据 URL 经 WindowsSourceService.capture_tool_receipt 走 T05.1 受控
+        媒体入库（只引用 asset_id，正文不塞 base64）；观察/点击请求/实际结果
+        三类分开记录。被动采集 RUNNING 且落在用户选择范围内时同时推进被动
+        水位（§6.1）。采集失败只记日志，绝不影响工具调用结果。
+        """
+        try:
+            service = _receipt_service()
+            if service is None:
+                return
+            data = result.get("data") if isinstance(result.get("data"), dict) else {}
+            action_result = data.get("action_result")
+            await service.capture_tool_receipt(
+                tool=name,
+                action=_receipt_action(name, args),
+                session_id=str(ctx.session_id or ""),
+                summary=_summary_from(result),
+                image_data_url=_thumbnail_from(result),
+                window_title=str(data.get("window_title") or ""),
+                target=str(args.get("target") or ""),
+                request_args=args,
+                result_ok=not bool(result.get("is_error")),
+                result_extra=({"action_result": action_result}
+                              if isinstance(action_result, dict) else None),
+            )
+        except Exception as exc:  # noqa: BLE001 - capture must never break the tool
+            log.debug("x2.computer_receipt_capture_failed", extra={"tool": name, "error": str(exc)})
 
     async def _emit_step(self, ctx: X2Context, name: str, result: dict[str, Any]) -> None:
         """Append one replay-trail event (action + capped thumbnail) for the frontend."""

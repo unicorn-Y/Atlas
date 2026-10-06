@@ -6,6 +6,16 @@
 （ATLAS_AGENT_TOOL_RESULT / ATLAS_VERIFICATION），全部经
 :mod:`atlas.memory.capture` 的既有 outbox 幂等管线入库。
 
+T05.3 扩展（§6.1）：
+  * :class:`PassiveCaptureController` —— "记录当前活动"被动采集控制状态机
+    （STOPPED/RUNNING/PAUSED + revision/request_id 幂等/expected_revision 409），
+    授权 sources = 用户显式选择的窗口/会话/媒体入口；passive_capture_watermark
+    与 conversation/tool 水位分开记账；真实能力边界在 status.collector 如实
+    标注（当前无后台连续截屏能力，偏差 PARTIAL，不假装在录）。
+  * :meth:`WindowsSourceService.capture_tool_receipt` —— x2 工具（computer/
+    browser）已经产生的截图/URL/DOM/动作收据入统一记忆：截图经 T05.1 受控
+    媒体入库只引用 asset_id（不塞 base64）；观察/请求/实际结果三类分开。
+
 语义要点（§1.1）：
   * USER_IMPORT：导入内容不是用户发言 —— ``speaker_role`` 恒为 UNKNOWN，
     ``epistemic_kind=USER_ASSERTED``（用户断言"这份资料值得记录"），每条观察
@@ -32,10 +42,14 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import os
+import sqlite3
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +58,7 @@ import structlog
 from atlas.memory.capture import (
     ContentTooLarge,
     build_observation,
+    canonical_json,
 )
 
 log = structlog.get_logger()
@@ -97,6 +112,31 @@ IMPORT_KINDS = {
 }
 
 DEFAULT_REGISTRY_FILENAME = "import_sources.json"
+
+# --------------------------------------------------------------- T05.3 常量
+
+#: 被动采集控制状态（§6.1：RUNNING/PAUSED/STOPPED）。
+CAPTURE_STATE_STOPPED = "STOPPED"
+CAPTURE_STATE_RUNNING = "RUNNING"
+CAPTURE_STATE_PAUSED = "PAUSED"
+
+#: 授权观察入口种类：用户选择的窗口 / 屏幕 / 会话 / 媒体入口（§6.1 "已授权的
+#: sources"；value "*" 表示该类全部）。没有"全系统"种类 —— 默认不开全系统录屏。
+CAPTURE_SOURCE_KINDS = ("window", "screen", "session", "media")
+MAX_CAPTURE_SOURCES = 32
+
+#: 控制状态持久化文件（outbox 同目录）：revision / passive_capture_watermark
+#: 单调计数跨进程不回退。这是控制器运行状态簿记，**不是**新的全局 settings
+#: 文件 —— 隐私范围复用现有设置（computer_use.permission_mode /
+#: memory.unified.capture_mode，start 时以 config_refs 记录引用）。
+PASSIVE_STATE_FILENAME = "passive_capture_state.json"
+
+#: 收据内容界：摘要/快照节选上限（快照全文超限显式截断并保留全文哈希）。
+_RECEIPT_SUMMARY_CHARS = 1000
+_RECEIPT_SNAPSHOT_CHARS = 4000
+
+#: stop/pause 排空在途被动观察的等待上限；超时后显式记缺口再报告成功（§6.1）。
+_INFLIGHT_DRAIN_TIMEOUT_SECONDS = 5.0
 
 
 class ImportUnsupported(Exception):
@@ -232,7 +272,8 @@ class WindowsSourceService:
     """T02.3 来源服务：文件导入 + 被调 Agent 结果记录，统一走 capture 管线。"""
 
     def __init__(self, capture: Any = None, *,
-                 registry_path: str | Path | None = None) -> None:
+                 registry_path: str | Path | None = None,
+                 passive_controller: "PassiveCaptureController | None" = None) -> None:
         if capture is None:
             from atlas.memory.capture import get_capture_service
 
@@ -243,6 +284,7 @@ class WindowsSourceService:
 
             registry_path = default_outbox_path().parent / DEFAULT_REGISTRY_FILENAME
         self.registry = SourceImportRegistry(registry_path)
+        self._passive_controller = passive_controller
 
     @property
     def capture(self) -> Any:
@@ -489,6 +531,178 @@ class WindowsSourceService:
             "relpath": relpath,
         }
 
+    # -------------------------------------------------- (a3) x2 工具收据（T05.3）
+
+    @property
+    def passive_controller(self) -> "PassiveCaptureController":
+        """被动采集控制器（T05.3）；显式注入优先，缺省用进程级单例。"""
+        if self._passive_controller is None:
+            self._passive_controller = get_passive_capture_controller()
+        return self._passive_controller
+
+    async def capture_tool_receipt(self, *, tool: str, action: str = "",
+                                   session_id: str = "", summary: str = "",
+                                   image_data_url: str | None = None,
+                                   url: str = "", title: str = "",
+                                   window_title: str = "", target: str = "",
+                                   snapshot: str = "",
+                                   request_args: dict[str, Any] | None = None,
+                                   result_ok: bool = True,
+                                   result_extra: dict[str, Any] | None = None,
+                                   x2_kind: str | None = None,
+                                   ) -> dict[str, Any] | None:
+        """x2 工具已经产生的真实收据 → 统一记忆（T05.3；§1.1 ATLAS_TOOL_OBSERVATION）。
+
+        与 T02.2 的 dispatch/result 观察（以 LLM tool_call_id 为对象，tool_node
+        接线）互补：这里记录**工具证据本身** —— 观察摘要 / 请求动作 / 实际结果
+        三类分开（content.observation / content.request / content.result）。
+        截图经 T05.1 受控媒体入库（facade POST /v1/unified/media）只引用
+        asset_id，**绝不把 base64 塞进观察正文**；媒体入库失败时显式记录
+        media.error，不伪造媒体引用。
+
+        幂等：对象 ID 内容寻址（图片按字节 sha256，非媒体收据按收据要素），
+        同一收据重放 → created=0，不制造新事实。
+
+        被动记账（§6.1）：被动采集 RUNNING 且收据落在用户选择的观察入口范围
+        内时，**另**记一条 passive 观察并推进 passive_capture_watermark（与
+        conversation/tool 水位分开）；pause/stop 后不再产生 passive 观察，
+        主动收据不受影响。任何失败只记日志，绝不影响工具调用本身。
+        """
+        if self._capture is None:
+            return None
+        tool = str(tool or "")
+        if not tool.strip():
+            return None
+        media: dict[str, Any] = {}
+        media_refs: list[Any] = []
+        image_bytes: bytes | None = None
+        image_mime: str | None = None
+        if image_data_url:
+            image_mime, image_bytes = _data_url_bytes(str(image_data_url))
+            if image_bytes is None:
+                media = {"error": "MEDIA_DATA_URL_UNPARSEABLE",
+                         "note": "截图数据 URL 无法解析；观察不带媒体引用，不伪造"}
+            else:
+                try:
+                    upload = await self._media_facade().client().ingest_media(
+                        data=image_bytes, mime=image_mime or "image/png")
+                    assets = upload.get("assets") or []
+                    if not assets:  # pragma: no cover - 服务端契约保证至少一个资产
+                        raise RuntimeError("媒体入库回执缺少资产（契约违规）")
+                    asset = assets[0]
+                    asset_id = str(asset.get("asset_id") or "")
+                    asset_hash = str(asset.get("content_hash")
+                                     or sha256_bytes(image_bytes))
+                    media = {"asset_id": asset_id, "media_sha256": asset_hash,
+                             "mime": image_mime or "image/png",
+                             "duplicate": bool(asset.get("duplicate")
+                                               or upload.get("duplicates"))}
+                    media_refs = [{"asset_id": asset_id, "hash": asset_hash}]
+                except Exception as exc:  # noqa: BLE001 — 媒体通道失败不阻断收据
+                    media = {"error": f"MEDIA_INGEST_FAILED: {exc}",
+                             "note": "受控媒体入库失败；本收据不带媒体引用"
+                                     "（原文不塞 base64，不伪造资产）"}
+
+        digest_basis = {
+            "tool": tool, "action": str(action or ""),
+            "session_id": str(session_id or ""),
+            "frame_sha256": sha256_bytes(image_bytes) if image_bytes is not None else None,
+            "url": str(url or ""), "title": str(title or ""),
+            "window_title": str(window_title or ""), "target": str(target or ""),
+            "summary": str(summary or "")[:_RECEIPT_SUMMARY_CHARS],
+        }
+        basis_hash = "sha256:" + hashlib.sha256(
+            canonical_json(digest_basis).encode("utf-8")).hexdigest()
+        object_prefix = f"x2receipt-{basis_hash.removeprefix('sha256:')[:16]}"
+
+        observation_snapshot = ""
+        if snapshot:
+            observation_snapshot = str(snapshot)[:_RECEIPT_SNAPSHOT_CHARS]
+        content: dict[str, Any] = {
+            "phase": "receipt",
+            "x2_kind": x2_kind or ("observe_receipt" if image_bytes is not None
+                                   else "action_receipt"),
+            "tool": tool,
+            "action": str(action or ""),
+            "session_id": str(session_id or ""),
+            "summary": str(summary or "")[:_RECEIPT_SUMMARY_CHARS],
+            # 观察（看到什么）/ 请求（要做什么）/ 结果（实际发生什么）三类分开。
+            "observation": {
+                "url": str(url or ""), "title": str(title or ""),
+                "window_title": str(window_title or ""), "target": str(target or ""),
+                "snapshot_sha256": (sha256_bytes(snapshot.encode("utf-8"))
+                                    if snapshot else None),
+                "snapshot_excerpt": observation_snapshot or None,
+                "frame_sha256": digest_basis["frame_sha256"],
+            },
+            "request": {"tool": tool,
+                        "arguments": _receipt_safe_args(request_args)},
+            "result": {"ok": bool(result_ok),
+                       **{str(key): value for key, value in
+                          (result_extra or {}).items()}},
+        }
+        if media:
+            content["media"] = media
+        locator = {"kind": "TOOL_CALL",
+                   "value": f"{session_id or 'x2-receipt'}/{object_prefix}"}
+        occurred, tz = _utc_now_iso()
+        overrides: dict[str, Any] = {
+            "runtime_session_id": str(session_id or f"x2:{tool}")}
+        observation = build_observation(
+            source_kind="ATLAS_TOOL_OBSERVATION",
+            source_object_id=object_prefix, source_revision="1",
+            content=content, speaker_role="TOOL", epistemic_kind="OBSERVED",
+            occurred_at=occurred, source_timezone=tz, locator=locator,
+            media_refs=media_refs)
+        result = self._capture.enqueue_observation(observation,
+                                                   context_overrides=overrides)
+
+        # ---- 被动记账（§6.1）：与主动收据分开的观察与水位 ----
+        passive_created = False
+        passive: dict[str, Any] | None = None
+        controller = self._passive_controller or self.passive_controller
+        candidates = _receipt_scope_candidates(
+            target=target, window_title=window_title, title=title,
+            session_id=session_id, has_media=image_bytes is not None)
+        selected = controller.begin_passive(candidates, session_id=str(session_id or ""))
+        if selected is not None:
+            # begin/finish 必须配对（构造或入队失败也走 finish_passive 显式记
+            # 缺口），否则 stop/pause 的在途排空会一直等到超时。
+            try:
+                passive_prefix = f"passive-{basis_hash.removeprefix('sha256:')[:16]}"
+                passive_observation = build_observation(
+                    source_kind="ATLAS_TOOL_OBSERVATION",
+                    source_object_id=passive_prefix, source_revision="1",
+                    content={**content, "passive": True,
+                             "source_selection": dict(selected)},
+                    speaker_role="TOOL", epistemic_kind="OBSERVED",
+                    occurred_at=occurred, source_timezone=tz,
+                    locator={"kind": "WINDOW" if str(selected.get("kind")) == "window"
+                             else "SCREEN" if str(selected.get("kind")) == "screen"
+                             else "MESSAGE",
+                             "value": str(selected.get("value") or object_prefix)},
+                    media_refs=media_refs)
+                passive_result = self._capture.enqueue_observation(
+                    passive_observation, context_overrides=overrides)
+                passive_created = bool(passive_result.get("created"))
+                controller.finish_passive(created=passive_created)
+                passive = {"source_event_id": passive_observation["source_event_id"],
+                           "created": passive_created,
+                           "source_selection": dict(selected)}
+            except Exception as exc:  # noqa: BLE001 — 显式记缺口，不静默丢账
+                controller.finish_passive(created=False, error=str(exc))
+                passive = {"created": False, "gap": str(exc),
+                           "source_selection": dict(selected)}
+
+        return {
+            "source_event_id": observation["source_event_id"],
+            "created": bool(result.get("created")),
+            "object_id": object_prefix,
+            "asset_id": media.get("asset_id"),
+            "media": media or None,
+            "passive": passive,
+        }
+
     # -------------------------------------------------- (b) 被调 Agent 结果
 
     def record_agent_tool_result(self, tool_name: str, actor_id: str,
@@ -687,6 +901,504 @@ class WindowsSourceService:
         }
 
 
+# ---------------------------------------------------------------------------
+# (d) 被动采集控制（T05.3 / §6.1）
+# ---------------------------------------------------------------------------
+
+
+class CaptureControlError(Exception):
+    """采集控制请求被拒（状态/版本/参数）。code 与 http_status 同码上抛。"""
+
+    def __init__(self, code: str, message: str, *, http_status: int = 409,
+                 details: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.http_status = int(http_status)
+        self.details = details or {}
+
+
+def _utc_now_iso() -> tuple[str, str]:
+    now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+    return now, "UTC"
+
+
+def _data_url_bytes(data_url: str) -> tuple[str | None, bytes | None]:
+    """``data:<mime>;base64,<payload>`` → (mime, bytes)；不可解析 → (None, None)。"""
+    scheme, sep, rest = str(data_url or "").partition("data:")
+    if not sep:
+        return None, None
+    meta, sep2, payload = rest.partition(",")
+    if not sep2:
+        return None, None
+    mime, _, enc = meta.partition(";")
+    if enc and enc != "base64":
+        return None, None
+    try:
+        return (mime or None), base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError):
+        return None, None
+
+
+def _receipt_safe_args(args: dict[str, Any] | None) -> dict[str, Any]:
+    """工具请求参数的入库投影：剥 task_id 与敏感形状键（复用 x2.recording 规则）。"""
+    if not isinstance(args, dict):
+        return {}
+    try:
+        from atlas.tools.x2.recording import clean_params
+
+        return clean_params(args)
+    except Exception:  # noqa: BLE001 — 依赖不可用时退回本地剥敏
+        return {key: value for key, value in args.items()
+                if key != "task_id" and str(key).casefold() not in {
+                    "password", "secret", "otp_secret", "cvc", "cvv", "card_number"}}
+
+
+def _receipt_scope_candidates(*, target: str = "", window_title: str = "",
+                              title: str = "", session_id: str = "",
+                              has_media: bool = False) -> list[tuple[str, str]]:
+    """一条 x2 收据的候选观察入口：(kind, value) 列表，任一命中授权条目即入范围。"""
+    candidates: list[tuple[str, str]] = []
+    if str(target or "").strip():
+        candidates.append(("screen", str(target).strip()))
+    for text in (window_title, title):
+        if str(text or "").strip():
+            candidates.append(("window", str(text).strip()))
+    if str(session_id or "").strip():
+        candidates.append(("session", str(session_id).strip()))
+    if has_media:
+        candidates.append(("media", "*"))
+    return candidates
+
+
+class PassiveCaptureController:
+    """"记录当前活动"被动采集控制器（T05.3 / 01_contracts §6.1）。
+
+    状态机 STOPPED → RUNNING ⇄ PAUSED → STOPPED：revision 每次受控迁移 +1，
+    request_id 幂等重放，expected_revision 不符 409。**只**控制后台被动观察
+    入口 —— 用户正常聊天与主动工具操作的归档走 CaptureService/outbox 既有
+    管线，完全不经本控制器（pause/stop 不影响它们，契约 §6.1）。
+
+    真实能力边界（如实，绝不假装在录）：
+      * 当前 Atlas 没有后台连续截屏/标题轮询能力 —— 本控制器管理的是"选择
+        范围内的观察入口"（x2 工具收据通道）与真实控制状态；status.collector
+        永久标注 ``background_polling=PARTIAL_NOT_IMPLEMENTED``（偏差记录）。
+        不可见后台应用不会产生任何观察，也绝不声称已记住。
+      * passive_capture_watermark 只在被动观察**真实入队**（created=True）后
+        前进；停止后不再前进；经状态文件持久化，进程重启不回退、恢复不重复
+        旧帧（同帧内容寻址去重）。与其他水位（conversation/tool）分开记账。
+      * pause/stop 先排空在途被动观察（同一把锁内的 begin/finish 配对），
+        超时未排空则显式记缺口再报告成功。
+      * 授权 sources 是用户显式选择的窗口/会话/媒体入口；隐私门引用现有设置
+        （computer_use.permission_mode / memory.unified.capture_mode），不建
+        新的全局 settings 文件。
+    """
+
+    def __init__(self, *, state_path: str | Path | None = None) -> None:
+        self._lock = threading.RLock()
+        self._state = CAPTURE_STATE_STOPPED
+        self._revision = 0
+        self._watermark = 0
+        self._in_flight = 0
+        self._sources: list[dict[str, str]] = []
+        self._config_refs: dict[str, Any] = {}
+        self._last_error: str | None = None
+        self._gaps: list[dict[str, str]] = []
+        self._notes: list[str] = []
+        self._requests: dict[str, dict[str, Any]] = {}
+        if state_path is None:
+            from atlas.memory.outbox import default_outbox_path
+
+            state_path = default_outbox_path().parent / PASSIVE_STATE_FILENAME
+        self._state_path = Path(state_path)
+        self._load()
+
+    # ------------------------------------------------------------ 状态迁移
+
+    def start(self, request_id: str, sources: list[Any], *,
+              expected_revision: Any = None) -> dict[str, Any]:
+        """STOPPED/PAUSED → RUNNING（PAUSED 起始即恢复）。RUNNING 下新请求 409。"""
+        with self._lock:
+            replay = self._replay(request_id, "start")
+            if replay is not None:
+                return dict(replay)
+            self._check_expected_revision(expected_revision)
+            if self._state == CAPTURE_STATE_RUNNING:
+                raise CaptureControlError(
+                    "ALREADY_RUNNING",
+                    "passive capture is already RUNNING (revision "
+                    f"{self._revision}); replay the same request_id for the "
+                    "idempotent result")
+            normalized = self._normalize_sources(sources)
+            config_refs = self._existing_privacy_refs(normalized)
+            self._state = CAPTURE_STATE_RUNNING
+            self._revision += 1
+            self._sources = normalized
+            self._config_refs = config_refs
+            self._last_error = None
+            self._persist()
+            return self._remember(request_id, "start", self._response())
+
+    def pause(self, request_id: str, *, expected_revision: Any = None) -> dict[str, Any]:
+        """RUNNING → PAUSED。只停被动观察入口；在途观察先排空再报成功。"""
+        drained = self._drain_inflight()
+        with self._lock:
+            replay = self._replay(request_id, "pause")
+            if replay is not None:
+                return dict(replay)
+            self._check_expected_revision(expected_revision)
+            if self._state == CAPTURE_STATE_STOPPED:
+                raise CaptureControlError(
+                    "NOT_RUNNING", "passive capture is STOPPED; nothing to pause")
+            if self._state == CAPTURE_STATE_PAUSED:
+                raise CaptureControlError(
+                    "ALREADY_PAUSED",
+                    f"passive capture is already PAUSED (revision {self._revision})")
+            self._state = CAPTURE_STATE_PAUSED
+            self._revision += 1
+            if not drained:
+                self._note_gap("PAUSE_WITH_INFLIGHT_OBSERVATIONS",
+                               "在途被动观察未在超时内排空；已显式记缺口")
+            self._persist()
+            response = self._response()
+            response["drained"] = bool(drained)
+            return self._remember(request_id, "pause", response)
+
+    def stop(self, request_id: str, *, expected_revision: Any = None) -> dict[str, Any]:
+        """RUNNING/PAUSED → STOPPED；STOPPED 下幂等成功（判据允许未 start 先 stop）。
+
+        在途被动观察先排空（或显式记缺口）再报告停止成功；revision 只在真实
+        迁移时递增，重复 stop 不再推进。
+        """
+        drained = self._drain_inflight()
+        with self._lock:
+            replay = self._replay(request_id, "stop")
+            if replay is not None:
+                return dict(replay)
+            self._check_expected_revision(expected_revision)
+            if self._state == CAPTURE_STATE_STOPPED:
+                response = self._response()
+                response["already_stopped"] = True
+                response["drained"] = True
+                return self._remember(request_id, "stop", response)
+            self._state = CAPTURE_STATE_STOPPED
+            self._revision += 1
+            if not drained:
+                self._note_gap("STOP_WITH_INFLIGHT_OBSERVATIONS",
+                               "在途被动观察未在超时内排空；已显式记缺口")
+            self._persist()
+            response = self._response()
+            response["drained"] = bool(drained)
+            if self._gaps:
+                response["gaps"] = list(self._gaps)
+            return self._remember(request_id, "stop", response)
+
+    def status(self) -> dict[str, Any]:
+        with self._lock:
+            payload = self._response()
+            payload["in_flight"] = self._in_flight
+            payload["gaps"] = list(self._gaps)
+            return payload
+
+    # ---------------------------------------------------- 被动观察记账钩子
+
+    def begin_passive(self, candidates: list[tuple[str, str]], *,
+                      session_id: str = "") -> dict[str, str] | None:
+        """RUNNING 且候选入口命中授权范围 → 返回命中的选择条目并登记在途。
+
+        调用方随后入队被动观察并必须配对 :meth:`finish_passive`（成功/失败都
+        要调，否则 stop 的排空会一直等待）。与状态迁移同一把进程内锁。
+        """
+        with self._lock:
+            if self._state != CAPTURE_STATE_RUNNING:
+                return None
+            matched = self._match(candidates, session_id=str(session_id or ""))
+            if matched is None:
+                return None
+            self._in_flight += 1
+            return dict(matched)
+
+    def finish_passive(self, *, created: bool, error: str | None = None) -> None:
+        """在途被动观察收账：真实入队才推进水位；失败显式记缺口。"""
+        with self._lock:
+            self._in_flight = max(0, self._in_flight - 1)
+            if error:
+                self._last_error = str(error)[:500]
+                self._note_gap("PASSIVE_CAPTURE_FAILED", str(error))
+                return
+            if created:
+                self._watermark += 1
+                self._persist()
+
+    # ---------------------------------------------------------------- 内部
+
+    def _replay(self, request_id: str, action: str) -> dict[str, Any] | None:
+        """同 request_id 幂等重放；同 ID 换动作 → 409（请求身份被复用）。"""
+        prior = self._requests.get(str(request_id))
+        if prior is None:
+            return None
+        if str(prior.get("action")) != str(action):
+            raise CaptureControlError(
+                "REQUEST_ID_REUSED",
+                f"request_id {request_id!r} was already used for "
+                f"{prior.get('action')!r}; each control request needs a fresh id")
+        return dict(prior.get("response") or {})
+
+    def _remember(self, request_id: str, action: str,
+                  response: dict[str, Any]) -> dict[str, Any]:
+        self._requests[str(request_id)] = {"action": str(action),
+                                           "response": dict(response)}
+        for stale in list(self._requests)[:-(2 * MAX_CAPTURE_SOURCES + 16)]:
+            self._requests.pop(stale, None)
+        return dict(response)
+
+    def _check_expected_revision(self, expected_revision: Any) -> None:
+        if expected_revision is None or expected_revision == "":
+            return
+        try:
+            expected = int(expected_revision)
+        except (TypeError, ValueError) as exc:
+            raise CaptureControlError(
+                "INVALID_EXPECTED_REVISION",
+                f"expected_revision 必须是整数，收到 {expected_revision!r}",
+                http_status=422) from exc
+        if expected != self._revision:
+            raise CaptureControlError(
+                "REVISION_CONFLICT",
+                f"expected_revision {expected} != current revision "
+                f"{self._revision}（状态已被其他控制请求推进）",
+                details={"current_revision": self._revision,
+                         "state": self._state})
+
+    @staticmethod
+    def _normalize_sources(sources: list[Any]) -> list[dict[str, str]]:
+        if not isinstance(sources, list) or not sources:
+            raise CaptureControlError(
+                "SOURCES_REQUIRED",
+                "sources 必填：用户显式选择的窗口/会话/媒体入口列表"
+                "（不做全系统连续采集）",
+                http_status=422)
+        normalized: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for item in sources:
+            if not isinstance(item, dict):
+                raise CaptureControlError(
+                    "INVALID_SOURCE", f"sources 条目必须是对象：{item!r}",
+                    http_status=422)
+            kind = str(item.get("kind") or "").strip().lower()
+            value = str(item.get("value") or "").strip()
+            if kind not in CAPTURE_SOURCE_KINDS:
+                raise CaptureControlError(
+                    "INVALID_SOURCE",
+                    f"source.kind 必须是 {CAPTURE_SOURCE_KINDS} 之一，收到 {kind!r}",
+                    http_status=422, details={"kind": kind})
+            if not value:
+                raise CaptureControlError(
+                    "INVALID_SOURCE",
+                    "source.value 必填（窗口标题子串 / screen 目标 / 会话 ID / \"*\"）",
+                    http_status=422, details={"kind": kind})
+            key = (kind, value.casefold())
+            if key not in seen:
+                seen.add(key)
+                normalized.append({"kind": kind, "value": value})
+            if len(normalized) > MAX_CAPTURE_SOURCES:
+                raise CaptureControlError(
+                    "TOO_MANY_SOURCES",
+                    f"sources 最多 {MAX_CAPTURE_SOURCES} 条", http_status=422)
+        return normalized
+
+    @staticmethod
+    def _existing_privacy_refs(sources: list[dict[str, str]]) -> dict[str, Any]:
+        """记录现有隐私设置引用（不新建 settings 文件）；桌面观察被 deny 时拒绝。"""
+        refs: dict[str, Any] = {}
+        permission_mode: str | None = None
+        try:
+            from atlas.config import get_config
+
+            permission_mode = get_config().computer_use_permission_mode
+        except Exception:  # noqa: BLE001 — 配置不可用时如实记 None
+            permission_mode = None
+        refs["computer_use.permission_mode"] = permission_mode
+        refs["memory.unified.capture_mode"] = "enabled"
+        if permission_mode == "deny" and any(
+                item["kind"] in {"window", "screen"} for item in sources):
+            raise CaptureControlError(
+                "PRIVACY_GATE_DENIES",
+                "现有隐私设置 computer_use.permission_mode=deny 禁止桌面观察；"
+                "请先在既有设置中放开，或只选择 session/media 入口",
+                http_status=422,
+                details={"computer_use.permission_mode": permission_mode})
+        return refs
+
+    def _match(self, candidates: list[tuple[str, str]], *,
+               session_id: str = "") -> dict[str, str] | None:
+        for entry in self._sources:
+            kind, value = entry["kind"], entry["value"]
+            for c_kind, c_value in candidates or []:
+                if c_kind != kind:
+                    continue
+                if kind == "media":
+                    return entry                       # 媒体入口：任何带媒体收据
+                if kind == "session":
+                    # 会话入口：候选值即当前会话 ID，两者一致才命中。
+                    if c_value == str(session_id or "") and value == c_value:
+                        return entry
+                    continue
+                if value == "*":
+                    return entry
+                if kind == "window":
+                    if value.casefold() in c_value.casefold():
+                        return entry                   # 窗口：标题子串匹配
+                elif value.casefold() == c_value.casefold():
+                    return entry                       # 屏幕：目标精确匹配
+        return None
+
+    def _drain_inflight(self) -> bool:
+        """等在途被动观察收账（§6.1 在途先完成）；超时返回 False（调用方记缺口）。"""
+        deadline = time.monotonic() + _INFLIGHT_DRAIN_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            with self._lock:
+                if self._in_flight <= 0:
+                    return True
+            time.sleep(0.01)
+        with self._lock:
+            return self._in_flight <= 0
+
+    def _note_gap(self, code: str, message: str) -> None:
+        at, _ = _utc_now_iso()
+        self._gaps.append({"at": at, "code": str(code),
+                           "error": str(message)[:300]})
+        del self._gaps[:-20]
+        self._last_error = f"{code}: {message}"[:500]
+
+    def _response(self) -> dict[str, Any]:
+        return {
+            "state": self._state,
+            "revision": self._revision,
+            "passive_capture_watermark": self._watermark,
+            "last_error": self._last_error,
+            "sources": [dict(item) for item in self._sources],
+            "config_refs": dict(self._config_refs),
+            "notes": list(self._notes),
+        }
+
+    # ------------------------------------------------------------ 持久化
+
+    def _load(self) -> None:
+        try:
+            if not self._state_path.exists():
+                return
+            data = json.loads(self._state_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return
+            self._revision = max(0, int(data.get("revision") or 0))
+            self._watermark = max(0, int(data.get("passive_capture_watermark") or 0))
+            if self._revision or self._watermark:
+                # 进程重启后控制状态不复位为 RUNNING/PAUSED：当前没有真实后台
+                # 采集器，恢复"还在录"就是假装在录。重新 start 才进入 RUNNING。
+                self._notes.append(
+                    "PROCESS_RESTART_STATE_RESET: 控制状态在进程重启后回到 "
+                    "STOPPED（revision/水位保持单调，不回退）；恢复记录需重新 start")
+        except (OSError, ValueError, TypeError) as exc:
+            self._notes.append(f"PERSISTENCE_UNREADABLE: {exc}")
+
+    def _persist(self) -> None:
+        try:
+            self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "revision": self._revision,
+                "passive_capture_watermark": self._watermark,
+                "updated_at": _utc_now_iso()[0],
+            }
+            tmp = self._state_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                           encoding="utf-8")
+            os.replace(tmp, self._state_path)
+        except OSError as exc:  # noqa: BLE001 — 簿记失败不阻断控制状态
+            self._notes.append(f"PERSISTENCE_WRITE_FAILED: {exc}")
+
+
+#: 进程级单例（按状态文件路径区分；跨 HTTP 请求保持状态机，测试可 reset）。
+_passive_controllers: dict[str, PassiveCaptureController] = {}
+_passive_controllers_lock = threading.Lock()
+
+
+def default_passive_state_path() -> Path:
+    from atlas.memory.outbox import default_outbox_path
+
+    return default_outbox_path().parent / PASSIVE_STATE_FILENAME
+
+
+def get_passive_capture_controller() -> PassiveCaptureController:
+    path = str(default_passive_state_path().resolve())
+    with _passive_controllers_lock:
+        controller = _passive_controllers.get(path)
+        if controller is None:
+            controller = PassiveCaptureController(state_path=path)
+            _passive_controllers[path] = controller
+        return controller
+
+
+def reset_passive_capture_controller() -> None:
+    """丢弃进程级控制器单例（测试隔离用；状态文件保留，计数不回退）。"""
+    with _passive_controllers_lock:
+        _passive_controllers.clear()
+
+
+# ---------------------------------------------------------------------------
+# (e) 本地水位记账（T05.3 §6.1：conversation/tool/passive 三分）
+# ---------------------------------------------------------------------------
+
+#: outbox payload_json 的确定性序列化（sort_keys + 紧凑分隔符）内嵌
+#: ``"source_kind":"<KIND>"``；按 kind 前缀做只读计数即可三分水位。
+_WATERMARK_KIND_LIKES: dict[str, tuple[str, ...]] = {
+    "conversation": ('"source_kind":"ATLAS_USER_MESSAGE"',
+                     '"source_kind":"ATLAS_ASSISTANT_MESSAGE"'),
+    "tool": ('"source_kind":"ATLAS_TOOL_OBSERVATION"',
+             '"source_kind":"ATLAS_AGENT_TOOL_RESULT"',
+             '"source_kind":"ATLAS_VERIFICATION"'),
+}
+
+
+def capture_watermarks(outbox_path: str | Path | None = None) -> dict[str, Any]:
+    """本地 outbox 的 conversation/tool 水位（enqueued/acked/pending 三分）。
+
+    队列是运维簿记不是知识库 —— 本函数只服务 /capture/status 诊断显示；
+    passive 水位由 :class:`PassiveCaptureController` 独立记账，不经这里。
+    """
+    if outbox_path is None:
+        from atlas.memory.outbox import default_outbox_path
+
+        outbox_path = default_outbox_path()
+    path = Path(outbox_path)
+    buckets = {name: {"enqueued": 0, "acked": 0, "pending": 0}
+               for name in _WATERMARK_KIND_LIKES}
+    result: dict[str, Any] = {"buckets": buckets,
+                              "note": "本地 outbox 计数；与 passive 水位分开记账"}
+    if not path.exists():
+        result["note"] = "outbox 不存在（尚无采集发生）"
+        return result
+    try:
+        conn = sqlite3.connect(str(path), timeout=5)
+        try:
+            for name, markers in _WATERMARK_KIND_LIKES.items():
+                clause = " OR ".join("payload_json LIKE ?" for _ in markers)
+                patterns = tuple(f"%{marker}%" for marker in markers)
+                row = conn.execute(
+                    f"SELECT COUNT(*), COALESCE(SUM(state = 'ACKED'), 0), "
+                    f"COALESCE(SUM(state IN ('NEW','RETRYABLE')), 0) "
+                    f"FROM outbox_events WHERE {clause}", patterns).fetchone()
+                buckets[name] = {
+                    "enqueued": int(row[0] or 0),
+                    "acked": int(row[1] or 0),
+                    "pending": int(row[2] or 0),
+                }
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        result["error"] = f"WATERMARK_COUNT_FAILED: {exc}"
+    return result
+
+
 def get_windows_source_service() -> WindowsSourceService | None:
     """接线点取用入口；capture disabled（unified memory 关闭）→ None。
 
@@ -704,17 +1416,28 @@ def get_windows_source_service() -> WindowsSourceService | None:
 
 __all__ = [
     "ContentTooLarge",
+    "CAPTURE_SOURCE_KINDS",
+    "CAPTURE_STATE_PAUSED",
+    "CAPTURE_STATE_RUNNING",
+    "CAPTURE_STATE_STOPPED",
     "DEFAULT_REGISTRY_FILENAME",
     "MEDIA_EXTENSIONS",
     "MEDIA_LOCATOR_KIND_BY_MIME",
     "MEDIA_MIME_BY_EXTENSION",
     "MAX_IMPORT_SEGMENTS",
+    "PASSIVE_STATE_FILENAME",
+    "CaptureControlError",
     "ImportTooManySegments",
     "ImportUnsupported",
+    "PassiveCaptureController",
     "SourceImportRegistry",
     "WindowsSourceService",
+    "capture_watermarks",
+    "default_passive_state_path",
     "extract_pdf_text",
+    "get_passive_capture_controller",
     "get_windows_source_service",
+    "reset_passive_capture_controller",
     "sha256_bytes",
     "slice_paragraphs",
 ]

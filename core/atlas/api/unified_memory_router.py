@@ -8,8 +8,9 @@
 
 * 已接线后缀：observe / recall / records / records/{record_ref} /
   evidence/{record_ref} / status / timeline / entities(+resolve) / corrections /
-  sources/change / media（T05.1：POST 上传与 GET content 为手写透传 —— 原始
-  字节与文件流不落盘副本；GET 元数据 / DELETE 走表驱动 JSON 透传）。
+  sources/change / multimodal/associate（T05.2：确定性关联入口，表驱动透传）/
+  media（T05.1：POST 上传与 GET content 为手写透传 —— 原始字节与文件流不落盘
+  副本；GET 元数据 / DELETE 走表驱动 JSON 透传）。
 * 其余任务书后缀：同样注册并**透传**，由服务端 501 FEATURE_NOT_READY 原样
   透传（后续波在 MemoryOS 侧接线后本代理自动跟随，不需要改这里）。
 * 错误映射保持同码：403/404/409/410/413/422/423/501 与超时/断连（503）→
@@ -71,6 +72,9 @@ PROXY_ROUTES: tuple[tuple[str, str], ...] = (
     ("GET", "/timeline"),
     ("GET", "/entities"),
     ("POST", "/entities/resolve"),
+    # T05.2 多模态关联：服务端已接线（multimodal.run_association_pass），
+    # 表驱动 JSON 透传（候选/等价组原样返回）。
+    ("POST", "/multimodal/associate"),
     # T05.1 受控媒体：元数据与删除走通用 JSON 透传；上传（原始字节）与
     # 文件流（不落盘副本）在下方手写（见 proxy_media_upload / proxy_media_content）。
     ("GET", "/media/{asset_id}"),
@@ -298,3 +302,140 @@ async def verify_agent_result(request: Request) -> JSONResponse:
             "error": "VERIFICATION_NOT_RECORDED",
             "message": "tool_call_id / session_id 无法构成稳定观察对象"})
     return JSONResponse(content=result)
+
+
+# ---------------------------------------------------------------------------
+# Atlas 本地采集控制（T05.3 / §6.1）—— capture/start|pause|stop 与 capture/
+# status 由 Atlas 本地控制器处理，**不代理** MemoryOS 同名路由；被动采集状态、
+# 授权范围与 passive_capture_watermark 是 Atlas 本机事实。pause/stop 只停后台
+# 被动观察，不影响正常聊天与主动工具归档（那走 CaptureService/outbox 管线）。
+# ---------------------------------------------------------------------------
+
+
+def _passive_controller() -> Any:
+    """取被动采集控制器；capture 未装配（disabled）→ 显式 503（与本地路由一致）。"""
+    _windows_sources()  # capture disabled → 503（复用同一装配判据）
+    from atlas.memory.windows_sources import get_passive_capture_controller
+
+    return get_passive_capture_controller()
+
+
+async def _capture_control_body(request: Request, *, sources_required: bool,
+                                ) -> tuple[str, Any, list[Any]]:
+    """控制请求体解析：request_id 必填、expected_revision 可选、sources 按需。"""
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001 — 非 JSON body → 与 FastAPI 同为 422
+        raise HTTPException(status_code=422, detail={
+            "error": "INVALID_BODY", "message": "请求体必须是 JSON 对象"}) from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail={
+            "error": "INVALID_BODY", "message": "请求体必须是 JSON 对象"})
+    request_id = str(body.get("request_id") or "").strip()
+    if not request_id:
+        raise HTTPException(status_code=422, detail={
+            "error": "CAPTURE_REQUEST_ID_REQUIRED",
+            "message": "body.request_id 必填（幂等重放键；重试沿用同一 id）"})
+    sources = body.get("sources") if sources_required else None
+    return request_id, body.get("expected_revision"), sources
+
+
+def _capture_control_error(exc: Any) -> HTTPException:
+    """CaptureControlError → HTTPException 同码（409 冲突 / 422 参数）。"""
+    return HTTPException(status_code=int(getattr(exc, "http_status", 409)),
+                         detail={"error": exc.code, "message": str(exc),
+                                 "details": exc.details})
+
+
+@router.post("/capture/start")
+async def capture_start(request: Request) -> JSONResponse:
+    """POST /api/unified-memory/capture/start — 进入 RUNNING（T05.3 / §6.1）。
+
+    body: ``{"request_id": str, "expected_revision"?: int, "sources":
+    [{"kind": "window|screen|session|media", "value": str}]}``。sources 是用户
+    显式选择的观察入口（无全系统种类 —— 默认不开全系统连续录屏）；隐私门引用
+    现有设置（config_refs 回显）。同 request_id 幂等重放；状态版本不符 409。
+    """
+    request_id, expected_revision, sources = await _capture_control_body(
+        request, sources_required=True)
+    controller = _passive_controller()
+    from atlas.memory.windows_sources import CaptureControlError
+
+    try:
+        result = controller.start(request_id, sources,
+                                  expected_revision=expected_revision)
+    except CaptureControlError as exc:
+        raise _capture_control_error(exc) from exc
+    return JSONResponse(content=result)
+
+
+@router.post("/capture/pause")
+async def capture_pause(request: Request) -> JSONResponse:
+    """POST /api/unified-memory/capture/pause — RUNNING → PAUSED（§6.1）。
+
+    只暂停被动观察入口；正常聊天与主动工具归档照常。在途被动观察先排空
+    （或显式记缺口）再报告成功。
+    """
+    request_id, expected_revision, _ = await _capture_control_body(
+        request, sources_required=False)
+    controller = _passive_controller()
+    from atlas.memory.windows_sources import CaptureControlError
+
+    try:
+        result = controller.pause(request_id, expected_revision=expected_revision)
+    except CaptureControlError as exc:
+        raise _capture_control_error(exc) from exc
+    return JSONResponse(content=result)
+
+
+@router.post("/capture/stop")
+async def capture_stop(request: Request) -> JSONResponse:
+    """POST /api/unified-memory/capture/stop — → STOPPED（§6.1）。
+
+    从 STOPPED 直接 stop 是幂等成功（already_stopped，revision 不推进）；
+    迁移时在途被动观察先完成（或显式记 gaps）再报告成功。停止后被动水位
+    不再前进，但普通工具截图仍正常记入工具经历（本路由不触碰那条管线）。
+    """
+    request_id, expected_revision, _ = await _capture_control_body(
+        request, sources_required=False)
+    controller = _passive_controller()
+    from atlas.memory.windows_sources import CaptureControlError
+
+    try:
+        result = controller.stop(request_id, expected_revision=expected_revision)
+    except CaptureControlError as exc:
+        raise _capture_control_error(exc) from exc
+    return JSONResponse(content=result)
+
+
+@router.get("/capture/status")
+async def capture_status() -> JSONResponse:
+    """GET /api/unified-memory/capture/status — 被动采集状态与三分水位（§6.1）。
+
+    返回 state/revision/passive_capture_watermark/last_error/sources 与
+    watermarks（conversation/tool/passive 三分开 —— **不能**用总水位判断被动
+    采集已停止）。collector 块如实标注当前采集能力边界（后台连续截屏未实现，
+    偏差 PARTIAL）。
+    """
+    controller = _passive_controller()
+    from atlas.memory import windows_sources
+
+    payload = controller.status()
+    payload["watermarks"] = {
+        "conversation": {}, "tool": {},
+        "passive": {"captured": int(payload["passive_capture_watermark"]),
+                    "gaps": len(payload.get("gaps") or [])},
+    }
+    counts = windows_sources.capture_watermarks()
+    payload["watermarks"]["conversation"] = counts["buckets"]["conversation"]
+    payload["watermarks"]["tool"] = counts["buckets"]["tool"]
+    if counts.get("error"):
+        payload["watermarks"]["error"] = counts["error"]
+    payload["collector"] = {
+        "background_polling": "PARTIAL_NOT_IMPLEMENTED",
+        "entry": "x2_tool_receipt",
+        "note": "当前 Atlas 无后台连续截屏/标题轮询能力；被动入口只记录选择"
+                "范围内真实到达的 x2 工具收据，不假装在录，不可见后台应用不"
+                "声称已记住（T05.3 偏差记录，真实后台采集留后续波）",
+    }
+    return JSONResponse(content=payload)

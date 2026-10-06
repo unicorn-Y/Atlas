@@ -168,6 +168,8 @@ def test_enabled_config_mounts_proxy_router_and_facade_composition(
         "/api/unified-memory/status",
         "/api/unified-memory/corrections",  # 501 透传面
         "/api/unified-memory/maintenance",
+        # T05.2 多模态关联（表驱动透传；服务端 multimodal.run_association_pass）
+        "/api/unified-memory/multimodal/associate",
         # T02.3 Atlas 本地路由（§6.1 同类：不代理 MemoryOS，本地采集控制器处理）
         "/api/unified-memory/import",
         "/api/unified-memory/verify-agent-result",
@@ -175,13 +177,19 @@ def test_enabled_config_mounts_proxy_router_and_facade_composition(
         "/api/unified-memory/media",
         "/api/unified-memory/media/{asset_id}",
         "/api/unified-memory/media/{asset_id}/content",
+        # T05.3 本地采集控制（§6.1：Atlas 本地控制器，不代理 MemoryOS）
+        "/api/unified-memory/capture/start",
+        "/api/unified-memory/capture/pause",
+        "/api/unified-memory/capture/stop",
+        "/api/unified-memory/capture/status",
     ):
         assert expected in proxy_paths, expected
-    # 后缀与 MemoryOS /v1/unified/* 一一对应（22 条契约路由 / 21 个唯一 path）
+    # 后缀与 MemoryOS /v1/unified/* 一一对应（23 条契约路由 / 22 个唯一 path）
     # + T02.3 两条 Atlas 本地路由（import / verify-agent-result）
     # + T05.1 三条媒体 path（media 上传 / media 元数据+删除同 path 两方法 /
     #   media content 文件流）
-    assert len(proxy_paths) == 26
+    # + T05.3 四条采集控制 path（capture start/pause/stop/status）
+    assert len(proxy_paths) == 31
 
     facade = UnifiedMemoryFacade.from_config()
     assert facade.enabled is True
