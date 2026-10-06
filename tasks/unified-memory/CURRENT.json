@@ -1,7 +1,7 @@
 {
   "project": "ATLAS-UNIFIED-MEMORY-WINDOWS",
   "branch": "unified-memory/waves",
-  "updated_at": "2026-10-06 (overnight run 1)",
+  "updated_at": "2026-10-07 (parallel wave execution)",
   "atlas_head_base": "aa6196f550098cc46081dc6db2c376cb87ddffa5",
   "memoryos_head_base": "702f702bf9c0c1fa552132930843aaca4923f139",
   "status_enum": [
@@ -83,6 +83,46 @@
       "status": "INTEGRATED",
       "evidence": "artifacts/unified-memory/UM04/T04.3/ (both repos)",
       "notes": "TiMem day/week/long-term summaries w/ dependency snapshots; discard-on-change"
+    },
+    "T05.1": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM05/T05.1/ (both repos)",
+      "notes": "0027_unified_media.sql + controlled media assets, hash dedup, lifecycle-checked streaming, segment locators"
+    },
+    "T05.2": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM05/T05.2/ (both repos)",
+      "notes": "M3-Agent S05 adapted multimodal nodes, equivalence retrieval, PROPOSED person aliases, point-in-time object observations"
+    },
+    "T05.3": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM05/T05.3/",
+      "notes": "x2 computer/browser receipt capture + PassiveCaptureController start/pause/stop + watermark separation"
+    },
+    "T06.1": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM06/T06.1/ (both repos)",
+      "notes": "0028_unified_focus_intents.sql + Myelin S04 adapted working_set observe/commit/attend + FocusContext"
+    },
+    "T06.2": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM06/T06.2/",
+      "notes": "focus_flow + reconcile wired into run_phases/hub/session_sync/run_drive; real restart continuation verified (7 passed)"
+    },
+    "T06.3": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM06/T06.3/ (both repos)",
+      "notes": "0029_unified_intents.sql + intentions lifecycle + intent_bridge to Automation"
+    },
+    "T07.1": {
+      "status": "INTEGRATED",
+      "evidence": "artifacts/unified-memory/UM07/T07.1/ (MemoryOS)",
+      "notes": "S03 TiMem query_planner + 5-channel retrieval + RRF fusion + fallback matrix (267 passed)"
+    },
+    "T12.1": {
+      "status": "COMPONENT_VERIFIED",
+      "evidence": "artifacts/unified-memory/UM12/T12.1-prep/",
+      "notes": "Frontend MemoryPage 6 unified tabs + 7 components + 52 new Vitest cases (243 total passed) + npm run build green; desktop E2E in UM12"
     }
   },
   "waves": {
@@ -91,26 +131,27 @@
     "UM02": "INTEGRATED",
     "UM03": "INTEGRATED",
     "UM04": "INTEGRATED",
-    "UM05": "NOT_STARTED",
-    "UM06": "NOT_STARTED",
-    "UM07": "NOT_STARTED",
-    "UM08": "NOT_STARTED",
-    "UM09": "NOT_STARTED",
+    "UM05": "INTEGRATED",
+    "UM06": "INTEGRATED",
+    "UM07": "IN_PROGRESS",
+    "UM08": "IN_PROGRESS",
+    "UM09": "IN_PROGRESS",
     "UM10": "NOT_STARTED",
     "UM11": "NOT_STARTED",
-    "UM12": "NOT_STARTED",
+    "UM12": "IN_PROGRESS",
     "UM13": "NOT_STARTED"
   },
   "notes": "Status follows docs/plan/UNIFIED-MEMORY/02_wave_tasks.md. No ACCEPTED without real-model + real-Windows evidence. Protected: others uncommitted files (see authority-map).",
   "commits": {
     "atlas_um00": "82745cd",
     "memoryos_um00": "9f81fb2",
-    "atlas_um01": "T01.1=302683b T01.2=9e25181 T01.3=this",
-    "um03": "Atlas 1443393/c29d77e + MemoryOS 8b7c3dd/6d90e3b + T03.3",
-    "um04": "MemoryOS faaacb1 + UM04 commit"
-  },
-  "notes_um01": "Engineering integration via real dual-service harness (fake model). Desktop/packaged + real-model proofs deferred to UM12/UM13 per task book.",
-  "known_issues": [
-    "test_preyield_constructor_failure_closes_initialized_memory_store: baseline failure introduced by T01.3 MemoryStore(unified=) signature vs older test stub - fix queued"
-  ]
+    "atlas_um01": "302683b / 9e25181 / 4fbe705",
+    "um02": "Atlas 67ea5fc/b99de70/f7d69c1 + MemoryOS 38930eb",
+    "um03": "Atlas 1443393/c29d77e/61a679c + MemoryOS 8b7c3dd/6d90e3b/65b43b6",
+    "um04": "Atlas 302dacf + MemoryOS faaacb1/991d679/307d510",
+    "um05": "Atlas 48dea96/83c994f + MemoryOS 8915774/96688f8",
+    "um06": "Atlas 4cd2043/87ba86a + MemoryOS 7d3ec61",
+    "um07": "MemoryOS T07.1=591cdf0",
+    "um12_prep": "Atlas 590acfba"
+  }
 }
