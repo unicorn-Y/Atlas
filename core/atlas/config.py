@@ -148,6 +148,29 @@ class AtlasConfig:
     def max_context_messages(self) -> int:
         return int(self.get("memory.max_context_messages", 50))
 
+    # -- memory.unified (UM02/T02.1: durable observation outbox defaults) --
+
+    @property
+    def unified_outbox_path(self) -> str:
+        """Atlas operational outbox 的独立 sqlite 文件路径（§3：内容不可作事实召回）。
+
+        默认 ``<ATLAS_DATA_DIR>/outbox/unified_outbox.sqlite3``；显式配置
+        ``memory.unified.outbox_path`` 时相对路径仍锚定 DATA_ROOT。
+        """
+        raw = str(self.get("memory.unified.outbox_path", "") or "").strip()
+        if raw:
+            p = Path(raw)
+            return str(p if p.is_absolute() else DATA_ROOT / p)
+        return str(DATA_ROOT / "outbox" / "unified_outbox.sqlite3")
+
+    @property
+    def unified_outbox_flush_limit(self) -> int:
+        return max(1, int(self.get("memory.unified.outbox_flush_limit", 50)))
+
+    @property
+    def unified_outbox_backoff_seconds(self) -> float:
+        return max(0.0, float(self.get("memory.unified.outbox_backoff_seconds", 5.0)))
+
     @property
     def context_maintenance_message_limit(self) -> int:
         return int(self.get("agent.context_maintenance.message_limit", 80))
