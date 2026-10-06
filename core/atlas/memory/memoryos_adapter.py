@@ -6,6 +6,13 @@ implementation and stays fully in charge of storage; a future external
 MemoryOS implementation would replace only this file's internals, not its
 callers.
 
+unified-memory (T01.2, authority-map 1.0): 生产当前无人构造本 Adapter；统一记忆
+优先路径经 :class:`~atlas.memory.unified_facade.UnifiedMemoryFacade` 与
+``MemoryStore(..., unified=facade)`` 委托点生效 —— MEMORY_AUTHORITY 写方法在
+unified 存在时不再本地落库，而走 /v1/unified/observe|corrections（见
+``core/atlas/memory/__init__.py`` 逐方法注释）。本文件保持既有组合语义不变，
+不强行为统一记忆重写（T01.3 组合接线时再统一入口）。
+
 First-class sections: identity, commitments, project state, decisions, and
 raw session recall.
 """

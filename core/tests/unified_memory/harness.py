@@ -46,6 +46,7 @@ from tests.fakes.fake_llm_provider import (
     ToolCall,
     write_hermes_home,
 )
+from atlas.memory.unified_client import observation_content_hash
 
 ATLAS_REPO = Path(__file__).resolve().parents[3]          # D:/Atlas
 CORE_DIR = ATLAS_REPO / "core"
@@ -327,12 +328,17 @@ class UMHarness:
             "MEMORYOS_OWNER_TOKEN": TEST_OWNER_TOKEN,
             "MEMORYOS_EXTRACTOR_MODEL_REGISTRY_ID": "um-extractor-registry",
             "MEMORYOS_EXTRACTOR_MODEL_ID": "model-um-extractor",
+            # T01.2 绑定修复：服务绑定主体 = 缺省 TEST context 的主体
+            # （harness.default_context 的 atlas-fixture），T01.1 期间二者错位导致
+            # h.api 注入的统一上下文被 403。T01.1 契约测试仍以 db 默认主体
+            # （subject-default）通信，经显式兼容别名保持可用；其他主体仍 403。
+            "MEMORYOS_MEMORY_SUBJECT_ID": "atlas-fixture",
+            "MEMORYOS_MEMORY_SUBJECT_ALIASES": "subject-default",
             "NO_PROXY": "127.0.0.1,localhost",
             "PYTHONUTF8": "1",
             "PYTHONIOENCODING": "utf-8",
             "PYTHONPATH": str(MEMORYOS_REPO / "service"),
         })
-        env.pop("MEMORYOS_MEMORY_SUBJECT_ID", None)
         return env
 
     def _wait_health(self, component: str, path: str, port: int, log_path: Path) -> None:
@@ -622,11 +628,12 @@ class UMHarness:
     def seed(self, name: str) -> dict[str, Any]:
         """Load a frozen seed pack from tests/fixtures/unified_memory/seeds/.
 
-        UM00: read-only — the records and observation batch are returned for
-        inspection; nothing is written to MemoryOS because /v1/unified/observe
-        does not exist yet. TODO(UM01): once the unified API ships, probe
-        ``GET /v1/unified/status`` and, when present, POST the observation
-        batch here so ``seed()`` ingests through the real entry point.
+        UM00 read-only branch kept as fallback: when the unified API is not
+        reachable the records and observation batch are returned for inspection
+        only. T01.2: when ``GET /v1/unified/status`` answers 200, the batch is
+        POSTed to the real ``/v1/unified/observe`` entry point and the result
+        carries ``created`` / ``duplicates`` / ``record_map`` — re-seeding the
+        same pack replays idempotently (created=0, identical record_map).
         """
         path = SEEDS_DIR / f"{name}.jsonl"
         if not path.exists():
@@ -645,20 +652,64 @@ class UMHarness:
         observation_batch = {
             "contract_version": "UM-WIN-1.0",
             "event_class": EVENT_CLASS,
-            "context": self.default_context(),
-            "observations": [obs for r in records for obs in r.get("observations", [])],
+            # 重放幂等要求 context 逐字节稳定：runtime_session_id 由种子名派生，
+            # 不用 default_context 的随机会话 ID（否则二次 seed 必然 409）。
+            "context": {**self.default_context(),
+                        "runtime_session_id": f"seed-{name}"},
+            "observations": [],
         }
-        # TODO(UM01): if self.api("GET", "/v1/unified/status").status_code == 200:
-        #     ack = self.api("POST", "/v1/unified/observe", json=observation_batch)
-        #     observation_batch["ack"] = ack.json()  # seed then ingests for real.
-        return {
+        hash_normalized = 0
+        for obs in (obs for r in records for obs in r.get("observations", [])):
+            normalized = dict(obs)
+            # §2：夹具字面量哈希不得作为校验依据 —— seed 装配时按当前契约规则
+            # 重算 content_hash（UM00 冻结夹具早于 T01.1 定稿的哈希字段集）。
+            recomputed = observation_content_hash(normalized)
+            if normalized.get("content_hash") != recomputed:
+                hash_normalized += 1
+            normalized["content_hash"] = recomputed
+            observation_batch["observations"].append(normalized)
+        result: dict[str, Any] = {
             "name": name,
             "source": str(path),
             "records": records,
             "record_keys": [str(r.get("key", f"line-{i}")) for i, r in enumerate(records)],
             "ground_truth": ground_truth,
             "observation_batch": observation_batch,
+            "hash_normalized": hash_normalized,
         }
+        # T01.2：统一 API 可用 → 真实导入（幂等）；不可用 → 保留 UM00 只读分支。
+        try:
+            status = self.api("GET", "/v1/unified/status")
+        except Exception:  # noqa: BLE001 — 服务未起时按只读分支处理
+            status = None
+        if status is not None and status.status_code == 200:
+            ack_response = self.api("POST", "/v1/unified/observe",
+                                    json=observation_batch)
+            if ack_response.status_code in (200, 201):
+                ack = ack_response.json()
+                memory_by_seid = {
+                    str(r.get("source_event_id")): r.get("memory_id")
+                    for r in (ack.get("memory_projection") or {}).get("receipts", [])
+                }
+                record_map: dict[str, str] = {}
+                for receipt in ack.get("receipts", []):
+                    seid = str(receipt.get("source_event_id"))
+                    memory_id = memory_by_seid.get(seid)
+                    record_map[seid] = (f"memory:{memory_id}" if memory_id
+                                        else f"episode:{receipt.get('event_id')}")
+                result.update({
+                    "ingested": True,
+                    "created": int(ack.get("created") or 0),
+                    "duplicates": int(ack.get("duplicates") or 0),
+                    "record_map": record_map,
+                })
+            else:
+                result.update({"ingested": False,
+                               "ingest_error": f"HTTP {ack_response.status_code}"})
+        else:
+            result.update({"ingested": False,
+                           "ingest_note": "unified API 不可用；UM00 只读分支"})
+        return result
 
     # ------------------------------------------------------------------ stop
 

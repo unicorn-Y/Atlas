@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import UTC, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiosqlite
 import structlog
@@ -26,6 +26,9 @@ from atlas.memory.quality import (
     evaluate_memory_health,
     evaluate_memory_optimization,
 )
+
+if TYPE_CHECKING:  # 运行期鸭子类型（避免 unified_facade ↔ memory 循环导入）
+    from atlas.memory.unified_facade import UnifiedMemoryFacade
 
 log = structlog.get_logger()
 
@@ -117,9 +120,70 @@ class MemoryStore:
     can be swapped to a stronger memory system later.
     """
 
-    def __init__(self, db_path: Path | None = None) -> None:
+    #: authority-map.json 版本（T00.1 产物）；委托/关闭注释逐项对齐它
+    AUTHORITY_MAP_VERSION = "1.0"
+
+    def __init__(self, db_path: Path | None = None,
+                 unified: "UnifiedMemoryFacade | None" = None) -> None:
         self._db_path = db_path or get_config().db_path
         self._db: aiosqlite.Connection | None = None
+        # unified-memory (T01.2): 统一记忆委托点。None（默认）= 完整旧本地行为，
+        # 全部旧测试不破；传入 facade 后 MEMORY_AUTHORITY 写方法按 authority-map
+        # 1.0 逐项委托/关闭，读方法保持本地只读（active 回查留 T01.3）。
+        self._unified = unified
+
+    def _unified_or_none(self) -> "UnifiedMemoryFacade | None":
+        """unified-memory: delegation probe —— None = 旧本地行为。"""
+        return self._unified
+
+    # ---------------- unified-memory 委托传输（T01.2） ----------------
+
+    def _observation(self, *, source_object_id: str, content: dict[str, Any],
+                     epistemic_kind: str = "USER_ASSERTED",
+                     speaker_role: str = "USER",
+                     locator: dict[str, Any] | None = None) -> dict[str, Any]:
+        """统一观察骨架。source_revision = 内容短哈希：同内容重放 → DUPLICATE_OK，
+        变更内容自然成为新版本（§2 编辑=新版本、旧版本保留）。"""
+        revision = hashlib.sha256(
+            json.dumps(content, ensure_ascii=False, sort_keys=True,
+                       separators=(",", ":")).encode("utf-8")).hexdigest()[:8]
+        return {
+            "source_event_id": f"atlas:USER_IMPORT:{source_object_id}:{revision}:UPSERT",
+            "source_kind": "USER_IMPORT",
+            "source_object_id": source_object_id,
+            "source_revision": revision,
+            "event_action": "UPSERT",
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "source_timezone": "UTC",
+            "time_status": "KNOWN",
+            "speaker_role": speaker_role,
+            "epistemic_kind": epistemic_kind,
+            "content": content,
+            "locator": locator or {"kind": "ATLAS_FACT_API", "value": source_object_id},
+            "media_refs": [],
+            "derived_from": [],
+        }
+
+    async def _unified_observe(self, observations: list[dict[str, Any]]) -> dict[str, Any]:
+        """unified-memory: 委托传输（POST /v1/unified/observe，authority-map 1.0）。"""
+        assert self._unified is not None
+        return await self._unified.observe_batch({
+            "event_class": "PRODUCTION", "observations": observations})
+
+    async def _unified_correct(self, request: dict[str, Any]) -> dict[str, Any]:
+        """unified-memory: 委托传输（POST /v1/unified/corrections，authority-map 1.0）。"""
+        assert self._unified is not None
+        return await self._unified.client().correct(request)
+
+    def _unified_write_closed(self, method: str, route: str) -> None:
+        """lifecycle/maintenance 路由未接线前，本地写路径**关闭**（绝不本地写，
+        不产生第二事实源；接线后改为委托）。"""
+        from atlas.memory.unified_client import FeatureNotReady
+
+        raise FeatureNotReady(
+            f"{method} 本地写路径已按 authority-map {self.AUTHORITY_MAP_VERSION} 关闭；"
+            f"统一入口 {route} 尚未接线（后续波补全）",
+            code="FEATURE_NOT_READY", route=route)
 
     async def init(self) -> None:
         """Initialize database and create tables."""
@@ -1042,6 +1106,18 @@ class MemoryStore:
     ) -> None:
         if memory_type not in {"fact", "identity", "commitment"}:
             raise ValueError("Unsupported memory type")
+        # unified-memory: delegated per authority-map 1.0 (POST /v1/unified/observe)
+        if self._unified_or_none() is not None:
+            await self._unified_observe([self._observation(
+                source_object_id=f"fact-{key}",
+                content={"key": key, "value": value, "category": category,
+                         "memory_type": memory_type, "confidence": confidence,
+                         "source_conversation_id": source_conversation_id,
+                         "source_message_id": source_message_id},
+                epistemic_kind="USER_ASSERTED", speaker_role="USER",
+                locator={"kind": "ATLAS_FACT_API", "value": key},
+            )])
+            return None
         assert self._db is not None
         await self._db.execute(
             "INSERT INTO facts (key, value, category, source_conversation_id, "
@@ -1063,6 +1139,8 @@ class MemoryStore:
         await self._db.commit()
 
     async def get_fact(self, key: str) -> str | None:
+        # unified-memory: 本地只读兼容视图（authority-map 1.0: GET /v1/unified/records）；
+        # active 读取回查统一记录留 T01.3 接线后增强。
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT value FROM facts WHERE key = ?", (key,)
@@ -1071,6 +1149,8 @@ class MemoryStore:
         return row["value"] if row else None
 
     async def list_facts(self, category: str | None = None) -> list[dict[str, Any]]:
+        # unified-memory: 本地只读兼容视图（authority-map 1.0: GET /v1/unified/records）；
+        # active 读取回查统一记录留 T01.3 接线后增强。
         assert self._db is not None
         if category:
             cursor = await self._db.execute(
@@ -1091,7 +1171,11 @@ class MemoryStore:
     async def extract_memories(
         self, conversation_id: str, content: str
     ) -> list[dict[str, str]]:
-        """Persist explicitly marked ``remember: key = value`` lines as facts."""
+        """Persist explicitly marked ``remember: key = value`` lines as facts.
+
+        unified-memory: delegated per authority-map 1.0 —— 逐行经 self.set_fact
+        委托（POST /v1/unified/observe）；unified=None 时保持旧本地写入。
+        """
         extracted: list[dict[str, str]] = []
         for line in content.splitlines():
             match = _MEMORY_LINE.match(line)
@@ -1119,8 +1203,14 @@ class MemoryStore:
         self, conversation_id: str, *, provenance: str = "user",
         transcript: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
-        """Extract conservative user-stated memories into a review queue."""
+        """Extract conservative user-stated memories into a review queue.
+
+        unified-memory: delegated per authority-map 1.0（候选队列 = 统一 CANDIDATE
+        生命周期，POST /v1/unified/observe）；unified=None 时保持旧本地候选表写入。
+        """
         assert self._db is not None
+        unified_present = self._unified_or_none() is not None
+        delegated_candidates: list[dict[str, Any]] = []
         if provenance not in {"user", "agent", "external"}:
             raise ValueError("invalid memory candidate provenance")
         if transcript is None:
@@ -1184,18 +1274,49 @@ class MemoryStore:
                         from atlas.safety.threats import scan_for_threats
                         if scan_for_threats(value, scope="strict"):
                             continue
-                    await self._db.execute(
-                        "INSERT OR IGNORE INTO memory_candidates "
-                        "(id, key, value, category, confidence, memory_type, "
-                        "source_conversation_id, source_message_id, provenance) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            str(uuid.uuid4()), key, value, category, 0.9, memory_type,
-                            conversation_id, message["id"], provenance,
-                        ),
-                    )
+                    if unified_present:
+                        delegated_candidates.append({
+                            "id": "cand-" + hashlib.sha256(
+                                f"{message['id']}\0{key}\0{value}".encode("utf-8")
+                            ).hexdigest()[:16],
+                            "key": key, "value": value, "category": category,
+                            "confidence": 0.9, "memory_type": memory_type,
+                            "source_conversation_id": conversation_id,
+                            "source_message_id": message["id"],
+                            "provenance": provenance,
+                        })
+                    else:
+                        await self._db.execute(
+                            "INSERT OR IGNORE INTO memory_candidates "
+                            "(id, key, value, category, confidence, memory_type, "
+                            "source_conversation_id, source_message_id, provenance) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                str(uuid.uuid4()), key, value, category, 0.9, memory_type,
+                                conversation_id, message["id"], provenance,
+                            ),
+                        )
                     break
         await self._db.commit()
+        if delegated_candidates:
+            observations = [
+                self._observation(
+                    source_object_id=f"memory-candidate-{item['id']}",
+                    content={field: item[field] for field in (
+                        "key", "value", "category", "memory_type", "provenance",
+                        "confidence", "source_conversation_id", "source_message_id")},
+                    epistemic_kind="USER_ASSERTED", speaker_role="USER",
+                    locator={"kind": "MESSAGE",
+                             "value": (f"{item['source_conversation_id']}/"
+                                       f"{item['source_message_id']}")},
+                )
+                for item in delegated_candidates
+            ]
+            await self._unified_observe(observations)
+            now = datetime.now(UTC).isoformat()
+            return [{**item, "status": "pending",
+                     "created_at": now, "updated_at": now}
+                    for item in delegated_candidates]
         return await self.list_memory_candidates(
             status="pending", source_conversation_id=conversation_id
         )
@@ -1204,6 +1325,8 @@ class MemoryStore:
         self, status: str | None = None,
         source_conversation_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        # unified-memory: 本地只读兼容视图（authority-map 1.0: GET /v1/unified/records
+        # facet=candidate）；active 读取回查统一记录留 T01.3 接线后增强。
         assert self._db is not None
         clauses: list[str] = []
         params: list[str] = []
@@ -1230,7 +1353,11 @@ class MemoryStore:
         source_run_id: str | None,
         reviewer_evidence: list[dict[str, Any]],
     ) -> list[str]:
-        """Store advisory Agent reflections in MemoryOS's governed proposal queue."""
+        """Store advisory Agent reflections in MemoryOS's governed proposal queue.
+
+        unified-memory: DERIVED_VIEW 审计队列按 authority-map 1.0 保留本地
+        （advisory 提案不直接 ACTIVE；统一 maintenance 路由接线后可切）。
+        """
         assert self._db is not None
         allowed = {"experience", "fact", "preference", "project_state", "decision"}
         proposal_ids: list[str] = []
@@ -1280,6 +1407,16 @@ class MemoryStore:
         return proposal_ids
 
     async def promote_memory_candidate(self, candidate_id: str) -> bool:
+        # unified-memory: delegated per authority-map 1.0（CANDIDATE→ACTIVE；
+        # lifecycle 动词路由接线后切换到 records/{ref}/lifecycle）
+        if self._unified_or_none() is not None:
+            await self._unified_correct({
+                "request_id": f"legacy:memory_candidates:{candidate_id}:promote",
+                "action": "PROMOTE_CANDIDATE",
+                "selector": {"kind": "LEGACY",
+                             "value": f"legacy:memory_candidates:{candidate_id}"},
+            })
+            return True
         assert self._db is not None
         await self._db.execute("BEGIN IMMEDIATE")
         cursor = await self._db.execute(
@@ -1372,7 +1509,11 @@ class MemoryStore:
         return True
 
     async def list_memory_conflicts(self) -> list[dict[str, Any]]:
-        """Return pending candidates whose values disagree with the current fact."""
+        """Return pending candidates whose values disagree with the current fact.
+
+        unified-memory: 本地只读兼容视图（authority-map 1.0: POST /v1/unified/recall
+        conflicts）；冲突裁决回查统一生命周期留 T01.3/UM03 接线后增强。
+        """
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT c.id AS candidate_id, c.key, c.value AS candidate_value, "
@@ -1388,7 +1529,11 @@ class MemoryStore:
         return [dict(row) for row in await cursor.fetchall()]
 
     async def list_memory_fact_history(self, key: str) -> list[dict[str, Any]]:
-        """Return superseded fact versions and duplicate consolidation records."""
+        """Return superseded fact versions and duplicate consolidation records.
+
+        unified-memory: 本地只读兼容视图（authority-map 1.0: GET /v1/unified/records/
+        {ref} 版本化 revisions）；版本历史回查统一记录留 T01.3 接线后增强。
+        """
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT key, value, category, confidence, source_conversation_id, "
@@ -1398,6 +1543,16 @@ class MemoryStore:
         return [dict(row) for row in await cursor.fetchall()]
 
     async def reject_memory_candidate(self, candidate_id: str) -> bool:
+        # unified-memory: delegated per authority-map 1.0（CANDIDATE→INVALIDATED；
+        # lifecycle 动词路由接线后切换到 records/{ref}/lifecycle）
+        if self._unified_or_none() is not None:
+            await self._unified_correct({
+                "request_id": f"legacy:memory_candidates:{candidate_id}:reject",
+                "action": "REJECT_CANDIDATE",
+                "selector": {"kind": "LEGACY",
+                             "value": f"legacy:memory_candidates:{candidate_id}"},
+            })
+            return True
         assert self._db is not None
         await self._db.execute("BEGIN IMMEDIATE")
         cursor = await self._db.execute(
@@ -1423,6 +1578,8 @@ class MemoryStore:
         self, key: str, outcome: str, conversation_id: str | None = None,
     ) -> int:
         """Persist how an active memory affected a conversation."""
+        # unified-memory: AUDIT_ONLY per authority-map 1.0 —— 保留本地审计
+        # （使用反馈不推广知识、不产生第二事实源）。
         if _SENSITIVE_MEMORY.search(key):
             raise ValueError("Sensitive memories cannot be recorded as feedback")
         if outcome not in {"used", "not_used", "helpful", "unhelpful"}:
@@ -1442,6 +1599,8 @@ class MemoryStore:
         self, key: str, source_message_id: str | None = None,
     ) -> int:
         """Record a user correction without changing or promoting a memory."""
+        # unified-memory: AUDIT_ONLY per authority-map 1.0 —— 保留本地审计信号；
+        # 真正的内容纠错走 set_fact/delete_fact 的统一委托（AUDIT 不等于内容权威）。
         if _SENSITIVE_MEMORY.search(key):
             raise ValueError("Sensitive memories cannot be recorded as feedback")
         assert self._db is not None
@@ -1461,6 +1620,7 @@ class MemoryStore:
 
     async def record_memory_evaluation(self, key: str, rating: str) -> int:
         """Persist an explicit usefulness evaluation for an active memory."""
+        # unified-memory: AUDIT_ONLY per authority-map 1.0 —— 保留本地审计。
         if _SENSITIVE_MEMORY.search(key):
             raise ValueError("Sensitive memories cannot be recorded as feedback")
         if rating not in {"useful", "not_useful", "uncertain"}:
@@ -1500,6 +1660,24 @@ class MemoryStore:
             )
             value = " ".join(value.split())
             return value[:limit] or "Unspecified failure"
+
+        # unified-memory: delegated per authority-map 1.0 (POST /v1/unified/observe)
+        if self._unified_or_none() is not None:
+            await self._unified_observe([self._observation(
+                source_object_id=f"agent-reflection-{reflection_id}",
+                content={
+                    "category": category,
+                    "component": safe_text(component, 160),
+                    "summary": safe_text(summary, 500),
+                    "resolution_hint": safe_text(resolution_hint, 500),
+                    "source_conversation_id": source_conversation_id,
+                    "source_run_id": source_run_id, "model": model,
+                },
+                epistemic_kind="INFERRED", speaker_role="ATLAS",
+                locator={"kind": "ATLAS_REFLECTION",
+                         "value": f"legacy:agent_reflections:{reflection_id}"},
+            )])
+            return reflection_id
 
         assert self._db is not None
         await self._db.execute(
@@ -1556,6 +1734,16 @@ class MemoryStore:
         """Record that a run with tool failures later completed successfully."""
         if not source_run_id:
             return
+        # unified-memory: delegated per authority-map 1.0 (POST /v1/unified/outcomes;
+        # 恢复成功的结局证据 —— 未验证自报一律 UNKNOWN，服务侧裁决)
+        if self._unified_or_none() is not None:
+            await self._unified_or_none().client().record_outcome({
+                "outcome_id": f"run-recovery-{source_run_id}",
+                "task_refs": [{"kind": "RUN", "value": source_run_id}],
+                "result": "UNKNOWN",
+                "evidence": {"kind": "RUN_RECOVERY", "source_run_id": source_run_id},
+            })
+            return
         assert self._db is not None
         await self._db.execute(
             "UPDATE agent_reflections SET recovered = 1, "
@@ -1602,6 +1790,23 @@ class MemoryStore:
             for step in steps if isinstance(step, dict)
         ]
         outcome_id = str(uuid.uuid4())
+        # unified-memory: delegated per authority-map 1.0 (POST /v1/unified/outcomes;
+        # pending experience —— 自报结局一律 UNKNOWN，由服务侧按证据裁决)
+        if self._unified_or_none() is not None:
+            await self._unified_or_none().client().record_outcome({
+                "outcome_id": outcome_id,
+                "task_refs": [{"kind": "GOAL", "value": safe_text(goal_id, 160)},
+                              {"kind": "RUN", "value": source_run_id}],
+                "result": "UNKNOWN",
+                "evidence": {
+                    "goal": safe_text(goal, 1000),
+                    "claimed_status": safe_text(status, 40),
+                    "evaluation": safe_evaluation, "steps": safe_steps,
+                    "source_conversation_id": source_conversation_id,
+                    "source_run_id": source_run_id,
+                },
+            })
+            return outcome_id
         assert self._db is not None
         await self._db.execute(
             "INSERT INTO goal_outcomes "
@@ -1884,6 +2089,11 @@ class MemoryStore:
         self, knowledge_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Audit approved improvement candidates and create eligible refinement candidates."""
+        # unified-memory: delegated per authority-map 1.0 —— maintenance 路由
+        # (POST /v1/unified/maintenance) 尚未接线；本地写路径**关闭**
+        # （不再本地写、不产生第二事实源；接线后改为委托）。
+        if self._unified_or_none() is not None:
+            self._unified_write_closed("evaluate_goal_knowledge_refinements", "/v1/unified/maintenance")
         assert self._db is not None
         query = (
             "SELECT knowledge_id, id, proposed_guidance FROM goal_knowledge_proposals "
@@ -2022,6 +2232,12 @@ class MemoryStore:
         self, entity_type: str | None = None, entity_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Deterministically evaluate pending advisory candidates against approval gates."""
+        # unified-memory: delegated per authority-map 1.0 —— lifecycle 动词路由
+        # (POST /v1/unified/records/{record_ref}/lifecycle) 尚未接线；本地写路径
+        # **关闭**（不再本地写、不产生第二事实源；接线后改为委托）。
+        if self._unified_or_none() is not None:
+            self._unified_write_closed(
+                "evaluate_goal_knowledge_governance", "/v1/unified/records/{record_ref}/lifecycle")
         if entity_type not in (None, "proposal", "refinement"):
             raise ValueError("Unsupported goal knowledge governance entity type")
         assert self._db is not None
@@ -2166,6 +2382,12 @@ class MemoryStore:
         self, refinement_id: str, approved: bool,
     ) -> bool:
         """Apply an approved refinement to advisory knowledge after explicit review."""
+        # unified-memory: delegated per authority-map 1.0 —— lifecycle 动词路由
+        # (POST /v1/unified/records/{record_ref}/lifecycle) 尚未接线；本地写路径
+        # **关闭**（不再本地写、不产生第二事实源；接线后改为委托）。
+        if self._unified_or_none() is not None:
+            self._unified_write_closed(
+                "review_goal_knowledge_refinement", "/v1/unified/records/{record_ref}/lifecycle")
         assert self._db is not None
         [governance] = await self.evaluate_goal_knowledge_governance(
             entity_type="refinement", entity_id=refinement_id,
@@ -2237,6 +2459,12 @@ class MemoryStore:
         self, proposal_id: str, approved: bool,
     ) -> bool:
         """Reject a candidate or explicitly promote it as new advisory knowledge."""
+        # unified-memory: delegated per authority-map 1.0 —— lifecycle 动词路由
+        # (POST /v1/unified/records/{record_ref}/lifecycle) 尚未接线；本地写路径
+        # **关闭**（不再本地写、不产生第二事实源；接线后改为委托）。
+        if self._unified_or_none() is not None:
+            self._unified_write_closed(
+                "review_goal_knowledge_proposal", "/v1/unified/records/{record_ref}/lifecycle")
         assert self._db is not None
         [governance] = await self.evaluate_goal_knowledge_governance(
             entity_type="proposal", entity_id=proposal_id,
@@ -2341,6 +2569,12 @@ class MemoryStore:
 
     async def review_goal_experience(self, outcome_id: str, approved: bool) -> bool:
         """Explicitly approve or reject a pending goal experience."""
+        # unified-memory: delegated per authority-map 1.0 —— lifecycle 动词路由
+        # (POST /v1/unified/records/{record_ref}/lifecycle) 尚未接线；本地写路径
+        # **关闭**（不再本地写、不产生第二事实源；接线后改为委托）。
+        if self._unified_or_none() is not None:
+            self._unified_write_closed(
+                "review_goal_experience", "/v1/unified/records/{record_ref}/lifecycle")
         assert self._db is not None
         cursor = await self._db.execute(
             "UPDATE goal_outcomes SET experience_status = ?, reviewed_at = datetime('now') "
@@ -3905,6 +4139,17 @@ class MemoryStore:
         """Change an approved commitment lifecycle with a user message as evidence."""
         if status not in {"active", "fulfilled", "cancelled"}:
             raise ValueError("Unsupported commitment status")
+        # unified-memory: delegated per authority-map 1.0 (POST /v1/unified/corrections
+        # —— 需用户消息 source；本地承诺表写路径关闭)
+        if self._unified_or_none() is not None:
+            await self._unified_correct({
+                "request_id": f"legacy:facts:{key}:commitment:{status}",
+                "action": "SET_COMMITMENT_STATUS",
+                "selector": {"kind": "LEGACY", "value": f"legacy:facts:{key}"},
+                "status": status,
+                "source_message_id": source_message_id,
+            })
+            return True
         assert self._db is not None
         await self._db.execute("BEGIN IMMEDIATE")
         cursor = await self._db.execute(
@@ -3937,6 +4182,8 @@ class MemoryStore:
         return True
 
     async def list_commitment_history(self, key: str) -> list[dict[str, Any]]:
+        # unified-memory: 本地只读兼容视图（authority-map 1.0: GET /v1/unified/records/
+        # {ref} 版本化状态历史）；回查统一记录留 T01.3 接线后增强。
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT key, previous_status, status, source_message_id, recorded_at "
@@ -4160,6 +4407,15 @@ class MemoryStore:
 
     async def delete_fact(self, key: str) -> bool:
         """Delete a fact by key. Returns True if found."""
+        # unified-memory: delegated per authority-map 1.0 (POST /v1/unified/corrections
+        # —— 删除经依赖失效传播，禁止旧库复活；本地写路径关闭)
+        if self._unified_or_none() is not None:
+            await self._unified_correct({
+                "request_id": f"legacy:facts:{key}:delete",
+                "action": "DELETE",
+                "selector": {"kind": "LEGACY", "value": f"legacy:facts:{key}"},
+            })
+            return True
         assert self._db is not None
         cursor = await self._db.execute(
             "DELETE FROM facts WHERE key = ?",
@@ -4235,6 +4491,19 @@ class MemoryStore:
         Returns:
             The new entry's ID.
         """
+        # unified-memory: delegated per authority-map 1.0 (POST /v1/unified/observe)
+        if self._unified_or_none() is not None:
+            entry_id = str(uuid.uuid4())
+            await self._unified_observe([self._observation(
+                source_object_id=f"knowledge-{entry_id}",
+                content={"content": content, "source": source, "category": category,
+                         "metadata": metadata or {}},
+                epistemic_kind="THIRD_PARTY_ASSERTED" if source else "INFERRED",
+                speaker_role="THIRD_PARTY" if source else "ATLAS",
+                locator={"kind": "ATLAS_KNOWLEDGE_API",
+                         "value": f"legacy:knowledge:{entry_id}"},
+            )])
+            return entry_id
         assert self._db is not None
         await self._ensure_knowledge_table()
 
@@ -4259,6 +4528,8 @@ class MemoryStore:
         Vector similarity search will be added when embeddings are
         integrated; for now this provides keyword-based retrieval.
         """
+        # unified-memory: 本地只读兼容视图（authority-map 1.0: POST /v1/unified/recall）；
+        # active 知识读取回查统一记录留 T01.3 接线后增强。
         assert self._db is not None
         await self._ensure_knowledge_table()
 
@@ -4293,6 +4564,8 @@ class MemoryStore:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         """List knowledge entries, optionally filtered by category."""
+        # unified-memory: 本地只读兼容视图（authority-map 1.0: GET /v1/unified/records
+        # facet=knowledge）；active 知识读取回查统一记录留 T01.3 接线后增强。
         assert self._db is not None
         await self._ensure_knowledge_table()
 
@@ -4314,6 +4587,15 @@ class MemoryStore:
 
     async def delete_knowledge(self, entry_id: str) -> bool:
         """Delete a knowledge entry by ID. Returns True if found."""
+        # unified-memory: delegated per authority-map 1.0 (POST /v1/unified/corrections；
+        # 本地写路径关闭)
+        if self._unified_or_none() is not None:
+            await self._unified_correct({
+                "request_id": f"legacy:knowledge:{entry_id}:delete",
+                "action": "DELETE",
+                "selector": {"kind": "LEGACY", "value": f"legacy:knowledge:{entry_id}"},
+            })
+            return True
         assert self._db is not None
         await self._ensure_knowledge_table()
 
