@@ -242,6 +242,29 @@ class UnifiedMemoryClient:
         """POST /v1/unified/focus → focus ref（旧运行版本拒绝覆盖）。"""
         return await self._request("POST", "/v1/unified/focus", json_body=request)
 
+    async def attend_focus(self, task_id: str, *, purpose: str = "CONTINUE_TASK",
+                           subject: str | None = None,
+                           max_records: int | None = None) -> dict:
+        """GET /v1/unified/focus/{task_id} → attend 焦点装配（T06.1 / UM06）。
+
+        purpose=CONTINUE_TASK（含近期注意事件）/ PLAN（只装配已提交状态）；
+        空 focus → 200 且 found=False（服务端不编造前情）；valid_until 过期 →
+        expired=True 且装配节退出。
+        """
+        params: dict[str, Any] = {"purpose": purpose}
+        if subject:
+            params["memory_subject_id"] = subject
+        if max_records is not None:
+            params["max_records"] = int(max_records)
+        return await self._request(
+            "GET", f"/v1/unified/focus/{task_id}", params=params)
+
+    async def observe_focus(self, focus_id: str, request: dict) -> dict:
+        """POST /v1/unified/focus/{focus_id}/observe → 注意事件入工作集
+        （T06.1：不改权威快照；404 焦点不存在 / 410 已过期同码映射）。"""
+        return await self._request(
+            "POST", f"/v1/unified/focus/{focus_id}/observe", json_body=request)
+
     async def create_intent(self, request: dict) -> dict:
         """POST /v1/unified/intents → intent ref（无直接授权来源只可 PROPOSED）。"""
         return await self._request("POST", "/v1/unified/intents", json_body=request)

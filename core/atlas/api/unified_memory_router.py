@@ -58,7 +58,12 @@ PROXY_ROUTES: tuple[tuple[str, str], ...] = (
     # 未接线路由：透传 → 服务端 501 FEATURE_NOT_READY（保留 route）
     ("POST", "/corrections"),
     ("POST", "/sources/change"),
+    # T06.1 焦点三路由：MemoryOS 侧已接线（unified/working_set）→ 真透传
+    # （POST /focus 提交焦点快照；GET /focus/{task_id} attend 焦点装配；
+    # POST /focus/{focus_id}/observe 注意事件入工作集）。
     ("POST", "/focus"),
+    ("GET", "/focus/{task_id}"),
+    ("POST", "/focus/{focus_id}/observe"),
     ("POST", "/intents"),
     ("GET", "/intents"),
     ("POST", "/intents/{intent_id}/transition"),

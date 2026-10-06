@@ -170,6 +170,11 @@ def test_enabled_config_mounts_proxy_router_and_facade_composition(
         "/api/unified-memory/maintenance",
         # T05.2 多模态关联（表驱动透传；服务端 multimodal.run_association_pass）
         "/api/unified-memory/multimodal/associate",
+        # T06.1 焦点三路由（POST /focus 焦点快照提交；GET /focus/{task_id}
+        # attend 焦点装配；POST /focus/{focus_id}/observe 注意事件入工作集）
+        "/api/unified-memory/focus",
+        "/api/unified-memory/focus/{task_id}",
+        "/api/unified-memory/focus/{focus_id}/observe",
         # T02.3 Atlas 本地路由（§6.1 同类：不代理 MemoryOS，本地采集控制器处理）
         "/api/unified-memory/import",
         "/api/unified-memory/verify-agent-result",
@@ -189,7 +194,9 @@ def test_enabled_config_mounts_proxy_router_and_facade_composition(
     # + T05.1 三条媒体 path（media 上传 / media 元数据+删除同 path 两方法 /
     #   media content 文件流）
     # + T05.3 四条采集控制 path（capture start/pause/stop/status）
-    assert len(proxy_paths) == 31
+    # + T06.1 两条焦点 path（GET /focus/{task_id} attend、
+    #   POST /focus/{focus_id}/observe 注意事件；POST /focus 已在 23 条内）
+    assert len(proxy_paths) == 33
 
     facade = UnifiedMemoryFacade.from_config()
     assert facade.enabled is True
