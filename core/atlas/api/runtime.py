@@ -30,6 +30,7 @@ class RunState:
         "executor", "sandbox", "extra_roots",
         "trust_roots",
         "project_id",
+        "task_id",
         "telegram_user_id",
     )
 
@@ -77,6 +78,7 @@ class RunState:
         self.extra_roots: list[str] = []
         self.trust_roots: list[str] = []
         self.project_id: str | None = None
+        self.task_id: str | None = None
         self.telegram_user_id: int | None = None
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:

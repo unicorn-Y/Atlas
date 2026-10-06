@@ -73,6 +73,19 @@ STOP_TIMEOUT_S = 5.0
 
 TERMINAL_EVENTS = {"run.completed", "run.failed", "run.cancelled"}
 
+#: 具有真实外部副作用的工具（T06.2 ``external_operation_counts`` 统计面）。
+#: 计数只从真实 ``tool.completed`` 事件提取（is_error 的执行不计）；工具名是
+#: 模型面名字（write_file/patch/terminal，tool_registry._ALIASES → local_*）
+#: 与内部执行名都收录。判据里的逻辑操作名（如 write-fixture-file）映射到
+#: 真实工具名 —— Atlas 无按逻辑操作名注册的工具，不伪造第二套计数。
+EXTERNAL_SIDE_EFFECT_TOOLS = {
+    # 模型面名字（tool.completed 事件携带的名字）
+    "write_file", "patch", "terminal", "execute_code",
+    # 内部执行名字（local_execution.call_tool 面）
+    "local_file", "local_edit", "local_shell", "local_exec",
+    "local_process", "local_git",
+}
+
 #: Aspects whose isolation / deletion / side-effect scenarios are critical
 #: (05_acceptance_matrix.md §3, mirrored in gen_manifest.py).
 CRITICAL_ASPECTS = {"M03", "L03", "L04", "G02", "I03", "N01", "N02"}
@@ -297,6 +310,10 @@ class UMHarness:
             f'[models.gateway]\nbase_url="{self._fake.base_url}"\napi_key="{FAKE_API_KEY}"\n'
             '[[models.custom]]\nid="fake-model"\nname="UM fake fixture"\n'
             'provider="openai"\nlitellm_model="openai/fake-model"\nmax_output_tokens=512\n'
+            # T06.2：第二个注册模型（同一 loopback fake 网关）—— 重启/切模型
+            # 续接判据用（run.start model="fake-model-b"，focus 不依赖模型身份）。
+            '[[models.custom]]\nid="fake-model-b"\nname="UM fake fixture B"\n'
+            'provider="openai"\nlitellm_model="openai/fake-model-b"\nmax_output_tokens=512\n'
             '[agent]\nengine="hermes"\nverify_before_stop=false\n'
             '[tools]\nauto_start=[]\n[tools.servers]\n'
             '[scheduler]\nenabled=false\n'
@@ -429,7 +446,8 @@ class UMHarness:
     # ------------------------------------------------------------------ chat
 
     def chat(self, text: str, session_id: str | None = None, *,
-             timeout: float = 90.0) -> dict[str, Any]:
+             timeout: float = 90.0, task_id: str | None = None,
+             model: str | None = None) -> dict[str, Any]:
         """Drive the real WebSocket /ws/chat path end to end.
 
         Sends ``run.start`` over the actual protocol (runtime_ws_router.py →
@@ -438,6 +456,10 @@ class UMHarness:
         extracted from real events only — the current Runtime Event Protocol
         carries no memory-reference events, so it stays an empty list with an
         explicit note rather than anything assembled from expectations.
+
+        T06.2：``task_id`` 随 run.start 原样携带（run_drive → RunState →
+        RunRequest → 焦点接续链路）；``model`` 允许换模型选择（第二个 fake
+        模型 fake-model-b，见 _write_atlas_toml）。
         """
         conversation_id = session_id or self._new_conversation()
         assert self._fake is not None
@@ -445,9 +467,11 @@ class UMHarness:
         url = (self.atlas_url.replace("http", "ws", 1) + "/ws/chat")
         start_message = {
             "type": "run.start", "run_id": run_id, "content": text,
-            "conversation_id": conversation_id, "model": MODEL_ID,
+            "conversation_id": conversation_id, "model": model or MODEL_ID,
             "workspace": str(self.workspace),
         }
+        if task_id:
+            start_message["task_id"] = task_id
         from websockets.sync.client import connect as ws_connect
 
         events: list[dict[str, Any]] = []
@@ -475,6 +499,7 @@ class UMHarness:
     def _summarize_run(self, run_id: str, conversation_id: str,
                        events: list[dict[str, Any]]) -> dict[str, Any]:
         counts: dict[str, int] = {}
+        external_operation_counts: dict[str, int] = {}
         reply = ""
         deltas: list[str] = []
         tool_calls: list[dict[str, Any]] = []
@@ -494,6 +519,9 @@ class UMHarness:
                     "result": data.get("result", []),
                     "is_error": bool(data.get("is_error", False)),
                 })
+                if not data.get("is_error") and data.get("name") in EXTERNAL_SIDE_EFFECT_TOOLS:
+                    op = str(data.get("name"))
+                    external_operation_counts[op] = external_operation_counts.get(op, 0) + 1
             if envelope.get("run_id") == run_id and event in TERMINAL_EVENTS:
                 terminal = event
         if not reply and deltas:
@@ -508,6 +536,9 @@ class UMHarness:
             "events": counts,
             "event_count": len(events),
             "tool_calls": tool_calls,
+            # T06.2：外部副作用操作计数（真实 tool.completed 事件、非 error、
+            # EXTERNAL_SIDE_EFFECT_TOOLS 统计面；不重复副作用判据用）。
+            "external_operation_counts": external_operation_counts,
             # Real-event extraction: the Atlas WS protocol (run_drive.py) has no
             # memory_refs / trace payload today, so these stay empty with a note
             # instead of being assembled from expected values (T00.2 rule).

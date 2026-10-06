@@ -159,9 +159,14 @@ async def hub_main() -> None:
 
     async def agent_callback(task_id: str, message: str) -> None:
         run_id = uuid.uuid4().hex[:8]
+        # T06.2 换 chat 入口不换任务主体：conversation_id（hub-{task_id}-{run_id}）
+        # 是每次运行的聊天入口，任务本体是调度任务的 task_id —— 经
+        # orchestrator.run(task_id=...) 进入焦点接续链路（atlas.memory.focus_flow），
+        # 同一任务跨 hub/桌面重启共享同一焦点投影（unified_focus 的
+        # (subject, task_id) 唯一行），运行权威版本由服务端回读后递增。
         conversation_id = f"hub-{task_id}-{run_id}"
         print(f"[hub] task {task_id} run {run_id}: {message}", flush=True)
-        events = orchestrator.run(message, conversation_id)
+        events = orchestrator.run(message, conversation_id, task_id=task_id)
         failed = False
         async for _event in events:
             if isinstance(_event, dict) and _event.get("type") == "error":

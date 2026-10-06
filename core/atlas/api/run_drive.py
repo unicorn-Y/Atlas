@@ -1502,6 +1502,9 @@ async def _handle_run_start(
     run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
     if isinstance(data.get("telegram_user_id"), int):
         run.telegram_user_id = data["telegram_user_id"]
+    # T06.2：任务焦点绑定 —— run.start 可显式携带 task_id（调度任务 / 续接
+    # 请求）；未携带为 None，普通聊天不进焦点接续链路。
+    run.task_id = str(data.get("task_id") or "").strip() or None
     if effective_mode not in {"act", "plan"}:
         run.status = "failed"
         await manager.send(conn_id, run.next_envelope("run.failed", {
@@ -2584,6 +2587,7 @@ async def _execute_run(
             sandbox_tool_callback=sandbox_tool if run.sandbox else None,
             sandbox_enabled=bool(run.sandbox),
             project_id=run.project_id,
+            task_id=run.task_id,
             reasoning_effort=(run.reasoning_effort if _model_supports_reasoning(
                 {"litellm_model": model_id or run.model}
             ) else None),

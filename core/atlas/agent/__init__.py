@@ -796,6 +796,7 @@ class AgentOrchestrator:
         sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None,
         sandbox_enabled: bool = False,
         project_id: str | None = None,
+        task_id: str | None = None,
         reasoning_effort: str | None = None,
         subtask_started: Callable[..., Any] | None = None,
         subtask_progress: Callable[..., Any] | None = None,
@@ -837,7 +838,7 @@ class AgentOrchestrator:
             tool_allow=tool_allow, tool_deny=tool_deny, read_only=read_only,
             permission_mode=permission_mode, allowed_paths=allowed_paths,
             sandbox_enabled=sandbox_enabled, project_id=project_id,
-            reasoning_effort=reasoning_effort, worker=worker,
+            task_id=task_id, reasoning_effort=reasoning_effort, worker=worker,
         )
         callbacks = RunCallbacks(
             cancel_event=cancel_event, pause_event=pause_event,
