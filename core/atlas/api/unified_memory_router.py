@@ -7,11 +7,13 @@
 ``call(method, path, json, params)`` 传输到真实 MemoryOS 服务。
 
 * 已接线后缀：observe / recall / records / records/{record_ref} /
-  evidence/{record_ref} / status。
+  evidence/{record_ref} / status / timeline / entities(+resolve) / corrections /
+  sources/change / media（T05.1：POST 上传与 GET content 为手写透传 —— 原始
+  字节与文件流不落盘副本；GET 元数据 / DELETE 走表驱动 JSON 透传）。
 * 其余任务书后缀：同样注册并**透传**，由服务端 501 FEATURE_NOT_READY 原样
   透传（后续波在 MemoryOS 侧接线后本代理自动跟随，不需要改这里）。
-* 错误映射保持同码：403/409/423/422/501 与超时/断连（503）→ HTTPException，
-  detail 保留服务端 error code/message/details。
+* 错误映射保持同码：403/404/409/410/413/422/423/501 与超时/断连（503）→
+  HTTPException，detail 保留服务端 error code/message/details。
 
 挂载方式：本 router 仅在 ``memory.unified.enabled=true`` 时由
 ``atlas.api.application.create_app`` include（默认 false → 完全不挂，
@@ -69,6 +71,10 @@ PROXY_ROUTES: tuple[tuple[str, str], ...] = (
     ("GET", "/timeline"),
     ("GET", "/entities"),
     ("POST", "/entities/resolve"),
+    # T05.1 受控媒体：元数据与删除走通用 JSON 透传；上传（原始字节）与
+    # 文件流（不落盘副本）在下方手写（见 proxy_media_upload / proxy_media_content）。
+    ("GET", "/media/{asset_id}"),
+    ("DELETE", "/media/{asset_id}"),
 )
 
 #: 客户端错误类 → HTTP 同码（status_code 为 None 的传输类错误回落 503）。
@@ -206,6 +212,60 @@ async def import_text_file(request: Request) -> JSONResponse:
             "error": exc.code, "message": str(exc),
             "segments": exc.count, "limit": exc.limit}) from exc
     return JSONResponse(content=result)
+
+
+@router.post("/media")
+async def proxy_media_upload(
+    request: Request,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> JSONResponse:
+    """POST /api/unified-memory/media — 受控媒体上传透传（T05.1）。
+
+    body / Content-Type **原样字节转发**到 MemoryOS POST /v1/unified/media
+    （JSON b64 或原始字节同语义；Atlas 不做 hash、不落盘副本，去重与白名单
+    裁决都在服务端）。同码映射：422 白名单/批次、413 超限、410 已 ERASED。
+    """
+    body = await request.body()
+    content_type = request.headers.get("content-type")
+    try:
+        status, payload = await _facade(services).client().call_raw(
+            "POST", "/v1/unified/media", content=body, content_type=content_type)
+    except UnifiedMemoryError as exc:
+        raise _http_error(exc) from exc
+    return JSONResponse(status_code=status, content=payload)
+
+
+@router.get("/media/{asset_id}/content")
+async def proxy_media_content(
+    request: Request,
+    asset_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> Any:
+    """GET /api/unified-memory/media/{asset_id}/content — 原媒体文件流透传（T05.1）。
+
+    服务端 lifecycle 校验后的字节流**流式转发**（Atlas 不落盘副本、不解析
+    内容）；ERASED / 文件缺失 → 服务端 410 同码透传（显式原因，UI 显示原因，
+    不造 caption）。
+    """
+    from fastapi.responses import StreamingResponse
+
+    client = _facade(services).client()
+    response = await client.fetch_media_content(
+        asset_id, params=dict(request.query_params))
+    if 200 <= response.status_code < 300:
+        headers = {}
+        for name in ("x-asset-id", "x-asset-relative-path"):
+            if response.headers.get(name):
+                headers[name] = response.headers[name]
+        headers["Cache-Control"] = "no-store"
+        return StreamingResponse(
+            response.aiter_bytes(), status_code=response.status_code,
+            media_type=response.headers.get("content-type", "application/octet-stream"),
+            headers=headers)
+    detail = response.json() if (response.content and
+                                 "json" in response.headers.get("content-type", "")) else {
+        "error": "MEDIA_UPSTREAM_ERROR", "message": response.text[:300]}
+    raise HTTPException(status_code=response.status_code, detail=detail)
 
 
 @router.post("/verify-agent-result")

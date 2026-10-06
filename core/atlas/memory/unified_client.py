@@ -291,6 +291,80 @@ class UnifiedMemoryClient:
                 "(the unified-memory transport only forwards /v1/unified/* routes)")
         return await self._request(method.upper(), path, json_body=json, params=params)
 
+    # ------------------------------------------------------------------
+    # T05.1 受控媒体传输（原始字节上传 / 文件流透传；JSON 走 call）
+    # ------------------------------------------------------------------
+
+    async def call_raw(self, method: str, path: str, *, content: bytes | None = None,
+                       content_type: str | None = None,
+                       params: dict[str, Any] | None = None) -> tuple[int, Any]:
+        """原始字节透传（POST /v1/unified/media 上传等）：body/content-type 原样转发。
+
+        返回 (upstream status, decoded JSON)；失败错误类映射与 :meth:`call`
+        完全一致。同样只允许 ``/v1/unified/`` 前缀。
+        """
+        if not path.startswith("/v1/unified/"):
+            raise UnifiedMemoryError(
+                f"refusing non-unified proxy path: {path!r} "
+                "(the unified-memory transport only forwards /v1/unified/* routes)")
+        headers = {"Content-Type": content_type} if content_type else None
+        try:
+            response = await self._http().request(
+                method.upper(), path, content=content, headers=headers, params=params)
+        except httpx.TimeoutException as exc:
+            raise ServiceUnavailable(
+                f"unified memory service timeout ({method} {path}): {exc}",
+                route=path) from exc
+        except httpx.TransportError as exc:
+            raise ServiceUnavailable(
+                f"unified memory service unreachable ({method} {path}): {exc}",
+                route=path) from exc
+        return response.status_code, self._decode(method, path, response)
+
+    async def fetch_media_content(self, asset_id: str,
+                                  params: dict[str, Any] | None = None) -> httpx.Response:
+        """GET /v1/unified/media/{asset_id}/content 的**原始响应**（代理流式转发）。
+
+        不消费 body、不落盘副本 —— 调用方（unified_memory_router）按 upstream
+        状态码决定流式转发或同码错误映射；超时/断连 → ServiceUnavailable。
+        """
+        path = f"/v1/unified/media/{asset_id}/content"
+        try:
+            return await self._http().get(path, params=params)
+        except httpx.TimeoutException as exc:
+            raise ServiceUnavailable(
+                f"unified memory service timeout (GET {path}): {exc}",
+                route=path) from exc
+        except httpx.TransportError as exc:
+            raise ServiceUnavailable(
+                f"unified memory service unreachable (GET {path}): {exc}",
+                route=path) from exc
+
+    async def ingest_media(self, *, data: bytes, mime: str,
+                           source_refs: list[Any] | None = None,
+                           duration_ms: int | None = None, width: int | None = None,
+                           height: int | None = None) -> dict:
+        """POST /v1/unified/media：原始字节上传（Content-Type = mime）→ asset 回执。"""
+        params: dict[str, Any] = {}
+        if duration_ms is not None:
+            params["duration_ms"] = str(int(duration_ms))
+        if width is not None:
+            params["width"] = str(int(width))
+        if height is not None:
+            params["height"] = str(int(height))
+        _status, body = await self.call_raw(
+            "POST", "/v1/unified/media", content=data, content_type=mime,
+            params=params or None)
+        return body or {}
+
+    async def get_media(self, asset_id: str) -> dict:
+        """GET /v1/unified/media/{asset_id} → 元数据（asset_id + 受控相对路径）。"""
+        return await self._request("GET", f"/v1/unified/media/{asset_id}")
+
+    async def delete_media(self, asset_id: str) -> dict:
+        """DELETE /v1/unified/media/{asset_id} → 受控删除回执（live 引用 409）。"""
+        return await self._request("DELETE", f"/v1/unified/media/{asset_id}")
+
     # -- 附加读取（§6 表内 GET 路由，UM01 已接线的两个）--
 
     async def list_records(self, *, facet: str | None = None, status: str | None = None,

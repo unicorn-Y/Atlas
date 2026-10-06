@@ -171,11 +171,17 @@ def test_enabled_config_mounts_proxy_router_and_facade_composition(
         # T02.3 Atlas 本地路由（§6.1 同类：不代理 MemoryOS，本地采集控制器处理）
         "/api/unified-memory/import",
         "/api/unified-memory/verify-agent-result",
+        # T05.1 受控媒体：上传（原始字节透传）/ 元数据 / 文件流 / 受控删除
+        "/api/unified-memory/media",
+        "/api/unified-memory/media/{asset_id}",
+        "/api/unified-memory/media/{asset_id}/content",
     ):
         assert expected in proxy_paths, expected
     # 后缀与 MemoryOS /v1/unified/* 一一对应（22 条契约路由 / 21 个唯一 path）
     # + T02.3 两条 Atlas 本地路由（import / verify-agent-result）
-    assert len(proxy_paths) == 23
+    # + T05.1 三条媒体 path（media 上传 / media 元数据+删除同 path 两方法 /
+    #   media content 文件流）
+    assert len(proxy_paths) == 26
 
     facade = UnifiedMemoryFacade.from_config()
     assert facade.enabled is True

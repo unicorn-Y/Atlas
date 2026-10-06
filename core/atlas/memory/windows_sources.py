@@ -62,6 +62,33 @@ MEDIA_EXTENSIONS = {
     ".mp4", ".mov", ".avi", ".mkv", ".webm",
 }
 
+#: T05.1 受控媒体导入：扩展名 → mime（**服务端白名单内的子集**；白名单外由
+#: MemoryOS 422 拒绝，双仓同一注册表语义）。
+MEDIA_MIME_BY_EXTENSION = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".txt": "text/plain",
+    ".md": "text/plain",
+}
+
+#: mime → 媒体片段 locator kind（导入时无从得知真实区域/时间段 → 用整文件
+#: **占位区间**，真实 region/range 解析在 T05.2；不伪造 caption/转录）。
+MEDIA_LOCATOR_KIND_BY_MIME = {
+    "image/png": "IMAGE_REGION", "image/jpeg": "IMAGE_REGION",
+    "image/gif": "IMAGE_REGION", "image/webp": "IMAGE_REGION",
+    "audio/wav": "AUDIO_RANGE", "audio/mpeg": "AUDIO_RANGE",
+    "audio/ogg": "AUDIO_RANGE",
+    "video/mp4": "VIDEO_RANGE", "video/webm": "VIDEO_RANGE",
+    "text/plain": "FILE_RANGE",
+}
+
 IMPORT_KINDS = {
     ".txt": "text_file",
     ".md": "text_file",
@@ -73,7 +100,7 @@ DEFAULT_REGISTRY_FILENAME = "import_sources.json"
 
 
 class ImportUnsupported(Exception):
-    """导入类型本期不支持（媒体走 UM05）；显式报错，不静默忽略。"""
+    """导入类型不支持（无 mime 映射等）；显式报错，不静默忽略。"""
 
     def __init__(self, reason: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(reason)
@@ -247,7 +274,9 @@ class WindowsSourceService:
         suffix = file_path.suffix.lower()
         if suffix in MEDIA_EXTENSIONS:
             raise ImportUnsupported(
-                f"媒体导入（{suffix}）在 UM05 接全；本期只做 txt/md/json/pdf 文字导入",
+                f"媒体导入（{suffix}）请走 import_media_file（UM05 受控媒体通道："
+                "POST /v1/unified/media 资产 + media_refs 观察）；文字导入只做 "
+                "txt/md/json/pdf",
                 {"extension": suffix})
         import_kind = IMPORT_KINDS.get(suffix, "text_file")
         data = file_path.read_bytes()
@@ -335,6 +364,128 @@ class WindowsSourceService:
             "file_sha256": file_hash,
             "import_kind": import_kind,
             "segments": len(segments),
+            "relpath": relpath,
+        }
+
+    # -------------------------------------------------- (a2) 媒体导入（T05.1）
+
+    def _media_facade(self) -> Any:
+        """媒体上传的 facade（capture.facade；未装配 → 显式错误，不伪造成功）。"""
+        facade = getattr(self._capture, "facade", None)
+        if facade is None:
+            raise RuntimeError("unified memory facade 不可用（媒体资产必须经"
+                               " MemoryOS 受控入库，不做本地副本）")
+        return facade
+
+    async def import_media_file(self, path: str | Path, *,
+                                task_id: str | None = None,
+                                root: str | Path | None = None,
+                                duration_ms: int | None = None,
+                                width: int | None = None,
+                                height: int | None = None) -> dict[str, Any]:
+        """本地媒体文件导入（T05.1）：受控资产 + media_refs 观察，两段都真实。
+
+        流程：读文件 → 扩展名→mime（白名单外交 415）→ 经 facade POST
+        /v1/unified/media 受控入库（hash 去重，同内容同 asset）→ 构造
+        USER_IMPORT 观察（locator = 媒体 range 占位 kind + media_refs 指向
+        asset_id）→ 经 capture.enqueue_observation 既有 outbox 管线入库。
+
+        幂等：资产面同 hash → 同 asset_id（duplicate 上报）；观察面内容寻址
+        source_object_id（``mediaimport-<hash16>``）→ 同内容重导 →
+        DUPLICATE_OK（created=0），不制造新事实。
+
+        失败显式：上传失败异常向上抛（不留半观察）；无 OCR/转录/caption ——
+        片段解析（区域/时间段的真值）在 T05.2，本入口不造内容。
+        """
+        if self._capture is None:
+            raise RuntimeError("capture service 不可用（unified memory 未启用）")
+        file_path = Path(str(path)).expanduser()
+        if not file_path.exists():
+            raise FileNotFoundError(f"导入文件不存在: {file_path}")
+        if not file_path.is_file():
+            raise IsADirectoryError(f"导入目标不是文件: {file_path}")
+        suffix = file_path.suffix.lower()
+        mime = MEDIA_MIME_BY_EXTENSION.get(suffix)
+        if mime is None:
+            raise ImportUnsupported(
+                f"媒体导入不支持扩展名 {suffix or '(none)'}（受控白名单："
+                f"{sorted(MEDIA_MIME_BY_EXTENSION)}）",
+                {"extension": suffix})
+        data = file_path.read_bytes()
+        file_hash = sha256_bytes(data)
+        locator_kind = MEDIA_LOCATOR_KIND_BY_MIME[mime]
+        relpath = _relpath(file_path, Path(root) if root else None)
+        object_prefix = "mediaimport-" + file_hash.removeprefix("sha256:")[:16]
+
+        facade = self._media_facade()
+        upload = await facade.client().ingest_media(
+            data=data, mime=mime, duration_ms=duration_ms,
+            width=width, height=height)
+        assets = upload.get("assets") or []
+        if not assets:  # pragma: no cover - 服务端契约保证至少一个资产
+            raise RuntimeError("媒体入库回执缺少资产（契约违规）")
+        asset = assets[0]
+        asset_id = str(asset.get("asset_id") or "")
+        asset_hash = str(asset.get("content_hash") or file_hash)
+        asset_duplicate = bool(asset.get("duplicate")
+                               or upload.get("duplicates"))
+
+        if locator_kind == "FILE_RANGE":
+            line_count = len(data.decode("utf-8", "replace").splitlines()) or 1
+            locator_value = f"{relpath}#L1-L{line_count}"
+        else:
+            locator_value = f"{relpath}#full"  # 整文件占位；真实区间解析在 T05.2
+        observation = build_observation(
+            source_kind="USER_IMPORT",
+            source_object_id=object_prefix,
+            source_revision="1",
+            content={
+                "text": "",
+                "author_role": "SOURCE_CONTENT",
+                "import_kind": "media",
+                "kind": locator_kind,
+                "mime": mime,
+                "asset_id": asset_id,
+                "media_sha256": asset_hash,
+                "size_bytes": len(data),
+                "import_path": str(file_path),
+                "missing_extract": {
+                    "reason": "SEGMENT_PARSE_DEFERRED_T05_2",
+                    "note": "受控资产已入库；区域/时间段解析（OCR/转录/caption）"
+                            "在 T05.2，本观察不伪造内容",
+                },
+            },
+            speaker_role="UNKNOWN",          # §1.1：媒体内容不是用户发言
+            epistemic_kind="USER_ASSERTED",  # 用户断言该资料值得记录
+            occurred_at=None, source_timezone=None,
+            locator={"kind": locator_kind, "value": locator_value},
+            media_refs=[{"asset_id": asset_id, "hash": asset_hash}])
+        context_overrides: dict[str, Any] = {
+            "runtime_session_id": f"import:{object_prefix}"}
+        if task_id:
+            context_overrides["task_id"] = str(task_id)
+        result = self._capture.enqueue_observation(
+            observation, context_overrides=context_overrides)
+        created = bool(result.get("created"))
+        self.registry.record(
+            path_key=_path_key(file_path), content_hash=file_hash,
+            entry={"file_key": object_prefix, "revision": 1,
+                   "relpath": relpath, "import_kind": "media",
+                   "import_path": str(file_path), "segments": [],
+                   "size_bytes": len(data), "mime": mime,
+                   "asset_id": asset_id})
+        return {
+            "status": "DUPLICATE" if not created else "IMPORTED",
+            "created": int(created),
+            "duplicates": int(not created),
+            "source_object_id": object_prefix,
+            "source_event_id": observation["source_event_id"],
+            "asset_id": asset_id,
+            "asset_duplicate": asset_duplicate,
+            "asset_relative_path": asset.get("relative_path"),
+            "media_sha256": asset_hash,
+            "mime": mime,
+            "locator": observation["locator"],
             "relpath": relpath,
         }
 
@@ -555,6 +706,8 @@ __all__ = [
     "ContentTooLarge",
     "DEFAULT_REGISTRY_FILENAME",
     "MEDIA_EXTENSIONS",
+    "MEDIA_LOCATOR_KIND_BY_MIME",
+    "MEDIA_MIME_BY_EXTENSION",
     "MAX_IMPORT_SEGMENTS",
     "ImportTooManySegments",
     "ImportUnsupported",
