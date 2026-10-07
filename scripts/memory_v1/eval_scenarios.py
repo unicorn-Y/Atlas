@@ -33,6 +33,12 @@ CORE_DIR = REPO_ROOT / "core"
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
 
+try:  # 真记忆层（真 MemoryOS 服务 + 真 assemble_recall_context）
+    from scripts.memory_v1.real_memory import RealMemoryService, to_observation, SUBJECT
+except ModuleNotFoundError:  # 直接脚本运行时
+    sys.path.insert(0, str(REPO_ROOT))
+    from scripts.memory_v1.real_memory import RealMemoryService, to_observation, SUBJECT
+
 # Production roots that must NEVER be touched during evaluation
 PRODUCTION_ROOTS = (
     Path(r"D:\Atlas\data"),
@@ -946,6 +952,64 @@ def get_all_scenarios() -> list[ScenarioSpec]:
 # Execution Engine with Strict Root Isolation
 # =============================================================================
 
+async def _push_history_to_memory(scenario, state, mem_svc) -> None:
+    """把场景预置历史观察经真 facade 落库（真装配只读真库）。"""
+    obs_list = []
+    for idx, item in enumerate(state.get("history_observations", []), start=1):
+        text = item.get("text") or ""
+        if not text:
+            continue
+        obs_list.append(to_observation(
+            text,
+            session_id=f"scenario-{scenario.id}",
+            turn_index=0,
+            idx=idx,
+            occurred_at=item.get("occurred_at") or "2026-10-01 12:00:00",
+        ))
+    await mem_svc.push(obs_list, session_id=f"scenario-{scenario.id}")
+
+
+async def _run_reflection(scenario, mem_svc) -> None:
+    """跑真反思者（S4）构建画像块/概括，供真装配的画像块读取。
+
+    生产里由 idle/daily 触发（server.py reflector_idle_loop）；评测原先从不触发，
+    导致画像块恒空，元问题场景（如"总结你对我的了解"）只能靠相关记忆块检索 ——
+    语义不匹配时召回为空，评测因此失真。
+    """
+    try:
+        from atlas.memory.reflector import MemoryReflector
+        from atlas.models import ModelManager
+
+        reflector = MemoryReflector(model_manager=ModelManager())
+        await reflector.run_reflection_cycle(
+            subject=SUBJECT,
+            force=True,
+            auto_apply=True,
+            client=mem_svc.facade(),
+            ctx=mem_svc.context(session_id=f"scenario-{scenario.id}"),
+        )
+    except Exception as exc:  # noqa: BLE001 - 反思失败不应中断评测
+        print(f"[real-memory] 反思者跳过（scenario {scenario.id}）: {type(exc).__name__}: {exc}")
+
+
+async def _push_formed_to_memory(scenario, step, formed_observations, mem_svc) -> None:
+    """把本轮观察者抽取结果经真 facade 落库。"""
+    obs_list = []
+    for idx, ob in enumerate(formed_observations or [], start=1):
+        text = ob.get("text") if isinstance(ob, dict) else str(ob)
+        if not text:
+            continue
+        occurred = (ob.get("occurred_at") if isinstance(ob, dict) else None) or step.occurred_at
+        obs_list.append(to_observation(
+            text,
+            session_id=step.session_id or f"scenario-{scenario.id}",
+            turn_index=step.turn_index,
+            idx=idx,
+            occurred_at=occurred,
+        ))
+    await mem_svc.push(obs_list, session_id=step.session_id or f"scenario-{scenario.id}")
+
+
 def enforce_isolation(isolated_dir: Path) -> dict[str, str]:
     """Ensure environment paths do not collide with production roots."""
     for prod_root in PRODUCTION_ROOTS:
@@ -1109,7 +1173,10 @@ async def run_scenario_step(
         from atlas.memory.observer import MemoryObserver
         from atlas.config import AtlasConfig
 
-        cfg = AtlasConfig({"memory": {"unified": {"enabled": True}}})
+        # 观察者日预算必须与 _apply_model_config 一致（否则回落默认 5 万 → 评测中途
+        # budget_deferred，后半场景无观察 → 必然 FAIL，评测失真）
+        cfg = AtlasConfig({"memory": {"unified": {"enabled": True},
+                                      "v1": {"observer_daily_token_budget": 5_000_000}}})
         obs = MemoryObserver(model_manager=mm, config=cfg)
 
         now_iso = step.occurred_at if "T" in step.occurred_at else step.occurred_at.replace(" ", "T")
@@ -1198,56 +1265,83 @@ async def run_scenario_step(
     if deletions:
         history = [obs for obs in history if not any(d and d in obs.get("text", "") for d in deletions)]
 
-    # 2. Context assembly / recall
+    # 2. Context assembly / recall —— 真装配（走 assemble_recall_context 真函数）
     assembled_refs: list[dict[str, Any]] = []
     recalled_context_texts: list[str] = []
+    gate_info: dict[str, Any] = {}
 
-    is_relevant, _, _ = is_personal_memory_relevant(step.user_input)
-    if is_relevant:
-        if scenario.id == 20:
-            # 减肥去重/合并
-            diet_items = [it for it in history if any(k in it.get("text", "") for k in ["减肥", "减脂", "低碳", "控糖", "瘦了"])]
-            if diet_items:
-                ref_id = diet_items[0].get("event_id", f"ref_{scenario.id}_1")
-                assembled_refs.append({
-                    "ref_id": ref_id,
-                    "text": "用户持续进行减肥健康减脂计划（已合并5次陈述出处）",
-                    "source_event_id": f"evt_{scenario.id}_consolidated",
-                    "occurred_at": diet_items[-1].get("occurred_at"),
-                })
-                recalled_context_texts.append(f"- [m:{ref_id}] (当前 | 已合并): 用户持续进行减肥健康减脂计划")
-        else:
-            sorted_history = list(history)
-            if scenario.id == 18:
-                sorted_history = sorted(sorted_history, key=lambda x: x.get("occurred_at", ""), reverse=True)
-
-            for idx, item in enumerate(sorted_history, start=1):
-                text = item.get("text", "")
-                ref_id = item.get("event_id", f"ref_{scenario.id}_{idx}")
-                occurred_at = item.get("occurred_at", "")
-
-                conflict_tag = ""
-                if scenario.id == 7 and "老王" in text:
-                    conflict_tag = " | 【有冲突/有多个候选】"
-
-                status_label = "当前"
-                if scenario.id == 16:
-                    status_label = "历史(原定)" if "周三" in text else "当前"
-                elif scenario.id == 17:
-                    status_label = "历史(已过期)"
-                elif scenario.id == 18:
-                    status_label = "历史(旧数据)" if "北京" in text else "当前(最新)"
-                elif scenario.id == 19:
-                    status_label = "历史(曾用)" if "Windows" in text else "当前(现用)"
-
-                assembled_refs.append({
-                    "ref_id": ref_id,
-                    "text": text,
-                    "source_event_id": item.get("source_event_id", ref_id),
-                    "occurred_at": occurred_at,
-                })
-                date_str = occurred_at[:10] if occurred_at else "记录"
-                recalled_context_texts.append(f"- [m:{ref_id}] ({date_str} | {status_label}{conflict_tag}): {text}")
+    mem_svc = state.get("memory_service")
+    if mem_svc is not None:
+        # 真召回：此刻库内只有历史观察（本轮观察尚未落库，与生产 run_phases 语义一致 ——
+        # Observer 在回合末才触发）。若把本轮自身先落库，召回会被"本轮提问"自匹配挤占。
+        recall_res = await mem_svc.recall(
+            step.user_input, session_id=step.session_id or f"scenario-{scenario.id}"
+        )
+        gate_info = {
+            "gate_passed": recall_res.gate_passed,
+            "gate_score": recall_res.gate_score,
+            "gate_reason": recall_res.gate_reason,
+            "conflicts_count": len(recall_res.conflicts_detected or []),
+        }
+        # assembled_ref_map 是 short_ref -> full_ref；正文从 raw_recall.context_items 取
+        short_by_full = {v: k for k, v in (recall_res.assembled_ref_map or {}).items()}
+        text_by_ref: dict[str, str] = {}
+        for item in ((recall_res.raw_recall or {}).get("context_items") or []):
+            if isinstance(item, dict):
+                rr = item.get("record_ref") or item.get("id") or ""
+                c = item.get("content")
+                txt = c.get("text") if isinstance(c, dict) else (str(c) if c else "")
+                if rr:
+                    text_by_ref[rr] = txt or ""
+        for full in (recall_res.assembled_refs or []):
+            assembled_refs.append({
+                "ref_id": short_by_full.get(full, full),
+                "full_ref": full,
+                "text": text_by_ref.get(full, ""),
+            })
+        if recall_res.relevant_memory_block:
+            recalled_context_texts.append(recall_res.relevant_memory_block)
+    else:
+        # 回退：无真服务时保留原进程内装配（仅供 dry_run/离线调试，不作为验收证据）
+        is_relevant, _, _ = is_personal_memory_relevant(step.user_input)
+        if is_relevant:
+            if scenario.id == 20:
+                diet_items = [it for it in history if any(k in it.get("text", "") for k in ["减肥", "减脂", "低碳", "控糖", "瘦了"])]
+                if diet_items:
+                    ref_id = diet_items[0].get("event_id", f"ref_{scenario.id}_1")
+                    assembled_refs.append({
+                        "ref_id": ref_id,
+                        "text": "用户持续进行减肥健康减脂计划（已合并5次陈述出处）",
+                        "source_event_id": f"evt_{scenario.id}_consolidated",
+                        "occurred_at": diet_items[-1].get("occurred_at"),
+                    })
+                    recalled_context_texts.append(f"- [m:{ref_id}] (当前 | 已合并): 用户持续进行减肥健康减脂计划")
+            else:
+                sorted_history = list(history)
+                if scenario.id == 18:
+                    sorted_history = sorted(sorted_history, key=lambda x: x.get("occurred_at", ""), reverse=True)
+                for idx, item in enumerate(sorted_history, start=1):
+                    text = item.get("text", "")
+                    ref_id = item.get("event_id", f"ref_{scenario.id}_{idx}")
+                    occurred_at = item.get("occurred_at", "")
+                    conflict_tag = " | 【有冲突/有多个候选】" if (scenario.id == 7 and "老王" in text) else ""
+                    status_label = "当前"
+                    if scenario.id == 16:
+                        status_label = "历史(原定)" if "周三" in text else "当前"
+                    elif scenario.id == 17:
+                        status_label = "历史(已过期)"
+                    elif scenario.id == 18:
+                        status_label = "历史(旧数据)" if "北京" in text else "当前(最新)"
+                    elif scenario.id == 19:
+                        status_label = "历史(曾用)" if "Windows" in text else "当前(现用)"
+                    assembled_refs.append({
+                        "ref_id": ref_id,
+                        "text": text,
+                        "source_event_id": item.get("source_event_id", ref_id),
+                        "occurred_at": occurred_at,
+                    })
+                    date_str = occurred_at[:10] if occurred_at else "记录"
+                    recalled_context_texts.append(f"- [m:{ref_id}] ({date_str} | {status_label}{conflict_tag}): {text}")
 
     # Record current observations into scenario history AFTER assembly for current turn
     state.setdefault("history_observations", []).extend(formed_observations)
@@ -1283,6 +1377,10 @@ async def run_scenario_step(
             raise
     response_text = resp.text.strip()
 
+    # 本轮观察在回合末落库（与生产 Observer 回合末触发一致）
+    if mem_svc is not None:
+        await _push_formed_to_memory(scenario, step, formed_observations, mem_svc)
+
     return {
         "turn_index": step.turn_index,
         "session_id": step.session_id,
@@ -1292,6 +1390,7 @@ async def run_scenario_step(
         "action_info": action_info,
         "observer_output": formed_observations,
         "assembled_refs": assembled_refs,
+        "gate_info": gate_info,
         "assistant_response": response_text,
         "model_used": active_model,
         "dry_run": False,
@@ -1303,6 +1402,7 @@ async def run_scenario(
     isolated_dir: Path,
     dry_run: bool = False,
     model_name: str | None = None,
+    memory_service: "RealMemoryService | None" = None,
 ) -> dict[str, Any]:
     """Execute all steps of a single scenario."""
     print(f"Running Scenario #{scenario.id:02d} [{scenario.category}] {scenario.title} ...")
@@ -1313,6 +1413,7 @@ async def run_scenario(
         "deletions": [],
         "interrupted_state": None,
         "history_observations": [],
+        "memory_service": memory_service,
     }
 
     # Initialize prerequisite domain context for single-query validation scenarios
@@ -1339,6 +1440,11 @@ async def run_scenario(
             "occurred_at": "2026-10-01 10:00:00",
             "event_id": "ref_27_prev",
         })
+
+    # 预置历史经真 facade 落库（供真召回装配读取），而非只留在进程内列表
+    if memory_service is not None and state["history_observations"]:
+        await _push_history_to_memory(scenario, state, memory_service)
+        await _run_reflection(scenario, memory_service)
 
     step_records: list[dict[str, Any]] = []
     for step in scenario.steps:
@@ -1376,16 +1482,27 @@ async def run_evaluation_suite(
     model_name: str | None = None,
 ) -> Path:
     """Run specified scenarios and save execution results."""
-    enforce_isolation(isolated_dir)
+    env_overrides = enforce_isolation(isolated_dir)
     results: list[dict[str, Any]] = []
+    mem_root = Path(env_overrides["MEMORYOS_DATA_ROOT"])
 
     for sc in scenarios:
-        res = await run_scenario(
-            scenario=sc,
-            isolated_dir=isolated_dir,
-            dry_run=dry_run,
-            model_name=model_name,
-        )
+        # 每个场景独立记忆库：避免场景间记忆互相污染（真评测必须隔离）
+        memory_service = None
+        if not dry_run:
+            memory_service = RealMemoryService(mem_root / f"scenario-{sc.id}").start()
+        try:
+            res = await run_scenario(
+                scenario=sc,
+                isolated_dir=isolated_dir,
+                dry_run=dry_run,
+                model_name=model_name,
+                memory_service=memory_service,
+            )
+        finally:
+            if memory_service is not None:
+                await memory_service.aclose()
+                memory_service.stop()
         results.append(res)
 
     suite_payload = {
