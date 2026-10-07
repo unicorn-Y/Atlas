@@ -21,11 +21,15 @@ Adapted for Atlas Memory V1 §S4:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
+import os
 import random
 import re
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Callable
 
 import structlog
@@ -667,7 +671,7 @@ def should_reflect(
     records: list[dict[str, Any]],
     *,
     count_threshold: int = DEFAULT_RECORD_COUNT_THRESHOLD,
-    token_threshold: int = DEFAULT_TOKEN_THRESHOLD,
+    token_threshold: int | dict[str, int] = DEFAULT_TOKEN_THRESHOLD,
     token_counter: Callable[[str], int] | None = None,
 ) -> bool:
     """Check if unorganized new memories meet the threshold to trigger reflection."""
@@ -677,7 +681,12 @@ def should_reflect(
         return True
     counter = token_counter or estimate_tokens
     total_tokens = sum(counter(extract_record_text(r)) for r in records)
-    return total_tokens >= token_threshold
+    eff_threshold = (
+        calculate_dynamic_threshold(token_threshold, total_tokens)
+        if isinstance(token_threshold, dict)
+        else get_max_threshold(token_threshold)
+    )
+    return total_tokens >= eff_threshold
 
 
 # ----------------------------------------------------------------------
@@ -698,6 +707,7 @@ class ReflectionResult:
     rejected_count: int = 0
     token_usage: dict[str, Any] = field(default_factory=dict)
     model_id: str | None = None
+    receipt: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -911,14 +921,177 @@ class MemoryReflector:
 
         # Handle UnifiedMemoryClient call method
         if hasattr(target_client, "call"):
-            res = await target_client.call("POST", "/v1/unified/consolidation:apply", json=payload)
+            res = target_client.call("POST", "/v1/unified/consolidation:apply", json=payload)
+            if inspect.isawaitable(res):
+                res = await res
             return res if isinstance(res, dict) else {}
 
         # Handle direct sqlite or synchronous mock client
         if hasattr(target_client, "apply_consolidation"):
-            return target_client.apply_consolidation(subject, operations, ctx=payload["context"])
+            res = target_client.apply_consolidation(subject, operations, ctx=payload["context"])
+            if inspect.isawaitable(res):
+                res = await res
+            return res if isinstance(res, dict) else {}
 
         raise TypeError(f"Unsupported client type for consolidation apply: {type(target_client)}")
+
+    def _build_and_persist_receipt(
+        self, result: ReflectionResult, total_candidates: int
+    ) -> dict[str, Any]:
+        """Construct receipt dictionary, log it, and optionally persist to disk."""
+        receipt_id = f"reflect-{uuid.uuid4().hex[:12]}"
+        receipt = {
+            "receipt_id": receipt_id,
+            "timestamp": self._now().isoformat(),
+            "subject": result.subject,
+            "reflected": result.reflected,
+            "skip_reason": result.skip_reason,
+            "total_candidates": total_candidates,
+            "model_id": result.model_id,
+            "proposed_count": len(result.proposed_operations),
+            "applied_count": result.applied_count,
+            "rejected_count": result.rejected_count,
+            "token_usage": result.token_usage,
+            "proposed_operations": result.proposed_operations,
+            "remote_results": result.remote_results,
+        }
+
+        log.info(
+            "memory_reflector.receipt",
+            receipt_id=receipt_id,
+            subject=result.subject,
+            reflected=result.reflected,
+            skip_reason=result.skip_reason,
+            total_candidates=total_candidates,
+            applied_count=result.applied_count,
+            rejected_count=result.rejected_count,
+        )
+
+        data_dir_env = os.environ.get("ATLAS_DATA_DIR")
+        if data_dir_env:
+            try:
+                receipts_dir = Path(data_dir_env) / "reflection_receipts"
+                receipts_dir.mkdir(parents=True, exist_ok=True)
+                receipt_file = receipts_dir / f"{receipt_id}.json"
+                receipt_file.write_text(
+                    json.dumps(receipt, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except Exception as exc:
+                log.warning("memory_reflector.receipt_persist_failed", error=str(exc))
+
+        return receipt
+
+    async def fetch_candidate_records(
+        self,
+        subject: str = "subject-default",
+        *,
+        status: str = "ACTIVE",
+        facet: str | None = None,
+        limit: int = 100,
+        client: Any = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch candidate records from MemoryOS via client/facade."""
+        target_client = client or self._client
+        if target_client is None:
+            return []
+
+        res: Any = None
+        if hasattr(target_client, "list_records"):
+            try:
+                res = target_client.list_records(status=status, facet=facet, limit=limit)
+            except TypeError:
+                res = target_client.list_records(limit=limit)
+            if inspect.isawaitable(res):
+                res = await res
+        elif hasattr(target_client, "call"):
+            params: dict[str, Any] = {"limit": limit}
+            if status:
+                params["status"] = status
+            if facet:
+                params["facet"] = facet
+            if subject:
+                params["memory_subject_id"] = subject
+            res = target_client.call("GET", "/v1/unified/records", params=params)
+            if inspect.isawaitable(res):
+                res = await res
+
+        if isinstance(res, dict):
+            items = list(res.get("items") or [])
+        elif isinstance(res, list):
+            items = list(res)
+        else:
+            items = []
+
+        if subject:
+            items = [
+                r for r in items
+                if not isinstance(r, dict) or r.get("memory_subject_id") in (None, subject)
+            ]
+        # Filter for durable memory records (memory:*) when present, as consolidation
+        # operates on durable memories rather than transient episode raw event entries.
+        memory_items = [r for r in items if str(r.get("record_ref", "")).startswith("memory:")]
+        if memory_items:
+            return memory_items
+        return items
+
+    async def run_reflection_cycle(
+        self,
+        subject: str = "subject-default",
+        *,
+        force: bool = False,
+        auto_apply: bool = True,
+        count_threshold: int = DEFAULT_RECORD_COUNT_THRESHOLD,
+        token_threshold: int | dict[str, int] = DEFAULT_TOKEN_THRESHOLD,
+        current_profile: str | None = None,
+        existing_rollups: list[str] | None = None,
+        client: Any = None,
+        ctx: dict[str, Any] | None = None,
+    ) -> ReflectionResult:
+        """Run an end-to-end reflection cycle: GET records -> Model proposes -> POST apply -> log/receipt."""
+        records = await self.fetch_candidate_records(subject, client=client)
+        result = await self.reflect(
+            subject,
+            records,
+            current_profile=current_profile,
+            existing_rollups=existing_rollups,
+            auto_apply=auto_apply,
+            client=client,
+            ctx=ctx,
+            force=force,
+            count_threshold=count_threshold,
+            token_threshold=token_threshold,
+        )
+        return result
+
+    async def trigger_if_threshold_met(
+        self,
+        subject: str = "subject-default",
+        *,
+        auto_apply: bool = True,
+        count_threshold: int = DEFAULT_RECORD_COUNT_THRESHOLD,
+        token_threshold: int | dict[str, int] = DEFAULT_TOKEN_THRESHOLD,
+        client: Any = None,
+        ctx: dict[str, Any] | None = None,
+    ) -> ReflectionResult | None:
+        """Check unorganized records threshold and run reflection if met."""
+        records = await self.fetch_candidate_records(subject, client=client)
+        if not should_reflect(
+            records,
+            count_threshold=count_threshold,
+            token_threshold=token_threshold,
+            token_counter=self._token_counter,
+        ):
+            return None
+        return await self.run_reflection_cycle(
+            subject=subject,
+            force=True,
+            auto_apply=auto_apply,
+            count_threshold=count_threshold,
+            token_threshold=token_threshold,
+            client=client,
+            ctx=ctx,
+        )
 
     async def reflect(
         self,
@@ -932,7 +1105,7 @@ class MemoryReflector:
         ctx: dict[str, Any] | None = None,
         force: bool = False,
         count_threshold: int = DEFAULT_RECORD_COUNT_THRESHOLD,
-        token_threshold: int = DEFAULT_TOKEN_THRESHOLD,
+        token_threshold: int | dict[str, int] = DEFAULT_TOKEN_THRESHOLD,
     ) -> ReflectionResult:
         """Run reflection over candidate records, validating and optionally applying operations."""
         if not force and not should_reflect(
@@ -941,12 +1114,14 @@ class MemoryReflector:
             token_threshold=token_threshold,
             token_counter=self._token_counter,
         ):
-            return ReflectionResult(
+            res = ReflectionResult(
                 subject=subject,
                 reflected=False,
                 skip_reason="BELOW_THRESHOLD",
                 proposed_operations=[],
             )
+            res.receipt = self._build_and_persist_receipt(res, len(records))
+            return res
 
         accepted_ops, rejected_ops, token_usage, model_id = await self.propose_operations(
             records,
@@ -965,7 +1140,7 @@ class MemoryReflector:
             applied_count = int(remote_results.get("accepted_count") or 0)
             remote_rejected = int(remote_results.get("rejected_count") or 0)
 
-        return ReflectionResult(
+        res = ReflectionResult(
             subject=subject,
             reflected=True,
             proposed_operations=[*accepted_ops, *rejected_ops],
@@ -977,3 +1152,59 @@ class MemoryReflector:
             token_usage=token_usage,
             model_id=model_id,
         )
+        res.receipt = self._build_and_persist_receipt(res, len(records))
+        return res
+
+
+# ----------------------------------------------------------------------
+# Background Idle / Daily Trigger & Singletons
+# ----------------------------------------------------------------------
+
+_GLOBAL_REFLECTOR: MemoryReflector | None = None
+
+
+def get_memory_reflector() -> MemoryReflector | None:
+    return _GLOBAL_REFLECTOR
+
+
+def set_memory_reflector(reflector: MemoryReflector | None) -> None:
+    global _GLOBAL_REFLECTOR
+    _GLOBAL_REFLECTOR = reflector
+
+
+async def trigger_reflection_if_needed(
+    subject: str = "subject-default",
+    *,
+    reflector: MemoryReflector | None = None,
+    client: Any = None,
+) -> ReflectionResult | None:
+    """Helper to check threshold and trigger reflection if met."""
+    target = reflector or _GLOBAL_REFLECTOR
+    if target is None:
+        return None
+    return await target.trigger_if_threshold_met(subject=subject, client=client)
+
+
+async def reflector_idle_loop(
+    reflector: MemoryReflector,
+    *,
+    check_interval: float = 60.0,
+    subject: str = "subject-default",
+) -> None:
+    """Server lifespan background task running periodic idle reflection checks."""
+    log.info("memory_reflector.idle_loop_started", interval=check_interval)
+    while True:
+        try:
+            await asyncio.sleep(check_interval)
+            res = await reflector.trigger_if_threshold_met(subject=subject)
+            if res and res.reflected:
+                log.info(
+                    "memory_reflector.idle_cycle_completed",
+                    subject=subject,
+                    applied_count=res.applied_count,
+                )
+        except asyncio.CancelledError:
+            log.info("memory_reflector.idle_loop_cancelled")
+            raise
+        except Exception as exc:
+            log.warning("memory_reflector.idle_cycle_error", error=str(exc), exc_info=True)

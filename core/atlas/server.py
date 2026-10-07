@@ -250,6 +250,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     observer_drain_requested = False
     memory_observer = None
     observer_drain = None
+    memory_reflector = None
+    reflector_idle_task: asyncio.Task[None] | None = None
     memoryos_lifecycle = None
     routes_before_lifespan_extensions = len(app.routes)
     startup_aborted = False
@@ -312,6 +314,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                         capture_service, after_flush_tick=schedule_observer_drain,
                     ),
                     name="unified-capture-flush",
+                )
+                from atlas.memory.reflector import (
+                    MemoryReflector,
+                    reflector_idle_loop,
+                    set_memory_reflector,
+                )
+
+                memory_reflector = MemoryReflector(
+                    model_mgr, get_config(), client=unified_memory,
+                )
+                set_memory_reflector(memory_reflector)
+                reflector_idle_task = asyncio.create_task(
+                    reflector_idle_loop(memory_reflector),
+                    name="unified-memory-reflector-idle",
                 )
         memory = MemoryStore(unified=unified_memory)
         await memory.init()
@@ -758,6 +774,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 observer_drain_task.cancel()
                 await asyncio.gather(observer_drain_task, return_exceptions=True)
                 log.warning("memory.observer_shutdown_drain_timeout")
+        if reflector_idle_task is not None:
+            reflector_idle_task.cancel()
+            await asyncio.gather(reflector_idle_task, return_exceptions=True)
+        try:
+            from atlas.memory.reflector import set_memory_reflector
+            set_memory_reflector(None)
+        except Exception:
+            pass
         try:
             from atlas.memory.capture import reset_capture_service
 

@@ -1336,20 +1336,43 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
             exc_info=True,
         )
     try:
-        reflection = (
-            None if request.worker or unified_enabled
-            else await agent._reflection.reflect(
-                conversation_id=request.conversation_id,
-                goal=state.message,
-                task_result=full_response,
-                source_run_id=runtime.run_id,
-                reviewer_evidence=[
-                    item for item in agent.trajectory_reviewer.evidence
-                    if item.get("goal") == state.message
-                ],
-                memory_candidates=memory_candidates,
-            )
-        )
+        reflection = None
+        if not request.worker:
+            if unified_enabled:
+                from atlas.memory.reflector import (
+                    MemoryReflector,
+                    get_memory_reflector,
+                )
+
+                reflector = getattr(agent, "_memory_reflector", None) or get_memory_reflector()
+                if reflector is None and hasattr(agent, "_model_mgr"):
+                    facade = getattr(agent._memory, "_unified", None) or (
+                        agent._memory._unified_or_none()
+                        if hasattr(agent._memory, "_unified_or_none")
+                        else None
+                    )
+                    if facade is not None:
+                        reflector = MemoryReflector(agent._model_mgr, client=facade)
+
+                if reflector is not None:
+                    subject = getattr(request, "subject", None) or "subject-default"
+                    reflection_result = await reflector.trigger_if_threshold_met(
+                        subject=subject, auto_apply=True
+                    )
+                    if reflection_result and reflection_result.reflected:
+                        reflection = reflection_result.to_dict()
+            else:
+                reflection = await agent._reflection.reflect(
+                    conversation_id=request.conversation_id,
+                    goal=state.message,
+                    task_result=full_response,
+                    source_run_id=runtime.run_id,
+                    reviewer_evidence=[
+                        item for item in agent.trajectory_reviewer.evidence
+                        if item.get("goal") == state.message
+                    ],
+                    memory_candidates=memory_candidates,
+                )
         if reflection is not None:
             yield {"type": "memory_reflection", "reflection": reflection}
     except Exception as exc:
