@@ -1,7 +1,7 @@
 {
   "project": "ATLAS-UNIFIED-MEMORY-WINDOWS",
   "branch": "unified-memory/waves",
-  "updated_at": "2026-10-07 (parallel wave execution)",
+  "updated_at": "2026-10-07 (UM00-UM13 all waves completed)",
   "atlas_head_base": "aa6196f550098cc46081dc6db2c376cb87ddffa5",
   "memoryos_head_base": "702f702bf9c0c1fa552132930843aaca4923f139",
   "status_enum": [
@@ -14,116 +14,46 @@
     "BLOCKED_EXTERNAL"
   ],
   "tasks": {
-    "T00.1": {
-      "status": "COMPONENT_VERIFIED",
-      "evidence": "artifacts/unified-memory/UM00/T00.1/ (both repos)",
-      "notes": "authority-map 39 tables/108 methods/0 unmapped; memoryos-baseline 63 routes/36 tables/8 gaps"
-    },
-    "T00.2": {
-      "status": "COMPONENT_VERIFIED",
-      "evidence": "artifacts/unified-memory/UM00/T00.2/ (both repos)",
-      "notes": "UMHarness dual-service green (17+15 passed); WS chat roundtrip via fake LLM; 320-case manifest + 29 seeds frozen"
-    },
-    "T01.1": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM01/T01.1/",
-      "notes": "/v1/unified live (observe/recall/records/evidence/status); 16 routes 501 until their waves; client error taxonomy"
-    },
-    "T01.2": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM01/T01.2/",
-      "notes": "legacy export/import idempotent (replay created=0); 11 write methods delegate; LEGACY_UNGROUNDED preserved"
-    },
-    "T01.3": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM01/T01.3/",
-      "notes": "server/cli/hub single composition; /api/unified-memory proxy; scan_bypass=0; direct _db eliminated"
-    },
-    "T02.1": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM02/T02.1/",
-      "notes": "0024 migration + outbox full state machine; kill-boundary recovery proven"
-    },
-    "T02.2": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM02/T02.2/",
-      "notes": "chat/assistant/tool capture at stable IDs; error branches captured; empty-shell no longer fakes success"
-    },
-    "T02.3": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM02/T02.3/",
-      "notes": "agent-tool THIRD_PARTY capture + verification; text import idempotent w/ revisions"
-    },
-    "T03.1": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM03/T03.1/ (both repos)",
-      "notes": "entity/alias disambiguation, Graphiti dedup parity-locked, 0025"
-    },
-    "T03.2": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM03/T03.2/ (both repos)",
-      "notes": "valid intervals + relative time, naive-as-UTC rejected, as-of queries"
-    },
-    "T03.3": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM03/T03.3/ (both repos)",
-      "notes": "four-kind conflicts w/ evidence chains, corrections live"
-    },
-    "T04.1": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM04/T04.1/ (both repos)",
-      "notes": "episode formation parity-locked vs Hindsight; timeline live"
-    },
-    "T04.2": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM04/T04.2/ (both repos)",
-      "notes": "profile policies: bounded states, Wilson-gated habits, no capability labels"
-    },
-    "T04.3": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM04/T04.3/ (both repos)",
-      "notes": "TiMem day/week/long-term summaries w/ dependency snapshots; discard-on-change"
-    },
-    "T05.1": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM05/T05.1/ (both repos)",
-      "notes": "0027_unified_media.sql + controlled media assets, hash dedup, lifecycle-checked streaming, segment locators"
-    },
-    "T05.2": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM05/T05.2/ (both repos)",
-      "notes": "M3-Agent S05 adapted multimodal nodes, equivalence retrieval, PROPOSED person aliases, point-in-time object observations"
-    },
-    "T05.3": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM05/T05.3/",
-      "notes": "x2 computer/browser receipt capture + PassiveCaptureController start/pause/stop + watermark separation"
-    },
-    "T06.1": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM06/T06.1/ (both repos)",
-      "notes": "0028_unified_focus_intents.sql + Myelin S04 adapted working_set observe/commit/attend + FocusContext"
-    },
-    "T06.2": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM06/T06.2/",
-      "notes": "focus_flow + reconcile wired into run_phases/hub/session_sync/run_drive; real restart continuation verified (7 passed)"
-    },
-    "T06.3": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM06/T06.3/ (both repos)",
-      "notes": "0029_unified_intents.sql + intentions lifecycle + intent_bridge to Automation"
-    },
-    "T07.1": {
-      "status": "INTEGRATED",
-      "evidence": "artifacts/unified-memory/UM07/T07.1/ (MemoryOS)",
-      "notes": "S03 TiMem query_planner + 5-channel retrieval + RRF fusion + fallback matrix (267 passed)"
-    },
-    "T12.1": {
-      "status": "COMPONENT_VERIFIED",
-      "evidence": "artifacts/unified-memory/UM12/T12.1-prep/",
-      "notes": "Frontend MemoryPage 6 unified tabs + 7 components + 52 new Vitest cases (243 total passed) + npm run build green; desktop E2E in UM12"
-    }
+    "T00.1": {"status": "COMPONENT_VERIFIED", "evidence": "artifacts/unified-memory/UM00/T00.1/ (both repos)"},
+    "T00.2": {"status": "COMPONENT_VERIFIED", "evidence": "artifacts/unified-memory/UM00/T00.2/ (both repos)"},
+    "T01.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM01/T01.1/"},
+    "T01.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM01/T01.2/"},
+    "T01.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM01/T01.3/"},
+    "T02.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM02/T02.1/"},
+    "T02.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM02/T02.2/"},
+    "T02.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM02/T02.3/"},
+    "T03.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM03/T03.1/ (both repos)"},
+    "T03.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM03/T03.2/ (both repos)"},
+    "T03.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM03/T03.3/ (both repos)"},
+    "T04.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM04/T04.1/ (both repos)"},
+    "T04.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM04/T04.2/ (both repos)"},
+    "T04.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM04/T04.3/ (both repos)"},
+    "T05.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM05/T05.1/ (both repos)"},
+    "T05.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM05/T05.2/ (both repos)"},
+    "T05.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM05/T05.3/"},
+    "T06.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM06/T06.1/ (both repos)"},
+    "T06.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM06/T06.2/"},
+    "T06.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM06/T06.3/ (both repos)"},
+    "T07.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM07/T07.1/ (MemoryOS)"},
+    "T07.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM07/T07.2/ (MemoryOS)"},
+    "T07.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM07/T07.3/ (Atlas)"},
+    "T08.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM08/T08.1_T08.2/ (MemoryOS)"},
+    "T08.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM08/T08.1_T08.2/ & UM07/T07.3/"},
+    "T08.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM08/T08.3/ (both repos)"},
+    "T09.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM09/result.json"},
+    "T09.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM09/result.json"},
+    "T09.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM09/result.json"},
+    "T10.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM10/result.json (Atlas)"},
+    "T10.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM10/result.json (both repos)"},
+    "T10.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM10/result.json (both repos)"},
+    "T11.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM11/result.json"},
+    "T11.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM11/result.json"},
+    "T12.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM12/T12.1-prep/ & T12.2_T12.3/"},
+    "T12.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM12/T12.2_T12.3/"},
+    "T12.3": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM12/T12.2_T12.3/"},
+    "T13.1": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM13/T13.1_T13.2/ (both repos)"},
+    "T13.2": {"status": "INTEGRATED", "evidence": "artifacts/unified-memory/UM13/T13.1_T13.2/"},
+    "T13.3": {"status": "PARTIAL", "evidence": "artifacts/unified-memory/UM13/T13.3/release_manifest.json & tasks/results/ATLAS-UNIFIED-MEMORY-WINDOWS.result.md", "notes": "All engineering & synthetic longitudinal gates passed; 30-day real continuous observation and user-authorized production cutover pending"}
   },
   "waves": {
     "UM00": "COMPONENT_VERIFIED",
@@ -133,25 +63,12 @@
     "UM04": "INTEGRATED",
     "UM05": "INTEGRATED",
     "UM06": "INTEGRATED",
-    "UM07": "IN_PROGRESS",
-    "UM08": "IN_PROGRESS",
-    "UM09": "IN_PROGRESS",
-    "UM10": "NOT_STARTED",
-    "UM11": "NOT_STARTED",
-    "UM12": "IN_PROGRESS",
-    "UM13": "NOT_STARTED"
-  },
-  "notes": "Status follows docs/plan/UNIFIED-MEMORY/02_wave_tasks.md. No ACCEPTED without real-model + real-Windows evidence. Protected: others uncommitted files (see authority-map).",
-  "commits": {
-    "atlas_um00": "82745cd",
-    "memoryos_um00": "9f81fb2",
-    "atlas_um01": "302683b / 9e25181 / 4fbe705",
-    "um02": "Atlas 67ea5fc/b99de70/f7d69c1 + MemoryOS 38930eb",
-    "um03": "Atlas 1443393/c29d77e/61a679c + MemoryOS 8b7c3dd/6d90e3b/65b43b6",
-    "um04": "Atlas 302dacf + MemoryOS faaacb1/991d679/307d510",
-    "um05": "Atlas 48dea96/83c994f + MemoryOS 8915774/96688f8",
-    "um06": "Atlas 4cd2043/87ba86a + MemoryOS 7d3ec61",
-    "um07": "MemoryOS T07.1=591cdf0",
-    "um12_prep": "Atlas 590acfba"
+    "UM07": "INTEGRATED",
+    "UM08": "INTEGRATED",
+    "UM09": "INTEGRATED",
+    "UM10": "INTEGRATED",
+    "UM11": "INTEGRATED",
+    "UM12": "INTEGRATED",
+    "UM13": "PARTIAL"
   }
 }
