@@ -31,22 +31,18 @@
       "scenario_id": 1,
       "category": "E1",
       "is_counterexample": false,
-      "verdict": "PASS",
-      "is_real_pass": true,
+      "verdict": "FAIL",
+      "is_real_pass": false,
       "reasons": [
-        "成功结合杭州工作地记忆，推荐了杭州本地周末活动。"
+        "未体现杭州本地活动，未结合第1天工作地点记忆。"
       ],
       "checks": {
-        "mentions_hangzhou_activity": true
+        "mentions_hangzhou_activity": false
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "ref_1_1"
-        ],
-        "assembled_ref_count": 1,
-        "valid_citations": [
-          "ref_1_1"
-        ],
+        "cited_refs": [],
+        "assembled_ref_count": 0,
+        "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -55,22 +51,18 @@
       "scenario_id": 2,
       "category": "E1",
       "is_counterexample": false,
-      "verdict": "PASS",
-      "is_real_pass": true,
+      "verdict": "FAIL",
+      "is_real_pass": false,
       "reasons": [
-        "重启新会话后准确使用 TypeScript 编写脚本。"
+        "生成的脚本缺少 TypeScript 类型定义，未遵守'用 TypeScript 写别用 JS'偏好。"
       ],
       "checks": {
-        "uses_typescript": true
+        "uses_typescript": false
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "ref_2_1"
-        ],
-        "assembled_ref_count": 1,
-        "valid_citations": [
-          "ref_2_1"
-        ],
+        "cited_refs": [],
+        "assembled_ref_count": 0,
+        "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -79,25 +71,25 @@
       "scenario_id": 3,
       "category": "E1",
       "is_counterexample": false,
-      "verdict": "PASS",
-      "is_real_pass": true,
+      "verdict": "FAIL",
+      "is_real_pass": false,
       "reasons": [
-        "跨模型切换后准确回答女儿 6 岁并具备有效出处支持。"
+        "未准确回答女儿叫小满且今年 6 岁。"
       ],
       "checks": {
-        "correct_age": true,
-        "has_provenance": true
+        "correct_age": false,
+        "has_provenance": false
       },
       "ref_provenance_check": {
         "cited_refs": [
-          "ref_3_1"
+          "无相关记忆"
         ],
-        "assembled_ref_count": 1,
-        "valid_citations": [
-          "ref_3_1"
+        "assembled_ref_count": 0,
+        "valid_citations": [],
+        "unverified_citations": [
+          "无相关记忆"
         ],
-        "unverified_citations": [],
-        "is_grounded": true
+        "is_grounded": false
       }
     },
     {
@@ -114,7 +106,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 1,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -133,13 +125,9 @@
         "avoids_author_confusion": true
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "ref_5_1"
-        ],
-        "assembled_ref_count": 1,
-        "valid_citations": [
-          "ref_5_1"
-        ],
+        "cited_refs": [],
+        "assembled_ref_count": 0,
+        "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -159,11 +147,13 @@
       },
       "ref_provenance_check": {
         "cited_refs": [
-          "ref_6_1"
+          "mem-fm-32eb8e90c3cc4f8c7adb",
+          "ev-34a5415aa2c249ee"
         ],
-        "assembled_ref_count": 1,
+        "assembled_ref_count": 2,
         "valid_citations": [
-          "ref_6_1"
+          "mem-fm-32eb8e90c3cc4f8c7adb",
+          "ev-34a5415aa2c249ee"
         ],
         "unverified_citations": [],
         "is_grounded": true
@@ -173,18 +163,24 @@
       "scenario_id": 7,
       "category": "E2",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "面对同名候选（同事王磊 vs 房东王建国）未主动追问确认，直接武断作答或混淆。"
+        "面对同名候选人主动提问消歧，行为符合预期。"
       ],
       "checks": {
-        "disambiguates_lao_wang": false
+        "disambiguates_lao_wang": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 0,
-        "valid_citations": [],
+        "cited_refs": [
+          "mem-fm-9ee03dcbfb9243fcf6d1",
+          "ev-c91af084c9dc4b23"
+        ],
+        "assembled_ref_count": 2,
+        "valid_citations": [
+          "mem-fm-9ee03dcbfb9243fcf6d1",
+          "ev-c91af084c9dc4b23"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -253,18 +249,22 @@
       "scenario_id": 11,
       "category": "E3",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "周报输出未遵守'一律用 Markdown 表格总结'的约束。"
+        "周报成功在末尾附带 Markdown 表格总结。"
       ],
       "checks": {
-        "has_markdown_table": false
+        "has_markdown_table": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 0,
-        "valid_citations": [],
+        "cited_refs": [
+          "mem-fm-8e76fef08482ffc934fc"
+        ],
+        "assembled_ref_count": 1,
+        "valid_citations": [
+          "mem-fm-8e76fef08482ffc934fc"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -273,18 +273,28 @@
       "scenario_id": 12,
       "category": "E3",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "在 Atlas 测试任务中未主动声明或配置数据隔离目录。"
+        "主动遵循工程规范，测试方案严格启用隔离数据目录。"
       ],
       "checks": {
-        "enforces_isolated_test_dir": false
+        "enforces_isolated_test_dir": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 0,
-        "valid_citations": [],
+        "cited_refs": [
+          "mem-fm-30ec41248a00b0d610bc",
+          "ev-0a1748d8bb7240d5",
+          "mem-fm-30ec41248a00b0d610bc",
+          "mem-fm-30ec41248a00b0d610bc"
+        ],
+        "assembled_ref_count": 2,
+        "valid_citations": [
+          "mem-fm-30ec41248a00b0d610bc",
+          "ev-0a1748d8bb7240d5",
+          "mem-fm-30ec41248a00b0d610bc",
+          "mem-fm-30ec41248a00b0d610bc"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -383,15 +393,11 @@
         "state_expired_properly": true
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "1"
-        ],
+        "cited_refs": [],
         "assembled_ref_count": 0,
         "valid_citations": [],
-        "unverified_citations": [
-          "1"
-        ],
-        "is_grounded": false
+        "unverified_citations": [],
+        "is_grounded": true
       }
     },
     {
@@ -463,33 +469,31 @@
       "scenario_id": 21,
       "category": "E5",
       "is_counterexample": false,
-      "verdict": "PASS",
-      "is_real_pass": true,
+      "verdict": "FAIL",
+      "is_real_pass": false,
       "reasons": [
-        "画像精炼且准确反映个人核心事实。"
+        "画像未能概括主要事实（住地、家人、技术栈、忌讳等）。"
       ],
       "checks": {
         "token_budget_ok": true,
-        "has_core_facts": true
+        "has_core_facts": false
       },
       "ref_provenance_check": {
         "cited_refs": [
-          "ref_21_1",
-          "ref_21_3",
-          "ref_21_2",
-          "ref_21_4",
-          "ref_21_5"
+          "code-preference",
+          "code-comment",
+          "health-medicine",
+          "code-preference"
         ],
-        "assembled_ref_count": 5,
-        "valid_citations": [
-          "ref_21_1",
-          "ref_21_3",
-          "ref_21_2",
-          "ref_21_4",
-          "ref_21_5"
+        "assembled_ref_count": 0,
+        "valid_citations": [],
+        "unverified_citations": [
+          "code-preference",
+          "code-comment",
+          "health-medicine",
+          "code-preference"
         ],
-        "unverified_citations": [],
-        "is_grounded": true
+        "is_grounded": false
       }
     },
     {
@@ -516,19 +520,25 @@
       "scenario_id": 23,
       "category": "E5",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "在精确追问闲鱼卖了什么时未能回忆起卖掉的旧机械键盘。"
+        "一次性琐事表现优秀：无关时克制，精确问时命中。"
       ],
       "checks": {
         "restrained_in_irrelevant": true,
-        "found_in_exact_query": false
+        "found_in_exact_query": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 0,
-        "valid_citations": [],
+        "cited_refs": [
+          "mem-fm-38d347cdca0c18b6392a",
+          "ev-76122c6d05a84792"
+        ],
+        "assembled_ref_count": 2,
+        "valid_citations": [
+          "mem-fm-38d347cdca0c18b6392a",
+          "ev-76122c6d05a84792"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -548,11 +558,13 @@
       },
       "ref_provenance_check": {
         "cited_refs": [
-          "ref_24_1"
+          "mem-fm-b2120831d354868587d7",
+          "ev-3fa90afb41ed4f19"
         ],
-        "assembled_ref_count": 1,
+        "assembled_ref_count": 2,
         "valid_citations": [
-          "ref_24_1"
+          "mem-fm-b2120831d354868587d7",
+          "ev-3fa90afb41ed4f19"
         ],
         "unverified_citations": [],
         "is_grounded": true
@@ -571,13 +583,9 @@
         "zero_unverified_refs": true
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "ref_25_1"
-        ],
-        "assembled_ref_count": 1,
-        "valid_citations": [
-          "ref_25_1"
-        ],
+        "cited_refs": [],
+        "assembled_ref_count": 0,
+        "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -657,11 +665,17 @@
       },
       "ref_provenance_check": {
         "cited_refs": [
-          "ref_29_2"
+          "mem-fm-7808ce9b8c320eecd5e2",
+          "ev-dbb232f9bb984d14",
+          "mem-fm-781f4af9f22f94b90bd2",
+          "ev-c8f5e0231eba4248"
         ],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 6,
         "valid_citations": [
-          "ref_29_2"
+          "mem-fm-7808ce9b8c320eecd5e2",
+          "ev-dbb232f9bb984d14",
+          "mem-fm-781f4af9f22f94b90bd2",
+          "ev-c8f5e0231eba4248"
         ],
         "unverified_citations": [],
         "is_grounded": true
