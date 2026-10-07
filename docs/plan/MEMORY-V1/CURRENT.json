@@ -25,9 +25,9 @@
     "controller": "Hermes AI计划",
     "round": 5,
     "pushed": {
-      "atlas": "8a300675 (memory-v1)",
-      "memoryos": "cbabd63 (memory-v1)",
-      "note": "I3 的推送早于 I2/R2 落地，总控已手工补推两仓至最新"
+      "atlas": "3d544e9d (memory-v1)",
+      "memoryos": "62422cb (memory-v1)",
+      "note": "2026-10-08 总控(AI计划)接管：N1b(a24ad543)+N2b(62422cb)+S8真评测返工(344ef58a/3d544e9d) 已双仓推送"
     },
     "round5_packages": ["J1 重跑S8评测", "I4 补齐D/H/S6包报告", "J3 E7记忆页面后端闭环验证"],
     "max_subagents": 3,
