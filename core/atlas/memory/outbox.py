@@ -326,7 +326,22 @@ async def flush_once(outbox: OperationalOutbox, facade: Any, *,
                             "state": STATE_RETRYABLE,
                             "retry_in_seconds": backoff, "error": str(exc)})
             continue
-        except UnifiedMemoryError as exc:  # 未知受控错误：保守可重试
+        except UnifiedMemoryError as exc:  # 410/423 或 SOURCE_BARRIERED/RECORD_ERASED → BLOCKED；其余受控错误保守重试
+            if getattr(exc, "status_code", None) in (409, 410, 422, 423, 401, 403, 501) or getattr(
+                exc, "code", None
+            ) in (
+                "ERASURE_BARRIER_ACTIVE",
+                "SOURCE_BARRIERED",
+                "SOURCE_DELETED",
+                "RECORD_ERASED",
+                "EVIDENCE_GONE",
+                "MEDIA_GONE",
+            ):
+                outbox.mark_blocked(source_event_id, f"{type(exc).__name__}: {exc}")
+                counts["blocked"] += 1
+                results.append({"source_event_id": source_event_id,
+                                "state": STATE_BLOCKED, "error": str(exc)})
+                continue
             backoff = min(backoff_seconds * (2 ** max(0, row["attempts"] - 1)),
                           max_backoff_seconds)
             outbox.mark_retryable(source_event_id, str(exc), backoff)
