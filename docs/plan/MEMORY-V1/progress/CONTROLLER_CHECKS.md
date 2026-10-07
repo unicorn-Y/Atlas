@@ -209,3 +209,12 @@ To github.com:unicorn-Y/Atlas.git
 - Atlas: **8 failed / 2336 passed / 4 skipped**。7 个为基线既有（lint_gate/model_router/plugins/route_snapshot/subprocess_encoding/repair_baseline×2），第 8 个是**新暴露的计划冲突**：
   `tests/unified_memory/test_baseline_inventory.py::test_env_manifest_records_both_repos_and_forbidden_roots`
   断言「受保护在途文件必须仍在 dirty 清单」，但 I3 按计划提交了它们 → 断言失效。属**测试与计划冲突**（非代码 bug）。待收尾包处理。
+
+### S8 评测器重大缺陷（2026-10-08 02:4x，总控亲自读码确认）
+F 建的 `scripts/memory_v1/eval_scenarios.py` **两种跑法都没经过真实产品管线**：
+- `--dry-run`（1009-1037）：直接返回 `[DRY-RUN RESPONSE]` 占位串 → 11/30、38.1% 就是这个跑法出来的，**无意义**。
+- 「live」路径（1039-1111）：虽用真 ModelManager/MemoryObserver，但
+  - 上下文装配是 `for prev_obs in state["history_observations"]` 自维护假历史（1069），**绕过 `/v1/unified/recall` 与 `recall_context.py`**；
+  - messages 自己手拼（1086-1094），**不走 run_phases**；
+  - 直接 `mm.chat()`（1096）。
+即评测器测的是「平行仿真」，不是产品。**结论：S8 当前数字不可作为 V1 达标依据**。K1 已按此方向改接真管线（run_phases 全链）。

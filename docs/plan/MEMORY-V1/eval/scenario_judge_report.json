@@ -1,26 +1,26 @@
 {
   "summary": {
     "total_scenarios_evaluated": 30,
-    "total_passed": 11,
-    "total_failed": 19,
+    "total_passed": 21,
+    "total_failed": 9,
     "e1_e4_e6": {
       "total": 21,
-      "passed": 8,
-      "pass_rate": 0.381,
+      "passed": 15,
+      "pass_rate": 0.7143,
       "threshold_met": false,
       "required_rate": 0.9
     },
     "counterexamples_strict": {
       "total": 7,
-      "passed": 5,
-      "pass_rate": 0.7143,
+      "passed": 6,
+      "pass_rate": 0.8571,
       "threshold_met": false,
       "required_rate": 1.0
     },
     "e5_e7_e8": {
       "total": 9,
-      "passed": 3,
-      "pass_rate": 0.3333,
+      "passed": 6,
+      "pass_rate": 0.6667,
       "threshold_met": false,
       "required_rate": 1.0
     },
@@ -31,18 +31,22 @@
       "scenario_id": 1,
       "category": "E1",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "未体现杭州本地活动，未结合第1天工作地点记忆。"
+        "成功结合杭州工作地记忆，推荐了杭州本地周末活动。"
       ],
       "checks": {
-        "mentions_hangzhou_activity": false
+        "mentions_hangzhou_activity": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 2,
-        "valid_citations": [],
+        "cited_refs": [
+          "ref_1_1"
+        ],
+        "assembled_ref_count": 1,
+        "valid_citations": [
+          "ref_1_1"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -51,18 +55,22 @@
       "scenario_id": 2,
       "category": "E1",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "生成的脚本缺少 TypeScript 类型定义，未遵守'用 TypeScript 写别用 JS'偏好。"
+        "重启新会话后准确使用 TypeScript 编写脚本。"
       ],
       "checks": {
-        "uses_typescript": false
+        "uses_typescript": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 2,
-        "valid_citations": [],
+        "cited_refs": [
+          "ref_2_1"
+        ],
+        "assembled_ref_count": 1,
+        "valid_citations": [
+          "ref_2_1"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -71,19 +79,23 @@
       "scenario_id": 3,
       "category": "E1",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "未准确回答女儿叫小满且今年 6 岁。"
+        "跨模型切换后准确回答女儿 6 岁并具备有效出处支持。"
       ],
       "checks": {
-        "correct_age": false,
+        "correct_age": true,
         "has_provenance": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 2,
-        "valid_citations": [],
+        "cited_refs": [
+          "ref_3_1"
+        ],
+        "assembled_ref_count": 1,
+        "valid_citations": [
+          "ref_3_1"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -102,7 +114,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 1,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -121,9 +133,13 @@
         "avoids_author_confusion": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 2,
-        "valid_citations": [],
+        "cited_refs": [
+          "ref_5_1"
+        ],
+        "assembled_ref_count": 1,
+        "valid_citations": [
+          "ref_5_1"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -132,19 +148,23 @@
       "scenario_id": 6,
       "category": "E2",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "未回忆起与老王聊的内容是 Atlas 融资。"
+        "准确回忆起与老王聊融资并包含日期信息。"
       ],
       "checks": {
-        "remembers_funding": false,
+        "remembers_funding": true,
         "provides_date": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 2,
-        "valid_citations": [],
+        "cited_refs": [
+          "ref_6_1"
+        ],
+        "assembled_ref_count": 1,
+        "valid_citations": [
+          "ref_6_1"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -163,7 +183,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 3,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -183,7 +203,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -193,17 +213,17 @@
       "scenario_id": 9,
       "category": "E2",
       "is_counterexample": true,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "【反例违规】未发生的日本之行被虚假捏造，产生记忆幻觉。"
+        "【反例通过】诚实告知没有相关日本旅行记录，杜绝幻觉。"
       ],
       "checks": {
-        "admits_no_japan_memory": false
+        "admits_no_japan_memory": true
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 1,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -223,7 +243,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -243,7 +263,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -263,7 +283,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -283,7 +303,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 1,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -303,7 +323,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 1,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -323,7 +343,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -344,7 +364,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 3,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -363,11 +383,15 @@
         "state_expired_properly": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 2,
+        "cited_refs": [
+          "1"
+        ],
+        "assembled_ref_count": 0,
         "valid_citations": [],
-        "unverified_citations": [],
-        "is_grounded": true
+        "unverified_citations": [
+          "1"
+        ],
+        "is_grounded": false
       }
     },
     {
@@ -384,7 +408,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 3,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -394,20 +418,24 @@
       "scenario_id": 19,
       "category": "E4",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "未回答当前使用的电脑是 Mac。"
+        "准确反映设备更换事实（现用 Mac）。"
       ],
       "checks": {
-        "answers_mac": false
+        "answers_mac": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 2,
+        "cited_refs": [
+          "1"
+        ],
+        "assembled_ref_count": 0,
         "valid_citations": [],
-        "unverified_citations": [],
-        "is_grounded": true
+        "unverified_citations": [
+          "1"
+        ],
+        "is_grounded": false
       }
     },
     {
@@ -425,7 +453,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 6,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -435,19 +463,31 @@
       "scenario_id": 21,
       "category": "E5",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "画像未能概括主要事实（住地、家人、技术栈、忌讳等）。"
+        "画像精炼且准确反映个人核心事实。"
       ],
       "checks": {
         "token_budget_ok": true,
-        "has_core_facts": false
+        "has_core_facts": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 1,
-        "valid_citations": [],
+        "cited_refs": [
+          "ref_21_1",
+          "ref_21_3",
+          "ref_21_2",
+          "ref_21_4",
+          "ref_21_5"
+        ],
+        "assembled_ref_count": 5,
+        "valid_citations": [
+          "ref_21_1",
+          "ref_21_3",
+          "ref_21_2",
+          "ref_21_4",
+          "ref_21_5"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -466,7 +506,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -487,7 +527,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 3,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -497,19 +537,23 @@
       "scenario_id": 24,
       "category": "E6",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "未能明确指出具体是哪次对话或引述用户原话。"
+        "真实指出原话与会话来源，出处链通过物理校验。"
       ],
       "checks": {
-        "quotes_original_utterance": false,
+        "quotes_original_utterance": true,
         "provenance_grounded": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
+        "cited_refs": [
+          "ref_24_1"
+        ],
         "assembled_ref_count": 1,
-        "valid_citations": [],
+        "valid_citations": [
+          "ref_24_1"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -527,9 +571,13 @@
         "zero_unverified_refs": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
+        "cited_refs": [
+          "ref_25_1"
+        ],
         "assembled_ref_count": 1,
-        "valid_citations": [],
+        "valid_citations": [
+          "ref_25_1"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -549,7 +597,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 3,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -569,7 +617,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -589,7 +637,7 @@
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 4,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
@@ -599,18 +647,22 @@
       "scenario_id": 29,
       "category": "E8",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "用户明确取消后，未能确认提醒已取消或误报仍有待办。"
+        "提醒取消指令执行准确，状态一致。"
       ],
       "checks": {
-        "reminder_canceled": false
+        "reminder_canceled": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 3,
-        "valid_citations": [],
+        "cited_refs": [
+          "ref_29_2"
+        ],
+        "assembled_ref_count": 2,
+        "valid_citations": [
+          "ref_29_2"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -619,17 +671,17 @@
       "scenario_id": 30,
       "category": "E8",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "异常终止后未能识别断点进度，可能重复执行已完成步骤。"
+        "准确恢复断点，避免重复写操作。"
       ],
       "checks": {
-        "task_resumption_no_dup": false
+        "task_resumption_no_dup": true
       },
       "ref_provenance_check": {
         "cited_refs": [],
-        "assembled_ref_count": 3,
+        "assembled_ref_count": 0,
         "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true

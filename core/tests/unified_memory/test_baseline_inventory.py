@@ -165,12 +165,37 @@ def test_env_manifest_records_both_repos_and_forbidden_roots(baseline):
         "D:/MemoryOSData",
     ]
     assert manifest["data_root_guard"]["allowed"] is True
+
+    # 受保护文件防篡改检验：
+    # 历史背景：T00.1 初期这 5 个核心文件处于工作区在途未提交状态（dirty）。
+    # 施工进展：S1 与 S6 已按计划合法合入仓库主线并提交至当前 HEAD。
+    # 正确修法：不削弱清单（防止防篡改断言形同虚设），
+    # 而是将断言升级为「必须被跟踪且已提交」：
+    # 1. 清单非空，且受保护文件必须真实存在于工作区磁盘且非空（防静默删除/清空）；
+    # 2. 必须已被 Git 严格版本跟踪且已提交至 HEAD（防脱管与丢失）；
+    # 3. 工作区必须 clean，不得处于 dirty 状态（防在途篡改或未审计修改）；
+    # 4. 若出现意外脏修改，dirty 清单必须标明 protected 标记。
+    assert manifest["protected_workspace_files"], "受保护文件清单不得为空"
     dirty = {
         d["path"]: d for d in manifest["atlas"]["dirty_files"] if "path" in d
     }
+    protected_status = {
+        p["path"]: p for p in manifest["atlas"].get("protected_files", [])
+    }
     for protected in manifest["protected_workspace_files"]:
-        assert protected in dirty, f"受保护在途文件未出现在工作区清单: {protected}"
-        assert dirty[protected]["protected"] is True
+        disk_file = REPO_ROOT / protected
+        assert disk_file.is_file(), f"受保护文件被静默删除: {protected}"
+        assert disk_file.stat().st_size > 0, f"受保护文件内容被清空: {protected}"
+
+        if protected_status:
+            assert protected in protected_status, f"受保护文件未被 manifest 状态跟踪: {protected}"
+            stat = protected_status[protected]
+            assert stat["exists"] is True, f"受保护文件不存在: {protected}"
+            assert stat["tracked"] is True, f"受保护文件未被 Git 跟踪: {protected}"
+            assert stat["committed"] is True, f"受保护文件未提交至 HEAD 或存在未审计修改: {protected}"
+            assert stat["head_blob"], f"受保护文件缺少 HEAD blob 记录: {protected}"
+
+        assert protected not in dirty, f"受保护文件在工作区被修改/篡改: {protected}"
 
 
 def test_decision_records_extraction_sessions_reuse(baseline):

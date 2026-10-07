@@ -81,6 +81,27 @@ def judge_single_scenario(scenario_data: dict[str, Any]) -> dict[str, Any]:
             "checks": {},
         }
 
+    # Anti-counterfeiting assertions: reject dry-run placeholder responses immediately
+    has_dry_run_flag = (
+        scenario_data.get("dry_run") is True
+        or any(r.get("dry_run") is True for r in records)
+    )
+    has_dry_run_text = any(
+        "[DRY-RUN RESPONSE" in r.get("assistant_response", "") for r in records
+    )
+    if has_dry_run_flag or has_dry_run_text:
+        return {
+            "scenario_id": sc_id,
+            "category": category,
+            "is_counterexample": is_counterexample,
+            "verdict": "REJECTED",
+            "is_real_pass": False,
+            "reasons": [
+                "[ANTI-COUNTERFEIT ASSERTION TRIGGERED] Input contains dry_run=true or [DRY-RUN RESPONSE] placeholder data. Directly marked INVALID/REJECTED."
+            ],
+            "checks": {"anti_counterfeit_pass": False},
+        }
+
     # Common extraction
     last_record = records[-1]
     last_response = last_record.get("assistant_response", "")
@@ -591,8 +612,12 @@ def evaluate_results_payload(payload: dict[str, Any]) -> dict[str, Any]:
     threshold_cx_met = (counterexamples_passed == counterexamples_total)
     threshold_e5_e7_e8_met = (e5_e7_e8_passed == e5_e7_e8_total)
 
+    payload_dry_run = (
+        payload.get("metadata", {}).get("dry_run") is True
+        or payload.get("dry_run") is True
+    )
     overall_verdict = "ACCEPTED" if (
-        threshold_e1_e4_e6_met and threshold_cx_met and threshold_e5_e7_e8_met
+        threshold_e1_e4_e6_met and threshold_cx_met and threshold_e5_e7_e8_met and not payload_dry_run
     ) else "REJECTED"
 
     summary = {

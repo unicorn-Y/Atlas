@@ -516,9 +516,20 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             )
             if unified_enabled:
                 try:
-                    state.context = await agent._memory._unified_recall_context(
-                        state.message, limit=10,
-                        runtime_session_id=request.conversation_id)
+                    from atlas.memory.recall_context import assemble_recall_context
+
+                    facade = getattr(agent._memory, "_unified_or_none", lambda: None)()
+                    unified_target = facade if facade is not None else getattr(agent._memory, "_unified", None)
+                    if unified_target is None:
+                        unified_target = agent._memory
+
+                    recall_res = await assemble_recall_context(
+                        unified_target,
+                        state.message,
+                        recent_history=state.history,
+                        session_id=request.conversation_id,
+                    )
+                    state.context = recall_res.to_context_dict()
                 except Exception as exc:
                     from atlas.memory.unified_client import ServiceUnavailable
 
@@ -527,6 +538,12 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
                     state.context = {
                         "memories": [],
                         "knowledge_trace": {"decisions": [], "query_terms": []},
+                        "profile_block": "",
+                        "relevant_memory_block": "",
+                        "system_prompt_prefix": "",
+                        "assembled_refs": [],
+                        "assembled_ref_map": {},
+                        "gate_passed": False,
                     }
                     log.warning(
                         "memory.unified.recall_unavailable",
@@ -539,9 +556,12 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             if inspect.iscoroutine(context_memories):
                 context_memories.close()
                 raise TypeError("Agent context memories must be a list, not a coroutine")
-            from atlas.memory.context import is_personal_memory_relevant
-            if not is_personal_memory_relevant(state.message):
-                state.context["memories"] = []
+            if not unified_enabled:
+                from atlas.memory.recall_context import is_personal_memory_relevant
+
+                gate_passed, _, _ = is_personal_memory_relevant(state.message)
+                if not gate_passed:
+                    state.context["memories"] = []
             if unified_enabled:
                 state.consolidated_insights, state.reflections, state.goal_experiences = [], [], []
             else:
@@ -680,6 +700,16 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
     """
     request = state.request
     initial_messages: list[BaseMessage] = [SystemMessage(content=_agent.SYSTEM_PROMPT)]
+    # S3: 画像块 ≤600 token 放系统提示词靠前稳定位 (便于 Prompt Cache)
+    if isinstance(state.context, dict):
+        sys_prefix = state.context.get("system_prompt_prefix")
+        if not sys_prefix:
+            prof = state.context.get("profile_block")
+            if prof:
+                from atlas.memory.recall_context import PROVENANCE_SYSTEM_INSTRUCTION
+                sys_prefix = f"{PROVENANCE_SYSTEM_INSTRUCTION}\n\n{prof}"
+        if sys_prefix:
+            initial_messages.append(SystemMessage(content=sys_prefix))
     if request.mode == "plan":
         initial_messages.append(SystemMessage(content=(
             "You are in read-only Plan mode. Inspect as needed, then return a concrete "
@@ -751,7 +781,14 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
     memories, trace_items, reflections, goal_experiences, goal_knowledge, insights = (
         _fit_advisory_blocks(state)
     )
-    if memories:
+    rel_mem_block = (
+        state.context.get("relevant_memory_block")
+        if isinstance(state.context, dict)
+        else None
+    )
+    if rel_mem_block:
+        initial_messages.append(SystemMessage(content=rel_mem_block))
+    elif memories:
         initial_messages.append(SystemMessage(
             content=_MEMORIES_PREFIX + json.dumps(memories, ensure_ascii=False)
         ))
@@ -987,6 +1024,7 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
             "Approved goal experiences ", "Consolidated goal knowledge ",
             "Approved consolidated knowledge insights ",
             "Task focus projection ",
+            "【本轮相关记忆】",
         )
         prompt_sections = [
             str(item.content) for item in state.initial_messages

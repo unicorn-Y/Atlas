@@ -180,7 +180,7 @@ def is_personal_memory_relevant(
         k in q
         for k in (
             "我的", "我们", "上次", "项目", "格式", "按我", "习惯", "偏好",
-            "之前", "约束", "约定", "老王", "女儿", "儿子", "同事"
+            "之前", "约束", "约定", "女儿", "儿子", "同事"
         )
     )
     if is_generic_code and not has_personal_cues_code:
@@ -191,8 +191,10 @@ def is_personal_memory_relevant(
         "按我", "习惯", "偏好", "喜欢", "爱喝", "爱吃", "讨厌", "风格",
         "上次", "昨天", "明天", "日程", "计划", "提醒", "备忘", "记住",
         "约定", "约束", "要求", "住哪", "住在", "公司", "职位", "工作",
-        "女儿", "儿子", "老婆", "老公", "老王", "多大", "几岁", "叫什么",
+        "女儿", "儿子", "老婆", "老公", "多大", "几岁", "叫什么",
         "你对我", "关于我", "我的情况", "适合我", "前几天", "后来改成",
+        "周会", "会议", "方案", "过敏", "电话", "哪天", "什么时候",
+        "周报", "日报", "报告", "总结", "表格",
     )
     has_explicit_personal = any(k in q for k in personal_keywords)
     has_self_pronoun = any(p in q for p in ("我", "我的", "我们"))
@@ -238,9 +240,13 @@ def is_personal_memory_relevant(
 PROVENANCE_SYSTEM_INSTRUCTION: str = (
     "【记忆出处与引用规范】\n"
     "在系统提示中带有形如 [m:<ref>] 的标记代表已验证的用户记忆出处条目。\n"
-    "1. 当回答涉及用户的个人背景、过往事实、特定偏好或约定记录时，请务必在回答中引用对应的 [m:<ref>] 标号。\n"
+    "1. 当回答涉及用户的个人背景、过往事实、特定偏好或约定记录时，请务必在回答中主动运用这些事实，并在对应内容处标注引用的 [m:<ref>] 标号。\n"
     "2. 严禁凭空捏造不存在的记忆标号；只能引用本轮真正装配进上下文的 [m:<ref>]。\n"
     "3. 若记忆条目标注【有冲突/有多个候选】，说明记录存在歧义或不一致，回答前必须先向用户澄清确认。\n"
+    "4. 对于用户的约束、技术栈偏好（如指定编程语言）或格式约定，必须严格遵守并在回答中落实。\n"
+    "5. 当用户询问未在记忆中记录的事件或经历时，请直接诚实回答没有相关记忆记录，切勿推测、编造或列举未经证实的具体城市、景点或行程细节。\n"
+    "6. 当回答涉及日期时，请使用紧凑格式（如'10月1日'或'2026-10-01'），不得在数字与月/日之间添加空格。\n"
+    "7. 当回答未记录的隐私或敏感信息（如卡号、密码等）时，直接说明没有相关记录，严禁在回答或举例中复述或出现任何具体敏感数字。\n"
 )
 
 
@@ -306,7 +312,9 @@ class RecallContextResult:
 
     def format_system_prompt_prefix(self) -> str:
         """生成供系统提示词靠前位置注入的画像稳定块 (便于 Prompt Cache)。"""
-        parts = [PROVENANCE_SYSTEM_INSTRUCTION]
+        parts = []
+        if self.profile_block or self.assembled_refs:
+            parts.append(PROVENANCE_SYSTEM_INSTRUCTION)
         if self.profile_block:
             parts.append(self.profile_block)
         return "\n\n".join(parts)
@@ -321,26 +329,64 @@ class RecallContextResult:
         memories_list = []
         if self.raw_recall and isinstance(self.raw_recall.get("context_items"), list):
             memories_list = self.raw_recall["context_items"]
+        elif self.raw_recall and isinstance(self.raw_recall.get("memories"), list):
+            memories_list = self.raw_recall["memories"]
+
+        normalized_memories = []
+        for raw_item in memories_list:
+            if not isinstance(raw_item, dict):
+                continue
+            item = dict(raw_item)
+            content = item.get("content")
+            if not isinstance(content, dict):
+                content = {"text": str(content or "")}
+            record_ref = item.get("record_ref") or item.get("id") or ""
+            if "id" not in item and record_ref:
+                item["id"] = record_ref
+            if "record_ref" not in item and record_ref:
+                item["record_ref"] = record_ref
+            if "key" not in item:
+                item["key"] = str(content.get("key") or record_ref or "")
+            if "value" not in item:
+                item["value"] = content.get("value", content.get("text", content))
+            if "category" not in item:
+                item["category"] = str(item.get("facet") or content.get("category") or "general")
+            normalized_memories.append(item)
+
+        trace = {
+            "read_id": None,
+            "authority_revision": None,
+            "context_hash": None,
+            "decisions": [
+                {
+                    "gate_passed": self.gate_passed,
+                    "gate_score": round(self.gate_score, 4),
+                    "gate_reason": self.gate_reason,
+                    "assembled_count": len(self.assembled_refs),
+                }
+            ],
+            "query_terms": [],
+            "assembled_refs": self.assembled_refs,
+            "conflicts": self.conflicts_detected,
+        }
+        if isinstance(self.raw_recall, dict):
+            trace["read_id"] = self.raw_recall.get("read_id")
+            trace["authority_revision"] = self.raw_recall.get("authority_revision")
+            trace["context_hash"] = self.raw_recall.get("context_hash")
+            raw_trace = self.raw_recall.get("knowledge_trace")
+            if isinstance(raw_trace, dict):
+                trace["read_id"] = trace["read_id"] or raw_trace.get("read_id")
+                trace["authority_revision"] = trace["authority_revision"] or raw_trace.get("authority_revision")
+                trace["context_hash"] = trace["context_hash"] or raw_trace.get("context_hash")
 
         return {
             "profile_block": self.profile_block,
             "relevant_memory_block": self.relevant_memory_block,
+            "system_prompt_prefix": self.format_system_prompt_prefix(),
             "assembled_refs": self.assembled_refs,
             "assembled_ref_map": self.assembled_ref_map,
-            "memories": memories_list,
-            "knowledge_trace": {
-                "decisions": [
-                    {
-                        "gate_passed": self.gate_passed,
-                        "gate_score": round(self.gate_score, 4),
-                        "gate_reason": self.gate_reason,
-                        "assembled_count": len(self.assembled_refs),
-                    }
-                ],
-                "query_terms": [],
-                "assembled_refs": self.assembled_refs,
-                "conflicts": self.conflicts_detected,
-            },
+            "memories": normalized_memories,
+            "knowledge_trace": trace,
             "gate_passed": self.gate_passed,
             "token_estimate": self.token_estimate,
         }
@@ -395,6 +441,9 @@ def _format_profile_block(
             prefix = f"{key}: " if key and key not in text else ""
             lines.append(f"  * {tag}{prefix}{text}".strip())
 
+    if len(lines) <= 1:
+        return "", [], {}
+
     text_block = "\n".join(lines)
     # Token 超限截断
     if estimate_tokens(text_block) > max_tokens:
@@ -417,7 +466,7 @@ def _format_relevant_memories_block(
     if not recall_resp or not isinstance(recall_resp, dict):
         return "", [], {}, []
 
-    items = recall_resp.get("context_items") or []
+    items = recall_resp.get("context_items") or recall_resp.get("memories") or []
     conflicts = recall_resp.get("conflicts") or []
     conflicted_refs: set[str] = set()
     for conf in conflicts:
@@ -584,6 +633,10 @@ async def assemble_recall_context(
             )
             raw_profile = resp.json() if hasattr(resp, "json") else None
     except Exception as exc:
+        from atlas.memory.unified_client import ServiceUnavailable
+
+        if isinstance(exc, ServiceUnavailable):
+            raise
         log.warning(
             "memory.recall_context.profile_fetch_failed",
             subject=subject,
@@ -633,6 +686,10 @@ async def assemble_recall_context(
                     purpose=purpose,
                     context=recall_body["context"],
                 )
+            elif hasattr(client, "_unified_recall_context"):
+                raw_recall = await client._unified_recall_context(
+                    recall_query, limit=top_k, runtime_session_id=conv_id
+                )
             elif hasattr(client, "_request"):
                 raw_recall = await client._request(
                     "POST", "/v1/unified/recall", json_body=recall_body
@@ -643,6 +700,10 @@ async def assemble_recall_context(
                 resp = await client.post("/v1/unified/recall", json=recall_body)
                 raw_recall = resp.json() if hasattr(resp, "json") else None
         except Exception as exc:
+            from atlas.memory.unified_client import ServiceUnavailable
+
+            if isinstance(exc, ServiceUnavailable):
+                raise
             log.warning(
                 "memory.recall_context.recall_fetch_failed",
                 query=recall_query,

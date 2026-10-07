@@ -53,7 +53,8 @@ MEMORYOS_HEAD_EXPECTED = "702f702bf9c0c1fa552132930843aaca4923f139"
 
 PRODUCTION_PATHS_FORBIDDEN = ["D:/Atlas/data", "D:/MemoryOSData"]
 
-# 他人在途、本任务禁止触碰的工作区文件（env_manifest 中标 protected=true）。
+# 受保护的核心文件：在基线初期为在途文件，现已按计划正式合入提交至仓库 HEAD（S1/S6）；
+# 在工作区与版本库中受严格防篡改与存在性保护（不得被静默删除或篡改，dirty 时标记 protected=true）。
 PROTECTED_WORKSPACE_FILES = [
     "core/atlas/automation/engine.py",
     "core/atlas/capabilities/durable/dbos_backend.py",
@@ -969,12 +970,37 @@ def build_env_manifest(repo_root: Path) -> dict:
         normalized == f or normalized.startswith(f + "/") for f in forbidden_normalized
     ) if normalized else False
 
+    dirty_atlas = dirty_entries(repo_root)
+    dirty_paths = {d["path"]: d for d in dirty_atlas if "path" in d}
+    raw_ls = _git(repo_root, "ls-files", *PROTECTED_WORKSPACE_FILES)
+    tracked_files = set(raw_ls.splitlines()) if not raw_ls.startswith("<git") else set()
+
+    protected_status = []
+    for p in PROTECTED_WORKSPACE_FILES:
+        target_path = repo_root / p
+        exists = target_path.is_file()
+        tracked = p in tracked_files
+        dirty_entry = dirty_paths.get(p)
+        head_blob = _git(repo_root, "rev-parse", f"HEAD:{p}") if tracked else None
+        if head_blob and head_blob.startswith("<git"):
+            head_blob = None
+        protected_status.append({
+            "path": p,
+            "exists": exists,
+            "tracked": tracked,
+            "committed": tracked and (dirty_entry is None),
+            "head_blob": head_blob,
+            "dirty": dirty_entry is not None,
+            "dirty_status": dirty_entry["status"] if dirty_entry else None,
+        })
+
     return {
         "atlas": {
             "root": str(repo_root).replace("\\", "/"),
             "head": atlas_head,
             "branch": _git(repo_root, "rev-parse", "--abbrev-ref", "HEAD"),
-            "dirty_files": dirty_entries(repo_root),
+            "dirty_files": dirty_atlas,
+            "protected_files": protected_status,
         },
         "memoryos": {
             "root": str(MEMORYOS_ROOT).replace("\\", "/"),

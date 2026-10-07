@@ -12,7 +12,7 @@
     "S0": {"title": "清场与开关", "status": "DONE_PENDING_REVIEW", "note": "harness去造假+冻结开关+全库基线已由总控独立复跑；证据 progress/CONTROLLER_RESUME_2026-10-07.md"},
     "S1": {"title": "读写打通：聊天只读统一记忆", "status": "DONE_PENDING_REVIEW", "note": "A包74 passed；11回归归零；总控复跑Atlas全库19→7 failed(全既有)。progress/S1.md"},
     "S2": {"title": "观察者 Observer", "status": "DONE_PENDING_REVIEW", "note": "observer.py真模型调用(complete_for purpose=memory_observe)+已接server lifespan(server.py:283-312)；C2真实端到端冒烟中；MemoryOS无key路径由8ac2fff+R1修复"},
-    "S3": {"title": "召回装配与意图闸门、出处", "status": "DONE_PENDING_REVIEW", "note": "E包 recall_context.py 已接入run_phases:519；5 passed + 10轮真模型冒烟。progress/packages/E.md"},
+    "S3": {"title": "召回装配与意图闸门、出处", "status": "DONE_PENDING_REVIEW", "note": "L1已修复假接线(CRITICAL)：run_phases._phase_context全链接入assemble_recall_context，画像块(≤600 tok)稳定位+相关记忆块(≤1500 tok [m:ref]+日期+出处)注入；彻底移除旧正则改调新意图闸门；清理'老王'硬编码；deepseek-v4.1-flash真模型冒烟PASSED并打印messages证据(L1.md+L1_smoke_evidence.json)；31/31测试PASSED"},
     "S4": {"title": "反思者 Reflector 与淡忘排序", "status": "DONE_PENDING_REVIEW", "note": "排序5ad0db8+apply8ac2fff经R1修复(c4f7ed8)；G包reflector.py(13faa7ca,真模型memory_reflect+POST consolidation:apply)；I2包已接idle/daily触发(8a300675,server.py reflector_idle_loop,17 passed,真模型端到端冒烟PASSED)"},
     "S5": {"title": "记忆页面闭环", "status": "DONE_PENDING_REVIEW", "note": "H包MemoryPage+RecordsView(253前端测试+build 0错误,总控复跑)；J3包E7后端闭环真实HTTP验证5 passed(总控复跑)：看/改/删/暂停全部生效，删后不复活。已提交3b408edb"},
     "S6": {"title": "中断接续与提醒验证", "status": "DONE_PENDING_REVIEW", "note": "现有提醒/接续链路未损坏，复用AutomationStore+DBOS；test_s6_interruption_and_reminder.py 7 passed；报告已由I4补齐(S6.md)"},
