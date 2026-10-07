@@ -577,7 +577,7 @@ def evaluate_results_payload(payload: dict[str, Any]) -> dict[str, Any]:
                 e1_e4_e6_passed += 1
 
         if cat in ("E5", "E7", "E8"):
-            e5_e7_e8_passed += 1
+            e5_e7_e8_total += 1
             if passed:
                 e5_e7_e8_passed += 1
 

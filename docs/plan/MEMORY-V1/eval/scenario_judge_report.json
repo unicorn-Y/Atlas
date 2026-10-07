@@ -18,9 +18,9 @@
       "required_rate": 1.0
     },
     "e5_e7_e8": {
-      "total": 0,
-      "passed": 12,
-      "pass_rate": 0.0,
+      "total": 9,
+      "passed": 3,
+      "pass_rate": 0.3333,
       "threshold_met": false,
       "required_rate": 1.0
     },

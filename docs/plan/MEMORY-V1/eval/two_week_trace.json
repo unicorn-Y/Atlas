@@ -3,7 +3,7 @@
     "title": "Two-Week Real Memory Interaction Trace (14 Days)",
     "purpose": "Evaluates S4 Reflector (MERGE, SUPERSEDE, ROLLUP, PROFILE, IMPORTANCE) and E5 / S8 acceptance",
     "base_date": "2026-09-24",
-    "generated_at": "2026-10-08T00:21:49.361231",
+    "generated_at": "2026-10-08T02:14:09.696095",
     "validation": {
       "status": "VALID",
       "total_sessions": 14,

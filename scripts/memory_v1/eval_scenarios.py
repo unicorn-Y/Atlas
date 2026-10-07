@@ -1273,8 +1273,13 @@ def main() -> int:
     )
 
     if args.judge:
-        from scripts.memory_v1.eval_judge import evaluate_results_file
-        report = evaluate_results_file(out_file)
+        try:
+            from scripts.memory_v1.eval_judge import evaluate_results_file, DEFAULT_REPORT_PATH
+        except ModuleNotFoundError:
+            import sys
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+            from scripts.memory_v1.eval_judge import evaluate_results_file, DEFAULT_REPORT_PATH
+        report = evaluate_results_file(out_file, output_path=DEFAULT_REPORT_PATH)
         print(f"Evaluation Verdict: {report.get('summary', {}).get('verdict')}")
 
     return 0
