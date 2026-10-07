@@ -1,0 +1,186 @@
+{
+  "schema_version": "atlas-um-audit-verdicts-1.0",
+  "audit_date": "2026-10-07",
+  "source": "参考/独立验收/验收明细.json",
+  "overall_verdict": "NOT_ACCEPTED",
+  "product_status": "PARTIAL",
+  "engineering_integrated_claim_supported": false,
+  "task_summary": {
+    "total": 40,
+    "partial": 23,
+    "contradicted": 17,
+    "accepted": 0,
+    "note": "Task requirement conformance; does not imply all functionality absent or all actual effect cases executed."
+  },
+  "unverified_gates": [
+    "Real 320-case effect run",
+    "Real 648-run held-out learning comparison",
+    "24 live traces",
+    "Actual installed Electron UI and packaged restart",
+    "Controlled production cutover and rollback",
+    "100k observations scale performance",
+    "Continuous genuine 30-day use"
+  ],
+  "task_verdicts": {
+    "T00.1": {
+      "verdict": "partial",
+      "evidence_and_gap": "静态基线、归属清单、版本记录和隔离测试存在；实际消费者完整替换、安全边界及真实权威统一不能由现有扫描代证。已确认旧 facts 读取反例。"
+    },
+    "T00.2": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "真实双服务端口及 WS 链存在；harness 主动合成符合预期的答案、补填状态，320 和 648 效果为预设/模拟；integration/desktop/live/longitudinal runner 未实现。"
+    },
+    "T01.1": {
+      "verdict": "partial",
+      "evidence_and_gap": "全部业务完成不能只证明路由存在；旧写方法仍通过 `memory/__init__.py:178` 抛 FEATURE_NOT_READY。主体隔离/MemoryOS 所有路由的实测由服务分项汇总，本报告不代认通过。"
+    },
+    "T01.2": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`get_fact:1141`、`list_facts:1151` 仍直接读旧 facts；`get_agent_context_with_trace:3707` 最终走旧库。部分知识激活/洞察仍本地存储并被真实规划调用。不是全方法统一兼容视图。"
+    },
+    "T01.3": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "facade 接入不等于消费者改接；真实记忆上下文继续读旧库。`test_composition.py:430` 明确断言聊天 memory_refs 为空，削弱原任务要求“相同 ref/revision 被聊天采用”。"
+    },
+    "T02.1": {
+      "verdict": "partial",
+      "evidence_and_gap": "CLI/hub 不启动发送循环；同内容旧 facts API 重放 ID 相同但 hash 不同。MemoryOS formation 事务和 barrier 结果另由服务分项验证。"
+    },
+    "T02.2": {
+      "verdict": "partial",
+      "evidence_and_gap": "消息版本 helper 没真实调用；调用方不传 branch、project/task 等现成上下文；只回合结束捕获当前用户与最后 assistant，未证明中途退出/steer 全覆盖。CLI/hub outbox 不发送。"
+    },
+    "T02.3": {
+      "verdict": "partial",
+      "evidence_and_gap": "独立 verification API 接受调用方 checks，不能仅因接口存在就证明 Atlas 实际目标验证闭环；没有检出完整记忆任务视图向所有子 Agent 传递及动作级使用证据。"
+    },
+    "T03.1": {
+      "verdict": "partial",
+      "evidence_and_gap": "同名先同簇，人工split测试；未搬接语义实体抽取与候选裁决完整机制；见P1身份"
+    },
+    "T03.2": {
+      "verdict": "partial",
+      "evidence_and_gap": "knowledge_as_of只过滤当前revision；自然正文时间/事件语义仍依赖结构化字段"
+    },
+    "T03.3": {
+      "verdict": "partial",
+      "evidence_and_gap": "普通正文不产生key/value候选；自然冲突与可观察范围可信度未端到端证明"
+    },
+    "T04.1": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "结构化topic分组替代跨会话语义事件，反例2轮拆2事件；测试先注入topic/participants"
+    },
+    "T04.2": {
+      "verdict": "partial",
+      "evidence_and_gap": "自然用户偏好未形成，行为习惯语义提取缺失；空库维护又造USER_ASSERTED，破坏画像真实性"
+    },
+    "T04.3": {
+      "verdict": "partial",
+      "evidence_and_gap": "模型生成未接、默认退化拼接；现有parity覆盖时间窗/模板/状态，不覆盖摘要信息质量"
+    },
+    "T05.1": {
+      "verdict": "partial",
+      "evidence_and_gap": "物理删除异常仍成功；图片/音频字节解析能力与播放回看须由Atlas真实入口证明，不能按假PNG/WAV夹具判通过"
+    },
+    "T05.2": {
+      "verdict": "partial",
+      "evidence_and_gap": "上游M3 DBSCAN/embedding联系改为稀疏词向量/规则，测试注入OCR/转录文本；真实ASR/视觉效果与目标对象迁移未本分项确认"
+    },
+    "T05.3": {
+      "verdict": "partial",
+      "evidence_and_gap": "`windows_sources.py:984` 与 `unified_memory_router.py:439` 明示后台采集未实现。start 只是控制哪些未来工具 receipt 能另记 passive；未证明用户只操作所选窗口时有观察进入。无真 Windows 选择/采集/暂停/回看验证。"
+    },
+    "T06.1": {
+      "verdict": "partial",
+      "evidence_and_gap": "Hermes `create_context_handoff:1305` 仍只有 transcript/todo 模型摘要，未装配统一 focus 原证据 refs；没有源码接线证明工作集预算/压缩接续全部满足。任务无 task_id 时不会建立 focus。"
+    },
+    "T06.2": {
+      "verdict": "partial",
+      "evidence_and_gap": "finalize 把无错误 TOOL_RESULT 直接归“已验证步骤”；只是请求成功不代表目标验证。测试续跑直接脚本化“无需重复”答案，未反证重复副作用风险。未知对账只局部文件面，不足以证明 API/窗口外部状态恢复。"
+    },
+    "T06.3": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`intent_bridge.py:203` 的 `wired=False`；create_automation_for_intent:280 不写 store、不激活 schedule；实际 Atlas 源码没有外部调用 IntentBridge。未进入 Automation 真实 trigger/DBOS 链。"
+    },
+    "T07.1": {
+      "verdict": "partial",
+      "evidence_and_gap": "query planner没有模型接线；向量只消费已有READY，没有实际部署索引可用证据；须真实语义与原文回退效果"
+    },
+    "T07.2": {
+      "verdict": "partial",
+      "evidence_and_gap": "precision gate非真实precision；源码parity只确定性子集；人工有图/路径测试不足证明抽取后多跳效果"
+    },
+    "T07.3": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`_create_plan` 未收到新约束；receipt 在实际应用前写且失败造 RECORDED_LOCAL；hash 只有 query。依赖报错 fail-open，依赖只有显式 request 带入，未从实际新计划形成。行为测试由夹具读取 memory 合成答案。"
+    },
+    "T08.1": {
+      "verdict": "partial",
+      "evidence_and_gap": "标STALE/INVALIDATED不等于派生画像/计划自动重算；所有Atlas旧路由最新过滤由另一审查分项确认；维护会反向重激活"
+    },
+    "T08.2": {
+      "verdict": "partial",
+      "evidence_and_gap": "这里只确认服务，不据此认定真实Atlas工具参数刷新/重新规划；竞争动作前完整接线由Atlas分项审查"
+    },
+    "T08.3": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "unlink失败误报、维护造/复活；restore helper从快照逐行INSERT OR IGNORE、sqlite异常忽略且最后固定index_rebuilt=true，需要完整恢复入口/失败验证"
+    },
+    "T09.1": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`service/unified/experience_distiller.py:132` 外部验证只凭 kind 或任意非空字段；`:317` 学习列表直接投影夹具字段为 ACTIVE；真正 distill_learning_facets 未见生产调用。真实经历提炼及可信 validation 不成立。"
+    },
+    "T09.2": {
+      "verdict": "partial",
+      "evidence_and_gap": "`strategy_updates.py:453` 对所有带 strategy_id+expected_revision 的直接请求，无论版本吻合与否最后都 409；`maintenance.py:823` POLICY_TRIAL 无真实验收直接 pass_trial=True 后激活。版本化操作有实现，但发布闭环未满足。"
+    },
+    "T09.3": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`utility.py:405` 奖励按请求 used_records 直接更新，无 application/read 关联核验；ValueAwareSelector 仅类定义，生产 retrieval 未实例化/调用；`utility.py:552` 为 util-* 种子读出人工 estimate。统计存在，真实行为归因与效用参与召回未闭环。"
+    },
+    "T10.1": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`skill_evolution.py:283` 目标效果是字符串包含检查；`:292` held-out 是 def/return 标记与 REGRESSION_BREAK；`:358` 发布是内存字典赋值，无真实 registry/package/MemoryOS 绑定。无生产调用，无法持久原子部署/进程重启恢复。"
+    },
+    "T10.2": {
+      "verdict": "partial",
+      "evidence_and_gap": "WorldMind refiner 被缩为拼接输入文本；`prediction.py:265` 仅 pred-001/pred-002 夹具定向投影，默认误差1.0；create_prediction、record_prediction_outcome 未见生产调用。真实预测→观察→更新闭环未接入。"
+    },
+    "T10.3": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`targeted_learning.py:305` 研究内容为固定摘要、来源 docs.example.org；所谓独立验证只是新 UUID + 词匹配/硬编码 kg-003；无生产调用、ModelManager、真实浏览/工具与独立验证运行。"
+    },
+    "T11.1": {
+      "verdict": "partial",
+      "evidence_and_gap": "`maintenance.py:779` 未传 llm_client，`self_probe.py:658` answer 保持空字符串；`:785` 无来源时填 seed:self_probe:probe-questions；未见 Atlas automation 自测调度接线，不能认定后台真实复盘完整。"
+    },
+    "T11.2": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`maintenance.py:306` 忽略是否存在真实观察，固定制造短约定并标 ACTIVE/USER_ASSERTED；普通维护真实入口可触达。`:826` 策略试验硬编码通过；`:693` 仅 elapsed_days 就判真实30/365天验证，无连续使用证据检查。"
+    },
+    "T12.1": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "拆分人物、取消事项、暂停采集没有真实 UI 动作；候选“记住”仍 POST facts 并本机 hide。所谓 desktop test 根本不操作 Electron，API 失败仍 fixture applied=True。"
+    },
+    "T12.2": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "packaged_atlas 测试只重启 Python Atlas 并改 manifest；status 回执由测试 helper 填关键字段；停止遗留进程测试用 fake_manifest 常量。未形成安装包、Electron 和 worker 生命周期证据。"
+    },
+    "T12.3": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "dry-run startup/rollback 结果是模拟常量；write pause 仅本地控制标记，没有真实业务写路径订阅；无原子权威切换及并发新写/删除对账证据。生产切换不应在验收前进行。"
+    },
+    "T13.1": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`test_acceptance_suite.py:139` 三配置结果按配置和 aspect 写死；FULL 永远 passed=True。没有逐项真实 Atlas/MemoryOS 执行；默认 evidence_refs 直接取 expected_record_refs。S16 默认模拟召回，不是公开集真实完成证明。"
+    },
+    "T13.2": {
+      "verdict": "contradicted",
+      "evidence_and_gap": "`learning_trial.py:207` MD5 值决定成功，before/raw/after 阈值分别0.58/0.63/0.82；fake-model 两个名字不构成两部署模型；token/step 数也是算出来的。648 模拟记录不构成学习增益。"
+    },
+    "T13.3": {
+      "verdict": "partial",
+      "evidence_and_gap": "12 效果 verified=true 与24轨迹只是测试名列表；final_closeout 只验证字段数量/类别。G13 通过依赖模拟测试；runner integration/desktop/live/longitudinal 全部 NOT_AVAILABLE_YET。最终真实入口门禁仍欠缺，不只是等待30天和授权切换。"
+    }
+  }
+}

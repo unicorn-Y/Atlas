@@ -1,0 +1,417 @@
+{
+  "project": "ATLAS-UNIFIED-MEMORY-WINDOWS",
+  "branch": "unified-memory/waves",
+  "schema_version": "atlas-um-repair-current-1.0",
+  "created": "2026-10-07",
+  "status_enum": [
+    "NOT_STARTED",
+    "IN_PROGRESS",
+    "PARTIAL",
+    "CONTRADICTED",
+    "PENDING_REVALIDATION",
+    "COMPONENT_VERIFIED",
+    "INTEGRATED",
+    "ACCEPTED",
+    "BLOCKED_EXTERNAL"
+  ],
+  "original_report": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+  "note": "本文件由 R00 建立：以独立验收裁决为权威，把原报告的整体声明降级（partial→PARTIAL / contradicted→CONTRADICTED），保留 original_status 与反证链接，未删除原报告、未降低原目标。",
+  "audit_summary": {
+    "total": 40,
+    "partial": 23,
+    "contradicted": 17,
+    "accepted": 0,
+    "note": "Task requirement conformance; does not imply all functionality absent or all actual effect cases executed."
+  },
+  "unverified_gates": [
+    "Real 320-case effect run",
+    "Real 648-run held-out learning comparison",
+    "24 live traces",
+    "Actual installed Electron UI and packaged restart",
+    "Controlled production cutover and rollback",
+    "100k observations scale performance",
+    "Continuous genuine 30-day use"
+  ],
+  "partial_count": 23,
+  "contradicted_count": 17,
+  "downgraded_count": 40,
+  "tasks": {
+    "T00.1": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM00/T00.1/ (both repos)",
+      "original_status": "COMPONENT_VERIFIED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T00.2": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM00/T00.2/ (both repos)",
+      "original_status": "COMPONENT_VERIFIED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T01.1": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM01/T01.1/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T01.2": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM01/T01.2/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T01.3": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM01/T01.3/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T02.1": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM02/T02.1/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T02.2": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM02/T02.2/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T02.3": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM02/T02.3/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T03.1": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM03/T03.1/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T03.2": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM03/T03.2/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T03.3": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM03/T03.3/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T04.1": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM04/T04.1/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T04.2": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM04/T04.2/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T04.3": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM04/T04.3/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T05.1": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM05/T05.1/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T05.2": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM05/T05.2/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T05.3": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM05/T05.3/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T06.1": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM06/T06.1/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T06.2": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM06/T06.2/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T06.3": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM06/T06.3/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T07.1": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM07/T07.1/ (MemoryOS)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T07.2": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM07/T07.2/ (MemoryOS)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T07.3": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM07/T07.3/ (Atlas)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T08.1": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM08/T08.1_T08.2/ (MemoryOS)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T08.2": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM08/T08.1_T08.2/ & UM07/T07.3/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T08.3": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM08/T08.3/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T09.1": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM09/result.json",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T09.2": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM09/result.json",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T09.3": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM09/result.json",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T10.1": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM10/result.json (Atlas)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T10.2": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM10/result.json (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T10.3": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM10/result.json (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T11.1": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM11/result.json",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    },
+    "T11.2": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM11/result.json",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T12.1": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM12/T12.1-prep/ & T12.2_T12.3/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T12.2": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM12/T12.2_T12.3/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T12.3": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM12/T12.2_T12.3/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T13.1": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM13/T13.1_T13.2/ (both repos)",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T13.2": {
+      "status": "CONTRADICTED",
+      "evidence": "artifacts/unified-memory/UM13/T13.1_T13.2/",
+      "original_status": "INTEGRATED",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 contradicted，须按修复任务重做"
+    },
+    "T13.3": {
+      "status": "PARTIAL",
+      "evidence": "artifacts/unified-memory/UM13/T13.3/release_manifest.json & tasks/results/ATLAS-UNIFIED-MEMORY-WINDOWS.result.md",
+      "notes": "All engineering & synthetic longitudinal gates passed; 30-day real continuous observation and user-authorized production cutover pending",
+      "original_status": "PARTIAL",
+      "superseded_by_audit": true,
+      "audit_reference": "参考/独立验收/总验收报告.md（整体 NOT_ACCEPTED / PARTIAL）",
+      "revalidation_note": "独立验收判定 partial，须补齐要求/接线/证据"
+    }
+  },
+  "waves": {
+    "UM00": "COMPONENT_VERIFIED",
+    "UM01": "INTEGRATED",
+    "UM02": "INTEGRATED",
+    "UM03": "INTEGRATED",
+    "UM04": "INTEGRATED",
+    "UM05": "INTEGRATED",
+    "UM06": "INTEGRATED",
+    "UM07": "INTEGRATED",
+    "UM08": "INTEGRATED",
+    "UM09": "INTEGRATED",
+    "UM10": "INTEGRATED",
+    "UM11": "INTEGRATED",
+    "UM12": "INTEGRATED",
+    "UM13": "PARTIAL"
+  },
+  "repair_progress": {
+    "schema": "atlas-um-repair-progress-1.0",
+    "note": "仅登记真实执行并留下证据的修复任务；未施工不登记为完成。",
+    "tasks": {
+      "R00": {
+        "status": "COMPONENT_VERIFIED",
+        "evidence": "artifacts/unified-memory/repair/R00/result.json",
+        "deliverables": [
+          "scripts/unified_memory/repair_baseline.py",
+          "core/tests/unified_memory/test_repair_baseline.py",
+          "tasks/unified-memory/REPAIR-CURRENT.json",
+          "docs/plan/UNIFIED-MEMORY/audit-verdicts.json"
+        ]
+      },
+      "R01": {
+        "status": "COMPONENT_VERIFIED",
+        "evidence": "artifacts/unified-memory/repair/R01/result.json",
+        "deliverables": [
+          "M:D:/MemoryOS/service/unified/maintenance.py",
+          "M:D:/MemoryOS/service/unified/prediction.py",
+          "M:D:/MemoryOS/service/unified/utility.py",
+          "M:D:/MemoryOS/service/unified/learning_gate.py",
+          "M:D:/MemoryOS/service/unified/experience_distiller.py",
+          "M:D:/MemoryOS/tests/unified_memory/test_repair_fixture_contamination.py"
+        ]
+      },
+      "R02": {
+        "status": "IN_PROGRESS",
+        "evidence": "artifacts/unified-memory/repair/R02/ (pending)",
+        "deliverables_done": [
+          "scripts/unified_memory/repair_driver.py (run_case 契约，已被 R01 五变体使用)"
+        ],
+        "deliverables_pending": [
+          "移除 core/tests/unified_memory/harness.py 的 _synthesize_scripted_response / 预期答案推送 / fabricated_fact 等",
+          "core/tests/unified_memory/test_repair_driver_integrity.py",
+          "tests/fixtures/unified_memory/repair-cases.json"
+        ]
+      }
+    }
+  }
+}
