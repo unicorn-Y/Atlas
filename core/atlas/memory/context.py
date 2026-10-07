@@ -24,6 +24,10 @@ docs/plan/UNIFIED-MEMORY/VENDORED.md S04 条目）。
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+import uuid
 from typing import Any
 
 from atlas.memory.unified_client import UnifiedMemoryClient
@@ -317,3 +321,256 @@ def compress_context(items: list[dict[str, Any]], focus: dict[str, Any] | None,
                  "不得代替任务状态）；全部原始证据 refs 保留可回溯；"
                  "当前用户消息优先（T06.2 接线点）"),
     }
+
+
+# ------------------------------------------------------------------ T07.3 / T08.2
+
+def is_personal_memory_relevant(query: str) -> bool:
+    """判断当前查询是否与个人/任务记忆相关（UM07 / T07.3）。
+
+    - 纯通用代码/计算类问题（如 "Python dict 怎么排序", "帮我算一下 128 乘以 64"）
+      无个人、任务、时间指示时返回 False，避免无端装配私人经历或无关片段；
+    - 涉及排期、偏好、任务、人名指示或隐含时间线的问题（如 "帮我安排明天的工作",
+      "按我现在的格式来", "帮我把他上次的修改意见整理成清单"）返回 True 并允许召回。
+    """
+    if not query or not isinstance(query, str):
+        return False
+    q = query.strip()
+    if not q:
+        return False
+
+    # 1. 显式纯计算类问题（如 "帮我算一下 128 乘以 64"）
+    math_patterns = (
+        r"(?:算一下|计算|求值|等于几).*(?:\d+|[\+\-\*\/]|乘以|除以|加上|减去)",
+        r"\d+\s*(?:\+|加|减|\-|乘|\*|乘以|除|\/|除以)\s*\d+",
+        r"^(?:帮我)?(?:算一下|计算)\b",
+    )
+    for pat in math_patterns:
+        if re.search(pat, q):
+            # 若不包含显式日程/偏好/人物等个人线索，则属于纯计算
+            if not any(k in q for k in ("日程", "会议", "工作", "上次", "按我", "安排", "计划", "明天", "时间")):
+                return False
+
+    # 2. 纯通用编程/语法/库函数类问题（如 "Python dict 怎么排序"）
+    generic_code_patterns = (
+        r"(?:python|java|c\+\+|golang|rust|javascript|typescript|sql|html|css)\b.*(?:怎么|如何|写法|排序|遍历|反转|用法|实现)",
+        r"^(?:怎么|如何|什么是|介绍一下)(?:使用|实现|排序|遍历|写)?\s*[a-zA-Z0-9_]+",
+    )
+    for pat in generic_code_patterns:
+        if re.search(pat, q, re.IGNORECASE):
+            if not any(k in q for k in ("我的", "我们", "上次", "项目", "格式", "按我", "习惯", "偏好", "现在", "之前")):
+                return False
+
+    # 3. 个人排期、偏好、习惯、人物、时间或状态线索
+    personal_cues = (
+        "安排", "明天", "工作", "日程", "会议", "晚上", "晚间", "上午", "下午", "这周", "下周",
+        "格式", "按我", "习惯", "偏好", "上次", "昨天", "他", "她", "清单", "意见",
+        "继续", "接着", "项目", "计划", "提醒", "备忘", "记住", "约定", "约束", "要求",
+        "小王", "老李", "张三", "李四", "同事", "领导", "现在的工作", "现在的格式",
+    )
+    if any(cue in q for cue in personal_cues):
+        return True
+
+    # 4. 代词与个人指令线索
+    if any(p in q for p in ("我", "我的", "我们")) and any(a in q for a in ("帮我", "给我", "做", "写", "查", "排")):
+        return True
+
+    return False
+
+
+async def load_pre_plan_constraints(
+    facade: Any, query: str, context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """规划前加载相关约束与偏好，绑定 read_id + input_hash 并记录应用收据（UM07 / T07.3）。
+
+    规划前加载 active PREFERENCE / STATE / COMMITMENT / CONSTRAINT 条目；
+    不要在 plan 已生成后才加载会改变计划的记忆。
+    """
+    input_hash = "sha256:" + hashlib.sha256(query.encode("utf-8")).hexdigest()
+
+    if not is_personal_memory_relevant(query):
+        return {
+            "relevant": False,
+            "constraints": [],
+            "context_items": [],
+            "read_id": None,
+            "input_hash": input_hash,
+            "application_receipt": None,
+        }
+
+    if facade is None or not getattr(facade, "enabled", True):
+        return {
+            "relevant": True,
+            "constraints": [],
+            "context_items": [],
+            "read_id": None,
+            "input_hash": input_hash,
+            "application_receipt": None,
+        }
+
+    try:
+        recall_resp = await facade.recall_for_conversation(
+            query=query, context=context, purpose="PLAN",
+        )
+    except Exception:
+        return {
+            "relevant": True,
+            "constraints": [],
+            "context_items": [],
+            "read_id": None,
+            "input_hash": input_hash,
+            "application_receipt": None,
+        }
+
+    read_id = recall_resp.get("read_id")
+    context_hash = recall_resp.get("context_hash") or input_hash
+    items = recall_resp.get("context_items") or []
+
+    constraint_facets = {"PREFERENCE", "STATE", "COMMITMENT", "CONSTRAINT", "HABIT"}
+    applied_items: list[dict[str, Any]] = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        facet = str(item.get("facet") or "").upper()
+        content = item.get("content") or {}
+        text = ""
+        if isinstance(content, dict):
+            text = str(content.get("text") or content.get("value") or content.get("constraint") or "")
+        elif isinstance(content, str):
+            text = content
+
+        is_constraint = (
+            facet in constraint_facets
+            or "constraint" in str(item.get("meta") or "").lower()
+            or any(k in text for k in ("不要", "不得", "必须", "只能", "后不", "前不", "晚上", "晚间", "格式", "习惯", "约束"))
+        )
+        if is_constraint:
+            applied_items.append(item)
+
+    if not applied_items and items:
+        applied_items = list(items)
+
+    applied_refs = [
+        str(it.get("record_ref")) for it in applied_items
+        if isinstance(it, dict) and it.get("record_ref")
+    ]
+
+    receipt: dict[str, Any] | None = None
+    if read_id and applied_items:
+        basis = {
+            "query": query,
+            "input_hash": input_hash,
+            "constraint_count": len(applied_items),
+            "applied_refs": applied_refs,
+        }
+        app_request = {
+            "read_id": read_id,
+            "context_hash": context_hash,
+            "action_refs": [f"action:plan-{uuid.uuid4().hex[:8]}"],
+            "applied_items": applied_items,
+            "basis": basis,
+            "context": context,
+        }
+        try:
+            if hasattr(facade, "record_application"):
+                rec_res = await facade.record_application(app_request)
+            elif hasattr(facade, "client") and hasattr(facade.client(), "record_application"):
+                rec_res = await facade.client().record_application(app_request)
+            else:
+                rec_res = None
+
+            if isinstance(rec_res, dict) and (rec_res.get("application_id") or rec_res.get("application_ref")):
+                receipt = {
+                    "application_id": rec_res.get("application_id"),
+                    "application_ref": rec_res.get("application_ref"),
+                    "read_id": read_id,
+                    "input_hash": input_hash,
+                    "applied_refs": applied_refs,
+                    "basis": basis,
+                    "status": "RECORDED",
+                }
+            else:
+                receipt = {
+                    "application_id": f"app-local-{uuid.uuid4().hex[:12]}",
+                    "application_ref": f"application:local-{uuid.uuid4().hex[:12]}",
+                    "read_id": read_id,
+                    "input_hash": input_hash,
+                    "applied_refs": applied_refs,
+                    "basis": basis,
+                    "status": "RECORDED_LOCAL",
+                }
+        except Exception:
+            # 501 / 连接失败等降级为本地应用凭据
+            receipt = {
+                "application_id": f"app-local-{uuid.uuid4().hex[:12]}",
+                "application_ref": f"application:local-{uuid.uuid4().hex[:12]}",
+                "read_id": read_id,
+                "input_hash": input_hash,
+                "applied_refs": applied_refs,
+                "basis": basis,
+                "status": "RECORDED_LOCAL",
+            }
+
+    return {
+        "relevant": True,
+        "constraints": applied_items,
+        "context_items": items,
+        "read_id": read_id,
+        "input_hash": input_hash,
+        "application_receipt": receipt,
+    }
+
+
+async def check_action_dependencies(
+    facade: Any, plan_dependencies: Any, context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """动作前依赖检查（T08.2 / UM08）：验证重要依赖版本，新事实不能配旧计划继续执行。"""
+    if facade is None or not getattr(facade, "enabled", True):
+        return {"status": "VALID", "changed_refs": [], "blocked": False}
+
+    req: dict[str, Any] = {}
+    if isinstance(plan_dependencies, list):
+        req["dependencies"] = plan_dependencies
+    elif isinstance(plan_dependencies, dict):
+        req = dict(plan_dependencies)
+    else:
+        return {"status": "VALID", "changed_refs": [], "blocked": False}
+
+    if context:
+        req.setdefault("context", context)
+    elif hasattr(facade, "default_context"):
+        req.setdefault("context", facade.default_context())
+
+    try:
+        if hasattr(facade, "check_dependencies"):
+            res = await facade.check_dependencies(req)
+        elif hasattr(facade, "client") and hasattr(facade.client(), "check_dependencies"):
+            res = await facade.client().check_dependencies(req)
+        else:
+            res = {"status": "VALID", "changed_refs": []}
+
+        st = str(res.get("status") or "").upper()
+        changed = list(res.get("changed_refs") or [])
+        if st in {"STALE", "FRONTIER_STALE"} or bool(changed):
+            return {
+                "status": "STALE",
+                "changed_refs": changed,
+                "conflicts": res.get("conflicts", []),
+                "details": res.get("details", []),
+                "blocked": True,
+                "detail": res.get("action_required") or "Plan dependencies are stale",
+            }
+        return {
+            "status": res.get("status") or "VALID",
+            "changed_refs": [],
+            "details": res.get("details", []),
+            "blocked": False,
+        }
+    except Exception as exc:
+        return {
+            "status": "ERROR",
+            "changed_refs": [],
+            "blocked": False,
+            "error": str(exc),
+        }

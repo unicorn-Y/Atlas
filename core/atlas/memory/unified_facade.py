@@ -186,6 +186,18 @@ class UnifiedMemoryFacade:
             return {"enabled": False, "reason": "MEMORY_UNIFIED_DISABLED"}
         return await self.client().get_status()
 
+    async def record_application(self, request: dict[str, Any]) -> dict[str, Any]:
+        """POST /v1/unified/applications（§6/T07.3/T09.3）：记录实际应用凭据。"""
+        if not self.enabled:
+            return {"enabled": False, "status": "DISABLED"}
+        return await self.client().record_application(request)
+
+    async def check_dependencies(self, request: dict[str, Any]) -> dict[str, Any]:
+        """POST /v1/unified/dependencies/check（§6/T08.2）：动作前依赖检查。"""
+        if not self.enabled:
+            return {"enabled": False, "status": "VALID", "changed_refs": []}
+        return await self.client().check_dependencies(request)
+
     async def call(self, method: str, path: str, json: Any = None,
                    params: dict[str, Any] | None = None) -> Any:
         """T01.3 通用代理传输：/api/unified-memory/* 透传到 /v1/unified/*。

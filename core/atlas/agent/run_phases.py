@@ -89,6 +89,7 @@ class RunRequest:
     task_id: str | None = None
     reasoning_effort: str | None = None
     worker: bool = False
+    plan_dependencies: list[dict[str, Any]] | dict[str, Any] | None = None
 
 
 @dataclass
@@ -151,6 +152,12 @@ class _RunState:
     focus_revision: int = 0
     focus_block: dict[str, Any] | None = None
     focus_tool_receipts: list[dict[str, Any]] = field(default_factory=list)
+    # UM07/T07.3 / T08.2 约束与应用收据
+    pre_plan_constraints: list[dict[str, Any]] = field(default_factory=list)
+    application_receipts: list[dict[str, Any]] = field(default_factory=list)
+    plan_dependencies: list[dict[str, Any]] | dict[str, Any] | None = None
+    pre_plan_read_id: str | None = None
+    pre_plan_input_hash: str | None = None
 
 
 async def execute_run(
@@ -169,7 +176,7 @@ async def execute_run(
     state = _RunState(request=request, callbacks=callbacks, message=request.message)
     for phase in (
         _phase_begin, _phase_prompt_hook, _phase_goal_knowledge,
-        _phase_plan, _phase_context,
+        _phase_pre_plan_constraints, _phase_plan, _phase_context,
     ):
         async with aclosing(phase(agent, state)) as running:
             async for event in running:
@@ -228,6 +235,8 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         parent_process_event_callback=callbacks.parent_process_event_callback,
     )
     state.runtime = runtime
+    runtime.plan_dependencies = request.plan_dependencies
+    runtime.application_receipts = state.application_receipts
 
     # Resolve model
     runtime.model = request.model or agent._model_mgr.current_model
@@ -329,6 +338,44 @@ async def _phase_goal_knowledge(agent, state: _RunState) -> AsyncIterator[dict[s
         }
         state.abort = True
         return
+
+
+async def _phase_pre_plan_constraints(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
+    """UM07/T07.3: 规划前加载相关状态/约束，绑定 read_id + input_hash 并记录应用收据。"""
+    request = state.request
+    if request.worker:
+        return
+    try:
+        from atlas.memory.context import (
+            is_personal_memory_relevant,
+            load_pre_plan_constraints,
+        )
+        if not is_personal_memory_relevant(state.message):
+            return
+
+        facade = getattr(agent, "_unified_facade", None)
+        if facade is None:
+            from atlas.memory.unified_facade import UnifiedMemoryFacade
+            facade = UnifiedMemoryFacade.from_config()
+
+        ctx = facade.default_context(
+            runtime_session_id=request.conversation_id,
+            task_id=request.task_id,
+            project_id=request.project_id,
+        )
+        res = await load_pre_plan_constraints(facade, state.message, context=ctx)
+        if res.get("relevant"):
+            state.pre_plan_constraints = res.get("constraints", [])
+            state.pre_plan_read_id = res.get("read_id")
+            state.pre_plan_input_hash = res.get("input_hash")
+            receipt = res.get("application_receipt")
+            if receipt:
+                state.application_receipts.append(receipt)
+                if state.runtime is not None:
+                    state.runtime.application_receipts = state.application_receipts
+                yield {"type": "application_receipt", "data": receipt}
+    except Exception as exc:
+        log.warning("agent.pre_plan_constraints_failed", error=str(exc), exc_info=True)
 
 
 async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
@@ -436,6 +483,9 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
                 limit=_agent.get_config().max_context_messages,
             )
             state.context = await agent._memory.get_agent_context_with_trace(state.message)
+            from atlas.memory.context import is_personal_memory_relevant
+            if not is_personal_memory_relevant(state.message):
+                state.context["memories"] = []
             state.consolidated_insights = (
                 await agent._memory.apply_knowledge_consolidated_insights(
                     state.message, purpose="execution",
@@ -465,6 +515,10 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             # (RuntimeWarning: coroutine never awaited) before the run aborts.
             context_memories.close()
             raise TypeError("Agent context memories must be a list, not a coroutine")
+        constraint_texts = [
+            item.get("content", {}).get("text") if isinstance(item.get("content"), dict) else str(item.get("content"))
+            for item in state.pre_plan_constraints
+        ]
         runtime.maintenance_context = {
             "project_state": state.plan.to_dict() if state.plan else None,
             "unresolved_work": [
@@ -474,6 +528,7 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             "user_constraints": [
                 "Preserve FULL_ACCESS policy",
                 "Verify the task before reporting completion",
+                *[t for t in constraint_texts if t],
             ],
             "memory_refs": [
                 item.get("key") or item.get("id")
@@ -611,6 +666,15 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
     if state.focus_block:
         initial_messages.append(SystemMessage(
             content=_FOCUS_PREFIX + json.dumps(state.focus_block, ensure_ascii=False)
+        ))
+
+    # UM07/T07.3：规划前约束与偏好装配块（必须严格遵守）
+    if state.pre_plan_constraints:
+        _CONSTRAINTS_PREFIX = (
+            "Active user constraints and preferences (must be strictly followed in plan and execution):\n"
+        )
+        initial_messages.append(SystemMessage(
+            content=_CONSTRAINTS_PREFIX + json.dumps(state.pre_plan_constraints, ensure_ascii=False)
         ))
 
     memories, trace_items, reflections, goal_experiences, goal_knowledge, insights = (

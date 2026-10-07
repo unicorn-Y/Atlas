@@ -366,6 +366,39 @@ async def execute_tools_node(
         mcp_info = agent._mcp.get_tool(fn_name) if agent._mcp else None
         is_mcp_write = mcp_info is not None and not getattr(mcp_info, "read_only", False)
         is_write = is_write or is_mcp_write
+
+        # T08.2 / UM08: 动作前依赖检查（新事实不能配旧计划继续执行）
+        plan_deps = getattr(ctx, "plan_dependencies", None)
+        if is_write and plan_deps:
+            try:
+                from atlas.memory.context import check_action_dependencies
+                from atlas.memory.unified_facade import UnifiedMemoryFacade
+
+                facade = getattr(agent, "_unified_facade", None) or UnifiedMemoryFacade.from_config()
+                dep_check = await check_action_dependencies(
+                    facade, plan_deps, getattr(ctx, "context", None)
+                )
+                if dep_check.get("blocked"):
+                    detail = (
+                        f"动作前依赖检查失败：依赖项已过时（STALE），"
+                        f"变更项: {dep_check.get('changed_refs', [])}。已阻止外部写操作执行。"
+                    )
+                    events.append({
+                        "type": "tool_result", "id": tc_id, "name": fn_name,
+                        "content": [{"type": "text", "text": detail}],
+                        "is_error": True, "error_category": "stale_plan",
+                    })
+                    _capture_tool_event(
+                        ctx, tool_call_id=tc_id, name=fn_name, phase="result",
+                        text=detail, is_error=True, error_category="stale_plan",
+                    )
+                    tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+                    if ctx.event_queue is not None:
+                        await ctx.event_queue.put(events[-1])
+                    continue
+            except Exception as exc:
+                log.warning("tool_node.dependency_check_failed", tool=fn_name, error=str(exc))
+
         if permission_mode == "ask_writes" and is_write and ctx.approval_callback:
             from atlas.engine.tool_registry import _approval_fingerprint
 
