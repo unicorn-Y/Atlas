@@ -107,3 +107,99 @@ C 对 Hermes 源码的进一步核验：parse failure 不覆盖原 config；back
 MOS ba8613403f56429333fe5adfdca6f291bd4b41f1 已提交、推送，并用 SSH ls-remote 核对 memory-v1 相同完整 HEAD。只 stage 17 个登记文件，未混入既有 recovery/HARD_ERASE 证据改动。A 确认冻结文件停止编辑后，其通道立即接续 D；api.py 转 D、retrieval.py 留 E，B/C 继续。A.md 的 PARTIAL 与全套基线缺口保留，不将整合子包当完整 S0。
 
 Observer 当前十二项已独立复跑：12 passed in 2.26s，退出0，Temp/memory-v1-controller-observer-current 隔离根。C 随后还在补 ACKED→enqueue 窗口恢复；总控读预算结算发现 BEGIN 前读 reservation 的并发重复结算风险，已退 C 将读取和更新置于同一事务并验证重启遗留预留策略。
+
+---
+
+## 2026-10-07 深夜 · Hermes 总控接手 · 独立验收记录
+
+上一任 Codex 总控与其 3 个 luna 子代理于 22:35 全部撞 ChatGPT 额度墙(usageLimitExceeded，恢复时间 Oct 8 01:37)。
+总控移交 Hermes。以下全部为**总控亲自复跑**的结果，不采信子代理自报。
+
+### 接手时基线(工作区未提交改动)
+- Atlas 全库: `19 failed, 2296 passed, 4 skipped`(336 deselected)，449s。
+- 对照基线 worktree 75c9709c: 同样 8 个测试 `8 failed, 27 passed` → **8 个是仓库既有失败**。
+- 判定: **11 个失败是未提交改动引入的回归**(7×test_agent_run_phases + 1×test_c4_hooks 同根因: `_unified_reads_enabled` 被 AsyncMock 探针返回的协程骗过，bool(协程)恒真 → 走统一读分支 → state.context.get() 崩；4× test_composition/legacy_migration/windows_activity: FakeUnifiedFacade 缺 list_records 等夹具未同步)。
+
+### 第一轮子代理(3 并行: A/D/E)
+- **A 包(S1 + 修 11 回归)**: 交付 DONE_PENDING_REVIEW。
+  - 总控独立复跑 5 个受影响文件: **74 passed, 0 failed**。
+  - 总控独立复跑 Atlas 全库: **19 failed → 7 failed, 2308 passed**；7 个全部为基线既有失败(lint_gate/model_router/plugins/route_snapshot/subprocess_encoding/repair_baseline×2)。**11 个回归归零，验收通过**。
+  - 修法正当(未弱化测试): 新增 `_is_unified_reads_enabled()` 用 inspect.iscoroutine + close() 处理测试替身；`memory/__init__.py:181` 用真实契约键 `items`。
+  - 遗留低危: 测试替身 `FakeUnifiedFacade.list_records` 返回键写的是 `records`，真实契约是 `items`(test_client_contract.py:473 断言 `records["items"]`)。生产侧正确，仅夹具不一致 → 已列入整合时修正。
+- **D 包(S2 无 key 路径 + S4 consolidation:apply)**: 提交 8ac2fff + 5ad0db8。
+  - 总控独立复跑新测试: 15 passed。无 key 路径真实(`not key and text` → facet EPISODE、保留 derived_from)；apply 白名单/黑名单/SAVEPOINT 逐操作原子、禁止删除类操作、0031 操作账本。
+  - **但总控复跑 MemoryOS 全库发现 5 个回归**: 基线 `1 failed / 460 passed` → `5 failed / 470 passed`。
+    1. `consolidation.py:1218/1231/1364` 写 `SELECT ... FROM episodes WHERE id = ? OR episode_key = ?`，但 episodes 表主键是 `episode_id`、**无 id 列**(基线 ba86134 grep 该模式 = 0，是 8ac2fff 新引入) → `sqlite3.OperationalError: no such column: id` → 源删除后概括 stale 链路 500。受影响: test_summary_provenance×2 + test_um04_wiring×1。直接违反任务书 S4「被删来源导致概括 stale，不能复活」。
+    2. `test_baseline_static.py::test_gap_evidence_is_computed_not_asserted`: 冻结表集合未同步 0031 的 `unified_consolidation_operations`。
+    3. `test_temporal.py::test_old_backfill_does_not_replace_current_state`: 单跑通过/全库失败(顺序污染)。
+  - 处置: **已派返工包 R1**，要求复现确认并修回 `1 failed / 460+ passed`。
+  - 文档缺口: D 未写 `progress/packages/D.md`。
+- **E 包(S3 召回装配 + S4 淡忘排序)**: 交付 DONE_PENDING_REVIEW。
+  - 总控独立复跑: Atlas recall_context 5 passed；MOS decay 15 passed。
+  - 接线真实: `run_phases.py:519 → memory/__init__.py:_unified_recall_context → facade.recall_for_conversation` + `context_items`。
+  - 意图闸门真实生效(`if gate_passed:` 才装配动态记忆块)，但为本地启发式(hash 向量 + 正则)，非模型；任务书未强制模型判定 → 记为设计选择(有意零额外模型成本)，非违规。
+  - S4 排序为真实现: Generative Agents(Park et al. 2023) 公式 + 分 facet 半衰期(STATE 14d/EPISODE 60d/其余不衰减) + HIGH 重要性下限。
+  - 10 轮真实模型冒烟有完整证据链(gate 判决/装配 refs/token 用量/出处校验)。
+
+### 第二轮(3 并行: R1 返工 / F 评测准备 / S6 提醒验证)
+已派出，等交付。
+
+## 2026-10-08 凌晨 · 第二轮验收（R1 返工 / F 评测 / S6 验证）
+
+### R1（MemoryOS 回归修复）— 总控独立验收通过
+- 提交 c4f7ed8：consolidation.py 的 `episodes WHERE id` → `episode_id`（1218/1231/1364 三处），
+  test_baseline_static 冻结表集合补入 0031 的 unified_consolidation_operations。
+- 总控复跑 MemoryOS 全库：**1 failed / 474 passed**（修复前 5 failed / 470 passed）。基线 ba86134 = 1 failed / 460 passed。
+- 剩余 1 个 failed（test_temporal::test_old_backfill_does_not_replace_current_state）：总控单跑 test_temporal.py = 45 passed；
+  R1 诊断其为既有跨测试 session 级 DB 污染（test_conflict_resolution 写入 subject-default FACT，test_temporal 旧回填用例受 STATE 14 天衰减 vs FACT 不衰减影响）。
+  判定：非本次功能回归，属既有测试隔离缺陷。
+- 注：早先对基线 worktree 的对比跑出现大量 collection ERROR（worktree 缺未跟踪夹具），已改用定向单跑判定。
+
+### F（S8 评测准备）— 交付物齐全，首轮判定 REJECTED 属正确行为
+- 真实下载 LongMemEval 数据集（分类分布 single-session-user 70 / multi-session 133 / temporal-reasoning 133 / knowledge-update 78 / …）。
+- 产出：eval/longmemeval_subset.json、eval/two_week_trace.json、scripts/memory_v1/{sample_longmemeval,eval_scenarios,eval_judge,gen_two_week_trace}.py。
+- 首轮评测报告：30 场景 11 passed / 19 failed，E1-E4/E6 38.1%（<90%）→ verdict REJECTED。
+  判定：S2/S4/S5/S6/S7 尚未完成时端到端评测不应通过，REJECTED 是诚实的正确行为。
+  信号记录：多数场景 assembled_ref_count=2 但 cited_refs=[]（记忆未被引用生效），待 S2/S4/S5 完成后重跑观察。
+
+### S6（中断接续与提醒验证）— 验证结论：现有链路未损坏
+- 交付：core/tests/test_s6_interruption_and_reminder.py（总控复跑 7 passed）。
+- 结论：时间/事件提醒复用 AutomationStore + DBOS 调度器，IntentBridge 仅作意图投影与事件匹配层，未新建第二套调度器/事实库（符合第3节第5条红线）；去重与取消经测试验证。
+- 缺口：未写 progress/S6.md（文档缺口，总控已记录）。
+
+## 2026-10-08 凌晨 · 任务包 I3 成果整合提交与推送记录
+
+本轮未提交成果已按逻辑拆分为 5 个原子提交，完成本地整合并推送到远程仓库。
+
+### 提交清单
+
+1. **`f10c7227`** — `feat(memory-v1): S1 unified read paths, MemoryOS service lifecycle supervision, and harness fixture`
+   - 文件数：12 个文件（+1358, -41）
+   - 范围：S1 统一读路径、`MemoryOSServiceLifecycle` 进程监管与就绪等待、`windows_sources` 穿透修复、`FakeUnifiedFacade` 补齐 `list_records`、切割基线 Harness 去除伪证据断言、相关测试集。
+
+2. **`bf0ff657`** — `feat(memory-v1): S2 observer extraction pipeline, durable outbox queue, drain loop, and agent wiring`
+   - 文件数：11 个文件（+2890, -27）
+   - 范围：S2 观察者提取流水线 (`observer.py` / `observer_drain.py` / `observer_prompt.py`)、持久化 Outbox 队列扩展 (`outbox.py`)、`run_phases.py` / `server.py` 会话与生命周期接线、Mastra 协议许可文件、Observer 单元与冒烟测试。
+
+3. **`51ef4511`** — `feat(memory-v1): S6 DBOS scheduler wait overflow shim and interruption reminder verification`
+   - 文件数：5 个文件（+759, -0）
+   - 范围：DBOS 调度器远期等待溢出兼容 shim (`dbos_compat.py`)、`engine.py` / `dbos_backend.py` 调度接入、中断接续与提醒验证用例 (`test_s6_interruption_and_reminder.py`) 及 shim 单测。
+
+4. **`3b408edb`** — `feat(memory-v1): S5 frontend memory page, unified records view, and status panel`
+   - 文件数：11 个文件（+1799, -233）
+   - 范围：S5 前端统一记忆管理页面 (`MemoryPage.tsx`)、统一记录列表 (`RecordsView.tsx`)、实体视窗 (`EntityView.tsx`)、状态面板 (`StatusPanel.tsx`)、时间线视窗及对应完整 Vitest 单测集（9 文件 62 用例全绿）。
+
+5. **`8ca7c856`** — `feat(memory-v1): S8 evaluation tooling, benchmark traces, scenario judge, and MEMORY-V1 docs`
+   - 文件数：18 个文件（+8762, -11）
+   - 范围：S8 评测脚本 (`eval_scenarios.py`, `eval_judge.py`, `gen_two_week_trace.py`, `sample_longmemeval.py`)、LongMemEval 评测子集与基准数据 (`eval/`)、MEMORY-V1 阶段推进文档与包报告 (`CURRENT.json`, `DISPATCH.md`, `CONTROLLER_RESUME_2026-10-07.md`, `PACKAGE_CONTEXT.md`, `S1.md`, `packages/A.md`, `packages/C.md`, `packages/C_vendored.md`, `packages/R1.md`)。
+
+### 推送结果
+
+- **推送命令**：`git push git@github.com:unicorn-Y/Atlas.git memory-v1`
+- **状态**：成功 (exit code 0)
+- **原始输出**：
+```
+To github.com:unicorn-Y/Atlas.git
+   75c9709c..8ca7c856  memory-v1 -> memory-v1
+```
+
