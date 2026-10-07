@@ -9,22 +9,24 @@
   "status_enum": ["NOT_STARTED", "IN_PROGRESS", "DONE_PENDING_REVIEW", "BLOCKED", "ACCEPTED", "REJECTED"],
   "note": "ACCEPTED/REJECTED 只能由审查方写",
   "steps": {
-    "S0": {"title": "清场与开关", "status": "IN_PROGRESS"},
-    "S1": {"title": "读写打通：聊天只读统一记忆", "status": "IN_PROGRESS"},
-    "S2": {"title": "观察者 Observer", "status": "IN_PROGRESS"},
-    "S3": {"title": "召回装配与意图闸门、出处", "status": "NOT_STARTED"},
-    "S4": {"title": "反思者 Reflector 与淡忘排序", "status": "NOT_STARTED"},
-    "S5": {"title": "记忆页面闭环", "status": "NOT_STARTED"},
-    "S6": {"title": "中断接续与提醒验证", "status": "NOT_STARTED"},
-    "S7": {"title": "正式启用与历史回填（用户授权）", "status": "NOT_STARTED"},
-    "S8": {"title": "V1 验收评测", "status": "NOT_STARTED"}
+    "S0": {"title": "清场与开关", "status": "DONE_PENDING_REVIEW", "note": "harness去造假+冻结开关+全库基线已由总控独立复跑；证据 progress/CONTROLLER_RESUME_2026-10-07.md"},
+    "S1": {"title": "读写打通：聊天只读统一记忆", "status": "DONE_PENDING_REVIEW", "note": "A包74 passed；11回归归零；总控复跑Atlas全库19→7 failed(全既有)。progress/S1.md"},
+    "S2": {"title": "观察者 Observer", "status": "DONE_PENDING_REVIEW", "note": "observer.py真模型调用(complete_for purpose=memory_observe)+已接server lifespan(server.py:283-312)；C2真实端到端冒烟中；MemoryOS无key路径由8ac2fff+R1修复"},
+    "S3": {"title": "召回装配与意图闸门、出处", "status": "DONE_PENDING_REVIEW", "note": "E包 recall_context.py 已接入run_phases:519；5 passed + 10轮真模型冒烟。progress/packages/E.md"},
+    "S4": {"title": "反思者 Reflector 与淡忘排序", "status": "IN_PROGRESS", "note": "排序5ad0db8+apply8ac2fff经R1修复(c4f7ed8)；G包reflector.py已提交13faa7ca(真模型memory_reflect+POST consolidation:apply,10 passed+真模型冒烟)；★缺口:尚未接空闲/每日触发，I2包接线中"},
+    "S5": {"title": "记忆页面闭环", "status": "IN_PROGRESS", "note": "H包已交付MemoryPage+RecordsView(253前端测试+build 0错误，总控复跑确认)；待I3整合提交"},
+    "S6": {"title": "中断接续与提醒验证", "status": "DONE_PENDING_REVIEW", "note": "验证结论:现有提醒/接续链路未损坏，复用AutomationStore+DBOS未新建调度器；test_s6_interruption_and_reminder.py 7 passed(总控复跑)"},
+    "S7": {"title": "正式启用与历史回填（用户授权）", "status": "NOT_STARTED", "note": "需用户授权，总控将停下询问"},
+    "S8": {"title": "V1 验收评测", "status": "IN_PROGRESS", "note": "F包已建评测器+LongMemEval子集+30场景+2周轨迹；首轮判定REJECTED(11/30)属半成品正确行为；待S2/S4/S5完成后重跑"}
   },
   "reviews": [],
   "orchestration": {
     "status": "RUNNING",
+    "controller": "Hermes AI计划 (接手；上一任商店版 Codex 于 2026-10-07 22:35 撞 ChatGPT 额度墙全挂)",
     "max_subagents": 3,
-    "reason": "User authorized at most 3 concurrent subagents; A/B/C resumed, D/E/F queued. CLI login is no longer required.",
-    "evidence": "progress/ORCHESTRATION_BLOCKED.md",
+    "reason": "Codex 四线程 failed(usageLimitExceeded, Oct 8 01:37 前无额度)。用户指令续接本任务，总控移交 Hermes。本轮派 3 个子智能体: A(修11回归+S1)、D(S2无key路径+consolidation:apply)、E(S3召回装配+S4排序)。",
+    "evidence": "progress/CONTROLLER_RESUME_2026-10-07.md",
+    "package_context": "progress/PACKAGE_CONTEXT.md",
     "dispatch": "progress/DISPATCH.md"
   }
 }

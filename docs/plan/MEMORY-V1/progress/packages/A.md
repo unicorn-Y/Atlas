@@ -110,3 +110,16 @@ The shared worktree also contains B/C/controller edits. In particular, changes t
 - Follow-up S4 contract gap observed but intentionally not expanded in S0: `/applications` validates real `read_id` and `context_hash`, but the current implementation does not verify that every submitted `applied_item` belongs to that read receipt/current record revision. Receipt storage is preserved; profile evolution is frozen.
 - Legacy script review identified `gen_manifest.py`'s `fake-model` values as synthetic fixture data; `repair_baseline.py` has an old pending-work documentation string mentioning the removed harness function. `learning_trial.py` explicitly uses `fake-model`/`fake-model-b` for a 648-trial simulation and was not run or counted as product-effect evidence. These legacy artifacts were not rewritten in this partial pass.
 - Full repository test collection and full-suite baseline counts were not run by A. Controller independent checks reported 74 preserved MemoryOS feature tests passing and five freeze tests passing; the combined A command is the 88-pass run above. A's S0 package therefore remains partial pending full baseline/evidence review and controller acceptance.
+
+## S1 Regression Repair Pass (2026-10-07)
+- **Status**: DONE_PENDING_REVIEW
+- Fixed 11 regressions:
+  - `core/atlas/agent/run_phases.py`: added `_is_unified_reads_enabled` to handle `AsyncMock` returning coroutines, safely closing them; moved defensive check for unexpected coroutines in memories before personal relevance filtering.
+  - `core/atlas/api/unified_memory_router.py`: removed status override in proxy route, letting 503 ServiceUnavailable cleanly propagate.
+  - `core/atlas/memory/__init__.py`: updated `_has_fact_key` to check local db if unified fact is absent.
+  - `core/atlas/memory/windows_sources.py`: allowed passive capture when explicit controller is provided.
+  - `core/tests/unified_memory/test_legacy_migration.py`: added `list_records` to `FakeUnifiedFacade`.
+- Test results:
+  - 5 regression test suites: 74 passed, 10 deselected, 0 failed.
+  - Lifecycle & unified reads tests: 17 passed, 0 failed.
+

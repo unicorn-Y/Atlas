@@ -32,6 +32,8 @@ A 另负责 test_transfer_gate.py 的同类显式 opt-in 和共用测试头 help
 
 B 增补 capture.py 现有 tick/ACK 后注册/清理薄回调所有权，不重写捕获内容、哈希、水位和投递可靠性；Observer 模型调用在 singleflight 后台任务，不阻塞 drain/主回答。未经删除边界验证，不在 DELETE conversation 后触发新增记忆写入。
 
+B 增补 observer_drain.py 及专属 drain 测试，只负责现有 capture tick 驱动 pending/resume→真实 HTTP ack→ack_batch；结束信号须同步持久化，再开始后台模型工作。
+
 判据：启用统一后用户事实读全部 HTTP 委托，独有本地 facts 不出现在上下文；健康检查/自动启动/仅关闭自有进程，离线不阻塞；隔离 legacy dry-run 有记录数、哈希、出处。必须生命周期/读路径/本地污染回归测试和 S1 五条真实模型经 run_phases 的冒烟，覆盖 remember、新会话、服务离线、重启自动拉起。独占 progress/packages/B.md。
 
 ## C：S2 Atlas Observer（施工中）
@@ -47,6 +49,8 @@ C 增补独占 outbox.py 的 Observer 操作状态、待观察/待 HTTP ack 队�
 独占 D:/MemoryOS/service/unified/formation.py、consolidation.py、api.py，D 专属测试，新增迁移号 **0031**（只有需要新字段时创建 0031_memory_v1_consolidation.sql）。app.py 已归 A 独占，需要接线时向 A 提需求。禁 retrieval.py、现有迁移修改、Atlas 热文件。配置向 A、Atlas client 方法向 B 提需求。
 
 2026-10-07：A 确认停止冻结文件编辑，总控独立验收后提交推送 MOS ba86134。api.py 正式转 D；retrieval.py 留给 E，当前无写者。A 通道接续 D，但其 Atlas 配置所有权仍保留，其他通道不得并写。先完成无 key 自然正文形成供 C 跑真实十条，再实施整理接口。
+
+D 增补 sources.py 的 _write_dependencies 及其直接 DERIVED source_event_id 解析校验，保留原字典依赖兼容。原始 payload/hash/derived_from 不改写；解析为已存在同主体实际 ref/revision，缺失或跨主体或删除屏障拒绝，不可凭命名拼 ref 假装存在。
 
 判据：无 key 非空正文形成记忆，归一正文去重、保留全部来源；带 key 的冲突/迟到/时态保持；consolidation:apply 合法操作、同主体/出处/删除屏障校验、逐操作原子接受或拒绝与 revision；被删来源导致概括 stale，不能复活。必须无 key/provenance/冲突/时态回归、非法与跨主体 ref、拒绝操作不部分生效、幂等、HARD_ERASE 和概括 stale 测试；真实隔离 HTTP 服务至少一条形成与一条整理冒烟，模型提议来自 C/G，不能用规则替代真实模型宣称 S4 达标。独占 progress/packages/D.md。
 
