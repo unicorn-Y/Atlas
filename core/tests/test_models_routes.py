@@ -535,3 +535,37 @@ async def test_connection_test_reports_sdk_exception_and_logs_it(
         "message": "provider request failed with status 429",
     }
     assert logged == ["models.connection_test_failed"]
+
+
+@pytest.mark.asyncio
+async def test_memory_model_setting_roundtrips_only_configured_model_ids(
+    client: AsyncClient,
+) -> None:
+    available = (await client.get("/api/models")).json()["models"]
+    model_id = next(str(item["id"]) for item in available if item.get("id"))
+
+    initial = await client.get("/api/settings/configuration")
+    assert initial.status_code == 200
+    assert initial.json()["memory_model"] == ""
+
+    saved = await client.put(
+        "/api/settings/configuration", json={"memory_model": model_id},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["memory_model"] == model_id
+    assert _settings()["memory_model"] == model_id
+
+    cleared = await client.put("/api/settings/configuration", json={"memory_model": ""})
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["memory_model"] == ""
+    assert _settings()["memory_model"] == ""
+
+
+@pytest.mark.asyncio
+async def test_memory_model_setting_rejects_unconfigured_model(client: AsyncClient) -> None:
+    rejected = await client.put(
+        "/api/settings/configuration", json={"memory_model": "not-configured"},
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"] == "记忆模型必须来自已配置的模型列表"
+    assert _settings().get("memory_model") is None

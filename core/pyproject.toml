@@ -111,5 +111,6 @@ markers = [
     "integration: tests crossing Atlas component, persistence, or process boundaries",
     "desktop: tests that interact with the real Windows desktop",
     "live: tests that call a real model provider; requires ATLAS_LIVE=1",
+    "fake_provider: tests using a fake model provider; do not count as product-effect evidence",
     "flaky: retry policy supplied by pytest-rerunfailures",
 ]

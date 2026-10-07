@@ -44,6 +44,7 @@ class ProviderSettingsRequest(BaseModel):
     gateway_base_url: str | None = None
     api_key: str | None = None
     compression_model: str | None = None
+    memory_model: str | None = None
     subagents_enabled: bool | None = None
     subagent_default_model: str | None = None
 
@@ -140,6 +141,7 @@ def _configuration_payload(model_mgr) -> dict[str, Any]:
         "models": model_mgr.list_models(),
         "current": model_mgr.current_model,
         "compression_model": str(settings.get("compression_model", "")),
+        "memory_model": str(settings.get("memory_model", "")),
         "subagents_enabled": (
             settings.get("subagents_enabled")
             if isinstance(settings.get("subagents_enabled"), bool) else True
@@ -229,14 +231,19 @@ async def update_configuration(
         item.get("id") == req.compression_model for item in model_mgr.list_models()
     ):
         raise HTTPException(status_code=400, detail="压缩模型必须来自已配置的模型列表")
+    if req.memory_model is not None and req.memory_model and not any(
+        item.get("id") == req.memory_model for item in model_mgr.list_models()
+    ):
+        raise HTTPException(status_code=400, detail="记忆模型必须来自已配置的模型列表")
     api_key = req.api_key.strip() if req.api_key and req.api_key.strip() else None
     if req.gateway_base_url is not None or api_key:
         model_mgr.update_provider(base_url, api_key)
-    if req.compression_model is not None:
+    if req.compression_model is not None or req.memory_model is not None:
         settings = _server().load_user_settings()
-    if req.compression_model is not None:
-        settings["compression_model"] = req.compression_model
-    if req.compression_model is not None:
+        if req.compression_model is not None:
+            settings["compression_model"] = req.compression_model
+        if req.memory_model is not None:
+            settings["memory_model"] = req.memory_model
         _server().save_user_settings(settings)
     if req.subagents_enabled is not None or req.subagent_default_model is not None:
         settings = _server().load_user_settings()

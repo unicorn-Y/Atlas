@@ -172,6 +172,21 @@ class AtlasConfig:
         return max(0.0, float(self.get("memory.unified.outbox_backoff_seconds", 5.0)))
 
     @property
+    def unified_service_dir(self) -> str:
+        """MemoryOS checkout used by the opt-in service lifecycle."""
+        return str(self.get("memory.unified.service_dir", r"D:\MemoryOS"))
+
+    @property
+    def memory_v1_recall_timeout_seconds(self) -> float:
+        """Short isolated recall deadline used by the MEMORY-V1 adapter."""
+        return float(self.get("memory.v1.recall_timeout_seconds", 1.0))
+
+    @property
+    def memory_v1_observer_daily_token_budget(self) -> int:
+        """Daily token cap shared with the asynchronous memory observer."""
+        return int(self.get("memory.v1.observer_daily_token_budget", 50_000))
+
+    @property
     def context_maintenance_message_limit(self) -> int:
         return int(self.get("agent.context_maintenance.message_limit", 80))
 

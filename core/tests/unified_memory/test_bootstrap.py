@@ -10,11 +10,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests.unified_memory.harness import (
     PRODUCTION_ATLAS_DATA,
     PRODUCTION_MEMORYOS_ROOT,
     UMHarness,
 )
+
+pytestmark = pytest.mark.fake_provider
 
 
 def test_harness_never_uses_production(um: UMHarness) -> None:
@@ -35,6 +39,10 @@ def test_harness_never_uses_production(um: UMHarness) -> None:
     # The two services must be separate data roots of the same runtime instance.
     assert atlas_data != memoryos_db
     assert manifest["model"]["provider"] == "fake-loopback"
+
+    atlas_env = um._atlas_env(atlas_data)
+    assert Path(atlas_env["MEMORYOS_DATA_ROOT"]).resolve() == Path(manifest["memoryos_data"]).resolve()
+    assert Path(atlas_env["MEMORYOS_DB_PATH"]).resolve() == memoryos_db
 
 
 def test_both_services_healthy(um: UMHarness) -> None:
@@ -92,6 +100,69 @@ def test_chat_roundtrip(um: UMHarness) -> None:
     # Reply comes from the loopback fake provider's default text, proving the
     # real model client → real agent loop → real WS protocol chain executed.
     assert result["reply"].strip() == "um-fake-ok"
+
+
+def test_harness_loopback_http_ignores_system_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Harness requests to its isolated local services must bypass OS proxies."""
+    calls: list[dict[str, object]] = []
+
+    def request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        return object()
+
+    monkeypatch.setattr("tests.unified_memory.harness.httpx.request", request)
+    monkeypatch.setattr(UMHarness, "memoryos_url", property(lambda _self: "http://127.0.0.1:65534"))
+
+    result = UMHarness().api("GET", "/v1/health")
+
+    assert result is not None
+    assert len(calls) == 1
+    assert calls[0]["url"] == "http://127.0.0.1:65534/v1/health"
+    assert calls[0]["trust_env"] is False
+
+
+def test_run_summary_only_reports_run_scoped_application_receipts(tmp_path: Path) -> None:
+    """Summary evidence comes from this run's real read_id, never nearby DB rows."""
+    import json
+    import sqlite3
+
+    db_file = tmp_path / "db" / "memoryos.sqlite3"
+    db_file.parent.mkdir(parents=True)
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "CREATE TABLE learning_applications (application_id TEXT, read_id TEXT, "
+            "context_hash TEXT, action_refs_json TEXT, basis_json TEXT, "
+            "applied_items_json TEXT, created_at TEXT)"
+        )
+        conn.executemany(
+            "INSERT INTO learning_applications VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("app-other", "read-other", "h", "[]", "{}",
+                 json.dumps([{"facet": "PREFERENCE", "content": {"value": "wrong"}}]), "2"),
+                ("app-current", "read-current", "h", "[]", "{}",
+                 json.dumps([{"facet": "PREFERENCE", "content": {"value": "简短中文"}}]), "1"),
+            ],
+        )
+
+    harness = object.__new__(UMHarness)
+    harness.started = False
+    harness.stopped = True
+    harness.runtime_manifest = {"memoryos_db": str(db_file)}
+    run_id = "run-current"
+    result = harness._summarize_run(run_id, "conversation-current", [
+        {"run_id": "run-current", "event": "application_receipt",
+         "data": {"read_id": "read-current", "status": "RECORDED"}},
+        {"run_id": "run-other", "event": "application_receipt",
+         "data": {"read_id": "read-other", "status": "RECORDED"}},
+    ])
+
+    assert [row["read_id"] for row in result["application_receipts"]] == [
+        "read-current", "read-current",
+    ]
+    assert result["applied_preference"] == "简短中文"
+    assert result["applied_preference_status"] == "VERIFIED_BY_RUN_SCOPED_APPLICATION_RECEIPT"
+    assert result["fabricated_fact"] is None
+    assert result["fabricated_fact_status"] == "UNVERIFIED"
 
 
 def test_api_routing(um: UMHarness) -> None:

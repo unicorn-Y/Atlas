@@ -343,8 +343,11 @@ class UMHarness:
         assert self._fake is not None
         env = _scrub_env(dict(os.environ))
         self._home_env(env, Path(self.runtime_manifest["runtime_root"]))
+        memoryos_data = Path(self.runtime_manifest["memoryos_data"])
         env.update({
             "ATLAS_DATA_DIR": str(atlas_data),
+            "MEMORYOS_DATA_ROOT": str(memoryos_data),
+            "MEMORYOS_DB_PATH": str(memoryos_data / "db" / "memoryos.sqlite3"),
             "HERMES_HOME": str(atlas_data / "engine"),
             "ATLAS_SCHEDULER_ENABLED": "false",
             "ATLAS_API_TOKEN": ATLAS_API_TOKEN,
@@ -401,7 +404,7 @@ class UMHarness:
                     f"日志尾部:\n{_tail(log_path)}"
                 )
             try:
-                response = httpx.get(url, timeout=2.0)
+                response = httpx.get(url, timeout=2.0, trust_env=False)
                 if response.status_code == 200:
                     return
                 last_error = f"HTTP {response.status_code}: {response.text[:200]}"
@@ -447,7 +450,7 @@ class UMHarness:
         else:
             raise ValueError(f"path 必须以 /v1/ 或 /api/ 开头: {path}")
         return httpx.request(method, base + path, json=json, params=params,
-                             headers=headers, timeout=30.0)
+                             headers=headers, timeout=30.0, trust_env=False)
 
     # ------------------------------------------------------------------ chat
 
@@ -469,13 +472,6 @@ class UMHarness:
         """
         conversation_id = session_id or self._new_conversation()
         assert self._fake is not None
-        # T07.3 / T12.1: 当 fake 未预推脚本时，基于统一记忆与约束自动合成符合期望的回复
-        with self._fake._lock:
-            has_script = bool(self._fake._script)
-        if not has_script:
-            auto_reply = self._synthesize_scripted_response(text, conversation_id=conversation_id)
-            self._fake.push(Text(auto_reply))
-
         run_id = uuid.uuid4().hex
         url = (self.atlas_url.replace("http", "ws", 1) + "/ws/chat")
         start_message = {
@@ -508,77 +504,6 @@ class UMHarness:
         if response.status_code != 200:
             raise RuntimeError(f"创建会话失败: {response.status_code} {response.text[:300]}")
         return str(response.json()["id"])
-
-    def _synthesize_scripted_response(self, text: str, conversation_id: str | None = None) -> str:
-        """根据当前召回统一记忆与用户约束自动合成模型回复（当 self._fake._script 为空时）。
-
-        覆盖三类场景（T07.3 / T12.1 / T10.3）：
-          1. 隐式工作约束（implicit）：如 '帮我安排明天的工作'，检测到 19:00 后不排会约束时，
-             安排白天工作，晚上明确不排会；若无约束（如 memory off），安排含晚间的工作。
-          2. 桌面偏好纠错（desktop）：如 '按我现在的格式来'，按 '简短中文' 格式回复。
-          3. 知识缺口（knowledge_gap）：如 '找出那个没有导入的文件里的人名'，识别 AUTH_OR_DATA_GAP
-             且不编造人名。
-        """
-        # 1. 检查是否存在隐式工作/排期约束
-        if any(kw in text for kw in ("安排明天的工作", "安排工作", "明天的工作", "排期")):
-            has_evening_constraint = False
-            try:
-                resp = self.api("POST", "/v1/unified/recall", json={"query": text, "purpose": "PLAN"})
-                if resp.status_code == 200:
-                    items = resp.json().get("context_items", [])
-                    for it in items:
-                        c_text = ""
-                        if isinstance(it.get("content"), dict):
-                            c_text = str(it["content"].get("text") or it["content"].get("constraint") or "")
-                        else:
-                            c_text = str(it.get("content") or "")
-                        if any(w in c_text for w in ("晚上", "7 点", "19:00", "不要给我安排工作会议", "不排工作")):
-                            has_evening_constraint = True
-                            break
-            except Exception:
-                pass
-
-            if has_evening_constraint:
-                return (
-                    "好的，已为您安排明天的工作计划：\n"
-                    "- 上午 09:30 - 11:30：项目重点推进与设计评审\n"
-                    "- 下午 14:00 - 17:30：核心功能编码实现与单元测试\n"
-                    "- 17:30 - 18:30：今日任务总结与工作邮件同步\n\n"
-                    "遵循您晚上 7 点后不安排工作会议的约束，晚间 19:00 后未安排任何工作与会议。"
-                )
-            else:
-                return (
-                    "好的，已为您安排明天的工作日程：\n"
-                    "- 上午 09:30 - 11:30：需求评审\n"
-                    "- 下午 14:00 - 17:30：系统开发\n"
-                    "- 晚上 20:00 - 21:30：晚间复盘会议与任务部署"
-                )
-
-        # 2. 检查偏好纠错（desktop）
-        if "按我现在的格式来" in text or "格式" in text:
-            pref = getattr(self, "_active_corrected_preference", None)
-            if not pref:
-                try:
-                    r = self.api("GET", "/api/unified-memory/records", params={"facet": "PREFERENCE"})
-                    if r.status_code == 200:
-                        items = r.json().get("items", [])
-                        if items:
-                            c = items[0].get("content", {})
-                            pref = c.get("value") or c.get("text")
-                except Exception:
-                    pass
-            pref_name = pref or "简短中文"
-            return f"已按您要求的{pref_name}格式整理完成。"
-
-        # 3. 检查知识缺口（knowledge_gap / evidence_gap）
-        if "没有导入的文件" in text or "找出那个没有导入的文件里的人名" in text:
-            return (
-                "经核实，该文件尚未导入系统，缺少对应的数据内容（AUTH_OR_DATA_GAP）。"
-                "为确保信息真实准确，系统不会编造具体人名。"
-            )
-
-        # 默认返回
-        return "好的，已收到您的指令并完成处理。"
 
     def _summarize_run(self, run_id: str, conversation_id: str,
                        events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -634,20 +559,26 @@ class UMHarness:
 
         # T07.3: 提取应用收据（来自 events、MemoryOS API 或 SQLite 表）
         application_receipts: list[dict[str, Any]] = []
+        run_read_ids: set[str] = set()
         for envelope in events:
-            if envelope.get("event") == "application_receipt":
+            if (envelope.get("run_id") == run_id
+                    and envelope.get("event") == "application_receipt"):
                 data = envelope.get("data") or envelope.get("receipt")
-                if data:
+                if isinstance(data, dict) and data.get("read_id"):
                     application_receipts.append(data)
-        if not application_receipts:
+                    run_read_ids.add(str(data["read_id"]))
+        if run_read_ids:
             try:
                 import sqlite3
-                db_file = self.memoryos_data / "memoryos.db"
+                db_file = Path(self.runtime_manifest["memoryos_db"])
                 if db_file.exists():
                     with sqlite3.connect(str(db_file)) as conn:
                         conn.row_factory = sqlite3.Row
+                        placeholders = ",".join("?" for _ in run_read_ids)
                         rows = conn.execute(
-                            "SELECT * FROM learning_applications ORDER BY created_at DESC"
+                            "SELECT * FROM learning_applications "
+                            f"WHERE read_id IN ({placeholders}) ORDER BY created_at DESC",
+                            tuple(sorted(run_read_ids)),
                         ).fetchall()
                         for r in rows:
                             application_receipts.append({
@@ -660,35 +591,30 @@ class UMHarness:
                             })
             except Exception:
                 pass
-        if not application_receipts:
-            try:
-                import sqlite3
-                db_file = self.memoryos_data / "memoryos.db"
-                if db_file.exists():
-                    with sqlite3.connect(str(db_file)) as conn:
-                        conn.row_factory = sqlite3.Row
-                        rows = conn.execute(
-                            "SELECT * FROM unified_read_receipts WHERE applied_json IS NOT NULL"
-                        ).fetchall()
-                        for r in rows:
-                            application_receipts.append(json.loads(r["applied_json"]))
-            except Exception:
-                pass
 
         # T12.1: 偏好纠错字段
-        applied_preference = getattr(self, "_active_corrected_preference", None)
-        if not applied_preference:
-            try:
-                r = self.api("GET", "/api/unified-memory/records", params={"facet": "PREFERENCE"})
-                if r.status_code == 200:
-                    items = r.json().get("items", [])
-                    if items:
-                        c = items[0].get("content", {})
-                        applied_preference = c.get("value") or c.get("text")
-            except Exception:
-                pass
-        if not applied_preference and ("简短中文" in reply or "格式" in reply):
-            applied_preference = "简短中文"
+        applied_preference = None
+        for receipt in application_receipts:
+            items = receipt.get("applied_items") or []
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                content = item.get("content") or {}
+                facet = str(item.get("facet") or (
+                    content.get("facet") if isinstance(content, dict) else ""
+                ) or "").upper()
+                if facet != "PREFERENCE":
+                    continue
+                if isinstance(content, dict):
+                    applied_preference = content.get("value") or content.get("text")
+                elif isinstance(content, str):
+                    applied_preference = content
+                if applied_preference:
+                    break
+            if applied_preference:
+                break
 
         # T10.3: 缺口类型与伪造标记
         gap_kind = None
@@ -703,7 +629,7 @@ class UMHarness:
         elif "NOT_RECORDED" in reply:
             gap_kind = "NOT_RECORDED"
 
-        fabricated_fact = False
+        fabricated_fact = None
 
         return {
             "run_id": run_id,
@@ -720,8 +646,13 @@ class UMHarness:
             "scheduled_work_in_evening": scheduled_work_in_evening,
             "application_receipts": application_receipts,
             "applied_preference": applied_preference,
+            "applied_preference_status": (
+                "VERIFIED_BY_RUN_SCOPED_APPLICATION_RECEIPT"
+                if applied_preference else "UNVERIFIED"
+            ),
             "gap_kind": gap_kind,
             "fabricated_fact": fabricated_fact,
+            "fabricated_fact_status": "UNVERIFIED",
             # Real-event extraction: the Atlas WS protocol (run_drive.py) has no
             # memory_refs / trace payload today, so these stay empty with a note
             # instead of being assembled from expected values (T00.2 rule).
