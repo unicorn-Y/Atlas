@@ -348,6 +348,13 @@ class AutomationEngine:
     def _create_schedule(self, record: dict[str, Any]) -> None:
         from dbos import DBOS
 
+        from atlas.capabilities.durable.dbos_compat import apply_scheduler_wait_shim
+
+        # Ensure the schedule thread's wait is bounded before this schedule
+        # (re)starts — a far-future cron overflows threading's wait and would
+        # otherwise kill the scheduler thread. Idempotent.
+        apply_scheduler_wait_shim()
+
         desired = self._cron_signature(record)
         DBOS.create_schedule(
             schedule_name=schedule_name(record["id"]),

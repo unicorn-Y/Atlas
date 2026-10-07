@@ -102,6 +102,12 @@ class DurableBackend:
         try:
             from dbos import DBOS
 
+            from atlas.capabilities.durable.dbos_compat import apply_scheduler_wait_shim
+
+            # Bound the per-schedule thread's wait before launch starts those
+            # threads (a far-future cron otherwise overflows threading's wait).
+            apply_scheduler_wait_shim()
+
             self._system_db_path.parent.mkdir(parents=True, exist_ok=True)
             dbos = DBOS(config={
                 "name": "atlas",
