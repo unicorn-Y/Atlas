@@ -203,3 +203,9 @@ To github.com:unicorn-Y/Atlas.git
    75c9709c..8ca7c856  memory-v1 -> memory-v1
 ```
 
+
+### 最终全库复跑（2026-10-08 02:1x）
+- MemoryOS: **475 passed / 0 failed**（R2 后彻底干净）
+- Atlas: **8 failed / 2336 passed / 4 skipped**。7 个为基线既有（lint_gate/model_router/plugins/route_snapshot/subprocess_encoding/repair_baseline×2），第 8 个是**新暴露的计划冲突**：
+  `tests/unified_memory/test_baseline_inventory.py::test_env_manifest_records_both_repos_and_forbidden_roots`
+  断言「受保护在途文件必须仍在 dirty 清单」，但 I3 按计划提交了它们 → 断言失效。属**测试与计划冲突**（非代码 bug）。待收尾包处理。
