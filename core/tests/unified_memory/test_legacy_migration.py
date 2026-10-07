@@ -71,6 +71,9 @@ class FakeUnifiedFacade:
         self.outcomes.append(request)
         return {"ok": True}
 
+    async def list_records(self, *, status: str | None = None, cursor: str | None = None, limit: int = 50) -> dict:
+        return {"records": [], "next_cursor": None}
+
 
 @pytest.fixture
 async def unified_store(tmp_path: Path):

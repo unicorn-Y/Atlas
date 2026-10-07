@@ -181,6 +181,13 @@ async def run_deferred_startup(app: Any, services: Any, components: StartupCompo
             name="startup-session-migration",
         ),
     ]
+    unified_memory = getattr(services, "unified_memory", None)
+    memoryos_lifecycle = getattr(unified_memory, "service_lifecycle", None)
+    if memoryos_lifecycle is not None:
+        branches.append(asyncio.create_task(
+            _component(components, "memoryos", memoryos_lifecycle.start),
+            name="startup-memoryos",
+        ))
     results = await asyncio.gather(*branches, return_exceptions=True)
     for result in results:
         if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError):

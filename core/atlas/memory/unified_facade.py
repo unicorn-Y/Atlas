@@ -11,12 +11,15 @@ T01.1 边界：
 
 from __future__ import annotations
 
+import asyncio
 import os
+import time
 from typing import Any
 
 from atlas.config import AtlasConfig
 from atlas.memory.unified_client import (
     CONTRACT_VERSION,
+    ServiceUnavailable,
     UnifiedMemoryClient,
     observation_content_hash,
 )
@@ -35,6 +38,9 @@ class UnifiedMemoryFacade:
             self._client: UnifiedMemoryClient | None = client
         else:
             self._client = None
+        self._service_lifecycle: Any = None
+        self._offline_until = 0.0
+        self._last_unavailable: str | None = None
 
     @classmethod
     def from_config(cls, config: AtlasConfig | None = None) -> "UnifiedMemoryFacade":
@@ -79,11 +85,72 @@ class UnifiedMemoryFacade:
         except (TypeError, ValueError):
             return 5.0
 
+    @property
+    def recall_timeout_seconds(self) -> float:
+        try:
+            return max(0.05, float(self._config.get("memory.v1.recall_timeout_seconds", 1.0)))
+        except (TypeError, ValueError):
+            return 1.0
+
+    @property
+    def service_state(self) -> str | None:
+        return getattr(self._service_lifecycle, "state", None)
+
+    @property
+    def service_lifecycle(self) -> Any:
+        return self._service_lifecycle
+
+    def bind_service_lifecycle(self, lifecycle: Any) -> None:
+        """Bind the process supervisor owned by the current server lifespan."""
+        self._service_lifecycle = lifecycle
+
+    def mark_read_unavailable(self, error: str) -> None:
+        """Open the 15-second read fuse after a bounded recall timeout."""
+        self._offline_until = time.monotonic() + 15.0
+        self._last_unavailable = str(error)[:500]
+
+    def _require_read_ready(self, route: str) -> None:
+        if not self.enabled:
+            raise ServiceUnavailable("unified memory disabled", route=route)
+        if self._service_lifecycle is not None and self.service_state == "starting":
+            reason = getattr(self._service_lifecycle, "last_error", None)
+            raise ServiceUnavailable(
+                "MemoryOS is starting" + (f": {reason}" if reason else ""),
+                route=route)
+        if time.monotonic() < self._offline_until:
+            raise ServiceUnavailable(
+                self._last_unavailable or "MemoryOS read circuit is open", route=route)
+
+    async def _remote_read(self, route: str, operation: Any) -> Any:
+        """Bound service reads to a 15-second local fuse after transport failure."""
+        self._require_read_ready(route)
+        try:
+            result = await asyncio.wait_for(
+                operation(), timeout=self.recall_timeout_seconds)
+        except ServiceUnavailable as exc:
+            self.mark_read_unavailable(str(exc))
+            raise
+        except asyncio.TimeoutError as exc:
+            error = ServiceUnavailable(
+                f"unified memory read exceeded {self.recall_timeout_seconds:g}s",
+                route=route)
+            self.mark_read_unavailable(str(error))
+            raise error from exc
+        self._offline_until = 0.0
+        self._last_unavailable = None
+        if self._service_lifecycle is not None:
+            note_ready = getattr(self._service_lifecycle, "note_http_ready", None)
+            if note_ready is not None:
+                note_ready()
+        return result
+
     def client(self) -> UnifiedMemoryClient:
         if self._client is None:
+            from atlas.memory.v1_features import frozen_features
+
             self._client = UnifiedMemoryClient(
                 service_url=self.service_url, internal_token=self.internal_token,
-                timeout=self.timeout_seconds)
+                timeout=self.timeout_seconds, frozen_features=frozen_features(self._config))
         return self._client
 
     def default_context(self, **overrides: Any) -> dict[str, Any]:
@@ -96,7 +163,8 @@ class UnifiedMemoryFacade:
                                                self.subject_binding),
             "client_id": overrides.pop("client_id", "atlas-desktop"),
             "actor_id": overrides.pop("actor_id", "atlas-main"),
-            "runtime_session_id": overrides.pop("runtime_session_id", ""),
+            "runtime_session_id": overrides.pop(
+                "runtime_session_id", "atlas-memory-read") or "atlas-memory-read",
             "task_id": overrides.pop("task_id", None),
             "project_id": overrides.pop("project_id", None),
             "environment_id": overrides.pop("environment_id", "windows"),
@@ -129,7 +197,8 @@ class UnifiedMemoryFacade:
         }
         if budget:
             request["budget"] = budget
-        response = await self.client().recall(request)
+        response = await self._remote_read(
+            "/v1/unified/recall", lambda: self.client().recall(request))
         return {
             "enabled": True,
             "read_id": response.get("read_id"),
@@ -184,7 +253,32 @@ class UnifiedMemoryFacade:
         """接线/水位/outbox/模型 worker 状态；disabled 时如实返回禁用状态。"""
         if not self.enabled:
             return {"enabled": False, "reason": "MEMORY_UNIFIED_DISABLED"}
-        return await self.client().get_status()
+        try:
+            result = await self._remote_read(
+                "/v1/unified/status", lambda: self.client().get_status())
+        except ServiceUnavailable as exc:
+            self.mark_read_unavailable(str(exc))
+            return {
+                "enabled": True,
+                "status": "记忆离线",
+                "degraded": True,
+                "degraded_reasons": ["MemoryOS 服务不可用"],
+                "last_error": str(exc)[:500],
+            }
+        return result
+
+    async def list_records(self, *, facet: str | None = None, status: str | None = None,
+                           cursor: str | None = None, limit: int = 50) -> dict[str, Any]:
+        """Read records from the MemoryOS authority, never from Atlas facts."""
+        route = "/v1/unified/records"
+        return await self._remote_read(
+            route, lambda: self.client().list_records(
+                facet=facet, status=status, cursor=cursor, limit=limit))
+
+    async def get_record(self, record_ref: str) -> dict[str, Any]:
+        route = f"/v1/unified/records/{record_ref}"
+        return await self._remote_read(
+            route, lambda: self.client().get_record(record_ref))
 
     async def record_application(self, request: dict[str, Any]) -> dict[str, Any]:
         """POST /v1/unified/applications（§6/T07.3/T09.3）：记录实际应用凭据。"""

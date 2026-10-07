@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -108,12 +109,14 @@ class UnifiedMemoryClient:
 
     def __init__(self, service_url: str, internal_token: str | None = None,
                  timeout: float = 5.0, *, transport: httpx.AsyncBaseTransport | None = None,
-                 contract_version: str = CONTRACT_VERSION) -> None:
+                 contract_version: str = CONTRACT_VERSION,
+                 frozen_features: frozenset[str] | None = None) -> None:
         self._service_url = service_url.rstrip("/")
         self._internal_token = internal_token
         self._timeout = timeout
         self._transport = transport
         self._contract_version = contract_version
+        self._frozen_features = frozen_features
         self._client: httpx.AsyncClient | None = None
 
     # -- 生命周期 --
@@ -121,11 +124,18 @@ class UnifiedMemoryClient:
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:
             headers = {"Accept": "application/json"}
+            if self._frozen_features is not None:
+                from atlas.memory.v1_features import FROZEN_FEATURES_HEADER
+
+                headers[FROZEN_FEATURES_HEADER] = json.dumps(sorted(self._frozen_features))
             if self._internal_token:
                 headers["Authorization"] = f"Bearer {self._internal_token}"
+            hostname = urlsplit(self._service_url).hostname
+            trust_env = hostname not in {"127.0.0.1", "localhost", "::1"}
             self._client = httpx.AsyncClient(
                 base_url=self._service_url, timeout=self._timeout,
-                headers=headers, transport=self._transport, follow_redirects=False)
+                headers=headers, transport=self._transport, follow_redirects=False,
+                trust_env=trust_env)
         return self._client
 
     async def aclose(self) -> None:

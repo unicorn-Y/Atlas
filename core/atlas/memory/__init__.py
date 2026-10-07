@@ -136,6 +136,140 @@ class MemoryStore:
         """unified-memory: delegation probe —— None = 旧本地行为。"""
         return self._unified
 
+    def _unified_reads_enabled(self) -> bool:
+        facade = self._unified_or_none()
+        return facade is not None and bool(getattr(facade, "enabled", False))
+
+    @staticmethod
+    def _fact_from_unified_record(record: dict[str, Any]) -> dict[str, Any] | None:
+        content = record.get("content")
+        if not isinstance(content, dict) or "key" not in content or "value" not in content:
+            return None
+        value = content["value"]
+        if not isinstance(value, str):
+            value = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        valid_time = record.get("valid_time")
+        return {
+            "key": str(content["key"]),
+            "value": value,
+            "category": str(content.get("category") or record.get("facet") or "general"),
+            "source_conversation_id": content.get("source_conversation_id"),
+            "source_message_id": content.get("source_message_id"),
+            "confidence": float(content.get("confidence", 1.0) or 0.0),
+            "memory_type": str(content.get("memory_type") or "fact"),
+            "commitment_status": content.get("commitment_status"),
+            "created_at": content.get("created_at") or record.get("created_at") or
+                          record.get("updated_at") or "",
+            "updated_at": (record.get("updated_at") or content.get("updated_at") or
+                           (valid_time.get("valid_from") if isinstance(valid_time, dict) else "") or
+                           datetime.now(UTC).isoformat()),
+            "record_ref": record.get("record_ref"),
+            "record_revision": record.get("record_revision"),
+            "epistemic_kind": record.get("epistemic_kind"),
+        }
+
+    async def _list_unified_records(self, *, status: str) -> list[dict[str, Any]]:
+        """Read every page from MemoryOS; never fall back to Atlas facts."""
+        facade = self._unified_or_none()
+        if facade is None:
+            return []
+        records: list[dict[str, Any]] = []
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        while True:
+            page = await facade.list_records(status=status, cursor=cursor, limit=200)
+            items = page.get("items") if isinstance(page, dict) else None
+            for record in items if isinstance(items, list) else []:
+                if isinstance(record, dict):
+                    records.append(record)
+            next_cursor = page.get("next_cursor") if isinstance(page, dict) else None
+            if not next_cursor or str(next_cursor) in seen_cursors:
+                return records
+            cursor = str(next_cursor)
+            seen_cursors.add(cursor)
+
+    async def _list_unified_facts(self, *, status: str = "ACTIVE") -> list[dict[str, Any]]:
+        records = await self._list_unified_records(status=status)
+        return [
+            fact for record in records
+            if (fact := self._fact_from_unified_record(record)) is not None
+        ]
+
+    async def _local_fact_signal_counts(
+        self, key: str, *, now_text: str | None = None, cutoff_modifier: str | None = None,
+    ) -> tuple[dict[str, int], int]:
+        """Read audit-only feedback counters for a fact already fetched remotely."""
+        names = (
+            "used", "not_used", "helpful", "unhelpful", "correction", "rejected",
+            "useful", "not_useful", "uncertain",
+        )
+        counts = {name: 0 for name in names}
+        recent = 0
+        if self._db is None:
+            return counts, recent
+        for table, field in (
+            ("memory_usage_events", "outcome"),
+            ("memory_feedback", "signal"),
+            ("memory_evaluations", "rating"),
+        ):
+            cursor = await self._db.execute(
+                f"SELECT {field} AS signal, COUNT(*) AS count FROM {table} "
+                "WHERE memory_key = ? GROUP BY " + field, (key,),
+            )
+            for row in await cursor.fetchall():
+                if row["signal"] in counts:
+                    counts[row["signal"]] += int(row["count"])
+            if now_text is not None and cutoff_modifier is not None:
+                cursor = await self._db.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE memory_key = ? "
+                    "AND recorded_at >= datetime(?, ?)",
+                    (key, now_text, cutoff_modifier),
+                )
+                row = await cursor.fetchone()
+                recent += int(row[0]) if row else 0
+        return counts, recent
+
+    async def _unified_recall_context(
+        self, query: str, *, limit: int, purpose: str = "CONVERSATION",
+        runtime_session_id: str | None = None,
+    ) -> dict[str, Any]:
+        facade = self._unified_or_none()
+        if facade is None:
+            return {"memories": [], "knowledge_trace": {"decisions": [], "query_terms": []}}
+        response = await facade.recall_for_conversation(
+            query, budget={"max_records": max(0, limit)}, purpose=purpose,
+            context=facade.default_context(
+                runtime_session_id=runtime_session_id or "atlas-memory-read"))
+        memories: list[dict[str, Any]] = []
+        for item in response.get("context_items", []):
+            content = item.get("content")
+            if not isinstance(content, dict):
+                content = {"text": str(content or "")}
+            record_ref = item.get("record_ref")
+            memories.append({
+                "id": record_ref,
+                "key": str(content.get("key") or record_ref or ""),
+                "value": content.get("value", content.get("text", content)),
+                "category": str(item.get("facet") or content.get("category") or "general"),
+                "content": content,
+                "record_ref": record_ref,
+                "record_revision": item.get("revision"),
+                "epistemic_kind": item.get("epistemic_kind"),
+                "source_refs": item.get("source_refs") or [],
+                "source_snippets": item.get("source_snippets") or [],
+            })
+        trace = {
+            "read_id": response.get("read_id"),
+            "authority_revision": response.get("authority_revision"),
+            "context_hash": response.get("context_hash"),
+            "decisions": [
+                {"record_ref": item.get("record_ref"), "decision": "included"}
+                for item in memories
+            ],
+            "query_terms": [],
+        }
+        return {"memories": memories[:max(0, limit)], "knowledge_trace": trace}
+
     # ---------------- unified-memory 委托传输（T01.2） ----------------
 
     def _observation(self, *, source_object_id: str, content: dict[str, Any],
@@ -1139,6 +1273,11 @@ class MemoryStore:
         await self._db.commit()
 
     async def get_fact(self, key: str) -> str | None:
+        if self._unified_reads_enabled():
+            for fact in await self._list_unified_facts():
+                if fact["key"] == key:
+                    return fact["value"]
+            return None
         # unified-memory: 本地只读兼容视图（authority-map 1.0: GET /v1/unified/records）；
         # active 读取回查统一记录留 T01.3 接线后增强。
         assert self._db is not None
@@ -1148,7 +1287,17 @@ class MemoryStore:
         row = await cursor.fetchone()
         return row["value"] if row else None
 
+    async def _has_fact_key(self, key: str) -> bool:
+        if self._unified_reads_enabled() and await self.get_fact(key) is not None:
+            return True
+        assert self._db is not None
+        cursor = await self._db.execute("SELECT 1 FROM facts WHERE key = ?", (key,))
+        return await cursor.fetchone() is not None
+
     async def list_facts(self, category: str | None = None) -> list[dict[str, Any]]:
+        if self._unified_reads_enabled():
+            facts = await self._list_unified_facts()
+            return [fact for fact in facts if category is None or fact["category"] == category]
         # unified-memory: 本地只读兼容视图（authority-map 1.0: GET /v1/unified/records）；
         # active 读取回查统一记录留 T01.3 接线后增强。
         assert self._db is not None
@@ -1514,6 +1663,22 @@ class MemoryStore:
         unified-memory: 本地只读兼容视图（authority-map 1.0: POST /v1/unified/recall
         conflicts）；冲突裁决回查统一生命周期留 T01.3/UM03 接线后增强。
         """
+        if self._unified_reads_enabled():
+            conflicts: list[dict[str, Any]] = []
+            for record in await self._list_unified_records(status="CONFLICTED"):
+                content = record.get("content")
+                content = content if isinstance(content, dict) else {}
+                conflicts.append({
+                    "record_ref": record.get("record_ref"),
+                    "candidate_id": record.get("record_ref"),
+                    "key": content.get("key") or record.get("record_ref"),
+                    "candidate_value": content.get("candidate_value") or content.get("value"),
+                    "current_value": content.get("current_value"),
+                    "candidate_confidence": content.get("confidence"),
+                    "candidate_source_conversation_id": content.get("source_conversation_id"),
+                    "candidate_source_message_id": content.get("source_message_id"),
+                })
+            return conflicts
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT c.id AS candidate_id, c.key, c.value AS candidate_value, "
@@ -1534,6 +1699,12 @@ class MemoryStore:
         unified-memory: 本地只读兼容视图（authority-map 1.0: GET /v1/unified/records/
         {ref} 版本化 revisions）；版本历史回查统一记录留 T01.3 接线后增强。
         """
+        if self._unified_reads_enabled():
+            records = await self._list_unified_facts(status="SUPERSEDED")
+            return [
+                {**record, "event_type": "superseded"}
+                for record in records if record["key"] == key
+            ]
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT key, value, category, confidence, source_conversation_id, "
@@ -1585,8 +1756,7 @@ class MemoryStore:
         if outcome not in {"used", "not_used", "helpful", "unhelpful"}:
             raise ValueError("Unsupported memory usage outcome")
         assert self._db is not None
-        cursor = await self._db.execute("SELECT 1 FROM facts WHERE key = ?", (key,))
-        if not await cursor.fetchone():
+        if not await self._has_fact_key(key):
             raise ValueError("Cannot record usage for an unknown memory")
         cursor = await self._db.execute(
             "INSERT INTO memory_usage_events (memory_key, outcome, conversation_id) "
@@ -1604,8 +1774,7 @@ class MemoryStore:
         if _SENSITIVE_MEMORY.search(key):
             raise ValueError("Sensitive memories cannot be recorded as feedback")
         assert self._db is not None
-        cursor = await self._db.execute("SELECT 1 FROM facts WHERE key = ?", (key,))
-        if not await cursor.fetchone():
+        if not await self._has_fact_key(key):
             raise ValueError("Cannot correct an unknown memory")
         if source_message_id:
             evidence = await _session_evidence(None, source_message_id)
@@ -1626,8 +1795,7 @@ class MemoryStore:
         if rating not in {"useful", "not_useful", "uncertain"}:
             raise ValueError("Unsupported memory usefulness rating")
         assert self._db is not None
-        cursor = await self._db.execute("SELECT 1 FROM facts WHERE key = ?", (key,))
-        if not await cursor.fetchone():
+        if not await self._has_fact_key(key):
             raise ValueError("Cannot evaluate an unknown memory")
         cursor = await self._db.execute(
             "INSERT INTO memory_evaluations (memory_key, rating) VALUES (?, ?)",
@@ -2790,13 +2958,26 @@ class MemoryStore:
         """Aggregate durable feedback and return advisory review flags."""
         if stale_after_days < 0 or window_days < 0:
             raise ValueError("Memory health windows must be non-negative")
-        assert self._db is not None
         now = as_of or datetime.now(timezone.utc)
         if now.tzinfo is None:
             now = now.replace(tzinfo=timezone.utc)
         now = now.astimezone(timezone.utc)
         now_text = now.strftime("%Y-%m-%d %H:%M:%S")
         cutoff_modifier = f"-{window_days} days"
+        if self._unified_reads_enabled():
+            memories: list[dict[str, Any]] = []
+            for fact in await self._list_unified_facts():
+                counts, recent = await self._local_fact_signal_counts(
+                    fact["key"], now_text=now_text, cutoff_modifier=cutoff_modifier)
+                memories.append({
+                    "key": fact["key"], "memory_type": fact["memory_type"],
+                    "updated_at": fact["updated_at"], "recent_signal_count": recent,
+                    **{f"{name}_count": count for name, count in counts.items()},
+                })
+            return evaluate_memory_health(
+                memories, stale_after_days=stale_after_days,
+                window_days=window_days, as_of=now)
+        assert self._db is not None
         cursor = await self._db.execute(
             "SELECT f.key, f.memory_type, f.updated_at, "
             "(SELECT COUNT(*) FROM memory_usage_events u WHERE u.memory_key=f.key AND u.outcome='used') AS used_count, "
@@ -2868,6 +3049,27 @@ class MemoryStore:
         self, *, as_of: datetime | None = None,
     ) -> dict[str, Any]:
         """Evaluate active facts using durable history, usage, and review evidence."""
+        if self._unified_reads_enabled():
+            memories = {fact["key"]: fact for fact in await self._list_unified_facts()}
+            evidence: dict[str, list[str]] = {
+                key: [f"record:{fact.get('record_ref') or key}"]
+                for key, fact in memories.items()
+            }
+            if self._db is not None:
+                cursor = await self._db.execute(
+                    "SELECT key, id FROM memory_fact_history WHERE event_type='superseded' "
+                    "ORDER BY id"
+                )
+                for row in await cursor.fetchall():
+                    key = row["key"]
+                    if key in memories:
+                        memories[key]["change_count"] = memories[key].get("change_count", 0) + 1
+                        evidence[key].append(f"history:{row['id']}")
+            for key, memory in memories.items():
+                counts, _recent = await self._local_fact_signal_counts(key)
+                memory.update({f"{name}_count": count for name, count in counts.items()})
+                memory["evidence_refs"] = evidence[key]
+            return evaluate_knowledge_maturity(list(memories.values()), as_of=as_of)
         assert self._db is not None
         cursor = await self._db.execute(
             "SELECT key, memory_type, confidence, source_conversation_id, "
@@ -3700,6 +3902,8 @@ class MemoryStore:
         """Return validated facts and traceable knowledge views for an agent request."""
         if limit <= 0:
             return []
+        if self._unified_reads_enabled():
+            return (await self._unified_recall_context(query, limit=limit))["memories"]
         views = await self.retrieve_user_knowledge(query, limit=1)
         facts = await self.get_active_context(query, limit=limit - len(views))
         return facts + views
@@ -3708,6 +3912,8 @@ class MemoryStore:
         self, query: str, limit: int = 10
     ) -> dict[str, Any]:
         """Return agent context with the knowledge retrieval decisions that produced it."""
+        if self._unified_reads_enabled():
+            return await self._unified_recall_context(query, limit=limit)
         trace = await self.retrieve_user_knowledge_with_trace(
             query, limit=1 if limit > 0 else limit
         )
@@ -4079,6 +4285,10 @@ class MemoryStore:
         Pending candidates are deliberately excluded: only facts written directly
         by an explicit remember request or promoted through approval enter context.
         """
+        if limit <= 0 or not (query or "").strip():
+            return []
+        if self._unified_reads_enabled():
+            return (await self._unified_recall_context(query, limit=limit))["memories"]
         facts = await self.list_facts()
         terms = {
             token.casefold()

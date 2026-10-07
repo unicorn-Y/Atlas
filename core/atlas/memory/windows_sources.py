@@ -660,11 +660,15 @@ class WindowsSourceService:
         # ---- 被动记账（§6.1）：与主动收据分开的观察与水位 ----
         passive_created = False
         passive: dict[str, Any] | None = None
-        controller = self._passive_controller or self.passive_controller
-        candidates = _receipt_scope_candidates(
-            target=target, window_title=window_title, title=title,
-            session_id=session_id, has_media=image_bytes is not None)
-        selected = controller.begin_passive(candidates, session_id=str(session_id or ""))
+        from atlas.memory.v1_features import is_frozen
+
+        selected = None
+        if self._passive_controller is not None or not is_frozen("passive_capture"):
+            controller = self._passive_controller or self.passive_controller
+            candidates = _receipt_scope_candidates(
+                target=target, window_title=window_title, title=title,
+                session_id=session_id, has_media=image_bytes is not None)
+            selected = controller.begin_passive(candidates, session_id=str(session_id or ""))
         if selected is not None:
             # begin/finish 必须配对（构造或入队失败也走 finish_passive 显式记
             # 缺口），否则 stop/pause 的在途排空会一直等到超时。

@@ -419,10 +419,13 @@ def fixture_desktop_correct_preference(harness: Any, arguments: dict[str, Any]) 
     else:
         replacement_text = str(replacement_val or "简短中文")
 
-    # Store preference on harness instance for chat response verification
-    harness._active_corrected_preference = replacement_text
-
-    # Write / update preference via unified API if running
+    # An observe HTTP success only proves that the request was handled. Keep the
+    # persisted source receipt separate from whether its formed preference can
+    # be read back as the requested current value.
+    persisted: bool | None = None
+    applied = False
+    source_event_id: str | None = None
+    record_ref: str | None = None
     try:
         from atlas.memory.unified_client import observation_content_hash
         obs = {
@@ -447,6 +450,7 @@ def fixture_desktop_correct_preference(harness: Any, arguments: dict[str, Any]) 
             "derived_from": [],
         }
         obs["content_hash"] = observation_content_hash(obs)
+        source_event_id = obs["source_event_id"]
         batch = {
             "contract_version": CONTRACT_VERSION,
             "event_class": "TEST",
@@ -457,13 +461,57 @@ def fixture_desktop_correct_preference(harness: Any, arguments: dict[str, Any]) 
             "observations": [obs],
         }
         resp = harness.api("POST", "/api/unified-memory/observe", json=batch)
+        if 200 <= resp.status_code < 300:
+            ack = resp.json()
+            receipts = ack.get("receipts") if isinstance(ack, dict) else None
+            source_receipt = next((r for r in receipts or []
+                                   if isinstance(r, dict)
+                                   and r.get("source_event_id") == source_event_id), None)
+            persisted = bool(
+                isinstance(ack, dict)
+                and ack.get("accepted") == len(batch["observations"])
+                and source_receipt is not None
+            )
+            if persisted:
+                formation = ack.get("formation")
+                results = (formation.get("results")
+                           if isinstance(formation, dict) else None)
+                formed = next((r for r in results or []
+                               if isinstance(r, dict)
+                               and r.get("source_event_id") == source_event_id
+                               and r.get("record_ref")), None)
+                record_ref = str(formed["record_ref"]) if formed else None
+                if record_ref:
+                    readback = harness.api(
+                        "GET", f"/api/unified-memory/records/{record_ref}")
+                    if 200 <= readback.status_code < 300:
+                        record = readback.json()
+                        content = (record.get("content")
+                                   if isinstance(record, dict) else None)
+                        applied = bool(
+                            isinstance(record, dict)
+                            and record.get("record_ref") == record_ref
+                            and str(record.get("lifecycle") or "").upper() == "ACTIVE"
+                            and str(record.get("facet") or "").upper() == "PREFERENCE"
+                            and isinstance(content, dict)
+                            and content.get("key") == "user_response_format"
+                            and str(content.get("value") or content.get("text") or "")
+                            == replacement_text
+                        )
     except Exception:
-        pass
+        applied = False
 
     return {
-        "status": "CORRECTED",
+        "status": "CORRECTED" if applied else "NOT_VERIFIED",
         "replacement": replacement_text,
-        "applied": True,
+        "applied": applied,
+        "persisted": persisted,
+        "persistence_status": (
+            "PERSISTED" if persisted is True else
+            "NOT_PERSISTED" if persisted is False else "UNVERIFIED"
+        ),
+        "source_event_id": source_event_id,
+        "record_ref": record_ref,
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -510,22 +558,7 @@ def attach_lane_helpers(h: Any) -> Any:
         orig_restart(component)
 
     def extended_chat(text: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        result = orig_chat(text, *args, **kwargs)
-        # Populate applied_preference
-        pref = getattr(h, "_active_corrected_preference", None)
-        if not pref:
-            # Check records
-            try:
-                r = h.api("GET", "/api/unified-memory/records", params={"facet": "PREFERENCE"})
-                if r.status_code == 200:
-                    items = r.json().get("items", [])
-                    if items:
-                        c = items[0].get("content", {})
-                        pref = c.get("value") or c.get("text")
-            except Exception:
-                pass
-        result["applied_preference"] = pref or "简短中文"
-        return result
+        return orig_chat(text, *args, **kwargs)
 
     def extended_api(method: str, path: str, *args: Any, **kwargs: Any) -> Any:
         resp = orig_api(method, path, *args, **kwargs)
