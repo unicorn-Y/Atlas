@@ -373,11 +373,11 @@ async def _phase_pre_plan_constraints(agent, state: _RunState) -> AsyncIterator[
     if request.worker:
         return
     try:
-        from atlas.memory.context import (
-            is_personal_memory_relevant,
-            load_pre_plan_constraints,
-        )
-        if not is_personal_memory_relevant(state.message):
+        from atlas.memory.context import load_pre_plan_constraints
+        from atlas.memory.recall_context import is_personal_memory_relevant
+
+        gate_passed, _, _ = is_personal_memory_relevant(state.message)
+        if not gate_passed:
             return
 
         facade = getattr(agent, "_unified_facade", None)
