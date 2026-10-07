@@ -85,4 +85,4 @@
 
 ## 提交 hash
 
-- 本地未 push，等待提交后记录。
+- `13faa7c` (feat(memory-v1): S4 reflector implementation with Mastra vendoring and tests)
