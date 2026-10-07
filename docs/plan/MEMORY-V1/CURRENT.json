@@ -1,0 +1,23 @@
+{
+  "plan": "MEMORY-V1",
+  "plan_version": "1.0",
+  "branch": "memory-v1",
+  "base": {
+    "atlas": "931ef643 (unified-memory/waves)",
+    "memoryos": "44c5357 (unified-memory/waves)"
+  },
+  "status_enum": ["NOT_STARTED", "IN_PROGRESS", "DONE_PENDING_REVIEW", "BLOCKED", "ACCEPTED", "REJECTED"],
+  "note": "ACCEPTED/REJECTED 只能由审查方写",
+  "steps": {
+    "S0": {"title": "清场与开关", "status": "NOT_STARTED"},
+    "S1": {"title": "读写打通：聊天只读统一记忆", "status": "NOT_STARTED"},
+    "S2": {"title": "观察者 Observer", "status": "NOT_STARTED"},
+    "S3": {"title": "召回装配与意图闸门、出处", "status": "NOT_STARTED"},
+    "S4": {"title": "反思者 Reflector 与淡忘排序", "status": "NOT_STARTED"},
+    "S5": {"title": "记忆页面闭环", "status": "NOT_STARTED"},
+    "S6": {"title": "中断接续与提醒验证", "status": "NOT_STARTED"},
+    "S7": {"title": "正式启用与历史回填（用户授权）", "status": "NOT_STARTED"},
+    "S8": {"title": "V1 验收评测", "status": "NOT_STARTED"}
+  },
+  "reviews": []
+}
