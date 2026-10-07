@@ -110,7 +110,448 @@ class OperationalOutbox:
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_outbox_events_state"
             " ON outbox_events(state, next_retry_at)")
+        # Observer-only operational metadata lives beside captured events. Queue
+        # rows contain source IDs and fragment offsets only; original capture text
+        # remains solely in outbox_events.payload_json.
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS observer_sessions ("
+            " session_id TEXT PRIMARY KEY,"
+            " flush_requested INTEGER NOT NULL DEFAULT 0,"
+            " updated_at TEXT NOT NULL)"
+        )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS observer_queue ("
+            " queue_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " session_id TEXT NOT NULL,"
+            " source_event_id TEXT NOT NULL,"
+            " part_index INTEGER NOT NULL DEFAULT 1,"
+            " part_count INTEGER NOT NULL DEFAULT 1,"
+            " source_view_json TEXT NOT NULL DEFAULT '{}',"
+            " created_at TEXT NOT NULL,"
+            " UNIQUE(session_id, source_event_id, part_index))"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_observer_queue_session"
+            " ON observer_queue(session_id, queue_id)"
+        )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS observer_source_watermarks ("
+            " source_event_id TEXT PRIMARY KEY,"
+            " session_id TEXT NOT NULL,"
+            " status TEXT NOT NULL CHECK(status IN ('QUEUED','DELIVERED'))," 
+            " updated_at TEXT NOT NULL)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_observer_watermark_session"
+            " ON observer_source_watermarks(session_id, status)"
+        )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS observer_batches ("
+            " batch_id TEXT PRIMARY KEY,"
+            " session_id TEXT NOT NULL,"
+            " source_event_ids_json TEXT NOT NULL,"
+            " queue_ids_json TEXT NOT NULL,"
+            " payload_json TEXT NOT NULL,"
+            " raw_output TEXT NOT NULL,"
+            " model_id TEXT NOT NULL,"
+            " input_tokens INTEGER NOT NULL DEFAULT 0,"
+            " output_tokens INTEGER NOT NULL DEFAULT 0,"
+            " status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','ACKED'))," 
+            " created_at TEXT NOT NULL,"
+            " acked_at TEXT)"
+        )
+        self._conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_observer_batch_one_pending"
+            " ON observer_batches(session_id) WHERE status = 'PENDING'"
+        )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS observer_daily_usage ("
+            " usage_day TEXT PRIMARY KEY,"
+            " spent_tokens INTEGER NOT NULL DEFAULT 0,"
+            " reserved_tokens INTEGER NOT NULL DEFAULT 0)"
+        )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS observer_token_reservations ("
+            " reservation_id TEXT PRIMARY KEY,"
+            " usage_day TEXT NOT NULL,"
+            " token_count INTEGER NOT NULL)"
+        )
         self._conn.commit()
+
+    # ------------------------------------------------------------------ Observer durable state
+
+    def observer_enqueue_sources(
+        self, session_id: str, refs: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Queue references to ACKED capture rows without copying their source text.
+
+        ``refs`` contains ``source_event_id``, ``part_index`` and ``part_count``;
+        fragments are regenerated from the original capture payload after restart.
+        """
+        session = str(session_id or "").strip()
+        if not session:
+            raise ValueError("observer session_id is required")
+        normalized: list[tuple[str, int, int, str]] = []
+        for ref in refs:
+            source_id = str(ref.get("source_event_id") or "").strip()
+            part_index = int(ref.get("part_index", 1))
+            part_count = int(ref.get("part_count", 1))
+            if not source_id or part_count < 1 or not 1 <= part_index <= part_count:
+                raise ValueError("invalid observer source reference")
+            source_view = {key: ref.get(key) for key in (
+                "speaker_role", "epistemic_kind", "source_kind", "source_object_id",
+                "source_revision", "occurred_at", "source_timezone", "provenance",
+            )}
+            normalized.append((source_id, part_index, part_count,
+                               json.dumps(source_view, ensure_ascii=False, sort_keys=True)))
+
+        now = _utc_iso()
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            for source_id in dict.fromkeys(ref[0] for ref in normalized):
+                row = self._conn.execute(
+                    "SELECT state FROM outbox_events WHERE source_event_id = ?",
+                    (source_id,),
+                ).fetchone()
+                if row is None or row["state"] != STATE_ACKED:
+                    raise ValueError("observer source is not a captured ACKED outbox event")
+            self._conn.execute(
+                "INSERT INTO observer_sessions(session_id, flush_requested, updated_at)"
+                " VALUES(?, 0, ?) ON CONFLICT(session_id) DO UPDATE SET updated_at=excluded.updated_at",
+                (session, now),
+            )
+            for source_id, part_index, part_count, source_view_json in normalized:
+                watermark = self._conn.execute(
+                    "SELECT session_id,status FROM observer_source_watermarks"
+                    " WHERE source_event_id=?", (source_id,),
+                ).fetchone()
+                if watermark is not None and str(watermark["session_id"]) != session:
+                    raise ValueError("Observer source ID is already assigned to another session")
+                if watermark is not None and watermark["status"] == "DELIVERED":
+                    continue
+                existing = self._conn.execute(
+                    "SELECT part_count,source_view_json FROM observer_queue WHERE session_id=?"
+                    " AND source_event_id=? LIMIT 1", (session, source_id),
+                ).fetchone()
+                if existing is not None and int(existing["part_count"]) != part_count:
+                    raise ValueError("observer source fragment layout changed during retry")
+                if existing is not None and str(existing["source_view_json"]) != source_view_json:
+                    raise ValueError("observer source provenance changed during retry")
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO observer_queue(session_id, source_event_id,"
+                    " part_index, part_count, source_view_json, created_at) VALUES(?,?,?,?,?,?)",
+                    (session, source_id, part_index, part_count, source_view_json, now),
+                )
+                self._conn.execute(
+                    "INSERT INTO observer_source_watermarks(source_event_id,session_id,status,updated_at)"
+                    " VALUES(?,?,'QUEUED',?) ON CONFLICT(source_event_id) DO UPDATE SET"
+                    " status='QUEUED', updated_at=excluded.updated_at",
+                    (source_id, session, now),
+                )
+            self._conn.commit()
+        except BaseException:
+            self._conn.rollback()
+            raise
+        return self.observer_queue_sources(session)
+
+    def observer_queue_sources(self, session_id: str) -> list[dict[str, Any]]:
+        """Return ordered fragment references joined to their original ACKED payloads."""
+        rows = self._conn.execute(
+            "SELECT q.queue_id, q.session_id, q.source_event_id, q.part_index, q.part_count,"
+            " q.source_view_json,"
+            " e.payload_json, e.state FROM observer_queue q"
+            " JOIN outbox_events e ON e.source_event_id=q.source_event_id"
+            " WHERE q.session_id=? ORDER BY q.queue_id", (str(session_id),),
+        ).fetchall()
+        result = []
+        for row in rows:
+            if row["state"] != STATE_ACKED:
+                continue
+            data = dict(row)
+            data["payload"] = json.loads(data.pop("payload_json"))
+            data["source_view"] = json.loads(data.pop("source_view_json"))
+            result.append(data)
+        return result
+
+    def observer_source(self, source_event_id: str) -> dict[str, Any] | None:
+        """Get an original capture row only when its HTTP event was ACKED."""
+        row = self._conn.execute(
+            "SELECT * FROM outbox_events WHERE source_event_id=? AND state=?",
+            (str(source_event_id), STATE_ACKED),
+        ).fetchone()
+        return self._row_as_dict(row) if row is not None else None
+
+    def observer_pending_sessions(self) -> list[str]:
+        sessions = {str(row["session_id"]) for row in self._conn.execute(
+            "SELECT DISTINCT session_id FROM observer_queue"
+        ).fetchall()}
+        sessions.update(str(row["session_id"])
+                        for row in self.observer_unprocessed_sources())
+        return sorted(sessions)
+
+    def observer_unprocessed_sources(
+        self, session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Recover ACKED capture rows lost between capture ack and Observer enqueue."""
+        rows = self._conn.execute(
+            "SELECT e.* FROM outbox_events e LEFT JOIN observer_source_watermarks w"
+            " ON w.source_event_id=e.source_event_id WHERE e.state=? AND w.source_event_id IS NULL"
+            " ORDER BY e.id", (STATE_ACKED,),
+        ).fetchall()
+        pending: list[dict[str, Any]] = []
+        for row in rows:
+            data = self._row_as_dict(row)
+            envelope = data.get("payload") or {}
+            observation = envelope.get("observation") or {}
+            if not observation or str(observation.get("source_kind") or "") == "DERIVED":
+                continue
+            context = envelope.get("context") or {}
+            content = observation.get("content") or {}
+            actual_session = str(
+                context.get("runtime_session_id") or context.get("session_id")
+                or content.get("session_id") or ""
+            ).strip()
+            if not actual_session or (session_id is not None and actual_session != str(session_id)):
+                continue
+            data["session_id"] = actual_session
+            pending.append(data)
+        return pending
+
+    def observer_set_flush_requested(self, session_id: str, requested: bool = True) -> None:
+        now = _utc_iso()
+        self._conn.execute(
+            "INSERT INTO observer_sessions(session_id, flush_requested, updated_at)"
+            " VALUES(?,?,?) ON CONFLICT(session_id) DO UPDATE SET"
+            " flush_requested=excluded.flush_requested, updated_at=excluded.updated_at",
+            (str(session_id), int(bool(requested)), now),
+        )
+        self._conn.commit()
+
+    def observer_mark_session_ended(self, session_id: str) -> None:
+        """Persist an end marker synchronously before asynchronous drain begins."""
+        session = str(session_id or "").strip()
+        if not session:
+            raise ValueError("observer session_id is required")
+        self.observer_set_flush_requested(session, True)
+
+    def observer_flush_requested(self, session_id: str) -> bool:
+        row = self._conn.execute(
+            "SELECT flush_requested FROM observer_sessions WHERE session_id=?",
+            (str(session_id),),
+        ).fetchone()
+        return bool(row["flush_requested"]) if row is not None else False
+
+    def observer_store_batch(
+        self, *, batch_id: str, session_id: str, source_event_ids: list[str],
+        queue_ids: list[int | str], payload: dict[str, Any] | None,
+        raw_output: str, model_id: str, input_tokens: int, output_tokens: int,
+    ) -> dict[str, Any]:
+        """Durably store one model result until the caller confirms MemoryOS HTTP ack."""
+        normalized_queue_ids = [int(value) for value in queue_ids]
+        now = _utc_iso()
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self._conn.execute(
+                "SELECT batch_id FROM observer_batches WHERE session_id=? AND status='PENDING'",
+                (str(session_id),),
+            ).fetchone()
+            if existing is not None:
+                if str(existing["batch_id"]) == str(batch_id):
+                    self._conn.commit()
+                    return self.observer_pending_batch(session_id)  # type: ignore[return-value]
+                raise ValueError("an Observer batch is already awaiting HTTP acknowledgement")
+            queued = self._conn.execute(
+                "SELECT count(*) AS c FROM observer_queue WHERE session_id=? AND queue_id IN ("
+                + ",".join("?" for _ in normalized_queue_ids) + ")",
+                (str(session_id), *normalized_queue_ids),
+            ).fetchone() if normalized_queue_ids else None
+            if queued is None or int(queued["c"]) != len(set(normalized_queue_ids)):
+                raise ValueError("Observer batch references missing durable queue rows")
+            self._conn.execute(
+                "INSERT INTO observer_batches(batch_id,session_id,source_event_ids_json,"
+                " queue_ids_json,payload_json,raw_output,model_id,input_tokens,output_tokens,"
+                " status,created_at) VALUES(?,?,?,?,?,?,?,?,?,'PENDING',?)",
+                (str(batch_id), str(session_id), json.dumps(list(dict.fromkeys(source_event_ids))),
+                 json.dumps(normalized_queue_ids), json.dumps(payload, ensure_ascii=False),
+                 str(raw_output), str(model_id), max(0, int(input_tokens)),
+                 max(0, int(output_tokens)), now),
+            )
+            self._conn.commit()
+        except BaseException:
+            self._conn.rollback()
+            raise
+        return self.observer_pending_batch(session_id)  # type: ignore[return-value]
+
+    def observer_pending_batch(self, session_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM observer_batches WHERE session_id=? AND status='PENDING'",
+            (str(session_id),),
+        ).fetchone()
+        return self._observer_batch_dict(row) if row is not None else None
+
+    def observer_get_batch(self, batch_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM observer_batches WHERE batch_id=?", (str(batch_id),),
+        ).fetchone()
+        return self._observer_batch_dict(row) if row is not None else None
+
+    def observer_ack_batch(self, batch_id: str) -> dict[str, Any] | None:
+        """Mark successful HTTP delivery and consume precisely its source fragments."""
+        now = _utc_iso()
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = self._conn.execute(
+                "SELECT * FROM observer_batches WHERE batch_id=?", (str(batch_id),),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"unknown Observer batch {batch_id}")
+            if row["status"] == "ACKED":
+                self._conn.commit()
+                return None
+            queue_ids = json.loads(row["queue_ids_json"])
+            if queue_ids:
+                self._conn.execute(
+                    "DELETE FROM observer_queue WHERE session_id=? AND queue_id IN ("
+                    + ",".join("?" for _ in queue_ids) + ")",
+                    (row["session_id"], *[int(value) for value in queue_ids]),
+                )
+            source_event_ids = json.loads(row["source_event_ids_json"])
+            for source_id in source_event_ids:
+                remaining_source_refs = self._conn.execute(
+                    "SELECT count(*) AS c FROM observer_queue WHERE session_id=? AND source_event_id=?",
+                    (row["session_id"], str(source_id)),
+                ).fetchone()
+                if not remaining_source_refs or int(remaining_source_refs["c"]) == 0:
+                    self._conn.execute(
+                        "UPDATE observer_source_watermarks SET status='DELIVERED',updated_at=?"
+                        " WHERE source_event_id=? AND session_id=?",
+                        (now, str(source_id), row["session_id"]),
+                    )
+            self._conn.execute(
+                "UPDATE observer_batches SET status='ACKED', acked_at=? WHERE batch_id=?",
+                (now, str(batch_id)),
+            )
+            remaining = self._conn.execute(
+                "SELECT count(*) AS c FROM observer_queue WHERE session_id=?",
+                (row["session_id"],),
+            ).fetchone()
+            if not remaining or int(remaining["c"]) == 0:
+                self._conn.execute(
+                    "DELETE FROM observer_sessions WHERE session_id=?", (row["session_id"],),
+                )
+            self._conn.commit()
+        except BaseException:
+            self._conn.rollback()
+            raise
+        return self.observer_pending_batch(str(row["session_id"]))
+
+    def observer_budget_snapshot(self, usage_day: str) -> dict[str, int]:
+        row = self._conn.execute(
+            "SELECT spent_tokens,reserved_tokens FROM observer_daily_usage WHERE usage_day=?",
+            (str(usage_day),),
+        ).fetchone()
+        if row is None:
+            return {"spent": 0, "reserved": 0}
+        return {"spent": int(row["spent_tokens"]),
+                "reserved": int(row["reserved_tokens"])}
+
+    def observer_budget_reserve(
+        self, usage_day: str, budget: int, reservation_id: str, token_count: int,
+    ) -> bool:
+        """Reserve daily Observer tokens transactionally across sessions/process restarts."""
+        amount = max(0, int(token_count))
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO observer_daily_usage(usage_day) VALUES(?)",
+                (str(usage_day),),
+            )
+            row = self._conn.execute(
+                "SELECT spent_tokens,reserved_tokens FROM observer_daily_usage WHERE usage_day=?",
+                (str(usage_day),),
+            ).fetchone()
+            existing = self._conn.execute(
+                "SELECT usage_day,token_count FROM observer_token_reservations WHERE reservation_id=?",
+                (str(reservation_id),),
+            ).fetchone()
+            if existing is not None:
+                ok = (str(existing["usage_day"]) == str(usage_day)
+                      and int(existing["token_count"]) == amount)
+                self._conn.commit()
+                return ok
+            if int(row["spent_tokens"]) + int(row["reserved_tokens"]) + amount > max(0, int(budget)):
+                self._conn.commit()
+                return False
+            self._conn.execute(
+                "INSERT INTO observer_token_reservations(reservation_id,usage_day,token_count)"
+                " VALUES(?,?,?)", (str(reservation_id), str(usage_day), amount),
+            )
+            self._conn.execute(
+                "UPDATE observer_daily_usage SET reserved_tokens=reserved_tokens+? WHERE usage_day=?",
+                (amount, str(usage_day)),
+            )
+            self._conn.commit()
+            return True
+        except BaseException:
+            self._conn.rollback()
+            raise
+
+    def observer_budget_commit(self, reservation_id: str, actual_tokens: int) -> bool:
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = self._conn.execute(
+                "SELECT usage_day,token_count FROM observer_token_reservations WHERE reservation_id=?",
+                (str(reservation_id),),
+            ).fetchone()
+            if row is None:
+                self._conn.commit()
+                return False
+            self._conn.execute(
+                "UPDATE observer_daily_usage SET reserved_tokens=max(0,reserved_tokens-?),"
+                " spent_tokens=spent_tokens+? WHERE usage_day=?",
+                (int(row["token_count"]), max(0, int(actual_tokens)), str(row["usage_day"])),
+            )
+            self._conn.execute(
+                "DELETE FROM observer_token_reservations WHERE reservation_id=?",
+                (str(reservation_id),),
+            )
+            self._conn.commit()
+            return True
+        except BaseException:
+            self._conn.rollback()
+            raise
+
+    def observer_budget_release(self, reservation_id: str) -> bool:
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = self._conn.execute(
+                "SELECT usage_day,token_count FROM observer_token_reservations WHERE reservation_id=?",
+                (str(reservation_id),),
+            ).fetchone()
+            if row is None:
+                self._conn.commit()
+                return False
+            self._conn.execute(
+                "UPDATE observer_daily_usage SET reserved_tokens=max(0,reserved_tokens-?)"
+                " WHERE usage_day=?", (int(row["token_count"]), str(row["usage_day"])),
+            )
+            self._conn.execute(
+                "DELETE FROM observer_token_reservations WHERE reservation_id=?",
+                (str(reservation_id),),
+            )
+            self._conn.commit()
+            return True
+        except BaseException:
+            self._conn.rollback()
+            raise
+
+    @staticmethod
+    def _observer_batch_dict(row: sqlite3.Row) -> dict[str, Any]:
+        data = dict(row)
+        data["source_event_ids"] = json.loads(data.pop("source_event_ids_json"))
+        data["queue_ids"] = json.loads(data.pop("queue_ids_json"))
+        data["payload"] = json.loads(data.pop("payload_json"))
+        return data
 
     # ------------------------------------------------------------------ 写入
 

@@ -30,7 +30,7 @@ import os
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import structlog
 
@@ -798,6 +798,26 @@ class CaptureService:
 _capture_service: CaptureService | None = None
 _capture_configured = False
 _capture_singleton_lock = threading.Lock()
+_observer_session_started: Callable[[str], None] | None = None
+
+
+def register_observer_session_callback(
+    callback: Callable[[str], None] | None,
+) -> None:
+    """Bind the lifespan-owned session-switch signal used by MemoryObserver."""
+    global _observer_session_started
+    _observer_session_started = callback
+
+
+def notify_observer_session_started(session_id: str) -> None:
+    """Signal a real foreground conversation start without doing background work."""
+    callback = _observer_session_started
+    if callback is None or not str(session_id or "").strip():
+        return
+    try:
+        callback(str(session_id))
+    except Exception as exc:  # noqa: BLE001 — observer scheduling must not break chat
+        log.exception("memory.observer_session_signal_failed", error=str(exc))
 
 
 def configure_capture_service(*, facade: Any = None, config: Any = None,
@@ -862,7 +882,8 @@ def reset_capture_service() -> None:
 
 
 async def capture_flush_loop(service: CaptureService, *,
-                             idle_seconds: float = 30.0) -> None:
+                             idle_seconds: float = 30.0,
+                             after_flush_tick: Callable[[], None] | None = None) -> None:
     """事件驱动的后台 flush 循环（server lifespan 启动/取消）。
 
     * 本服务每次成功入队都会唤醒循环，立即把新观察 flush 出去；
@@ -876,6 +897,11 @@ async def capture_flush_loop(service: CaptureService, *,
     while True:
         try:
             await service.flush()
+            if after_flush_tick is not None:
+                try:
+                    after_flush_tick()
+                except Exception as exc:  # noqa: BLE001 — callback must not stop source flush
+                    log.exception("memory.capture_after_flush_callback_failed", error=str(exc))
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — flush 失败不终止循环

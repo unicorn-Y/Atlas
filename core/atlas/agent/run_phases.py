@@ -160,6 +160,25 @@ class _RunState:
     pre_plan_input_hash: str | None = None
 
 
+def _is_unified_reads_enabled(agent: Any) -> bool:
+    mem = getattr(agent, "_memory", None)
+    if mem is None:
+        return False
+    checker = getattr(mem, "_unified_reads_enabled", None)
+    if not callable(checker):
+        return False
+    try:
+        res = checker()
+        if inspect.iscoroutine(res):
+            res.close()
+            return False
+        if inspect.isawaitable(res):
+            return False
+        return bool(res)
+    except Exception:
+        return False
+
+
 async def execute_run(
     agent, request: RunRequest, callbacks: RunCallbacks,
 ) -> AsyncIterator[dict[str, Any]]:
@@ -264,6 +283,13 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         conv=request.conversation_id,
         msg_len=len(state.message),
     )
+    if not request.worker:
+        # Unified-memory lifespan binds this callback to its foreground session
+        # switch state. It only records the previous session end; the existing
+        # capture flush tick schedules any Observer/model work after source ACK.
+        from atlas.memory.capture import notify_observer_session_started
+
+        notify_observer_session_started(request.conversation_id)
 
     # UM06/T06.2 任务焦点接续：携带 task_id 的运行（续接请求 / 调度任务）在
     # 运行开始先 attend 回读服务端权威版本，对账 UNKNOWN 外部收据后以 old+1
@@ -324,7 +350,8 @@ async def _phase_goal_knowledge(agent, state: _RunState) -> AsyncIterator[dict[s
     """Load approved goal knowledge for the (possibly hook-augmented) message."""
     request = state.request
     try:
-        state.consolidated_goal_knowledge = [] if request.worker else (
+        unified_enabled = _is_unified_reads_enabled(agent)
+        state.consolidated_goal_knowledge = [] if request.worker or unified_enabled else (
             await agent._memory.retrieve_approved_goal_knowledge(state.message, limit=3)
         )
     except Exception as exc:
@@ -413,10 +440,13 @@ async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
         yield {"type": "plan_updated", "plan": plan_value, "resumed": True}
     elif not request.worker and (request.force_plan or requires_plan(state.message)):
         try:
-            planning_insights = await agent._memory.apply_knowledge_consolidated_insights(
-                state.message, purpose="planning",
-                conversation_id=request.conversation_id,
-                source_run_id=request.source_run_id, limit=3,
+            unified_enabled = _is_unified_reads_enabled(agent)
+            planning_insights = [] if unified_enabled else await (
+                agent._memory.apply_knowledge_consolidated_insights(
+                    state.message, purpose="planning",
+                    conversation_id=request.conversation_id,
+                    source_run_id=request.source_run_id, limit=3,
+                )
             )
             for knowledge in state.consolidated_goal_knowledge:
                 usage = agent._memory.record_goal_knowledge_usage
@@ -474,7 +504,9 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             }
             state.consolidated_insights, state.reflections, state.goal_experiences = [], [], []
         else:
-            await agent._memory.extract_memories(request.conversation_id, state.message)
+            unified_enabled = _is_unified_reads_enabled(agent)
+            if not unified_enabled:
+                await agent._memory.extract_memories(request.conversation_id, state.message)
             from atlas.config import DATA_ROOT
             from atlas.engine.session_sync import read_session_messages
 
@@ -482,23 +514,62 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
                 read_session_messages, DATA_ROOT / "engine", request.conversation_id,
                 limit=_agent.get_config().max_context_messages,
             )
-            state.context = await agent._memory.get_agent_context_with_trace(state.message)
+            if unified_enabled:
+                try:
+                    state.context = await agent._memory._unified_recall_context(
+                        state.message, limit=10,
+                        runtime_session_id=request.conversation_id)
+                except Exception as exc:
+                    from atlas.memory.unified_client import ServiceUnavailable
+
+                    if not isinstance(exc, ServiceUnavailable):
+                        raise
+                    state.context = {
+                        "memories": [],
+                        "knowledge_trace": {"decisions": [], "query_terms": []},
+                    }
+                    log.warning(
+                        "memory.unified.recall_unavailable",
+                        conversation_id=request.conversation_id,
+                        error=str(exc), exc_info=True,
+                    )
+            else:
+                state.context = await agent._memory.get_agent_context_with_trace(state.message)
+            context_memories = state.context.get("memories", []) if isinstance(state.context, dict) else None
+            if inspect.iscoroutine(context_memories):
+                context_memories.close()
+                raise TypeError("Agent context memories must be a list, not a coroutine")
             from atlas.memory.context import is_personal_memory_relevant
             if not is_personal_memory_relevant(state.message):
                 state.context["memories"] = []
-            state.consolidated_insights = (
-                await agent._memory.apply_knowledge_consolidated_insights(
-                    state.message, purpose="execution",
-                    conversation_id=request.conversation_id,
-                    source_run_id=request.source_run_id, limit=3,
+            if unified_enabled:
+                state.consolidated_insights, state.reflections, state.goal_experiences = [], [], []
+            else:
+                state.consolidated_insights = (
+                    await agent._memory.apply_knowledge_consolidated_insights(
+                        state.message, purpose="execution",
+                        conversation_id=request.conversation_id,
+                        source_run_id=request.source_run_id, limit=3,
+                    )
                 )
-            )
-            state.reflections = await agent._memory.retrieve_agent_reflections(
-                state.message, limit=3,
-            )
-            state.goal_experiences = await agent._memory.retrieve_approved_goal_experiences(
-                state.message, limit=3,
-            )
+                state.reflections = await agent._memory.retrieve_agent_reflections(
+                    state.message, limit=3,
+                )
+                state.goal_experiences = await agent._memory.retrieve_approved_goal_experiences(
+                    state.message, limit=3,
+                )
+            if unified_enabled:
+                trace = state.context.get("knowledge_trace") or {}
+                log.info(
+                    "agent.memory.unified_read",
+                    conversation_id=request.conversation_id,
+                    read_id=trace.get("read_id"),
+                    record_refs=[
+                        item.get("record_ref") for item in state.context.get("memories", [])
+                        if isinstance(item, dict) and item.get("record_ref")
+                    ],
+                    authority_revision=trace.get("authority_revision"),
+                )
         for knowledge in state.consolidated_goal_knowledge:
             usage = agent._memory.record_goal_knowledge_usage
             if request.source_run_id is None:
@@ -1245,18 +1316,18 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
         except Exception as exc:
             log.warning("agent.focus_finalize_failed", error=str(exc), exc_info=True)
     memory_candidates: list[dict[str, Any]] | None = None
+    unified_enabled = _is_unified_reads_enabled(agent)
     try:
-        # Worker transcripts are internal; nothing in them should become user memory.
-        memory_candidates = (
-            None if request.worker
-            else await agent._memory.extract_conversation_candidates(
+        # Worker transcripts are internal; unified mode also forbids the legacy
+        # local candidate store from forming a second facts authority.
+        if not request.worker and not unified_enabled:
+            memory_candidates = await agent._memory.extract_conversation_candidates(
                 request.conversation_id,
                 provenance="external" if runtime.external_tool_context else "user",
                 transcript=await asyncio.to_thread(
                     read_session_all_messages, DATA_ROOT / "engine", request.conversation_id,
                 ),
             )
-        )
     except Exception as exc:
         log.warning(
             "memory.candidate_extraction_failed",
@@ -1266,7 +1337,7 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
         )
     try:
         reflection = (
-            None if request.worker
+            None if request.worker or unified_enabled
             else await agent._reflection.reflect(
                 conversation_id=request.conversation_id,
                 goal=state.message,
