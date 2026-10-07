@@ -104,9 +104,16 @@ export function ItemRow({ item, onOpenEvidence, onCorrect }: {
 }) {
   const epistemic = epistemicLabel(item.epistemic);
   const role = roleLabel(item.speakerRole);
+  const isDailyRollup = item.facet === 'SUMMARY' && (item.title?.includes('日') || item.text?.includes('日') || item.text?.includes('每日'));
+  const isWeeklyRollup = item.facet === 'SUMMARY' && (item.title?.includes('周') || item.text?.includes('周') || item.text?.includes('每周'));
+
   return <div className="fact">
     <div>
-      <div>{item.title || item.text || '(无文字内容)'}</div>
+      <div>
+        {isDailyRollup && <span className="tag" style={{ marginRight: 6, color: '#38bdf8' }}>[每日概括]</span>}
+        {isWeeklyRollup && <span className="tag" style={{ marginRight: 6, color: '#a78bfa' }}>[每周概括]</span>}
+        {item.title || item.text || '(无文字内容)'}
+      </div>
       {item.title && item.text && item.title !== item.text && <small>{item.text}</small>}
       <small>
         {[
@@ -145,6 +152,7 @@ export default function TimelineView({ apiBaseUrl, connected, onOpenEvidence, on
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [rollupFilter, setRollupFilter] = useState<'ALL' | 'DAILY' | 'WEEKLY' | 'EPISODE'>('ALL');
 
   const load = useCallback(async (opts: { cursor?: string | null }) => {
     if (!connected) return;
@@ -168,7 +176,19 @@ export default function TimelineView({ apiBaseUrl, connected, onOpenEvidence, on
   useEffect(() => { void load({}); }, [load]);
 
   const degraded = isFeatureDisabled(error) || isNotEnabled(error);
-  const hasContent = items.length > 0 || unknown.length > 0;
+  const filteredItems = items.filter((item) => {
+    if (rollupFilter === 'DAILY') {
+      return item.facet === 'SUMMARY' && (item.title?.includes('日') || item.text?.includes('日') || item.text?.includes('每日'));
+    }
+    if (rollupFilter === 'WEEKLY') {
+      return item.facet === 'SUMMARY' && (item.title?.includes('周') || item.text?.includes('周') || item.text?.includes('每周'));
+    }
+    if (rollupFilter === 'EPISODE') {
+      return item.facet === 'EPISODE';
+    }
+    return true;
+  });
+  const hasContent = filteredItems.length > 0 || unknown.length > 0;
   // 未连接：显示等待提示，不卡在「正在读取」（页面级离线说明照常显示）。
   if (!connected) return <section aria-label="日常时间线"><div className="note">等待 Atlas 后端连接后读取时间线。</div></section>;
 
@@ -187,12 +207,19 @@ export default function TimelineView({ apiBaseUrl, connected, onOpenEvidence, on
       <button className="btn ghost" disabled={loading || !connected} onClick={() => void load({})}><RefreshCw size={14} className={loading ? 'spin' : undefined} />刷新</button>
     </div>
 
+    <div className="seg" style={{ marginBottom: 10 }}>
+      <button className={`btn ${rollupFilter === 'ALL' ? 'active' : 'ghost'}`} onClick={() => setRollupFilter('ALL')}>全部经历</button>
+      <button className={`btn ${rollupFilter === 'DAILY' ? 'active' : 'ghost'}`} onClick={() => setRollupFilter('DAILY')}>每日概括</button>
+      <button className={`btn ${rollupFilter === 'WEEKLY' ? 'active' : 'ghost'}`} onClick={() => setRollupFilter('WEEKLY')}>每周概括</button>
+      <button className={`btn ${rollupFilter === 'EPISODE' ? 'active' : 'ghost'}`} onClick={() => setRollupFilter('EPISODE')}>单次事件</button>
+    </div>
+
     {loading && <div className="list glass"><div className="empty"><LoaderCircle size={22} className="spin" /><b>正在读取时间线…</b></div></div>}
     {!loading && degraded && <div className="note">时间线功能未启用：服务端尚未接线或统一记忆未开启。这不是错误，等后端启用后会自动可用。</div>}
     {!loading && !degraded && error && <div className="error-note" role="alert"><span>读取时间线失败：{error}</span></div>}
     {!loading && !error && !hasContent && <div className="list glass"><div className="empty"><CalendarClock size={22} /><b>还没有可显示的经历</b>和 Atlas 聊天、使用工具的经历会按时间出现在这里。</div></div>}
 
-    {!loading && !error && items.length > 0 && <div className="list glass">{items.map((item) =>
+    {!loading && !error && filteredItems.length > 0 && <div className="list glass">{filteredItems.map((item) =>
       <ItemRow key={item.recordRef} item={item} onOpenEvidence={onOpenEvidence} onCorrect={onCorrect} />)}
     </div>}
 

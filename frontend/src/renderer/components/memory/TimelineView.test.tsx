@@ -72,6 +72,9 @@ describe('TimelineView render', () => {
     expect(html).toContain('正在读取时间线…');
     expect(html).toContain('aria-label="开始日期"');
     expect(html).toContain('aria-label="结束日期"');
+    expect(html).toContain('每日概括');
+    expect(html).toContain('每周概括');
+    expect(html).toContain('单次事件');
   });
 
   it('shows a waiting note instead of a stuck spinner when the backend is offline', () => {
@@ -95,5 +98,12 @@ describe('TimelineView render', () => {
     const html = renderToStaticMarkup(<ItemRow item={item({ epistemic: 'INFERRED', speakerRole: 'TOOL' })} />);
     expect(html).toContain('推断');
     expect(html).toContain('工具');
+  });
+
+  it('marks daily and weekly rollup summaries with explicit tags (S5)', () => {
+    const dailyHtml = renderToStaticMarkup(<ItemRow item={item({ facet: 'SUMMARY', title: '10月8日概括' })} />);
+    expect(dailyHtml).toContain('[每日概括]');
+    const weeklyHtml = renderToStaticMarkup(<ItemRow item={item({ facet: 'SUMMARY', title: '第40周概括' })} />);
+    expect(weeklyHtml).toContain('[每周概括]');
   });
 });

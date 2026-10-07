@@ -56,6 +56,12 @@ describe('EntityView render', () => {
     expect(html).toContain('项目');
   });
 
+  it('renders a delete confirm button when onDelete is provided (S5)', () => {
+    const page = normalizeEntities(payload);
+    const html = renderToStaticMarkup(<EntityRow entity={page.items[0]} onDelete={() => undefined} />);
+    expect(html).toContain('删除');
+  });
+
   it('renders the search field and loading skeleton on mount', () => {
     const html = renderToStaticMarkup(<EntityView apiBaseUrl="http://x" connected />);
     expect(html).toContain('aria-label="人事"');

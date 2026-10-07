@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import StatusPanel, { StatusPanelBody, WatermarkCards, fetchStatus } from './StatusPanel';
+import StatusPanel, {
+  StatusPanelBody,
+  WatermarkCards,
+  fetchStatus,
+  fetchCaptureStatus,
+  pauseCapture,
+  resumeCapture,
+} from './StatusPanel';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -29,6 +36,32 @@ describe('StatusPanel fetch', () => {
     expect(asked).toBe('http://x/api/unified-memory/status');
     expect(result.raw.authority_id).toBe('authority-windows-01');
   });
+
+  it('reads capture status and sends pause/resume requests (S5)', async () => {
+    let lastUrl = '';
+    let lastMethod = '';
+    vi.stubGlobal('fetch', (async (input: RequestInfo | URL, init?: RequestInit) => {
+      lastUrl = String(input);
+      lastMethod = init?.method ?? 'GET';
+      if (lastUrl.endsWith('/capture/status')) {
+        return new Response(JSON.stringify({ state: 'RUNNING', revision: 2 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch);
+
+    const cap = await fetchCaptureStatus('http://x');
+    expect(lastUrl).toBe('http://x/api/unified-memory/capture/status');
+    expect(cap.state).toBe('RUNNING');
+    expect(cap.revision).toBe(2);
+
+    await pauseCapture('http://x', 2);
+    expect(lastUrl).toBe('http://x/api/unified-memory/capture/pause');
+    expect(lastMethod).toBe('POST');
+
+    await resumeCapture('http://x', 3);
+    expect(lastUrl).toBe('http://x/api/unified-memory/capture/start');
+    expect(lastMethod).toBe('POST');
+  });
 });
 
 describe('StatusPanelBody render', () => {
@@ -47,6 +80,11 @@ describe('StatusPanelBody render', () => {
     // 已知标量带中文标签（authority_id → 权威标识），原始值完整可见
     expect(html).toContain('权威标识');
     expect(html).toContain('authority-windows-01');
+    // S5 状态概览关键指标
+    expect(html).toContain('采集开关');
+    expect(html).toContain('MemoryOS 状态');
+    expect(html).toContain('待整理数量');
+    expect(html).toContain('今日 Observer 用量');
   });
 
   it('renders empty lists/objects without crashing and shows an explicit empty placeholder', () => {

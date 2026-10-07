@@ -4,6 +4,8 @@
  * 不引入第二套数据层；测试经 vi.stubGlobal 换全局 fetch（x2 测试同法）。
  */
 
+import { useEffect, useState } from 'react';
+
 /** 从 api() 抛出的错误信息里取回 HTTP 状态码（api() 统一格式 "HTTP 409：…"）。
  *  组件里错误通常存成字符串，所以 Error 与字符串都要认。 */
 export function statusOf(exc: unknown): number | null {
@@ -103,3 +105,37 @@ export function RevisionBadge({ revision }: { revision?: number | string | null 
   if (revision === null || revision === undefined || revision === '') return null;
   return <span className="tag" style={{ marginTop: 0 }}>版本 {String(revision)}</span>;
 }
+
+export function ConfirmButton({
+  label,
+  confirm,
+  disabled = false,
+  onConfirm,
+}: {
+  label: string;
+  confirm: string;
+  disabled?: boolean;
+  onConfirm: () => void;
+}) {
+  const [asked, setAsked] = useState(false);
+  useEffect(() => {
+    if (!asked) return;
+    const timer = window.setTimeout(() => setAsked(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [asked]);
+  return <button
+    className={`btn ${asked ? 'danger' : 'ghost'}`}
+    disabled={disabled}
+    onClick={() => {
+      if (asked) {
+        setAsked(false);
+        onConfirm();
+      } else {
+        setAsked(true);
+      }
+    }}
+  >
+    {asked ? confirm : label}
+  </button>;
+}
+

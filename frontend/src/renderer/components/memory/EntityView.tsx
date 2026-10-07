@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { LoaderCircle, Users } from 'lucide-react';
 import { api } from '../../services/api';
-import { enumLabel, isFeatureDisabled, isNotEnabled, pageOf, str } from './common';
+import { enumLabel, isFeatureDisabled, isNotEnabled, pageOf, str, ConfirmButton } from './common';
 
 export interface EntityItem {
   id: string;
@@ -64,7 +64,7 @@ export async function fetchEntities(
   return api<unknown>(apiBaseUrl, `/api/unified-memory/entities${query ? `?${query}` : ''}`);
 }
 
-export function EntityRow({ entity }: { entity: EntityItem }) {
+export function EntityRow({ entity, onDelete }: { entity: EntityItem; onDelete?: (entity: EntityItem) => void }) {
   const badge = entityStatusLabel(entity);
   return <div className="fact">
     <div>
@@ -74,10 +74,21 @@ export function EntityRow({ entity }: { entity: EntityItem }) {
         {badge.text && <span style={badge.verified ? { background: 'var(--ok-soft)', color: 'var(--ok)' } : undefined}>{badge.text}</span>}
       </div>
     </div>
+    {onDelete && <div className="btns">
+      <ConfirmButton label="删除" confirm="确认删除" onConfirm={() => onDelete(entity)} />
+    </div>}
   </div>;
 }
 
-export default function EntityView({ apiBaseUrl, connected }: { apiBaseUrl: string; connected: boolean }) {
+export default function EntityView({
+  apiBaseUrl,
+  connected,
+  onDelete,
+}: {
+  apiBaseUrl: string;
+  connected: boolean;
+  onDelete?: (entity: EntityItem) => void;
+}) {
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<EntityItem[]>([]);
@@ -85,6 +96,20 @@ export default function EntityView({ apiBaseUrl, connected }: { apiBaseUrl: stri
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+
+  const handleDelete = async (entity: EntityItem) => {
+    if (onDelete) {
+      onDelete(entity);
+      setItems((prev) => prev.filter((item) => item.id !== entity.id));
+      return;
+    }
+    try {
+      await api(apiBaseUrl, `/api/facts/${encodeURIComponent(entity.name)}`, { method: 'DELETE' });
+    } catch {
+      // ignore
+    }
+    setItems((prev) => prev.filter((item) => item.id !== entity.id));
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(query.trim()), 250);
@@ -134,7 +159,7 @@ export default function EntityView({ apiBaseUrl, connected }: { apiBaseUrl: stri
       <div className="list glass"><div className="empty"><Users size={22} /><b>{search ? '没有匹配的人物或事物' : '还没有人物或事物'}</b>Atlas 从经历里整理出的人物、项目与事物会出现在这里。</div></div>}
 
     {!loading && !error && items.length > 0 && <div className="list glass">
-      {items.map((entity) => <EntityRow key={entity.id} entity={entity} />)}
+      {items.map((entity) => <EntityRow key={entity.id} entity={entity} onDelete={handleDelete} />)}
     </div>}
 
     {cursor && !loading && !error && <div style={{ textAlign: 'center', marginTop: 14 }}>
