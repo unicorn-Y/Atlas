@@ -1,5 +1,14 @@
 # F1-A 语义召回与纠正链路修复 · 验收报告
 
+2026-10-09 总控补修与验收记录：已验收 A/B/C 基线提交并推送为 Atlas `2df2e137`、MemoryOS `cc01907`（SSH 远端一致、ahead/behind 0/0）。后续发现 relevance 分支只取语义分数，尚未满足任务书要求的字面/语义取最大值；Luna A 已补为独立字面 RRF 归一化与语义相似度取 max，保留无语义候选的旧路径及 exact/temporal 优先级。此补修已完成下述双仓门禁和总控真实抽查，MemoryOS 提交 `759b1ed` 已 SSH 推送且 ahead/behind 0/0，不混同基线 hash。
+
+- 总控亲自读补修 diff；定向四类（字面较强、语义较强、仅语义、无语义）通过。总控 MemoryOS 全集 `tests/unified_memory`：425 passed / 0 failed，150.03s；证据 `D:/Temp/F1-controller-memoryos-max-gate-20261009/junit.xml` 与 `pytest.log`。
+- 总控亲自真实 HTTP/Qwen 冒烟：10/10 改述命中，HARD_ERASE 后目标不可召回，READY / pending=0 / device=cuda；证据 `D:/Temp/F1-controller-max-real-smoke-20261009/run.json`。抽查首条英文查询 `Which Chinese city is my current home?` 命中杭州，target_rank=2，semantic_score=0.6813217103481293。隔离测试服务已退出，58174 无监听；未变更生产解释器。
+- Atlas 补修全集已由总控运行：273 tests，271 passed / 2 skipped / 0 failed，284.66s；证据 `D:/Temp/F1-controller-atlas-max-gate-20261009/junit.xml`。随后新增 Gemini runner 三项离线测试，含新测试的 276 项全集正在另行复跑；不将此前 273 项说成包含新增三项。
+- 用户已将延迟改为本轮记录项：下文历史 391.536ms 来自临时 CUDA 环境，不代表共享 CPU-only 解释器部署结果；本次补修冒烟没有重复 10k 性能跑分。S7 未启动。
+
+以下保留 2026-10-08 施工者原始记录，其中旧 Atlas legacy 失败已由 F1-C 修复；它不代表当前状态。
+
 2026-10-08；执行者 AI计划（接续 Codex 桌面端 F1 施工线）。权威：`04_修复包F1.md`、`F1-dispatch.md`。
 本轮不写 ACCEPTED（审查方专属）；不提交、不推送；不改生产数据或配置。
 
