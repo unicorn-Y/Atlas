@@ -457,12 +457,14 @@ def test_import_text_files_via_real_atlas_service(um) -> None:
         new_hits = [item for item in items
                     if _obs_content(item).get("file_sha256") == revised["file_sha256"]]
         still_old = [item for item in items if _source_event_id(item) == old_seid]
-        if len(new_hits) >= 2 and len(still_old) == 1:
+        old_event_ids = {_source_event_id(item) for item in still_old}
+        if len(new_hits) >= 2 and old_event_ids == {old_seid}:
             break
         time.sleep(1.0)
     assert len(new_hits) == 2, "修改后的两个片段观察应入库"
-    assert [_projection(item)["locator"]["value"] for item in new_hits] == [
-        "sample.txt#L1-L1", "sample.txt#L3-L3"]
+    new_locators = [_projection(item)["locator"]["value"] for item in new_hits]
+    assert len(new_locators) == 2
+    assert set(new_locators) == {"sample.txt#L1-L1", "sample.txt#L3-L3"}
     assert any(_obs_content(item)["text"] == "评审窗口改为每周四上午。"
                for item in new_hits)
     # 旧版本保留：按 locator 回原片段（rev 1 原文仍在服务端）。

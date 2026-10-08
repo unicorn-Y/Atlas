@@ -44,6 +44,7 @@ def h(um: UMHarness) -> UMHarness:
 # ================================================================== T07.3 Acceptance Test
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_implicit_constraint_changes_action(h: UMHarness) -> None:
     """T07.3 核心验收用例：隐式约束真实改变行动。
 

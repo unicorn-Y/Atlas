@@ -136,3 +136,46 @@
   用例将 Atlas 的 HEAD 固定断言为 R00 修复起点 commit `234e545a...`。随着主线和波次推进，HEAD 演进为当前最新提交，该断言必然失败。
 - **建议**：
   同为 R00 阶段性锁死用例，属于历史快照性质。
+
+---
+
+## MEMORY-V1 F1-C：`core/tests/unified_memory` 基线 11 项失败定性（2026-10-08）
+
+> 本节独立记录 F1-C 的统一记忆测试基线，不覆盖上文全库 K2 盘点。有效 Atlas 基线为 253 passed / 11 failed / 2 errors / 0 skipped；原始摘要日志：`C:\Users\25011\AppData\Local\Temp\atlas-f1c-atlas-run2-20261008\pytest.log`。run1 使用了共享 pytest 临时目录，结果不作为基线。原始失败节点以 run2 日志为准。
+
+| # | 基线失败节点 | 定性 | 当前处理 / 证据状态 |
+|---|---|---|---|
+| 1 | `test_capture_lifecycle.py::test_chat_capture_user_and_assistant_observations` | 测试断言把一个 source event 的多个合法投影误当多条来源事件 | 改为核对唯一 source event IDs 与投影计数；focus2 定向结果通过 |
+| 2 | `test_client_contract.py::test_service_down_raises_and_no_local_fallback_write` | ①原断言把 Atlas 启动所需的 DBOS SQLite 误判为统一记忆本地回退写入；②修订后 MemoryOS 侧快照仍宽匹配，把 SQLite checkpoint 的 `-wal`/`-shm` 边车涨落误判为写入（间歇 flake） | 双侧快照均只认权威主库文件（Atlas `atlas.db`、MemoryOS `memoryos.sqlite3`）；主库 mtime+size 仍精确比对，断言强度未降。单文件 20 passed；全量三连复验 0 flake。详见下文专项 |
+| 3 | `test_import_sources.py::test_import_text_files_via_real_atlas_service` | 导入确有新 revision，测试却依赖非契约的返回顺序/每次恰好一个 projection | 按 source event IDs 和 locator 集合验证真实 HTTP 导入；focus2 定向结果通过 |
+| 4 | `test_legacy_migration.py::test_legacy_export_import_roundtrip_idempotent_and_counts` | **真实 MemoryOS 产品缺陷，已由 A 修复，Atlas roundtrip 复验通过** | legacy_ref 派生链此前改变原始内容 hash；现严格校验 hash、重复导入与生命周期。Atlas focus5：`D:\Temp\F1-C-20261008\focus5-legacy\pytest.log`，1 passed |
+| 5 | `test_multimodal_proxy.py::test_associate_via_proxy_returns_candidates_and_groups` | V1 多模态理解未开放，服务按契约返回 `MEMORY_V1_FEATURE_FROZEN` | 仅此冻结能力标注 `frozen_v1` 并显式 skip；理由为 V1 不执行多模态理解，不以假响应伪装成功 |
+| 6 | `test_release_composition.py::test_desktop_correction_is_visible_in_new_chat` | 原测试经 helper 造假“已纠正”结果，没有旧值或 corrections API；属于不诚实脚手架 | 旧版 focus2 失败是 replacement 没装入新 chat provider context；现已改为真实 observe → record/profile/recall 旧值 → Atlas corrections API → revision/current fields/profile/recall 新值 → 新 Atlas WebSocket chat。Atlas 仅用 fake provider 检查模型请求装配，明确标记 `fake_provider`，不计真实模型效果。后续真实HTTP依次发现活动 title、CURRENT raw episode旧值回流、CURRENT context_items泄漏 `corrected.prev_value` 审计字段。A已修活动投影及CURRENT来源过滤；当前只待 recall 投影隐藏审计元数据，持久化审计、不可变source和AS_OF历史都必须保留 |
+| 7 | `test_repair_baseline.py::test_r00_b_0026_is_construction_not_foreign` | R00 瞬时守卫过时：迁移已在 Git 跟踪，不应要求仍处于 dirty | 改为核验 migration 仍被跟踪；focus2 定向结果通过。没有降低迁移存在性要求 |
+| 8 | `test_repair_baseline.py::test_r00_b_dirty_counts_match_known_baseline` | R00 锁定旧 HEAD、dirty path/count 的快照基准已过期 | 改为基于当前仓库 HEAD/status manifest 做真实性核验；focus2 定向结果通过。只更新时效性基准，不忽略当前状态 |
+| 9 | `test_source_idempotency.py::test_flush_roundtrip_records_readable_status_counts_outbox_drained` | 同一 source event 可合法形成多种 projection；旧断言把 projection 数当 event 数 | 按唯一 source IDs/readable statuses 检查，outbox 在 finally 关闭；focus2 定向结果通过 |
+| 10 | `test_windows_activity.py::test_capture_lifecycle_over_http` | 测试曾要求 V1 未提供的被动屏幕采集产生新水位，从而把冻结能力混入有效生命周期断言 | 保留真实 HTTP capture 状态与 Atlas chat 有效路径；移除被动采集伪成功前提。focus2 定向结果通过 |
+| 11 | `test_windows_activity.py::test_running_capture_passive_watermark_advances` | V1 被动屏幕/媒体采集能力冻结 | 仅水位推进断言标注 `frozen_v1` 并显式 skip；一般 capture 生命周期和有效文本导入仍保留测试 |
+
+### 基线 teardown / fake provider 脚手架问题
+
+- run2 的两个 teardown errors 与测试父进程 `psutil.pid_exists(pid)` 的 PID 重用假阳性有关。harness 现在基于本轮持有的 Popen/子进程句柄终止进程树，并在 stop 后检查本轮 Atlas/MemoryOS 端口已释放；focus2 无 teardown error。端口检查保留，不能只检查父 launcher 退出。
+- Observer 合约假 provider 曾持续返回不符合结构的文本并制造大量 schema rejection。现在只有 Observer schema 路径返回合法空 observations `{"observations":[]}`；不合成事实，其他 fake provider 覆盖明确只作为接口/基础设施测试，不计真实效果。
+- F1-C focused 结果不是全套验收：focus2 原始摘要为 8 passed / 1 failed / 2 skipped，唯一失败为旧版 T12 provider context 未包含 replacement；该断言路径已由真实纠正链替换。后续真实纠正运行先后发现活动 title、CURRENT raw episode 旧值回流、CURRENT context_items泄漏 `corrected.prev_value` 审计字段。当前活动value/title/summary/text、自然召回新值、不可变source及持久化审计均已通过，但上下文泄漏待A修；完整全量门禁留在 `progress/F1-C.md`，目前未完成、不得标记 ACCEPTED。
+
+### 跨用例隔离缺陷：`test_legacy_migration` 全库计数被 `test_capture_lifecycle` 污染（2026-10-08，AI计划 定性并修复）
+
+- **现象**：单独运行 `test_legacy_export_import_roundtrip_idempotent_and_counts` 为 `1 passed`；但与 `test_capture_lifecycle.py::test_failing_tool_result_captured_with_error_marker` 同批运行时该用例报 `AssertionError: assert 9 == 8`（第 378 行，`len({legacy_ref}) == expected_rows`）。
+- **根因（因果实验铁证）**：`core/atlas/agent/tool_node.py:1354` 在工具失败路径调用真实 agent 的 `record_agent_reflection`；该委托落到**会话级共享** `um` harness 的 MemoryOS 库，写入 `locator.value = legacy:agent_reflections:<uuid>`（`core/atlas/memory/__init__.py:1846`）。`_legacy_records()` 按 `content.legacy_ref` 前缀 `legacy:` 过滤**全库**记录，于是把这条 agent reflection 也计入，得到 9 条而非 8 条。两条证据：①组合跑 = FAIL，②roundtrip 单跑 = PASS。
+- **性质**：测试隔离缺陷，非 MemoryOS 产品缺陷；双仓纯 HEAD 同样复现（`git stash` 对照一致）。
+- **修复**：将该用例改用函数级隔离实例 `um_fresh`（每用例独立 ATLAS_DATA_DIR/MEMORYOS_DATA_ROOT/MEMORYOS_DB_PATH），断言与夹具**一字未改**，只隔离数据库。组合跑复验 = `2 passed`；全量复验 = `271 passed, 2 skipped, 0 failed`。
+- **纪律**：不通过放宽断言、按时间/数量截断全库结果来掩盖隔离问题；全库断言必须有全库隔离的前提。
+
+### 跨用例隔离缺陷（二）：全库快照把 SQLite WAL 边车涨落误判为回退写入（2026-10-08，AI计划 定性并修复）
+
+- **现象**：全量口径 `-o addopts= core/tests/unified_memory` 下，`test_client_contract.py::test_service_down_raises_and_no_local_fallback_write` 间歇失败；`set(memoryos_after) != set(memoryos_before)`，报错显示 `memoryos_before` 含 `memoryos.sqlite3-wal` 与 `memoryos.sqlite3-shm`，而 `memoryos_after` 已无（被 checkpoint 合并回收）。
+- **根因**：该用例同时快照 Atlas 侧与 MemoryOS 侧数据目录。Atlas 侧此前已收窄到只认 `data/atlas.db`，**但 MemoryOS 侧仍宽匹配** `*.db`/`*.sqlite*`/`*.sqlite3-*`，于是把运行中的 MemoryOS 服务自身 checkpoint 造成的 `-wal`/`-shm` 边车出现/消失，误当成本地回退写入证据。属测试隔离缺陷，与被测行为无关；`-wal`/`-shm` 只是 SQLite 模式的内部状态，不是写入证据。
+- **反向证据**：单文件运行 `test_client_contract.py` = 20 passed；同一用例在全量 run1/run3 通过、run2 失败（时序相关）。
+- **修复**：`db_snapshot(root, only)` 增加 `only` 参数；Atlas 侧传 `atlas_memory_db`、MemoryOS 侧传 `runtime_manifest["memoryos_db"]`（`db/memoryos.sqlite3`），两侧都只对权威主库文件比对 mtime+size，忽略边车。**未放宽断言**：主库文件的精确比对原样保留，任何真实写入仍会被捕获；只是不再把 SQLite 内部 checkpoint 的边车涨落当证据。
+- **复验**：单文件 20 passed；全量三连（run1/2/3，各独立 basetemp+JUnit）全部 `271 passed, 2 skipped, exit 0`，**零 flake**。证据 `D:\Temp\F1-C-gate-20261008\`。
+- **纪律**：不得用删除 MemoryOS 侧断言、或整体跳过该用例来消除 flake；两侧快照必须保持对权威主库的精确比对。

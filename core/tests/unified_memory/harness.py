@@ -2,7 +2,9 @@
 
 Spawns one real Atlas backend (``uvicorn atlas.server:app``) and one real
 MemoryOS service (``uvicorn app:app``) as subprocesses in their own
-interpreters, each bound to a fresh isolated data root under
+interpreters, each bound to a fresh isolated data root. When
+``ATLAS_DATA_DIR`` is set by the suite, test runtime files live below that
+external isolated root; otherwise they use
 ``artifacts/unified-memory/test-runtime/<uuid>/``. Only the LLM provider is
 fake: :class:`~tests.fakes.fake_llm_provider.FakeLLMServer` runs loopback-only
 inside the pytest process and every chat/tool/memory path under test goes
@@ -130,11 +132,35 @@ def _canonical_json(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _fake_aux_response(request: dict[str, Any]) -> Text:
+    """Return an empty, schema-valid extraction for Observer-only fake calls.
+
+    The contract harness records source observations directly and does not use
+    fake extraction as effect evidence. Returning no synthesized observations
+    acknowledges that boundary without retrying an unrelated summary string.
+    """
+    messages = request.get("messages") or []
+    observer_contract = any(
+        message.get("role") == "system"
+        and "Atlas structured-output contract:" in str(message.get("content") or "")
+        for message in messages if isinstance(message, dict)
+    )
+    if observer_contract:
+        return Text('{"observations":[]}')
+    return Text("Fake summary of the earlier conversation.")
+
+
 class UMHarness:
     """One isolated Atlas + MemoryOS pair. See module docstring for scope."""
 
     def __init__(self, *, artifacts_base: Path | None = None) -> None:
-        self.artifacts_base = Path(artifacts_base) if artifacts_base else ARTIFACTS_BASE
+        isolated_atlas_root = os.environ.get("ATLAS_DATA_DIR")
+        default_artifacts_base = (
+            Path(isolated_atlas_root) / "unified-memory-test-runtime"
+            if isolated_atlas_root else ARTIFACTS_BASE
+        )
+        self.artifacts_base = (Path(artifacts_base) if artifacts_base
+                               else default_artifacts_base)
         self.started = False
         self.stopped = False
         self._fake: FakeLLMServer | None = None
@@ -207,7 +233,7 @@ class UMHarness:
         })
 
         # 1. Fake model provider: loopback HTTP inside the pytest process.
-        self._fake = FakeLLMServer(default_text="um-fake-ok")
+        self._fake = FakeLLMServer(default_text="um-fake-ok", aux=_fake_aux_response)
         self._fake.start()
         self.runtime_manifest["model"] = {
             "provider": "fake-loopback",
@@ -384,6 +410,9 @@ class UMHarness:
             # （subject-default）通信，经显式兼容别名保持可用；其他主体仍 403。
             "MEMORYOS_MEMORY_SUBJECT_ID": "atlas-fixture",
             "MEMORYOS_MEMORY_SUBJECT_ALIASES": "subject-default",
+            # This harness validates contract/capture paths. Semantic-model
+            # loading is covered only by the dedicated real-model smoke tests.
+            "MEMORYOS_SEMANTIC_RECALL_ENABLED": "0",
             "NO_PROXY": "127.0.0.1,localhost",
             "PYTHONUTF8": "1",
             "PYTHONIOENCODING": "utf-8",
@@ -921,7 +950,10 @@ class UMHarness:
         ):
             self._terminate(proc, handle)
             pid = self.runtime_manifest.get(f"{component}_pid")
-            if pid is not None and self._pid_alive(pid):
+            # Check the Popen handle we own instead of pid_exists(pid): Windows
+            # can recycle a PID immediately after wait(), producing a false
+            # teardown failure for an unrelated newly-started process.
+            if proc is not None and proc.poll() is None:
                 leftover.append(f"{component}:{pid}")
             if proc is not None:
                 self.runtime_manifest[f"{component}_pid"] = proc.pid
@@ -941,12 +973,68 @@ class UMHarness:
 
     def _terminate(self, proc: subprocess.Popen | None, log_handle: Any) -> None:
         if proc is None:
+            if log_handle is not None:
+                try:
+                    log_handle.flush()
+                    log_handle.close()
+                except (OSError, ValueError):
+                    pass
             return
         if proc.poll() is None:
-            proc.terminate()
+            # Windows' venv python.exe can be a launcher that spawns the real
+            # interpreter. Terminate descendants first so no uvicorn child can
+            # keep the test port alive after the launcher exits.
+            descendants = []
+            try:
+                import psutil
+
+                descendants = psutil.Process(proc.pid).children(recursive=True)
+            except Exception:
+                # The exact harness-owned PID tree is the fallback scope.
+                if os.name == "nt":
+                    try:
+                        subprocess.run(
+                            ["taskkill", "/PID", str(proc.pid), "/T"],
+                            capture_output=True, text=True, timeout=STOP_TIMEOUT_S,
+                            check=False,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
+
+            for child in reversed(descendants):
+                try:
+                    child.terminate()
+                except (OSError, ProcessLookupError):
+                    pass
+            if descendants:
+                try:
+                    import psutil
+
+                    _, alive = psutil.wait_procs(descendants, timeout=STOP_TIMEOUT_S)
+                    for child in alive:
+                        try:
+                            child.kill()
+                        except (OSError, ProcessLookupError):
+                            pass
+                    if alive:
+                        psutil.wait_procs(alive, timeout=STOP_TIMEOUT_S)
+                except Exception:
+                    pass
+
+            if proc.poll() is None:
+                proc.terminate()
             try:
                 proc.wait(timeout=STOP_TIMEOUT_S)
             except subprocess.TimeoutExpired:
+                if os.name == "nt":
+                    try:
+                        subprocess.run(
+                            ["taskkill", "/F", "/PID", str(proc.pid), "/T"],
+                            capture_output=True, text=True, timeout=STOP_TIMEOUT_S,
+                            check=False,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
                 proc.kill()
                 try:
                     proc.wait(timeout=STOP_TIMEOUT_S)

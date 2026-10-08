@@ -322,8 +322,15 @@ def _legacy_records(harness: UMHarness) -> list[dict]:
 
 
 @pytest.mark.integration
-def test_legacy_export_import_roundtrip_idempotent_and_counts(um: UMHarness, tmp_path):
-    """迁移判据：只读导出 → 幂等导入 → legacy_ref 读回 + 哈希一致 + 重放 created=0。"""
+def test_legacy_export_import_roundtrip_idempotent_and_counts(um_fresh, tmp_path):
+    """迁移判据：只读导出 → 幂等导入 → legacy_ref 读回 + 哈希一致 + 重放 created=0。
+
+    本用例末段的"服务端 legacy 记录计数 == summary 行数"是全库断言，要求数据库
+    只含本次导入。会话级共享 ``um`` 会被 ``test_capture_lifecycle`` 的失败工具
+    用例经真实 agent 写入 ``legacy:agent_reflections`` 记录，造成既有跨用例隔离
+    缺陷（9 != 8）。改用函数级隔离实例；断言本身保持原样不变。
+    """
+    um = um_fresh()
     db_path = tmp_path / "legacy-atlas.db"
     local_counts = _build_legacy_db(db_path)
     export_dir = tmp_path / "export"
@@ -337,28 +344,45 @@ def test_legacy_export_import_roundtrip_idempotent_and_counts(um: UMHarness, tmp
     assert first["created"] == expected_rows
     assert len(first["record_map"]) == expected_rows
 
-    # 读回：按 legacy_ref 逐条核对内容哈希 + 状态映射
-    records = {item["content"]["legacy_ref"]: item for item in _legacy_records(um)}
+    # 读回：importer 返回 memory: 引用并列出 episode 投影。按 record_map
+    # 指定的真实 memory ref 对账，不能让同 legacy_ref 的后续 projection 覆盖。
+    service_records = _legacy_records(um)
+    by_record_ref = {item["record_ref"]: item for item in service_records}
     lines: list[dict] = []
     for jsonl in sorted(export_dir.glob("*.jsonl")):
         lines.extend(json.loads(l) for l in
                      jsonl.read_text(encoding="utf-8").splitlines() if l.strip())
     for line in lines:
-        record = records[line["legacy_ref"]]
+        memory_ref = first["record_map"][line["legacy_ref"]]
+        assert memory_ref.startswith("memory:"), (line["legacy_ref"], memory_ref)
+        record = by_record_ref[memory_ref]
+        assert record["content"]["legacy_ref"] == line["legacy_ref"]
         assert record["lifecycle"] == line["lifecycle"], \
             f"{line['legacy_ref']} 生命周期映射不一致"
         assert record["epistemic_kind"] == line["epistemic_kind"]
         assert record["content"]["legacy_ungrounded"] == "LEGACY_UNGROUNDED"
-        assert content_hash_of(record["content"]["legacy_content"]) == line["content_hash"], \
-            f"{line['legacy_ref']} 内容哈希不一致"
+        stored_content = record["content"]["legacy_content"]
+        stored_hash = content_hash_of(stored_content)
+        if stored_hash != line["content_hash"]:
+            expected_content = line["content"]
+            differing_fields = {
+                key: (expected_content.get(key), stored_content.get(key))
+                for key in set(expected_content) | set(stored_content)
+                if expected_content.get(key) != stored_content.get(key)
+            }
+            pytest.fail(
+                f"{line['legacy_ref']} content hash mismatch: "
+                f"expected={line['content_hash']} actual={stored_hash}; "
+                f"differing_fields={differing_fields}")
     superseded = [line for line in lines
                   if line["content"]["legacy_status"] == "superseded"]
     assert superseded, "夹具必须包含历史/失效记录"
     for line in superseded:
-        assert records[line["legacy_ref"]]["lifecycle"] == "SUPERSEDED"
+        memory_ref = first["record_map"][line["legacy_ref"]]
+        assert by_record_ref[memory_ref]["lifecycle"] == "SUPERSEDED"
 
     # 数量核对：summary 行数 == 服务端 legacy 记录计数
-    assert len(records) == expected_rows
+    assert len({item["content"]["legacy_ref"] for item in service_records}) == expected_rows
 
     # 重放导入：created=0、record_map 逐条一致
     code_replay, replay = _run_import(export_dir, um)

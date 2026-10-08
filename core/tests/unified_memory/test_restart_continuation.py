@@ -129,6 +129,7 @@ def test_reconcile_focus_receipts_batch_and_purity():
 # ------------------------------------------------------------------ 集成：判据 1
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_restart_does_not_repeat_completed_side_effect(um_fresh):
     """判据语义原样：首轮真实写收据 → 真进程重启 → 续接不重复副作用。"""
     h = um_fresh()
@@ -183,6 +184,7 @@ def test_restart_does_not_repeat_completed_side_effect(um_fresh):
 # ------------------------------------------------------------------ 集成：判据 2
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_multiple_unfinished_tasks_need_explicit_focus(um_fresh):
     """多未完成任务：装配不自动选边 —— 无 task_id 不触碰任何焦点，带才续。"""
     h = um_fresh()
@@ -221,6 +223,7 @@ def test_multiple_unfinished_tasks_need_explicit_focus(um_fresh):
 # ------------------------------------------------------------------ 集成：判据 3
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_unknown_receipt_goes_to_pending_not_verified(um_fresh):
     """失败收据进 pending 而非 verified；助手「完成」文本不是已完成任务。"""
     h = um_fresh()
@@ -245,6 +248,7 @@ def test_unknown_receipt_goes_to_pending_not_verified(um_fresh):
 
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_unknown_receipt_reconciled_before_recommit_after_restart(um_fresh):
     """重跑前对账：UNKNOWN 收据（真实路径）在续接运行 begin 时确定性检查并
     更新状态，再随快照重提交 —— 不重复调用有副作用的工具。"""
@@ -286,6 +290,7 @@ def test_unknown_receipt_reconciled_before_recommit_after_restart(um_fresh):
 # ------------------------------------------------------------------ 集成：判据 4
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_focus_survives_restart_and_model_change(um_fresh):
     """真进程重启（atlas+memoryos）+ 模型选择改变后焦点仍可用（不依赖模型身份）。"""
     h = um_fresh()

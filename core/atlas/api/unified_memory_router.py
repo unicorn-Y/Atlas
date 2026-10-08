@@ -138,7 +138,11 @@ def _make_proxy(method: str, suffix: str):
         if method == "POST":
             body = await request.json()
         try:
-            result = await _facade(services).call(
+            facade = _facade(services)
+            if (method == "POST" and suffix == "/corrections"
+                    and isinstance(body, dict) and "context" not in body):
+                body = {**body, "context": facade.default_context()}
+            result = await facade.call(
                 method, f"/v1/unified{upstream}", json=body,
                 params=dict(request.query_params))
         except UnifiedMemoryError as exc:

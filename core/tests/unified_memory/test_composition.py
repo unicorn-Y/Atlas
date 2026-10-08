@@ -405,6 +405,7 @@ def _proxy_preference_refs(h: UMHarness) -> tuple[set[str], dict[str, dict]]:
 
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_ui_and_chat_share_authority(um: UMHarness):
     """入口 smoke（任务书判据）：经代理写偏好 → 代理可读 → chat 同 authority。
 

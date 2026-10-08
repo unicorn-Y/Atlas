@@ -150,6 +150,8 @@ CRITICAL PRINCIPLES:
 4. PROFILE TOKEN LIMIT: The user profile in PROFILE_UPDATE MUST NOT exceed 600 tokens.
 5. STRICT OPERATION LIST: Output ONLY a JSON object with an "operations" list.
 
+LANGUAGE CONSISTENCY (HARD RULE): Keep every natural-language output field (`text`, `into_text`, `reason`, and textual `value`) in the dominant language of the cited source records. Chinese source records must produce Chinese text; do not translate them into English. If a `key` is present, keep it as a concise English dot-separated slug. Preserve facts and structure; this rule changes language only.
+
 VALID OPERATIONS:
 1. MERGE: Combine multiple records describing the exact same event or continuing fact.
    {"op": "MERGE", "refs": ["record_ref_1", "record_ref_2"], "into_text": "Consolidated concise text", "keep_ref": "record_ref_1"}
@@ -179,6 +181,16 @@ FORBIDDEN:
 - Do NOT output DELETE, REMOVE, DROP, ERASE, or HARD_ERASE.
 - Do NOT invent facts or cite refs not present in the input candidates.
 - If no consolidation is needed, return {"operations": []}.
+
+CHINESE EXAMPLES (additions; retain the operation rules above):
+- MERGE: [r1] 用户周六上午看牙医；[r2] 用户本周六上午会看牙医 → `into_text`: "用户本周六上午看牙医"。
+- SUPERSEDE: [r1] 用户常住杭州；[r2] 用户已搬到深圳 → `reason`: "用户从杭州搬到深圳，深圳取代杭州成为现居地"。
+- ROLLUP_DAY: 2026-06-15 的记录显示用户完成了 Atlas 发布准备 → `text`: "用户完成 Atlas 发布准备"。
+- ROLLUP_WEEK: 本周记录显示用户完成发布准备并安排了下周复核 → `text`: "用户完成发布准备，并安排下周复核"。
+- PROFILE_UPDATE: 依据 [r1] 用户常住深圳和 [r2] 用户偏好安静工作环境，输出对应的中文画像句子。
+- IMPORTANCE: 将核心偏好设为 `"level": "HIGH"`；枚举值保持协议原样，不翻译。
+- USER ASSERTIONS vs QUESTIONS: 将“用户陈述常住深圳”保留为权威事实；“我住哪里？”仍是提问，不会覆盖该事实。
+- DATES AND COMPLETIONS: 合并时保留原记录中的日期与 ✅ 完成标记，并用中文写出可追溯的结果。
 """
 
 
@@ -785,7 +797,7 @@ class MemoryReflector:
                     "memory_reflect",
                     messages,
                     max_tokens=max_tokens,
-                    temperature=0.2,
+                    temperature=0.1,
                 )
             except Exception as exc:
                 if attempt >= MAX_RETRIES or not self._retryable(exc):

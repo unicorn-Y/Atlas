@@ -89,6 +89,7 @@ def test_fault_registry_wiring(um: UMHarness) -> None:
         raise AssertionError("未接线的故障必须 NotImplementedError，不允许静默")
 
 
+@pytest.mark.fake_provider
 def test_chat_roundtrip(um: UMHarness) -> None:
     """Fake model answers one line; the real WS run path must complete."""
     result = um.chat("请回复一句测试回复。")
@@ -182,6 +183,7 @@ def test_api_routing(um: UMHarness) -> None:
         raise AssertionError("非 /v1 与 /api 前缀必须被拒绝")
 
 
+@pytest.mark.fake_provider
 def test_tool_dispatch_resolves_real_tool(um: UMHarness) -> None:
     """h.tool drives the real execute_tools_node; the receipt is the real result."""
     outcome = um.tool("terminal", {"command": "echo um-tool-ok", "shell": "powershell"})

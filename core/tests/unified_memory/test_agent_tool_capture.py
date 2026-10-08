@@ -382,6 +382,7 @@ def _wait_for_records(h: Any, predicate: Any, *, timeout: float = 120.0,
 
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_delegate_task_claim_is_third_party_and_belongs_to_atlas(um) -> None:
     """主判据集成：h.tool 真实派发 delegate_task（被调 Agent = Atlas 子代理，
     executor=atlas + fake 模型 —— TEST runtime 不真跑外部 CLI）→ 服务端 records
@@ -432,6 +433,7 @@ def test_delegate_task_claim_is_third_party_and_belongs_to_atlas(um) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_atlas_independent_verification_after_agent_claim(um) -> None:
     """返回"完成"先记录 THIRD_PARTY 声明 → Atlas 独立检查（真实文件存在性）
     → /api/unified-memory/verify-agent-result 追加 ATLAS_VERIFICATION 观察

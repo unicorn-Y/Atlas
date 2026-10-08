@@ -398,28 +398,40 @@ def test_flush_roundtrip_records_readable_status_counts_outbox_drained(um):
     before = um.api("GET", "/v1/unified/status").json()["source_objects"]["total"]
 
     outbox = OperationalOutbox(um.atlas_data / "outbox" / "unified_outbox.sqlite3")
-    for observation in observations:
-        enqueue_capture(outbox, observation, context=builder.context,
-                        event_class="TEST")
-    assert outbox.stats()["pending"] == 3
+    try:
+        for observation in observations:
+            enqueue_capture(outbox, observation, context=builder.context,
+                            event_class="TEST")
+        assert outbox.stats()["pending"] == 3
 
-    report = asyncio.run(flush_once(outbox, _real_facade(um)))
-    assert report["acked"] == 3, report
-    assert report["outbox"]["pending"] == 0
-    assert outbox.poll_pending(10) == []             # 全部 ACKED，不再投递
+        report = asyncio.run(flush_once(outbox, _real_facade(um)))
+        assert report["acked"] == 3, report
+        assert report["outbox"]["pending"] == 0
+        assert outbox.poll_pending(10) == []             # 全部 ACKED，不再投递
 
-    # /v1/unified/records 可读（episode 投影）
-    items = um.api("GET", "/v1/unified/records",
-                   params={"limit": 200}).json()["items"]
-    hits = [item for item in items if tag in str(item)]
-    assert len(hits) >= 3, f"flush 后 records 必须可读: {tag}"
-    assert all(item["record_ref"].startswith("episode:") for item in hits[:3])
+        # records 同时含 episode 与 memory 投影；每个 source_event 可能有
+        # 多个 projection ref。按唯一 source_event 集合验证三条输入都可读。
+        items = um.api("GET", "/v1/unified/records",
+                       params={"limit": 200}).json()["items"]
+        hits = [item for item in items if tag in str(item)]
+        assert len(hits) >= 3, f"flush 后 records 必须可读: {tag}"
+        expected_events = {observation["source_event_id"] for observation in observations}
+        episode_events = {
+            ref["source_event_id"]
+            for item in hits if item["record_ref"].startswith("episode:")
+            for ref in item.get("source_refs", [])
+            if ref.get("source_event_id")
+        }
+        assert episode_events == expected_events, (
+            f"episode projections must cover exactly the 3 flushed events; "
+            f"expected={expected_events}, actual={episode_events}")
 
-    # status source_objects 计数 +3
-    after = um.api("GET", "/v1/unified/status").json()["source_objects"]
-    assert after["total"] == before + 3
-    assert after["active"] >= 3
-    outbox.close()
+        # status source_objects 计数 +3
+        after = um.api("GET", "/v1/unified/status").json()["source_objects"]
+        assert after["total"] == before + 3
+        assert after["active"] >= 3
+    finally:
+        outbox.close()
 
 
 @pytest.mark.integration

@@ -124,6 +124,8 @@ def _context(harness: UMHarness) -> dict:
 
 
 @pytest.mark.integration
+@pytest.mark.frozen_v1(reason="F1-C: MemoryOS V1 multimodal association is explicitly frozen; proxy association returns MEMORY_V1_FEATURE_FROZEN.")
+@pytest.mark.skip(reason="frozen_v1: MemoryOS V1 has no multimodal association implementation; retain this test for thaw-time verification.")
 def test_associate_via_proxy_returns_candidates_and_groups(
         um: UMHarness, tmp_path: Path):
     """媒体 + 文本观察 → 经 Atlas 代理 associate → 200 候选关联 + 等价组。"""

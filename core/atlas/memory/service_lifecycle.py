@@ -161,6 +161,7 @@ class MemoryOSServiceLifecycle:
         try:
             command, cwd = self._launch_command()
             env = os.environ.copy()
+            env["MEMORYOS_SEMANTIC_RECALL_ENABLED"] = "1"
             self._output_chunks.clear()
             self._output_size = 0
             self._process = await self._process_factory(

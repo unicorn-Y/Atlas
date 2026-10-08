@@ -233,6 +233,7 @@ def _proxy_get_intent(um: UMHarness, intent_id: str) -> dict:
 
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_cancelled_intent_does_not_trigger_via_proxy(um: UMHarness):
     """任务书判据语义（代理面走通）：建 ACTIVE 事件意图 → transition
     CANCELLED → 真实工具派发 + bridge.handle_atlas_event（engine 未挂接，

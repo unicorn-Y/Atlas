@@ -26,7 +26,7 @@ describe('submitCorrection (interaction, mocked fetch)', () => {
     expect(recorded[0].init?.method).toBe('POST');
     expect(JSON.parse(String(recorded[0].init?.body))).toEqual({
       request_id: 'req-1', target_ref: 'memory:m-1', expected_revision: 5,
-      replacement: '写代码用 VS Code，主题偏亮', source: 'desktop-correction',
+      replacement: { value: '写代码用 VS Code，主题偏亮' }, source: 'desktop-correction',
     });
     expect(result.revision).toBe(6);
     expect(result.affected).toEqual([

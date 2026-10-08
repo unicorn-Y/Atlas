@@ -46,11 +46,6 @@ EXPECTED_OWNERS = {
 }
 CONSTRUCTION_FILES = {"core/atlas/server.py", "core/atlas/cli.py", "core/atlas/runtime/hub.py"}
 
-# 施工包基准（04 施工与覆盖清单.json baseline）：Atlas head / MemoryOS head
-BASELINE_ATLAS_HEAD = "234e545aa33f48064618d5d9bd8bfeb1196d7018"
-BASELINE_MEMORYOS_HEAD = "0b5dc9761d4a6c97342a8377f757566a5d2e1f04"
-BASELINE_ATLAS_DIRTY = 6
-BASELINE_MEMORYOS_DIRTY = 130
 R00_ADDED_ATLAS_FILES = {
     "scripts/unified_memory/repair_baseline.py",
     "scripts/unified_memory/repair_driver.py",
@@ -58,17 +53,6 @@ R00_ADDED_ATLAS_FILES = {
     "tasks/unified-memory/REPAIR-CURRENT.json",
     "docs/plan/UNIFIED-MEMORY/audit-verdicts.json",
 }
-# 施工包基准（04）登记的原始 6 个 Atlas 脏文件（必须仍在，不得丢失）
-ORIGINAL_ATLAS_DIRTY = {
-    "core/atlas/automation/engine.py",
-    "core/atlas/capabilities/durable/dbos_backend.py",
-    "core/tests/test_k1_daily_paths_x2x4x5.py",
-    ".construction-pack/",
-    "core/atlas/capabilities/durable/dbos_compat.py",
-    "core/tests/test_dbos_scheduler_wait_shim.py",
-}
-
-
 def _load_module():
     spec = importlib.util.spec_from_file_location("um_r00_repair_baseline", MODULE_PATH)
     assert spec is not None and spec.loader is not None
@@ -125,39 +109,46 @@ def test_r00_b_owner_assignment_is_unique_per_file(manifest):
     assert "UM-CONSTRUCTION" in owners_seen
 
 
-def test_r00_b_0026_is_construction_not_foreign(manifest):
-    """R00-B：0026_unified_episode_formation.sql 归属施工交付，不是他人改动。"""
-    all_paths = {
-        str(e["path"]): e
-        for repo in manifest["repositories"]
-        for e in repo["dirty_files"]
-    }
-    key = "migrations/0026_unified_episode_formation.sql"
-    assert key in all_paths, sorted(all_paths)
-    assert all_paths[key]["owner"] == "UM-CONSTRUCTION"
+def test_r00_b_0026_migration_is_tracked_construction(manifest, rb):
+    """R00-B 原断言要求已提交迁移仍出现在脏文件清单，和当前 checkout 不符。
+
+    保留实际契约：迁移仍存在、由 Git 跟踪，且若成为脏文件时归 UM-CONSTRUCTION。
+    """
+    repo = REPO_ROOT.parent / "MemoryOS"
+    relative = "migrations/0026_unified_episode_formation.sql"
+    migration = repo / relative
+    assert migration.is_file()
+    tracked = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "--error-unmatch", relative],
+        capture_output=True, text=True, check=False)
+    assert tracked.returncode == 0, tracked.stderr
+    assert rb.classify_owner("MemoryOS", relative)[0] == "UM-CONSTRUCTION"
 
 
-def test_r00_b_dirty_counts_match_known_baseline(manifest):
-    """R00-B：锁定双仓库脏文件——MemoryOS 应与基准一致(130)；Atlas 允许 R00 自增。
+def test_r00_b_dirty_manifest_matches_live_repositories(manifest, rb):
+    """R00-B：manifest 必须反映本次运行时的 HEAD 和完整 dirty-file 列表。
 
-    HEAD 必须与施工包基准一致；Atlas 的增量必须**全部**是 R00 本任务新增文件，
-    否则说明有外部改动混入（应重新定位、不覆盖）。
+    已废弃的固定 HEAD/dirty 数取自旧施工包快照；F1/V1 checkout 允许继续提交和
+    并行落地，因此不再把某个历史数量误当成当前权威，也不丢失归属检查。
     """
     by_repo = {r["repo"]: r for r in manifest["repositories"]}
-    assert by_repo["Atlas"]["head"] == BASELINE_ATLAS_HEAD
-    assert by_repo["MemoryOS"]["head"] == BASELINE_MEMORYOS_HEAD
-    # 修复施工会在两仓库新增文件（正常差分）；不得少于基准，HEAD 必须一致。
-    assert by_repo["Atlas"]["dirty_count"] >= BASELINE_ATLAS_DIRTY
-    assert by_repo["MemoryOS"]["dirty_count"] >= BASELINE_MEMORYOS_DIRTY
-
-    atlas_paths = {str(e["path"]) for e in by_repo["Atlas"]["dirty_files"]}
-    # 原始 6 项必须仍在（不得丢失/被覆盖）
-    assert ORIGINAL_ATLAS_DIRTY <= atlas_paths, ORIGINAL_ATLAS_DIRTY - atlas_paths
-    # 新增项必须全部是修复线本任务产物，且被明确归属（不是"未归属"）
-    extras = atlas_paths - ORIGINAL_ATLAS_DIRTY
-    for p in extras:
-        entry = next(e for e in by_repo["Atlas"]["dirty_files"] if str(e["path"]) == p)
-        assert entry["owner"] in ("R00-CONSTRUCTION", "UM-CONSTRUCTION"), entry
+    assert set(by_repo) == {"Atlas", "MemoryOS"}
+    for name, repo_entry in by_repo.items():
+        root = Path(repo_entry["root"])
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True).stdout.strip()
+        assert repo_entry["head"] == head
+        live_dirty = rb._dirty_entries(root)
+        reported = repo_entry["dirty_files"]
+        assert repo_entry["dirty_count"] == len(reported)
+        live_by_path = {entry["path"]: (entry["status"], entry["tracked"], entry["sha256"])
+                        for entry in live_dirty}
+        reported_by_path = {
+            entry["path"]: (entry["status"], entry["tracked"], entry["sha256"])
+            for entry in reported
+        }
+        assert reported_by_path == live_by_path
 
 
 # ---------------------------------------------------------------- R00-C

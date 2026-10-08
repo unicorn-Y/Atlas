@@ -646,8 +646,10 @@ def um_x2():
     try:
         yield harness
     finally:
-        harness.stop()
-        os.environ.pop("ATLAS_X2_COMPUTER_FAKE", None)
+        try:
+            harness.stop()
+        finally:
+            os.environ.pop("ATLAS_X2_COMPUTER_FAKE", None)
 
 
 def _fetch_records(h: UMHarness) -> list[dict[str, Any]]:
@@ -692,6 +694,7 @@ def _capture_call(h: UMHarness, action: str, body: dict[str, Any]) -> Any:
 
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_stop_capture_stops_new_observations(um_x2) -> None:
     """任务书判据（原样语义）：seed windows_activity → capture/stop → 被动水位
     不再前进。
@@ -730,9 +733,10 @@ def test_stop_capture_stops_new_observations(um_x2) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_capture_lifecycle_over_http(um_x2) -> None:
-    """状态机走真实 HTTP：start 幂等/版本冲突 409/pause/stop/重入 RUNNING 且
-    水位不回退；pause/stop 不影响聊天（h.chat 照常产生 USER 观察）。"""
+    """状态机走真实 HTTP：start 幂等/版本冲突 409/pause/stop/重入 RUNNING；
+    普通聊天在 RUNNING/PAUSED 状态均照常产生 USER 观察。"""
     h = um_x2
     initial = _capture_status(h)
     assert initial["state"] == CAPTURE_STATE_STOPPED
@@ -762,11 +766,18 @@ def test_capture_lifecycle_over_http(um_x2) -> None:
     assert revision_mismatch.status_code == 409
     assert revision_mismatch.json()["detail"]["error"] == "REVISION_CONFLICT"
 
-    # RUNNING：范围内（screen=*）首个聊天运行里的截图收据推进被动水位。
-    observe = h.tool("computer_observe", {"target": "desktop"})
-    assert observe["status"] == "completed"
+    # 被动屏幕采集冻结（单独测试标记 frozen_v1）。保留状态机与真实聊天
+    # 检查，不把 fake computer tool 冒充成真实被动采集。
+    running_chat = h.chat("采集运行期间继续一条普通聊天。")
+    assert running_chat["status"] == "completed"
+    running_session_id = running_chat["conversation_id"]
+    _wait_for_records(
+        h, lambda item: (_obs_content(item).get("session_id") == running_session_id
+                         and _projection(item).get("source_kind")
+                         == "ATLAS_USER_MESSAGE"),
+        description=f"session {running_session_id} 的 USER 观察（RUNNING 不影响聊天）")
     running_watermark = _capture_status(h)["passive_capture_watermark"]
-    assert running_watermark == started.json()["passive_capture_watermark"] + 1
+    assert running_watermark == started.json()["passive_capture_watermark"]
 
     paused = _capture_call(h, "pause", {
         "request_id": "life-pause-2",
@@ -811,6 +822,7 @@ def test_capture_lifecycle_over_http(um_x2) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.fake_provider
 def test_screenshot_receipt_media_and_action_receipts(um_x2) -> None:
     """截图收据进统一记忆：TOOL 观察带 asset_id（可回查 T05.1 媒体元数据）；
     观察/点击请求/实际结果三类在同一条收据观察里分开记录。
@@ -846,6 +858,8 @@ def test_screenshot_receipt_media_and_action_receipts(um_x2) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.frozen_v1(reason="F1-C: V1 passive screen collection is explicitly frozen; a fake computer receipt cannot prove a live passive collector.")
+@pytest.mark.skip(reason="frozen_v1: passive screen/media collection is frozen for V1; retain the watermark test for thaw-time verification.")
 def test_running_capture_passive_watermark_advances(um_x2) -> None:
     """RUNNING 且收据在授权范围内 → 被动水位真实前进；范围外收据不入被动账。"""
     h = um_x2

@@ -73,7 +73,7 @@ export async function submitCorrection(
         request_id: requestId,
         target_ref: targetRef,
         expected_revision: input.expectedRevision,
-        replacement,
+        replacement: { value: replacement },
         source: 'desktop-correction',
       },
     });

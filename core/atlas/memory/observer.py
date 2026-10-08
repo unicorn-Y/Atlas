@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -32,6 +33,17 @@ from atlas.memory.observer_prompt import (
 from atlas.models.tokens import estimate_tokens
 
 log = structlog.get_logger()
+
+_ENGLISH_SIGNAL_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "to", "of", "in", "on", "at",
+    "by", "for", "from", "with", "as", "is", "are", "was", "were", "be",
+    "been", "being", "have", "has", "had", "do", "does", "did", "will",
+    "would", "can", "could", "should", "may", "might", "must", "i", "we",
+    "they", "you", "he", "she", "it", "my", "our", "their", "this", "that",
+    "user", "stated", "asked", "prefers", "preference", "likes", "liked", "uses",
+    "used", "works", "lives", "moved", "plans", "needs", "runs", "running",
+    "every", "week", "month", "year", "times", "per",
+})
 
 # Mastra observational-memory defaults at the pinned source commit. The threshold
 # gates an asynchronous flush; it is not a reason to discard or truncate captures.
@@ -84,6 +96,99 @@ OBSERVER_OUTPUT_SCHEMA: dict[str, Any] = {
     },
 }
 
+
+def _dominant_language(value: Any) -> str | None:
+    """Return zh/en only when the text gives a clear language signal."""
+    text = str(value or "")
+    han = sum("\u3400" <= char <= "\u9fff" for char in text)
+    latin = sum("a" <= char.lower() <= "z" for char in text)
+    words = re.findall(r"[a-z]+", text.lower())
+    english_signal = sum(word in _ENGLISH_SIGNAL_WORDS for word in words)
+    if han >= 2:
+        if english_signal >= 2 and latin > han and english_signal * 2 >= han:
+            return "en"
+        if english_signal == 0 or han >= english_signal * 2:
+            return "zh"
+        return None
+    if latin >= 4 and english_signal:
+        return "en"
+    return None
+
+
+def _language_text_values(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [text for item in value.values() for text in _language_text_values(item)]
+    if isinstance(value, (list, tuple)):
+        return [text for item in value for text in _language_text_values(item)]
+    return []
+
+
+def _value_language(value: str) -> str | None:
+    language = _dominant_language(value)
+    if language is not None:
+        return language
+    if any("\u3400" <= char <= "\u9fff" for char in value):
+        return None
+    words = re.findall(r"[A-Za-z]+", value)
+    if len(words) >= 2 and any(word.islower() for word in words[1:]):
+        return "en"
+    return None
+
+
+def _source_language(entries: list[dict[str, Any]]) -> str | None:
+    languages = [_dominant_language(entry.get("text")) for entry in entries]
+    chinese = languages.count("zh")
+    english = languages.count("en")
+    if chinese > english:
+        return "zh"
+    if english > chinese:
+        return "en"
+    return None
+
+
+def _language_mismatch_indices(
+    observations: list[dict[str, Any]], entries: list[dict[str, Any]],
+) -> list[int]:
+    sources = {str(entry.get("source_event_id") or ""): entry for entry in entries}
+    mismatches: list[int] = []
+    for index, observation in enumerate(observations):
+        evidence = observation.get("evidence")
+        source_entries = [
+            sources[str(source_id)] for source_id in evidence or []
+            if str(source_id) in sources
+        ]
+        source_language = _source_language(source_entries)
+        if source_language is None:
+            continue
+        output_texts = [str(observation.get("text") or "")]
+        source_terms = " ".join(str(entry.get("text") or "") for entry in source_entries).casefold()
+        text_language = _dominant_language(output_texts[0]) or _value_language(output_texts[0])
+        value_languages = [
+            _value_language(text) for text in _language_text_values(observation.get("value"))
+            if text.strip().casefold() not in source_terms
+        ]
+        if (
+            text_language is not None and text_language != source_language
+        ) or any(language is not None and language != source_language for language in value_languages):
+            mismatches.append(index)
+    return mismatches
+
+
+def _parse_observer_output(output_text: str) -> dict[str, Any]:
+    clean_text = output_text.strip()
+    if clean_text.startswith("```"):
+        lines = clean_text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        clean_text = "\n".join(lines).strip()
+    parsed = json.loads(clean_text)
+    validate(parsed, OBSERVER_OUTPUT_SCHEMA)
+    return parsed
+
 _SYSTEM_PROMPT = "\n\n".join((
     OBSERVER_EXTRACTION_INSTRUCTIONS,
     OBSERVER_OUTPUT_GUIDANCE,
@@ -128,6 +233,8 @@ class PendingObservationBatch:
     model_id: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
+    language_status: str = "ok"
+    language_mismatch_count: int = 0
 
 
 @dataclass
@@ -168,6 +275,12 @@ class MemoryObserver:
         self._queues: dict[str, _SessionQueue] = {}
         self._inflight: dict[str, _BatchState] = {}
         self._restored_sessions: set[str] = set()
+        self._language_mismatch_count = 0
+
+    @property
+    def language_mismatch_count(self) -> int:
+        """Number of retained observation rows still mismatched after one retry."""
+        return self._language_mismatch_count
 
     def pending_sessions(self) -> list[str]:
         """List durable sessions whose original captured source refs remain queued."""
@@ -551,6 +664,8 @@ class MemoryObserver:
             if output_tokens is None:
                 output_tokens = max(0, int(estimate_tokens(output_text)))
             actual_tokens = input_tokens + output_tokens
+            total_input_tokens = input_tokens
+            total_output_tokens = output_tokens
             if self._outbox is not None:
                 self._outbox.observer_budget_commit(reservation_id, actual_tokens)
             else:
@@ -561,22 +676,114 @@ class MemoryObserver:
                     _DAILY_SPENT[day_key] = _DAILY_SPENT.get(day_key, 0) + actual_tokens
             reservation = 0
             try:
-                clean_text = output_text.strip()
-                if clean_text.startswith("```"):
-                    lines = clean_text.splitlines()
-                    if lines and lines[0].startswith("```"):
-                        lines = lines[1:]
-                    if lines and lines[-1].strip() == "```":
-                        lines = lines[:-1]
-                    clean_text = "\n".join(lines).strip()
-                parsed = json.loads(clean_text)
-                validate(parsed, OBSERVER_OUTPUT_SCHEMA)
+                parsed = _parse_observer_output(output_text)
             except (json.JSONDecodeError, ValidationError) as exc:
                 log.warning("memory_observer.output_rejected", model_id=model_id,
                             source_event_ids=list(source_ids), reason=str(exc)[:400],
                             raw_output=output_text, input_tokens=input_tokens,
                             output_tokens=output_tokens)
                 raise ValueError("memory_observe output failed the S2 JSON schema") from exc
+
+            language_status = "ok"
+            mismatches = _language_mismatch_indices(parsed["observations"], entries)
+            if mismatches:
+                initial_mismatch_count = len(mismatches)
+                retry_messages = [
+                    *model_messages,
+                    {
+                        "role": "user",
+                        "content": (
+                            "Retry this extraction once. For each observation, use the language "
+                            "of the raw source text identified by that observation's evidence: "
+                            "Chinese source text gets Chinese text/value, and English source text "
+                            "gets English text/value. Do not force a batch-wide language when its "
+                            "cited source texts differ. Keep any "
+                            "key as an English dot-separated slug. Return the same JSON schema and "
+                            "cite only the source_event_id values already provided. Do not add facts."
+                        ),
+                    },
+                ]
+                retry_request_tokens = max(1, estimate_tokens(
+                    retry_messages, model=model_id, system_prompt=_SYSTEM_PROMPT,
+                ))
+                retry_budget = self._reserve_language_retry(
+                    session_id, day_key, budget, retry_request_tokens,
+                )
+                if retry_budget is None:
+                    language_status = "language_mismatch"
+                else:
+                    retry_reservation_id, retry_max_output, retry_reservation = retry_budget
+                    try:
+                        retry_result = await self._complete_with_retry(
+                            model_id, retry_messages, max_tokens=retry_max_output,
+                        )
+                        retry_output_text = str(getattr(retry_result, "text", "") or "")
+                        retry_input_tokens, retry_output_tokens = self._reported_usage(
+                            getattr(retry_result, "usage", None),
+                        )
+                        if retry_input_tokens is None:
+                            retry_input_tokens = retry_request_tokens
+                        if retry_output_tokens is None:
+                            retry_output_tokens = max(0, int(estimate_tokens(retry_output_text)))
+                        retry_actual_tokens = retry_input_tokens + retry_output_tokens
+                        self._commit_language_retry(
+                            day_key, retry_reservation_id, retry_reservation,
+                            retry_actual_tokens,
+                        )
+                        retry_reservation = 0
+                        total_input_tokens += retry_input_tokens
+                        total_output_tokens += retry_output_tokens
+                        actual_tokens += retry_actual_tokens
+                        try:
+                            retry_parsed = _parse_observer_output(retry_output_text)
+                        except (json.JSONDecodeError, ValidationError) as exc:
+                            log.warning(
+                                "memory_observer.language_retry_output_rejected",
+                                model_id=model_id, source_event_ids=list(source_ids),
+                                reason=str(exc)[:400], raw_output=retry_output_text,
+                            )
+                            language_status = "language_mismatch"
+                        else:
+                            output_text = retry_output_text
+                            parsed = retry_parsed
+                            mismatches = _language_mismatch_indices(
+                                parsed["observations"], entries,
+                            )
+                            if mismatches:
+                                language_status = "language_mismatch"
+                            else:
+                                language_status = "retry_recovered"
+                                log.info(
+                                    "memory_observer.language_retry_recovered",
+                                    model_id=model_id, source_event_ids=list(source_ids),
+                                    initial_mismatch_count=initial_mismatch_count,
+                                    input_tokens=total_input_tokens,
+                                    output_tokens=total_output_tokens,
+                                )
+                    except Exception as exc:
+                        language_status = "language_mismatch"
+                        log.warning(
+                            "memory_observer.language_retry_failed",
+                            model_id=model_id, source_event_ids=list(source_ids),
+                            error_type=type(exc).__name__,
+                        )
+                    finally:
+                        if retry_reservation:
+                            self._release_language_retry(
+                                day_key, retry_reservation_id, retry_reservation,
+                            )
+
+                if language_status == "language_mismatch":
+                    self._language_mismatch_count += len(mismatches)
+                    log.warning(
+                        "memory_observer.language_mismatch",
+                        status=language_status, model_id=model_id,
+                        source_event_ids=list(source_ids),
+                        language_mismatch_count=len(mismatches),
+                        total_language_mismatch_count=self._language_mismatch_count,
+                        retry_attempted=retry_budget is not None,
+                        raw_output=output_text,
+                    )
 
             payload = self._build_payload(
                 parsed["observations"], entries, source_ids, session_id, output_text, context,
@@ -586,15 +793,19 @@ class MemoryObserver:
             batch_id = self._batch_id(session_id, source_ids, queue_ids, output_text)
             public = PendingObservationBatch(
                 batch_id=batch_id, payload=payload, raw_output=output_text,
-                model_id=model_id, input_tokens=input_tokens, output_tokens=output_tokens,
+                model_id=model_id, input_tokens=total_input_tokens,
+                output_tokens=total_output_tokens, language_status=language_status,
+                language_mismatch_count=(
+                    len(mismatches) if language_status == "language_mismatch" else 0
+                ),
             )
             if self._outbox is not None:
                 self._outbox.observer_store_batch(
                     batch_id=batch_id, session_id=session_id,
                     source_event_ids=list(source_ids),
                     queue_ids=list(queue_ids), payload=payload, raw_output=output_text,
-                    model_id=model_id, input_tokens=input_tokens,
-                    output_tokens=output_tokens,
+                    model_id=model_id, input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
                 )
             queue.active_batch_id = batch_id
             self._inflight[batch_id] = _BatchState(
@@ -603,10 +814,11 @@ class MemoryObserver:
 
             accepted = len(payload["observations"]) if payload else 0
             log.info("memory_observer.completed", model_id=model_id, purpose="memory_observe",
-                     input_tokens=input_tokens, output_tokens=output_tokens,
+                     input_tokens=total_input_tokens, output_tokens=total_output_tokens,
                      total_tokens=actual_tokens, source_event_ids=list(source_ids),
                      accepted_observations=accepted, raw_output=output_text,
-                     batch_id=batch_id)
+                     batch_id=batch_id, language_status=language_status,
+                     language_mismatch_count=public.language_mismatch_count)
             return public
         except BaseException:
             if reservation:
@@ -633,7 +845,7 @@ class MemoryObserver:
                 return await router.complete_for(
                     model_id, "memory_observe",
                     [{"role": "system", "content": _SYSTEM_PROMPT}, *messages],
-                    max_tokens=max_tokens, temperature=0.3,
+                    max_tokens=max_tokens, temperature=0.1,
                 )
             except Exception as exc:
                 if attempt >= MAX_RETRIES or not self._retryable(exc):
@@ -649,6 +861,59 @@ class MemoryObserver:
                 await asyncio.sleep(wait)
                 delay = min(MAX_RETRY_DELAY_SECONDS, delay * 2)
         raise AssertionError("unreachable retry loop")
+
+    def _reserve_language_retry(
+        self, session_id: str, day_key: str, budget: int, request_tokens: int,
+    ) -> tuple[str, int, int] | None:
+        reservation_id = f"observer:{session_id}:language-retry:{uuid.uuid4().hex}"
+        if self._outbox is not None:
+            usage = self._outbox.observer_budget_snapshot(day_key)
+            available = budget - usage["spent"] - usage["reserved"] - request_tokens
+            retry_max_tokens = min(MAX_OUTPUT_TOKENS, available)
+            if retry_max_tokens <= 0:
+                return None
+            reservation_tokens = request_tokens + retry_max_tokens
+            if not self._outbox.observer_budget_reserve(
+                day_key, budget, reservation_id, reservation_tokens,
+            ):
+                return None
+            return reservation_id, retry_max_tokens, reservation_tokens
+
+        with _DAILY_LOCK:
+            available = (
+                budget - _DAILY_SPENT.get(day_key, 0) - _DAILY_RESERVED.get(day_key, 0)
+                - request_tokens
+            )
+            retry_max_tokens = min(MAX_OUTPUT_TOKENS, available)
+            if retry_max_tokens <= 0:
+                return None
+            reservation_tokens = request_tokens + retry_max_tokens
+            _DAILY_RESERVED[day_key] = _DAILY_RESERVED.get(day_key, 0) + reservation_tokens
+        return reservation_id, retry_max_tokens, reservation_tokens
+
+    def _commit_language_retry(
+        self, day_key: str, reservation_id: str, reservation_tokens: int,
+        actual_tokens: int,
+    ) -> None:
+        if self._outbox is not None:
+            self._outbox.observer_budget_commit(reservation_id, actual_tokens)
+            return
+        with _DAILY_LOCK:
+            _DAILY_RESERVED[day_key] = max(
+                0, _DAILY_RESERVED.get(day_key, 0) - reservation_tokens,
+            )
+            _DAILY_SPENT[day_key] = _DAILY_SPENT.get(day_key, 0) + actual_tokens
+
+    def _release_language_retry(
+        self, day_key: str, reservation_id: str, reservation_tokens: int,
+    ) -> None:
+        if self._outbox is not None:
+            self._outbox.observer_budget_release(reservation_id)
+            return
+        with _DAILY_LOCK:
+            _DAILY_RESERVED[day_key] = max(
+                0, _DAILY_RESERVED.get(day_key, 0) - reservation_tokens,
+            )
 
     @staticmethod
     def _retryable(exc: Exception) -> bool:

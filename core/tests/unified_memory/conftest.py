@@ -14,6 +14,13 @@ import pytest
 from tests.unified_memory.harness import UMHarness
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "frozen_v1(reason): V1 feature intentionally frozen; skipped with a recorded reason",
+    )
+
+
 @pytest.fixture(scope="session")
 def um() -> UMHarness:
     """Session-wide harness: lazily started, stopped after the session."""
@@ -36,7 +43,4 @@ def um_fresh() -> Callable[[], UMHarness]:
 
     yield _factory
     for harness in made:
-        try:
-            harness.stop()
-        except Exception:
-            pass
+        harness.stop()
