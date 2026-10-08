@@ -1,8 +1,8 @@
 # F1-B：Observer / Reflector 同语言
 
-2026-10-09 用户续令：当前模型改为 custom provider 的 `gemini-3.8-flash`（Antigravity 8045）。下方 DeepSeek 10×3 是历史验收证据，不能代表 Gemini 最终效果；Gemini 最终代码 10×3 复跑进行中，原始超时/部分结果保留，尚未据此宣称达标。产品基线先按用户要求提交，新模型效果与最终记录随后补齐。
+2026-10-09 用户续令：当前模型改为 custom provider 的 `gemini-3.8-flash`（Antigravity 8045）。下方 DeepSeek 10×3 是历史证据，不代表 Gemini 效果。Gemini 真实 ModelRouter 10×3 已完成：30 个唯一成功样本产生 31 条文本，31/31 为中文；首轮样本 27 的真实超时保留为失败尝试，之后续跑样本 27–30 完成。完整调用与 token 口径见本节末尾。
 
-状态：实现与本地验证完成，等待总控抽检和合入；本报告不改变 `CURRENT`。
+状态：实现、真实调用和证据记录完成；总控单段抽检已通过。总控 Atlas 全集已包含新增三项 runner 测试：276 tests，274 passed、2 skipped、0 failed/error，276.879s，证据 `D:/Temp/F1-controller-atlas-gemini-final-gate-20261009/junit.xml`。独立共享 Gemini helper 的 8 项测试也由总控复跑通过，证据 `D:/Temp/F1-controller-gemini-helper-tests-20261009/tests.log`。MemoryOS 全集已为此交付再次由总控复跑：425 passed / 0 failed，132.73s，证据 `D:/Temp/F1-controller-memoryos-gemini-gate-20261009/junit.xml`；本报告不改变 `CURRENT`。
 
 ## 上游来源核对
 
@@ -60,3 +60,36 @@ git diff --check -- core/atlas/memory/observer.py core/atlas/memory/observer_pro
 ```
 
 检查脚本与进度记录没有写入 `scripts/memory_v1`、未修改 `CURRENT`，且没有提交或推送。本项结果供总控抽检、全集回归和后续 F1 门禁使用。
+
+## Gemini 3.8 Flash 最终真实 ModelRouter 冒烟（2026-10-09）
+
+本节是 Gemini 最终真实效果证据；上节 DeepSeek 30-call 结果只作历史记录。调用完整 Atlas ModelRouter 的 memory_observe purpose，模型 gemini-3.8-flash，Atlas provider id custom（label antigravity-tools），目标 host 127.0.0.1:8045，API mode chat_completions。这是实际 provider 请求，不是 fake provider。凭据由 Atlas ModelManager 从 Windows Credential Manager/keyring 读取；隔离设置只含获准的 memory_model、providers.custom 路由元数据和 Gemini custom_models 元数据，没有密钥值。
+
+10 段自然中文对话各运行 3 次，共 30 个唯一成功批次，产生 31 条 Observer 文本。Atlas _dominant_language 对 31 条逐条判为中文（31/31，100%），language_mismatch 为 0，高于 98% 门槛。逐条从每个原始输出读取 observations[].evidence，与该批输入的 source_events[].source_event_id 集合比较；31 个 evidence 项全部属于同批输入 source。输入未附加预期观察答案或替换文案。
+
+首轮顺序执行完成样本 1–26 后，样本 27 的真实 ModelRouter 请求发生 APITimeoutError。这是一次真实失败尝试，不计作成功样本，也没有对该失败生成文本。首轮 runner 在异常汇报处又触发 KeyError，未能写出最终 JSON；26 个已完成批次从同一次 Observer 结构化日志按顺序原样恢复。随后只续跑样本 27–30，四个批次均成功。最终结果的样本编号 1–30 唯一，模型调用共 31 次（26 次成功、1 次失败超时、4 次续跑成功）；失败尝试独立列在证据中，没有从分母移除它的历史记录。
+
+token 口径分别保留：30 个成功样本的 Observer-accounted input 为 159,261、output 为 4,158。首轮 26 个样本的逐请求 ModelRouter usage 没有从异常前 runner 文件中落盘；Observer 结构化日志提供的 batch-accounted 数字在 provider usage 缺失时可能是估算，不能标成 provider-reported。续跑 4 次的 provider usage 完整，input 为 21,250、output 为 554；超时请求没有返回 usage。费用字段未返回，因此费用未知。
+
+配置和数据均隔离在 D:\Temp\F1-B-gemini-20261009\。运行时只从 D:\Atlas\data\user-settings.json 读取允许的路由元数据，写入隔离设置副本；ATLAS_DATA_DIR、MEMORYOS_DATA_ROOT 和 MEMORYOS_DB_PATH 都指向 DTemp。没有改生产设置、生产数据库、D:\MemoryOSData 或 8045 服务配置，也没有启动 Atlas / MemoryOS 服务。最终 JSON 与两份原始日志逐文件 SHA256 对照 DTemp 原件一致；用当前 Windows Credential Manager 中的实际凭据对三份文件做字符串、JSON 字符串、URL 编码和 base64 扫描，匹配文件数为 0。
+
+完整证据与原始日志：
+
+- [F1-B-gemini-language-smoke.json](F1-B-gemini-language-smoke.json)：30 个唯一成功样本、31 条 raw Observation、31 项 source 验证、完整失败尝试记录与 token 口径。
+- [F1-B-gemini-first-attempt.raw.log](F1-B-gemini-first-attempt.raw.log)：首轮 26 次成功输出及样本 27 超时。
+- [F1-B-gemini-continuation.raw.log](F1-B-gemini-continuation.raw.log)：样本 27–30 的四次成功续跑。
+
+最终 30 次调用由 DTemp 中隔离配置的执行副本完成：D:\Temp\F1-B-gemini-20261009\language_smoke.py。仓库中的 scripts/f1_language_smoke.py 已接入共享 Gemini bootstrap，固定隔离设置、路由与 Windows keyring 来源；支持从本脚本格式的 JSON 续跑。续跑会校验样本输入摘要和固定 Gemini 路由，只跳过已有的唯一成功样本，将失败 attempt 保留在 failed_attempts 与 attempt_history；离线检查确认已成功样本不会重复，失败样本会被再次尝试，重复成功样本会拒绝加载。此前 30 次实际运行早于这项仓库脚本接线，不能说成由当前仓库脚本生成。
+
+仓库 runner 的离线 pytest 覆盖：保留失败尝试并只安排失败/未完成样本、拒绝重复成功样本、拒绝输入摘要不匹配。命令为：
+
+    & 'D:\Atlas\core\.venv\Scripts\python.exe' -m pytest -p no:cacheprovider -o addopts= --basetemp 'D:\Temp\F1-B-runner-tests-20261009\basetemp' --junitxml 'D:\Temp\F1-B-runner-tests-20261009\junit.xml' 'D:\Atlas\core\tests\unified_memory\test_f1_language_smoke.py' -q
+
+结果：3 passed in 0.90s。该测试只检查本地 resume artifact，不调用模型。
+
+总控随后使用仓库最终脚本做单段真实 Gemini 抽检，证据位于 D:\Temp\F1-B-gemini-root-spot-20261009\evidence.json，stdout 位于 controller.log。3/3 个批次各产生中文文本，100% 中文，0 language_mismatch、0 failed attempt；3 个 evidence reference 全部属于同批 source。实际路由为 custom Gemini/keyring；provider usage 为 input 15,974、output 398，未返回费用字段（unknown，不记为 0）。
+
+总控单段抽检可复跑命令（每段执行 3 个 ModelRouter 批次；隔离根及证据文件应置于 DTemp）：
+
+    $runRoot = 'D:\Temp\F1-B-gemini-root-spot-20261009'
+    & 'D:\Atlas\core\.venv\Scripts\python.exe' 'D:\Atlas\scripts\f1_language_smoke.py' --limit 1 --isolation-root $runRoot --settings-source 'D:\Atlas\data\user-settings.json' --output (Join-Path $runRoot 'evidence.json')
