@@ -408,6 +408,8 @@ def _format_profile_block(
     ref_map: dict[str, str] = {}
 
     sections = (
+        # 画像块主来源：反思者维护的「我对用户的了解」(SUMMARY/PROFILE)。
+        ("总览", profile_data.get("summary") or []),
         ("偏好", profile_data.get("preferences") or []),
         ("状态", profile_data.get("states") or []),
         ("习惯", profile_data.get("habits") or []),

@@ -168,3 +168,46 @@ async def test_assemble_recall_context_personal_with_conflict():
     ctx_dict = result.to_context_dict()
     assert ctx_dict["gate_passed"] is True
     assert len(ctx_dict["memories"]) == 2
+
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_profile_block_renders_summary_section():
+    """画像块主来源：GET /v1/unified/profile 的 summary 分节（facet=SUMMARY/scope=PROFILE）。
+
+    S3↔S4 集成缺口返工：反思者把「我对用户的了解」写成 SUMMARY/PROFILE 记录，
+    但 _format_profile_block 原先只渲染 4 节，画像块恒空。此处钉死 summary
+    分节必须被渲染进画像块，且正文与出处短 ref 都在。
+    """
+    class FakeClient:
+        async def _request(self, method: str, path: str, *, params=None, json_body=None):
+            if path == "/v1/unified/profile":
+                return {
+                    "preferences": [],
+                    "states": [],
+                    "habits": [],
+                    "relations": [],
+                    "summary": [
+                        {
+                            "record_ref": "memory:mem-profile-abc123",
+                            "key": "用户画像",
+                            "value": "用户常住杭州，从事跨境电商；女儿小满6岁。",
+                        }
+                    ],
+                }
+            if path == "/v1/unified/recall":
+                pytest.fail("纯技术问题不应触发 POST /v1/unified/recall!")
+
+    result = await assemble_recall_context(
+        FakeClient(),
+        user_message="Python dict 怎么排序",
+        subject="subject-default",
+    )
+
+    assert "【用户画像" in result.profile_block
+    assert "常住杭州" in result.profile_block, f"画像正文未渲染: {result.profile_block!r}"
+    assert "总览" in result.profile_block
+    assert "memory:mem-profile-abc123" in result.assembled_refs
+    # 出处短 ref 必须出现在画像块里，供模型标注引用
+    assert "mem-profile-abc123" in result.profile_block

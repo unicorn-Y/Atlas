@@ -1269,6 +1269,7 @@ async def run_scenario_step(
     assembled_refs: list[dict[str, Any]] = []
     recalled_context_texts: list[str] = []
     gate_info: dict[str, Any] = {}
+    profile_block_text = ""
 
     mem_svc = state.get("memory_service")
     if mem_svc is not None:
@@ -1283,6 +1284,7 @@ async def run_scenario_step(
             "gate_reason": recall_res.gate_reason,
             "conflicts_count": len(recall_res.conflicts_detected or []),
         }
+        profile_block_text = recall_res.profile_block or ""
         # assembled_ref_map 是 short_ref -> full_ref；正文从 raw_recall.context_items 取
         short_by_full = {v: k for k, v in (recall_res.assembled_ref_map or {}).items()}
         text_by_ref: dict[str, str] = {}
@@ -1357,6 +1359,12 @@ async def run_scenario_step(
     messages = [
         {"role": "system", "content": "\n\n".join(system_prompt_parts)},
     ]
+    # 画像块（稳定）注入 —— 与生产 run_phases._phase_context 一致：反思者维护的
+    # 「我对用户的了解」放系统提示词靠前稳定位（便于 Prompt Cache）。此前 harness
+    # 只注入相关记忆块、漏注入画像块，使元问题场景（总结你的了解 / 女儿叫什么 /
+    # 用什么电脑）检索不到具体事实而失真。
+    if profile_block_text:
+        messages.append({"role": "system", "content": profile_block_text})
     if recalled_context_texts:
         messages.append({
             "role": "system",
