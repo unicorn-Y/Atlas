@@ -8786,6 +8786,88 @@
       ]
     },
     {
+      "path": "/api/memory/changes",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_changes_api_memory_changes_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 100,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "before",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Before"
+              }
+            },
+            {
+              "in": "query",
+              "name": "entity",
+              "required": false,
+              "schema": {
+                "default": "",
+                "title": "Entity",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "op",
+              "required": false,
+              "schema": {
+                "default": "",
+                "title": "Op",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Changes Api Memory Changes Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/memory/consolidated-insights",
       "operations": [
         {
@@ -9078,6 +9160,50 @@
                       "type": "string"
                     },
                     "title": "Response Reject Memory Consolidation Proposal Api Memory Consolidation Proposals  Proposal Id  Reject Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/memory/delete",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "delete_memory_api_memory_delete_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Delete Memory Api Memory Delete Post",
                     "type": "object"
                   }
                 }
@@ -10832,6 +10958,50 @@
       ]
     },
     {
+      "path": "/api/memory/pause",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "set_pause_api_memory_pause_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PauseBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Set Pause Api Memory Pause Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/memory/self-steering-reports",
       "operations": [
         {
@@ -10996,6 +11166,31 @@
                 }
               },
               "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/memory/state",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_state_api_memory_state_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get State Api Memory State Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
             }
           }
         }
@@ -18918,6 +19113,27 @@
         "title": "CustomModelUpdateRequest",
         "type": "object"
       },
+      "DeleteBody": {
+        "properties": {
+          "entity": {
+            "title": "Entity",
+            "type": "string"
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entity",
+          "ids"
+        ],
+        "title": "DeleteBody",
+        "type": "object"
+      },
       "DeliverySpec": {
         "properties": {
           "channel": {
@@ -19478,6 +19694,19 @@
         "title": "ModelTestRequest",
         "type": "object"
       },
+      "PauseBody": {
+        "properties": {
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paused"
+        ],
+        "title": "PauseBody",
+        "type": "object"
+      },
       "PauseRequest": {
         "properties": {
           "pause": {
@@ -19835,6 +20064,17 @@
               }
             ],
             "title": "Gateway Base Url"
+          },
+          "memory_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Model"
           },
           "subagent_default_model": {
             "anyOf": [
