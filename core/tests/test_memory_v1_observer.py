@@ -8,9 +8,13 @@ from threading import Barrier
 
 import pytest
 
-from atlas.memory.observer import MemoryObserver
+from atlas.memory.observer import MemoryObserver, _parse_observer_output
 from atlas.memory.capture import build_observation
 from atlas.memory.outbox import OperationalOutbox, STATE_ACKED
+from atlas.memory.observer_prompt import (
+    OBSERVER_EXTRACTION_INSTRUCTIONS,
+    OBSERVER_QUESTION_RULES,
+)
 
 
 class Config:
@@ -150,13 +154,66 @@ def test_model_cannot_attach_unknown_source_or_promote_external_tool_content_to_
     assert item["epistemic_kind"] == "THIRD_PARTY_ASSERTED"
 
 
-def test_model_output_with_any_unknown_evidence_is_rejected():
+def test_parser_rejects_invalid_items_individually_and_counts_reasons():
+    valid = answer(["source-1"])["observations"][0]
+    unknown_facet = {**valid, "facet": "QUESTION", "evidence": ["source-1"]}
+    missing_evidence = {key: value for key, value in valid.items() if key != "evidence"}
+    forged_evidence = {**valid, "evidence": ["forged-source"]}
+
+    parsed, rejected = _parse_observer_output(
+        json.dumps({"observations": [
+            valid, unknown_facet, missing_evidence, forged_evidence,
+        ]}),
+        {"source-1"},
+    )
+
+    assert parsed["observations"] == [valid]
+    assert rejected == {
+        "unknown_facet": 1,
+        "missing_evidence": 1,
+        "evidence_not_in_batch": 1,
+    }
+
+
+def test_parser_ignores_extra_root_metadata_when_observations_are_valid():
+    valid = answer(["source-1"])['observations'][0]
+
+    parsed, rejected = _parse_observer_output(
+        json.dumps({"observations": [valid], "note": "provider metadata"}),
+        {"source-1"},
+    )
+
+    assert parsed["observations"] == [valid]
+    assert rejected == {}
+
+
+def test_model_discards_invalid_evidence_item_without_losing_valid_items():
     src = source()
-    router = Router(answer([src["source_event_id"], "atlas:forged:id"]))
+    valid = answer([src["source_event_id"]])["observations"][0]
+    invalid = answer([src["source_event_id"], "atlas:forged:id"])["observations"][0]
+    router = Router({"observations": [valid, invalid]})
     observer = make_observer(router, token_counter=len)
 
-    with pytest.raises(ValueError, match="no valid in-batch evidence"):
-        asyncio.run(observer.add_messages("session-2b", [src], session_ended=True))
+    batch = asyncio.run(observer.add_messages("session-2b", [src], session_ended=True))
+
+    assert batch is not None
+    assert len(batch.payload["observations"]) == 1
+    assert batch.payload["observations"][0]["content"]["text"] == valid["text"]
+    assert observer.item_rejected_counts == {"evidence_not_in_batch": 1}
+
+
+def test_all_invalid_items_complete_as_an_empty_batch():
+    src = source()
+    item = answer([src["source_event_id"]])["observations"][0]
+    router = Router({"observations": [{**item, "facet": "QUESTION"}]})
+    observer = make_observer(router, token_counter=len)
+
+    batch = asyncio.run(observer.add_messages("session-2c", [src], session_ended=True))
+
+    assert batch is not None
+    assert batch.payload is None
+    assert asyncio.run(observer.ack_batch(batch.batch_id)) is None
+    assert "session-2c" not in observer._queues
 
 
 def test_small_exchange_waits_for_threshold_or_end_flush():
@@ -185,22 +242,37 @@ def test_daily_budget_defers_original_sources_then_flushes_after_reset():
     assert not router.calls
 
     current[0] = datetime(2026, 10, 8, tzinfo=timezone.utc)
-    observer._config.values["memory.v1.observer_daily_token_budget"] = 5_000
+    # The added question rule raises the fixed prompt estimate above the old 5,000 cap.
+    observer._config.values["memory.v1.observer_daily_token_budget"] = 10_000
     flushed = asyncio.run(observer.add_messages("session-4", [], session_ended=True))
 
     assert flushed is not None
     assert flushed.payload["observations"][0]["derived_from"] == [src["source_event_id"]]
 
 
-def test_output_schema_failure_does_not_ack_or_drop_queued_source():
+def test_unparseable_output_does_not_ack_or_drop_queued_source():
     src = source()
-    router = Router({"observations": [{"text": "missing schema fields"}]})
+    class RawRouter(Router):
+        async def complete_for(self, model_id, purpose, messages, **kwargs):
+            self.calls.append((model_id, purpose, messages, kwargs))
+            return type("Result", (), {
+                "text": "{not json", "usage": {"prompt_tokens": 31, "completion_tokens": 12},
+            })()
+
+    router = RawRouter(None)
     observer = make_observer(router, token_counter=len)
 
     with pytest.raises(ValueError, match="failed the S2 JSON schema"):
         asyncio.run(observer.add_messages("session-5", [src], session_ended=True))
     assert "session-5" in observer._queues
     assert observer._queues["session-5"].entries[0]["source_event_id"] == src["source_event_id"]
+
+
+def test_observer_prompt_distinguishes_questions_from_facts_without_question_facet():
+    assert "When the user ASKS about something, mark it as a question/request:" in OBSERVER_EXTRACTION_INSTRUCTIONS
+    assert "用户的提问、请求、指令本身不记录；只有提问中透露出的事实才记录。" in OBSERVER_QUESTION_RULES
+    assert "question, request, or instruction is not itself a fact to remember" in OBSERVER_QUESTION_RULES
+    assert "我女儿 6 岁了，她该上几年级？" in OBSERVER_QUESTION_RULES
 
 
 def test_threshold_flushes_in_capped_batches_without_losing_source_text():

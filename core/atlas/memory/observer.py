@@ -16,6 +16,7 @@ import random
 import re
 import threading
 import uuid
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Callable
@@ -29,6 +30,7 @@ from atlas.memory.observer_prompt import (
     OBSERVER_EXTRACTION_INSTRUCTIONS,
     OBSERVER_GUIDELINES,
     OBSERVER_OUTPUT_GUIDANCE,
+    OBSERVER_QUESTION_RULES,
 )
 from atlas.models.tokens import estimate_tokens
 
@@ -95,6 +97,13 @@ OBSERVER_OUTPUT_SCHEMA: dict[str, Any] = {
         },
     },
 }
+
+_OBSERVER_ROOT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["observations"],
+    "properties": {"observations": {"type": "array"}},
+}
+_OBSERVER_ITEM_SCHEMA = OBSERVER_OUTPUT_SCHEMA["properties"]["observations"]["items"]
 
 
 def _dominant_language(value: Any) -> str | None:
@@ -176,7 +185,10 @@ def _language_mismatch_indices(
     return mismatches
 
 
-def _parse_observer_output(output_text: str) -> dict[str, Any]:
+def _parse_observer_output(
+    output_text: str,
+    source_event_ids: set[str],
+) -> tuple[dict[str, Any], dict[str, int]]:
     clean_text = output_text.strip()
     if clean_text.startswith("```"):
         lines = clean_text.splitlines()
@@ -186,11 +198,38 @@ def _parse_observer_output(output_text: str) -> dict[str, Any]:
             lines = lines[:-1]
         clean_text = "\n".join(lines).strip()
     parsed = json.loads(clean_text)
-    validate(parsed, OBSERVER_OUTPUT_SCHEMA)
-    return parsed
+    validate(parsed, _OBSERVER_ROOT_SCHEMA)
+    observations: list[dict[str, Any]] = []
+    rejected: Counter[str] = Counter()
+    for candidate in parsed["observations"]:
+        if not isinstance(candidate, dict):
+            rejected["schema_invalid"] += 1
+            continue
+        if "facet" in candidate and candidate["facet"] not in FACETS:
+            rejected["unknown_facet"] += 1
+            continue
+        evidence = candidate.get("evidence")
+        if (
+            not isinstance(evidence, list)
+            or not evidence
+            or any(not isinstance(item, str) or not item.strip() for item in evidence)
+        ):
+            rejected["missing_evidence"] += 1
+            continue
+        try:
+            validate(candidate, _OBSERVER_ITEM_SCHEMA)
+        except ValidationError:
+            rejected["schema_invalid"] += 1
+            continue
+        if any(source_id not in source_event_ids for source_id in evidence):
+            rejected["evidence_not_in_batch"] += 1
+            continue
+        observations.append(candidate)
+    return {"observations": observations}, dict(rejected)
 
 _SYSTEM_PROMPT = "\n\n".join((
     OBSERVER_EXTRACTION_INSTRUCTIONS,
+    OBSERVER_QUESTION_RULES,
     OBSERVER_OUTPUT_GUIDANCE,
     OBSERVER_GUIDELINES,
     """
@@ -276,11 +315,17 @@ class MemoryObserver:
         self._inflight: dict[str, _BatchState] = {}
         self._restored_sessions: set[str] = set()
         self._language_mismatch_count = 0
+        self._item_rejected_counts: Counter[str] = Counter()
 
     @property
     def language_mismatch_count(self) -> int:
         """Number of retained observation rows still mismatched after one retry."""
         return self._language_mismatch_count
+
+    @property
+    def item_rejected_counts(self) -> dict[str, int]:
+        """Cumulative item-level rejection counts grouped by stable reason."""
+        return dict(self._item_rejected_counts)
 
     def pending_sessions(self) -> list[str]:
         """List durable sessions whose original captured source refs remain queued."""
@@ -676,7 +721,10 @@ class MemoryObserver:
                     _DAILY_SPENT[day_key] = _DAILY_SPENT.get(day_key, 0) + actual_tokens
             reservation = 0
             try:
-                parsed = _parse_observer_output(output_text)
+                parsed, item_rejected = _parse_observer_output(
+                    output_text, set(source_ids),
+                )
+                item_rejected = Counter(item_rejected)
             except (json.JSONDecodeError, ValidationError) as exc:
                 log.warning("memory_observer.output_rejected", model_id=model_id,
                             source_event_ids=list(source_ids), reason=str(exc)[:400],
@@ -735,7 +783,9 @@ class MemoryObserver:
                         total_output_tokens += retry_output_tokens
                         actual_tokens += retry_actual_tokens
                         try:
-                            retry_parsed = _parse_observer_output(retry_output_text)
+                            retry_parsed, retry_rejected = _parse_observer_output(
+                                retry_output_text, set(source_ids),
+                            )
                         except (json.JSONDecodeError, ValidationError) as exc:
                             log.warning(
                                 "memory_observer.language_retry_output_rejected",
@@ -746,6 +796,7 @@ class MemoryObserver:
                         else:
                             output_text = retry_output_text
                             parsed = retry_parsed
+                            item_rejected.update(retry_rejected)
                             mismatches = _language_mismatch_indices(
                                 parsed["observations"], entries,
                             )
@@ -788,8 +839,7 @@ class MemoryObserver:
             payload = self._build_payload(
                 parsed["observations"], entries, source_ids, session_id, output_text, context,
             )
-            if parsed["observations"] and payload is None:
-                raise ValueError("memory_observe output contained no valid in-batch evidence")
+            self._item_rejected_counts.update(item_rejected)
             batch_id = self._batch_id(session_id, source_ids, queue_ids, output_text)
             public = PendingObservationBatch(
                 batch_id=batch_id, payload=payload, raw_output=output_text,
@@ -813,10 +863,16 @@ class MemoryObserver:
             )
 
             accepted = len(payload["observations"]) if payload else 0
+            for reason, count in item_rejected.items():
+                log.warning(
+                    "memory_observer.item_rejected", reason=reason, count=count,
+                    model_id=model_id, source_event_ids=list(source_ids),
+                )
             log.info("memory_observer.completed", model_id=model_id, purpose="memory_observe",
                      input_tokens=total_input_tokens, output_tokens=total_output_tokens,
                      total_tokens=actual_tokens, source_event_ids=list(source_ids),
                      accepted_observations=accepted, raw_output=output_text,
+                     item_rejected=dict(item_rejected),
                      batch_id=batch_id, language_status=language_status,
                      language_mismatch_count=public.language_mismatch_count)
             return public

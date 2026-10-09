@@ -25,6 +25,10 @@ import httpx
 
 from atlas.models import catalog
 
+_MEMORY_AUXILIARY_TIMEOUT_SECONDS = 120.0
+_MEMORY_AUXILIARY_PURPOSES = frozenset({"memory_observe", "memory_reflect"})
+_MEMORY_LOW_REASONING_MODELS = frozenset({"gemini-3.8-flash"})
+
 
 @dataclass(frozen=True)
 class RouteSpec:
@@ -273,6 +277,17 @@ class ModelRouter:
         from atlas.usage import env_run_usage_budget
         from atlas.models.tokens import estimate_tokens
         from agent.turn_usage import new_usage_request_id
+
+        if route.purpose in _MEMORY_AUXILIARY_PURPOSES and kwargs.get("timeout") is None:
+            kwargs["timeout"] = _MEMORY_AUXILIARY_TIMEOUT_SECONDS
+        if (
+            route.purpose in _MEMORY_AUXILIARY_PURPOSES
+            and (route.wire_model or route.model) in _MEMORY_LOW_REASONING_MODELS
+        ):
+            extra_body = kwargs.get("extra_body")
+            memory_extra_body = dict(extra_body) if isinstance(extra_body, dict) else {}
+            memory_extra_body.setdefault("reasoning_effort", "low")
+            kwargs["extra_body"] = memory_extra_body
 
         request_id = new_usage_request_id()
         budget = env_run_usage_budget()
