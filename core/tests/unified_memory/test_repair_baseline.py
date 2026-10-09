@@ -120,7 +120,7 @@ def test_r00_b_0026_migration_is_tracked_construction(manifest, rb):
     assert migration.is_file()
     tracked = subprocess.run(
         ["git", "-C", str(repo), "ls-files", "--error-unmatch", relative],
-        capture_output=True, text=True, check=False)
+        capture_output=True, text=True, encoding="utf-8", check=False)
     assert tracked.returncode == 0, tracked.stderr
     assert rb.classify_owner("MemoryOS", relative)[0] == "UM-CONSTRUCTION"
 
@@ -137,7 +137,7 @@ def test_r00_b_dirty_manifest_matches_live_repositories(manifest, rb):
         root = Path(repo_entry["root"])
         head = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "HEAD"],
-            capture_output=True, text=True, check=True).stdout.strip()
+            capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()
         assert repo_entry["head"] == head
         live_dirty = rb._dirty_entries(root)
         reported = repo_entry["dirty_files"]
@@ -204,7 +204,7 @@ def test_r00_d_rejects_symlink_or_junction(tmp_path):
         # 无权限建 symlink → 退而建 junction（不需要管理员）
         rc = subprocess.run(
             ["cmd", "/c", "mklink", "/J", str(link), str(tmp_path)],
-            capture_output=True, text=True, errors="replace",
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
         if rc.returncode == 0 and link.exists():
             kind = "junction"
@@ -223,7 +223,7 @@ def test_r00_d_junction_to_production_rejected(tmp_path):
     link = tmp_path / "prod-link"
     rc = subprocess.run(
         ["cmd", "/c", "mklink", "/J", str(link), "D:\\MemoryOSData"],
-        capture_output=True, text=True, errors="replace",
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if rc.returncode != 0 or not link.exists():
         pytest.skip("无法创建 junction 指向生产根")

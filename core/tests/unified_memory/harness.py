@@ -995,7 +995,8 @@ class UMHarness:
                     try:
                         subprocess.run(
                             ["taskkill", "/PID", str(proc.pid), "/T"],
-                            capture_output=True, text=True, timeout=STOP_TIMEOUT_S,
+                            capture_output=True, text=True, encoding="utf-8",
+                            timeout=STOP_TIMEOUT_S,
                             check=False,
                         )
                     except (OSError, subprocess.TimeoutExpired):
@@ -1030,7 +1031,8 @@ class UMHarness:
                     try:
                         subprocess.run(
                             ["taskkill", "/F", "/PID", str(proc.pid), "/T"],
-                            capture_output=True, text=True, timeout=STOP_TIMEOUT_S,
+                            capture_output=True, text=True, encoding="utf-8",
+                            timeout=STOP_TIMEOUT_S,
                             check=False,
                         )
                     except (OSError, subprocess.TimeoutExpired):
@@ -1061,7 +1063,8 @@ class UMHarness:
             return psutil.pid_exists(int(pid))
         except ImportError:
             output = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {int(pid)}"], capture_output=True, text=True,
+                ["tasklist", "/FI", f"PID eq {int(pid)}"],
+                capture_output=True, text=True, encoding="utf-8",
                 check=False,
             ).stdout
             return str(pid) in output

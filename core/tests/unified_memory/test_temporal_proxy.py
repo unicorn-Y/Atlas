@@ -101,7 +101,7 @@ def _seed_temporal_state(harness: UMHarness, tmp_path: Path) -> None:
     proc = subprocess.run(
         [str(python), str(script), str(db_path),
          str(MEMORYOS_REPO / "service"), SUBJECT, UID],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, text=True, encoding="utf-8", timeout=120,
     )
     assert proc.returncode == 0, f"seed 失败:\n{proc.stdout}\n{proc.stderr}"
     payload = json.loads(proc.stdout.strip().splitlines()[-1])

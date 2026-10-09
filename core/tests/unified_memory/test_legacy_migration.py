@@ -278,7 +278,7 @@ def _run_export(db_path: Path, out_dir: Path) -> dict:
     proc = subprocess.run(
         [sys.executable, str(EXPORT_SCRIPT), "--db", str(db_path),
          "--out", str(out_dir), "--subject", "atlas-fixture"],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, text=True, encoding="utf-8", timeout=120,
         env={**os.environ, "PYTHONUTF8": "1"},
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
@@ -295,7 +295,7 @@ def _run_import(export_dir: Path, harness: UMHarness,
          "--subject", "atlas-fixture",
          "--event-class", "TEST",
          *(extra_args or [])],
-        capture_output=True, text=True, timeout=180,
+        capture_output=True, text=True, encoding="utf-8", timeout=180,
         env={**os.environ, "PYTHONUTF8": "1"},
     )
     result_path = export_dir / "import_result.json"
