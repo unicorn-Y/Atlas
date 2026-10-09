@@ -58,10 +58,23 @@ def test_roundtrip_put_get_list_delete(tmp_path: Path) -> None:
 
     assert store.update_state("daily-digest", last_status="ok", last_run_at="2026-10-03T00:00:00+00:00")
     assert store.get("daily-digest")["state"]["last_status"] == "ok"
-
     assert store.delete("daily-digest") is True
     assert store.get("daily-digest") is None
     assert store.delete("daily-digest") is False
+
+
+def test_source_binding_survives_automation_store_roundtrip(tmp_path: Path) -> None:
+    store = AutomationStore(tmp_path / "automations.toml")
+    source_binding = {
+        "request_run_id": "run-42",
+        "source_message_ref": "ATLAS_USER_MESSAGE:message-42",
+        "intent_id": "intent-42",
+    }
+
+    saved = store.put({**_cron_record(), "source_binding": source_binding})
+
+    assert saved["source_binding"] == source_binding
+    assert store.get(saved["id"])["source_binding"] == source_binding
 
 
 def test_generated_id_and_defaults(tmp_path: Path) -> None:

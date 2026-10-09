@@ -352,6 +352,47 @@ def test_reminder_audit_tracks_real_create_cancel_and_empty_run_receipts(tmp_pat
     assert third["readback"]["run_receipt_count"] == 0
 
 
+def test_reminder_audit_accepts_observer_created_and_cancelled_automation_without_tool(
+    tmp_path: Path,
+):
+    automation = {
+        "id": "um-intent-pipeline-report", "name": "提醒：交报告", "enabled": True,
+        "trigger": {"kind": "date", "at": "2026-10-10T09:00:00+08:00"},
+    }
+    intent = {"facet": "INTENT", "record_ref": "intent-pipeline-report",
+              "lifecycle": "ACTIVE", "content": {"text": "交报告"}}
+    baseline = {"reminder_audit_baseline": {
+        "atlas_automations": {"status_code": 200, "body": {"automations": []}},
+        "memory_intents": [],
+    }, "reminder_audit_history": [], "last_run": {"tool_calls": []}}
+    ctx = make_ctx(
+        tmp_path, scenario_id=29, turn_index=1, user_input="明天提醒我交报告",
+        state=baseline, atlas_responses=[(200, {"automations": [automation]})],
+        records=[intent],
+    )
+
+    created = audit_reminder_state(ctx)
+    assert created["status"] == "ok"
+    ctx.state["reminder_audit_history"].append(created)
+
+    cancelled = {**automation, "enabled": False}
+    ctx.step.turn_index = 2
+    ctx.step.user_input = "取消明天交报告的提醒"
+    ctx.state["last_run"] = {"tool_calls": []}
+    ctx.atlas.responses = [(200, {"automations": [cancelled]})]
+    ctx.memory.records = lambda facet=None: [{**intent, "lifecycle": "CANCELLED"}]
+    second = audit_reminder_state(ctx)
+    assert second["status"] == "ok"
+    ctx.state["reminder_audit_history"].append(second)
+
+    ctx.step.turn_index = 3
+    ctx.step.user_input = "好的"
+    ctx.atlas.responses = [(200, {"automations": [cancelled]}), (200, {"runs": []})]
+    third = audit_reminder_state(ctx)
+    assert third["status"] == "ok"
+    assert third["readback"]["run_receipt_count"] == 0
+
+
 def test_reminder_audit_requires_tool_evidence_for_store_change(tmp_path: Path):
     baseline = {"reminder_audit_baseline": {
         "atlas_automations": {"status_code": 200, "body": {"automations": []}},

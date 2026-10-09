@@ -46,7 +46,7 @@ def _make_parser() -> argparse.ArgumentParser:
 
 def _runner_args(args: argparse.Namespace) -> argparse.Namespace:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    run_root = args.run_root or runner.TEMP_ROOT / f"F2-B-longmemeval-{args.limit}-{stamp}-{uuid.uuid4().hex[:8]}"
+    run_root = args.run_root or runner.preferred_temp_root() / f"F2-B-longmemeval-{args.limit}-{stamp}-{uuid.uuid4().hex[:8]}"
     return argparse.Namespace(
         source=args.source,
         subset=args.subset,
@@ -141,6 +141,8 @@ def write_completion_report(run_root: Path, *, limit: int) -> Path:
     report = {
         "status": "COMPLETED",
         "evaluation": "LongMemEval fixed 20261007 stratified subset",
+        "random_seed": summary.get("random_seed", runner.FIXED_SUBSET_SEED),
+        "run_count": 1,
         "sample_size": limit,
         "sample_scope": "first 1 per category" if limit == 6 else "first 5 per category",
         "selected_question_ids": [item["question_id"] for item in questions],
@@ -230,6 +232,8 @@ def write_failure_report(run_root: Path, *, limit: int) -> Path:
     report = {
         "status": "FAILED_QUESTION",
         "evaluation": "LongMemEval fixed 20261007 stratified subset",
+        "random_seed": summary.get("random_seed", runner.FIXED_SUBSET_SEED),
+        "run_count": 1,
         "target_sample_size": limit,
         "sample_scope": "first 1 per category" if limit == 6 else "first 5 per category",
         "selected_question_ids": [str(value) for value in selected_ids],

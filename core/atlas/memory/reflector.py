@@ -35,7 +35,12 @@ from typing import Any, Callable
 import structlog
 
 from atlas.models.tokens import estimate_tokens
-from atlas.time_context import now_local, timezone_name
+from atlas.time_context import (
+    now_local,
+    resolve_source_event_test_clock,
+    test_clock_context,
+    timezone_name,
+)
 
 log = structlog.get_logger()
 
@@ -1128,6 +1133,62 @@ class MemoryReflector:
         )
 
     async def reflect(
+        self,
+        subject: str,
+        records: list[dict[str, Any]],
+        *,
+        current_profile: str | None = None,
+        existing_rollups: list[str] | None = None,
+        auto_apply: bool = False,
+        client: Any = None,
+        ctx: dict[str, Any] | None = None,
+        force: bool = False,
+        count_threshold: int = DEFAULT_RECORD_COUNT_THRESHOLD,
+        token_threshold: int | dict[str, int] = DEFAULT_TOKEN_THRESHOLD,
+    ) -> ReflectionResult:
+        """Use source-event time for a fully proven TEST reflection batch."""
+        event_groups: list[list[dict[str, Any]]] = []
+        has_source_provenance = False
+        complete_source_provenance = bool(records)
+        for record in records:
+            metadata = record.get("metadata") if isinstance(record, dict) else None
+            if isinstance(metadata, dict) and "source_events" in metadata:
+                has_source_provenance = True
+            sources = metadata.get("source_events") if isinstance(metadata, dict) else None
+            if not isinstance(sources, list) or not sources:
+                complete_source_provenance = False
+                continue
+            event_groups.append(sources)
+
+        source_events = [event for group in event_groups for event in group]
+        source_clock = (
+            resolve_source_event_test_clock(source_events, self._config)
+            if has_source_provenance and complete_source_provenance
+            and len(event_groups) == len(records)
+            else None
+        )
+        # Background reflection must not inherit a request clock without its
+        # own durable source proof. Missing, mixed, or invalid provenance masks
+        # any parent scope and uses the actual wall clock.
+        with test_clock_context(
+            source_clock.isoformat() if source_clock is not None else None,
+            config=self._config,
+            event_class="TEST" if source_clock is not None else "PRODUCTION",
+        ):
+            return await self._reflect_with_records(
+                subject,
+                records,
+                current_profile=current_profile,
+                existing_rollups=existing_rollups,
+                auto_apply=auto_apply,
+                client=client,
+                ctx=ctx,
+                force=force,
+                count_threshold=count_threshold,
+                token_threshold=token_threshold,
+            )
+
+    async def _reflect_with_records(
         self,
         subject: str,
         records: list[dict[str, Any]],

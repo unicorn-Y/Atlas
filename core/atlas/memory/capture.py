@@ -520,7 +520,8 @@ class CaptureService:
                  occurred_at: Any, source_timezone: str | None,
                  locator: dict[str, Any] | None,
                  context_overrides: dict[str, Any] | None = None,
-                 derived_from: list[Any] | None = None) -> dict[str, Any] | None:
+                 derived_from: list[Any] | None = None,
+                 metadata: dict[str, Any] | None = None) -> dict[str, Any] | None:
         occurred, tz, time_status = _normalize_time(occurred_at, source_timezone)
         observation = self._builder.build(
             source_kind=source_kind, source_object_id=source_object_id,
@@ -528,6 +529,8 @@ class CaptureService:
             speaker_role=speaker_role, epistemic_kind=epistemic_kind,
             occurred_at=occurred, source_timezone=tz, time_status=time_status,
             locator=locator, derived_from=derived_from)
+        if metadata:
+            observation["metadata"] = dict(metadata)
         return self._enqueue(observation, context_overrides)
 
     # ------------------------------------------------------------ 消息捕获
@@ -537,7 +540,8 @@ class CaptureService:
                              revision: int | str = 1, source_timezone: str | None = None,
                              model_deployment_id: str | None = None,
                              project_id: str | None = None,
-                             task_id: str | None = None) -> dict[str, Any] | None:
+                             task_id: str | None = None,
+                             request_run_id: str | None = None) -> dict[str, Any] | None:
         """用户原话（ATLAS_USER_MESSAGE / USER / USER_ASSERTED）。
 
         ``message_id`` 必须是 SessionDB 稳定 ``message_uid``（含 legacy row id
@@ -557,7 +561,9 @@ class CaptureService:
             locator={"kind": "MESSAGE", "value": f"{session_id}/{object_id}"},
             context_overrides=self._message_context(
                 session_id, model_deployment_id=model_deployment_id,
-                project_id=project_id, task_id=task_id))
+                project_id=project_id, task_id=task_id),
+            metadata=({"request_run_id": str(request_run_id)}
+                      if str(request_run_id or "").strip() else None))
 
     def capture_assistant_message(self, session_id: str, message_id: str, text: str,
                                   occurred_at: Any = None,

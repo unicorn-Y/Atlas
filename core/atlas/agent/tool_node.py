@@ -751,15 +751,26 @@ async def execute_tools_node(
                 }], "is_error": False}
             elif fn_name == "automation_manage":
                 # E8：自然语言提醒接既有 AutomationEngine（不另造 scheduler）。
+                from atlas.automation import get_automation_engine
                 from atlas.automation.reminders import (
                     ReminderError,
                     cancel_reminder,
                     create_reminder,
+                    find_reminder,
                     list_reminders,
                     update_reminder,
+                    resolve_update_due,
                 )
+                from atlas.memory.intent_bridge import IntentBridge, IntentBridgeError
+                from atlas.memory.unified_client import UnifiedMemoryError
 
                 action = str(fn_args.get("action") or "").strip().lower()
+                engine = get_automation_engine()
+                config = _agent.get_config()
+                request_run_id = str(ctx.run_id or "").strip()
+                source_binding = ({"request_run_id": request_run_id}
+                                  if request_run_id else None)
+                operation_failed = False
                 try:
                     if action == "create":
                         message = str(fn_args.get("message") or "").strip()
@@ -769,32 +780,89 @@ async def execute_tools_node(
                             message=message,
                             due_at=str(fn_args.get("due_at") or ""),
                             due_text=str(fn_args.get("due_text") or ""),
+                            source_binding=source_binding,
+                            engine=engine, config=config,
                         )
                     elif action == "cancel":
-                        data = await cancel_reminder(
-                            query=str(fn_args.get("query") or ""),
-                            automation_id=str(fn_args.get("automation_id") or ""),
-                        )
+                        query = str(fn_args.get("query") or "")
+                        automation_id = str(fn_args.get("automation_id") or "")
+                        target = find_reminder(query=query, automation_id=automation_id,
+                                               engine=engine)
+                        binding = (target or {}).get("source_binding")
+                        intent_id = (binding or {}).get("intent_id") \
+                            if isinstance(binding, dict) else None
+                        if isinstance(intent_id, str) and intent_id.strip():
+                            bridge = IntentBridge.from_config(config)
+                            data = await bridge.cancel_intent(
+                                intent_id, engine=engine,
+                            )
+                            data["automation"] = engine.store.get(
+                                str((target or {}).get("id") or ""))
+                            if (not data.get("cancelled")
+                                    or not (data.get("automation_cancel") or {}).get("wired")):
+                                operation_failed = True
+                        else:
+                            data = await cancel_reminder(
+                                query=query, automation_id=automation_id,
+                                engine=engine, config=config,
+                            )
                     elif action == "update":
-                        data = await update_reminder(
-                            automation_id=str(fn_args.get("automation_id") or ""),
-                            query=str(fn_args.get("query") or ""),
-                            due_at=str(fn_args.get("due_at") or ""),
-                            due_text=str(fn_args.get("due_text") or ""),
-                            message=str(fn_args.get("message") or ""),
-                        )
+                        query = str(fn_args.get("query") or "")
+                        automation_id = str(fn_args.get("automation_id") or "")
+                        target = find_reminder(query=query, automation_id=automation_id,
+                                               include_disabled=True, engine=engine)
+                        if target is None:
+                            data = {"updated": False, "reason": "no_matching_reminder",
+                                    "query": query}
+                        else:
+                            due_at = str(fn_args.get("due_at") or "")
+                            due_text = str(fn_args.get("due_text") or "")
+                            if due_at or due_text:
+                                # Parse/check before cancelling the old intent or
+                                # schedule so a bad update cannot destroy it.
+                                due_at = resolve_update_due(
+                                    due_at=due_at, due_text=due_text, config=config)
+                                due_text = ""
+                            binding = target.get("source_binding")
+                            intent_id = (binding or {}).get("intent_id") \
+                                if isinstance(binding, dict) else None
+                            memory_sync = None
+                            if isinstance(intent_id, str) and intent_id.strip():
+                                bridge = IntentBridge.from_config(config)
+                                memory_sync = await bridge.cancel_intent(
+                                    intent_id, engine=engine,
+                                )
+                            if memory_sync is not None and (
+                                    not memory_sync.get("cancelled")
+                                    or not (memory_sync.get("automation_cancel") or {}).get("wired")):
+                                data = {"updated": False,
+                                        "reason": "intent_supersede_failed",
+                                        "superseded_intent": memory_sync,
+                                        "automation": engine.store.get(
+                                            str(target.get("id") or ""))}
+                                operation_failed = True
+                            else:
+                                data = await update_reminder(
+                                    automation_id=str(target.get("id") or ""),
+                                    due_at=due_at, due_text=due_text,
+                                    message=str(fn_args.get("message") or ""),
+                                    source_binding=source_binding,
+                                    engine=engine, config=config,
+                                )
+                                if memory_sync is not None:
+                                    data["superseded_intent"] = memory_sync
                     elif action == "list":
-                        data = list_reminders()
+                        data = list_reminders(engine=engine)
                     else:
                         raise ReminderError(f"未知 action: {action!r}")
-                except ReminderError as exc:
+                except (ReminderError, IntentBridgeError, UnifiedMemoryError) as exc:
                     result = {"data": {"action": action, "error": str(exc)}, "content": [{
                         "type": "text", "text": f"提醒操作失败：{exc}",
                     }], "is_error": True}
                 else:
                     result = {"data": data, "content": [{
                         "type": "text", "text": json.dumps(data, ensure_ascii=False),
-                    }], "is_error": False}
+                    }], "is_error": operation_failed}
             elif fn_name == "todo_list":
                 if fn_args.get("todos") is not None:
                     snapshot = ctx.todo_store.write(

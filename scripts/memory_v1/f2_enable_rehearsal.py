@@ -24,12 +24,14 @@ import sqlite3
 import subprocess
 import sys
 import time
+import tomllib
 import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import quote, urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 ATLAS_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ATLAS_DB = ATLAS_ROOT / "data" / "atlas.db"
@@ -164,6 +166,21 @@ def _parse_timestamp(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _parse_aware_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed
 
 
 def _safe_event_type(value: Any) -> str:
@@ -310,6 +327,46 @@ def build_isolated_user_settings(source_path: Path, *, memory_model: str) -> dic
     return result
 
 
+def read_user_timezone_allowlist(source_path: Path) -> str | None:
+    """Parse only the non-sensitive ``[user].timezone`` Atlas config value."""
+    section = ""
+    found = False
+    timezone_name: str | None = None
+    user_section_pattern = re.compile(r"""^\s*\[\s*(?:user|"user"|'user')\s*\]\s*(?:#.*)?$""")
+    key_pattern = re.compile(r"^\s*timezone\s*=")
+    value_pattern = re.compile(
+        r"""^\s*timezone\s*=\s*(?:"([A-Za-z0-9_+./-]*)"|'([A-Za-z0-9_+./-]*)')\s*(?:#.*)?$"""
+    )
+    try:
+        with source_path.open("r", encoding="utf-8") as stream:
+            for line in stream:
+                candidate_line = line.rstrip("\r\n")
+                if not candidate_line.strip() or candidate_line.lstrip().startswith("#"):
+                    continue
+                if candidate_line.lstrip().startswith("["):
+                    section = ""
+                    if user_section_pattern.fullmatch(candidate_line):
+                        section = "user"
+                    continue
+                if section != "user" or not key_pattern.match(candidate_line):
+                    continue
+                if found:
+                    raise RehearsalError("duplicate Atlas user timezone setting")
+                found = True
+                value_match = value_pattern.fullmatch(candidate_line)
+                if not value_match:
+                    raise RehearsalError("Atlas user timezone is not an IANA timezone string")
+                timezone_name = value_match.group(1) or value_match.group(2) or None
+    except OSError as exc:
+        raise RehearsalError("could not parse Atlas timezone setting") from exc
+    if not found or not timezone_name:
+        return None
+    try:
+        return ZoneInfo(timezone_name).key
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise RehearsalError("Atlas user timezone is not a valid IANA timezone") from exc
+
+
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
@@ -391,7 +448,7 @@ def _cleanup_sensitive_run_artifacts(run_root: Path) -> None:
         resolved_export = _resolved(export_dir)
         if _is_relative_to(resolved_export, root) and resolved_export != root:
             shutil.rmtree(resolved_export)
-    for pattern in ("*.log", "semantic-trace.jsonl"):
+    for pattern in ("*.log", "semantic-trace.jsonl", "synthetic-chat-receipts.jsonl"):
         for path in root.glob(pattern):
             if path.is_file() and not path.is_symlink():
                 path.unlink(missing_ok=True)
@@ -399,12 +456,18 @@ def _cleanup_sensitive_run_artifacts(run_root: Path) -> None:
 
 def _write_isolated_atlas_config(data_root: Path, *, enabled: bool,
                                  service_url: str, memoryos_root: Path,
-                                 model_id: str, atlas_port: int) -> None:
+                                 model_id: str, atlas_port: int,
+                                 user_timezone: str | None = None) -> None:
     config_path = data_root / "config" / "atlas.toml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
+    user_section = (
+        f"[user]\ntimezone = {json.dumps(user_timezone)}\n\n"
+        if user_timezone else ""
+    )
     config = f'''[general]
 name = "Atlas F2-C isolated rehearsal"
 
+{user_section}
 [server]
 host = "127.0.0.1"
 port = {atlas_port}
@@ -797,13 +860,15 @@ def _start_atlas(*, run_root: Path, atlas_data: Path, memoryos_data: Path,
                  memoryos_db: Path, memoryos_root: Path, model_id: str,
                  atlas_python: Path, service_port: int, atlas_port: int,
                  enabled: bool, settings_source: Path, internal_token: str,
-                 log_path: Path) -> tuple[subprocess.Popen[Any], dict[str, str], Path]:
+                 log_path: Path, user_timezone: str | None = None
+                 ) -> tuple[subprocess.Popen[Any], dict[str, str], Path]:
     if _port_is_listening(service_port):
         raise RehearsalError("isolated MemoryOS port is already occupied")
     service_url = _service_url(service_port)
     _write_isolated_atlas_config(
         atlas_data, enabled=enabled, service_url=service_url,
         memoryos_root=memoryos_root, model_id=model_id, atlas_port=atlas_port,
+        user_timezone=user_timezone,
     )
     settings_path = _write_runtime_settings(atlas_data, settings_source, model_id)
     env = _isolated_environment(run_root, atlas_data=atlas_data,
@@ -855,10 +920,27 @@ async def _wait_http(url: str, *, timeout: float, expected: int = 200) -> dict[s
     raise RehearsalError("isolated HTTP readiness check timed out")
 
 
+def _build_chat_run_start(*, run_id: str, conversation_id: str, workspace: Path,
+                          model_id: str, prompt: str,
+                          permission_mode: str = "read_only",
+                          tool_allow: list[str] | None = None) -> dict[str, Any]:
+    message: dict[str, Any] = {
+        "type": "run.start", "run_id": run_id, "content": prompt,
+        "conversation_id": conversation_id, "workspace": str(workspace),
+        "model": model_id, "mode": "act", "permission_mode": permission_mode,
+        "active_skills": [],
+    }
+    if tool_allow is not None:
+        message["tool_allow"] = list(tool_allow)
+    return message
+
+
 async def _create_and_send_real_chat(*, atlas_url: str, model_id: str,
                                      workspace: Path, prompt: str,
                                      expected_marker: str | None = None,
-                                     raw_receipt_path: Path | None = None) -> dict[str, Any]:
+                                     raw_receipt_path: Path | None = None,
+                                     permission_mode: str = "read_only",
+                                     tool_allow: list[str] | None = None) -> dict[str, Any]:
     import httpx
     from websockets.asyncio.client import connect
 
@@ -881,12 +963,11 @@ async def _create_and_send_real_chat(*, atlas_url: str, model_id: str,
     usage: dict[str, int] = {}
     async with connect(ws_url, open_timeout=20, close_timeout=5, max_size=8_000_000,
                        additional_headers={"Origin": atlas_url}) as ws:
-        await ws.send(json.dumps({
-            "type": "run.start", "run_id": run_id, "content": prompt,
-            "conversation_id": conversation_id, "workspace": str(workspace),
-            "model": model_id, "mode": "act", "permission_mode": "read_only",
-            "active_skills": [],
-        }, ensure_ascii=False))
+        await ws.send(json.dumps(_build_chat_run_start(
+            run_id=run_id, conversation_id=conversation_id, workspace=workspace,
+            model_id=model_id, prompt=prompt, permission_mode=permission_mode,
+            tool_allow=tool_allow,
+        ), ensure_ascii=False))
         deadline = time.monotonic() + 240
         while time.monotonic() < deadline:
             raw = await asyncio.wait_for(ws.recv(), timeout=max(0.1, deadline - time.monotonic()))
@@ -920,7 +1001,7 @@ async def _create_and_send_real_chat(*, atlas_url: str, model_id: str,
         raw_receipt_path.parent.mkdir(parents=True, exist_ok=True)
         receipt = {
             "conversation_id": conversation_id,
-            "prompt": prompt,
+            "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
             "answer_sha256": hashlib.sha256(answer.encode("utf-8")).hexdigest(),
             "answer_chars": len(answer),
             "answer_matches_expected_marker": bool(expected_marker and expected_marker.casefold() in answer.casefold()),
@@ -961,6 +1042,356 @@ def _count_marker_evidence(db_path: Path, marker: str) -> int:
         ).fetchone()[0])
     finally:
         conn.close()
+
+
+def _read_isolated_marker_automations(path: Path, marker: str) -> list[dict[str, Any]]:
+    """Read only reminder assertions for the synthetic marker from the clone."""
+    if not path.is_file():
+        return []
+    try:
+        with path.open("rb") as stream:
+            source = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise RehearsalError("isolated automation store is unreadable") from exc
+    automations = source.get("automations")
+    if not isinstance(automations, dict):
+        return []
+    marker_folded = marker.casefold()
+    matched: list[dict[str, Any]] = []
+    for key, raw in automations.items():
+        if not isinstance(raw, dict):
+            continue
+        payload = raw.get("payload") if isinstance(raw.get("payload"), dict) else {}
+        trigger = raw.get("trigger") if isinstance(raw.get("trigger"), dict) else {}
+        binding = raw.get("source_binding") if isinstance(raw.get("source_binding"), dict) else {}
+        name = str(raw.get("name") or "")
+        message = str(payload.get("message") or "")
+        if marker_folded not in name.casefold() and marker_folded not in message.casefold():
+            continue
+        matched.append({
+            "id": str(raw.get("id") or key),
+            "name": name,
+            "enabled": raw.get("enabled") is not False,
+            "trigger_kind": str(trigger.get("kind") or ""),
+            "trigger_at": str(trigger.get("at") or ""),
+            "message_contains_marker": marker_folded in message.casefold(),
+            "source_binding": {
+                binding_key: str(binding[binding_key])
+                for binding_key in ("request_run_id", "source_message_ref", "intent_id")
+                if isinstance(binding.get(binding_key), str) and binding[binding_key].strip()
+            },
+        })
+    return matched
+
+
+def _automation_store_path(database_path: Path) -> Path:
+    """Resolve the automation store beside the isolated Atlas database."""
+    return _resolved(database_path).parent / "automations.toml"
+
+
+def _normalize_user_source_ref(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    reference = value.strip()
+    if reference.startswith("source:"):
+        reference = reference[len("source:"):]
+    kind, separator, object_id = reference.partition(":")
+    if kind != "ATLAS_USER_MESSAGE" or not separator or not object_id.strip():
+        return None
+    return f"{kind}:{object_id.strip()}"
+
+
+def _read_isolated_user_source(database_path: Path, *, source_message_ref: str,
+                               expected_run_id: str,
+                               memory_subject_id: str = REHEARSAL_SUBJECT
+                               ) -> dict[str, Any]:
+    """Prove a source ref is this run's persisted USER message without returning text."""
+    normalized_ref = _normalize_user_source_ref(source_message_ref)
+    if not normalized_ref or not expected_run_id.strip() or not database_path.is_file():
+        return {"source_message_ref": normalized_ref,
+                "source_message_matches_run": False,
+                "occurred_at_utc": None}
+    _, _, object_id = normalized_ref.partition(":")
+    conn = sqlite3.connect(_readonly_uri(database_path), uri=True, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=ON")
+    matching: list[datetime] = []
+    try:
+        rows = conn.execute(
+            "SELECT source_event_id FROM unified_source_objects"
+            " WHERE subject_id = ? AND source_kind = ? AND source_object_id = ?"
+            " AND lifecycle != 'DELETED' ORDER BY source_revision",
+            (memory_subject_id, "ATLAS_USER_MESSAGE", object_id),
+        ).fetchall()
+        for row in rows:
+            event = conn.execute(
+                "SELECT event_type, payload_json FROM evidence_events"
+                " WHERE memory_subject_id = ? AND source_event_id = ?",
+                (memory_subject_id, row["source_event_id"]),
+            ).fetchone()
+            if event is None or str(event["event_type"] or "").upper() != "OBSERVATION":
+                continue
+            payload = json.loads(event["payload_json"] or "{}")
+            observation = payload.get("observation") if isinstance(payload, dict) else None
+            if not isinstance(observation, dict):
+                continue
+            metadata = observation.get("metadata")
+            run_id = metadata.get("request_run_id") if isinstance(metadata, dict) else None
+            if (observation.get("source_kind") != "ATLAS_USER_MESSAGE"
+                    or str(observation.get("speaker_role") or "").upper() != "USER"
+                    or run_id != expected_run_id):
+                continue
+            occurred_at = _parse_aware_timestamp(observation.get("occurred_at"))
+            if occurred_at is not None:
+                matching.append(occurred_at.astimezone(timezone.utc))
+    finally:
+        conn.close()
+    return {
+        "source_message_ref": normalized_ref,
+        "source_message_matches_run": len(matching) == 1,
+        "occurred_at_utc": matching[0].isoformat() if len(matching) == 1 else None,
+    }
+
+
+def _read_isolated_intent(database_path: Path, *, intent_id: str,
+                          memory_subject_id: str = REHEARSAL_SUBJECT
+                          ) -> dict[str, Any] | None:
+    """Read only the intent fields needed for lifecycle assertions from the clone."""
+    if not intent_id or not database_path.is_file():
+        return None
+    conn = sqlite3.connect(_readonly_uri(database_path), uri=True, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=ON")
+    try:
+        row = conn.execute(
+            "SELECT intent_id, lifecycle, revision, user_source_ref, source_state,"
+            " action_json, due_at, automation_id FROM unified_intents"
+            " WHERE subject_id = ? AND intent_id = ?",
+            (memory_subject_id, intent_id),
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            action = json.loads(row["action_json"] or "{}")
+        except (TypeError, ValueError):
+            action = {}
+        return {
+            "intent_id": str(row["intent_id"] or ""),
+            "lifecycle": str(row["lifecycle"] or "").upper(),
+            "revision": int(row["revision"] or 0),
+            "user_source_ref": str(row["user_source_ref"] or ""),
+            "source_state": str(row["source_state"] or "").upper(),
+            "action": action if isinstance(action, dict) else {},
+            "due_at": str(row["due_at"] or ""),
+            "automation_id": str(row["automation_id"] or ""),
+        }
+    finally:
+        conn.close()
+
+
+def _effective_timezone_name(user_timezone: str | None) -> str:
+    if user_timezone:
+        return ZoneInfo(user_timezone).key
+    try:
+        from tzlocal import get_localzone_name
+
+        name = get_localzone_name()
+        return ZoneInfo(name).key
+    except (ImportError, ZoneInfoNotFoundError, ValueError) as exc:
+        raise RehearsalError("could not resolve the system IANA timezone") from exc
+
+
+def _expected_tomorrow_nine(timezone_name: str, *, now: datetime | None = None) -> datetime:
+    zone = ZoneInfo(timezone_name)
+    current = (now or datetime.now(zone)).astimezone(zone)
+    target_date = current.date() + timedelta(days=1)
+    return datetime(target_date.year, target_date.month, target_date.day,
+                    9, 0, tzinfo=zone)
+
+
+def _verify_marker_automation(path: Path, *, marker: str, timezone_name: str,
+                              expected_due: datetime | None, expected_run_id: str,
+                              expected_enabled: bool, require_intent_id: bool = True
+                              ) -> dict[str, Any]:
+    matches = _read_isolated_marker_automations(path, marker)
+    record = matches[0] if len(matches) == 1 else None
+    binding = record.get("source_binding", {}) if record else {}
+    due_matches = False
+    stored_trigger_is_aware = False
+    actual_local_due = None
+    if record:
+        try:
+            due = datetime.fromisoformat(record["trigger_at"].replace("Z", "+00:00"))
+            stored_trigger_is_aware = due.tzinfo is not None and due.utcoffset() is not None
+            if (stored_trigger_is_aware and expected_due is not None
+                    and expected_due.tzinfo is not None
+                    and expected_due.utcoffset() is not None):
+                actual_local_due = due.astimezone(ZoneInfo(timezone_name))
+                due_matches = due.astimezone(timezone.utc) == expected_due.astimezone(timezone.utc)
+        except (KeyError, ValueError, TypeError):
+            due_matches = False
+    run_binding_matches = bool(record and binding.get("request_run_id") == expected_run_id)
+    observer_intent_bound = bool(record and binding.get("intent_id"))
+    source_message_bound = bool(record and _normalize_user_source_ref(
+        binding.get("source_message_ref")))
+    unique = len(matches) == 1
+    enabled_matches = bool(record and record.get("enabled") is expected_enabled)
+    passed = bool(
+        unique and record and record.get("message_contains_marker")
+        and record.get("trigger_kind") == "date" and enabled_matches
+        and due_matches and run_binding_matches
+        and source_message_bound
+        and (observer_intent_bound or not require_intent_id)
+    )
+    return {
+        "passed": passed,
+        "matching_automation_count": len(matches),
+        "automation_id": record.get("id") if record else None,
+        "enabled": record.get("enabled") if record else None,
+        "trigger_kind": record.get("trigger_kind") if record else None,
+        "actual_local_due": actual_local_due.isoformat() if actual_local_due else None,
+        "expected_local_due": expected_due.isoformat() if expected_due else None,
+        "due_matches_local_time": due_matches,
+        "due_matches_utc_instant": due_matches,
+        "message_matches_marker": bool(record and record.get("message_contains_marker")),
+        "request_run_id_matches_chat": run_binding_matches,
+        "observer_intent_linked": observer_intent_bound,
+        "automation_binding_unique": bool(
+            unique and run_binding_matches and observer_intent_bound and source_message_bound
+        ),
+        "stored_trigger_is_aware": bool(record and stored_trigger_is_aware),
+    }
+
+
+def _verify_marker_intent(*, record: dict[str, Any] | None,
+                          intent: dict[str, Any] | None,
+                          source: dict[str, Any], marker: str,
+                          expected_run_id: str, expected_lifecycle: str,
+                          expected_due: datetime | None) -> dict[str, Any]:
+    binding = record.get("source_binding", {}) if record else {}
+    bound_ref = _normalize_user_source_ref(binding.get("source_message_ref"))
+    intent_ref = _normalize_user_source_ref(intent.get("user_source_ref")) if intent else None
+    action = intent.get("action") if intent and isinstance(intent.get("action"), dict) else {}
+    action_message = str(action.get("message") or "")
+    intent_due = _parse_aware_timestamp(intent.get("due_at")) if intent else None
+    source_matches = bool(
+        source.get("source_message_matches_run")
+        and source.get("source_message_ref")
+        and source.get("source_message_ref") == bound_ref == intent_ref
+    )
+    intent_due_matches = bool(
+        intent_due is not None and expected_due is not None
+        and expected_due.tzinfo is not None and expected_due.utcoffset() is not None
+        and intent_due.astimezone(timezone.utc) == expected_due.astimezone(timezone.utc)
+    )
+    lifecycle_matches = bool(
+        intent and intent.get("lifecycle") == expected_lifecycle.upper()
+    )
+    source_verified = bool(intent and intent.get("source_state") == "VERIFIED")
+    action_matches = marker.casefold() in action_message.casefold()
+    automation_id = str(record.get("id") or "") if record else ""
+    intent_automation_id = str(intent.get("automation_id") or "") if intent else ""
+    automation_link_matches = not intent_automation_id or intent_automation_id == automation_id
+    try:
+        revision_valid = bool(intent and int(intent.get("revision") or 0) >= 1)
+    except (TypeError, ValueError):
+        revision_valid = False
+    passed = bool(
+        source_matches and lifecycle_matches and source_verified and action_matches
+        and intent_due_matches and automation_link_matches and revision_valid
+        and intent and intent.get("intent_id") == binding.get("intent_id")
+        and binding.get("request_run_id") == expected_run_id
+    )
+    return {
+        "intent_lifecycle": intent.get("lifecycle") if intent else None,
+        "intent_revision_valid": revision_valid,
+        "intent_source_verified": source_verified,
+        "source_message_ref": bound_ref,
+        "source_message_ref_nonempty": bool(bound_ref),
+        "source_message_is_user_message_from_run": source_matches,
+        "source_occurred_at_utc": source.get("occurred_at_utc"),
+        "intent_due_matches_utc_instant": intent_due_matches,
+        "intent_action_matches_marker": action_matches,
+        "intent_automation_link_matches": automation_link_matches,
+        "observer_settled": passed,
+        "passed": passed,
+    }
+
+
+async def _wait_for_marker_automation(path: Path, *, memoryos_db: Path,
+                                      marker: str, timezone_name: str,
+                                      expected_run_id: str, expected_enabled: bool,
+                                      expected_lifecycle: str,
+                                      expected_due: datetime | None = None,
+                                      memory_subject_id: str = REHEARSAL_SUBJECT,
+                                      timeout: float = 120
+                                      ) -> dict[str, Any]:
+    started = time.monotonic()
+    last: dict[str, Any] = {"passed": False, "matching_automation_count": 0}
+    while True:
+        matches = _read_isolated_marker_automations(path, marker)
+        if len(matches) > 1:
+            last = {"passed": False, "matching_automation_count": len(matches),
+                    "deduplication_verified": False}
+            break
+        record = matches[0] if matches else None
+        binding = record.get("source_binding", {}) if record else {}
+        source_ref = str(binding.get("source_message_ref") or "")
+        intent_id = str(binding.get("intent_id") or "")
+        source = _read_isolated_user_source(
+            memoryos_db, source_message_ref=source_ref,
+            expected_run_id=expected_run_id, memory_subject_id=memory_subject_id,
+        ) if source_ref else {"source_message_ref": None,
+                              "source_message_matches_run": False,
+                              "occurred_at_utc": None}
+        intent = _read_isolated_intent(
+            memoryos_db, intent_id=intent_id, memory_subject_id=memory_subject_id,
+        ) if intent_id else None
+        source_occurred_at = _parse_timestamp(source.get("occurred_at_utc"))
+        source_expected_due = (
+            _expected_tomorrow_nine(timezone_name, now=source_occurred_at)
+            if source_occurred_at is not None else None
+        )
+        due = expected_due or source_expected_due
+        store_check = _verify_marker_automation(
+            path, marker=marker, timezone_name=timezone_name,
+            expected_due=due,
+            expected_run_id=expected_run_id, expected_enabled=expected_enabled,
+        ) if record else {"passed": False, "matching_automation_count": 0,
+                          "automation_binding_unique": False}
+        source_due_matches = bool(
+            expected_due is None or (source_expected_due is not None
+                and source_expected_due.astimezone(timezone.utc)
+                == expected_due.astimezone(timezone.utc))
+        )
+        intent_check = _verify_marker_intent(
+            record=record, intent=intent, source=source, marker=marker,
+            expected_run_id=expected_run_id, expected_lifecycle=expected_lifecycle,
+            expected_due=due,
+        )
+        passed = bool(store_check.get("passed") and intent_check.get("passed")
+                      and source_due_matches)
+        last = {
+            **store_check,
+            **intent_check,
+            "passed": passed,
+            "observer_settled": bool(intent_check.get("observer_settled")),
+            "deduplication_verified": bool(
+                store_check.get("automation_binding_unique")
+                and intent_check.get("passed") and source_due_matches
+            ),
+            "expected_local_due": due.astimezone(ZoneInfo(timezone_name)).isoformat()
+                if due is not None else None,
+            "expected_due_utc": due.astimezone(timezone.utc).isoformat()
+                if due is not None else None,
+            "source_due_matches_expected": source_due_matches,
+        }
+        if last["passed"] or time.monotonic() - started >= timeout:
+            break
+        await asyncio.sleep(0.5)
+    last["wait_seconds"] = round(time.monotonic() - started, 3)
+    last["timed_out"] = not last["passed"] and last["matching_automation_count"] <= 1
+    return last
 
 
 async def _verify_unified_recall(*, service_url: str, internal_token: str,
@@ -1192,10 +1623,12 @@ async def _wait_marker_evidence_growth(db_path: Path, marker: str, baseline: int
 async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
                              atlas_db: Path, memoryos_db: Path,
                              settings_source: Path, atlas_python: Path,
-                             memoryos_python: Path, memoryos_root: Path) -> dict[str, Any]:
+                             memoryos_python: Path, memoryos_root: Path,
+                             atlas_config_source: Path = DEFAULT_ATLAS_CONFIG) -> dict[str, Any]:
     root = assert_run_root_isolated(run_root)
     root.mkdir(parents=True, exist_ok=False)
     started_at = datetime.now(timezone.utc)
+    user_timezone = read_user_timezone_allowlist(atlas_config_source)
     atlas_data = root / "atlas-data"
     memoryos_data = root / "memoryos-data"
     hermes_home = root / "hermes-home"
@@ -1212,6 +1645,7 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
     )
     source_hashes_before = _source_hashes(
         atlas_db=atlas_db, memoryos_db=memoryos_db, settings_source=settings_source,
+        atlas_config_source=atlas_config_source,
     )
     server_runs: list[dict[str, Any]] = []
 
@@ -1230,7 +1664,7 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
         "source_paths": {"atlas_db": str(_resolved(atlas_db)),
                          "memoryos_db": str(_resolved(memoryos_db)),
                          "settings_source": str(_resolved(settings_source)),
-                         "atlas_config_source": str(_resolved(DEFAULT_ATLAS_CONFIG))},
+                          "atlas_config_source": str(_resolved(atlas_config_source))},
         "isolated_roots": {"run_root": str(root), "atlas_data": str(atlas_data),
                             "memoryos_data": str(memoryos_data), "hermes_home": str(hermes_home)},
         "stages": {},
@@ -1256,6 +1690,7 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
     report["stages"]["model_route"] = {"model_id": model_id,
                                         "provider_base_host": "127.0.0.1",
                                         "provider_base_port": 8045,
+                                         "user_timezone": user_timezone,
                                         "credentials_recorded": False}
     _checkpoint(artifact_dir, report, "model_route")
 
@@ -1289,7 +1724,10 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
     internal_token = secrets.token_urlsafe(32)
     marker = "F2C-" + uuid.uuid4().hex[:12].upper()
     marker_sha256 = hashlib.sha256(marker.encode("utf-8")).hexdigest()
-    raw_receipt_path = Path(r"D:\Temp") / f"F2-C-synthetic-chat-{root.name}.jsonl"
+    raw_receipt_path = root / "synthetic-chat-receipts.jsonl"
+    reminder_marker = "F4E-" + uuid.uuid4().hex[:12].upper()
+    timezone_name = _effective_timezone_name(user_timezone)
+    automation_store_path = _automation_store_path(atlas_db_copy)
     remember_prompt = (
         "请记住这一条仅用于隔离演练的合成事实：我的 F2 测试标记是 "
         f"{marker}。请简短回复已记下。"
@@ -1297,6 +1735,14 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
     recall_prompt = (
         "这是一个新的对话。请基于已经保存的隔离演练记忆回答："
         "我刚才设定的 F2 测试标记是什么？只回复标记，不要猜。"
+    )
+    create_reminder_prompt = (
+        f"请明天上午9点提醒我完成 {reminder_marker} 事项："
+        "给测试联系人发一条确认消息。"
+    )
+    cancel_reminder_prompt = (
+        f"请取消我刚才设置的提醒，内容标记为 {reminder_marker}，"
+        "不要更改或取消其他提醒。"
     )
     isolation_env = _isolated_environment(root, atlas_data=atlas_data,
                                           memoryos_data=memoryos_data,
@@ -1311,7 +1757,7 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
         memoryos_db=memoryos_db_copy, memoryos_root=memoryos_root,
         model_id=model_id, atlas_python=atlas_python, service_port=service_port,
         atlas_port=atlas_port, enabled=True, settings_source=settings_source,
-        internal_token=internal_token,
+        internal_token=internal_token, user_timezone=user_timezone,
         log_path=root / "atlas-enable.log",
     )
     atlas_url = f"http://127.0.0.1:{atlas_port}"
@@ -1376,6 +1822,28 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
         marker_capture = await _wait_marker_evidence_growth(
             memoryos_db_copy, marker, marker_evidence_before_chat,
         )
+        reminder_create_chat = await _create_and_send_real_chat(
+            atlas_url=atlas_url, model_id=model_id, workspace=root / "workspace",
+            prompt=create_reminder_prompt, raw_receipt_path=raw_receipt_path,
+            permission_mode="full_access", tool_allow=["automation_manage"],
+        )
+        reminder_created = await _wait_for_marker_automation(
+            automation_store_path, memoryos_db=memoryos_db_copy,
+            marker=reminder_marker, timezone_name=timezone_name,
+            expected_run_id=reminder_create_chat["run_id"], expected_enabled=True,
+            expected_lifecycle="ACTIVE",
+        )
+        expected_reminder_due = _parse_aware_timestamp(
+            reminder_created.get("expected_due_utc")
+        )
+        report["stages"]["reminder_lifecycle"] = {
+            "timezone": timezone_name,
+            "expected_local_due": reminder_created.get("expected_local_due"),
+            "marker_sha256": hashlib.sha256(reminder_marker.encode("utf-8")).hexdigest(),
+            "create_chat": reminder_create_chat,
+            "after_create_and_observer": reminder_created,
+        }
+        _checkpoint(artifact_dir, report, "reminder_created")
         report["stages"]["enable_and_real_chat"] = {
             "atlas_health_seconds": atlas_ready["elapsed_seconds"],
             "atlas_health_status": (atlas_ready.get("body") or {}).get("status")
@@ -1388,7 +1856,7 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
             "semantic_enabled_env": env.get("MEMORYOS_SEMANTIC_RECALL_ENABLED") == "1",
             "atlas_config_enabled": True,
             "temporary_settings_path": str(settings_path),
-            "raw_synthetic_chat_evidence_path": str(raw_receipt_path),
+            "synthetic_chat_receipts_path": str(raw_receipt_path),
         }
     finally:
         stop = _stop_atlas_process(process, atlas_port=atlas_port, memoryos_port=service_port)
@@ -1409,13 +1877,28 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
         memoryos_db=memoryos_db_copy, memoryos_root=memoryos_root,
         model_id=model_id, atlas_python=atlas_python, service_port=service_port,
         atlas_port=atlas_port_2, enabled=True, settings_source=settings_source,
-        internal_token=internal_token,
+            internal_token=internal_token, user_timezone=user_timezone,
         log_path=root / "atlas-restart.log",
     )
     try:
         restarted_health = await _wait_http(f"http://127.0.0.1:{atlas_port_2}/api/health", timeout=120)
         restarted_memory = await _wait_for_memoryos(
             service_url, internal_token=internal_token, timeout=300,
+        )
+        reminder_after_restart = await _wait_for_marker_automation(
+            automation_store_path, memoryos_db=memoryos_db_copy,
+            marker=reminder_marker, timezone_name=timezone_name,
+            expected_due=expected_reminder_due,
+            expected_run_id=reminder_create_chat["run_id"], expected_enabled=True,
+            expected_lifecycle="ACTIVE",
+        )
+        reminder_after_restart["same_automation_id"] = (
+            reminder_after_restart["automation_id"] == reminder_created["automation_id"]
+            and reminder_created["automation_id"] is not None
+        )
+        reminder_after_restart["passed"] = bool(
+            reminder_after_restart["passed"]
+            and reminder_after_restart["same_automation_id"]
         )
         recall_check = await _verify_unified_recall(
             service_url=service_url, internal_token=internal_token, marker=marker,
@@ -1434,6 +1917,32 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
         post_restart_marker_capture = await _wait_marker_evidence_growth(
             memoryos_db_copy, marker, post_restart_marker_baseline,
         )
+        cancellation_chat = await _create_and_send_real_chat(
+            atlas_url=f"http://127.0.0.1:{atlas_port_2}", model_id=model_id,
+            workspace=root / "workspace", prompt=cancel_reminder_prompt,
+            raw_receipt_path=raw_receipt_path,
+            permission_mode="full_access", tool_allow=["automation_manage"],
+        )
+        reminder_cancelled = await _wait_for_marker_automation(
+            automation_store_path, memoryos_db=memoryos_db_copy,
+            marker=reminder_marker, timezone_name=timezone_name,
+            expected_due=expected_reminder_due,
+            expected_run_id=reminder_create_chat["run_id"], expected_enabled=False,
+            expected_lifecycle="CANCELLED",
+        )
+        reminder_cancelled["same_automation_id"] = (
+            reminder_cancelled["automation_id"] == reminder_created["automation_id"]
+            and reminder_created["automation_id"] is not None
+        )
+        reminder_cancelled["passed"] = bool(
+            reminder_cancelled["passed"] and reminder_cancelled["same_automation_id"]
+        )
+        report["stages"]["reminder_lifecycle"].update({
+            "after_restart": reminder_after_restart,
+            "cancel_chat": cancellation_chat,
+            "after_cancel_chat": reminder_cancelled,
+        })
+        _checkpoint(artifact_dir, report, "reminder_cancelled")
         report["stages"]["restart"] = {
             "atlas_health_seconds": restarted_health["elapsed_seconds"],
             "atlas_health_status": (restarted_health.get("body") or {}).get("status")
@@ -1445,6 +1954,8 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
             "post_restart_chat": post_restart_chat,
             "post_restart_capture": post_restart_capture,
             "post_restart_marker_capture": post_restart_marker_capture,
+            "reminder_same_id_after_restart": reminder_after_restart["same_automation_id"],
+            "reminder_cancelled_by_chat": reminder_cancelled["passed"],
         }
     finally:
         stop = _stop_atlas_process(process, atlas_port=atlas_port_2, memoryos_port=service_port)
@@ -1465,13 +1976,14 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
     _write_isolated_atlas_config(
         atlas_data, enabled=False, service_url=service_url,
         memoryos_root=memoryos_root, model_id=model_id, atlas_port=atlas_port_3,
+        user_timezone=user_timezone,
     )
     process, env, settings_path = _start_atlas(
         run_root=root, atlas_data=atlas_data, memoryos_data=memoryos_data,
         memoryos_db=memoryos_db_copy, memoryos_root=memoryos_root,
         model_id=model_id, atlas_python=atlas_python, service_port=service_port,
         atlas_port=atlas_port_3, enabled=False, settings_source=settings_source,
-        internal_token=internal_token,
+        internal_token=internal_token, user_timezone=user_timezone,
         log_path=root / "atlas-rollback.log",
     )
     try:
@@ -1479,6 +1991,24 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
         await asyncio.sleep(1)
         disabled_service_absent = not _port_is_listening(service_port)
         legacy_path = await _probe_legacy_memory_api(f"http://127.0.0.1:{atlas_port_3}")
+        reminder_after_rollback = await _wait_for_marker_automation(
+            automation_store_path, memoryos_db=memoryos_db_copy,
+            marker=reminder_marker, timezone_name=timezone_name,
+            expected_due=expected_reminder_due,
+            expected_run_id=reminder_create_chat["run_id"], expected_enabled=False,
+            expected_lifecycle="CANCELLED", timeout=5,
+        )
+        reminder_after_rollback["same_automation_id"] = (
+            reminder_after_rollback["automation_id"] == reminder_created["automation_id"]
+            and reminder_created["automation_id"] is not None
+        )
+        reminder_after_rollback["passed"] = bool(
+            reminder_after_rollback["passed"]
+            and reminder_after_rollback["same_automation_id"]
+        )
+        report["stages"]["reminder_lifecycle"]["after_disable_rollback"] = (
+            reminder_after_rollback
+        )
         report["stages"]["rollback"] = {
             "atlas_health_seconds": rollback_health["elapsed_seconds"],
             "atlas_config_enabled": False,
@@ -1488,6 +2018,7 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
             "memoryos_listener_absent": disabled_service_absent,
             "memoryos_data_preserved": memoryos_db_copy.is_file(),
             "memoryos_evidence_count": _count_memoryos_evidence(memoryos_db_copy),
+            "disabled_reminder_persisted": reminder_after_rollback["passed"],
         }
     finally:
         stop = _stop_atlas_process(process, atlas_port=atlas_port_3,
@@ -1501,6 +2032,7 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
     final_memory_summary = database_summary(memoryos_db_copy)
     source_hashes_after = _source_hashes(
         atlas_db=atlas_db, memoryos_db=memoryos_db, settings_source=settings_source,
+        atlas_config_source=atlas_config_source,
     )
     source_hashes_unchanged = source_hashes_before == source_hashes_after
     production_files_modified = _source_files_modified(source_hashes_before, source_hashes_after)
@@ -1522,6 +2054,7 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
     report["source_hashes_unchanged"] = source_hashes_unchanged
     report["source_hashes_after"] = source_hashes_after
     report["ended_at_utc"] = datetime.now(timezone.utc).isoformat()
+    reminder_lifecycle = report["stages"].get("reminder_lifecycle", {})
     report["status"] = "passed" if (
         report["source_hashes_unchanged"] is True
         and report["production_files_modified"] is False
@@ -1539,6 +2072,13 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
         and bool(report["stages"].get("restart", {}).get("post_restart_recall", {}).get("matched_record_refs"))
         and report["stages"].get("restart", {}).get("post_restart_chat", {}).get("answer_matches_expected_marker")
         and report["stages"].get("restart", {}).get("post_restart_marker_capture", {}).get("new_marker_evidence_rows", 0) > 0
+        and reminder_lifecycle.get("create_chat", {}).get("status") == "completed"
+        and reminder_lifecycle.get("after_create_and_observer", {}).get("passed")
+        and reminder_lifecycle.get("after_create_and_observer", {}).get("deduplication_verified")
+        and reminder_lifecycle.get("after_restart", {}).get("passed")
+        and reminder_lifecycle.get("cancel_chat", {}).get("status") == "completed"
+        and reminder_lifecycle.get("after_cancel_chat", {}).get("passed")
+        and reminder_lifecycle.get("after_disable_rollback", {}).get("passed")
         and report["stages"].get("legacy_import_copy_only", {}).get("conflicts") == 0
         and (
             report["stages"].get("recent_30_day_token_estimate", {}).get("status")
@@ -1547,6 +2087,7 @@ async def run_full_rehearsal(*, run_root: Path, artifact_dir: Path,
                 "estimated_payload_tokens_upper_bound") is not None
         )
         and report["stages"].get("embedding_warmup_and_backfill", {}).get("estimated_backfill_seconds_remaining") is not None
+        and report["stages"].get("rollback", {}).get("atlas_config_enabled") is False
     ) else "incomplete"
     report["credentials_recorded"] = False
     output = artifact_dir / "F2-C-lifecycle-rehearsal.json"
@@ -1569,6 +2110,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--memoryos-db", type=Path, default=DEFAULT_MEMORYOS_DB)
     parser.add_argument("--settings-source", type=Path,
                         default=ATLAS_ROOT / "data" / "user-settings.json")
+    parser.add_argument("--atlas-config", type=Path, default=DEFAULT_ATLAS_CONFIG,
+                        help="Atlas TOML used read-only for the IANA timezone allowlist and source hash")
     parser.add_argument("--atlas-python", type=Path, default=DEFAULT_ATLAS_PYTHON)
     parser.add_argument("--memoryos-python", type=Path, default=DEFAULT_MEMORYOS_PYTHON)
     parser.add_argument("--memoryos-root", type=Path, default=DEFAULT_MEMORYOS_ROOT)
@@ -1580,6 +2123,7 @@ def main(argv: list[str] | None = None) -> int:
             atlas_db=args.atlas_db, memoryos_db=args.memoryos_db,
             settings_source=args.settings_source, atlas_python=args.atlas_python,
             memoryos_python=args.memoryos_python, memoryos_root=args.memoryos_root,
+            atlas_config_source=args.atlas_config,
         ))
     except Exception as exc:  # redact all exception messages from the CLI surface
         failed_stage = "unknown"
@@ -1610,6 +2154,7 @@ def main(argv: list[str] | None = None) -> int:
                 hashes_after = _source_hashes(
                     atlas_db=args.atlas_db, memoryos_db=args.memoryos_db,
                     settings_source=args.settings_source,
+                    atlas_config_source=args.atlas_config,
                 )
             except (OSError, RehearsalError):
                 hashes_after = None
@@ -1628,7 +2173,7 @@ def main(argv: list[str] | None = None) -> int:
             "source_paths": {"atlas_db": str(_resolved(args.atlas_db)),
                              "memoryos_db": str(_resolved(args.memoryos_db)),
                              "settings_source": str(_resolved(args.settings_source)),
-                             "atlas_config_source": str(_resolved(DEFAULT_ATLAS_CONFIG))},
+                             "atlas_config_source": str(_resolved(args.atlas_config))},
             "isolated_roots": {"run_root": str(_resolved(args.run_root))},
             "stages": {},
         }
@@ -1655,6 +2200,7 @@ def main(argv: list[str] | None = None) -> int:
                                                        "error_type": type(exc).__name__})
         _write_json(args.artifact_dir / "F2-C-lifecycle-rehearsal.json", result)
 
+    reminder_lifecycle = result.get("stages", {}).get("reminder_lifecycle", {})
     print(json.dumps({
         "status": result.get("status"),
         "production_write_allowed": result.get("production_write_allowed"),
@@ -1668,6 +2214,14 @@ def main(argv: list[str] | None = None) -> int:
         "chat_status": result.get("stages", {}).get("enable_and_real_chat", {}).get("chat", {}).get("status"),
         "restart_auto_start": result.get("stages", {}).get("restart", {}).get("memoryos_auto_started_again"),
         "rollback_listener_absent": result.get("stages", {}).get("rollback", {}).get("memoryos_listener_absent"),
+        "reminder_create_and_observer_dedup": reminder_lifecycle.get(
+            "after_create_and_observer", {}).get("deduplication_verified"),
+        "reminder_same_id_after_restart": reminder_lifecycle.get(
+            "after_restart", {}).get("same_automation_id"),
+        "reminder_cancelled_by_chat": reminder_lifecycle.get(
+            "after_cancel_chat", {}).get("passed"),
+        "reminder_preserved_after_disable_rollback": reminder_lifecycle.get(
+            "after_disable_rollback", {}).get("passed"),
         "artifact_path": str(args.artifact_dir / "F2-C-lifecycle-rehearsal.json"),
     }, ensure_ascii=False))
     return 0 if result.get("status") == "passed" else 2

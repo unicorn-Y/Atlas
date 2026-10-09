@@ -314,6 +314,7 @@ class MemoryObserver:
         self._config = config
         self._outbox = outbox
         self._token_counter = token_counter or (lambda text: estimate_tokens(text))
+        self._now_override = now
         self._now = lambda: now_local(
             self._config, now=now() if now is not None else None,
         )
@@ -607,6 +608,7 @@ class MemoryObserver:
         content = observation.get("content") or {}
         if not isinstance(content, dict):
             raise ValueError("captured Observer source content is malformed")
+        source_metadata = observation.get("metadata")
         source = dict(row.get("source_view") or {})
         stored_context = envelope.get("context") or {}
         source.update({
@@ -619,6 +621,8 @@ class MemoryObserver:
             "epistemic_kind": source.get("epistemic_kind") or observation.get("epistemic_kind"),
             "occurred_at": source.get("occurred_at") or observation.get("occurred_at"),
             "source_timezone": source.get("source_timezone") or observation.get("source_timezone"),
+            "metadata": (dict(source_metadata)
+                         if isinstance(source_metadata, dict) else {}),
             "provenance": source.get("provenance") or {
                 "event_class": envelope.get("event_class"),
                 "locator": observation.get("locator"),
@@ -697,7 +701,27 @@ class MemoryObserver:
             str(entry["source_event_id"]) for entry in entries
         ))
         prompt = self._format_sources(entries)
-        local_now = self._now()
+        from atlas.time_context import resolve_source_event_test_clock, test_clock_context
+
+        source_events = [
+            {
+                "source_event_id": entry.get("source_event_id"),
+                "event_class": (entry.get("provenance") or {}).get("event_class"),
+                "occurred_at": entry.get("occurred_at"),
+                "source_timezone": entry.get("source_timezone"),
+            }
+            for entry in entries
+        ]
+        source_clock = resolve_source_event_test_clock(source_events, self._config)
+        with test_clock_context(
+            source_clock.isoformat() if source_clock is not None else None,
+            config=self._config,
+            event_class="TEST" if source_clock is not None else "PRODUCTION",
+        ) as scoped_clock:
+            local_now = (
+                self._now() if self._now_override is not None
+                else scoped_clock or self._now()
+            )
         timezone = timezone_name(self._config)
         system_prompt = "\n\n".join((
             _SYSTEM_PROMPT,

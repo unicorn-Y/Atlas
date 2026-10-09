@@ -388,7 +388,7 @@ def test_message_id_mapping_and_revision_helpers() -> None:
 def _run_state(message: str = "记住我喜欢简洁回复") -> Any:
     from atlas.agent.run_phases import RunCallbacks, RunRequest, _RunState
 
-    request = RunRequest(message=message, conversation_id="conv-guard")
+    request = RunRequest(message=message, conversation_id="conv-guard", run_id="run-1")
     runtime = type("Runtime", (), {})()
     runtime.model = "test-model"
     runtime.verify_nudge_sent = False
@@ -396,7 +396,10 @@ def _run_state(message: str = "记住我喜欢简洁回复") -> Any:
     runtime.verification_passed = False
     runtime.run_id = "run-1"
     runtime.external_tool_context = False
-    state = _RunState(request=request, callbacks=RunCallbacks(), message=message)
+    state = _RunState(
+        request=request, callbacks=RunCallbacks(), message=message,
+        preexisting_user_message_ids=set(),
+    )
     state.runtime = runtime
     state.result = {"messages": [AIMessage(content="好的，已记下。")]}
     return state
@@ -449,29 +452,37 @@ def test_run_phases_finalize_completes_when_capture_raises(monkeypatch) -> None:
 @pytest.mark.unit
 def test_run_user_message_capture_swallows_capture_errors(monkeypatch) -> None:
     """护栏单测：用户消息捕获内部失败只记日志；成功路径把真实 ID 原样传给 capture。"""
+    import atlas.agent as agent_module
     from atlas.agent.run_phases import _capture_run_user_message
+    from atlas.config import AtlasConfig
     from atlas.engine import session_sync
+
+    monkeypatch.setattr(agent_module, "get_config", lambda: AtlasConfig({
+        "user": {"timezone": "UTC"},
+    }))
 
     persisted = {"id": "user-uid-1", "role": "user",
                  "content": "记住我喜欢简洁回复",
                  "created_at": "2026-10-06T09:00:00+00:00"}
-    monkeypatch.setattr(session_sync, "latest_session_message",
-                        lambda *_a, **_k: dict(persisted))
-    monkeypatch.setattr(session_sync, "read_session_messages", lambda *_a, **_k: [])
+    monkeypatch.setattr(session_sync, "read_session_all_messages",
+                        lambda *_a, **_k: [dict(persisted)])
 
-    calls: list[tuple[Any, ...]] = []
+    calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
     class _Ok:
-        def capture_user_message(self, *args: Any) -> dict[str, Any]:
-            calls.append(args)
+        def capture_user_message(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            calls.append((args, kwargs))
             return {"created": True}
 
     async def _scenario(monkeypatch_module: Any) -> None:
         state = _run_state()
         monkeypatch_module.setattr("atlas.memory.capture.get_capture_service", lambda: _Ok())
         await _capture_run_user_message(state)          # 成功路径：参数即真实 ID
-        assert calls == [("conv-guard", "user-uid-1",
-                          "记住我喜欢简洁回复", "2026-10-06T09:00:00+00:00")]
+        assert calls[0][0] == (
+            "conv-guard", "user-uid-1", "记住我喜欢简洁回复",
+            "2026-10-06T09:00:00+00:00",
+        )
+        assert calls[0][1]["request_run_id"] == "run-1"
 
         def _boom(*_args: Any, **_kwargs: Any) -> None:
             raise RuntimeError("capture down")
@@ -484,30 +495,38 @@ def test_run_user_message_capture_swallows_capture_errors(monkeypatch) -> None:
 
 @pytest.mark.unit
 def test_run_user_message_capture_prefers_matching_persisted_message(monkeypatch) -> None:
-    """同回合被 steer 追加消息时，优先取与本次输入一致的持久化用户消息。"""
+    """只捕获前界之后唯一新增、且正文匹配本次输入的原始UID。"""
+    import atlas.agent as agent_module
     from atlas.agent.run_phases import _capture_run_user_message
+    from atlas.config import AtlasConfig
     from atlas.engine import session_sync
+
+    monkeypatch.setattr(agent_module, "get_config", lambda: AtlasConfig({
+        "user": {"timezone": "UTC"},
+    }))
 
     steer_message = {"id": "user-uid-steer", "role": "user",
                      "content": "等一下，先停一下", "created_at": None}
-    monkeypatch.setattr(session_sync, "latest_session_message",
-                        lambda *_a, **_k: dict(steer_message))
 
     original = {"id": "user-uid-original", "role": "user",
                 "content": "记住我喜欢简洁回复", "created_at": None}
-    monkeypatch.setattr(session_sync, "read_session_messages",
+    monkeypatch.setattr(session_sync, "read_session_all_messages",
                         lambda *_a, **_k: [dict(original), dict(steer_message)])
 
-    calls: list[tuple[Any, ...]] = []
+    calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
     class _Ok:
-        def capture_user_message(self, *args: Any) -> dict[str, Any]:
-            calls.append(args)
+        def capture_user_message(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            calls.append((args, kwargs))
             return {"created": True}
 
     monkeypatch.setattr("atlas.memory.capture.get_capture_service", lambda: _Ok())
     asyncio.run(_capture_run_user_message(_run_state()))
-    assert calls == [("conv-guard", "user-uid-original", "记住我喜欢简洁回复", None)]
+    assert len(calls) == 1
+    assert calls[0][0] == (
+        "conv-guard", "user-uid-original", "记住我喜欢简洁回复", None,
+    )
+    assert calls[0][1]["request_run_id"] == "run-1"
 
 
 # ------------------------------------------------------------------ 集成

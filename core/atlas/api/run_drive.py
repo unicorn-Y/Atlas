@@ -1258,11 +1258,15 @@ async def _handle_run_start(
     content = data.get("content", "")
     if not isinstance(content, str):
         content = str(content)
-    # F3-B3：测试时钟经唯一闸门（event_class=TEST + 隔离数据根）才放行；
-    # 生产路径这里恒为 None（真实时间）。
-    from atlas.memory.test_clock import resolve_test_clock
+    # F4-C: accept only a gated clock, normalized once in the user's timezone.
+    # A naive value means user-local wall time; production always receives None.
+    from atlas.config import get_config
+    from atlas.time_context import resolve_gated_test_clock
 
-    test_clock = resolve_test_clock(data.get("test_clock"))
+    effective_test_clock = resolve_gated_test_clock(
+        data.get("test_clock"), config=get_config(),
+    )
+    test_clock = effective_test_clock.isoformat() if effective_test_clock else None
     requested_workspace = data.get("workspace")
     # W10: resolve the persistent agent first — an empty workspace falls back to
     # the agent's workspace, and its profile merges in at the profile_id block
@@ -2301,9 +2305,12 @@ async def _execute_run(
             await sandbox_manager.start(run.run_id, workspace or "", run.sandbox)
         # Emit run.started
         if not continuation:
-            await emit("run.started", {
+            started_data = {
                 "status": "running", "phase": "planning", "content": content,
-            })
+            }
+            if test_clock:
+                started_data["effective_test_clock"] = test_clock
+            await emit("run.started", started_data)
 
         # Keep only Atlas metadata; Hermes SessionDB owns the transcript.
         try:
