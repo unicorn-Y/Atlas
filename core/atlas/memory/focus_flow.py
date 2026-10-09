@@ -203,7 +203,7 @@ async def begin_run_focus(
         attend = await runtime.focus.attend_for_purpose(
             task_id=task_id, purpose="CONTINUE_TASK")
     except Exception as exc:  # noqa: BLE001 — focus 失败绝不打断聊天
-        log.debug("focus.attend_failed", task_id=task_id, error=str(exc))
+        log.debug("focus.attend_failed", task_id=task_id, error=str(exc), exc_info=True)
         return None
     if not attend.get("enabled"):
         return None
@@ -241,10 +241,10 @@ async def begin_run_focus(
             await _commit(revision, fresh)
         except Exception as exc:  # noqa: BLE001
             log.debug("focus.begin_conflict_degraded",
-                      task_id=task_id, error=str(exc))
+                      task_id=task_id, error=str(exc), exc_info=True)
             return None
     except Exception as exc:  # noqa: BLE001 — 服务不可达等：本运行无焦点
-        log.debug("focus.begin_failed", task_id=task_id, error=str(exc))
+        log.debug("focus.begin_failed", task_id=task_id, error=str(exc), exc_info=True)
         return None
     payload = {
         # 携带对账后的节：finalize 重提交以这里为 carried 基线（对账结果不回退）。
@@ -283,7 +283,7 @@ def focus_context_block(
         block = compress_context(list(memories or []), payload,
                                  current_message=current_message)
     except Exception as exc:  # noqa: BLE001 — 装配失败按无焦点处理
-        log.debug("focus.block_failed", error=str(exc))
+        log.debug("focus.block_failed", error=str(exc), exc_info=True)
         return None
     focus_part = block.get("focus")
     if not focus_part:
@@ -354,10 +354,10 @@ async def commit_finalize_focus(
             })
         except Exception as exc:  # noqa: BLE001
             log.debug("focus.finalize_conflict_degraded",
-                      task_id=task_id, error=str(exc))
+                      task_id=task_id, error=str(exc), exc_info=True)
             return int(revision)
     except Exception as exc:  # noqa: BLE001 — 服务不可达：本轮快照丢弃，不打断收尾
-        log.debug("focus.finalize_failed", task_id=task_id, error=str(exc))
+        log.debug("focus.finalize_failed", task_id=task_id, error=str(exc), exc_info=True)
         return int(revision)
     log.info("focus.finalize", task_id=task_id, revision=new_revision,
              verified_steps=len(new_steps), failed_pending=len(new_pending))

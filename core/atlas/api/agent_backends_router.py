@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated, Any
 
+import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -20,6 +21,8 @@ from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.config import get_config
 from atlas.runtime.external_agents import external_agent_status
+
+log = structlog.get_logger()
 
 router = APIRouter()
 
@@ -227,10 +230,8 @@ def _record_backend_agent_result(*, backend_name: str | None,
                       **({"error": error} if error else {})},
             session_id=None, text=claim, is_error=bool(error))
     except Exception as exc:  # noqa: BLE001 — 记录失败不影响已完成的流
-        import structlog
-
-        structlog.get_logger().debug(
-            "memory.capture_backend_agent_result_failed", error=str(exc))
+        log.debug("memory.capture_backend_agent_result_failed", error=str(exc),
+                  exc_info=True)
 
 
 @router.post("/api/agent/sessions/{session_id}/cancel")

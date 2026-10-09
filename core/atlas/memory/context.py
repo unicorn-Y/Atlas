@@ -30,8 +30,12 @@ import re
 import uuid
 from typing import Any
 
+import structlog
+
 from atlas.memory.unified_client import UnifiedMemoryClient
 from atlas.memory.unified_facade import UnifiedMemoryFacade
+
+log = structlog.get_logger()
 
 #: attend 支持的 purpose（与 MemoryOS working_set.ATTEND_PURPOSES 同集；
 #: 通用召回走 recall，不经过焦点装配）
@@ -412,7 +416,8 @@ async def load_pre_plan_constraints(
         recall_resp = await facade.recall_for_conversation(
             query=query, context=context, purpose="PLAN",
         )
-    except Exception:
+    except Exception as exc:
+        log.debug("context.load_pre_plan_constraints_failed", error=str(exc), exc_info=True)
         return {
             "relevant": True,
             "constraints": [],
@@ -500,7 +505,8 @@ async def load_pre_plan_constraints(
                     "basis": basis,
                     "status": "RECORDED_LOCAL",
                 }
-        except Exception:
+        except Exception as exc:
+            log.debug("context.load_pre_plan_constraints_failed", error=str(exc), exc_info=True)
             # 501 / 连接失败等降级为本地应用凭据
             receipt = {
                 "application_id": f"app-local-{uuid.uuid4().hex[:12]}",
@@ -568,6 +574,7 @@ async def check_action_dependencies(
             "blocked": False,
         }
     except Exception as exc:
+        log.debug("context.check_action_dependencies_failed", error=str(exc), exc_info=True)
         return {
             "status": "ERROR",
             "changed_refs": [],

@@ -310,7 +310,7 @@ def _receipt_service() -> Any:
 
         return get_windows_source_service()
     except Exception as exc:  # noqa: BLE001 - capture plumbing must never raise
-        log.debug("x2.browser_receipt_service_unavailable", extra={"error": str(exc)})
+        log.debug("x2.browser_receipt_service_unavailable", extra={"error": str(exc)}, exc_info=True)
         return None
 
 
@@ -492,7 +492,7 @@ class X2BrowserRuntime:
         try:
             sync_x2_config()
         except Exception as exc:  # noqa: BLE001 - config sync must not break tool calls
-            log.warning("x2.browser_config_sync_failed", extra={"error": str(exc)})
+            log.warning("x2.browser_config_sync_failed", extra={"error": str(exc)}, exc_info=True)
         stored = load_user_settings().get("browser") or {}
         mode = _MODE_ALIASES.get(str(stored.get("mode") or "standalone").lower(), "standalone")
         cdp_url = str(stored.get("cdp_url") or "")
@@ -501,7 +501,7 @@ class X2BrowserRuntime:
         try:
             _apply_browser_mode_to_hermes(mode, cdp_url, proxy)
         except Exception as exc:  # noqa: BLE001
-            log.warning("x2.browser_mode_push_failed", extra={"error": str(exc)})
+            log.warning("x2.browser_mode_push_failed", extra={"error": str(exc)}, exc_info=True)
         if self._backend_factory is not None and self._backend is None:
             # Mode config → correct backend requested (tests assert on this seam).
             self._backend = self._backend_factory(dict(self.backend_request))
@@ -536,7 +536,7 @@ class X2BrowserRuntime:
         try:
             self.recordings.prune()  # bound the replays: keep the newest 50
         except Exception as exc:  # noqa: BLE001 - pruning is best-effort
-            log.debug("x2.recordings_prune_failed", extra={"error": str(exc)})
+            log.debug("x2.recordings_prune_failed", extra={"error": str(exc)}, exc_info=True)
         site = origin_of(self.last_url)
         doc = self.recordings.create(site=site)
         self.recorder = Recorder(doc, self.recordings)
@@ -559,12 +559,12 @@ class X2BrowserRuntime:
         try:
             from tools.browser_tool_lifecycle import cleanup_all_browsers
         except Exception as exc:  # noqa: BLE001 - stack absent offline
-            log.debug("x2.browser_cleanup_import_failed", extra={"error": str(exc)})
+            log.debug("x2.browser_cleanup_import_failed", extra={"error": str(exc)}, exc_info=True)
             return
         try:
             await asyncio.to_thread(cleanup_all_browsers)
         except Exception as exc:  # noqa: BLE001 - shutdown must never raise
-            log.debug("x2.browser_cleanup_failed", extra={"error": str(exc)})
+            log.debug("x2.browser_cleanup_failed", extra={"error": str(exc)}, exc_info=True)
 
     # -- dispatch ----------------------------------------------------------
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -677,7 +677,7 @@ class X2BrowserRuntime:
                         else "action_receipt",
             )
         except Exception as exc:  # noqa: BLE001 - capture must never break the tool
-            log.debug("x2.browser_receipt_capture_failed", extra={"tool": name, "error": str(exc)})
+            log.debug("x2.browser_receipt_capture_failed", extra={"tool": name, "error": str(exc)}, exc_info=True)
 
     # -- handoff -----------------------------------------------------------
     async def _handle_handoff(self, ctx: X2Context, args: dict[str, Any]) -> dict[str, Any]:

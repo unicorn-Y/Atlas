@@ -116,7 +116,7 @@ class MemoryObserverDrain:
             listing = await self.facade.list_records(facet="INTENT", status="ACTIVE")
         except Exception as exc:  # noqa: BLE001 — 记忆读不可用不阻塞采集 ACK
             log.warning("memory.intent_bridge_list_failed", session_id=session_id,
-                        error=str(exc))
+                        error=str(exc), exc_info=True)
             return
         items = listing.get("items") if isinstance(listing, dict) else None
         for record in items or []:
@@ -127,7 +127,7 @@ class MemoryObserverDrain:
             except Exception as exc:  # noqa: BLE001 — 单条失败不阻塞其余意图
                 log.warning("memory.intent_bridge_intent_failed",
                             session_id=session_id,
-                            record_ref=record.get("record_ref"), error=str(exc))
+                            record_ref=record.get("record_ref"), error=str(exc), exc_info=True)
                 continue
             if ensured.get("created"):
                 log.info("memory.intent_bridge_intent_created",
@@ -145,7 +145,7 @@ class MemoryObserverDrain:
             except Exception as exc:  # noqa: BLE001 — 单条失败不阻塞其余意图
                 log.warning("memory.intent_bridge_persist_failed",
                             session_id=session_id,
-                            intent_id=intent.get("intent_id"), error=str(exc))
+                            intent_id=intent.get("intent_id"), error=str(exc), exc_info=True)
                 continue
             if result.get("created"):
                 log.info("memory.intent_bridge_automation_created",
@@ -194,5 +194,5 @@ def request_observer_session_end(session_id: str | None = None) -> dict[str, Any
         try:
             _drain_kick()
         except Exception as exc:  # noqa: BLE001 — 控制面失败不上抛
-            log.warning("memory.observer_session_end_kick_failed", error=str(exc))
+            log.warning("memory.observer_session_end_kick_failed", error=str(exc), exc_info=True)
     return {"status": "ok" if target else "no_active_session", "session_ended": target or None}

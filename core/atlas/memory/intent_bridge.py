@@ -607,7 +607,7 @@ class IntentBridge:
                 "GET", "/v1/unified/intents", params={"intent_id": intent_id})
         except Exception as exc:  # noqa: BLE001 — 复查尽力而为，不阻塞建任务
             log.warning("memory.intent_lifecycle_lookup_failed",
-                        intent_id=intent_id, error=str(exc))
+                        intent_id=intent_id, error=str(exc), exc_info=True)
             return None
         items = listing.get("items") if isinstance(listing, dict) else listing
         for row in items or []:
@@ -778,8 +778,8 @@ class IntentBridge:
                        == str(intent_id)]
             if len(matches) == 1:
                 automation_id = str(matches[0].get("id") or automation_id)
-        except Exception:  # noqa: BLE001 — fall back to legacy stable ID lookup
-            pass
+        except Exception as exc:  # noqa: BLE001 — fall back to legacy stable ID lookup
+            log.debug("intent_bridge.cancel_automation_for_intent_failed", error=str(exc), exc_info=True)
         result = await reminder_service.cancel_reminder(
             automation_id=automation_id,
             now=now, engine=engine)
@@ -815,8 +815,8 @@ class IntentBridge:
             bound_intent_id = binding.get("intent_id") if isinstance(binding, dict) else None
             if isinstance(bound_intent_id, str) and bound_intent_id.strip():
                 intent_id = bound_intent_id.strip()
-        except Exception:  # noqa: BLE001 — stable legacy ID remains a fallback
-            pass
+        except Exception as exc:  # noqa: BLE001 — stable legacy ID remains a fallback
+            log.debug("intent_bridge.on_automation_event_failed", error=str(exc), exc_info=True)
         if intent_id is None:
             intent_id = intent_id_from_automation(automation_id)
         if intent_id is None:

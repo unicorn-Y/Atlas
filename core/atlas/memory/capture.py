@@ -345,7 +345,8 @@ def capture_paused() -> bool:
         from atlas.memory.windows_sources import get_passive_capture_controller
 
         return bool(get_passive_capture_controller().capture_paused)
-    except Exception:  # noqa: BLE001 — 无控制器环境按"未暂停"处理
+    except Exception as exc:  # noqa: BLE001 — 无控制器环境按"未暂停"处理
+        log.debug("capture.capture_paused_failed", error=str(exc), exc_info=True)
         return False
 
 
@@ -368,7 +369,8 @@ def _load_config() -> Any | None:
         from atlas.config import get_config
 
         return get_config()
-    except Exception:  # pragma: no cover — 配置系统不可用时按禁用处理
+    except Exception as exc:  # pragma: no cover — 配置系统不可用时按禁用处理
+        log.debug("capture._load_config_failed", error=str(exc), exc_info=True)
         return None
 
 
@@ -443,8 +445,8 @@ class CaptureService:
         if self._facade is not None:
             try:
                 return self._facade.default_context(**dict(overrides or {}))
-            except Exception:  # noqa: BLE001 — 配置缺项回落到静态 context
-                pass
+            except Exception as exc:  # noqa: BLE001 — 配置缺项回落到静态 context
+                log.debug("capture._context_failed", error=str(exc), exc_info=True)
         merged = dict(self._base_context or {})
         merged.update(overrides or {})
         return merged or None
@@ -500,7 +502,7 @@ class CaptureService:
                     # 同 ID 异内容：first-write-wins（例如异步完成回调重放带了
                     # 流片段）——保留第一次的完整原文，不覆盖、不上抛。
                     log.warning("memory.capture_conflict_kept_first",
-                                source_event_id=source_event_id, error=str(exc))
+                                source_event_id=source_event_id, error=str(exc), exc_info=True)
                     self._seen.add(source_event_id)
                     return {"source_event_id": source_event_id, "created": False,
                             "conflict": True}
@@ -950,7 +952,7 @@ async def capture_flush_loop(service: CaptureService, *,
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — flush 失败不终止循环
-            log.warning("memory.capture_flush_loop_error", error=str(exc))
+            log.warning("memory.capture_flush_loop_error", error=str(exc), exc_info=True)
         try:
             await asyncio.wait_for(wake.wait(), timeout=idle_seconds)
         except asyncio.TimeoutError:

@@ -766,8 +766,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             from atlas.memory.observer_drain import register_observer_drain
 
             register_observer_drain(None)
-        except Exception:  # noqa: BLE001 — startup may have ended before capture setup
-            pass
+        except Exception as exc:  # noqa: BLE001 — startup may have ended before capture setup
+            log.debug("memory.observer_session_callbacks_reset_failed", error=str(exc),
+                      exc_info=True)
         # T02.2：先停捕获 flush 循环并复位单例，避免跨 lifespan 残留旧服务。
         if capture_flush_task is not None:
             capture_flush_task.cancel()
@@ -797,8 +798,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             from atlas.memory.reflector import set_memory_reflector
             set_memory_reflector(None)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("memory.reflector_reset_failed", error=str(exc), exc_info=True)
         try:
             from atlas.memory.capture import reset_capture_service
 

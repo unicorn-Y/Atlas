@@ -182,7 +182,8 @@ def _is_unified_reads_enabled(agent: Any) -> bool:
         if inspect.isawaitable(res):
             return False
         return bool(res)
-    except Exception:
+    except Exception as exc:
+        log.debug("agent.unified_reads_probe_failed", error=str(exc), exc_info=True)
         return False
 
 
@@ -1031,7 +1032,7 @@ async def _capture_run_user_message(state: _RunState) -> None:
             request.conversation_id, str(message.get("id") or ""), content,
             occurred_at, **capture_kwargs)
     except Exception as exc:  # 护栏：捕获失败不打断聊天主流程
-        log.debug("memory.capture_user_message_failed", error=str(exc))
+        log.debug("memory.capture_user_message_failed", error=str(exc), exc_info=True)
 
 
 async def _capture_run_assistant_message(state: _RunState, full_response: str) -> None:
@@ -1065,7 +1066,7 @@ async def _capture_run_assistant_message(state: _RunState, full_response: str) -
             model=state.runtime.model,
         )
     except Exception as exc:  # 护栏：捕获失败不打断聊天主流程
-        log.debug("memory.capture_assistant_message_failed", error=str(exc))
+        log.debug("memory.capture_assistant_message_failed", error=str(exc), exc_info=True)
 
 
 async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
@@ -1086,7 +1087,8 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
             }
         except Exception as exc:  # noqa: BLE001 — boundary read failure must fail closed
             state.preexisting_user_message_ids = None
-            log.debug("memory.capture_user_message_boundary_failed", error=str(exc))
+            log.debug("memory.capture_user_message_boundary_failed", error=str(exc),
+                      exc_info=True)
 
         volatile_prefixes = (
             "Atlas Skill index ", "Project context ", "Active user context ",

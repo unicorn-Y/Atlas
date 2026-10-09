@@ -82,7 +82,8 @@ def estimate_tokens(text: str) -> int:
         import tiktoken
         enc = tiktoken.get_encoding("cl100k_base")
         return len(enc.encode(text))
-    except Exception:
+    except Exception as exc:
+        log.debug("recall_context.estimate_tokens_failed", error=str(exc), exc_info=True)
         # 中英文混合保守估算: 英文约 4 字符/token，中文约 1.5-2 字符/token
         # len(text) // 2 贴合混合语境
         return max(1, len(text) // 2)

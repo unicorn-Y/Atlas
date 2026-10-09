@@ -100,7 +100,7 @@ def _capture_tool_event(
                 project_id=project_id)
     except Exception as exc:  # 护栏：捕获失败不打断工具执行
         log.debug("memory.capture_tool_event_failed", tool=name, phase=phase,
-                  error=str(exc))
+                  error=str(exc), exc_info=True)
 
 
 def _capture_agent_tool_event(ctx: Any, *, tool_call_id: str, tool_name: str,
@@ -144,7 +144,7 @@ def _capture_agent_tool_event(ctx: Any, *, tool_call_id: str, tool_name: str,
             text=claim[:4000], is_error=bool(result.get("is_error", False)))
     except Exception as exc:  # 护栏：捕获失败不打断工具执行
         log.debug("memory.capture_agent_tool_event_failed", tool=tool_name,
-                  error=str(exc))
+                  error=str(exc), exc_info=True)
 
 
 async def execute_tools_node(
@@ -397,7 +397,8 @@ async def execute_tools_node(
                         await ctx.event_queue.put(events[-1])
                     continue
             except Exception as exc:
-                log.warning("tool_node.dependency_check_failed", tool=fn_name, error=str(exc))
+                log.warning("tool_node.dependency_check_failed", tool=fn_name,
+                            error=str(exc), exc_info=True)
 
         if permission_mode == "ask_writes" and is_write and ctx.approval_callback:
             from atlas.engine.tool_registry import _approval_fingerprint

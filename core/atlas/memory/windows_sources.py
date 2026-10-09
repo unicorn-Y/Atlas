@@ -186,12 +186,14 @@ def extract_pdf_text(data: bytes) -> str | None:
         from io import BytesIO
 
         from pypdf import PdfReader
-    except Exception:  # pragma: no cover — 依赖缺失时的降级分支
+    except Exception as exc:  # pragma: no cover — 依赖缺失时的降级分支
+        log.debug("windows_sources.extract_pdf_text_failed", error=str(exc), exc_info=True)
         return None
     try:
         reader = PdfReader(BytesIO(data))
         pages = [(page.extract_text() or "") for page in reader.pages]
-    except Exception:  # noqa: BLE001 — 加密/损坏的 PDF 走显式 missing_extract
+    except Exception as exc:  # noqa: BLE001 — 加密/损坏的 PDF 走显式 missing_extract
+        log.debug("windows_sources.extract_pdf_text_failed", error=str(exc), exc_info=True)
         return None
     return "\n".join(page for page in pages if page.strip()).strip() or None
 
@@ -599,6 +601,7 @@ class WindowsSourceService:
                                                or upload.get("duplicates"))}
                     media_refs = [{"asset_id": asset_id, "hash": asset_hash}]
                 except Exception as exc:  # noqa: BLE001 — 媒体通道失败不阻断收据
+                    log.debug("windows_sources.capture_tool_receipt_failed", error=str(exc), exc_info=True)
                     media = {"error": f"MEDIA_INGEST_FAILED: {exc}",
                              "note": "受控媒体入库失败；本收据不带媒体引用"
                                      "（原文不塞 base64，不伪造资产）"}
@@ -694,6 +697,7 @@ class WindowsSourceService:
                            "created": passive_created,
                            "source_selection": dict(selected)}
             except Exception as exc:  # noqa: BLE001 — 显式记缺口，不静默丢账
+                log.debug("windows_sources.capture_tool_receipt_failed", error=str(exc), exc_info=True)
                 controller.finish_passive(created=False, error=str(exc))
                 passive = {"created": False, "gap": str(exc),
                            "source_selection": dict(selected)}
@@ -951,7 +955,8 @@ def _receipt_safe_args(args: dict[str, Any] | None) -> dict[str, Any]:
         from atlas.tools.x2.recording import clean_params
 
         return clean_params(args)
-    except Exception:  # noqa: BLE001 — 依赖不可用时退回本地剥敏
+    except Exception as exc:  # noqa: BLE001 — 依赖不可用时退回本地剥敏
+        log.debug("windows_sources._receipt_safe_args_failed", error=str(exc), exc_info=True)
         return {key: value for key, value in args.items()
                 if key != "task_id" and str(key).casefold() not in {
                     "password", "secret", "otp_secret", "cvc", "cvv", "card_number"}}
@@ -1238,7 +1243,8 @@ class PassiveCaptureController:
             from atlas.config import get_config
 
             permission_mode = get_config().computer_use_permission_mode
-        except Exception:  # noqa: BLE001 — 配置不可用时如实记 None
+        except Exception as exc:  # noqa: BLE001 — 配置不可用时如实记 None
+            log.debug("windows_sources._existing_privacy_refs_failed", error=str(exc), exc_info=True)
             permission_mode = None
         refs["computer_use.permission_mode"] = permission_mode
         refs["memory.unified.capture_mode"] = "enabled"

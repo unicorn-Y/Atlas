@@ -19,7 +19,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+import structlog
+
 from atlas.config import DATA_ROOT
+
+log = structlog.get_logger()
 
 # 被跟踪的 MemOS 表 → 中文名、标题字段、只算"评分变化"的数值字段。
 ENTITIES: dict[str, dict[str, Any]] = {
@@ -305,8 +309,8 @@ def ensure_watcher() -> None:
         while True:
             try:
                 scan()
-            except Exception:  # noqa: BLE001 — a bad scan must never kill the watcher
-                pass
+            except Exception as exc:  # noqa: BLE001 — a bad scan must never kill the watcher
+                log.debug("memos_changes.loop_failed", error=str(exc), exc_info=True)
             time.sleep(POLL_SECONDS)
 
     threading.Thread(target=loop, name="memos-change-watcher", daemon=True).start()

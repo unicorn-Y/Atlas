@@ -40,7 +40,8 @@ def isolated_test_environment() -> bool:
         from atlas.config import PROJECT_ROOT
 
         return Path(raw).resolve() != Path(PROJECT_ROOT).resolve()
-    except Exception:  # noqa: BLE001 — 判定失败一律按非隔离（保守）
+    except Exception as exc:  # noqa: BLE001 — 判定失败一律按非隔离（保守）
+        log.debug("test_clock.isolated_test_environment_failed", error=str(exc), exc_info=True)
         return False
 
 

@@ -893,6 +893,7 @@ class MemoryObserver:
                             "memory_observer.language_retry_failed",
                             model_id=model_id, source_event_ids=list(source_ids),
                             error_type=type(exc).__name__,
+                            exc_info=True,
                         )
                     finally:
                         if retry_reservation:
@@ -1081,7 +1082,8 @@ class MemoryObserver:
 
         try:
             settings = load_user_settings() or {}
-        except Exception:
+        except Exception as exc:
+            log.debug("observer._select_model_id_failed", error=str(exc), exc_info=True)
             settings = {}
         models = self._model_manager.list_models()
         for candidate in (

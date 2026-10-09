@@ -470,7 +470,7 @@ async def close_observer_session(request: Request) -> JSONResponse:
     """
     try:
         body = await request.json()
-    except Exception:  # noqa: BLE001 — 空 body 合法：默认作用于当前活跃会话
+    except ValueError:  # 空 body 合法：默认作用于当前活跃会话
         body = {}
     if not isinstance(body, dict):
         raise HTTPException(status_code=422, detail={

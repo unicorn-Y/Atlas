@@ -241,7 +241,8 @@ def _cap_thumbnail(data_url: str) -> str:
         return data_url
     try:
         from PIL import Image
-    except Exception:  # noqa: BLE001 - Pillow absent: truncate instead
+    except Exception as exc:  # noqa: BLE001 - Pillow absent: truncate instead
+        log.debug("computer._cap_thumbnail_failed", error=str(exc), exc_info=True)
         return _truncate_thumbnail(data_url)
     try:
         image = Image.open(BytesIO(base64.b64decode(payload)))
@@ -251,7 +252,8 @@ def _cap_thumbnail(data_url: str) -> str:
         out = BytesIO()
         image.save(out, format="JPEG", quality=_THUMBNAIL_JPEG_QUALITY)
         return f"data:image/jpeg;base64,{base64.b64encode(out.getvalue()).decode('ascii')}"
-    except Exception:  # noqa: BLE001 - undecodable payload: truncate instead
+    except Exception as exc:  # noqa: BLE001 - undecodable payload: truncate instead
+        log.debug("computer._cap_thumbnail_failed", error=str(exc), exc_info=True)
         return _truncate_thumbnail(data_url)
 
 
@@ -273,7 +275,7 @@ def _receipt_service() -> Any:
 
         return get_windows_source_service()
     except Exception as exc:  # noqa: BLE001 - capture plumbing must never raise
-        log.debug("x2.receipt_service_unavailable", extra={"error": str(exc)})
+        log.debug("x2.receipt_service_unavailable", extra={"error": str(exc)}, exc_info=True)
         return None
 
 
@@ -330,7 +332,7 @@ class X2ComputerRuntime:
         try:
             sync_x2_config()
         except Exception as exc:  # noqa: BLE001 - config sync must not break tool calls
-            log.warning("x2.computer_config_sync_failed", extra={"error": str(exc)})
+            log.warning("x2.computer_config_sync_failed", extra={"error": str(exc)}, exc_info=True)
         try:
             from tools.computer_use.cua_backend_driver import resolve_cua_driver_cmd
 
@@ -341,7 +343,7 @@ class X2ComputerRuntime:
             else:
                 self.backend_name = "cua(unavailable)"
         except Exception as exc:  # noqa: BLE001
-            log.debug("x2.cua_driver_probe_failed", extra={"error": str(exc)})
+            log.debug("x2.cua_driver_probe_failed", extra={"error": str(exc)}, exc_info=True)
 
     def _hermes_tool(self) -> Any:
         if self._injected_hermes_tool is not None:
@@ -353,7 +355,7 @@ class X2ComputerRuntime:
 
             return hermes_tool
         except Exception as exc:  # noqa: BLE001 - pinned dependency may be absent
-            log.warning("x2.hermes_computer_tool_missing", extra={"error": str(exc)})
+            log.warning("x2.hermes_computer_tool_missing", extra={"error": str(exc)}, exc_info=True)
             self._hermes_tool_failed = True
             return None
 
@@ -367,7 +369,7 @@ class X2ComputerRuntime:
         try:
             return hermes_tool._get_backend("")
         except Exception as exc:  # noqa: BLE001 - fallback to legacy below
-            log.warning("x2.hermes_backend_unavailable", extra={"error": str(exc)})
+            log.warning("x2.hermes_backend_unavailable", extra={"error": str(exc)}, exc_info=True)
             return None
 
     def _ensure_legacy(self) -> Any:
@@ -383,7 +385,7 @@ class X2ComputerRuntime:
             self._legacy_runtime = ComputerUseRuntime()
             return self._legacy_runtime
         except Exception as exc:  # noqa: BLE001
-            log.warning("x2.legacy_computer_runtime_failed", extra={"error": str(exc)})
+            log.warning("x2.legacy_computer_runtime_failed", extra={"error": str(exc)}, exc_info=True)
             return None
 
     # -- dispatch ----------------------------------------------------------
@@ -477,7 +479,7 @@ class X2ComputerRuntime:
         try:
             windows = await asyncio.to_thread(backend.list_windows)
         except Exception as exc:  # noqa: BLE001
-            log.debug("x2.window_recovery_list_failed", extra={"error": str(exc)})
+            log.debug("x2.window_recovery_list_failed", extra={"error": str(exc)}, exc_info=True)
             return None
         match: dict[str, Any] | None = None
         for window in windows or []:
@@ -496,7 +498,7 @@ class X2ComputerRuntime:
                 backend.capture, "ax", None, match.get("pid"), match.get("window_id"),
             )
         except Exception as exc:  # noqa: BLE001
-            log.debug("x2.window_recovery_capture_failed", extra={"error": str(exc)})
+            log.debug("x2.window_recovery_capture_failed", extra={"error": str(exc)}, exc_info=True)
             return None
         recovered = {"pid": match.get("pid"), "window_id": match.get("window_id")}
         self._last_target.update({k: v for k, v in recovered.items() if v})
@@ -544,7 +546,7 @@ class X2ComputerRuntime:
                               if isinstance(action_result, dict) else None),
             )
         except Exception as exc:  # noqa: BLE001 - capture must never break the tool
-            log.debug("x2.computer_receipt_capture_failed", extra={"tool": name, "error": str(exc)})
+            log.debug("x2.computer_receipt_capture_failed", extra={"tool": name, "error": str(exc)}, exc_info=True)
 
     async def _emit_step(self, ctx: X2Context, name: str, result: dict[str, Any]) -> None:
         """Append one replay-trail event (action + capped thumbnail) for the frontend."""
@@ -569,7 +571,7 @@ class X2ComputerRuntime:
             try:
                 hermes_tool.release_computer_use_session("")
             except Exception as exc:  # noqa: BLE001
-                log.debug("x2.hermes_backend_release_failed", extra={"error": str(exc)})
+                log.debug("x2.hermes_backend_release_failed", extra={"error": str(exc)}, exc_info=True)
         legacy = self._legacy_runtime
         if legacy is not None:
             stop = getattr(legacy, "shutdown", None)
@@ -577,7 +579,7 @@ class X2ComputerRuntime:
                 try:
                     await stop()
                 except Exception as exc:  # noqa: BLE001
-                    log.debug("x2.legacy_shutdown_failed", extra={"error": str(exc)})
+                    log.debug("x2.legacy_shutdown_failed", extra={"error": str(exc)}, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -726,6 +728,7 @@ def collect_doctor_report() -> dict[str, Any]:
         try:
             return dict(hermes_doctor._drive_health_report(binary, timeout=8.0))
         except Exception as exc:  # noqa: BLE001 - degraded beats a 500
+            log.debug("computer.collect_doctor_report_failed", error=str(exc), exc_info=True)
             return {
                 "schema_version": "1", "platform": platform, "overall": "degraded",
                 "driver_version": None, "checks": [{
@@ -734,6 +737,7 @@ def collect_doctor_report() -> dict[str, Any]:
                 }],
             }
     except Exception as exc:  # noqa: BLE001
+        log.debug("computer.collect_doctor_report_failed", error=str(exc), exc_info=True)
         return {"schema_version": "1", "platform": platform, "overall": "failed",
                 "driver_version": None, "checks": [], "error": str(exc)}
 
@@ -762,6 +766,7 @@ def status_snapshot() -> dict[str, Any]:
             "doctor": report,
         }
     except Exception as exc:  # noqa: BLE001 - status endpoints must never raise
+        log.debug("computer.status_snapshot_failed", error=str(exc), exc_info=True)
         return {"ok": False, "ready": False, "error": f"查询桌面控制状态失败：{exc}", "doctor": None}
 
 

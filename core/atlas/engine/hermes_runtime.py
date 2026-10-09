@@ -196,7 +196,9 @@ class HermesRuntime:
             if (self.home.parent / "data" / "memory_paused").exists():  # 用户在记忆页暂停了记忆
                 return False
             return bool(str((cfg.get("memory") or {}).get("provider") or "").strip())
-        except Exception:  # missing/invalid config: keep Hermes memory off
+        except Exception as exc:  # missing/invalid config: keep Hermes memory off
+            logger.debug("hermes.memory_provider_config_unreadable", error=str(exc),
+                         exc_info=True)
             return False
 
     def _ensure_hermes_home(self) -> None:

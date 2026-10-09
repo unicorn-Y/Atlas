@@ -302,8 +302,8 @@ def parse_reflector_output(output_text: str) -> list[dict[str, Any]]:
                 return [item for item in ops if isinstance(item, dict)]
             if "op" in parsed or "action" in parsed:
                 return [parsed]
-    except Exception:
-        pass
+    except Exception as exc:
+        log.debug("reflector.parse_reflector_output_failed", error=str(exc), exc_info=True)
 
     # Fallback regex search for JSON object or array
     json_match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
@@ -316,8 +316,8 @@ def parse_reflector_output(output_text: str) -> list[dict[str, Any]]:
                 ops = parsed.get("operations")
                 if isinstance(ops, list):
                     return [item for item in ops if isinstance(item, dict)]
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("reflector.parse_reflector_output_failed", error=str(exc), exc_info=True)
 
     log.warning("memory_reflector.parse_failed", raw_output=text[:200])
     return []
@@ -778,7 +778,8 @@ class MemoryReflector:
 
         try:
             settings = load_user_settings() or {}
-        except Exception:
+        except Exception as exc:
+            log.debug("reflector._select_model_id_failed", error=str(exc), exc_info=True)
             settings = {}
 
         models = self._model_manager.list_models()
@@ -1017,7 +1018,7 @@ class MemoryReflector:
                     encoding="utf-8",
                 )
             except Exception as exc:
-                log.warning("memory_reflector.receipt_persist_failed", error=str(exc))
+                log.warning("memory_reflector.receipt_persist_failed", error=str(exc), exc_info=True)
 
         return receipt
 
