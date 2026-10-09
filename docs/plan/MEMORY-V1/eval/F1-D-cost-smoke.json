@@ -1,0 +1,73 @@
+{
+  "status": "ESTIMATE_ONLY",
+  "scope": "stratified smoke (2 per category)",
+  "question_count": 12,
+  "question_ids": [
+    "001be529",
+    "19b5f2b3",
+    "0e5e2d1a",
+    "18dcd5a5",
+    "06878be2",
+    "06f04340",
+    "10d9b85a",
+    "21d02d0d",
+    "08f4fc43",
+    "0bb5a684",
+    "01493427",
+    "031748ae_abs"
+  ],
+  "model_calibration": {
+    "model_id": "deepseek-v4.1-flash",
+    "source": "F1-B genuine Atlas ModelRouter usage rows",
+    "calls": 30,
+    "input_tokens_median_per_call": 5119,
+    "output_tokens_median_per_call": 225,
+    "output_tokens_p95_per_call": 277,
+    "provider_reported_cost_present": false
+  },
+  "observer": {
+    "history_content_tokens_char_div_5": 1182441,
+    "history_content_tokens_char_div_3_5": 1689131,
+    "estimated_calls_char_div_5": 572,
+    "estimated_calls_char_div_3_5": 572,
+    "input_tokens_low": 4110509,
+    "input_tokens_high": 4617199,
+    "output_tokens_low": 128700,
+    "output_tokens_high": 158444,
+    "conservative_calibration_note": "Adds full S history token estimate to the measured full-request B input baseline, intentionally double-counting B's short source text."
+  },
+  "answer_and_official_judge_envelope": {
+    "answer_input_tokens_low_high": [
+      36000,
+      120000
+    ],
+    "answer_output_tokens_low_high": [
+      2400,
+      6144
+    ],
+    "judge_input_tokens_low_high": [
+      12000,
+      48000
+    ],
+    "judge_output_tokens_low_high": [
+      120,
+      120
+    ],
+    "judge_prompt_source": "Pinned LongMemEval evaluate_qa.py get_anscheck_prompt; labels via Atlas ModelRouter"
+  },
+  "direct_vendor_peak_price": {
+    "source": "https://api-docs.deepseek.com/quick_start/pricing/",
+    "model_mapping": "deepseek-v4.1-flash legacy alias is billed at V4.1 Flash rates",
+    "input_cache_miss_usd_per_million": 0.3,
+    "output_usd_per_million": 1.2,
+    "cache_assumption": "all input charged as cache-miss",
+    "usd_low": 1.405,
+    "usd_high": 1.6332
+  },
+  "configured_gateway": {
+    "reported_by_provider": false,
+    "price_schedule": "unknown",
+    "all_in_cost_usd": null,
+    "note": "F1-B usage rows contain no provider cost; gateway surcharge is not assumed to be zero. This does not establish the all-in $20 gate."
+  }
+}

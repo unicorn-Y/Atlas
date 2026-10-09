@@ -69,6 +69,8 @@ git diff --check -- core/atlas/memory/observer.py core/atlas/memory/observer_pro
 
 首轮顺序执行完成样本 1–26 后，样本 27 的真实 ModelRouter 请求发生 APITimeoutError。这是一次真实失败尝试，不计作成功样本，也没有对该失败生成文本。首轮 runner 在异常汇报处又触发 KeyError，未能写出最终 JSON；26 个已完成批次从同一次 Observer 结构化日志按顺序原样恢复。随后只续跑样本 27–30，四个批次均成功。最终结果的样本编号 1–30 唯一，模型调用共 31 次（26 次成功、1 次失败超时、4 次续跑成功）；失败尝试独立列在证据中，没有从分母移除它的历史记录。
 
+计数边界补充：上述 31 次是 `ModelRouter.complete_for` 调用次数，不能当作精确 HTTP 请求总数。SDK 重试或 auxiliary fallback 可能在同一次 Router 调用内发起多个 transport 请求；这批证据未完整追踪内部 transport，因此不据此宣称请求总数或超时费用为零。当前仓库脚本的第一组总控单段抽查只显式隔离 Atlas/MemoryOS 根，未显式设置 `HERMES_HOME`，不能宣称该次 Hermes auxiliary 配置也完全隔离；正在补齐后再抽查。原始观察文本及失败记录保留，不覆盖历史证据。
+
 token 口径分别保留：30 个成功样本的 Observer-accounted input 为 159,261、output 为 4,158。首轮 26 个样本的逐请求 ModelRouter usage 没有从异常前 runner 文件中落盘；Observer 结构化日志提供的 batch-accounted 数字在 provider usage 缺失时可能是估算，不能标成 provider-reported。续跑 4 次的 provider usage 完整，input 为 21,250、output 为 554；超时请求没有返回 usage。费用字段未返回，因此费用未知。
 
 配置和数据均隔离在 D:\Temp\F1-B-gemini-20261009\。运行时只从 D:\Atlas\data\user-settings.json 读取允许的路由元数据，写入隔离设置副本；ATLAS_DATA_DIR、MEMORYOS_DATA_ROOT 和 MEMORYOS_DB_PATH 都指向 DTemp。没有改生产设置、生产数据库、D:\MemoryOSData 或 8045 服务配置，也没有启动 Atlas / MemoryOS 服务。最终 JSON 与两份原始日志逐文件 SHA256 对照 DTemp 原件一致；用当前 Windows Credential Manager 中的实际凭据对三份文件做字符串、JSON 字符串、URL 编码和 base64 扫描，匹配文件数为 0。
@@ -93,3 +95,9 @@ token 口径分别保留：30 个成功样本的 Observer-accounted input 为 15
 
     $runRoot = 'D:\Temp\F1-B-gemini-root-spot-20261009'
     & 'D:\Atlas\core\.venv\Scripts\python.exe' 'D:\Atlas\scripts\f1_language_smoke.py' --limit 1 --isolation-root $runRoot --settings-source 'D:\Atlas\data\user-settings.json' --output (Join-Path $runRoot 'evidence.json')
+
+## HERMES 根隔离补修（2026-10-09）
+
+总控复核发现此前仓库 `_run` 只设置 `ATLAS_DATA_DIR`、`MEMORYOS_DATA_ROOT`、`MEMORYOS_DB_PATH`，未覆盖继承的 `HERMES_HOME`。语言冒烟脚本现于任何 `atlas.*` import 前将 `HERMES_HOME` 指向 `<isolation_root>/hermes-home`，创建该目录，并在 `isolated_roots` 证据中记录完整路径。Gemini helper 及产品 Observer/ModelRouter 未改。
+
+离线回归 `scripts/memory_v1/test_f1_language_smoke_isolation.py` 用 AST 校验 Hermes 根赋值早于 Atlas imports，并核对运行证据包含同一路径。首次 RED：源中不存在 `hermes_home_root`；补修后 GREEN：`1 passed in 0.07s`，JUnit 在 `D:\Temp\F1-C-language-hermes-test-20261009-final\junit.xml`。原 30 次真实调用证据保持原样且不重跑；它们验证实际中文效果，但因当时未设置独立 `HERMES_HOME`，本报告不把原运行表述为完整 Hermes 根隔离。总控早先的单段×3也发生在补修前，应沿用“读取配置”的边界说明，不表述为全 HERMES 隔离抽查。

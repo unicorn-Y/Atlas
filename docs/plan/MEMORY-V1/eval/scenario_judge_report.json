@@ -1,12 +1,12 @@
 {
   "summary": {
     "total_scenarios_evaluated": 30,
-    "total_passed": 21,
-    "total_failed": 9,
+    "total_passed": 19,
+    "total_failed": 11,
     "e1_e4_e6": {
       "total": 21,
-      "passed": 15,
-      "pass_rate": 0.7143,
+      "passed": 14,
+      "pass_rate": 0.6667,
       "threshold_met": false,
       "required_rate": 0.9
     },
@@ -19,8 +19,8 @@
     },
     "e5_e7_e8": {
       "total": 9,
-      "passed": 6,
-      "pass_rate": 0.6667,
+      "passed": 5,
+      "pass_rate": 0.5556,
       "threshold_met": false,
       "required_rate": 1.0
     },
@@ -81,15 +81,11 @@
         "has_provenance": false
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "无相关记忆"
-        ],
+        "cited_refs": [],
         "assembled_ref_count": 0,
         "valid_citations": [],
-        "unverified_citations": [
-          "无相关记忆"
-        ],
-        "is_grounded": false
+        "unverified_citations": [],
+        "is_grounded": true
       }
     },
     {
@@ -147,13 +143,11 @@
       },
       "ref_provenance_check": {
         "cited_refs": [
-          "mem-fm-32eb8e90c3cc4f8c7adb",
-          "ev-34a5415aa2c249ee"
+          "mem-fm-32eb8e90c3cc4f8c7adb"
         ],
         "assembled_ref_count": 2,
         "valid_citations": [
-          "mem-fm-32eb8e90c3cc4f8c7adb",
-          "ev-34a5415aa2c249ee"
+          "mem-fm-32eb8e90c3cc4f8c7adb"
         ],
         "unverified_citations": [],
         "is_grounded": true
@@ -172,15 +166,9 @@
         "disambiguates_lao_wang": true
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "mem-fm-9ee03dcbfb9243fcf6d1",
-          "ev-c91af084c9dc4b23"
-        ],
-        "assembled_ref_count": 2,
-        "valid_citations": [
-          "mem-fm-9ee03dcbfb9243fcf6d1",
-          "ev-c91af084c9dc4b23"
-        ],
+        "cited_refs": [],
+        "assembled_ref_count": 0,
+        "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -284,16 +272,12 @@
       "ref_provenance_check": {
         "cited_refs": [
           "mem-fm-30ec41248a00b0d610bc",
-          "ev-0a1748d8bb7240d5",
-          "mem-fm-30ec41248a00b0d610bc",
-          "mem-fm-30ec41248a00b0d610bc"
+          "ev-b6b5aafeb2ab455a"
         ],
         "assembled_ref_count": 2,
         "valid_citations": [
           "mem-fm-30ec41248a00b0d610bc",
-          "ev-0a1748d8bb7240d5",
-          "mem-fm-30ec41248a00b0d610bc",
-          "mem-fm-30ec41248a00b0d610bc"
+          "ev-b6b5aafeb2ab455a"
         ],
         "unverified_citations": [],
         "is_grounded": true
@@ -424,24 +408,20 @@
       "scenario_id": 19,
       "category": "E4",
       "is_counterexample": false,
-      "verdict": "PASS",
-      "is_real_pass": true,
+      "verdict": "FAIL",
+      "is_real_pass": false,
       "reasons": [
-        "准确反映设备更换事实（现用 Mac）。"
+        "未回答当前使用的电脑是 Mac。"
       ],
       "checks": {
-        "answers_mac": true
+        "answers_mac": false
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "1"
-        ],
+        "cited_refs": [],
         "assembled_ref_count": 0,
         "valid_citations": [],
-        "unverified_citations": [
-          "1"
-        ],
-        "is_grounded": false
+        "unverified_citations": [],
+        "is_grounded": true
       }
     },
     {
@@ -469,31 +449,41 @@
       "scenario_id": 21,
       "category": "E5",
       "is_counterexample": false,
-      "verdict": "FAIL",
-      "is_real_pass": false,
+      "verdict": "PASS",
+      "is_real_pass": true,
       "reasons": [
-        "画像未能概括主要事实（住地、家人、技术栈、忌讳等）。"
+        "画像精炼且准确反映个人核心事实。"
       ],
       "checks": {
         "token_budget_ok": true,
-        "has_core_facts": false
+        "has_core_facts": true
       },
       "ref_provenance_check": {
         "cited_refs": [
-          "code-preference",
-          "code-comment",
-          "health-medicine",
-          "code-preference"
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355"
         ],
-        "assembled_ref_count": 0,
-        "valid_citations": [],
-        "unverified_citations": [
-          "code-preference",
-          "code-comment",
-          "health-medicine",
-          "code-preference"
+        "assembled_ref_count": 1,
+        "valid_citations": [
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355",
+          "mem-profile-9bc946715355"
         ],
-        "is_grounded": false
+        "unverified_citations": [],
+        "is_grounded": true
       }
     },
     {
@@ -520,25 +510,19 @@
       "scenario_id": 23,
       "category": "E5",
       "is_counterexample": false,
-      "verdict": "PASS",
-      "is_real_pass": true,
+      "verdict": "FAIL",
+      "is_real_pass": false,
       "reasons": [
-        "一次性琐事表现优秀：无关时克制，精确问时命中。"
+        "在精确追问闲鱼卖了什么时未能回忆起卖掉的旧机械键盘。"
       ],
       "checks": {
         "restrained_in_irrelevant": true,
-        "found_in_exact_query": true
+        "found_in_exact_query": false
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "mem-fm-38d347cdca0c18b6392a",
-          "ev-76122c6d05a84792"
-        ],
-        "assembled_ref_count": 2,
-        "valid_citations": [
-          "mem-fm-38d347cdca0c18b6392a",
-          "ev-76122c6d05a84792"
-        ],
+        "cited_refs": [],
+        "assembled_ref_count": 0,
+        "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -558,13 +542,15 @@
       },
       "ref_provenance_check": {
         "cited_refs": [
+          "ev-f2000cd796b44257",
           "mem-fm-b2120831d354868587d7",
-          "ev-3fa90afb41ed4f19"
+          "mem-profile-9bc946715355"
         ],
-        "assembled_ref_count": 2,
+        "assembled_ref_count": 3,
         "valid_citations": [
+          "ev-f2000cd796b44257",
           "mem-fm-b2120831d354868587d7",
-          "ev-3fa90afb41ed4f19"
+          "mem-profile-9bc946715355"
         ],
         "unverified_citations": [],
         "is_grounded": true
@@ -583,9 +569,13 @@
         "zero_unverified_refs": true
       },
       "ref_provenance_check": {
-        "cited_refs": [],
-        "assembled_ref_count": 0,
-        "valid_citations": [],
+        "cited_refs": [
+          "mem-profile-9bc946715355"
+        ],
+        "assembled_ref_count": 1,
+        "valid_citations": [
+          "mem-profile-9bc946715355"
+        ],
         "unverified_citations": [],
         "is_grounded": true
       }
@@ -655,28 +645,18 @@
       "scenario_id": 29,
       "category": "E8",
       "is_counterexample": false,
-      "verdict": "PASS",
-      "is_real_pass": true,
+      "verdict": "FAIL",
+      "is_real_pass": false,
       "reasons": [
-        "提醒取消指令执行准确，状态一致。"
+        "用户明确取消后，未能确认提醒已取消或误报仍有待办。"
       ],
       "checks": {
-        "reminder_canceled": true
+        "reminder_canceled": false
       },
       "ref_provenance_check": {
-        "cited_refs": [
-          "mem-fm-7808ce9b8c320eecd5e2",
-          "ev-dbb232f9bb984d14",
-          "mem-fm-781f4af9f22f94b90bd2",
-          "ev-c8f5e0231eba4248"
-        ],
-        "assembled_ref_count": 6,
-        "valid_citations": [
-          "mem-fm-7808ce9b8c320eecd5e2",
-          "ev-dbb232f9bb984d14",
-          "mem-fm-781f4af9f22f94b90bd2",
-          "ev-c8f5e0231eba4248"
-        ],
+        "cited_refs": [],
+        "assembled_ref_count": 0,
+        "valid_citations": [],
         "unverified_citations": [],
         "is_grounded": true
       }

@@ -421,13 +421,15 @@ async def _run(
     isolation_root = isolation_root.resolve()
     atlas_data_root = isolation_root / "atlas-data"
     memory_root = isolation_root / "memoryos-data"
+    hermes_home_root = isolation_root / "hermes-home"
     db_path = memory_root / "db" / "memoryos.sqlite3"
-    for path in (atlas_data_root, memory_root, db_path.parent):
+    for path in (atlas_data_root, memory_root, hermes_home_root, db_path.parent):
         path.mkdir(parents=True, exist_ok=True)
 
     os.environ["ATLAS_DATA_DIR"] = str(atlas_data_root)
     os.environ["MEMORYOS_DATA_ROOT"] = str(memory_root)
     os.environ["MEMORYOS_DB_PATH"] = str(db_path)
+    os.environ["HERMES_HOME"] = str(hermes_home_root)
     clear_inherited_gateway_credentials()
     if str(_CORE_ROOT) not in sys.path:
         sys.path.insert(0, str(_CORE_ROOT))
@@ -560,6 +562,7 @@ async def _run(
             "ATLAS_DATA_DIR": str(atlas_data_root),
             "MEMORYOS_DATA_ROOT": str(memory_root),
             "MEMORYOS_DB_PATH": str(db_path),
+            "HERMES_HOME": str(hermes_home_root),
         },
     )
 

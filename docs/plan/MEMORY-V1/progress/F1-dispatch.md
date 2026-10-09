@@ -1,5 +1,16 @@
 # F1 编排与文件所有权
 
+## 2026-10-09 总控当前已验证状态
+
+- 当前已推送 Atlas `5fe404c08953f4b6815cce62e20211f87af81987`，MemoryOS `759b1ed`；SSH 推送和 `git status -sb` / ahead-behind 0/0 已核验。历史脏文件继续排除。
+- A 字面/语义取 max 补修：总控 MemoryOS 425 passed，Atlas 271 passed / 2 skipped；总控真实 Qwen/CUDA HTTP 10/10 改述召回与 HARD_ERASE 验证通过，58174 服务已停止。
+- Gemini B：10×3 为 30 成功样本、31 中文文本（100%），保留样本27一次真实超时和续跑；原始证据与 DTemp SHA 一致。总控当前仓库脚本单段×3 全过，provider usage 15974/398，费用未知。总控最终 Atlas 276 tests（274 passed / 2 skipped）、MemoryOS 425 passed；helper 8/8 另行复跑。
+- D 定向测试由总控复跑 27/27；真实限1题尚未通过：第一次缺官方 evaluator 的 NumPy 依赖（已仅补隔离 target），第二次真实 observe HTTP 403，根因是 runner 固定 `atlas-fixture` 与每题服务 `f1d-<qid>` 主体不一致。B 正修 runner；两个失败根及日志原样保留，不计成功。正式12/120未启动。
+- 30场景由A负责真实WS入口/lifecycle；C独占 `scenario_actions.py` 适配与专项测试。已发现需补真实产品接线：S5任务书要求 capture 与 Observer 全部暂停，现API只停passive；S6提醒构件测试手工写 AutomationStore，不能代表自然语言真实接线。这两项不能通过伪动作验收。
+- S27 canonical 输入无建立“小满”的前置历史。未经授权增加真实 setup turn 同样改变评测输入，自动 setup 已撤回；先保留原步骤缺目标诊断，补充 fixture-backed 删除 probe 必须另列出处与额外输入，不能混进原30成绩。
+- 清理另6个旧Atlas测试进程和10个旧MemoryOS测试服务（20进程实例），身份、测试根及端口已核验；目标进程/监听归零，8045仍PID20808。证据 `D:/Temp/F1-orphan-audit-20261009/atlas-old-test-cleanup-proof.json`、`memoryos-ten-old-services-cleanup-proof.json`。未知MCP进程与生产数据未动。
+- F1仍在执行，未写最终 `progress/F1.md`、未改 `CURRENT`，未进入S7。
+
 ## 2026-10-09 用户续令（优先于下方原派单）
 
 - Observer、Reflector、回答及 judge 改用 `gemini-3.8-flash`，custom provider 的 Antigravity 反代 `http://127.0.0.1:8045/v1`。隔离 settings 复制 custom provider 元数据、custom_models、memory_model；Windows 凭据库密钥只在内存读取，不写文件或日志。

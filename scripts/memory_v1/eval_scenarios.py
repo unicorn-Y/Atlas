@@ -5,11 +5,11 @@ Runs all 30 acceptance scenarios defined in `01_验收场景.md`.
 Enforces strict isolation from production data roots (D:\\Atlas\\data, D:\\MemoryOSData).
 Saves structured execution results including:
 - Natural Chinese user input
-- Simulated / occurred_at timestamps
-- Observer outputs (formed observations)
+- Original scenario timestamps (recorded; live WS requests use Atlas runtime time)
+- Real MemoryOS record deltas and assembled recall refs
 - Assembled context refs (provenance tokens)
 - Model responses
-- Scenario action traces (model switches, erasures, edits, pause capture)
+- Scenario action traces from the real-action adapter; unsupported actions remain failed
 
 Output JSON can be evaluated directly by `eval_judge.py`.
 """
@@ -17,27 +17,31 @@ Output JSON can be evaluated directly by `eval_judge.py`.
 from __future__ import annotations
 
 import argparse
+import ast
 import asyncio
 import datetime
+import hashlib
 import json
 import os
+import re
+import socket
+import sqlite3
+import subprocess
 import sys
-import tempfile
+import time
+import uuid
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 # Ensure Atlas core is importable
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_DIR = REPO_ROOT / "core"
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
-
-try:  # 真记忆层（真 MemoryOS 服务 + 真 assemble_recall_context）
-    from scripts.memory_v1.real_memory import RealMemoryService, to_observation, SUBJECT
-except ModuleNotFoundError:  # 直接脚本运行时
+if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-    from scripts.memory_v1.real_memory import RealMemoryService, to_observation, SUBJECT
 
 # Production roots that must NEVER be touched during evaluation
 PRODUCTION_ROOTS = (
@@ -47,8 +51,9 @@ PRODUCTION_ROOTS = (
 )
 
 DEFAULT_RESULTS_PATH = Path(
-    r"D:\Atlas\docs\plan\MEMORY-V1\eval\scenario_eval_results.json"
+    r"D:\Temp\F1-D-scenarios\scenario_eval_results.json"
 )
+GEMINI_MODEL_ID = "gemini-3.8-flash"
 
 
 # =============================================================================
@@ -76,6 +81,8 @@ class ScenarioSpec:
     is_counterexample: bool  # True for ✗ items
     steps: list[ScenarioStep]
     acceptance_criteria: list[str]
+    runtime_capabilities: frozenset[str] = field(default_factory=frozenset, repr=False, compare=False)
+    workspace_files: tuple[str, ...] = field(default_factory=tuple, repr=False, compare=False)
 
 
 def get_all_scenarios() -> list[ScenarioSpec]:
@@ -827,6 +834,7 @@ def get_all_scenarios() -> list[ScenarioSpec]:
                 "回答中完全不出现'小满'或其关联信息",
                 "召回与画像中均已被彻底清除",
             ],
+            runtime_capabilities=frozenset({"hard_erase"}),
         ),
         ScenarioSpec(
             id=28,
@@ -908,6 +916,7 @@ def get_all_scenarios() -> list[ScenarioSpec]:
                 "提醒已被取消，回答中确认没有明天的待办提醒",
                 "不得出现已取消提醒继续触发",
             ],
+            runtime_capabilities=frozenset({"reminder_readonly_audit"}),
         ),
         ScenarioSpec(
             id=30,
@@ -944,6 +953,8 @@ def get_all_scenarios() -> list[ScenarioSpec]:
                 "知道先前的任务进度（file1.md 已完成）",
                 "从 file2.md 开始继续处理，不重复执行 file1.md",
             ],
+            runtime_capabilities=frozenset({"workspace_write_tools", "owned_process_kill"}),
+            workspace_files=("docs/file1.md", "docs/file2.md", "docs/file3.md"),
         ),
     ]
 
@@ -952,673 +963,1079 @@ def get_all_scenarios() -> list[ScenarioSpec]:
 # Execution Engine with Strict Root Isolation
 # =============================================================================
 
-async def _push_history_to_memory(scenario, state, mem_svc) -> None:
-    """把场景预置历史观察经真 facade 落库（真装配只读真库）。"""
-    obs_list = []
-    for idx, item in enumerate(state.get("history_observations", []), start=1):
-        text = item.get("text") or ""
-        if not text:
+def scenario_manifest_sha256() -> str:
+    payload = []
+    for scenario in get_all_scenarios():
+        manifest_row = asdict(scenario)
+        manifest_row.pop("runtime_capabilities", None)
+        manifest_row.pop("workspace_files", None)
+        payload.append(manifest_row)
+    canonical = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def is_control_action_step(step: ScenarioStep) -> bool:
+    return step.user_input.startswith("[系统模拟操作:")
+
+
+def build_run_start_message(
+    scenario: ScenarioSpec,
+    step: ScenarioStep,
+    *,
+    run_id: str,
+    conversation_id: str,
+    workspace: Path,
+    model_id: str = GEMINI_MODEL_ID,
+) -> dict[str, Any]:
+    if is_control_action_step(step):
+        raise ValueError("control action steps must not be sent to the model as chat")
+    if model_id != GEMINI_MODEL_ID:
+        raise ValueError(f"F1-D WS runs are pinned to {GEMINI_MODEL_ID}")
+    workspace_path = workspace.resolve()
+    write_tools = "workspace_write_tools" in scenario.runtime_capabilities
+    return {
+        "type": "run.start",
+        "run_id": run_id,
+        "content": step.user_input,
+        "conversation_id": conversation_id,
+        "model": GEMINI_MODEL_ID,
+        "workspace": str(workspace_path),
+        "mode": "act",
+        "permission_mode": "ask_writes" if write_tools else "read_only",
+        "allowed_paths": [str(workspace_path)],
+        "tool_allow": ["read_file", "write_file", "patch", "search_files"] if write_tools else [],
+        "tool_deny": [] if write_tools else ["*"],
+    }
+
+
+def summarize_run_events(run_id: str, events: list[dict[str, Any]]) -> dict[str, Any]:
+    response = ""
+    deltas: list[str] = []
+    terminal_event: str | None = None
+    model_used: str | None = None
+    usage: list[dict[str, Any]] = []
+    tool_calls: list[dict[str, Any]] = []
+    policy_events: list[dict[str, Any]] = []
+    for envelope in events:
+        if str(envelope.get("run_id") or "") != run_id:
             continue
-        obs_list.append(to_observation(
-            text,
-            session_id=f"scenario-{scenario.id}",
-            turn_index=0,
-            idx=idx,
-            occurred_at=item.get("occurred_at") or "2026-10-01 12:00:00",
-        ))
-    await mem_svc.push(obs_list, session_id=f"scenario-{scenario.id}")
+        event = str(envelope.get("event") or "")
+        data = envelope.get("data") or {}
+        if not isinstance(data, dict):
+            data = {}
+        if event == "message.completed":
+            response = str(data.get("content") or "")
+        elif event == "message.delta":
+            deltas.append(str(data.get("content") or ""))
+        elif event in {"run.completed", "run.failed", "run.cancelled"}:
+            terminal_event = event
+            model_used = str(data.get("model") or "") or model_used
+        elif event in {"run.usage", "usage"}:
+            usage.append({key: data[key] for key in (
+                "model", "provider", "input_tokens", "output_tokens", "total_tokens",
+                "cached_input_tokens", "provider_reported_cost_usd", "purpose",
+            ) if key in data})
+        elif event == "tool.completed":
+            tool_calls.append({
+                "tool_call_id": str(data.get("tool_call_id") or data.get("id") or ""),
+                "name": str(data.get("name") or ""),
+                "is_error": bool(data.get("is_error", False)),
+                "result": data.get("result"),
+            })
+        elif event in {"rules.trust_required", "rules.loaded", "approval.required", "approval.responded"}:
+            policy_events.append({"event": event, "data": data})
+    if not response and deltas:
+        response = "".join(deltas)
+    status = {
+        "run.completed": "completed",
+        "run.failed": "failed",
+        "run.cancelled": "cancelled",
+    }.get(terminal_event, "unknown")
+    return {
+        "run_id": run_id,
+        "status": status,
+        "terminal_event": terminal_event,
+        "assistant_response": response,
+        "model_used": model_used,
+        "usage": usage,
+        "tool_calls": tool_calls,
+        "policy_events": policy_events,
+    }
 
 
-async def _run_reflection(scenario, mem_svc) -> None:
-    """跑真反思者（S4）构建画像块/概括，供真装配的画像块读取。
+def _extract_assembled_refs(log_text: str, conversation_id: str) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for line in log_text.splitlines():
+        if "memory.recall_context.assembled" not in line:
+            continue
+        conv = re.search(r"\bconversation_id=([^\s]+)", line)
+        encoded = re.search(r"\bassembled_refs=(\[[^\]]*\])", line)
+        if not conv or conv.group(1) != conversation_id or not encoded:
+            continue
+        try:
+            values = ast.literal_eval(encoded.group(1))
+        except (SyntaxError, ValueError):
+            continue
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            ref = str(value).strip()
+            if ref.startswith("m:"):
+                ref = ref[2:]
+            if ref and ref not in seen:
+                seen.add(ref)
+                refs.append({"ref_id": ref})
+    return refs
 
-    生产里由 idle/daily 触发（server.py reflector_idle_loop）；评测原先从不触发，
-    导致画像块恒空，元问题场景（如"总结你对我的了解"）只能靠相关记忆块检索 ——
-    语义不匹配时召回为空，评测因此失真。
-    """
+
+def _read_capture_source_events(
+    atlas_data_root: Path, conversation_id: str | None = None,
+) -> dict[str, Any]:
+    """Read source IDs and ACK states from this isolated Atlas outbox, without source text."""
+    atlas_data_root = atlas_data_root.resolve()
+    if not _is_within(atlas_data_root, Path(r"D:\Temp")):
+        raise RuntimeError("capture evidence may only be read from an isolated D:\\Temp root")
+    path = atlas_data_root / "outbox" / "unified_outbox.sqlite3"
+    if not path.is_file():
+        return {"status": "not_created", "events": []}
+    events: list[dict[str, Any]] = []
     try:
-        from atlas.memory.reflector import MemoryReflector
-        from atlas.models import ModelManager
+        with sqlite3.connect(str(path), timeout=5.0) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT source_event_id,payload_json,content_hash,state,created_at,acked_at,last_error "
+                "FROM outbox_events ORDER BY id"
+            ).fetchall()
+        for row in rows:
+            try:
+                envelope = json.loads(row["payload_json"])
+            except (TypeError, ValueError):
+                continue
+            observation = envelope.get("observation") if isinstance(envelope, dict) else None
+            if not isinstance(observation, dict):
+                continue
+            content = observation.get("content") if isinstance(observation.get("content"), dict) else {}
+            context = envelope.get("context") if isinstance(envelope.get("context"), dict) else {}
+            if (conversation_id is not None
+                    and str(content.get("session_id") or "") != conversation_id
+                    and str(context.get("runtime_session_id") or "") != conversation_id):
+                continue
+            events.append({
+                "source_event_id": str(row["source_event_id"]),
+                "source_kind": observation.get("source_kind"),
+                "source_object_id": observation.get("source_object_id"),
+                "source_revision": observation.get("source_revision"),
+                "speaker_role": observation.get("speaker_role"),
+                "epistemic_kind": observation.get("epistemic_kind"),
+                "occurred_at": observation.get("occurred_at"),
+                "source_timezone": observation.get("source_timezone"),
+                "time_status": observation.get("time_status"),
+                "content_hash": str(row["content_hash"]),
+                "state": str(row["state"]),
+                "created_at": str(row["created_at"]),
+                "acked_at": row["acked_at"],
+                "has_error": bool(row["last_error"]),
+            })
+    except sqlite3.Error as exc:
+        return {"status": "read_failed", "error_type": type(exc).__name__, "events": []}
+    return {"status": "ok", "events": events}
 
-        reflector = MemoryReflector(model_manager=ModelManager())
-        await reflector.run_reflection_cycle(
-            subject=SUBJECT,
-            force=True,
-            auto_apply=True,
-            client=mem_svc.facade(),
-            ctx=mem_svc.context(session_id=f"scenario-{scenario.id}"),
-        )
-    except Exception as exc:  # noqa: BLE001 - 反思失败不应中断评测
-        print(f"[real-memory] 反思者跳过（scenario {scenario.id}）: {type(exc).__name__}: {exc}")
+
+def _capture_evidence_delta(
+    before: dict[str, Any], after: dict[str, Any], assembled_refs: list[dict[str, str]],
+    observer_output: list[dict[str, Any]],
+) -> dict[str, Any]:
+    before_ids = {str(event.get("source_event_id")) for event in before.get("events", [])}
+    new_events = [event for event in after.get("events", [])
+                  if str(event.get("source_event_id")) not in before_ids]
+    assembled = {str(item.get("ref_id") or "") for item in assembled_refs}
+    observer_refs = {str(item.get("record_ref") or "") for item in observer_output}
+    same_run_record_refs = sorted(ref for ref in assembled & observer_refs if ref)
+    acked = [event["source_event_id"] for event in new_events if event.get("state") == "ACKED"]
+    pending = [event["source_event_id"] for event in new_events if event.get("state") != "ACKED"]
+    return {
+        "outbox_before_status": before.get("status"),
+        "outbox_after_status": after.get("status"),
+        "new_source_events": new_events,
+        "new_source_ids": [event["source_event_id"] for event in new_events],
+        "acked_source_ids": acked,
+        "not_acked_source_ids": pending,
+        "ack_status": "all_acked" if new_events and not pending else (
+            "pending" if pending else "no_new_source_events"),
+        "same_run_record_refs_in_assembled_context": same_run_record_refs,
+    }
 
 
-async def _push_formed_to_memory(scenario, step, formed_observations, mem_svc) -> None:
-    """把本轮观察者抽取结果经真 facade 落库。"""
-    obs_list = []
-    for idx, ob in enumerate(formed_observations or [], start=1):
-        text = ob.get("text") if isinstance(ob, dict) else str(ob)
-        if not text:
-            continue
-        occurred = (ob.get("occurred_at") if isinstance(ob, dict) else None) or step.occurred_at
-        obs_list.append(to_observation(
-            text,
-            session_id=step.session_id or f"scenario-{scenario.id}",
-            turn_index=step.turn_index,
-            idx=idx,
-            occurred_at=occurred,
-        ))
-    await mem_svc.push(obs_list, session_id=step.session_id or f"scenario-{scenario.id}")
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
 
 
 def enforce_isolation(isolated_dir: Path) -> dict[str, str]:
-    """Ensure environment paths do not collide with production roots."""
+    """Create empty per-run roots; never copy or mutate a repository/user config."""
+    isolated_dir = isolated_dir.resolve()
     for prod_root in PRODUCTION_ROOTS:
-        try:
-            if isolated_dir.resolve().is_relative_to(prod_root.resolve()):
-                raise RuntimeError(
-                    f"Refusing to run: isolated_dir {isolated_dir} is inside production root {prod_root}"
-                )
-        except (AttributeError, ValueError):
-            pass
-
+        if _is_within(isolated_dir, prod_root):
+            raise RuntimeError(f"Refusing to run inside production root: {prod_root}")
+    for var, production in (
+        ("ATLAS_DATA_DIR", Path(r"D:\Atlas\data")),
+        ("MEMORYOS_DATA_ROOT", Path(r"D:\MemoryOSData")),
+        ("MEMORYOS_DB_PATH", Path(r"D:\MemoryOSData")),
+    ):
+        inherited = os.environ.get(var)
+        if inherited and Path(inherited).resolve() == production.resolve():
+            raise RuntimeError(f"Refusing inherited production path in {var}")
+    if isolated_dir.exists() and any(isolated_dir.iterdir()):
+        raise FileExistsError(f"isolated run directory is not empty: {isolated_dir}")
     isolated_dir.mkdir(parents=True, exist_ok=True)
     atlas_data = isolated_dir / "atlas_data"
     memoryos_data = isolated_dir / "memoryos_data"
     hermes_home = isolated_dir / "hermes_home"
-
-    for d in (atlas_data, memoryos_data, hermes_home):
-        d.mkdir(parents=True, exist_ok=True)
-
-    # Ensure isolated atlas config uses real model configuration instead of dummy example
-    source_toml = Path(r"D:\Atlas\config\atlas.toml")
-    target_toml = atlas_data / "config" / "atlas.toml"
-    if source_toml.exists() and not target_toml.exists():
-        target_toml.parent.mkdir(parents=True, exist_ok=True)
-        import shutil
-        shutil.copy2(source_toml, target_toml)
-
-    # Remove any existing outbox to reset budget snapshot for clean evaluation
-    for outbox_file in isolated_dir.glob("**/outbox.db*"):
-        try:
-            outbox_file.unlink()
-        except Exception:
-            pass
-
-    env_overrides = {
+    workspace = isolated_dir / "workspace"
+    for directory in (atlas_data, memoryos_data, hermes_home, workspace):
+        directory.mkdir(parents=True, exist_ok=True)
+    return {
         "ATLAS_DATA_DIR": str(atlas_data),
         "MEMORYOS_DATA_ROOT": str(memoryos_data),
-        "MEMORYOS_DB_PATH": str(memoryos_data / "unified_memory.db"),
+        "MEMORYOS_DB_PATH": str(memoryos_data / "db" / "memoryos.sqlite3"),
         "HERMES_HOME": str(hermes_home),
-        "ATLAS_TEST_MODE": "1",
+        "WORKSPACE": str(workspace),
     }
-    os.environ.update(env_overrides)
-    return env_overrides
 
 
-def _apply_model_config() -> None:
-    from atlas import config as atlas_config
-    from atlas.config import AtlasConfig
-    import atlas.models.manager as model_manager_module
+@contextmanager
+def _temporary_environment(values: dict[str, str]) -> Iterator[None]:
+    original = dict(os.environ)
+    try:
+        os.environ.clear()
+        os.environ.update(values)
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(original)
 
-    config_path = Path(os.environ.get(
-        "ATLAS_MEMORY_V1_MODEL_CONFIG_READONLY", r"D:\Atlas\config\atlas.toml",
-    )).resolve()
+
+def _runtime_environment(
+    roots: dict[str, str], *, api_token: str, subject_id: str,
+    scenario: ScenarioSpec | None = None,
+) -> dict[str, str]:
+    env = {
+        key: os.environ[key]
+        for key in (
+            "PATH", "SystemRoot", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT",
+            "COMPUTERNAME", "USERNAME", "USERDOMAIN",
+        ) if os.environ.get(key)
+    }
+    root = Path(roots["ATLAS_DATA_DIR"]).parent
+    home = root / "home"
+    for name in ("appdata", "localappdata", "temp"):
+        (home / name).mkdir(parents=True, exist_ok=True)
+    env.update({
+        "HOME": str(home), "USERPROFILE": str(home),
+        "APPDATA": str(home / "appdata"), "LOCALAPPDATA": str(home / "localappdata"),
+        "TEMP": str(home / "temp"), "TMP": str(home / "temp"),
+        "ATLAS_DATA_DIR": roots["ATLAS_DATA_DIR"],
+        "ATLAS_API_TOKEN": api_token,
+        "HERMES_HOME": roots["HERMES_HOME"],
+        "MEMORYOS_DATA_ROOT": roots["MEMORYOS_DATA_ROOT"],
+        "MEMORYOS_DB_PATH": roots["MEMORYOS_DB_PATH"],
+        "MEMORYOS_INTERNAL_TOKEN": "test-internal-token",
+        "MEMORYOS_OWNER_TOKEN": "test-owner-token",
+        "MEMORYOS_MEMORY_SUBJECT_ID": subject_id,
+        "MEMORYOS_MEMORY_SUBJECT_ALIASES": "atlas-fixture",
+        "PYTHONPATH": str(CORE_DIR), "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8", "PYTHONDONTWRITEBYTECODE": "1",
+        "NO_PROXY": "127.0.0.1,localhost", "no_proxy": "127.0.0.1,localhost",
+    })
+    for var in ("ATLAS_API_KEY", "ATLAS_API_BASE", "OPENAI_API_KEY", "GOOGLE_API_KEY",
+                "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY"):
+        env.pop(var, None)
+    if scenario and "hard_erase" in scenario.runtime_capabilities:
+        env["MEMORYOS_HARD_ERASE_ENABLED"] = "true"
+    return env
+
+
+def _write_isolated_atlas_config(atlas_data_root: Path, memory_url: str, subject_id: str) -> Path:
+    config_path = atlas_data_root / "config" / "atlas.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        "[models]\n"
+        f'default = "{GEMINI_MODEL_ID}"\n'
+        "fallback = []\n\n"
+        "[models.gateway]\nbase_url = \"\"\napi_key = \"\"\n\n"
+        '[agent]\nengine = "hermes"\nverify_before_stop = false\n\n'
+        "[tools]\nauto_start = []\n\n"
+        "[scheduler]\nenabled = false\n\n"
+        "[memory.v1]\nobserver_daily_token_budget = 5000000\n\n"
+        "[memory.unified]\n"
+        "enabled = true\n"
+        f'service_url = "{memory_url}"\n'
+        'internal_token = "test-internal-token"\n'
+        f'subject_binding = "{subject_id}"\n'
+        "timeout_seconds = 30.0\n",
+        encoding="utf-8",
+    )
+    return config_path
+
+
+def _write_isolated_hermes_config(hermes_home: Path) -> Path:
+    hermes_home = hermes_home.resolve()
+    if not _is_within(hermes_home, Path(r"D:\Temp")):
+        raise RuntimeError("Hermes config may only be written under the isolated D:\\Temp root")
+    hermes_home.mkdir(parents=True, exist_ok=True)
+    config_path = hermes_home / "config.yaml"
     if config_path.exists():
+        raise FileExistsError(f"refusing to overwrite existing isolated Hermes config: {config_path}")
+    config_path.write_text(
+        "fallback_providers: []\n"
+        "fallback_model: []\n"
+        "auxiliary:\n"
+        "  memory_observe:\n"
+        "    timeout: 120\n"
+        "    fallback_chain: []\n"
+        "  memory_reflect:\n"
+        "    timeout: 120\n"
+        "    fallback_chain: []\n",
+        encoding="utf-8",
+    )
+    return config_path
+
+
+class AtlasEvalClient:
+    def __init__(self, base_url: str, api_token: str, workspace: Path) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.api_token = api_token
+        self.workspace = workspace.resolve()
+
+    def request(self, method: str, path: str, *, json_body: Any = None,
+                params: dict[str, Any] | None = None) -> dict[str, Any]:
+        import httpx
+
+        response = httpx.request(
+            method, self.base_url + path, json=json_body, params=params,
+            headers={"x-atlas-api-token": self.api_token}, timeout=30.0, trust_env=False,
+        )
         try:
-            import tomllib
-        except ModuleNotFoundError:
-            import tomli as tomllib
-        raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        raw.setdefault("memory", {}).setdefault("v1", {})["observer_daily_token_budget"] = 5_000_000
-        config = AtlasConfig(raw)
-        atlas_config.get_config = lambda: config
-        model_manager_module.get_config = lambda: config
-        atlas_config.load_user_settings = lambda path=None: {
-            "memory_model": "deepseek-v4.1-flash",
-            "default_model": "deepseek-v4.1-flash",
+            body = response.json()
+        except ValueError:
+            body = {"text": response.text[:4000]}
+        return {"status_code": response.status_code, "body": body}
+
+    def chat(self, message: dict[str, Any], *, timeout: float = 180.0) -> dict[str, Any]:
+        from websockets.sync.client import connect
+
+        run_id = str(message["run_id"])
+        url = self.base_url.replace("http://", "ws://", 1).replace("https://", "wss://", 1) + "/ws/chat"
+        events: list[dict[str, Any]] = []
+        with connect(url, additional_headers={"x-atlas-api-token": self.api_token},
+                     max_size=8_000_000, close_timeout=5) as ws:
+            ws.send(json.dumps(message, ensure_ascii=False))
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(f"Atlas run {run_id} timed out after {timeout:.0f}s")
+                envelope = json.loads(ws.recv(timeout=remaining))
+                events.append(envelope)
+                event = str(envelope.get("event") or "")
+                data = envelope.get("data") or {}
+                if not isinstance(data, dict):
+                    data = {}
+                if event == "rules.trust_required":
+                    root = Path(str(data.get("root") or "")).resolve()
+                    ws.send(json.dumps({"type": "rules.trust", "run_id": run_id,
+                                        "trust": root == self.workspace}))
+                elif event == "approval.required":
+                    approval_id = str(data.get("approval_id") or data.get("event_id") or "")
+                    permitted = self._approval_is_workspace_file_write(data)
+                    ws.send(json.dumps({"type": "approval.response", "event_id": approval_id,
+                                        "choice": "allow" if permitted else "deny"}))
+                if (str(envelope.get("run_id") or "") == run_id
+                        and event in {"run.completed", "run.failed", "run.cancelled"}):
+                    break
+        summary = summarize_run_events(run_id, events)
+        summary["events"] = events
+        return summary
+
+    def _approval_is_workspace_file_write(self, data: dict[str, Any]) -> bool:
+        tool = str(data.get("tool") or "")
+        inputs = data.get("input") if isinstance(data.get("input"), dict) else {}
+        if tool == "write_file":
+            candidates = [str(inputs.get("path") or "")]
+        elif tool == "patch":
+            patch = str(inputs.get("patch") or "")
+            candidates = re.findall(r"^\*\*\* (?:Update|Add|Delete) File: (.+)$", patch, re.M)
+            candidates.extend(re.findall(r"^\*\*\* Move to: (.+)$", patch, re.M))
+            for source, destination in re.findall(r"^\*\*\* Move File: (.+?)\s*->\s*(.+)$", patch, re.M):
+                candidates.extend((source, destination))
+        else:
+            return False
+        if not candidates:
+            return False
+        for candidate in candidates:
+            target = Path(candidate)
+            if not target.is_absolute():
+                target = self.workspace / target
+            if not _is_within(target, self.workspace):
+                return False
+        return True
+
+
+class MemoryOSIsolationClient:
+    def __init__(self, base_url: str, subject_id: str) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.subject_id = subject_id
+
+    def request(self, method: str, path: str, *, json_body: Any = None,
+                params: dict[str, Any] | None = None, owner: bool = False) -> dict[str, Any]:
+        import httpx
+
+        headers = {"Authorization": "Bearer test-internal-token"}
+        if owner:
+            headers["X-MemoryOS-Owner-Token"] = "test-owner-token"
+        response = httpx.request(
+            method, self.base_url + path, json=json_body, params=params,
+            headers=headers, timeout=30.0, trust_env=False,
+        )
+        try:
+            body = response.json()
+        except ValueError:
+            body = {"text": response.text[:4000]}
+        return {"status_code": response.status_code, "body": body}
+
+    def records(self, facet: str | None = None) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            params: dict[str, Any] = {"limit": 200, "memory_subject_id": self.subject_id}
+            if facet:
+                params["facet"] = facet
+            if cursor:
+                params["cursor"] = cursor
+            result = self.request("GET", "/v1/unified/records", params=params)
+            if result["status_code"] != 200 or not isinstance(result["body"], dict):
+                raise RuntimeError(f"MemoryOS records read failed (HTTP {result['status_code']})")
+            page = result["body"]
+            items = page.get("items", [])
+            if isinstance(items, list):
+                records.extend(item for item in items if isinstance(item, dict))
+            cursor = page.get("next_cursor")
+            if not cursor:
+                return records
+
+
+class AtlasProcessLifecycle:
+    """One isolated Atlas listener; cleanup checks PID and creation time before signaling."""
+
+    def __init__(self, *, python: Path, runtime_root: Path, env: dict[str, str],
+                 workspace: Path, api_token: str) -> None:
+        self.python = python.resolve()
+        self.runtime_root = runtime_root.resolve()
+        self.env = dict(env)
+        self.workspace = workspace.resolve()
+        self.api_token = api_token
+        self.port = self._free_port()
+        self.log_path = self.runtime_root / "logs" / "atlas.log"
+        self.process: subprocess.Popen[bytes] | None = None
+        self.log_handle = None
+        self.owned: dict[int, float] = {}
+        self.client = AtlasEvalClient(f"http://127.0.0.1:{self.port}", api_token, self.workspace)
+        self.route_metadata: dict[str, Any] = {}
+
+    @staticmethod
+    def _free_port() -> int:
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
+
+    def start(self) -> dict[str, Any]:
+        if self.process is not None and self.process.poll() is None:
+            raise RuntimeError("Atlas lifecycle is already running")
+        if not self.python.is_file():
+            raise FileNotFoundError(f"Atlas service interpreter does not exist: {self.python}")
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.log_handle = self.log_path.open("ab")
+        self.process = subprocess.Popen(
+            [str(self.python), "-m", "uvicorn", "atlas.server:app", "--host", "127.0.0.1",
+             "--port", str(self.port)],
+            cwd=str(CORE_DIR), env=self.env, stdout=self.log_handle, stderr=subprocess.STDOUT,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        self._capture_owned_processes()
+        self._wait_ready()
+        return dict(self.route_metadata)
+
+    def _wait_ready(self, timeout: float = 120.0) -> None:
+        deadline = time.monotonic() + timeout
+        last = "not yet responding"
+        while time.monotonic() < deadline:
+            if self.process is None or self.process.poll() is not None:
+                raise RuntimeError(f"Atlas exited during startup; log={self.log_path}")
+            try:
+                health = self.client.request("GET", "/api/health")
+                if health["status_code"] == 200:
+                    config = self.client.request("GET", "/api/settings/configuration")
+                    if config["status_code"] == 200 and isinstance(config["body"], dict):
+                        body = config["body"]
+                        models = body.get("models", [])
+                        model = next((item for item in models if item.get("id") == GEMINI_MODEL_ID), None)
+                        if body.get("current") != GEMINI_MODEL_ID or not model:
+                            raise RuntimeError("isolated Atlas did not load the fixed Gemini model")
+                        if model.get("provider") != "custom":
+                            raise RuntimeError("isolated Gemini model did not resolve to provider=custom")
+                        self.route_metadata = {
+                            "model_id": GEMINI_MODEL_ID,
+                            "provider_id": "custom",
+                            "provider_endpoint_host": self.env.get("F1D_PROVIDER_ENDPOINT_HOST", "127.0.0.1:8045"),
+                            "credential_value_recorded": False,
+                        }
+                        return
+                last = f"health HTTP {health['status_code']}"
+            except RuntimeError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                last = type(exc).__name__
+            time.sleep(0.5)
+        raise TimeoutError(f"isolated Atlas did not become ready in {timeout:.0f}s ({last})")
+
+    def _capture_owned_processes(self) -> None:
+        if self.process is None:
+            return
+        import psutil
+
+        try:
+            root = psutil.Process(self.process.pid)
+        except psutil.NoSuchProcess:
+            return
+        self.owned[root.pid] = root.create_time()
+        for child in root.children(recursive=True):
+            try:
+                self.owned[child.pid] = child.create_time()
+            except psutil.NoSuchProcess:
+                pass
+
+    def _matching_processes(self):
+        import psutil
+
+        processes = []
+        for pid, created in self.owned.items():
+            try:
+                process = psutil.Process(pid)
+                if abs(process.create_time() - created) < 0.001:
+                    processes.append(process)
+            except psutil.NoSuchProcess:
+                pass
+        return processes
+
+    def _signal_owned_processes(self, *, force: bool) -> None:
+        import psutil
+
+        processes = self._matching_processes()
+        for process in reversed(processes):
+            try:
+                if abs(process.create_time() - self.owned[process.pid]) < 0.001:
+                    process.kill() if force else process.terminate()
+            except psutil.NoSuchProcess:
+                pass
+        _, alive = psutil.wait_procs(processes, timeout=5)
+        if alive and not force:
+            self._signal_owned_processes(force=True)
+            return
+        if alive:
+            raise RuntimeError("owned Atlas processes survived identity-checked cleanup")
+
+    def _close_process_handles(self) -> None:
+        if self.process is not None:
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(f"Atlas process {self.process.pid} remains after cleanup") from exc
+            self.process = None
+        if self.log_handle is not None:
+            self.log_handle.close()
+            self.log_handle = None
+
+    def stop(self) -> None:
+        if self.process is None:
+            return
+        self._capture_owned_processes()
+        self._signal_owned_processes(force=False)
+        self._close_process_handles()
+
+    def crash(self) -> dict[str, Any]:
+        if self.process is None or self.process.poll() is not None:
+            raise RuntimeError("no live owned Atlas process to crash")
+        pid = self.process.pid
+        created = self.owned.get(pid)
+        self._capture_owned_processes()
+        self._signal_owned_processes(force=True)
+        self._close_process_handles()
+        return {"pid": pid, "creation_time": created, "port": self.port, "terminated": True}
+
+    def restart(self) -> dict[str, Any]:
+        self.stop()
+        self.owned.clear()
+        route = self.start()
+        return {
+            "pid": self.process.pid if self.process else None,
+            "port": self.port,
+            "creation_time": self.owned.get(self.process.pid) if self.process else None,
+            "route": route,
         }
+
+    def read_log(self) -> str:
+        try:
+            return self.log_path.read_text(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            return ""
+
+
+@dataclass
+class ScenarioActionContext:
+    scenario_id: int
+    step: ScenarioStep
+    atlas: AtlasEvalClient
+    memory: MemoryOSIsolationClient
+    lifecycle: AtlasProcessLifecycle
+    workspace: Path
+    artifact_dir: Path
+    subject_id: str
+    state: dict[str, Any]
+    runtime_capabilities: frozenset[str] = field(default_factory=frozenset)
+    workspace_files: tuple[str, ...] = ()
+
+
+def _apply_step_action(action: str, payload: dict[str, Any], ctx: ScenarioActionContext) -> dict[str, Any]:
+    try:
+        try:
+            from scripts.memory_v1.scenario_actions import apply_step_action
+        except ModuleNotFoundError as exc:
+            if exc.name != "scripts.memory_v1.scenario_actions":
+                raise
+            from scenario_actions import apply_step_action  # type: ignore[no-redef]
+    except ModuleNotFoundError:
+        return {"action": action, "status": "unsupported",
+                "detail": "scenario_actions adapter is not present in this checkout"}
+    result = apply_step_action(action, payload, ctx)
+    if not isinstance(result, dict) or result.get("status") not in {"ok", "failed", "unsupported"}:
+        return {"action": action, "status": "failed", "detail": "adapter returned an invalid result"}
+    return result
+
+
+def _audit_reminder_state(ctx: ScenarioActionContext) -> dict[str, Any]:
+    try:
+        try:
+            from scripts.memory_v1.scenario_actions import audit_reminder_state
+        except ModuleNotFoundError as exc:
+            if exc.name != "scripts.memory_v1.scenario_actions":
+                raise
+            from scenario_actions import audit_reminder_state  # type: ignore[no-redef]
+    except ModuleNotFoundError:
+        return {
+            "action": "reminder_readonly_audit", "status": "unsupported",
+            "detail": "scenario_actions reminder audit is not present in this checkout",
+        }
+    result = audit_reminder_state(ctx)
+    if not isinstance(result, dict) or result.get("status") not in {"ok", "failed", "unsupported"}:
+        return {
+            "action": "reminder_readonly_audit", "status": "failed",
+            "detail": "reminder audit returned an invalid result",
+        }
+    return result
+
+
+def _records_delta(before: list[dict[str, Any]], after: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    old = {str(item.get("record_ref") or ""): item for item in before if item.get("record_ref")}
+    return [item for item in after if item.get("record_ref") and
+            (str(item["record_ref"]) not in old or old[str(item["record_ref"])] != item)]
 
 
 async def run_scenario_step(
     scenario: ScenarioSpec,
     step: ScenarioStep,
+    *,
+    atlas: AtlasEvalClient,
+    memory: MemoryOSIsolationClient,
+    lifecycle: AtlasProcessLifecycle,
+    workspace: Path,
+    artifact_dir: Path,
+    subject_id: str,
     state: dict[str, Any],
-    dry_run: bool = False,
-    model_name: str | None = None,
 ) -> dict[str, Any]:
-    """Execute a single step of a scenario."""
-    action_info: dict[str, Any] = {}
-    
-    # Handle state mutations before step execution
-    if step.action == "pause_capture":
-        state["capture_paused"] = True
-        action_info = {"action": "pause_capture", "status": "ok"}
-    elif step.action == "resume_capture":
-        state["capture_paused"] = False
-        action_info = {"action": "resume_capture", "status": "ok"}
-    elif step.action == "switch_model":
-        target = step.action_payload.get("model", "deepseek-v4.1-flash")
-        if target in ("gpt-4o", "claude-sonnet-4", "gpt-4o-mini"):
-            target = "deepseek-v4.1-flash"
-        state["current_model"] = target
-        action_info = {"action": "switch_model", "target": state["current_model"]}
-    elif step.action == "edit_memory":
-        state["edits"].append(step.action_payload)
-        action_info = {"action": "edit_memory", "payload": step.action_payload}
-    elif step.action == "delete_memory":
-        state["deletions"].append(step.action_payload)
-        action_info = {"action": "delete_memory", "payload": step.action_payload}
-    elif step.action == "kill_process":
-        state["interrupted_state"] = step.action_payload
-        action_info = {"action": "kill_process", "saved_state": step.action_payload}
-
-    if any(k in step.user_input for k in ["取消明天", "取消那个提醒", "取消交报告"]):
-        state["history_observations"] = [
-            o for o in state.get("history_observations", [])
-            if not any(k in o.get("text", "") for k in ["提醒", "报告"])
-        ]
-        state["history_observations"].append({
-            "text": "用户已取消明天交报告的提醒，明天没有任何待办提醒。",
-            "occurred_at": step.occurred_at,
-            "event_id": f"ref_{scenario.id}_{step.turn_index}",
-            "source_event_id": f"evt_{scenario.id}_{step.turn_index}",
-        })
-
-    if dry_run:
-        # Return structured dry-run simulation payload
-        return {
-            "turn_index": step.turn_index,
-            "session_id": step.session_id,
-            "occurred_at": step.occurred_at,
-            "user_input": step.user_input,
-            "action": step.action,
-            "action_info": action_info,
-            "observer_output": [
-                {
-                    "text": f"Observed facts for {step.user_input[:20]}...",
-                    "priority": "HIGH" if "过敏" in step.user_input else "MEDIUM",
-                    "occurred_at": step.occurred_at,
-                    "event_id": f"evt_{scenario.id}_{step.turn_index}",
-                }
-            ] if not state.get("capture_paused") else [],
-            "assembled_refs": [
-                {
-                    "ref_id": f"ref_{scenario.id}_{step.turn_index}",
-                    "text": step.user_input,
-                    "source_event_id": f"evt_{scenario.id}_{step.turn_index}",
-                    "occurred_at": step.occurred_at,
-                }
-            ],
-            "assistant_response": f"[DRY-RUN RESPONSE to '{step.user_input}']",
-            "model_used": state.get("current_model", model_name or "claude-sonnet-4"),
-            "dry_run": True,
-        }
-
-    # Live execution with real models and isolated pipeline
-    _apply_model_config()
-    from atlas.models import ModelManager
-    from atlas.memory.recall_context import (
-        PROVENANCE_SYSTEM_INSTRUCTION,
-        is_personal_memory_relevant,
-        to_short_ref,
+    action_info = None
+    ctx = ScenarioActionContext(
+        scenario.id, step, atlas, memory, lifecycle, workspace, artifact_dir, subject_id, state,
+        runtime_capabilities=scenario.runtime_capabilities,
+        workspace_files=scenario.workspace_files,
     )
-
-    mm = ModelManager()
-    active_model = state.get("current_model") or model_name or "deepseek-v4.1-flash"
-    router = mm.model_router
-
-    # 1. Memory Observer processing via real MemoryObserver (add_messages / resume)
-    formed_observations: list[dict[str, Any]] = []
-    if not state.get("capture_paused") and not step.user_input.startswith("[系统模拟操作"):
-        from atlas.memory.observer import MemoryObserver
-        from atlas.config import AtlasConfig
-
-        # 观察者日预算必须与 _apply_model_config 一致（否则回落默认 5 万 → 评测中途
-        # budget_deferred，后半场景无观察 → 必然 FAIL，评测失真）
-        cfg = AtlasConfig({"memory": {"unified": {"enabled": True},
-                                      "v1": {"observer_daily_token_budget": 5_000_000}}})
-        obs = MemoryObserver(model_manager=mm, config=cfg)
-
-        now_iso = step.occurred_at if "T" in step.occurred_at else step.occurred_at.replace(" ", "T")
-        if not ("+" in now_iso or "Z" in now_iso):
-            now_iso += "+08:00"
-
-        source_evt_id = f"evt_{scenario.id}_{step.turn_index}"
-        src_msg = {
-            "source_event_id": source_evt_id,
-            "source_kind": "USER_MESSAGE",
-            "source_object_id": f"msg_{scenario.id}_{step.turn_index}",
-            "source_revision": "1",
-            "content": {"text": step.user_input},
-            "text": step.user_input,
-            "speaker_role": "USER",
-            "epistemic_kind": "USER_ASSERTED",
-            "occurred_at": now_iso,
-        }
-        try:
-            # Genuine MemoryObserver interface: add_messages with session_ended=True
-            batch = await obs.add_messages(step.session_id, [src_msg], session_ended=True)
-            if batch is not None and batch.payload:
-                obs_list = batch.payload.get("observations", [])
-                for o_idx, item in enumerate(obs_list):
-                    c_dict = item.get("content", {}) if isinstance(item.get("content"), dict) else {}
-                    t = c_dict.get("text") or item.get("text") or ""
-                    p = item.get("priority") or c_dict.get("priority") or "MEDIUM"
-                    ref_id = f"ref_{scenario.id}_{step.turn_index}_{o_idx + 1}" if len(obs_list) > 1 else f"ref_{scenario.id}_{step.turn_index}"
-                    formed_observations.append({
-                        "text": t,
-                        "priority": p,
-                        "occurred_at": step.occurred_at,
-                        "event_id": ref_id,
-                        "source_event_id": source_evt_id,
-                        "original_utterance": step.user_input,
-                    })
-                await obs.ack_batch(batch.batch_id)
-            elif obs.pending_sessions():
-                resumed_batch = await obs.resume(step.session_id, session_ended=True)
-                if resumed_batch is not None and resumed_batch.payload:
-                    for item in resumed_batch.payload.get("observations", []):
-                        c_dict = item.get("content", {}) if isinstance(item.get("content"), dict) else {}
-                        t = c_dict.get("text") or item.get("text") or ""
-                        p = item.get("priority") or c_dict.get("priority") or "MEDIUM"
-                        formed_observations.append({
-                            "text": t,
-                            "priority": p,
-                            "occurred_at": step.occurred_at,
-                            "event_id": f"ref_{scenario.id}_{step.turn_index}",
-                            "source_event_id": source_evt_id,
-                            "original_utterance": step.user_input,
-                        })
-                    await obs.ack_batch(resumed_batch.batch_id)
-        except Exception as e:
-            # Fallback if model fails or format error
-            formed_observations.append({
-                "text": f"observer_error: {e}",
-                "priority": "LOW",
-                "occurred_at": step.occurred_at,
-                "event_id": f"ref_{scenario.id}_{step.turn_index}",
-                "source_event_id": source_evt_id,
-                "original_utterance": step.user_input,
+    if step.action:
+        action_info = _apply_step_action(step.action, step.action_payload, ctx)
+        state["action_results"].append(action_info)
+        if action_info.get("status") != "ok":
+            state["execution_errors"].append({
+                "kind": "action", "turn_index": step.turn_index,
+                "action": step.action, "status": action_info.get("status"),
             })
-    elif step.user_input.startswith("[系统模拟操作") and "我住在北京" in step.user_input:
-        ref_id = f"ref_{scenario.id}_{step.turn_index}"
-        formed_observations.append({
-            "text": "用户以前住在北京朝阳区。",
-            "priority": "MEDIUM",
-            "occurred_at": step.occurred_at,
-            "event_id": ref_id,
-            "source_event_id": f"evt_{scenario.id}_{step.turn_index}",
-            "original_utterance": step.user_input,
-        })
-
-    # Apply memory edits / deletions to existing observations
-    history = list(state.get("history_observations", []))
-    for edit in state.get("edits", []):
-        target = edit.get("target_entity") or edit.get("old_value") or edit.get("old")
-        new_val = edit.get("new_value") or edit.get("new")
-        if target and new_val:
-            for obs in history:
-                if target in obs.get("text", ""):
-                    obs["text"] = obs["text"].replace(target, new_val)
-
-    deletions = [d.get("target_entity") or d.get("entity") for d in state.get("deletions", [])]
-    if deletions:
-        history = [obs for obs in history if not any(d and d in obs.get("text", "") for d in deletions)]
-
-    # 2. Context assembly / recall —— 真装配（走 assemble_recall_context 真函数）
-    assembled_refs: list[dict[str, Any]] = []
-    recalled_context_texts: list[str] = []
-    gate_info: dict[str, Any] = {}
-    profile_block_text = ""
-
-    mem_svc = state.get("memory_service")
-    if mem_svc is not None:
-        # 真召回：此刻库内只有历史观察（本轮观察尚未落库，与生产 run_phases 语义一致 ——
-        # Observer 在回合末才触发）。若把本轮自身先落库，召回会被"本轮提问"自匹配挤占。
-        recall_res = await mem_svc.recall(
-            step.user_input, session_id=step.session_id or f"scenario-{scenario.id}"
-        )
-        gate_info = {
-            "gate_passed": recall_res.gate_passed,
-            "gate_score": recall_res.gate_score,
-            "gate_reason": recall_res.gate_reason,
-            "conflicts_count": len(recall_res.conflicts_detected or []),
+    if is_control_action_step(step):
+        return {
+            "turn_index": step.turn_index, "session_id": step.session_id,
+            "occurred_at": step.occurred_at, "user_input": step.user_input,
+            "action": step.action, "action_info": action_info,
+            "message_transport": "action_adapter",
+            "execution_status": action_info.get("status", "unsupported") if action_info else "failed",
         }
-        profile_block_text = recall_res.profile_block or ""
-        # assembled_ref_map 是 short_ref -> full_ref；正文从 raw_recall.context_items 取
-        short_by_full = {v: k for k, v in (recall_res.assembled_ref_map or {}).items()}
-        text_by_ref: dict[str, str] = {}
-        for item in ((recall_res.raw_recall or {}).get("context_items") or []):
-            if isinstance(item, dict):
-                rr = item.get("record_ref") or item.get("id") or ""
-                c = item.get("content")
-                txt = c.get("text") if isinstance(c, dict) else (str(c) if c else "")
-                if rr:
-                    text_by_ref[rr] = txt or ""
-        for full in (recall_res.assembled_refs or []):
-            assembled_refs.append({
-                "ref_id": short_by_full.get(full, full),
-                "full_ref": full,
-                "text": text_by_ref.get(full, ""),
-            })
-        if recall_res.relevant_memory_block:
-            recalled_context_texts.append(recall_res.relevant_memory_block)
-    else:
-        # 回退：无真服务时保留原进程内装配（仅供 dry_run/离线调试，不作为验收证据）
-        is_relevant, _, _ = is_personal_memory_relevant(step.user_input)
-        if is_relevant:
-            if scenario.id == 20:
-                diet_items = [it for it in history if any(k in it.get("text", "") for k in ["减肥", "减脂", "低碳", "控糖", "瘦了"])]
-                if diet_items:
-                    ref_id = diet_items[0].get("event_id", f"ref_{scenario.id}_1")
-                    assembled_refs.append({
-                        "ref_id": ref_id,
-                        "text": "用户持续进行减肥健康减脂计划（已合并5次陈述出处）",
-                        "source_event_id": f"evt_{scenario.id}_consolidated",
-                        "occurred_at": diet_items[-1].get("occurred_at"),
-                    })
-                    recalled_context_texts.append(f"- [m:{ref_id}] (当前 | 已合并): 用户持续进行减肥健康减脂计划")
-            else:
-                sorted_history = list(history)
-                if scenario.id == 18:
-                    sorted_history = sorted(sorted_history, key=lambda x: x.get("occurred_at", ""), reverse=True)
-                for idx, item in enumerate(sorted_history, start=1):
-                    text = item.get("text", "")
-                    ref_id = item.get("event_id", f"ref_{scenario.id}_{idx}")
-                    occurred_at = item.get("occurred_at", "")
-                    conflict_tag = " | 【有冲突/有多个候选】" if (scenario.id == 7 and "老王" in text) else ""
-                    status_label = "当前"
-                    if scenario.id == 16:
-                        status_label = "历史(原定)" if "周三" in text else "当前"
-                    elif scenario.id == 17:
-                        status_label = "历史(已过期)"
-                    elif scenario.id == 18:
-                        status_label = "历史(旧数据)" if "北京" in text else "当前(最新)"
-                    elif scenario.id == 19:
-                        status_label = "历史(曾用)" if "Windows" in text else "当前(现用)"
-                    assembled_refs.append({
-                        "ref_id": ref_id,
-                        "text": text,
-                        "source_event_id": item.get("source_event_id", ref_id),
-                        "occurred_at": occurred_at,
-                    })
-                    date_str = occurred_at[:10] if occurred_at else "记录"
-                    recalled_context_texts.append(f"- [m:{ref_id}] ({date_str} | {status_label}{conflict_tag}): {text}")
 
-    # Record current observations into scenario history AFTER assembly for current turn
-    state.setdefault("history_observations", []).extend(formed_observations)
-
-    # 3. Model generation via ModelRouter
-    system_prompt_parts = ["你是 Atlas 个人智能助理。", PROVENANCE_SYSTEM_INSTRUCTION]
-    if state.get("interrupted_state"):
-        saved = state["interrupted_state"]
-        system_prompt_parts.append(
-            f"【断点续做恢复】此前文件处理任务中断已恢复，已完成步骤：{saved.get('completed_steps', [])}，请继续后续步骤（file2），勿重复执行已完成步骤。"
-        )
-
-    messages = [
-        {"role": "system", "content": "\n\n".join(system_prompt_parts)},
-    ]
-    # 画像块（稳定）注入 —— 与生产 run_phases._phase_context 一致：反思者维护的
-    # 「我对用户的了解」放系统提示词靠前稳定位（便于 Prompt Cache）。此前 harness
-    # 只注入相关记忆块、漏注入画像块，使元问题场景（总结你的了解 / 女儿叫什么 /
-    # 用什么电脑）检索不到具体事实而失真。
-    if profile_block_text:
-        messages.append({"role": "system", "content": profile_block_text})
-    if recalled_context_texts:
-        messages.append({
-            "role": "system",
-            "content": (
-                "【本轮相关记忆】\n"
-                "以下是经过验证的与当前用户相关的背景事实、偏好与约定记录。在回答涉及这些事实时，请主动结合并在对应陈述处标注引用的 [m:<ref>] 标号：\n"
-                + "\n".join(recalled_context_texts)
-            ),
+    conversation_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"f1-d:{scenario.id}:{step.session_id}"))
+    run_id = str(uuid.uuid4())
+    message = build_run_start_message(
+        scenario, step, run_id=run_id, conversation_id=conversation_id,
+        workspace=workspace,
+    )
+    atlas_data_root = lifecycle.runtime_root / "atlas_data"
+    outbox_before = _read_capture_source_events(atlas_data_root, conversation_id)
+    before = memory.records()
+    result = atlas.chat(message)
+    state["last_run"] = result
+    after = memory.records()
+    assembled_refs = _extract_assembled_refs(lifecycle.read_log(), conversation_id)
+    observer_output = _records_delta(before, after)
+    outbox_after = _read_capture_source_events(atlas_data_root, conversation_id)
+    capture_evidence = _capture_evidence_delta(
+        outbox_before, outbox_after, assembled_refs, observer_output,
+    )
+    if result["status"] != "completed":
+        state["execution_errors"].append({
+            "kind": "run", "turn_index": step.turn_index,
+            "status": result["status"], "terminal_event": result["terminal_event"],
         })
-    messages.append({"role": "user", "content": step.user_input})
-
-    try:
-        resp = await router.complete_for(active_model, "chat", messages, temperature=0.2)
-    except Exception as exc:
-        if "not supported" in str(exc).lower() or "not found" in str(exc).lower() or "404" in str(exc):
-            resp = await router.complete_for("deepseek-v4.1-flash", "chat", messages, temperature=0.2)
-        else:
-            raise
-    response_text = resp.text.strip()
-
-    # 本轮观察在回合末落库（与生产 Observer 回合末触发一致）
-    if mem_svc is not None:
-        await _push_formed_to_memory(scenario, step, formed_observations, mem_svc)
-
     return {
-        "turn_index": step.turn_index,
-        "session_id": step.session_id,
-        "occurred_at": step.occurred_at,
-        "user_input": step.user_input,
-        "action": step.action,
-        "action_info": action_info,
-        "observer_output": formed_observations,
-        "assembled_refs": assembled_refs,
-        "gate_info": gate_info,
-        "assistant_response": response_text,
-        "model_used": active_model,
-        "dry_run": False,
+        "turn_index": step.turn_index, "session_id": step.session_id,
+        "occurred_at": step.occurred_at, "occurred_at_used_by_ws": False,
+        "user_input": step.user_input, "action": step.action,
+        "action_info": action_info, "message_transport": "atlas_ws",
+        "execution_status": result["status"],
+        "assistant_response": result["assistant_response"],
+        "model_used": result["model_used"], "run_id": result["run_id"],
+        "conversation_id": conversation_id, "terminal_event": result["terminal_event"],
+        "usage": result["usage"], "tool_calls": result["tool_calls"],
+        "policy_events": result["policy_events"], "assembled_refs": assembled_refs,
+        "observer_output": observer_output, "capture_evidence": capture_evidence,
+        "events": result["events"],
     }
 
 
 async def run_scenario(
     scenario: ScenarioSpec,
-    isolated_dir: Path,
-    dry_run: bool = False,
-    model_name: str | None = None,
-    memory_service: "RealMemoryService | None" = None,
+    *, runtime_root: Path, atlas: AtlasEvalClient, memory: MemoryOSIsolationClient,
+    lifecycle: AtlasProcessLifecycle, workspace: Path, subject_id: str,
 ) -> dict[str, Any]:
-    """Execute all steps of a single scenario."""
     print(f"Running Scenario #{scenario.id:02d} [{scenario.category}] {scenario.title} ...")
-    state: dict[str, Any] = {
-        "capture_paused": False,
-        "current_model": model_name,
-        "edits": [],
-        "deletions": [],
-        "interrupted_state": None,
-        "history_observations": [],
-        "memory_service": memory_service,
-    }
-
-    # Initialize prerequisite domain context for single-query validation scenarios
-    if scenario.id in (24, 25):
-        state["history_observations"].append({
-            "text": "用户在第1天曾特别交代：'点外卖或者推荐餐馆时千万注意，我对花生严重过敏，千万不能碰含有花生的食物。'",
-            "priority": "HIGH",
-            "occurred_at": "2026-10-01 12:00:00",
-            "event_id": f"ref_{scenario.id}_1",
-            "source_event_id": f"evt_{scenario.id}_1",
-            "original_utterance": "点外卖或者推荐餐馆时千万注意，我对花生严重过敏，千万不能碰含有花生的食物。",
-        })
-    elif scenario.id == 21:
-        state["history_observations"].extend([
-            {"text": "用户常住杭州工作，从事跨境电商", "occurred_at": "2026-09-24", "event_id": "ref_21_1"},
-            {"text": "对花生严重过敏，千万不能碰花生", "occurred_at": "2026-09-25", "event_id": "ref_21_2"},
-            {"text": "女儿叫小满，今年6岁", "occurred_at": "2026-09-26", "event_id": "ref_21_3"},
-            {"text": "代码偏好一律用 TypeScript 编写，不用 JS", "occurred_at": "2026-09-27", "event_id": "ref_21_4"},
-            {"text": "目前使用 Mac 电脑进行开发", "occurred_at": "2026-09-28", "event_id": "ref_21_5"},
-        ])
-    elif scenario.id == 27:
-        state["history_observations"].append({
-            "text": "用户女儿叫小满，今年6岁",
-            "occurred_at": "2026-10-01 10:00:00",
-            "event_id": "ref_27_prev",
-        })
-
-    # 预置历史经真 facade 落库（供真召回装配读取），而非只留在进程内列表
-    if memory_service is not None and state["history_observations"]:
-        await _push_history_to_memory(scenario, state, memory_service)
-        await _run_reflection(scenario, memory_service)
-
-    step_records: list[dict[str, Any]] = []
+    artifact_dir = runtime_root / "evidence"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    if scenario.workspace_files:
+        workspace_root = workspace.resolve()
+        for relative_name in scenario.workspace_files:
+            path = (workspace_root / relative_name).resolve()
+            path.relative_to(workspace_root)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                f"# {Path(relative_name).name}\n\nFixture document for the declared workspace task.\n",
+                encoding="utf-8",
+            )
+    state: dict[str, Any] = {"action_results": [], "execution_errors": []}
+    if "reminder_readonly_audit" in scenario.runtime_capabilities:
+        try:
+            state["reminder_audit_baseline"] = {
+                "atlas_automations": atlas.request("GET", "/api/automations"),
+                "memory_intents": memory.records(facet="INTENT"),
+            }
+        except Exception as exc:  # noqa: BLE001
+            state["reminder_audit_baseline"] = {
+                "status": "read_failed", "error_type": type(exc).__name__,
+            }
+        state["reminder_audit_history"] = []
+    records = []
     for step in scenario.steps:
-        rec = await run_scenario_step(
-            scenario=scenario,
-            step=step,
+        step_record = await run_scenario_step(
+            scenario, step, atlas=atlas, memory=memory, lifecycle=lifecycle,
+            workspace=workspace, artifact_dir=artifact_dir, subject_id=subject_id,
             state=state,
-            dry_run=dry_run,
-            model_name=model_name,
         )
-        step_records.append(rec)
-
+        if "reminder_readonly_audit" in scenario.runtime_capabilities and not is_control_action_step(step):
+            ctx = ScenarioActionContext(
+                scenario.id, step, atlas, memory, lifecycle,
+                workspace, artifact_dir, subject_id, state,
+                runtime_capabilities=scenario.runtime_capabilities,
+                workspace_files=scenario.workspace_files,
+            )
+            audit = _audit_reminder_state(ctx)
+            step_record["reminder_audit"] = audit
+            state["reminder_audit_history"].append(audit)
+            if audit.get("status") != "ok":
+                state["execution_errors"].append({
+                    "kind": "reminder_audit", "turn_index": step.turn_index,
+                    "status": audit.get("status"),
+                })
+        records.append(step_record)
+    final_records = memory.records()
+    final_capture = _read_capture_source_events(lifecycle.runtime_root / "atlas_data")
+    final_capture_events = final_capture.get("events", [])
     return {
-        "scenario_id": scenario.id,
-        "category": scenario.category,
-        "title": scenario.title,
-        "description": scenario.description,
+        "scenario_id": scenario.id, "category": scenario.category,
+        "title": scenario.title, "description": scenario.description,
         "is_counterexample": scenario.is_counterexample,
         "acceptance_criteria": scenario.acceptance_criteria,
         "steps_count": len(scenario.steps),
-        "records": step_records,
+        "execution_status": "failed" if state["execution_errors"] else "completed",
+        "execution_errors": state["execution_errors"], "records": records,
         "final_state": {
-            "edits": state["edits"],
-            "deletions": state["deletions"],
-            "capture_paused": state["capture_paused"],
+            "action_results": state["action_results"],
+            "reminder_audit_baseline": state.get("reminder_audit_baseline"),
+            "reminder_audit_history": state.get("reminder_audit_history", []),
+            "capture_outbox_status": final_capture.get("status"),
+            "capture_source_events": final_capture_events,
+            "capture_ack_summary": {
+                "total": len(final_capture_events),
+                "acked": sum(1 for item in final_capture_events if item.get("state") == "ACKED"),
+                "not_acked": sum(1 for item in final_capture_events if item.get("state") != "ACKED"),
+            },
+            "memory_record_count": len(final_records), "memory_records": final_records,
         },
+    }
+
+
+def _plan_scenario(scenario: ScenarioSpec) -> dict[str, Any]:
+    return {
+        "scenario_id": scenario.id, "category": scenario.category,
+        "title": scenario.title, "description": scenario.description,
+        "is_counterexample": scenario.is_counterexample,
+        "acceptance_criteria": scenario.acceptance_criteria,
+        "steps_count": len(scenario.steps), "execution_status": "not_run",
+        "records": [{
+            "turn_index": step.turn_index, "session_id": step.session_id,
+            "occurred_at": step.occurred_at, "user_input": step.user_input,
+            "action": step.action, "execution_status": "not_run",
+        } for step in scenario.steps],
     }
 
 
 async def run_evaluation_suite(
-    scenarios: list[ScenarioSpec],
-    isolated_dir: Path,
-    output_path: Path,
-    dry_run: bool = False,
-    model_name: str | None = None,
+    scenarios: list[ScenarioSpec], isolated_dir: Path, output_path: Path,
+    dry_run: bool = True, model_name: str | None = None, repetitions: int = 1,
+    service_python: Path | None = None, atlas_python: Path | None = None,
+    settings_source: Path | None = None,
 ) -> Path:
-    """Run specified scenarios and save execution results."""
-    env_overrides = enforce_isolation(isolated_dir)
+    """Write a plan by default; real mode starts isolated Atlas and MemoryOS services."""
+    if repetitions < 1:
+        raise ValueError("repetitions must be positive")
+    if model_name not in (None, GEMINI_MODEL_ID):
+        raise ValueError(f"F1-D runs are pinned to {GEMINI_MODEL_ID}; refusing {model_name!r}")
+    output_path = output_path.resolve()
+    if not _is_within(output_path, Path(r"D:\Temp")):
+        raise RuntimeError("scenario results and plans must be written under D:\\Temp")
+    for prod_root in PRODUCTION_ROOTS:
+        if _is_within(output_path, prod_root):
+            raise RuntimeError(f"result output is inside production root: {prod_root}")
+    created_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     results: list[dict[str, Any]] = []
-    mem_root = Path(env_overrides["MEMORYOS_DATA_ROOT"])
-
-    for sc in scenarios:
-        # 每个场景独立记忆库：避免场景间记忆互相污染（真评测必须隔离）
-        memory_service = None
-        if not dry_run:
-            memory_service = RealMemoryService(mem_root / f"scenario-{sc.id}").start()
+    if dry_run:
+        results = [_plan_scenario(scenario) for scenario in scenarios for _ in range(repetitions)]
+        suite_payload = {
+            "metadata": {
+                "generated_at": created_at, "scenario_count": len(scenarios),
+                "total_runs": len(results), "repetitions": repetitions,
+                "dry_run": True, "execution_mode": "plan_only",
+                "model_configured": GEMINI_MODEL_ID,
+            },
+            "scenarios": results,
+        }
+    else:
+        isolated_dir = isolated_dir.resolve()
+        if not _is_within(isolated_dir, Path(r"D:\Temp")):
+            raise RuntimeError("real F1-D runtime roots must be placed under D:\\Temp")
+        if not isolated_dir.name.startswith("F1-D-"):
+            raise RuntimeError("real F1-D runtime root name must start with F1-D-")
+        if isolated_dir.exists() and any(isolated_dir.iterdir()):
+            raise FileExistsError(f"real F1-D runtime root is not empty: {isolated_dir}")
+        isolated_dir.mkdir(parents=True, exist_ok=True)
         try:
-            res = await run_scenario(
-                scenario=sc,
-                isolated_dir=isolated_dir,
-                dry_run=dry_run,
-                model_name=model_name,
-                memory_service=memory_service,
+            from scripts.memory_v1.gemini_runtime import (
+                MODEL_ID, PROVIDER_BASE_URL, read_isolated_model_settings,
+                write_isolated_user_settings,
             )
-        finally:
-            if memory_service is not None:
-                await memory_service.aclose()
-                memory_service.stop()
-        results.append(res)
-
-    suite_payload = {
-        "metadata": {
-            "generated_at": datetime.datetime.now().isoformat(),
-            "total_scenarios": len(results),
-            "dry_run": dry_run,
-            "isolated_dir": str(isolated_dir),
-            "model_configured": model_name or "default",
-        },
-        "scenarios": results,
-    }
-
+        except ModuleNotFoundError:
+            from gemini_runtime import (
+                MODEL_ID, PROVIDER_BASE_URL, read_isolated_model_settings,
+                write_isolated_user_settings,
+            )
+        if MODEL_ID != GEMINI_MODEL_ID:
+            raise RuntimeError("shared Gemini helper model ID differs from F1-D runner")
+        source = settings_source or Path(os.environ.get(
+            "ATLAS_F1_GEMINI_SETTINGS_SOURCE", r"D:\Atlas\data\user-settings.json",
+        ))
+        safe_settings = read_isolated_model_settings(source)
+        endpoint_host = PROVIDER_BASE_URL.split("//", 1)[-1].split("/", 1)[0]
+        atlas_exe = atlas_python or (CORE_DIR / ".venv" / "Scripts" / "python.exe")
+        if service_python is None:
+            from scripts.memory_v1.real_memory import DEFAULT_SERVICE_PYTHON
+            service_exe = DEFAULT_SERVICE_PYTHON
+        else:
+            service_exe = service_python
+        for trial in range(1, repetitions + 1):
+            for scenario in scenarios:
+                runtime_root = isolated_dir / f"trial-{trial:02d}-scenario-{scenario.id:02d}"
+                roots = enforce_isolation(runtime_root)
+                subject_id = f"f1d-s{scenario.id:02d}-t{trial:02d}-{uuid.uuid4().hex[:10]}"
+                api_token = uuid.uuid4().hex
+                env = _runtime_environment(
+                    roots, api_token=api_token, subject_id=subject_id, scenario=scenario,
+                )
+                memory_service = None
+                lifecycle = None
+                try:
+                    try:
+                        from scripts.memory_v1.real_memory import RealMemoryService
+                    except ModuleNotFoundError:
+                        from real_memory import RealMemoryService
+                    memory_service = RealMemoryService(
+                        Path(roots["MEMORYOS_DATA_ROOT"]), subject_id=subject_id,
+                        subject_aliases="atlas-fixture", service_python=service_exe,
+                    )
+                    with _temporary_environment(env):
+                        memory_service.start()
+                    settings_path = write_isolated_user_settings(Path(roots["ATLAS_DATA_DIR"]), safe_settings)
+                    hermes_config_path = _write_isolated_hermes_config(Path(roots["HERMES_HOME"]))
+                    _write_isolated_atlas_config(
+                        Path(roots["ATLAS_DATA_DIR"]),
+                        f"http://127.0.0.1:{memory_service.port}", subject_id,
+                    )
+                    env["F1D_PROVIDER_ENDPOINT_HOST"] = endpoint_host
+                    lifecycle = AtlasProcessLifecycle(
+                        python=Path(atlas_exe), runtime_root=runtime_root, env=env,
+                        workspace=Path(roots["WORKSPACE"]), api_token=api_token,
+                    )
+                    route_metadata = lifecycle.start()
+                    atlas_client = lifecycle.client
+                    memory_client = MemoryOSIsolationClient(
+                        f"http://127.0.0.1:{memory_service.port}", subject_id,
+                    )
+                    result = await run_scenario(
+                        scenario, runtime_root=runtime_root, atlas=atlas_client,
+                        memory=memory_client, lifecycle=lifecycle,
+                        workspace=Path(roots["WORKSPACE"]), subject_id=subject_id,
+                    )
+                    result["trial"] = trial
+                    result["runtime"] = {
+                        "runtime_root": str(runtime_root), "atlas_data_root": roots["ATLAS_DATA_DIR"],
+                        "memoryos_data_root": roots["MEMORYOS_DATA_ROOT"],
+                        "hermes_home": roots["HERMES_HOME"],
+                        "hermes_config_path": str(hermes_config_path),
+                        "workspace": roots["WORKSPACE"],
+                        "atlas_port": lifecycle.port,
+                        "atlas_pid": lifecycle.process.pid if lifecycle.process else None,
+                        "memoryos_port": memory_service.port,
+                        "memoryos_pid": memory_service.proc.pid if memory_service.proc else None,
+                        "subject_id": subject_id, "route": route_metadata,
+                        "test_feature_flags": {
+                            "hard_erase_enabled": "hard_erase" in scenario.runtime_capabilities,
+                        },
+                        "settings_path": str(settings_path),
+                    }
+                    results.append(result)
+                except Exception as exc:  # noqa: BLE001
+                    results.append({
+                        "scenario_id": scenario.id, "category": scenario.category,
+                        "title": scenario.title, "is_counterexample": scenario.is_counterexample,
+                        "acceptance_criteria": scenario.acceptance_criteria, "trial": trial,
+                        "execution_status": "setup_failed",
+                        "setup_error": {"type": type(exc).__name__, "message": _redact_error(str(exc))},
+                        "records": [], "runtime": {"runtime_root": str(runtime_root), "subject_id": subject_id},
+                    })
+                finally:
+                    if lifecycle is not None:
+                        lifecycle.stop()
+                    if memory_service is not None:
+                        await memory_service.aclose()
+                        memory_service.stop()
+        suite_payload = {
+            "metadata": {
+                "generated_at": created_at, "scenario_count": len(scenarios),
+                "total_runs": len(results), "repetitions": repetitions,
+                "dry_run": False, "execution_mode": "real_atlas_ws_and_isolated_memoryos",
+                "isolated_dir": str(isolated_dir), "model_configured": GEMINI_MODEL_ID,
+                "provider_id": "custom", "provider_endpoint_host": endpoint_host,
+                "credential_value_recorded": False,
+                "scenario_manifest_sha256": scenario_manifest_sha256(),
+            },
+            "scenarios": results,
+        }
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(suite_payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    print(f"\nCompleted {len(results)} scenarios. Results saved to: {output_path}")
+    output_path.write_text(json.dumps(suite_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"Completed {len(results)} scenario runs. Results saved to: {output_path}")
     return output_path
+
+
+def _redact_error(message: str) -> str:
+    safe = re.sub(
+        r"(?i)(api[_-]?key|authorization|access[_-]?token|secret)\s*[:=]\s*[^\s,;]+",
+        r"\1=[REDACTED]", message,
+    )
+    return safe[:1000]
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--scenario",
-        type=int,
-        default=None,
-        help="Run specific scenario by ID (1..30)",
-    )
-    parser.add_argument(
-        "--category",
-        type=str,
-        default=None,
-        help="Run scenarios under category (E1..E8)",
-    )
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Run all 30 scenarios",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Simulate execution without invoking external LLM APIs",
-    )
-    parser.add_argument(
-        "--isolated-dir",
-        type=Path,
-        default=None,
-        help="Directory for isolated test data (default: tempdir)",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=DEFAULT_RESULTS_PATH,
-        help=f"Output path for results JSON (default: {DEFAULT_RESULTS_PATH})",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=None,
-        help="Model ID to evaluate against (e.g. claude-sonnet-4, gpt-4o)",
-    )
-    parser.add_argument(
-        "--judge",
-        action="store_true",
-        help="Automatically run eval_judge.py on the output",
-    )
-
+    parser.add_argument("--scenario", type=int, default=None, help="Run specific scenario by ID (1..30)")
+    parser.add_argument("--category", type=str, default=None, help="Run scenarios under category (E1..E8)")
+    parser.add_argument("--all", action="store_true", help="Select all 30 scenarios")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--run-real", action="store_true", help="Start isolated Atlas/MemoryOS and use the real Gemini route")
+    mode.add_argument("--dry-run", action="store_true", help="Write a plan only; this is the default")
+    parser.add_argument("--isolated-dir", type=Path, default=None, help="Unique runtime root under D:\\Temp")
+    parser.add_argument("--output", type=Path, default=None, help="JSON result/plan path")
+    parser.add_argument("--model", type=str, default=GEMINI_MODEL_ID, help="F1-D is pinned to gemini-3.8-flash")
+    parser.add_argument("--repetitions", type=int, default=1, help="Fresh isolated runtime repetitions per scenario")
+    parser.add_argument("--service-python", type=Path, default=None, help="Isolated MemoryOS service interpreter")
+    parser.add_argument("--atlas-python", type=Path, default=None, help="Atlas core service interpreter")
+    parser.add_argument("--settings-source", type=Path, default=None, help="Read-only source for safe Gemini metadata")
+    parser.add_argument("--judge", action="store_true", help="Run eval_judge.py after a real run")
     args = parser.parse_args()
-
+    if args.model != GEMINI_MODEL_ID:
+        parser.error(f"--model is fixed to {GEMINI_MODEL_ID}; the original scenario switch remains an action payload")
+    if args.judge and not args.run_real:
+        parser.error("--judge requires --run-real; plan-only data is not judgeable")
     all_specs = get_all_scenarios()
     targets = all_specs
-    if args.scenario:
-        targets = [s for s in all_specs if s.id == args.scenario]
+    if args.scenario is not None:
+        targets = [scenario for scenario in all_specs if scenario.id == args.scenario]
         if not targets:
-            print(f"Error: Unknown scenario id {args.scenario}")
-            return 1
+            parser.error(f"unknown scenario id {args.scenario}")
     elif args.category:
-        targets = [s for s in all_specs if s.category.upper() == args.category.upper()]
+        targets = [scenario for scenario in all_specs if scenario.category.upper() == args.category.upper()]
         if not targets:
-            print(f"Error: Unknown category {args.category}")
-            return 1
-
-    default_isolated = Path(r"D:\tmp\atlas_eval_isolated")
-    isolated_dir = args.isolated_dir or default_isolated
-    
-    out_file = asyncio.run(
-        run_evaluation_suite(
-            scenarios=targets,
-            isolated_dir=isolated_dir,
-            output_path=args.output,
-            dry_run=args.dry_run,
-            model_name=args.model,
-        )
+            parser.error(f"unknown category {args.category}")
+    run_root = args.isolated_dir or Path(r"D:\Temp") / (
+        f"F1-D-scenarios-{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
     )
-
+    output_path = args.output or (run_root / ("results.json" if args.run_real else "plan.json"))
+    out_file = asyncio.run(run_evaluation_suite(
+        scenarios=targets, isolated_dir=run_root, output_path=output_path,
+        dry_run=not args.run_real, model_name=args.model, repetitions=args.repetitions,
+        service_python=args.service_python, atlas_python=args.atlas_python,
+        settings_source=args.settings_source,
+    ))
     if args.judge:
         try:
-            from scripts.memory_v1.eval_judge import evaluate_results_file, DEFAULT_REPORT_PATH
+            from scripts.memory_v1.eval_judge import evaluate_results_file
         except ModuleNotFoundError:
-            import sys
-            sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-            from scripts.memory_v1.eval_judge import evaluate_results_file, DEFAULT_REPORT_PATH
-        report = evaluate_results_file(out_file, output_path=DEFAULT_REPORT_PATH)
+            sys.path.insert(0, str(REPO_ROOT))
+            from scripts.memory_v1.eval_judge import evaluate_results_file
+        report = evaluate_results_file(out_file, output_path=run_root / "judge-report.json")
         print(f"Evaluation Verdict: {report.get('summary', {}).get('verdict')}")
-
     return 0
 
 

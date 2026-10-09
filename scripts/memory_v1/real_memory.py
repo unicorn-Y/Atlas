@@ -22,12 +22,17 @@ from typing import Any
 
 _MEMORYOS_REPO = Path(os.environ.get("MEMORYOS_REPO", r"D:\MemoryOS"))
 _ATLAS_REPO = Path(os.environ.get("ATLAS_REPO", r"D:\Atlas"))
+DEFAULT_SERVICE_PYTHON = _MEMORYOS_REPO / "service" / ".venv" / "Scripts" / "python.exe"
 
 # 与 core/tests/unified_memory/harness.py 保持一致的服务端契约常量
 TEST_INTERNAL_TOKEN = "test-internal-token"
 TEST_OWNER_TOKEN = "test-owner-token"
 SUBJECT = "atlas-fixture"
 HEALTH_TIMEOUT_S = 90.0
+
+
+def _same_process_instance(expected_creation_time: float, actual_creation_time: float) -> bool:
+    return abs(float(expected_creation_time) - float(actual_creation_time)) < 0.001
 
 
 def free_port() -> int:
@@ -90,15 +95,34 @@ def to_observation(
 class RealMemoryService:
     """真 MemoryOS 服务生命周期 + 真 facade 句柄。"""
 
-    def __init__(self, data_root: Path) -> None:
+    def __init__(
+        self,
+        data_root: Path,
+        *,
+        subject_id: str = SUBJECT,
+        subject_aliases: str = "subject-default",
+        service_python: Path | str | None = None,
+    ) -> None:
         self.data_root = data_root
+        self.subject_id = subject_id
+        self.subject_aliases = subject_aliases
+        self.service_python = Path(service_python).resolve() if service_python else (
+            DEFAULT_SERVICE_PYTHON
+        )
         self.port = free_port()
         self.proc: subprocess.Popen[bytes] | None = None
+        self._owned_processes: dict[int, float] = {}
         self._log = None
         self._facade = None
 
     # ---------------------------------------------------------------- lifecycle
     def start(self) -> "RealMemoryService":
+        try:
+            import psutil  # noqa: F401
+        except ImportError as exc:
+            raise RuntimeError(
+                "psutil is required to track and stop the isolated MemoryOS process tree safely"
+            ) from exc
         db_root = self.data_root / "db"
         db_root.mkdir(parents=True, exist_ok=True)
         env = dict(os.environ)
@@ -107,21 +131,25 @@ class RealMemoryService:
             "MEMORYOS_DB_PATH": str(db_root / "memoryos.sqlite3"),
             "MEMORYOS_INTERNAL_TOKEN": TEST_INTERNAL_TOKEN,
             "MEMORYOS_OWNER_TOKEN": TEST_OWNER_TOKEN,
-            "MEMORYOS_MEMORY_SUBJECT_ID": SUBJECT,
-            "MEMORYOS_MEMORY_SUBJECT_ALIASES": "subject-default",
+            "MEMORYOS_MEMORY_SUBJECT_ID": self.subject_id,
+            "MEMORYOS_MEMORY_SUBJECT_ALIASES": self.subject_aliases,
             "NO_PROXY": "127.0.0.1,localhost",
             "PYTHONUTF8": "1",
             "PYTHONIOENCODING": "utf-8",
             "PYTHONPATH": str(_MEMORYOS_REPO / "service"),
         })
-        python = _MEMORYOS_REPO / "service" / ".venv" / "Scripts" / "python.exe"
+        if not self.service_python.is_file():
+            raise FileNotFoundError(
+                f"MemoryOS service interpreter does not exist: {self.service_python}"
+            )
         self._log = open(self.data_root / "memoryos.log", "wb")
         self.proc = subprocess.Popen(
-            [str(python), "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", str(self.port)],
+            [str(self.service_python), "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", str(self.port)],
             cwd=str(_MEMORYOS_REPO / "service"), env=env,
             stdout=self._log, stderr=subprocess.STDOUT,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        self._capture_owned_process_tree()
         self._wait_health()
         return self
 
@@ -133,6 +161,7 @@ class RealMemoryService:
         last = ""
         while time.monotonic() < deadline:
             assert self.proc is not None
+            self._capture_owned_process_tree()
             if self.proc.poll() is not None:
                 raise RuntimeError(
                     f"MemoryOS 子进程提前退出 (code={self.proc.returncode})；日志尾部:\n{self.log_tail()}"
@@ -154,19 +183,102 @@ class RealMemoryService:
         return "(no log)"
 
     def stop(self) -> None:
-        if self.proc is not None:
-            self.proc.terminate()
+        proc = self.proc
+        try:
+            if proc is not None:
+                self._capture_owned_process_tree()
+                self._terminate_owned_process_tree()
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired as exc:
+                    raise RuntimeError(
+                        f"MemoryOS root process {proc.pid} remains after identity-checked tree cleanup"
+                    ) from exc
+                self.proc = None
+        finally:
+            if self._log is not None:
+                try:
+                    self._log.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._log = None
+
+    def _capture_owned_process_tree(self) -> None:
+        """Remember PID + creation time for the service root and its descendants."""
+        if self.proc is None:
+            return
+        import psutil
+
+        try:
+            root = psutil.Process(self.proc.pid)
+        except psutil.NoSuchProcess:
+            if self.proc.poll() is None:
+                raise RuntimeError(
+                    f"Cannot verify identity for live MemoryOS process {self.proc.pid}"
+                )
+            return
+
+        root_created = root.create_time()
+        previous_root_created = self._owned_processes.get(root.pid)
+        if previous_root_created is not None and not _same_process_instance(
+            previous_root_created, root_created
+        ):
+            return
+        self._owned_processes[root.pid] = root_created
+        for child in root.children(recursive=True):
             try:
-                self.proc.wait(timeout=10)
-            except Exception:  # noqa: BLE001
-                self.proc.kill()
-            self.proc = None
-        if self._log is not None:
+                self._owned_processes[child.pid] = child.create_time()
+            except psutil.NoSuchProcess:
+                continue
+
+    def _terminate_owned_process_tree(self) -> None:
+        """Stop only saved process instances; never signal a PID after reuse."""
+        if not self._owned_processes:
+            return
+        import psutil
+
+        processes = []
+        for pid, created in self._owned_processes.items():
             try:
-                self._log.close()
-            except Exception:  # noqa: BLE001
-                pass
-            self._log = None
+                process = psutil.Process(pid)
+                if _same_process_instance(created, process.create_time()):
+                    processes.append(process)
+            except psutil.NoSuchProcess:
+                continue
+
+        for process in reversed(processes):
+            try:
+                if _same_process_instance(
+                    self._owned_processes[process.pid], process.create_time()
+                ):
+                    process.terminate()
+            except psutil.NoSuchProcess:
+                continue
+
+        _, alive = psutil.wait_procs(processes, timeout=5)
+        for process in alive:
+            try:
+                if _same_process_instance(
+                    self._owned_processes[process.pid], process.create_time()
+                ):
+                    process.kill()
+            except psutil.NoSuchProcess:
+                continue
+        _, alive = psutil.wait_procs(alive, timeout=5)
+        remaining = []
+        for process in alive:
+            try:
+                if _same_process_instance(
+                    self._owned_processes[process.pid], process.create_time()
+                ):
+                    remaining.append(process.pid)
+            except psutil.NoSuchProcess:
+                continue
+        if remaining:
+            raise RuntimeError(
+                "MemoryOS owned processes survived identity-checked cleanup: "
+                + ", ".join(map(str, sorted(remaining)))
+            )
 
     # -------------------------------------------------------------------- facade
     def facade(self):
@@ -181,7 +293,7 @@ class RealMemoryService:
                 "enabled": True,
                 "service_url": f"http://127.0.0.1:{self.port}",
                 "internal_token": TEST_INTERNAL_TOKEN,
-                "subject_binding": SUBJECT,
+                "subject_binding": self.subject_id,
             }}})
             self._facade = UnifiedMemoryFacade(config=cfg)
         return self._facade
