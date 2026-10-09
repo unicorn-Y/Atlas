@@ -138,3 +138,7 @@ data/memos-home/
 data/memos-plugin/
 data/memory_changes.sqlite3
 data/memory_paused
+
+# Machine-local clutter (never commit): construction pack + config backups
+/.construction-pack/
+data/user-settings.json.bak-*
