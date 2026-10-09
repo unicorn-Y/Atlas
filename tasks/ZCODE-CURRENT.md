@@ -1,5 +1,9 @@
 # Atlas ZCode Parallel Current
 
+> **SUPERSEDED (2026-10-10)** — 本 lane 已并入 `main`，**不再是"当前任务"**。
+> 当前任务唯一入口：`tasks/CURRENT.md`；机器可读状态：`docs/plan/MEMORY-V1/CURRENT.json`。
+> 以下内容仅作历史记录保留。
+
 CURRENT: ATLAS-C5-C6A-INTEGRATION
 STATUS: INTEGRATING_INTO_MAIN
 OWNER: ZCode second construction lane

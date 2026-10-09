@@ -1,37 +1,38 @@
 # Atlas Current Task
 
-CURRENT: ATLAS-H1-CORE-HARDENING
-STATUS: CLOSED_BY_USER
-CONTROLLER: Codex
-TASKBOOK: tasks/taskbooks/ATLAS-H1-CORE-HARDENING.md
-RESULT: tasks/results/ATLAS-H1-CORE-HARDENING.result.md
-REVIEW: tasks/reviews/ATLAS-H1-CORE-HARDENING.review.md
+> **唯一入口**：任何 agent / session 接手工作前，先读本文件，再读 `STATE_SOURCE`。
+> 不要再新建并列的 `*-CURRENT.md`；"当前任务"只在这里和 `STATE_SOURCE` 声明。
 
-BASE_BRANCH: main
-BASE_COMMIT: 574db83
-PREVIOUS: ATLAS-MEGA-PERSISTENT-CLOSEOUT
-PREVIOUS_STATUS: REVIEW_PASSED
+ACTIVE_TASK: ATLAS-MEMORY-V1
+BRANCH: memory-v1
+STATE_SOURCE: docs/plan/MEMORY-V1/CURRENT.json   # 机器可读状态（唯一权威）
+PROGRESS_DIR: docs/plan/MEMORY-V1/progress/
+SPEC: docs/plan/MEMORY-V1/00_任务书.md
+LAST_PUSH: atlas b820cd12 / memoryos d0ec6b2 (2026-10-09)
 
-## Goal
+## Active
 
-主体加固一次到位：内核接口化、单一会话数据源、并发与资源、模型路由与原生通道、
-server.py 拆分、错误处理、渠道默认权限、启动速度、无头 CLI、测试分层，
-最后用真实模型做 Atlas 冒烟实测。不加新功能，行为默认不变，每项修复带测试。
+**MEMORY-V1（统一记忆 V1）施工中**，现行波次 F4。逐项状态以 `STATE_SOURCE` 为准：
 
-## First steps
+| 波次 | 状态 |
+|---|---|
+| S0–S6 | DONE_PENDING_REVIEW |
+| S3 召回装配 / 意图闸门 | IN_PROGRESS（★真缺口：画像块恒空） |
+| S8 V1 验收评测 | IN_PROGRESS（真数 21/30，未达门槛） |
+| S7 正式启用 / 历史回填 | NOT_STARTED — **需用户授权，停下询问** |
+| F4 | A DONE_PENDING_REVIEW；B/C IN_PROGRESS；D/E NOT_STARTED |
 
-1. H0.1：主机未提交改动原样存到 `wip/host-uncommitted-2026-10-04` 并 push，再从干净 main 开工。
-2. H0.2：跑基线脚本。
-3. H5 server 拆分先做，然后按任务书第 14 节并行。
+## 历史（已结束，不再是当前任务）
 
-## SUBAGENT POLICY — HARD REQUIREMENT
+- `ATLAS-H1-CORE-HARDENING` — CLOSED_BY_USER。结果/审查：`tasks/results/`、`tasks/reviews/`。
+  目标：主体加固一次到位（内核接口化、单一会话数据源、并发与资源、模型路由与原生通道、
+  `server.py` 拆分、错误处理、渠道默认权限、启动速度、无头 CLI、测试分层），
+  不加新功能、行为默认不变、每项修复带测试。BASE_BRANCH: main @ 574db83。
+- `ATLAS-C5-C6A-INTEGRATION` — 见 `tasks/ZCODE-CURRENT.md`（已归档，内容仅作历史）。
 
-- 用当前 runtime 允许的最大子代理并发，不写死数量；被拒就缩 batch，不退回单线程。
-- 热文件单 owner：`server.py`、`engine/hermes_runtime.py`、`agent/__init__.py`、Hermes fork、`backendProcess.ts`。
+## 规则
 
-## Completion
-
-写 `tasks/results/ATLAS-H1-CORE-HARDENING.result.md`，CURRENT 改为 `AWAITING_REVIEW`，
-push main，核对本地/远端 head，停。
-
-不得启动 T1 / X6 / R1 / MemoryOS / UI 改版 / 安全审查 / 新上游调研。
+- 完成一步只写 `DONE_PENDING_REVIEW` 继续施工；只有 S7、BLOCKED、或改变目标的决定才停下询问。
+- `ACCEPTED` / `REJECTED` 只能由审查方写，施工方不得自评通过。
+- 不得删除 / 跳过 / xfail 失败测试或降低门槛来"通过"；不得造假报告
+  （见 `docs/plan/MEMORY-V1/progress/AUDIT_K3.md`）。
