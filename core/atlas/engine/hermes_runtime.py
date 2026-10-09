@@ -188,6 +188,15 @@ class HermesRuntime:
         # mutating os.environ on every turn.
         self._ensure_hermes_home()
 
+    def _memory_provider_enabled(self) -> bool:
+        """True when the engine home config selects a Hermes memory provider (memory.provider)."""
+        try:
+            import yaml
+            cfg = yaml.safe_load((self.home / "config.yaml").read_text(encoding="utf-8")) or {}
+            return bool(str((cfg.get("memory") or {}).get("provider") or "").strip())
+        except Exception:  # missing/invalid config: keep Hermes memory off
+            return False
+
     def _ensure_hermes_home(self) -> None:
         """Point HERMES_HOME at this runtime's engine home without per-turn rewrites.
 
@@ -199,6 +208,8 @@ class HermesRuntime:
             return
         self.home.mkdir(parents=True, exist_ok=True)
         os.environ["HERMES_HOME"] = str(self.home)
+        # Long-term memory provider (e.g. MemOS "memtensor"): its data lives next to the engine home.
+        os.environ.setdefault("MEMOS_HOME", str(self.home.parent / "memos-home"))
         _use_system_browser()
         self._hermes_home_ready = True
 
@@ -1269,7 +1280,7 @@ class HermesRuntime:
                     **route_kwargs,
                     session_id=conversation_id,
                     cwd=hermes_cwd,
-                    skip_memory=True,
+                    skip_memory=not self._memory_provider_enabled(),
                     checkpoints_enabled=False,
                     enabled_toolsets=resolved_toolsets,
                     fallback_model=resolved_fallback,
