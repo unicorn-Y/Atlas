@@ -283,13 +283,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             capture_service = configure_capture_service(facade=unified_memory)
             if capture_service is not None:
                 from atlas.memory.capture import register_observer_session_callback
+                from atlas.memory.intent_bridge import IntentBridge
                 from atlas.memory.observer import MemoryObserver
                 from atlas.memory.observer_drain import MemoryObserverDrain
 
                 memory_observer = MemoryObserver(
                     model_mgr, get_config(), outbox=capture_service._ensure_outbox(),
                 )
-                observer_drain = MemoryObserverDrain(memory_observer, unified_memory)
+                observer_drain = MemoryObserverDrain(
+                    memory_observer, unified_memory,
+                    # F3-B2：观察者产出带时间条件的 INTENT → 既有 AutomationEngine
+                    # 真实建任务（桥未注入时 drain 行为与从前一致）。
+                    intent_bridge=IntentBridge(facade=unified_memory),
+                    automation_engine=get_automation_engine(),
+                )
                 register_observer_session_callback(observer_drain.note_session_started)
 
                 async def drain_observer_batches() -> None:

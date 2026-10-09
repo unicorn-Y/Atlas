@@ -749,6 +749,52 @@ async def execute_tools_node(
                 result = {"data": data, "content": [{
                     "type": "text", "text": json.dumps(data, ensure_ascii=False),
                 }], "is_error": False}
+            elif fn_name == "automation_manage":
+                # E8：自然语言提醒接既有 AutomationEngine（不另造 scheduler）。
+                from atlas.automation.reminders import (
+                    ReminderError,
+                    cancel_reminder,
+                    create_reminder,
+                    list_reminders,
+                    update_reminder,
+                )
+
+                action = str(fn_args.get("action") or "").strip().lower()
+                try:
+                    if action == "create":
+                        message = str(fn_args.get("message") or "").strip()
+                        if not message:
+                            raise ReminderError("create 需要 message（提醒正文）")
+                        data = await create_reminder(
+                            message=message,
+                            due_at=str(fn_args.get("due_at") or ""),
+                            due_text=str(fn_args.get("due_text") or ""),
+                        )
+                    elif action == "cancel":
+                        data = await cancel_reminder(
+                            query=str(fn_args.get("query") or ""),
+                            automation_id=str(fn_args.get("automation_id") or ""),
+                        )
+                    elif action == "update":
+                        data = await update_reminder(
+                            automation_id=str(fn_args.get("automation_id") or ""),
+                            query=str(fn_args.get("query") or ""),
+                            due_at=str(fn_args.get("due_at") or ""),
+                            due_text=str(fn_args.get("due_text") or ""),
+                            message=str(fn_args.get("message") or ""),
+                        )
+                    elif action == "list":
+                        data = list_reminders()
+                    else:
+                        raise ReminderError(f"未知 action: {action!r}")
+                except ReminderError as exc:
+                    result = {"data": {"action": action, "error": str(exc)}, "content": [{
+                        "type": "text", "text": f"提醒操作失败：{exc}",
+                    }], "is_error": True}
+                else:
+                    result = {"data": data, "content": [{
+                        "type": "text", "text": json.dumps(data, ensure_ascii=False),
+                    }], "is_error": False}
             elif fn_name == "todo_list":
                 if fn_args.get("todos") is not None:
                     snapshot = ctx.todo_store.write(

@@ -24,10 +24,14 @@
     条件子集、任一侧 list 即 any-of）—— 两仓库各自实现的**同一判据**（不跨
     仓库 import 是既定边界；两侧单测互为对照锁定行为一致）。
 
-**engine 挂接偏差（T06.3 如实登记，真挂接行未落）**：
+**engine 挂接状态（F3-B2 更新）**：
 
-  engine.py / triggers.py 本波只读（他人有未提交改动，禁令），真挂接留待
-  收口。挂接点建议（两行，engine 侧调用方已有事件循环）::
+  时间条件意图已真挂接：``persist_automation_for_intent`` → ``reminders`` →
+  ``AutomationStore``（automations.toml）+ ``AutomationEngine.sync_automation``，
+  观察者落库收口（``observer_drain._persist_intents``）在 ACK 后自动投影。
+  **事件 cue 未统一**：Atlas 事件产生点分散，事件触发仍靠调用方直调
+  ``handle_atlas_event``；engine.py / triggers.py 的**回调**挂接行未落
+  （挂接点如下，engine 侧调用方已有事件循环）::
 
       # atlas/automation/engine.py  AutomationEngine.start_async() 末尾
       #   （attach_triggers 之后）：
@@ -199,11 +203,18 @@ def projection_for_intent(intent: dict[str, Any], *,
     }
 
 
-#: engine 挂接说明（偏差登记的机器可读形状；测试断言其存在与锚点正确）
+#: engine 挂接说明（机器可读；测试断言其存在与锚点正确）
+#:
+#: F3-B2 起：**时间条件意图的真实建任务已落**（``persist_automation_for_intent``
+#: 直接 store.put + engine.sync_automation，见下）。事件 cue 意图仍只产配置对象
+#: （事件分发点未统一），故 ``wired`` 记 True 而 ``event_wired`` 记 False —— 不
+#: 把"半个挂接"说成全部挂接。
 ENGINE_WIRING = {
-    "wired": False,
-    "reason": "engine.py/triggers.py 本波只读（他人未提交改动，T06.3 禁令）；"
-              "真挂接行留收口代理",
+    "wired": True,
+    "reason": "F3-B2：时间条件意图经 persist_automation_for_intent 真实写入 "
+              "AutomationStore 并 sync 到既有 AutomationEngine（不另造 scheduler）；"
+              "事件 cue 意图仍只产配置对象（事件分发点未统一），见 event_wired。",
+    "event_wired": False,
     "anchors": [
         {"file": "core/atlas/automation/engine.py",
          "function": "AutomationEngine.start_async",
@@ -214,9 +225,13 @@ ENGINE_WIRING = {
         {"file": "core/atlas/memory/intent_bridge.py",
          "function": "IntentBridge.handle_atlas_event",
          "line": "Atlas 事件产生点（采集/工具管线）直调直至统一事件分发点建立"},
+        {"file": "core/atlas/memory/observer_drain.py",
+         "function": "MemoryObserverDrain._persist_intents",
+         "line": "ACK 后新 INTENT（带时间条件）→ intent_bridge.persist_automation_for_intent"},
     ],
-    "store_write": "create_automation_for_intent 只产出配置对象；store.put/"
-                   "engine.sync_automation 由引擎侧执行（本桥绝不写 automations.toml）",
+    "store_write": "persist_automation_for_intent（时间 cue）经 reminders.create_reminder "
+                   "真实写 automations.toml（AutomationStore）+ engine.sync_automation；"
+                   "create_automation_for_intent 仍只产出配置对象（事件 cue 用）",
 }
 
 
@@ -311,6 +326,84 @@ class IntentBridge:
                 "note": ENGINE_WIRING["reason"],
             },
         }
+
+    # -------------------------------------------------------------- 真实建任务
+
+    @staticmethod
+    def _reminder_text(intent: dict[str, Any]) -> str:
+        """意图 → 提醒正文（action.message 优先；退化到意图正文；再退化到 action.kind）。"""
+        action = intent.get("action")
+        action = action if isinstance(action, dict) else {}
+        for key in ("message", "text", "summary", "title"):
+            value = action.get(key)
+            if str(value or "").strip():
+                return str(value).strip()
+        for key in ("text", "summary", "content", "statement"):
+            value = intent.get(key)
+            if str(value or "").strip():
+                return str(value).strip()
+        return str(action.get("kind") or "提醒").strip()
+
+    @staticmethod
+    def _time_due(intent: dict[str, Any]) -> str:
+        """意图的时间触发面：due_at 优先，其次 time cue 的 at；无 → 空串。"""
+        cue = intent.get("cue")
+        cue = cue if isinstance(cue, dict) else {}
+        direct = str(intent.get("due_at") or "").strip()
+        if direct:
+            return direct
+        if str(cue.get("kind") or "") == "time":
+            return str(cue.get("at") or "").strip()
+        return ""
+
+    async def persist_automation_for_intent(self, intent: dict[str, Any], *,
+                                            engine: Any = None,
+                                            now: Any = None) -> dict[str, Any]:
+        """统一意图 → **真实** Automation（F3-B2 主链路；不另造 scheduler）。
+
+        时间条件意图（``due_at`` 或 time cue）经
+        :func:`atlas.automation.reminders.create_reminder` 真写
+        ``data/automations.toml`` 并 ``engine.sync_automation`` 到既有
+        AutomationEngine；automation_id 用稳定绑定
+        ``um-intent-<intent_id>``（重放/双链路幂等，不产生第二条）。
+
+        event cue 意图**不在此建**（事件分发点未统一）→ 返回
+        ``{"created": False, "reason": "event_cue_not_wired"}``，其配置对象仍由
+        :meth:`create_automation_for_intent` 产出（偏差如实登记在
+        :data:`ENGINE_WIRING`）。
+        """
+        intent_id = str(intent.get("intent_id") or "").strip()
+        if not intent_id:
+            raise IntentBridgeError("持久化需要 intent_id（unified_intents 行）")
+        due = self._time_due(intent)
+        if not due:
+            cue = intent.get("cue")
+            cue = cue if isinstance(cue, dict) else {}
+            reason = ("event_cue_not_wired" if str(cue.get("kind") or "") == "event"
+                      else "no_time_cue")
+            return {"created": False, "reason": reason, "intent_id": intent_id,
+                    "automation_id": automation_id_for_intent(intent_id)}
+        from atlas.automation import reminders as reminder_service
+
+        result = await reminder_service.create_reminder(
+            message=self._reminder_text(intent), due_at=due,
+            automation_id=automation_id_for_intent(intent_id),
+            now=now, engine=engine)
+        result["intent_id"] = intent_id
+        result["automation_id"] = (result.get("automation") or {}).get("id")
+        return result
+
+    async def cancel_automation_for_intent(self, intent_id: str, *,
+                                           engine: Any = None,
+                                           now: Any = None) -> dict[str, Any]:
+        """统一意图取消 → 对应 Automation 停用（保留记录，可审计）。"""
+        from atlas.automation import reminders as reminder_service
+
+        result = await reminder_service.cancel_reminder(
+            automation_id=automation_id_for_intent(intent_id),
+            now=now, engine=engine)
+        result["intent_id"] = str(intent_id)
+        return result
 
     # ------------------------------------------------------------------ 触发回写
 
@@ -444,12 +537,15 @@ class IntentBridge:
     # ------------------------------------------------------------------ 取消
 
     async def cancel_intent(self, intent_id: str, *, context: dict[str, Any] | None = None,
+                            engine: Any = None, now: Any = None,
                             ) -> dict[str, Any]:
-        """取消意图 + Automation 取消说明（引擎侧执行，本桥不写 store）。
+        """取消意图 + 对应 Automation 停用。
 
-        服务端 transition CANCELLED（终态自环幂等重放）；Automation 半边的
-        取消（engine.cancel / store 停用 / 监听重建）在引擎侧 —— 返回的
-        automation_cancel.wired=False 如实登记（偏差）。
+        服务端 transition CANCELLED（终态自环幂等重放）；Automation 半边：
+        **显式传 engine 时真取消**（``store`` 停用 + ``engine.cancel``，见
+        :meth:`cancel_automation_for_intent`），未传 engine 时只返回取消说明
+        （``wired=False``）—— 不隐式读写进程默认的 ``data/automations.toml``
+        （生产数据边界：调用方要真取消就显式注入引擎）。
         """
         client = self.client()
         try:
@@ -472,20 +568,26 @@ class IntentBridge:
             cancel_ok, cancel_error = True, None
         except UnifiedMemoryError as exc:
             payload, cancel_ok, cancel_error = None, False, str(exc)
+        automation_cancel: dict[str, Any] = {
+            "automation_id": automation_id,
+            "instruction": ("engine.cancel(automation_id)（移除 DBOS "
+                            "schedule/date run + dedup 活跃 run）；store 停用"
+                            "由 reminders.cancel_reminder 执行"),
+            "wired": False,
+            "note": ENGINE_WIRING["reason"],
+        }
+        if engine is not None:
+            automation_cancel["result"] = await self.cancel_automation_for_intent(
+                str(intent_id), engine=engine, now=now)
+            automation_cancel["wired"] = bool(
+                automation_cancel["result"].get("cancelled"))
         return {
             "intent_id": intent_id,
             "lifecycle": payload.get("lifecycle") if payload else None,
             "revision": payload.get("revision") if payload else None,
             "cancelled": cancel_ok,
             "cancel_error": cancel_error,
-            "automation_cancel": {
-                "automation_id": automation_id,
-                "instruction": ("engine.cancel(automation_id)（移除 DBOS "
-                                "schedule/date run + dedup 活跃 run）；store 停用"
-                                "或删除记录由引擎侧既有 CRUD 入口执行"),
-                "wired": False,
-                "note": ENGINE_WIRING["reason"],
-            },
+            "automation_cancel": automation_cancel,
         }
 
     # ------------------------------------------------------------------ 挂接说明

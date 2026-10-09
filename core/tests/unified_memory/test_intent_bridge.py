@@ -10,7 +10,7 @@
       normalize_record + validate_record）验证 §4 冻结字段形状合法；
     - 无触发面的意图拒绝投影（不另造 scheduler）；
     - 桥不写 store：create_automation_for_intent 只产出配置对象 + 引擎侧
-      调用说明（wired=False 偏差如实登记）；
+      调用说明（F3-B2 起 wired=True：时间 cue 走 persist_automation_for_intent）；
     - cue 适配纯函数 event_matches_cue：project_open / tool_result /
       record_updated 三类事件各命中/不命中；
     - engine 挂接偏差登记存在且锚点正确（engine.py / triggers.py）。
@@ -21,7 +21,7 @@
       lifecycle 保持 CANCELLED 不触发；
     - on_automation_event 回写：投影经真实 TOML store 落地 → 引擎 fire 回写
       lifecycle=TRIGGERED（receipt 留行上）；二次 fire 不重复触发；cancel 后
-      不再触发（引擎侧取消 wired=False 偏差如实返回）。
+      不再触发（显式注入 engine 时 Automation 半边真取消；未注入只返回说明）。
 
 被测实现：core/atlas/memory/intent_bridge.py（Atlas/MemoryOS 整合任务，
 无外部来源搬运，不需要 VENDORED 条目）。
@@ -146,7 +146,9 @@ def test_bridge_create_returns_instructions_never_writes_store(tmp_path: Path):
     bridge = IntentBridge(client=object())   # 该路径不触达 client
     result = bridge.create_automation_for_intent(_sample_intent())
     assert "automation" in result and "instructions" in result
-    assert result["instructions"]["wired"] is False
+    # F3-B2 起 engine 真挂接（时间 cue 经 persist_automation_for_intent 真写
+    # store），但**本投影方法**仍只产配置对象 —— 两者不矛盾。
+    assert result["instructions"]["wired"] is True
     assert "store.put" in result["instructions"]["persist"]
     # 投影不落盘：目录里没有 automations.toml
     assert not (tmp_path / "automations.toml").exists()
@@ -183,13 +185,16 @@ def test_event_matches_cue_three_event_types():
 
 
 def test_engine_wiring_deviation_registered():
-    """engine 挂接偏差如实登记：wired=False + engine.py/triggers.py 锚点 +
-    store 写入边界说明（真挂接行留收口 —— T06.3 分步方式）。"""
+    """engine 挂接如实登记：F3-B2 起时间 cue 真挂接（wired=True），事件 cue 仍
+    未统一（event_wired=False）+ engine.py/triggers.py/observer_drain 锚点 +
+    store 写入边界说明。"""
     wiring = IntentBridge.describe_engine_wiring()
-    assert wiring["wired"] is False
+    assert wiring["wired"] is True
+    assert wiring["event_wired"] is False
     files = {anchor["file"] for anchor in wiring["anchors"]}
     assert "core/atlas/automation/engine.py" in files
     assert "core/atlas/automation/triggers.py" in files
+    assert "core/atlas/memory/observer_drain.py" in files
     assert "automations.toml" in wiring["store_write"]
     assert ENGINE_WIRING["reason"]
 
