@@ -4,7 +4,7 @@
  * 淡忘 / 归档 / 评分变化，并附改动前后的字段内容与变动原因（来自 MemOS 事件）。
  */
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, GitCompare, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Archive, ChevronDown, ChevronRight, ExternalLink, GitCompare, LoaderCircle, Pause, Play, RefreshCw, Trash2 } from 'lucide-react';
 import { api, relativeTime } from '../../services/api';
 
 interface ChangeField { key: string; label: string }
@@ -100,6 +100,39 @@ export default function MemoryChangesView({ apiBaseUrl, connected }: { apiBaseUr
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [memosDb, setMemosDb] = useState(true);
+  const [paused, setPaused] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState('http://127.0.0.1:18800');
+  const [busy, setBusy] = useState('');
+
+  const loadState = useCallback(async () => {
+    if (!connected) return;
+    try {
+      const state = await api<{ paused: boolean; viewer_url: string }>(apiBaseUrl, '/api/memory/state');
+      setPaused(state.paused); setViewerUrl(state.viewer_url);
+    } catch { /* state is optional */ }
+  }, [apiBaseUrl, connected]);
+  useEffect(() => { void loadState(); }, [loadState]);
+
+  const togglePause = async () => {
+    setBusy('pause');
+    try {
+      const state = await api<{ paused: boolean }>(apiBaseUrl, '/api/memory/pause', { method: 'POST', json: { paused: !paused } });
+      setPaused(state.paused);
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(''); }
+  };
+
+  const remove = async (item: ChangeItem) => {
+    const verb = item.entity === 'skills' ? '归档' : '删除';
+    if (!window.confirm(`${verb}这条${item.entity_label}？
+${item.title}`)) return;
+    setBusy(`del-${item.id}`);
+    try {
+      await api(apiBaseUrl, '/api/memory/delete', { method: 'POST', json: { entity: item.entity, ids: [item.entity_id] } });
+      await load(null, true);
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(''); }
+  };
 
   const load = useCallback(async (before?: number | null, quiet = false) => {
     if (!connected) return;
@@ -151,7 +184,15 @@ export default function MemoryChangesView({ apiBaseUrl, connected }: { apiBaseUr
       <button className="btn ghost" disabled={loading} onClick={() => void load()}>
         <RefreshCw size={14} className={loading ? 'spin' : undefined} />刷新
       </button>
+      <button className="btn ghost" disabled={busy === 'pause'} onClick={() => void togglePause()}
+        title={paused ? '恢复后 Atlas 会重新读取和记录记忆' : '暂停后 Atlas 不再读取也不再记录记忆（下一轮对话起生效）'}>
+        {paused ? <Play size={14} /> : <Pause size={14} />}{paused ? '恢复记忆' : '暂停记忆'}
+      </button>
+      <a className="btn ghost" href={viewerUrl} target="_blank" rel="noreferrer">
+        <ExternalLink size={14} />打开 MemOS 面板
+      </a>
     </div>
+    {paused && <div className="note">记忆已暂停：Atlas 现在既不读取也不记录记忆。点「恢复记忆」重新开启。</div>}
 
     {!memosDb && <div className="note">还没有记忆数据：开始和 Atlas 对话后，记忆的每一次变动都会出现在这里。</div>}
     {loading && <div className="list glass"><div className="empty"><LoaderCircle size={22} className="spin" /><b>正在读取记忆变动…</b></div></div>}
@@ -178,7 +219,13 @@ export default function MemoryChangesView({ apiBaseUrl, connected }: { apiBaseUr
           </div>
         </div>
         {open.has(item.id) && <div style={{ padding: '4px 12px 12px 34px' }}>
-          <small className="empty-note">编号 {item.entity_id}</small>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <small className="empty-note">编号 {item.entity_id}</small>
+            {item.op !== 'removed' && (item.entity === 'traces' || item.entity === 'skills') &&
+              <button className="btn ghost" disabled={busy === `del-${item.id}`} onClick={() => void remove(item)}>
+                {item.entity === 'skills' ? <Archive size={14} /> : <Trash2 size={14} />}{item.entity === 'skills' ? '归档这个技能' : '删除这条记录'}
+              </button>}
+          </div>
           <FieldTable item={item} />
         </div>}
       </Fragment>)}

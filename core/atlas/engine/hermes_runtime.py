@@ -193,6 +193,8 @@ class HermesRuntime:
         try:
             import yaml
             cfg = yaml.safe_load((self.home / "config.yaml").read_text(encoding="utf-8")) or {}
+            if (self.home.parent / "memory_paused").exists():  # 用户在记忆页暂停了记忆
+                return False
             return bool(str((cfg.get("memory") or {}).get("provider") or "").strip())
         except Exception:  # missing/invalid config: keep Hermes memory off
             return False
@@ -1207,7 +1209,8 @@ class HermesRuntime:
             ] + mcp_toolsets
             resolved_max_tokens = max_output_tokens or model_config.get("max_output_tokens")
             resolved_fallback = model_config.get("fallback")
-            agent_fingerprint = self._agent_cache_fingerprint(
+            memory_on = self._memory_provider_enabled()
+            agent_fingerprint = ("mem1|" if memory_on else "mem0|") + self._agent_cache_fingerprint(
                 self._fingerprint_route(route_kwargs), hermes_cwd, resolved_toolsets,
                 resolved_fallback, resolved_max_tokens,
             )
@@ -1280,7 +1283,7 @@ class HermesRuntime:
                     **route_kwargs,
                     session_id=conversation_id,
                     cwd=hermes_cwd,
-                    skip_memory=not self._memory_provider_enabled(),
+                    skip_memory=not memory_on,
                     checkpoints_enabled=False,
                     enabled_toolsets=resolved_toolsets,
                     fallback_model=resolved_fallback,
