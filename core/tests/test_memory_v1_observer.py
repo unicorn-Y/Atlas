@@ -271,7 +271,13 @@ def test_unparseable_output_does_not_ack_or_drop_queued_source():
 def test_observer_prompt_distinguishes_questions_from_facts_without_question_facet():
     assert "When the user ASKS about something, mark it as a question/request:" in OBSERVER_EXTRACTION_INSTRUCTIONS
     assert "用户的提问、请求、指令本身不记录；只有提问中透露出的事实才记录。" in OBSERVER_QUESTION_RULES
+    assert "条件句或假设" in OBSERVER_QUESTION_RULES
+    assert "不证明用户已经计划、决定或承诺" in OBSERVER_QUESTION_RULES
+    assert "问句中的查询条件" in OBSERVER_QUESTION_RULES
+    assert "不证明用户有该偏好或需求" in OBSERVER_QUESTION_RULES
     assert "question, request, or instruction is not itself a fact to remember" in OBSERVER_QUESTION_RULES
+    assert "hypothetical or conditional phrase" in OBSERVER_QUESTION_RULES
+    assert "Conditions asked about in a question do not establish personal preferences" in OBSERVER_QUESTION_RULES
     assert "我女儿 6 岁了，她该上几年级？" in OBSERVER_QUESTION_RULES
 
 
