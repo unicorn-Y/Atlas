@@ -52,7 +52,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from datetime import datetime
+from typing import Any, Mapping
 
 from atlas.memory.unified_client import (
     RevisionConflict,
@@ -200,6 +201,132 @@ def projection_for_intent(intent: dict[str, Any], *,
             "cue": cue,
             "binding": "automation_id = um-intent-<intent_id>（双向可解析）",
         },
+    }
+
+
+# ------------------------------------------- 记忆记录 → 意图行（F3-B3 收口）
+
+#: 用户直接来源的 chain key 前缀（T06.3：意图的 ACTIVE 授权只来自来源验证）
+USER_SOURCE_CHAIN_PREFIX = "ATLAS_USER_MESSAGE:"
+
+#: 证据来源事件 id 前缀（``atlas:<KIND>:<object_id>:<revision>:<op>``）
+SOURCE_EVENT_PREFIX = "atlas:"
+
+
+def user_source_ref_from_record(record: Mapping[str, Any]) -> str | None:
+    """INTENT 记忆记录 → 用户直接来源引用（``ATLAS_USER_MESSAGE:<object_id>``）。
+
+    **只认用户自己的发言**：证据链 ``content.evidence_chains.chain_keys`` 优先，
+    退化到 ``source_refs[*].source_event_id`` 的
+    ``atlas:<KIND>:<object_id>:<revision>:<op>`` 解析。派生摘要
+    （``DERIVED:observer-…``）、工具结果与助手消息一律不采用 —— 意图行要有用户
+    直接授权来源才可能 ACTIVE（§4 来源纪律 / T06.3）。取不到 → None（调用方
+    如实跳过，不伪造授权来源）。
+    """
+    content = record.get("content")
+    content = content if isinstance(content, dict) else {}
+    chains = content.get("evidence_chains")
+    chains = chains if isinstance(chains, dict) else {}
+    candidates: list[Any] = list(chains.get("chain_keys") or [])
+    for ref in record.get("source_refs") or []:
+        candidates.append(ref.get("source_event_id") if isinstance(ref, dict) else ref)
+    for item in candidates:
+        text = str(item or "").strip()
+        if text.startswith(USER_SOURCE_CHAIN_PREFIX):
+            return text
+        if text.startswith(SOURCE_EVENT_PREFIX + USER_SOURCE_CHAIN_PREFIX):
+            parts = text.split(":")
+            if len(parts) >= 4 and parts[2].strip():
+                return USER_SOURCE_CHAIN_PREFIX + parts[2].strip()
+    return None
+
+
+def aware_iso(raw: Any) -> str:
+    """带时区 ISO 8601 → 原文本；naive / 非法 → 空串。
+
+    naive 时刻不假装绝对时间（§2 时间纪律）—— 宁可判"无到期时刻"也不替用户
+    猜时区。
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(
+            text[:-1] + "+00:00" if text.endswith("Z") else text)
+    except ValueError:
+        return ""
+    return text if parsed.tzinfo is not None else ""
+
+
+def same_instant(left: Any, right: Any) -> bool:
+    """两个 ISO 时刻是否同一瞬间（时区写法和字符串形式无关）；不可解析 → False。"""
+    parsed: list[datetime] = []
+    for raw in (left, right):
+        text = str(raw or "").strip()
+        if not text:
+            return False
+        try:
+            value = datetime.fromisoformat(
+                text[:-1] + "+00:00" if text.endswith("Z") else text)
+        except ValueError:
+            return False
+        if value.tzinfo is None:
+            return False
+        parsed.append(value)
+    return parsed[0] == parsed[1]
+
+
+def record_due_at(record: Mapping[str, Any]) -> str:
+    """记录 → 带时区到期时刻（``valid_time.valid_from`` 优先，退化 title/value）。"""
+    valid_time = record.get("valid_time")
+    valid_time = valid_time if isinstance(valid_time, dict) else {}
+    content = record.get("content")
+    content = content if isinstance(content, dict) else {}
+    for raw in (valid_time.get("valid_from"), content.get("title"),
+                content.get("value")):
+        due = aware_iso(raw)
+        if due:
+            return due
+    return ""
+
+
+def record_reminder_text(record: Mapping[str, Any]) -> str:
+    """记录 → 提醒正文（``content`` 的 text/summary 优先，退化标题 → "提醒"）。"""
+    content = record.get("content")
+    content = content if isinstance(content, dict) else {}
+    for key in ("text", "summary", "statement", "title"):
+        value = content.get(key)
+        if str(value or "").strip():
+            return str(value).strip()
+    return "提醒"
+
+
+def intent_request_from_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    """INTENT 记忆记录 → ``POST /v1/unified/intents`` 请求体；不合格 → None。
+
+    资格（缺一不可，缺则**如实跳过**、不伪造意图行）：facet/``memory_type`` ==
+    ``INTENT`` 且生命周期 ACTIVE；有用户直接来源引用；有**带时区**的绝对到期
+    时刻。服务端仍会独立查证来源（VERIFIED → ACTIVE，否则 PROPOSED）—— 桥不
+    代替服务端判定授权，只保证请求字段齐全。
+    """
+    facet = str(record.get("facet") or record.get("memory_type") or "").upper()
+    if facet and facet != "INTENT":
+        return None
+    lifecycle = str(record.get("lifecycle") or record.get("status")
+                    or "ACTIVE").upper()
+    if lifecycle != "ACTIVE":
+        return None
+    user_source_ref = user_source_ref_from_record(record)
+    if not user_source_ref:
+        return None
+    due = record_due_at(record)
+    if not due:
+        return None
+    return {
+        "user_source_ref": user_source_ref,
+        "cue": {"kind": "time", "at": due},
+        "action": {"kind": "remind", "message": record_reminder_text(record)},
+        "due_at": due,
     }
 
 
@@ -392,6 +519,84 @@ class IntentBridge:
         result["intent_id"] = intent_id
         result["automation_id"] = (result.get("automation") or {}).get("id")
         return result
+
+    # ------------------------------------------ 记忆记录 → 意图行（F3-B3 收口）
+
+    async def find_intent_for_record(self, record: Mapping[str, Any]
+                                     ) -> dict[str, Any] | None:
+        """按幂等键 ``(user_source_ref, due_at)`` 在现有 ACTIVE 意图里查重。
+
+        ``GET /v1/unified/intents`` 只支持 lifecycle / intent_id / automation_id /
+        subject 过滤（无 user_source_ref）→ 拉 ACTIVE 后本地按来源引用 + 到期时刻
+        精确比对：同来源同时刻 = 同一意图，重放不产生第二条意图行。不合格记录 →
+        None（调用方退回 POST 路径）。
+        """
+        request = intent_request_from_record(record)
+        if request is None:
+            return None
+        listing = await self.client().call(
+            "GET", "/v1/unified/intents",
+            params={"lifecycle": "ACTIVE", "limit": 200})
+        items = listing.get("items") if isinstance(listing, dict) else listing
+        for row in items or []:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("user_source_ref") or "").strip() != request["user_source_ref"]:
+                continue
+            if same_instant(self._time_due(row), request["due_at"]):
+                return row
+        return None
+
+    async def ensure_intent_from_record(self, record: Mapping[str, Any]
+                                        ) -> dict[str, Any]:
+        """INTENT 记忆记录 → **真实** ``unified_intents`` 行（F3-B3 收口；幂等）。
+
+        链路：观察者形成带时间 cue 的用户意图记忆 → 本条投影成意图行（服务端查证
+        ``user_source_ref`` → ACTIVE）→ :meth:`persist_automation_for_intent` 用其
+        ``intent_id`` 建真实 Automation（``um-intent-<intent_id>``）。
+
+        幂等：先 :meth:`find_intent_for_record` 查现有 ACTIVE 意图，命中即复用
+        （``created`` False）；否则 POST 建立。不合格记录 → ``reason`` 说明后如实
+        跳过 —— 不伪造意图行、不假装成功。
+        """
+        request = intent_request_from_record(record)
+        if request is None:
+            return {"created": False, "reason": "not_eligible", "intent_id": None,
+                    "intent": None, "request": None}
+        existing = await self.find_intent_for_record(record)
+        if existing is not None:
+            return {"created": False, "reason": "already_exists",
+                    "intent_id": existing.get("intent_id"), "intent": existing,
+                    "request": request}
+        body: dict[str, Any] = dict(request)
+        if (ctx := self._context(None)) is not None:
+            body["context"] = ctx
+        payload = await self.client().create_intent(body)
+        return {"created": True, "reason": "created",
+                "intent_id": payload.get("intent_id"), "intent": payload,
+                "lifecycle": payload.get("lifecycle"), "request": request}
+
+    @staticmethod
+    def persist_input_from_record(ensured: Mapping[str, Any]
+                                  ) -> dict[str, Any] | None:
+        """``ensure_intent_from_record`` 结果 → ``persist_automation_for_intent`` 输入。
+
+        以服务端意图行为准（intent_id / cue / due_at / action），记录侧请求字段只
+        补缺 —— 持久化不依赖服务端是否回显 cue/due_at（少一次字段回显就掉链的
+        脆性）。无 intent_id → None（调用方如实跳过）。
+        """
+        intent_id = str(ensured.get("intent_id") or "").strip()
+        if not intent_id:
+            return None
+        request = ensured.get("request")
+        request = request if isinstance(request, dict) else {}
+        row = ensured.get("intent")
+        row = dict(row) if isinstance(row, dict) else {}
+        row["intent_id"] = intent_id
+        for key in ("cue", "due_at", "action"):
+            if not row.get(key) and request.get(key):
+                row[key] = request[key]
+        return row
 
     async def cancel_automation_for_intent(self, intent_id: str, *,
                                            engine: Any = None,

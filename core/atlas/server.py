@@ -322,6 +322,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     ),
                     name="unified-capture-flush",
                 )
+                # F3-C：把 drain 与它的调度踢点登记给控制面，供
+                # POST /api/unified-memory/session/close 触发「会话结束」批量冲刷。
+                from atlas.memory.observer_drain import register_observer_drain
+
+                register_observer_drain(observer_drain, schedule_observer_drain)
                 from atlas.memory.reflector import (
                     MemoryReflector,
                     reflector_idle_loop,
@@ -756,6 +761,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             from atlas.memory.capture import register_observer_session_callback
 
             register_observer_session_callback(None)
+            from atlas.memory.observer_drain import register_observer_drain
+
+            register_observer_drain(None)
         except Exception:  # noqa: BLE001 — startup may have ended before capture setup
             pass
         # T02.2：先停捕获 flush 循环并复位单例，避免跨 lifespan 残留旧服务。

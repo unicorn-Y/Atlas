@@ -356,6 +356,7 @@ class MemoryObserver:
         session = str(session_id)
         self._recover_unprocessed_sources(session)
         queue = self._restore_queue(session, context)
+        self._hydrate_queue_from_outbox(session, queue)
         pending = self._outbox.observer_pending_batch(session) if self._outbox is not None else None
         if pending is not None:
             state = self._inflight.get(str(pending["batch_id"]))
@@ -405,6 +406,7 @@ class MemoryObserver:
 
         session = str(session_id)
         queue = self._restore_queue(session, context)
+        self._hydrate_queue_from_outbox(session, queue)
         if context is not None:
             queue.context = context
 
@@ -536,6 +538,40 @@ class MemoryObserver:
                 public, session_id, queue_ids, source_ids, public.raw_output,
             )
         return queue
+
+    def _hydrate_queue_from_outbox(self, session_id: str, queue: _SessionQueue) -> None:
+        """Fold durable queue rows that this process never saw into the live queue.
+
+        ``_recover_unprocessed_sources`` writes recovered sources straight to the outbox,
+        and ``_restore_queue`` skips the reload for sessions already restored in-process,
+        so a source that only ever arrived through recovery used to stay invisible to the
+        in-memory queue and strand forever. Rebuild the entry here from the durable row.
+        """
+        if self._outbox is None:
+            return
+        known = {str(entry.get("_observer_queue_id")) for entry in queue.entries}
+        inflight_queue_ids: set[str] = set()
+        if queue.active_batch_id is not None:
+            state = self._inflight.get(str(queue.active_batch_id))
+            if state is not None:
+                inflight_queue_ids = {str(value) for value in state.queue_ids}
+        appended: list[tuple[int, dict[str, Any]]] = []
+        for row in self._outbox.observer_queue_sources(session_id):
+            queue_id = str(row["queue_id"])
+            if queue_id in known or queue_id in inflight_queue_ids:
+                continue
+            source = self._source_from_capture_row(row)
+            fragments = self._split_source(source)
+            part_index = int(row["part_index"])
+            if len(fragments) != int(row["part_count"]) or not 1 <= part_index <= len(fragments):
+                raise ValueError("durable Observer fragment layout no longer matches captured source")
+            entry = fragments[part_index - 1]
+            entry["_observer_queue_id"] = queue_id
+            entry["_observer_part_index"] = part_index
+            entry["_observer_part_count"] = int(row["part_count"])
+            appended.append((int(row["queue_id"]), entry))
+        for _, entry in sorted(appended, key=lambda item: item[0]):
+            queue.entries.append(entry)
 
     def _recover_unprocessed_sources(self, session_id: str) -> None:
         """Queue ACKED capture rows that were never handed to Observer before restart."""

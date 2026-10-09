@@ -28,7 +28,9 @@ def test_runtime_capabilities_are_declared_outside_the_canonical_manifest() -> N
     scenarios = {scenario.id: scenario for scenario in runner.get_all_scenarios()}
 
     assert scenarios[27].runtime_capabilities == frozenset({"hard_erase"})
-    assert scenarios[29].runtime_capabilities == frozenset({"reminder_readonly_audit"})
+    assert scenarios[29].runtime_capabilities == frozenset(
+        {"reminder_readonly_audit", "reminder_tools"}
+    )
     assert scenarios[30].runtime_capabilities == frozenset({"workspace_write_tools", "owned_process_kill"})
     assert scenarios[30].workspace_files == ("docs/file1.md", "docs/file2.md", "docs/file3.md")
     assert runner.scenario_manifest_sha256() == ORIGINAL_SCENARIO_MANIFEST_SHA256
@@ -55,6 +57,39 @@ def test_hard_erase_flag_follows_declared_capability_not_scenario_number(tmp_pat
 
     assert enabled["MEMORYOS_HARD_ERASE_ENABLED"] == "true"
     assert "MEMORYOS_HARD_ERASE_ENABLED" not in disabled
+
+
+def test_local_weight_cache_env_is_inherited_but_never_hardcoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """隔离进程必须能看见父进程的本地权重缓存，否则语义 worker 会联网找模型失败。"""
+    roots = {
+        "ATLAS_DATA_DIR": str(tmp_path / "atlas"),
+        "MEMORYOS_DATA_ROOT": str(tmp_path / "memoryos"),
+        "MEMORYOS_DB_PATH": str(tmp_path / "memoryos" / "db.sqlite3"),
+        "HERMES_HOME": str(tmp_path / "hermes"),
+        "WORKSPACE": str(tmp_path / "workspace"),
+    }
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf-home"))
+    monkeypatch.delenv("HF_HUB_CACHE", raising=False)
+
+    inherited = runner._runtime_environment(
+        roots, api_token="token", subject_id="isolated-subject",
+    )
+
+    assert inherited["HF_HOME"] == str(tmp_path / "hf-home")
+    assert "HF_HUB_CACHE" not in inherited
+    # 不透传联网开关：隔离运行不得替父进程打开模型下载。
+    assert "MEMORYOS_EMBEDDING_ALLOW_DOWNLOAD" not in inherited
+
+    monkeypatch.delenv("HF_HOME", raising=False)
+    bare = runner._runtime_environment(
+        roots, api_token="token", subject_id="isolated-subject",
+    )
+
+    # 未设置即不注入 —— 不把任何本机缓存路径写死进运行器。
+    assert "HF_HOME" not in bare
+    assert not [key for key in bare if key.startswith("HF_")]
 
 
 def test_run_start_message_preserves_original_input_and_uses_current_product_model() -> None:
@@ -240,6 +275,73 @@ def test_workspace_tools_follow_declared_capability_instead_of_scenario_number()
     assert restricted["tool_deny"] == ["*"]
     assert allowed["permission_mode"] == "ask_writes"
     assert allowed["tool_allow"] == ["read_file", "write_file", "patch", "search_files"]
+
+
+def test_reminder_capability_exposes_the_automation_tool_by_capability_not_id() -> None:
+    """声明提醒审计的场景必须真放行 automation_manage（按能力，不按场景号）。"""
+    reminder_scenario = next(
+        scenario
+        for scenario in runner.get_all_scenarios()
+        if "reminder_readonly_audit" in scenario.runtime_capabilities
+    )
+    step = next(
+        step
+        for step in reminder_scenario.steps
+        if not runner.is_control_action_step(step)
+    )
+
+    scoped = runner.build_run_start_message(
+        reminder_scenario,
+        step,
+        run_id="reminder",
+        conversation_id="conversation-reminder",
+        workspace=Path("D:/Temp/F1-D/workspace"),
+    )
+    renamed = runner.build_run_start_message(
+        replace(reminder_scenario, id=929),
+        step,
+        run_id="reminder-renamed",
+        conversation_id="conversation-reminder-renamed",
+        workspace=Path("D:/Temp/F1-D/workspace"),
+    )
+    without_tool_capability = runner.build_run_start_message(
+        replace(
+            reminder_scenario,
+            runtime_capabilities=frozenset({"reminder_readonly_audit"}),
+        ),
+        step,
+        run_id="reminder-without-tools",
+        conversation_id="conversation-reminder-without-tools",
+        workspace=Path("D:/Temp/F1-D/workspace"),
+    )
+
+    assert scoped["tool_allow"] == ["automation_manage"]
+    assert scoped["tool_deny"] == []
+    assert scoped["permission_mode"] == "ask_writes"
+    # 换 id 不影响口径：分支只认能力名。
+    assert renamed["tool_allow"] == scoped["tool_allow"]
+    assert renamed["permission_mode"] == scoped["permission_mode"]
+    # 只有审计能力、没有工具能力 → 退回全禁基线（这正是修复前的坏状态）。
+    assert without_tool_capability["tool_allow"] == []
+    assert without_tool_capability["tool_deny"] == ["*"]
+    assert without_tool_capability["permission_mode"] == "read_only"
+
+
+def test_declared_capabilities_are_all_known_to_the_runtime_map() -> None:
+    """能力名写错必须报错，不能静默退化成全禁（避免审计恒不可达）。"""
+    declared = {
+        capability
+        for scenario in runner.get_all_scenarios()
+        for capability in scenario.runtime_capabilities
+    }
+    # 不改变工具口径、由运行器其它分支消费的能力。
+    non_tool_capabilities = {
+        "hard_erase",
+        "owned_process_kill",
+        "reminder_readonly_audit",
+    }
+
+    assert declared <= set(runner.CAPABILITY_RUNTIME) | non_tool_capabilities
 
 
 def test_control_action_steps_are_not_sent_as_chat() -> None:
@@ -510,3 +612,48 @@ def test_capture_evidence_reports_isolated_source_ids_ack_and_context_overlap(tm
     assert "text" not in after["events"][0]
     assert evidence["ack_status"] == "all_acked"
     assert evidence["same_run_record_refs_in_assembled_context"] == ["memory:record-1"]
+
+class _FakeAtlasClient:
+    """最小替身：只记录 (method, path, json_body) 并回放预置响应。"""
+
+    def __init__(self, response=None, raises=None) -> None:
+        self.calls: list[tuple[str, str, object]] = []
+        self._response = response
+        self._raises = raises
+
+    def request(self, method: str, path: str, *, json_body=None, params=None):
+        self.calls.append((method, path, json_body))
+        if self._raises is not None:
+            raise self._raises
+        return self._response
+
+
+def test_close_turn_session_uses_product_endpoint_with_conversation_id() -> None:
+    """会话结束必须走产品自己的控制面，并把本轮 conversation_id 带上。"""
+    atlas = _FakeAtlasClient(
+        response={"status_code": 200,
+                  "body": {"status": "ok", "session_ended": "conversation-7"}})
+
+    result = runner._close_turn_session(atlas, "conversation-7")
+
+    assert result == {"status": "ok", "session_ended": "conversation-7"}
+    assert atlas.calls == [
+        ("POST", "/api/unified-memory/session/close", {"session_id": "conversation-7"})]
+
+
+def test_close_turn_session_reports_http_failure_without_raising() -> None:
+    atlas = _FakeAtlasClient(response={"status_code": 503, "body": {"detail": {}}})
+
+    result = runner._close_turn_session(atlas, "conversation-7")
+
+    assert result == {"status": "failed", "http_status": 503}
+
+
+def test_close_turn_session_reports_transport_error_without_raising() -> None:
+    atlas = _FakeAtlasClient(raises=ConnectionError("atlas down"))
+
+    result = runner._close_turn_session(atlas, "conversation-7")
+
+    assert result["status"] == "failed"
+    assert result["error_type"] == "ConnectionError"
+

@@ -245,9 +245,15 @@ class _Observer:
 
 
 class _Facade:
-    def __init__(self, intents: list[dict[str, Any]] | None = None) -> None:
+    def __init__(self, intents: list[dict[str, Any]] | None = None,
+                 client_obj: Any = None) -> None:
         self.intents = intents or []
         self.listed = 0
+        self._client = client_obj
+
+    def client(self) -> Any:
+        assert self._client is not None, "本替身只在注入 client 的用例里用"
+        return self._client
 
     def default_context(self, **kwargs):
         return kwargs
@@ -263,6 +269,53 @@ class _Facade:
         return {"items": list(self.intents)}
 
 
+def _intent_record() -> dict[str, Any]:
+    """INTENT 记忆记录的**真形状**（取自 F1-D S29 真跑隔离库 mem-fm-1 的投影）。
+
+    三处要害：``facet=INTENT`` + ``status=ACTIVE``；用户来源在
+    ``content.evidence_chains.chain_keys``（``ATLAS_USER_MESSAGE:<object_id>``）；
+    ``valid_time.valid_from`` 是**带时区**的绝对到期时刻。扁平的意图行
+    （intent_id/cue/due_at）不是 ``/v1/unified/records`` 的形状 —— 拿它当记录
+    喂进来，桥只能如实判 ``not_eligible``（这正是修复前的坏状态）。
+    """
+    return {
+        "record_ref": f"mem-fm-{UID}-drain",
+        "facet": "INTENT",
+        "status": "ACTIVE",
+        "valid_time": {"valid_from": "2026-10-05T09:00:00+08:00"},
+        "content": {
+            "text": f"交报告（{UID}）",
+            "evidence_chains": {"chain_keys": [
+                f"ATLAS_USER_MESSAGE:msg-{UID}-drain",
+                f"DERIVED:observer-{UID}-drain",
+            ]},
+        },
+        "source_refs": [
+            {"source_event_id": f"atlas:ATLAS_USER_MESSAGE:msg-{UID}-drain:1:UPSERT"},
+            {"source_event_id": f"atlas:DERIVED:observer-{UID}-drain:1:UPSERT"},
+        ],
+    }
+
+
+class _IntentClient:
+    """桥需要的两个服务端调用（fake facade 的 client 面）。"""
+
+    def __init__(self, intent_id: str) -> None:
+        self.intent_id = intent_id
+        self.created: list[dict[str, Any]] = []
+
+    async def call(self, method: str, path: str, json: Any = None,
+                   params: dict[str, Any] | None = None) -> Any:
+        assert (method, path) == ("GET", "/v1/unified/intents")
+        return {"items": []}                 # 首查：无同来源同意图 → 走创建路径
+
+    async def create_intent(self, request: dict[str, Any]) -> dict[str, Any]:
+        self.created.append(dict(request))
+        # 真服务端行为：来源查证通过 → ACTIVE（只有查不到才 PROPOSED）
+        return {"intent_id": self.intent_id, "lifecycle": "ACTIVE",
+                "user_source_ref": request.get("user_source_ref")}
+
+
 def _batch() -> _Batch:
     return _Batch("batch-1", {"observations": [
         {"source_event_id": "src-1", "kind": "chat_message", "text": "明天上午 9 点提醒我交报告"},
@@ -270,26 +323,32 @@ def _batch() -> _Batch:
 
 
 def test_observer_drain_creates_automation_for_time_intent(tmp_path: Path) -> None:
-    """drain ACK 后把带时间条件的 ACTIVE 意图投影成真实 Automation。"""
-    intent = {
-        "intent_id": f"int-{UID}-drain",
-        "cue": {"kind": "time"},
-        "action": {"kind": "remind", "message": f"交报告（{UID}）"},
-        "due_at": "2026-10-05T09:00:00+08:00",
-        "lifecycle": "ACTIVE",
-    }
-    facade = _Facade([intent])
+    """drain ACK 后把带时间 cue 的 ACTIVE INTENT **记录**投影成真实 Automation。
+
+    形状按真服务投影（见 :func:`_intent_record`）：记忆记录 → 意图行 → Automation
+    两跳都真走。重放同一条记录不产生第二份 Automation（automation_id 稳定 +
+    同正文同时间由 reminders 层去重）。
+    """
+    intent_id = f"int-{UID}-drain"
+    client = _IntentClient(intent_id)
+    facade = _Facade([_intent_record()], client_obj=client)
     engine = _engine(tmp_path)
-    drain = MemoryObserverDrain(_Observer(["session-a"], [_batch(), None]), facade,
-                                intent_bridge=IntentBridge(client=object()),
-                                automation_engine=engine)
+    drain = MemoryObserverDrain(
+        _Observer(["session-a"], [_batch(), None, _batch(), None]), facade,
+        intent_bridge=IntentBridge(facade=facade),  # type: ignore[arg-type]
+        automation_engine=engine,
+    )
 
     asyncio.run(drain.drain_once())
+    asyncio.run(drain.drain_once())   # 同一条记录重放（记忆读再走一遍）
 
-    assert facade.listed == 1
+    assert facade.listed == 2
+    assert client.created, "带用户来源链的时间意图必须真建意图行"
+    assert client.created[0]["user_source_ref"].startswith("ATLAS_USER_MESSAGE:")
+    assert client.created[0]["due_at"] == "2026-10-05T09:00:00+08:00"
     records = engine.store.list()
     assert len(records) == 1
-    assert records[0]["id"] == automation_id_for_intent(intent["intent_id"])
+    assert records[0]["id"] == automation_id_for_intent(intent_id)
     assert records[0]["trigger"]["at"] == "2026-10-05T09:00:00+08:00"
 
 

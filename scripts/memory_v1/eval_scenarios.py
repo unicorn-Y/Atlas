@@ -916,7 +916,13 @@ def get_all_scenarios() -> list[ScenarioSpec]:
                 "提醒已被取消，回答中确认没有明天的待办提醒",
                 "不得出现已取消提醒继续触发",
             ],
-            runtime_capabilities=frozenset({"reminder_readonly_audit"}),
+            # reminder_readonly_audit：运行器审计提醒终态（只读）。
+            # reminder_tools：必须真放行 automation_manage —— 否则模型一个工具
+            # 都调不动，只能口头编造"已设置提醒"，审计恒不可达
+            # （见 CAPABILITY_RUNTIME / _runtime_tool_scope）。
+            runtime_capabilities=frozenset(
+                {"reminder_readonly_audit", "reminder_tools"}
+            ),
         ),
         ScenarioSpec(
             id=30,
@@ -978,6 +984,60 @@ def is_control_action_step(step: ScenarioStep) -> bool:
     return step.user_input.startswith("[系统模拟操作:")
 
 
+#: 场景能力 → 运行工具口径（声明式映射）。
+#:
+#: 运行器只按**能力名**拼装 tool_allow / tool_deny / permission_mode，永不按
+#: 场景号或题目号分支：``replace(spec, id=130)`` 的副本与正本走同一条路径。
+#: 能力声明本身放在 canonical manifest 之外（见
+#: ``test_runtime_capabilities_are_declared_outside_the_canonical_manifest``），
+#: 因此新增/调整能力不会改动 manifest 指纹。
+#:
+#: ``tool_allow`` 的元组顺序即下发顺序，按 ``CAPABILITY_RUNTIME_ORDER`` 去重合并。
+CAPABILITY_RUNTIME: dict[str, dict[str, Any]] = {
+    "workspace_write_tools": {
+        "permission_mode": "ask_writes",
+        "tool_allow": ("read_file", "write_file", "patch", "search_files"),
+    },
+    # 声明提醒审计的场景必须能把提醒**真的**建出来：observer 落库只是旁路
+    # ，audit_reminder_state 的 creation_tools / cancellation_tools 只认模型
+    # 这一轮真实调用的工具名。不放行则场景恒不可达（模型被迫口头编造）。
+    "reminder_tools": {
+        "permission_mode": "ask_writes",
+        "tool_allow": ("automation_manage",),
+    },
+}
+
+#: 能力合并顺序（显式固定，避免 frozenset 迭代顺序影响下发报文）。
+CAPABILITY_RUNTIME_ORDER: tuple[str, ...] = (
+    "workspace_write_tools",
+    "reminder_tools",
+)
+
+
+def _runtime_tool_scope(
+    capabilities: frozenset[str],
+) -> tuple[list[str], list[str], str]:
+    """把已声明能力翻译成 ``(tool_allow, tool_deny, permission_mode)``。
+
+    没有任何已知能力 → 沿用安全基线：``read_only`` + ``tool_deny=["*"]``。
+    ``automation_manage`` 不在 ``_ATLAS_WRITE_TOOLS`` 分类内，故 ``ask_writes``
+    下不会触发审批弹窗。
+    """
+    allow: list[str] = []
+    permission_mode = "read_only"
+    for capability in CAPABILITY_RUNTIME_ORDER:
+        if capability not in capabilities:
+            continue
+        spec = CAPABILITY_RUNTIME[capability]
+        permission_mode = str(spec["permission_mode"])
+        for name in spec["tool_allow"]:
+            if name not in allow:
+                allow.append(name)
+    if not allow:
+        return [], ["*"], "read_only"
+    return allow, [], permission_mode
+
+
 def build_run_start_message(
     scenario: ScenarioSpec,
     step: ScenarioStep,
@@ -989,7 +1049,9 @@ def build_run_start_message(
     if is_control_action_step(step):
         raise ValueError("control action steps must not be sent to the model as chat")
     workspace_path = workspace.resolve()
-    write_tools = "workspace_write_tools" in scenario.runtime_capabilities
+    tool_allow, tool_deny, permission_mode = _runtime_tool_scope(
+        scenario.runtime_capabilities
+    )
     return {
         "type": "run.start",
         "run_id": run_id,
@@ -1001,10 +1063,10 @@ def build_run_start_message(
         "test_clock": step.occurred_at,
         "workspace": str(workspace_path),
         "mode": "act",
-        "permission_mode": "ask_writes" if write_tools else "read_only",
+        "permission_mode": permission_mode,
         "allowed_paths": [str(workspace_path)],
-        "tool_allow": ["read_file", "write_file", "patch", "search_files"] if write_tools else [],
-        "tool_deny": [] if write_tools else ["*"],
+        "tool_allow": tool_allow,
+        "tool_deny": tool_deny,
     }
 
 
@@ -1200,6 +1262,31 @@ def _read_capture_source_events(
     return {"status": "ok", "events": events, "observer": observer}
 
 
+def _close_turn_session(atlas: Any, conversation_id: str) -> dict[str, Any]:
+    """End this turn's Observer session through the product's own control surface.
+
+    00_任务书 §6：观察者批量在「阈值累积」或「会话结束」触发。评测里每个 turn 就是
+    一个独立会话，所以每轮收尾都走产品自己的会话结束入口（
+    POST /api/unified-memory/session/close）把该会话标成待冲刷 —— 既不新建调度器，
+    也不由运行器直接写库。
+    """
+    try:
+        response = atlas.request(
+            "POST", "/api/unified-memory/session/close",
+            json_body={"session_id": conversation_id},
+        )
+    except Exception as exc:  # noqa: BLE001 — 结算仍会继续等待，失败如实记录
+        return {"status": "failed", "error_type": type(exc).__name__}
+    status = int(response.get("status_code") or 0)
+    body = response.get("body")
+    if status != 200 or not isinstance(body, dict):
+        return {"status": "failed", "http_status": status}
+    return {
+        "status": str(body.get("status")),
+        "session_ended": body.get("session_ended"),
+    }
+
+
 async def _wait_for_observer_settlement(
     atlas_data_root: Path,
     conversation_id: str,
@@ -1386,6 +1473,18 @@ def _runtime_environment(
     for var in ("ATLAS_API_KEY", "ATLAS_API_BASE", "OPENAI_API_KEY", "GOOGLE_API_KEY",
                 "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY"):
         env.pop(var, None)
+    # 本地权重缓存必须能被隔离进程看见：MemoryOS 的语义 worker 默认
+    # local_files_only，按 HF 缓存定位嵌入权重；父进程已配好的缓存位置若不
+    # 透传，子进程会改为联网取模型并以 OSError 失败 → 语义 worker 进 ERROR →
+    # 场景结算闸门（要求 semantic READY/pending=0）随后拒收每一轮，整套评测
+    # 都跑不动。这里只透传**父进程已设置**的缓存/离线类变量，不硬编码任何
+    # 本机路径，也不打开联网下载（MEMORYOS_EMBEDDING_ALLOW_DOWNLOAD 不透传）。
+    for var in ("HF_HOME", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE",
+                "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE",
+                "MEMORYOS_EMBEDDING_MODEL", "MEMORYOS_EMBEDDING_DEVICE"):
+        inherited_value = os.environ.get(var)
+        if inherited_value:
+            env[var] = inherited_value
     if scenario and "hard_erase" in scenario.runtime_capabilities:
         env["MEMORYOS_HARD_ERASE_ENABLED"] = "true"
     return env
@@ -1832,6 +1931,8 @@ async def run_scenario_step(
     before = memory.records()
     result = atlas.chat(message)
     state["last_run"] = result
+    state.setdefault("session_close", []).append(
+        _close_turn_session(atlas, conversation_id))
     try:
         observer_settlement = await _wait_for_observer_settlement(
             atlas_data_root, conversation_id, memory,
@@ -1957,6 +2058,7 @@ async def run_scenario(
         "execution_errors": state["execution_errors"], "records": records,
         "final_state": {
             "action_results": state["action_results"],
+            "session_close": state.get("session_close", []),
             "reminder_audit_baseline": state.get("reminder_audit_baseline"),
             "reminder_audit_history": state.get("reminder_audit_history", []),
             "capture_outbox_status": final_capture.get("status"),

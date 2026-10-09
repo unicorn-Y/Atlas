@@ -459,3 +459,27 @@ async def capture_status() -> JSONResponse:
                              "paused_skipped": 0,
                              "note": "采集服务未装配"}
     return JSONResponse(content=payload)
+
+@router.post("/session/close")
+async def close_observer_session(request: Request) -> JSONResponse:
+    """POST /api/unified-memory/session/close — 结束观察者会话并立即冲刷。
+
+    语义 = 00_任务书 §6 的批量触发「会话结束」：把当前（或 body.session_id 指定
+    的）观察者会话标记为待冲刷，再叫醒既有的 capture-flush → drain 链路。不新建
+    调度器、不直接写库。body 可省略；``{"session_id": "..."}`` 可指定会话。
+    """
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 — 空 body 合法：默认作用于当前活跃会话
+        body = {}
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail={
+            "error": "INVALID_BODY", "message": "请求体必须是 JSON 对象"})
+    from atlas.memory.observer_drain import request_observer_session_end
+
+    result = request_observer_session_end(body.get("session_id"))
+    if result.get("status") == "unavailable":
+        raise HTTPException(status_code=503, detail={
+            "error": "OBSERVER_NOT_CONFIGURED",
+            "message": "统一记忆未装配（memory.unified.enabled=false）"})
+    return JSONResponse(content=result)

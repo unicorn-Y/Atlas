@@ -187,6 +187,8 @@ def test_enabled_config_mounts_proxy_router_and_facade_composition(
         "/api/unified-memory/capture/pause",
         "/api/unified-memory/capture/stop",
         "/api/unified-memory/capture/status",
+        # F3-B 观察者会话收口（本地控制器：不等 1200-token 阈值就结算本轮）
+        "/api/unified-memory/session/close",
     ):
         assert expected in proxy_paths, expected
     # 后缀与 MemoryOS /v1/unified/* 一一对应（23 条契约路由 / 22 个唯一 path）
@@ -196,7 +198,9 @@ def test_enabled_config_mounts_proxy_router_and_facade_composition(
     # + T05.3 四条采集控制 path（capture start/pause/stop/status）
     # + T06.1 两条焦点 path（GET /focus/{task_id} attend、
     #   POST /focus/{focus_id}/observe 注意事件；POST /focus 已在 23 条内）
-    assert len(proxy_paths) == 33
+    # + F3-B 一条会话收口 path（POST /session/close：观察者本轮结算，
+    #   E7/E8 真实链路不依赖 1200-token 阈值）
+    assert len(proxy_paths) == 34
 
     facade = UnifiedMemoryFacade.from_config()
     assert facade.enabled is True
