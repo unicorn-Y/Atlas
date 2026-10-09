@@ -22,18 +22,19 @@
   "reviews": [],
   "orchestration": {
     "status": "RUNNING",
-    "controller": "Codex /root (F2 unique controller)",
+    "controller": "Codex /root (F4 unique controller)",
     "round": 6,
     "pushed": {
-      "atlas": "c4e7570a (memory-v1)",
-      "memoryos": "9dd61d8 (memory-v1)",
-      "note": "2026-10-09 F2-0 inherited F1-D work reviewed, ID-based runtime branches repaired, SSH push + explicit tracking fetch verified both branches have no ahead"
+      "atlas": "b820cd12 (memory-v1)",
+      "memoryos": "d0ec6b2 (memory-v1)",
+      "note": "2026-10-09 F4-A timezone package independently checked; SSH push and explicit tracking fetch, ahead/behind 0/0 in both repos"
     },
     "round5_packages": ["J1 重跑S8评测", "I4 补齐D/H/S6包报告", "J3 E7记忆页面后端闭环验证"],
     "max_subagents": 3,
-    "reason": "F2 用户指定 Codex 唯一总控，最多3个GPT-6 Luna/xhigh子智能体。F2-0已推送；F2-A产品修补和真实验收中，F2-B运行器准备中，F2-C仅副本演练和S7前置清单。不得进入S7或自行ACCEPTED。",
-    "evidence": "progress/CONTROLLER_RESUME_2026-10-07.md",
+    "reason": "F4 唯一总控；最多3个GPT-6 Luna/xhigh。F4-A已推送待审，F4-B/C施工，D/E未启动。两仓历史脏文件保留；忽略的Atlas uv.lock发生非必要生成变更，不能证明恢复，详见F4.md。不进入S7，不自行ACCEPTED。",
+    "f4_packages": {"A": "DONE_PENDING_REVIEW", "B": "IN_PROGRESS", "C": "IN_PROGRESS", "D": "NOT_STARTED", "E": "NOT_STARTED"},
+    "evidence": "progress/F4.md",
     "package_context": "progress/PACKAGE_CONTEXT.md",
-    "dispatch": "progress/F2.md"
+    "dispatch": "progress/F4.md"
   }
 }
