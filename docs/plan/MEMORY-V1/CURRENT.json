@@ -22,18 +22,18 @@
   "reviews": [],
   "orchestration": {
     "status": "RUNNING",
-    "controller": "Hermes AI计划",
-    "round": 5,
+    "controller": "Codex /root (F2 unique controller)",
+    "round": 6,
     "pushed": {
-      "atlas": "3d544e9d (memory-v1)",
-      "memoryos": "62422cb (memory-v1)",
-      "note": "2026-10-08 总控(AI计划)接管：N1b(a24ad543)+N2b(62422cb)+S8真评测返工(344ef58a/3d544e9d) 已双仓推送"
+      "atlas": "c4e7570a (memory-v1)",
+      "memoryos": "9dd61d8 (memory-v1)",
+      "note": "2026-10-09 F2-0 inherited F1-D work reviewed, ID-based runtime branches repaired, SSH push + explicit tracking fetch verified both branches have no ahead"
     },
     "round5_packages": ["J1 重跑S8评测", "I4 补齐D/H/S6包报告", "J3 E7记忆页面后端闭环验证"],
     "max_subagents": 3,
-    "reason": "Codex 四线程 failed(usageLimitExceeded, Oct 8 01:37 前无额度)。用户指令续接本任务，总控移交 Hermes。本轮派 3 个子智能体: A(修11回归+S1)、D(S2无key路径+consolidation:apply)、E(S3召回装配+S4排序)。",
+    "reason": "F2 用户指定 Codex 唯一总控，最多3个GPT-6 Luna/xhigh子智能体。F2-0已推送；F2-A产品修补和真实验收中，F2-B运行器准备中，F2-C仅副本演练和S7前置清单。不得进入S7或自行ACCEPTED。",
     "evidence": "progress/CONTROLLER_RESUME_2026-10-07.md",
     "package_context": "progress/PACKAGE_CONTEXT.md",
-    "dispatch": "progress/DISPATCH.md"
+    "dispatch": "progress/F2.md"
   }
 }
