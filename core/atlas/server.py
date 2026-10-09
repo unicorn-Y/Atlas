@@ -294,7 +294,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     memory_observer, unified_memory,
                     # F3-B2：观察者产出带时间条件的 INTENT → 既有 AutomationEngine
                     # 真实建任务（桥未注入时 drain 行为与从前一致）。
-                    intent_bridge=IntentBridge(facade=unified_memory),
+                    intent_bridge=IntentBridge(
+                        facade=unified_memory, config=get_config(),
+                    ),
                     automation_engine=get_automation_engine(),
                 )
                 register_observer_session_callback(observer_drain.note_session_started)

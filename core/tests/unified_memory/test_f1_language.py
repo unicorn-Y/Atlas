@@ -10,13 +10,14 @@ import pytest
 import atlas.memory.observer as observer_module
 from atlas.memory.observer import (
     MemoryObserver,
-    _SessionQueue,
     _dominant_language,
     _language_mismatch_indices,
+    _SessionQueue,
 )
 from atlas.memory.observer_prompt import (
     OBSERVER_EXTRACTION_INSTRUCTIONS,
     OBSERVER_OUTPUT_GUIDANCE,
+    OBSERVER_QUESTION_RULES,
 )
 from atlas.memory.reflector import (
     MemoryReflector,
@@ -270,6 +271,92 @@ def test_prompts_keep_mastra_examples_and_add_chinese_language_rules() -> None:
     assert "NEVER DELETE" in prompt
     assert "dominant language of the cited source records" in prompt
     assert "用户从杭州搬到深圳" in prompt
+
+
+def test_observer_prompt_distinguishes_authorized_reminders_from_commitments(monkeypatch) -> None:
+    observer, router = _make_observer(monkeypatch, [{"body": {"observations": []}}])
+
+    batch = asyncio.run(observer._start_batch("f4-reminder-intent", _queue(), None))
+
+    assert batch is not None
+    system_prompt = router.calls[0]["messages"][0]["content"]
+    assert "A direct request authorizing Atlas to remind or notify the user" in system_prompt
+    assert "is an INTENT" in system_prompt
+    assert (
+        "Ordinary information questions, immediate help requests, and instructions for work "
+        "happening now are not personal facts" in OBSERVER_QUESTION_RULES
+    )
+    assert (
+        "A separately authorized, time-cued future reminder or notification may be recorded "
+        "as INTENT" in OBSERVER_QUESTION_RULES
+    )
+    assert "Do not store ordinary information requests, immediate help requests" in system_prompt
+    assert (
+        "Only when the USER directly authorizes Atlas to perform a future reminder"
+        in system_prompt
+    )
+    assert "recorded as INTENT" in system_prompt
+    assert "without asking Atlas to act" in system_prompt
+    assert "is a COMMITMENT" in system_prompt
+    assert "hypothetical or information question" in system_prompt
+
+
+def test_observer_prompt_and_daily_budget_use_configured_local_clock(monkeypatch) -> None:
+    monkeypatch.setattr(observer_module, "_DAILY_SPENT", {})
+    monkeypatch.setattr(observer_module, "_DAILY_RESERVED", {})
+    router = _Router([{"body": _chinese_answer()}])
+    observer = MemoryObserver(
+        _Manager(router),
+        {"user": {"timezone": "America/Los_Angeles"},
+         "memory": {"v1": {"observer_daily_token_budget": 1_000_000}}},
+        token_counter=len,
+        now=lambda: datetime(2100, 1, 1, tzinfo=UTC),
+    )
+
+    batch = asyncio.run(observer._start_batch("f4-time-session", _queue(), None))
+
+    assert batch is not None
+    system_prompt = router.calls[0]["messages"][0]["content"]
+    assert "America/Los_Angeles" in system_prompt
+    assert "2099-12-31T16:00:00-08:00" in system_prompt
+    assert set(observer_module._DAILY_SPENT) == {"2099-12-31"}
+
+
+def test_reflector_prompt_and_apply_request_use_user_timezone(monkeypatch) -> None:
+    import atlas.config
+
+    monkeypatch.setattr(atlas.config, "load_user_settings", lambda: {})
+    router = _Router([{"body": {"operations": []}}])
+    config = {"user": {"timezone": "America/Los_Angeles"}}
+    def now() -> datetime:
+        return datetime(2100, 1, 1, tzinfo=UTC)
+
+    reflector = MemoryReflector(_Manager(router), config=config, now=now)
+
+    asyncio.run(reflector.propose_operations([]))
+
+    system_prompt = router.calls[0]["messages"][0]["content"]
+    assert "America/Los_Angeles" in system_prompt
+    assert "2099-12-31T16:00:00-08:00" in system_prompt
+    assert "local calendar day" in system_prompt
+
+    class _Client:
+        def __init__(self):
+            self.request = None
+
+        def call(self, method, route, *, json):
+            self.request = (method, route, json)
+            return {"accepted_count": 1}
+
+    client = _Client()
+    result = asyncio.run(reflector.apply_operations(
+        "subject", [{"op": "ROLLUP_DAY"}], client=client,
+    ))
+
+    assert result["accepted_count"] == 1
+    assert client.request[2]["cue_context"] == {
+        "current_timezone": "America/Los_Angeles",
+    }
 
 
 def test_reflector_uses_low_temperature_without_changing_model_router(monkeypatch) -> None:

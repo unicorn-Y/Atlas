@@ -18,8 +18,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
+from tzlocal import get_localzone_name
 
 from atlas.automation.engine import AutomationEngine
 from atlas.automation.reminders import (
@@ -34,10 +36,12 @@ from atlas.automation.reminders import (
 from atlas.automation.store import AutomationStore
 from atlas.memory.intent_bridge import IntentBridge, automation_id_for_intent
 from atlas.memory.observer_drain import MemoryObserverDrain
+from atlas.time_context import attach_user_timezone
 from tests.unified_memory.harness import TEST_INTERNAL_TOKEN, UMHarness
 
 UID = uuid.uuid4().hex[:8]
 NOW = datetime(2026, 10, 4, 14, 0, 0)          # 测试时钟（S29 "明天上午 9 点"）
+SHANGHAI_CONFIG = {"user": {"timezone": "Asia/Shanghai"}}
 
 
 def _engine(tmp_path: Path) -> AutomationEngine:
@@ -48,18 +52,126 @@ def _engine(tmp_path: Path) -> AutomationEngine:
 # --------------------------------------------------------------- 1. 时间解析
 
 @pytest.mark.parametrize("text,expected", [
-    ("明天上午9点", "2026-10-05T09:00:00"),
-    ("明天上午 9 点提醒我交报告", "2026-10-05T09:00:00"),
-    ("今天下午3点", "2026-10-04T15:00:00"),
-    ("后天晚上八点半", "2026-10-06T20:30:00"),
-    ("明天中午十二点", "2026-10-05T12:00:00"),
-    ("9:30", "2026-10-05T09:30:00"),                # 只说钟点且已过 → 明天
-    ("明天", "2026-10-05T09:00:00"),                # 只有日期 → 09:00 默认
-    ("2026-10-05T09:00:00", "2026-10-05T09:00:00"),  # ISO 直通
-    ("2026-10-05 09:00:00 提醒我", "2026-10-05T09:00:00"),
+    ("明天上午9点", "2026-10-05T09:00:00+08:00"),
+    ("明天上午 9 点提醒我交报告", "2026-10-05T09:00:00+08:00"),
+    ("今天下午3点", "2026-10-04T15:00:00+08:00"),
+    ("后天晚上八点半", "2026-10-06T20:30:00+08:00"),
+    ("明天中午十二点", "2026-10-05T12:00:00+08:00"),
+    ("9:30", "2026-10-05T09:30:00+08:00"),                # 只说钟点且已过 → 明天
+    ("明天", "2026-10-05T09:00:00+08:00"),                # 只有日期 → 09:00 默认
+    ("2026-10-05T09:00:00", "2026-10-05T09:00:00+08:00"),  # ISO 直通
+    ("2026-10-05 09:00:00 提醒我", "2026-10-05T09:00:00+08:00"),
 ])
 def test_parse_due_convertible_forms(text: str, expected: str) -> None:
-    assert parse_due(text, now=NOW).isoformat() == expected
+    assert parse_due(text, now=NOW, config=SHANGHAI_CONFIG).isoformat() == expected
+
+
+def test_f4_relative_reminder_time_is_aware_in_user_timezone() -> None:
+    due = parse_due("明天上午 9 点", now=NOW, config=SHANGHAI_CONFIG)
+
+    assert due.isoformat() == "2026-10-05T09:00:00+08:00"
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("明天上午 9 点", "2026-10-05T09:00:00+08:00"),
+    ("下周三下午三点", "2026-10-07T15:00:00+08:00"),
+    ("下周三15点", "2026-10-07T15:00:00+08:00"),
+    ("今晚八点", "2026-10-04T20:00:00+08:00"),
+    ("今晚20点", "2026-10-04T20:00:00+08:00"),
+])
+def test_f4_natural_reminder_times_keep_local_zone(text: str, expected: str) -> None:
+    try:
+        due = parse_due(text, now=NOW, config=SHANGHAI_CONFIG)
+    except ReminderError:
+        due = None
+
+    assert due is not None and due.isoformat() == expected
+
+
+def test_f4_tomorrow_uses_local_date_when_utc_now_is_before_local_midnight() -> None:
+    now = datetime(2026, 10, 4, 15, 30, tzinfo=ZoneInfo("UTC"))
+
+    due = parse_due("明天上午9点", now=now, config=SHANGHAI_CONFIG)
+
+    assert due.isoformat() == "2026-10-05T09:00:00+08:00"
+
+
+def test_f4_configured_timezone_applies_dst_rules_to_future_dates() -> None:
+    now = datetime(2026, 10, 31, 23, 30, tzinfo=ZoneInfo("UTC"))
+
+    due = parse_due("明天上午9点", now=now,
+                    config={"user": {"timezone": "America/New_York"}})
+
+    assert due.isoformat() == "2026-11-01T09:00:00-05:00"
+
+
+def test_f4_relative_time_rejects_nonexistent_dst_wall_time() -> None:
+    now = datetime(2026, 3, 7, 23, 0, tzinfo=ZoneInfo("UTC"))
+
+    with pytest.raises(ReminderError):
+        parse_due("明天凌晨2点半", now=now,
+                  config={"user": {"timezone": "America/New_York"}})
+
+
+def test_f4_aware_zoneinfo_gap_is_rejected() -> None:
+    invalid = datetime(2026, 3, 8, 2, 30, tzinfo=ZoneInfo("America/New_York"))
+
+    with pytest.raises(ValueError, match="invalid in America/New_York"):
+        attach_user_timezone(invalid, {"user": {"timezone": "America/New_York"}})
+
+
+def test_f4_relative_time_uses_first_occurrence_for_dst_fold() -> None:
+    now = datetime(2026, 10, 31, 23, 30, tzinfo=ZoneInfo("UTC"))
+
+    due = parse_due("明天凌晨1点半", now=now,
+                    config={"user": {"timezone": "America/New_York"}})
+
+    assert due.isoformat() == "2026-11-01T01:30:00-04:00"
+
+
+def test_f4_iso_offset_is_preserved_before_trailing_reminder_text() -> None:
+    now = datetime(2026, 10, 31, 23, 30, tzinfo=ZoneInfo("UTC"))
+
+    due = parse_due("2026-11-01T09:00:00+08:00 提醒我", now=now,
+                    config={"user": {"timezone": "America/New_York"}})
+
+    assert due.isoformat() == "2026-10-31T21:00:00-04:00"
+
+
+def test_f4_intent_bridge_passes_user_timezone_to_reminder_service(monkeypatch) -> None:
+    from atlas.automation import reminders as reminder_service
+
+    config = {"user": {"timezone": "America/New_York"}}
+    observed: dict[str, Any] = {}
+
+    async def fake_create_reminder(**kwargs):
+        observed.update(kwargs)
+        return {"automation": {"id": kwargs["automation_id"]}, "created": True}
+
+    monkeypatch.setattr(reminder_service, "create_reminder", fake_create_reminder)
+    bridge = IntentBridge(client=object(), config=config)
+    result = asyncio.run(bridge.persist_automation_for_intent({
+        "intent_id": "intent-f4-timezone",
+        "action": {"kind": "remind", "message": "交报告"},
+        "due_at": "2026-11-01T09:00:00-05:00",
+    }))
+
+    assert result["created"] is True
+    assert observed["config"] is config
+
+
+def test_f4_create_reminder_default_uses_system_iana_timezone(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+
+    result = asyncio.run(create_reminder(
+        message="默认时区提醒", due_text="明天上午9点", engine=engine))
+    due = datetime.fromisoformat(result["due_at"])
+
+    assert due.tzinfo is not None
+    system_zone = ZoneInfo(get_localzone_name())
+    local_due = due.astimezone(system_zone)
+    assert local_due.hour == 9 and local_due.minute == 0
+    assert due.utcoffset() == local_due.utcoffset()
 
 
 @pytest.mark.parametrize("text", ["", "晚点", "回头", "有空的时候", "9点"[:0]])
@@ -76,22 +188,25 @@ def test_create_dedupe_cancel_update_list_on_real_store(tmp_path: Path) -> None:
     store = engine.store
 
     first = asyncio.run(create_reminder(
-        message="交报告", due_text="明天上午9点", now=NOW, engine=engine))
+        message="交报告", due_text="明天上午9点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
     assert first["created"] is True
     trigger = first["automation"]["trigger"]
-    assert trigger["kind"] == "date" and trigger["at"] == "2026-10-05T09:00:00"
+    assert trigger["kind"] == "date" and trigger["at"] == "2026-10-05T09:00:00+08:00"
     assert first["automation"]["name"].startswith(REMINDER_PREFIX)
     assert first["automation"]["enabled"] is True
 
     # 同正文 + 同时间（含口语前缀"提醒我"）→ 不重复建第二条
     again = asyncio.run(create_reminder(
-        message="提醒我交报告", due_text="明天上午9点", now=NOW, engine=engine))
+        message="提醒我交报告", due_text="明天上午9点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
     assert again["created"] is False and again.get("deduped") is True
     assert len(store.list()) == 1
 
     # 不同事 → 各建一条
     other = asyncio.run(create_reminder(
-        message="交周报", due_text="明天上午9点", now=NOW, engine=engine))
+        message="交周报", due_text="明天上午9点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
     assert other["created"] is True
     assert len(store.list()) == 2
 
@@ -109,10 +224,11 @@ def test_create_dedupe_cancel_update_list_on_real_store(tmp_path: Path) -> None:
 
     # 改期 → 原地更新同一条，不新建
     updated = asyncio.run(update_reminder(
-        query="周报", due_text="明天下午3点", now=NOW, engine=engine))
+        query="周报", due_text="明天下午3点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
     assert updated["updated"] is True
     assert updated["automation"]["id"] == other["automation"]["id"]
-    assert updated["automation"]["trigger"]["at"] == "2026-10-05T15:00:00"
+    assert updated["automation"]["trigger"]["at"] == "2026-10-05T15:00:00+08:00"
     assert len(store.list()) == 2
 
     # 取消失败的诚实返回（无匹配 → 不假装成功）
@@ -130,8 +246,10 @@ def test_reminder_syncs_engine_every_mutation(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr(engine, "sync_automation", _record)
     created = asyncio.run(create_reminder(
-        message="喝水", due_text="今天下午3点", now=NOW, engine=engine))
-    asyncio.run(cancel_reminder(query="喝水", now=NOW, engine=engine))
+        message="喝水", due_text="今天下午3点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
+    asyncio.run(cancel_reminder(query="喝水", now=NOW, engine=engine,
+                                config=SHANGHAI_CONFIG))
     assert synced == [created["automation"]["id"], created["automation"]["id"]]
 
 
@@ -377,7 +495,8 @@ def test_cancel_matches_whole_sentence_query(tmp_path: Path, query: str) -> None
     """S29 第 2 轮实测：模型常把整句塞进 query，必须仍能取消掉。"""
     engine = _engine(tmp_path)
     created = asyncio.run(create_reminder(
-        message="交报告", due_text="明天上午9点", now=NOW, engine=engine))
+        message="交报告", due_text="明天上午9点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
     assert created["created"] is True
 
     cancelled = asyncio.run(cancel_reminder(query=query, now=NOW, engine=engine))
@@ -389,9 +508,11 @@ def test_cancel_does_not_false_match_similar_words(tmp_path: Path) -> None:
     """"周报" 不能把 "报告" 的提醒取消掉（放宽匹配不许误伤）。"""
     engine = _engine(tmp_path)
     kept = asyncio.run(create_reminder(
-        message="交报告", due_text="明天上午9点", now=NOW, engine=engine))
+        message="交报告", due_text="明天上午9点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
     asyncio.run(create_reminder(
-        message="交周报", due_text="明天上午9点", now=NOW, engine=engine))
+        message="交周报", due_text="明天上午9点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
 
     missed = asyncio.run(cancel_reminder(
         query="取消明天上午交周报的那个提醒", now=NOW, engine=engine))
@@ -405,7 +526,8 @@ def test_list_exposes_active_count_after_cancel(tmp_path: Path) -> None:
     """已取消的留在 store（可审计），但 active 列表要把它排除。"""
     engine = _engine(tmp_path)
     created = asyncio.run(create_reminder(
-        message="交报告", due_text="明天上午9点", now=NOW, engine=engine))
+        message="交报告", due_text="明天上午9点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
     asyncio.run(cancel_reminder(query="报告", now=NOW, engine=engine))
 
     listing = list_reminders(engine=engine)
@@ -418,12 +540,13 @@ def test_list_exposes_active_count_after_cancel(tmp_path: Path) -> None:
 def test_update_matches_whole_sentence_query(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
     created = asyncio.run(create_reminder(
-        message="交报告", due_text="明天上午9点", now=NOW, engine=engine))
+        message="交报告", due_text="明天上午9点", now=NOW, engine=engine,
+        config=SHANGHAI_CONFIG))
 
     moved = asyncio.run(update_reminder(
         query="把明天上午交报告那个提醒改到下午3点", due_text="明天下午3点",
-        now=NOW, engine=engine))
+        now=NOW, engine=engine, config=SHANGHAI_CONFIG))
     assert moved["updated"] is True
     assert moved["automation"]["id"] == created["automation"]["id"]
-    assert moved["automation"]["trigger"]["at"] == "2026-10-05T15:00:00"
+    assert moved["automation"]["trigger"]["at"] == "2026-10-05T15:00:00+08:00"
     assert len(engine.store.list()) == 1           # 原地改，不新建

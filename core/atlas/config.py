@@ -224,6 +224,12 @@ class AtlasConfig:
     def scheduler_timezone(self) -> str:
         return str(self.get("scheduler.timezone", "Asia/Shanghai"))
 
+    @property
+    def user_timezone(self) -> str:
+        from atlas.time_context import timezone_name
+
+        return timezone_name(self)
+
     # -- notifications --
 
     @property

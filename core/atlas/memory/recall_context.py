@@ -38,6 +38,8 @@ from typing import Any, Sequence
 
 import structlog
 
+from atlas.time_context import timezone_name
+
 log = structlog.get_logger("atlas.memory.recall_context")
 
 # ---------------------------------------------------------------------------
@@ -591,6 +593,7 @@ async def assemble_recall_context(
     intent_threshold: float | None = None,
     environment_id: str = "windows-default",
     purpose: str = "CONVERSATION",
+    current_timezone: str | None = None,
 ) -> RecallContextResult:
     """供 run_phases._phase_context 调用的统一记忆上下文装配核心函数。
 
@@ -606,6 +609,7 @@ async def assemble_recall_context(
       intent_threshold: 意图闸门阈值 (为 None 时读取环境变量或默认值 0.35)
       environment_id: 环境标识
       purpose: 召回意图模式 (默认 CONVERSATION)
+      current_timezone: 当前 Atlas 配置使用的 IANA 时区
 
     返回:
       RecallContextResult 实例，包含画像块、相关记忆块、装配的 refs、闸门判决详情及 token 估算。
@@ -672,6 +676,9 @@ async def assemble_recall_context(
             },
             "query": recall_query,
             "purpose": purpose,
+            "cue_context": {
+                "current_timezone": current_timezone or timezone_name(),
+            },
             "budget": {
                 "max_records": top_k,
                 "max_tokens": max_memory_tokens,

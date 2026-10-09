@@ -28,13 +28,14 @@ import random
 import re
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
 import structlog
 
 from atlas.models.tokens import estimate_tokens
+from atlas.time_context import now_local, timezone_name
 
 log = structlog.get_logger()
 
@@ -194,9 +195,23 @@ CHINESE EXAMPLES (additions; retain the operation rules above):
 """
 
 
-def build_reflector_system_prompt(custom_instructions: str | None = None) -> str:
+def build_reflector_system_prompt(
+    custom_instructions: str | None = None,
+    *,
+    current_timezone: str | None = None,
+    current_local_time: str | None = None,
+) -> str:
     """Build the Reflector's system prompt (adapted from Mastra buildReflectorSystemPrompt)."""
     prompt = _BASE_SYSTEM_INSTRUCTIONS
+    if current_timezone and current_local_time:
+        prompt += (
+            "\n\nUSER LOCAL CLOCK CONTEXT (AUTHORITATIVE FOR ROLLUP DATES):\n"
+            f"Timezone: {current_timezone}\n"
+            f"Current local date and time: {current_local_time}\n"
+            "Use this timezone's local calendar day and week when producing ROLLUP_DAY "
+            "and ROLLUP_WEEK dates. The date in each rollup operation is a local date "
+            "in this timezone."
+        )
     if custom_instructions:
         prompt += f"\n\n=== CUSTOM INSTRUCTIONS ===\n\n{custom_instructions}"
     return prompt
@@ -746,7 +761,9 @@ class MemoryReflector:
         self._config = config
         self._client = client
         self._token_counter = token_counter or (lambda text: estimate_tokens(text))
-        self._now = now or (lambda: datetime.now(UTC))
+        self._now = lambda: now_local(
+            self._config, now=now() if now is not None else None,
+        )
 
     def _select_model_id(self) -> str:
         """Resolve memory model via ModelManager following the standard fallback chain."""
@@ -862,7 +879,11 @@ class MemoryReflector:
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], str]:
         """Invoke ModelRouter to propose consolidation operations and validate locally."""
         model_id = self._select_model_id()
-        system_prompt = build_reflector_system_prompt()
+        local_now = self._now()
+        system_prompt = build_reflector_system_prompt(
+            current_timezone=timezone_name(self._config),
+            current_local_time=local_now.isoformat(),
+        )
 
         curr_level = compression_level
         last_accepted: list[dict[str, Any]] = []
@@ -929,6 +950,7 @@ class MemoryReflector:
         payload = {
             "context": ctx or {"memory_subject_id": subject, "owner_id": "owner-local"},
             "operations": operations,
+            "cue_context": {"current_timezone": timezone_name(self._config)},
         }
 
         # Handle UnifiedMemoryClient call method

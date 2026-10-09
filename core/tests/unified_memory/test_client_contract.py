@@ -377,13 +377,17 @@ def test_facade_recall_for_conversation_shapes_lightweight_items():
         "missing_evidence": [{"record_ref": "memory:m-1", "reason": "NO_SOURCE_REFS"}],
     }
 
+    seen: dict[str, object] = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/unified/recall"
+        seen.update(json.loads(request.content))
         return httpx.Response(200, json=response)
 
     async def case():
         cfg = AtlasConfig({"memory": {"unified": {"enabled": True,
-                                                  "subject_binding": SUBJECT}}})
+                                                  "subject_binding": SUBJECT}},
+                          "user": {"timezone": "America/New_York"}})
         facade = UnifiedMemoryFacade(cfg, client=make_client(handler))
         shaped = await facade.recall_for_conversation("偏好", budget={"max_records": 3})
         assert shaped["enabled"] is True
@@ -395,6 +399,7 @@ def test_facade_recall_for_conversation_shapes_lightweight_items():
         assert item["source_refs"]
         assert "extra_not_for_model" not in item
         assert shaped["missing_evidence"]
+        assert seen["cue_context"] == {"current_timezone": "America/New_York"}
         await facade.aclose()
     run(case())
 

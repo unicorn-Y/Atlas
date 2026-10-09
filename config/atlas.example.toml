@@ -169,3 +169,7 @@ format = "json"
 # exclude_roots = []             # 永不启用语言服务的目录 glob（如 ["~/big-monorepo", "/srv/*/vendor"]）
 # 内置服务表可用 lsp.servers.<名称> 覆盖（command / env / initialization_options / disabled），
 # 也可声明全新的自定义服务（需要 command 与 extensions 两个字段）。
+[user]
+# IANA timezone for relative time and reminder interpretation. Empty follows
+# the operating system timezone, mapped to its IANA rules (including DST).
+timezone = ""

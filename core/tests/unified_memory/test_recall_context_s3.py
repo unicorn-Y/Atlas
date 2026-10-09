@@ -170,6 +170,36 @@ async def test_assemble_recall_context_personal_with_conflict():
     assert len(ctx_dict["memories"]) == 2
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_assemble_recall_context_sends_explicit_timezone_as_cue_context():
+    from atlas.config import AtlasConfig
+    from atlas.time_context import timezone_name
+
+    seen: dict[str, dict] = {}
+
+    class FakeClient:
+        async def _request(self, method: str, path: str, *, params=None, json_body=None):
+            if path == "/v1/unified/profile":
+                return {}
+            if path == "/v1/unified/recall":
+                seen["body"] = json_body
+                return {"context_items": [], "conflicts": []}
+            raise AssertionError(f"unexpected request: {method} {path}")
+
+    config = AtlasConfig({"user": {"timezone": "America/Los_Angeles"}})
+    await assemble_recall_context(
+        FakeClient(),
+        user_message="我目前住在哪？",
+        current_timezone=timezone_name(config),
+    )
+
+    assert seen["body"]["cue_context"] == {
+        "current_timezone": "America/Los_Angeles",
+    }
+    assert "cue_context" not in seen["body"]["context"]
+
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio

@@ -29,10 +29,13 @@ from atlas.memory.capture import build_observation, capture_enabled
 from atlas.memory.observer_prompt import (
     OBSERVER_EXTRACTION_INSTRUCTIONS,
     OBSERVER_GUIDELINES,
+    OBSERVER_INTENT_CLASSIFICATION_GUIDANCE,
+    OBSERVER_LOCAL_CLOCK_GUIDANCE,
     OBSERVER_OUTPUT_GUIDANCE,
     OBSERVER_QUESTION_RULES,
 )
 from atlas.models.tokens import estimate_tokens
+from atlas.time_context import now_local, timezone_name
 
 log = structlog.get_logger()
 
@@ -230,6 +233,7 @@ def _parse_observer_output(
 _SYSTEM_PROMPT = "\n\n".join((
     OBSERVER_EXTRACTION_INSTRUCTIONS,
     OBSERVER_QUESTION_RULES,
+    OBSERVER_INTENT_CLASSIFICATION_GUIDANCE,
     OBSERVER_OUTPUT_GUIDANCE,
     OBSERVER_GUIDELINES,
     """
@@ -310,7 +314,9 @@ class MemoryObserver:
         self._config = config
         self._outbox = outbox
         self._token_counter = token_counter or (lambda text: estimate_tokens(text))
-        self._now = now or (lambda: datetime.now(UTC))
+        self._now = lambda: now_local(
+            self._config, now=now() if now is not None else None,
+        )
         self._queues: dict[str, _SessionQueue] = {}
         self._inflight: dict[str, _BatchState] = {}
         self._restored_sessions: set[str] = set()
@@ -691,13 +697,21 @@ class MemoryObserver:
             str(entry["source_event_id"]) for entry in entries
         ))
         prompt = self._format_sources(entries)
+        local_now = self._now()
+        timezone = timezone_name(self._config)
+        system_prompt = "\n\n".join((
+            _SYSTEM_PROMPT,
+            OBSERVER_LOCAL_CLOCK_GUIDANCE.format(
+                timezone=timezone, local_now=local_now.isoformat(),
+            ),
+        ))
         model_id = self._select_model_id()
         model_messages = [{"role": "user", "content": prompt}]
         request_tokens = max(1, estimate_tokens(
-            model_messages, model=model_id, system_prompt=_SYSTEM_PROMPT,
+            model_messages, model=model_id, system_prompt=system_prompt,
         ))
         budget = self._daily_budget()
-        day_key = self._now().date().isoformat()
+        day_key = local_now.date().isoformat()
         if self._outbox is not None:
             usage = self._outbox.observer_budget_snapshot(day_key)
             spent, reserved = usage["spent"], usage["reserved"]
@@ -736,6 +750,7 @@ class MemoryObserver:
         try:
             result = await self._complete_with_retry(
                 model_id, model_messages, max_tokens=max_output,
+                system_prompt=system_prompt,
             )
             output_text = str(getattr(result, "text", "") or "")
             usage = getattr(result, "usage", None)
@@ -788,7 +803,7 @@ class MemoryObserver:
                     },
                 ]
                 retry_request_tokens = max(1, estimate_tokens(
-                    retry_messages, model=model_id, system_prompt=_SYSTEM_PROMPT,
+                    retry_messages, model=model_id, system_prompt=system_prompt,
                 ))
                 retry_budget = self._reserve_language_retry(
                     session_id, day_key, budget, retry_request_tokens,
@@ -800,6 +815,7 @@ class MemoryObserver:
                     try:
                         retry_result = await self._complete_with_retry(
                             model_id, retry_messages, max_tokens=retry_max_output,
+                            system_prompt=system_prompt,
                         )
                         retry_output_text = str(getattr(retry_result, "text", "") or "")
                         retry_input_tokens, retry_output_tokens = self._reported_usage(
@@ -927,6 +943,7 @@ class MemoryObserver:
 
     async def _complete_with_retry(
         self, model_id: str, messages: list[dict[str, Any]], *, max_tokens: int,
+        system_prompt: str = _SYSTEM_PROMPT,
     ) -> Any:
         router = getattr(self._model_manager, "model_router", None)
         if router is None:
@@ -936,7 +953,7 @@ class MemoryObserver:
             try:
                 return await router.complete_for(
                     model_id, "memory_observe",
-                    [{"role": "system", "content": _SYSTEM_PROMPT}, *messages],
+                    [{"role": "system", "content": system_prompt}, *messages],
                     max_tokens=max_tokens, temperature=0.1,
                 )
             except Exception as exc:

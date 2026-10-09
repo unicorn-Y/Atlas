@@ -520,17 +520,22 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             if unified_enabled:
                 try:
                     from atlas.memory.recall_context import assemble_recall_context
+                    from atlas.time_context import timezone_name
 
                     facade = getattr(agent._memory, "_unified_or_none", lambda: None)()
                     unified_target = facade if facade is not None else getattr(agent._memory, "_unified", None)
                     if unified_target is None:
                         unified_target = agent._memory
+                    current_timezone = getattr(unified_target, "current_timezone", None)
+                    if not isinstance(current_timezone, str) or not current_timezone.strip():
+                        current_timezone = timezone_name(_agent.get_config())
 
                     recall_res = await assemble_recall_context(
                         unified_target,
                         state.message,
                         recent_history=state.history,
                         session_id=request.conversation_id,
+                        current_timezone=current_timezone,
                     )
                     state.context = recall_res.to_context_dict()
                 except Exception as exc:

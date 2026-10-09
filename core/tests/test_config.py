@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from tzlocal import get_localzone_name
 
 from atlas.config import AtlasConfig, load_config
 
@@ -26,6 +30,11 @@ class TestAtlasConfigDefaults:
         assert cfg.context_maintenance_message_limit == 80
         assert cfg.context_maintenance_character_limit == 80000
         assert cfg.trajectory_reviewer_enabled is False
+
+    def test_user_timezone_defaults_to_system_iana_timezone(self) -> None:
+        cfg = AtlasConfig()
+
+        assert getattr(cfg, "user_timezone", None) == get_localzone_name()
 
     def test_get_missing_key_returns_default(self) -> None:
         cfg = AtlasConfig()
@@ -73,6 +82,14 @@ class TestAtlasConfigFromData:
             str(cfg.db_path).endswith("data/test.db")
             or str(cfg.db_path).endswith("data\\test.db")
         )
+
+    def test_user_timezone_prefers_configured_iana_zone_with_dst_rules(self) -> None:
+        cfg = AtlasConfig({"user": {"timezone": "America/New_York"}})
+
+        assert getattr(cfg, "user_timezone", None) == "America/New_York"
+        zone = ZoneInfo(cfg.user_timezone)
+        assert datetime(2026, 1, 1, tzinfo=zone).utcoffset().total_seconds() == -5 * 3600
+        assert datetime(2026, 7, 1, tzinfo=zone).utcoffset().total_seconds() == -4 * 3600
 
 
 class TestLoadConfig:

@@ -23,6 +23,7 @@ from atlas.memory.unified_client import (
     UnifiedMemoryClient,
     observation_content_hash,
 )
+from atlas.time_context import timezone_name
 
 DEFAULT_SERVICE_URL = "http://127.0.0.1:8099"
 DEFAULT_SUBJECT_BINDING = "subject-default"
@@ -64,6 +65,11 @@ class UnifiedMemoryFacade:
     @property
     def service_url(self) -> str:
         return str(self._config.get("memory.unified.service_url") or DEFAULT_SERVICE_URL)
+
+    @property
+    def current_timezone(self) -> str:
+        """The validated IANA timezone used by this facade's Atlas config."""
+        return timezone_name(self._config)
 
     @property
     def subject_binding(self) -> str:
@@ -194,6 +200,7 @@ class UnifiedMemoryFacade:
             "context": context or self.default_context(),
             "query": query,
             "purpose": purpose,
+            "cue_context": {"current_timezone": timezone_name(self._config)},
         }
         if budget:
             request["budget"] = budget

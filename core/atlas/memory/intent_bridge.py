@@ -52,8 +52,9 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any
 
 from atlas.memory.unified_client import (
     RevisionConflict,
@@ -376,17 +377,23 @@ class IntentBridge:
 
     def __init__(self, facade: UnifiedMemoryFacade | None = None,
                  client: UnifiedMemoryClient | None = None, *,
-                 event_inbox_dir: str | None = None) -> None:
+                 event_inbox_dir: str | None = None,
+                 config: Any = None) -> None:
         if facade is None and client is None:
             raise IntentBridgeError(
                 "IntentBridge 需要 facade 或 client 之一（不自行装配配置）")
         self._facade = facade
         self._client_override = client
         self._event_inbox_dir = event_inbox_dir
+        self._config = config if config is not None else getattr(facade, "_config", None)
 
     @classmethod
     def from_config(cls, config: Any = None) -> IntentBridge:
-        return cls(facade=UnifiedMemoryFacade.from_config(config))
+        if config is None:
+            from atlas.config import get_config
+
+            config = get_config()
+        return cls(facade=UnifiedMemoryFacade.from_config(config), config=config)
 
     @property
     def enabled(self) -> bool:
@@ -515,7 +522,7 @@ class IntentBridge:
         result = await reminder_service.create_reminder(
             message=self._reminder_text(intent), due_at=due,
             automation_id=automation_id_for_intent(intent_id),
-            now=now, engine=engine)
+            now=now, engine=engine, config=self._config)
         result["intent_id"] = intent_id
         result["automation_id"] = (result.get("automation") or {}).get("id")
         return result

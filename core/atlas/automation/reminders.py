@@ -36,6 +36,7 @@ from atlas.automation.store import (
     normalize_record,
     validate_record,
 )
+from atlas.time_context import attach_user_timezone, now_local
 
 log = structlog.get_logger()
 
@@ -53,6 +54,9 @@ _CN_NUMERALS = {
 }
 _PERIODS = {"凌晨": 0, "早上": 0, "早晨": 0, "上午": 0, "中午": 12,
             "下午": 12, "傍晚": 12, "晚上": 12, "夜里": 12, "晚": 12}
+_WEEKDAY = re.compile(r"(下周|下星期|本周|这周)([一二三四五六日天])")
+_WEEKDAY_INDEX = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4,
+                  "六": 5, "日": 6, "天": 6}
 
 
 def _cn_hour(text: str) -> int | None:
@@ -78,7 +82,7 @@ def _cn_hour(text: str) -> int | None:
     return None
 
 
-def parse_due(text: str, *, now: datetime) -> datetime:
+def parse_due(text: str, *, now: datetime, config: Any = None) -> datetime:
     """把相对时间短语解析为绝对时间（"明天上午 9 点" / "今天下午3点" / ISO）。
 
     只支持**明确可换算**的形式；含糊说法（"晚点"/"回头"）→ ReminderError，
@@ -87,28 +91,45 @@ def parse_due(text: str, *, now: datetime) -> datetime:
     raw = str(text or "").strip()
     if not raw:
         raise ReminderError("提醒时间不能为空")
+    reference = now_local(config, now=now)
     # ISO 8601 直通（含 "2026-10-05 09:00"）
     for candidate in (raw, raw.replace(" ", "T", 1)):
         try:
-            return datetime.fromisoformat(candidate)
+            return attach_user_timezone(datetime.fromisoformat(candidate), config)
         except ValueError:
             pass
 
     # ISO 时间戳前缀（"2026-10-05 09:00:00 提醒我..."）
-    match = re.match(r"^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})", raw)
+    match = re.match(
+        r"^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})"
+        r"(?::(\d{2}))?(Z|[+-]\d{2}:?\d{2})?", raw,
+    )
     if match:
-        return datetime.fromisoformat(
-            f"{match.group(1)}T{int(match.group(2)):02d}:{match.group(3)}:00")
+        offset = match.group(5) or ""
+        if offset == "Z":
+            offset = "+00:00"
+        value = datetime.fromisoformat(
+            f"{match.group(1)}T{int(match.group(2)):02d}:{match.group(3)}:"
+            f"{match.group(4) or '00'}{offset}"
+        )
+        return attach_user_timezone(value, config)
 
     day_offset: int | None = None
-    if "后天" in raw:
+    weekday = _WEEKDAY.search(raw)
+    if weekday:
+        week_start = reference.date() - timedelta(days=reference.weekday())
+        target = week_start + timedelta(
+            days=_WEEKDAY_INDEX[weekday.group(2)] +
+            (7 if weekday.group(1) in ("下周", "下星期") else 0))
+        day_offset = (target - reference.date()).days
+    elif "大后天" in raw:
+        day_offset = 3
+    elif "后天" in raw:
         day_offset = 2
     elif "明天" in raw or "明日" in raw:
         day_offset = 1
-    elif "今天" in raw or "今日" in raw:
+    elif "今天" in raw or "今日" in raw or "今晚" in raw:
         day_offset = 0
-    elif "大后天" in raw:
-        day_offset = 3
 
     period = 0
     period_match = None
@@ -153,13 +174,16 @@ def parse_due(text: str, *, now: datetime) -> datetime:
     if not 0 <= int(hour) <= 23 or not 0 <= int(minute or 0) <= 59:
         raise ReminderError(f"提醒时间非法: {text!r}")
 
-    base = now.replace(hour=int(hour), minute=int(minute or 0), second=0, microsecond=0)
+    base = reference.replace(hour=int(hour), minute=int(minute or 0), second=0, microsecond=0)
     if day_offset is not None:
         base = base + timedelta(days=day_offset)
-    elif base <= now:
+    elif base <= reference:
         # 只说钟点且已过 → 明天同一钟点（最常见的口语意图）
         base = base + timedelta(days=1)
-    return base
+    try:
+        return attach_user_timezone(base.replace(tzinfo=None), config)
+    except ValueError as exc:
+        raise ReminderError(str(exc)) from exc
 
 
 #: 提醒正文的口语噪声前缀（去重比较前剥离："提醒我交报告" ≡ "交报告"）
@@ -280,19 +304,21 @@ def _sorted_reminders(store: Any) -> list[dict[str, Any]]:
 async def create_reminder(*, message: str, due_at: str = "", due_text: str = "",
                           name: str = "", automation_id: str = "",
                           now: datetime | None = None, context: str = "",
-                          engine: Any = None) -> dict[str, Any]:
+                          engine: Any = None, config: Any = None) -> dict[str, Any]:
     """创建提醒：真实写 store + ``engine.sync_automation``（E8）。"""
     text = str(message or "").strip()
     if not text:
         raise ReminderError("提醒内容不能为空")
+    reference = now_local(config, now=now)
     due_iso = str(due_at or "").strip()
     if due_iso:
         try:
-            due = datetime.fromisoformat(due_iso.replace(" ", "T", 1))
+            due = attach_user_timezone(
+                datetime.fromisoformat(due_iso.replace(" ", "T", 1)), config)
         except ValueError as exc:
             raise ReminderError(f"due_at 非法 ISO 时间: {due_iso!r}") from exc
     else:
-        due = parse_due(due_text, now=now or datetime.now())
+        due = parse_due(due_text, now=reference, config=config)
 
     automation_engine = _engine(engine)
     store = automation_engine.store
@@ -335,8 +361,8 @@ async def create_reminder(*, message: str, due_at: str = "", due_text: str = "",
         "payload": {"kind": "agent_turn", "message": text, "wake_mode": "now"},
         "delivery": {"mode": "none"},
         "policy": {"missed_run": "skip", "delete_after_run": False},
-        "created_at": (now or datetime.now()).isoformat(),
-        "updated_at": (now or datetime.now()).isoformat(),
+        "created_at": reference.isoformat(),
+        "updated_at": reference.isoformat(),
     })
     if not str(record.get("name") or "").startswith(REMINDER_PREFIX):
         record["name"] = REMINDER_PREFIX + str(record.get("name") or text)
@@ -350,10 +376,11 @@ async def create_reminder(*, message: str, due_at: str = "", due_text: str = "",
 
 async def cancel_reminder(*, query: str = "", automation_id: str = "",
                           now: datetime | None = None, context: str = "",
-                          engine: Any = None) -> dict[str, Any]:
+                          engine: Any = None, config: Any = None) -> dict[str, Any]:
     """取消提醒：保留记录但 ``enabled=False`` + 引擎撤调度（可审计、可回查）。"""
     automation_engine = _engine(engine)
     store = automation_engine.store
+    reference = now_local(config, now=now)
     target: dict[str, Any] | None = None
     if automation_id:
         target = store.get(str(automation_id))
@@ -369,7 +396,7 @@ async def cancel_reminder(*, query: str = "", automation_id: str = "",
 
     updated = dict(target)
     updated["enabled"] = False
-    updated["updated_at"] = (now or datetime.now()).isoformat()
+    updated["updated_at"] = reference.isoformat()
     saved = store.put(normalize_record(updated))
     cancelled_runs = await _cancel_active_runs(automation_engine, saved["id"])
     await automation_engine.sync_automation(saved)   # enabled=False → 撤 date 调度
@@ -380,11 +407,12 @@ async def cancel_reminder(*, query: str = "", automation_id: str = "",
 
 async def update_reminder(*, automation_id: str = "", query: str = "", due_at: str = "",
                           due_text: str = "", message: str = "", now: datetime | None = None,
-                          context: str = "", engine: Any = None) -> dict[str, Any]:
+                          context: str = "", engine: Any = None,
+                          config: Any = None) -> dict[str, Any]:
     """改期/改内容：同一记录原地更新 + 重新 sync（不新建第二条）。"""
     automation_engine = _engine(engine)
     store = automation_engine.store
-    reference = now or datetime.now()
+    reference = now_local(config, now=now)
     target: dict[str, Any] | None = None
     if automation_id:
         candidate = store.get(str(automation_id))
@@ -402,11 +430,12 @@ async def update_reminder(*, automation_id: str = "", query: str = "", due_at: s
     if due_at or due_text:
         if due_at:
             try:
-                due = datetime.fromisoformat(str(due_at).replace(" ", "T", 1))
+                due = attach_user_timezone(
+                    datetime.fromisoformat(str(due_at).replace(" ", "T", 1)), config)
             except ValueError as exc:
                 raise ReminderError(f"due_at 非法 ISO 时间: {due_at!r}") from exc
         else:
-            due = parse_due(due_text, now=reference)
+            due = parse_due(due_text, now=reference, config=config)
         updated["trigger"] = {**(target.get("trigger") or {}), "kind": "date",
                               "at": due.isoformat()}
     if message:
