@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -99,6 +100,49 @@ def test_isolated_settings_rejects_proxy_url_with_query_data(tmp_path: Path) -> 
         rehearsal.build_isolated_user_settings(source, memory_model="gemini")
 
 
+def test_user_timezone_allowlist_returns_only_valid_iana_value(tmp_path: Path) -> None:
+    source = tmp_path / "atlas.toml"
+    source.write_text(
+        '[models.gateway]\napi_key = "synthetic-secret"\n'
+        '[user]\ntimezone = "Asia/Shanghai"\n',
+        encoding="utf-8",
+    )
+
+    assert rehearsal.read_user_timezone_allowlist(source) == "Asia/Shanghai"
+    assert "synthetic-secret" not in json.dumps(
+        {"timezone": rehearsal.read_user_timezone_allowlist(source)}
+    )
+
+
+def test_user_timezone_allowlist_uses_system_fallback_when_absent(tmp_path: Path) -> None:
+    source = tmp_path / "atlas.toml"
+    source.write_text('[user]\nname = "Local user"\n', encoding="utf-8")
+
+    assert rehearsal.read_user_timezone_allowlist(source) is None
+    with pytest.raises(rehearsal.RehearsalError):
+        rehearsal.read_user_timezone_allowlist(source.with_name("missing.toml"))
+
+
+def test_user_timezone_allowlist_rejects_invalid_iana_name(tmp_path: Path) -> None:
+    source = tmp_path / "atlas.toml"
+    source.write_text('[user]\ntimezone = "Not/A_Timezone"\n', encoding="utf-8")
+
+    with pytest.raises(rehearsal.RehearsalError):
+        rehearsal.read_user_timezone_allowlist(source)
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [('[user]', "Asia/Shanghai"), ('["user"]', "Asia/Shanghai"), ("[[user]]", None)],
+)
+def test_user_timezone_allowlist_respects_table_boundaries(
+        tmp_path: Path, header: str, expected: str | None) -> None:
+    source = tmp_path / "atlas.toml"
+    source.write_text(f'{header}\ntimezone = "Asia/Shanghai"\n', encoding="utf-8")
+
+    assert rehearsal.read_user_timezone_allowlist(source) == expected
+
+
 def test_run_root_cannot_overlap_checkout_or_memoryos_data(tmp_path: Path) -> None:
     atlas_root = tmp_path / "Atlas"
     memoryos_root = tmp_path / "MemoryOSData"
@@ -124,6 +168,286 @@ def test_isolated_config_and_settings_stay_under_the_cloned_data_root(tmp_path: 
     assert "enabled = true" in config
     assert "db_path = \"./data/atlas.db\"" in config
     assert "127.0.0.1:51123" in config
+
+
+def test_isolated_config_carries_only_allowed_user_timezone(tmp_path: Path) -> None:
+    data_root = tmp_path / "isolated-atlas"
+    rehearsal._write_isolated_atlas_config(
+        data_root, enabled=True, service_url="http://127.0.0.1:51123",
+        memoryos_root=tmp_path / "MemoryOS", model_id="gemini-3.8-flash",
+        atlas_port=51124, user_timezone="Asia/Shanghai",
+    )
+    config = (data_root / "config" / "atlas.toml").read_text(encoding="utf-8")
+
+    assert "[user]" in config
+    assert 'timezone = "Asia/Shanghai"' in config
+    assert "credential" not in config.casefold()
+
+
+def test_chat_start_allows_only_automation_manage_for_reminder_run(tmp_path: Path) -> None:
+    message = rehearsal._build_chat_run_start(
+        run_id="run-1", conversation_id="conv-1", workspace=tmp_path,
+        model_id="gemini-3.8-flash", prompt="natural reminder request",
+        permission_mode="full_access", tool_allow=["automation_manage"],
+    )
+
+    assert message["permission_mode"] == "full_access"
+    assert message["tool_allow"] == ["automation_manage"]
+    assert message["content"] == "natural reminder request"
+
+
+def test_isolated_marker_automation_snapshot_and_due_assertion_are_allowlisted(
+        tmp_path: Path) -> None:
+    automation_path = tmp_path / "automations.toml"
+    automation_path.write_text(
+        '[automations.rem-1]\nname = "Reminder: F4E-X1"\nenabled = true\n'
+        '[automations.rem-1.trigger]\nkind = "date"\nat = "2026-10-10T09:00:00+08:00"\n'
+        '[automations.rem-1.payload]\nmessage = "Send test note F4E-X1"\n'
+        '[automations.rem-1.payload.extra]\nsecret = "must-not-escape"\n'
+        '[automations.rem-1.source_binding]\nrequest_run_id = "run-1"\n'
+        'source_message_ref = "ATLAS_USER_MESSAGE:user-1"\nintent_id = "intent-1"\n',
+        encoding="utf-8",
+    )
+    expected = rehearsal._expected_tomorrow_nine(
+        "Asia/Shanghai", now=datetime(2026, 10, 9, 1, 0, tzinfo=timezone.utc),
+    )
+
+    snapshot = rehearsal._read_isolated_marker_automations(automation_path, "F4E-X1")
+    check = rehearsal._verify_marker_automation(
+        automation_path, marker="F4E-X1", timezone_name="Asia/Shanghai",
+        expected_due=expected, expected_run_id="run-1", expected_enabled=True,
+    )
+
+    assert len(snapshot) == 1
+    assert snapshot[0]["id"] == "rem-1"
+    assert snapshot[0]["source_binding"] == {
+        "request_run_id": "run-1", "source_message_ref": "ATLAS_USER_MESSAGE:user-1",
+        "intent_id": "intent-1",
+    }
+    assert "must-not-escape" not in json.dumps(snapshot)
+    assert check["passed"] is True
+    assert check["automation_binding_unique"] is True
+    assert check["due_matches_local_time"] is True
+    assert check["stored_trigger_is_aware"] is True
+
+
+def test_isolated_marker_automation_cancel_assertion_requires_disabled_record(
+        tmp_path: Path) -> None:
+    automation_path = tmp_path / "automations.toml"
+    automation_path.write_text(
+        '[automations.rem-1]\nname = "Reminder: F4E-X2"\nenabled = false\n'
+        '[automations.rem-1.trigger]\nkind = "date"\nat = "2026-10-10T09:00:00+08:00"\n'
+        '[automations.rem-1.payload]\nmessage = "Send test note F4E-X2"\n'
+        '[automations.rem-1.source_binding]\nrequest_run_id = "run-1"\n'
+        'source_message_ref = "ATLAS_USER_MESSAGE:user-1"\nintent_id = "intent-1"\n',
+        encoding="utf-8",
+    )
+    expected = rehearsal._expected_tomorrow_nine(
+        "Asia/Shanghai", now=datetime(2026, 10, 9, 1, 0, tzinfo=timezone.utc),
+    )
+
+    check = rehearsal._verify_marker_automation(
+        automation_path, marker="F4E-X2", timezone_name="Asia/Shanghai",
+        expected_due=expected, expected_run_id="run-1", expected_enabled=False,
+    )
+
+    assert check["passed"] is True
+    assert check["enabled"] is False
+
+
+def test_isolated_marker_automation_rejects_duplicate_matches(tmp_path: Path) -> None:
+    automation_path = tmp_path / "automations.toml"
+    lines = []
+    for automation_id in ("rem-1", "rem-2"):
+        lines.extend([
+            f"[automations.{automation_id}]",
+            f'name = "Reminder: F4E-X3 {automation_id}"',
+            "enabled = true",
+            f"[automations.{automation_id}.trigger]",
+            'kind = "date"',
+            'at = "2026-10-10T09:00:00+08:00"',
+            f"[automations.{automation_id}.payload]",
+            'message = "Send test note F4E-X3"',
+            f"[automations.{automation_id}.source_binding]",
+            'request_run_id = "run-1"',
+            'source_message_ref = "ATLAS_USER_MESSAGE:user-1"',
+            'intent_id = "intent-1"',
+            "",
+        ])
+    automation_path.write_text("\n".join(lines), encoding="utf-8")
+    expected = rehearsal._expected_tomorrow_nine(
+        "Asia/Shanghai", now=datetime(2026, 10, 9, 1, 0, tzinfo=timezone.utc),
+    )
+
+    check = rehearsal._verify_marker_automation(
+        automation_path, marker="F4E-X3", timezone_name="Asia/Shanghai",
+        expected_due=expected, expected_run_id="run-1", expected_enabled=True,
+    )
+
+    assert check["matching_automation_count"] == 2
+    assert check["passed"] is False
+    assert check["automation_binding_unique"] is False
+
+
+def test_marker_automation_rejects_naive_stored_trigger(tmp_path: Path) -> None:
+    automation_path = tmp_path / "automations.toml"
+    automation_path.write_text(
+        '[automations.rem-1]\nname = "Reminder: F4E-X4"\nenabled = true\n'
+        '[automations.rem-1.trigger]\nkind = "date"\nat = "2026-10-10T09:00:00"\n'
+        '[automations.rem-1.payload]\nmessage = "Send test note F4E-X4"\n'
+        '[automations.rem-1.source_binding]\nrequest_run_id = "run-1"\n'
+        'source_message_ref = "ATLAS_USER_MESSAGE:user-1"\nintent_id = "intent-1"\n',
+        encoding="utf-8",
+    )
+    expected = rehearsal._expected_tomorrow_nine(
+        "Asia/Shanghai", now=datetime(2026, 10, 9, 1, 0, tzinfo=timezone.utc),
+    )
+
+    check = rehearsal._verify_marker_automation(
+        automation_path, marker="F4E-X4", timezone_name="Asia/Shanghai",
+        expected_due=expected, expected_run_id="run-1", expected_enabled=True,
+    )
+
+    assert check["passed"] is False
+    assert check["stored_trigger_is_aware"] is False
+    assert check["due_matches_utc_instant"] is False
+
+
+def _write_isolated_memoryos_lifecycle_db(path: Path, *, lifecycle: str = "ACTIVE",
+                                          speaker_role: str = "USER",
+                                          run_id: str = "run-1",
+                                          source_ref: str = "ATLAS_USER_MESSAGE:user-1",
+                                          intent_due: str = "2026-10-10T01:00:00+00:00") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as conn:
+        conn.executescript(
+            "CREATE TABLE unified_source_objects("
+            "subject_id TEXT, source_kind TEXT, source_object_id TEXT,"
+            "source_revision INTEGER, source_event_id TEXT, lifecycle TEXT);"
+            "CREATE TABLE evidence_events("
+            "memory_subject_id TEXT, source_event_id TEXT, event_type TEXT, payload_json TEXT);"
+            "CREATE TABLE unified_intents("
+            "subject_id TEXT, intent_id TEXT, lifecycle TEXT, revision INTEGER,"
+            "user_source_ref TEXT, source_state TEXT, action_json TEXT, due_at TEXT,"
+            "automation_id TEXT);"
+        )
+        conn.execute(
+            "INSERT INTO unified_source_objects VALUES(?,?,?,?,?,?)",
+            ("f2-c-isolated", "ATLAS_USER_MESSAGE", "user-1", 1,
+             "atlas:ATLAS_USER_MESSAGE:user-1:1:UPSERT", "ACTIVE"),
+        )
+        payload = {"observation": {
+            "source_kind": "ATLAS_USER_MESSAGE", "speaker_role": speaker_role,
+            "occurred_at": "2026-10-09T01:00:00+00:00",
+            "metadata": {"request_run_id": run_id},
+            "content": {"text": "synthetic private user message"},
+        }}
+        conn.execute(
+            "INSERT INTO evidence_events VALUES(?,?,?,?)",
+            ("f2-c-isolated", "atlas:ATLAS_USER_MESSAGE:user-1:1:UPSERT",
+             "OBSERVATION", json.dumps(payload)),
+        )
+        conn.execute(
+            "INSERT INTO unified_intents VALUES(?,?,?,?,?,?,?,?,?)",
+            ("f2-c-isolated", "intent-1", lifecycle, 1, source_ref, "VERIFIED",
+             json.dumps({"kind": "REMINDER", "message": "Finish F4E-X5"}),
+             intent_due, "rem-1"),
+        )
+
+
+def _write_lifecycle_automation(path: Path, *, marker: str = "F4E-X5",
+                                enabled: bool = True) -> None:
+    path.write_text(
+        '[automations.rem-1]\nname = "Reminder: ' + marker + '"\n'
+        f'enabled = {str(enabled).lower()}\n'
+        '[automations.rem-1.trigger]\nkind = "date"\n'
+        'at = "2026-10-10T01:00:00+00:00"\n'
+        '[automations.rem-1.payload]\nmessage = "Finish ' + marker + '"\n'
+        '[automations.rem-1.source_binding]\nrequest_run_id = "run-1"\n'
+        'source_message_ref = "ATLAS_USER_MESSAGE:user-1"\nintent_id = "intent-1"\n',
+        encoding="utf-8",
+    )
+
+
+def test_memoryos_intent_verification_uses_real_user_source_and_run(tmp_path: Path) -> None:
+    database = tmp_path / "memoryos.sqlite3"
+    automation_path = tmp_path / "automations.toml"
+    _write_isolated_memoryos_lifecycle_db(database)
+    _write_lifecycle_automation(automation_path)
+    record = rehearsal._read_isolated_marker_automations(automation_path, "F4E-X5")[0]
+    intent = rehearsal._read_isolated_intent(database, intent_id="intent-1")
+    source = rehearsal._read_isolated_user_source(
+        database, source_message_ref="ATLAS_USER_MESSAGE:user-1", expected_run_id="run-1",
+    )
+    expected = rehearsal._expected_tomorrow_nine(
+        "Asia/Shanghai", now=datetime(2026, 10, 9, 1, 0, tzinfo=timezone.utc),
+    )
+
+    check = rehearsal._verify_marker_intent(
+        record=record, intent=intent, source=source, marker="F4E-X5",
+        expected_run_id="run-1", expected_lifecycle="ACTIVE", expected_due=expected,
+    )
+
+    assert check["passed"] is True
+    assert check["observer_settled"] is True
+    assert check["source_message_ref_nonempty"] is True
+    assert check["source_message_is_user_message_from_run"] is True
+    assert "synthetic private user message" not in json.dumps(source)
+
+
+@pytest.mark.parametrize(
+    ("speaker_role", "run_id"), [("ASSISTANT", "run-1"), ("USER", "other-run")],
+)
+def test_memoryos_source_verification_rejects_non_user_or_other_run(
+        tmp_path: Path, speaker_role: str, run_id: str) -> None:
+    database = tmp_path / "memoryos.sqlite3"
+    _write_isolated_memoryos_lifecycle_db(
+        database, speaker_role=speaker_role, run_id=run_id,
+    )
+
+    source = rehearsal._read_isolated_user_source(
+        database, source_message_ref="source:ATLAS_USER_MESSAGE:user-1",
+        expected_run_id="run-1",
+    )
+
+    assert source["source_message_ref"] == "ATLAS_USER_MESSAGE:user-1"
+    assert source["source_message_matches_run"] is False
+
+
+def test_reminder_wait_requires_active_then_cancelled_intent_settlement(tmp_path: Path) -> None:
+    database = tmp_path / "memoryos.sqlite3"
+    automation_path = tmp_path / "automations.toml"
+    _write_isolated_memoryos_lifecycle_db(database)
+    _write_lifecycle_automation(automation_path)
+
+    created = asyncio.run(rehearsal._wait_for_marker_automation(
+        automation_path, memoryos_db=database, marker="F4E-X5",
+        timezone_name="Asia/Shanghai", expected_run_id="run-1", expected_enabled=True,
+        expected_lifecycle="ACTIVE", timeout=0,
+    ))
+    assert created["passed"] is True
+    assert created["deduplication_verified"] is True
+    assert created["observer_settled"] is True
+
+    with sqlite3.connect(database) as conn:
+        conn.execute("UPDATE unified_intents SET lifecycle='CANCELLED', revision=2")
+    _write_lifecycle_automation(automation_path, enabled=False)
+    due = rehearsal._parse_aware_timestamp(created["expected_due_utc"])
+    cancelled = asyncio.run(rehearsal._wait_for_marker_automation(
+        automation_path, memoryos_db=database, marker="F4E-X5",
+        timezone_name="Asia/Shanghai", expected_run_id="run-1", expected_enabled=False,
+        expected_lifecycle="CANCELLED", expected_due=due, timeout=0,
+    ))
+
+    assert cancelled["passed"] is True
+    assert cancelled["intent_lifecycle"] == "CANCELLED"
+    assert cancelled["observer_settled"] is True
+
+
+def test_automation_store_is_sibling_of_configured_database(tmp_path: Path) -> None:
+    database = tmp_path / "atlas-data" / "data" / "atlas.db"
+
+    assert rehearsal._automation_store_path(database) == database.parent / "automations.toml"
 
 
 def test_production_change_flag_is_derived_from_source_hashes() -> None:

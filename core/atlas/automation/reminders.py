@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -33,6 +33,7 @@ import structlog
 from atlas.automation import get_automation_engine
 from atlas.automation.store import (
     AutomationValidationError,
+    normalize_source_binding,
     normalize_record,
     validate_record,
 )
@@ -211,6 +212,55 @@ def _same_reminder(left: str, right: str) -> bool:
     return a == b or a in b or b in a
 
 
+def _same_action(left: str, right: str) -> bool:
+    """Conservative action match for source-bound tool/pipeline convergence.
+
+    Require an exact normalized action after a small set of explicit Chinese
+    verb normalizations. Similarity based on character bigrams can be dominated
+    by shared identifiers or suffixes and merge different actions from one
+    source message.
+    """
+    a, b = _core_text(left), _core_text(right)
+    if not a or not b:
+        return False
+
+    def canonical_action(value: str) -> str:
+        # These common verb forms preserve the same object and intent while
+        # avoiding fuzzy matching across different actions sharing a suffix.
+        return value.replace("提交", "交").replace("发送", "发")
+
+    return canonical_action(a) == canonical_action(b)
+
+
+def _same_due(left: Any, right: Any) -> bool:
+    try:
+        a = datetime.fromisoformat(str(left).replace("Z", "+00:00"))
+        b = datetime.fromisoformat(str(right).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if a.tzinfo is None or b.tzinfo is None:
+        return False
+    return a.astimezone(UTC) == b.astimezone(UTC)
+
+
+def resolve_update_due(*, due_at: str = "", due_text: str = "",
+                       now: datetime | None = None, config: Any = None) -> str:
+    """Purely resolve and validate a future update due before any side effect."""
+    reference = now_local(config, now=now)
+    raw = str(due_at or "").strip()
+    if raw:
+        try:
+            due = attach_user_timezone(
+                datetime.fromisoformat(raw.replace(" ", "T", 1)), config)
+        except ValueError as exc:
+            raise ReminderError(f"due_at 非法 ISO 时间: {raw!r}") from exc
+    else:
+        due = parse_due(due_text, now=reference, config=config)
+    if due.astimezone(UTC) <= reference.astimezone(UTC):
+        raise ReminderError("改期必须晚于当前时间")
+    return due.isoformat()
+
+
 def _engine(engine: Any = None) -> Any:
     return engine if engine is not None else get_automation_engine()
 
@@ -301,8 +351,26 @@ def _sorted_reminders(store: Any) -> list[dict[str, Any]]:
     return items
 
 
+def find_reminder(*, query: str = "", automation_id: str = "",
+                  include_disabled: bool = False, engine: Any = None
+                  ) -> dict[str, Any] | None:
+    """Resolve one reminder using the same target rules as cancel/update."""
+    store = _engine(engine).store
+    if automation_id:
+        target = store.get(str(automation_id))
+        if target is not None and str(target.get("name") or "").startswith(REMINDER_PREFIX):
+            if include_disabled or target.get("enabled") is not False:
+                return target
+        return None
+    candidates = [record for record in _sorted_reminders(store)
+                  if (include_disabled or record.get("enabled") is not False)
+                  and _match(record, query)]
+    return candidates[0] if len(candidates) == 1 else None
+
+
 async def create_reminder(*, message: str, due_at: str = "", due_text: str = "",
                           name: str = "", automation_id: str = "",
+                          source_binding: dict[str, Any] | None = None,
                           now: datetime | None = None, context: str = "",
                           engine: Any = None, config: Any = None) -> dict[str, Any]:
     """创建提醒：真实写 store + ``engine.sync_automation``（E8）。"""
@@ -322,29 +390,76 @@ async def create_reminder(*, message: str, due_at: str = "", due_text: str = "",
 
     automation_engine = _engine(engine)
     store = automation_engine.store
+    binding = normalize_source_binding(source_binding)
 
-    # 去重（真实产品语义）：同一提醒正文 + 同一到期时间不重复建第二条。
-    # 观察者 INTENT 自动链路与模型工具链路都走这里，两条链路收敛到同一条记录，
-    # 避免"说一次提醒，库里出现两条"。
     due_iso_norm = due.isoformat()
-    for record in store.list():
-        if not str(record.get("name") or "").startswith(REMINDER_PREFIX):
-            continue
-        if record.get("enabled") is False:
-            continue
-        if not _same_reminder(_message_of(record), text):
-            continue
-        if str((record.get("trigger") or {}).get("at") or "") != due_iso_norm:
-            continue
-        log.info("memory.reminder_deduped", automation_id=record.get("id"))
-        return {"created": False, "deduped": True, "automation": record,
-                "due_at": due_iso_norm, "context": context}
+    records = store.list()
+    if binding.get("request_run_id"):
+        # Cross-path convergence is scoped to the actual Atlas run, same due
+        # instant, and one unambiguous action match. It never merges unrelated
+        # messages globally or collapses two actions from one message.
+        matches = [record for record in records
+                   if str(record.get("name") or "").startswith(REMINDER_PREFIX)
+                   and str((record.get("source_binding") or {}).get("request_run_id") or "")
+                   == binding["request_run_id"]
+                   and _same_due((record.get("trigger") or {}).get("at"), due_iso_norm)
+                   and _same_action(_message_of(record), text)]
+        if len(matches) == 1:
+            matched = dict(matches[0])
+            old_binding = matched.get("source_binding") or {}
+            matched["source_binding"] = {**old_binding, **binding}
+            if matched.get("enabled") is False:
+                saved = store.put(normalize_record(matched))
+                return {"created": False, "deduped": False,
+                        "reason": "source_reminder_cancelled", "automation": saved,
+                        "due_at": due_iso_norm, "context": context}
+            saved = store.put(normalize_record(matched))
+            await automation_engine.sync_automation(saved)
+            log.info("memory.reminder_deduped", automation_id=saved.get("id"))
+            return {"created": False, "deduped": True, "automation": saved,
+                    "due_at": due_iso_norm, "context": context}
+    else:
+        # Legacy callers without source provenance retain the historical local
+        # de-duplication behavior. Model/tool and observer paths always provide
+        # the actual request_run_id.
+        for record in records:
+            if not str(record.get("name") or "").startswith(REMINDER_PREFIX):
+                continue
+            if record.get("enabled") is False:
+                continue
+            if not _same_reminder(_message_of(record), text):
+                continue
+            if str((record.get("trigger") or {}).get("at") or "") != due_iso_norm:
+                continue
+            log.info("memory.reminder_deduped", automation_id=record.get("id"))
+            return {"created": False, "deduped": True, "automation": record,
+                    "due_at": due_iso_norm, "context": context}
 
     existing_ids = {str(record.get("id") or "") for record in store.list()}
     if automation_id:
-        # 显式 id（统一意图桥的稳定绑定 um-intent-<intent_id>）：同 id 幂等覆盖，
-        # 不新建第二条 —— 重放/双链路收敛。
         new_id = str(automation_id)
+        existing = store.get(new_id)
+        if existing is not None and existing.get("enabled") is False:
+            return {"created": False, "deduped": False,
+                    "reason": "automation_cancelled", "automation": existing,
+                    "due_at": str((existing.get("trigger") or {}).get("at") or ""),
+                    "context": context}
+        if existing is not None and binding:
+            if (_same_due((existing.get("trigger") or {}).get("at"), due_iso_norm)
+                    and _same_action(_message_of(existing), text)):
+                saved = store.put(normalize_record({
+                    **existing,
+                    "source_binding": {
+                        **(existing.get("source_binding") or {}), **binding,
+                    },
+                }))
+                await automation_engine.sync_automation(saved)
+                return {"created": False, "deduped": True, "automation": saved,
+                        "due_at": due_iso_norm, "context": context}
+            return {"created": False, "deduped": False,
+                    "reason": "automation_id_conflict", "automation": existing,
+                    "due_at": str((existing.get("trigger") or {}).get("at") or ""),
+                    "context": context}
     else:
         for _ in range(20):
             new_id = "rem-" + uuid.uuid4().hex[:12]
@@ -364,6 +479,8 @@ async def create_reminder(*, message: str, due_at: str = "", due_text: str = "",
         "created_at": reference.isoformat(),
         "updated_at": reference.isoformat(),
     })
+    if binding:
+        record["source_binding"] = binding
     if not str(record.get("name") or "").startswith(REMINDER_PREFIX):
         record["name"] = REMINDER_PREFIX + str(record.get("name") or text)
     validate_record(record)
@@ -381,18 +498,10 @@ async def cancel_reminder(*, query: str = "", automation_id: str = "",
     automation_engine = _engine(engine)
     store = automation_engine.store
     reference = now_local(config, now=now)
-    target: dict[str, Any] | None = None
-    if automation_id:
-        target = store.get(str(automation_id))
-        if target is None or not str(target.get("name") or "").startswith(REMINDER_PREFIX):
-            target = None
+    target = find_reminder(query=query, automation_id=automation_id, engine=automation_engine)
     if target is None:
-        candidates = [record for record in _sorted_reminders(store)
-                      if record.get("enabled") is not False and _match(record, query)]
-        if not candidates:
-            return {"cancelled": False, "reason": "no_matching_reminder",
-                    "query": query, "context": context}
-        target = candidates[0]
+        return {"cancelled": False, "reason": "no_matching_reminder",
+                "query": query, "context": context}
 
     updated = dict(target)
     updated["enabled"] = False
@@ -407,40 +516,31 @@ async def cancel_reminder(*, query: str = "", automation_id: str = "",
 
 async def update_reminder(*, automation_id: str = "", query: str = "", due_at: str = "",
                           due_text: str = "", message: str = "", now: datetime | None = None,
+                          source_binding: dict[str, Any] | None = None,
                           context: str = "", engine: Any = None,
                           config: Any = None) -> dict[str, Any]:
     """改期/改内容：同一记录原地更新 + 重新 sync（不新建第二条）。"""
     automation_engine = _engine(engine)
     store = automation_engine.store
     reference = now_local(config, now=now)
-    target: dict[str, Any] | None = None
-    if automation_id:
-        candidate = store.get(str(automation_id))
-        if candidate is not None and str(candidate.get("name") or "").startswith(REMINDER_PREFIX):
-            target = candidate
+    target = find_reminder(query=query, automation_id=automation_id,
+                           include_disabled=True, engine=automation_engine)
     if target is None:
-        candidates = [record for record in _sorted_reminders(store)
-                      if record.get("enabled") is not False and _match(record, query)]
-        if not candidates:
-            return {"updated": False, "reason": "no_matching_reminder",
-                    "query": query, "context": context}
-        target = candidates[0]
+        return {"updated": False, "reason": "no_matching_reminder",
+                "query": query, "context": context}
 
     updated = dict(target)
     if due_at or due_text:
-        if due_at:
-            try:
-                due = attach_user_timezone(
-                    datetime.fromisoformat(str(due_at).replace(" ", "T", 1)), config)
-            except ValueError as exc:
-                raise ReminderError(f"due_at 非法 ISO 时间: {due_at!r}") from exc
-        else:
-            due = parse_due(due_text, now=reference, config=config)
+        due_iso = resolve_update_due(due_at=due_at, due_text=due_text,
+                                     now=reference, config=config)
         updated["trigger"] = {**(target.get("trigger") or {}), "kind": "date",
-                              "at": due.isoformat()}
+                              "at": due_iso}
     if message:
         updated["payload"] = {**(target.get("payload") or {}), "message": str(message)}
         updated["name"] = REMINDER_PREFIX + str(message)
+    updated["enabled"] = True
+    if source_binding is not None:
+        updated["source_binding"] = normalize_source_binding(source_binding)
     updated["updated_at"] = reference.isoformat()
     saved = store.put(normalize_record(updated))
     await automation_engine.sync_automation(saved)
@@ -478,6 +578,8 @@ def list_reminders(*, context: str = "", engine: Any = None) -> dict[str, Any]:
 __all__ = [
     "REMINDER_PREFIX",
     "ReminderError",
+    "find_reminder",
+    "resolve_update_due",
     "parse_due",
     "create_reminder",
     "cancel_reminder",

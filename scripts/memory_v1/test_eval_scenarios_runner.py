@@ -407,10 +407,22 @@ def test_results_cannot_be_written_outside_temp_even_before_real_start() -> None
             dry_run=True,
         ))
     except RuntimeError as exc:
-        assert "D:\\Temp" in str(exc)
+        assert "temporary root" in str(exc)
     else:
         raise AssertionError("runner must refuse output outside D:\\Temp")
     assert not output_path.exists()
+
+
+def test_isolated_temp_guard_ignores_temp_env_and_rejects_root_itself(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    temp_root = Path(r"D:\Temp")
+    monkeypatch.setenv("TEMP", r"D:\Atlas\data")
+
+    assert runner._is_isolated_temporary_path(temp_root) is False
+    assert runner._is_isolated_temporary_path(temp_root / "f4-c-child") is True
+    assert runner._is_isolated_temporary_path(Path(r"D:\Atlas\data")) is False
+    assert runner._is_isolated_temporary_path(Path(r"D:\Atlas\data") / "child") is False
 
 
 def test_scenario_trial_checkpoint_and_partial_journal_are_durable_and_immutable(tmp_path: Path) -> None:
@@ -580,12 +592,14 @@ def test_capture_evidence_reports_isolated_source_ids_ack_and_context_overlap(tm
     outbox = atlas_data / "outbox" / "unified_outbox.sqlite3"
     outbox.parent.mkdir(parents=True)
     envelope = {
+        "event_class": "TEST",
         "observation": {
             "source_kind": "ATLAS_USER_MESSAGE", "source_object_id": "msg-1",
             "source_revision": "1", "speaker_role": "USER",
             "epistemic_kind": "USER_ASSERTED", "occurred_at": "2026-10-09T10:00:00+00:00",
             "source_timezone": "+00:00", "time_status": "KNOWN",
             "content": {"session_id": "conversation-1", "text": "secret user text"},
+            "metadata": {"request_run_id": "run-1"},
         },
         "context": {"runtime_session_id": "conversation-1"},
     }
@@ -609,9 +623,62 @@ def test_capture_evidence_reports_isolated_source_ids_ack_and_context_overlap(tm
 
     assert after["events"][0]["source_event_id"] == "atlas:ATLAS_USER_MESSAGE:msg-1:1:UPSERT"
     assert after["events"][0]["state"] == "ACKED"
+    assert after["events"][0]["event_class"] == "TEST"
+    assert after["events"][0]["request_run_id"] == "run-1"
     assert "text" not in after["events"][0]
     assert evidence["ack_status"] == "all_acked"
     assert evidence["same_run_record_refs_in_assembled_context"] == ["memory:record-1"]
+
+
+def test_occurred_at_used_by_ws_requires_clock_source_and_ack_chain() -> None:
+    run_id = "run-actual-1"
+    clock = "2026-10-05T09:00:00+08:00"
+    run_events = [{
+        "run_id": run_id, "event": "run.started",
+        "data": {"effective_test_clock": clock},
+    }]
+    source_event = {
+        "source_kind": "ATLAS_USER_MESSAGE", "event_class": "TEST",
+        "request_run_id": run_id, "occurred_at": clock,
+        "source_timezone": "Asia/Hong_Kong", "state": "ACKED",
+        "has_error": False,
+    }
+    capture_evidence = {"new_source_events": [source_event]}
+
+    assert runner._occurred_at_used_by_ws(
+        run_id, run_events, capture_evidence, {"status": "ready"},
+    ) is True
+    assert runner._occurred_at_used_by_ws(
+        run_id, run_events, capture_evidence, {"status": "failed"},
+    ) is False
+
+    for key, value in (
+        ("request_run_id", "a-different-run"),
+        ("event_class", "PRODUCTION"),
+        ("state", "PENDING"),
+        ("occurred_at", "2026-10-05T10:00:00+08:00"),
+    ):
+        changed = dict(source_event)
+        changed[key] = value
+        assert runner._occurred_at_used_by_ws(
+            run_id, run_events, {"new_source_events": [changed]}, {"status": "ready"},
+        ) is False
+
+
+def test_occurred_at_used_by_ws_rejects_missing_or_ambiguous_ws_clock() -> None:
+    run_id = "run-actual-2"
+    event = {"run_id": run_id, "event": "run.started", "data": {}}
+    assert runner._effective_test_clock_from_ws(run_id, [event]) is None
+    assert runner._effective_test_clock_from_ws(run_id, [
+        {"run_id": run_id, "event": "run.started",
+         "data": {"effective_test_clock": "2026-10-05T09:00:00"}},
+    ]) is None
+    assert runner._effective_test_clock_from_ws(run_id, [
+        {"run_id": run_id, "event": "run.started",
+         "data": {"effective_test_clock": "2026-10-05T09:00:00+08:00"}},
+        {"run_id": run_id, "event": "run.started",
+         "data": {"effective_test_clock": "2026-10-05T10:00:00+08:00"}},
+    ]) is None
 
 class _FakeAtlasClient:
     """最小替身：只记录 (method, path, json_body) 并回放预置响应。"""

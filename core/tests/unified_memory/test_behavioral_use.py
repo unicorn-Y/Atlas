@@ -64,26 +64,21 @@ def test_implicit_constraint_changes_action(h: UMHarness) -> None:
 
 @pytest.mark.unit
 def test_pre_plan_constraint_order_in_execution_flow() -> None:
-    """验证 run_phases 管道中 pre_plan_constraints 阶段严格先于 plan 阶段执行。"""
-    from atlas.agent.run_phases import (
-        _phase_begin,
-        _phase_context,
-        _phase_goal_knowledge,
-        _phase_plan,
-        _phase_pre_plan_constraints,
-        _phase_prompt_hook,
-    )
+    """验证执行 wrapper 的clock scope及其 scoped phase 顺序。"""
     import inspect
 
-    # 检查 execute_run 中的阶段顺序
-    from atlas.agent.run_phases import execute_run
-    src = inspect.getsource(execute_run)
-    idx_pre_plan = src.find("_phase_pre_plan_constraints")
-    idx_plan = src.find("_phase_plan")
-    idx_context = src.find("_phase_context")
+    from atlas.agent.run_phases import _execute_run_scoped, execute_run
 
-    assert idx_pre_plan != -1, "_phase_pre_plan_constraints 必须注册在 execute_run 中"
-    assert idx_plan != -1, "_phase_plan 必须注册在 execute_run 中"
+    wrapper_source = inspect.getsource(execute_run)
+    scoped_source = inspect.getsource(_execute_run_scoped)
+    assert "test_clock_context" in wrapper_source
+    assert "aclosing(_execute_run_scoped" in wrapper_source
+    idx_pre_plan = scoped_source.find("_phase_pre_plan_constraints")
+    idx_plan = scoped_source.find("_phase_plan")
+    idx_context = scoped_source.find("_phase_context")
+
+    assert idx_pre_plan != -1, "_phase_pre_plan_constraints 必须注册在 scoped run 中"
+    assert idx_plan != -1, "_phase_plan 必须注册在 scoped run 中"
     assert idx_pre_plan < idx_plan, (
         "铁律：_phase_pre_plan_constraints 必须在 _phase_plan 之前执行，"
         "不在 plan 生成后才加载会改变计划的记忆！"

@@ -51,6 +51,7 @@
 
 from __future__ import annotations
 
+import structlog
 import uuid
 from collections.abc import Mapping
 from datetime import datetime
@@ -62,6 +63,14 @@ from atlas.memory.unified_client import (
     UnifiedMemoryError,
 )
 from atlas.memory.unified_facade import UnifiedMemoryFacade
+
+log = structlog.get_logger()
+
+# create_reminder 判定「同源 Automation 已被取消」的两种 reason（见
+# atlas.automation.reminders.create_reminder）：命中即说明该意图的 Automation
+# 半边已经停用，意图必须随之终态化，避免「意图 ACTIVE、Automation 已停用」。
+_INTENT_TERMINAL_REASONS = frozenset(
+    {"source_reminder_cancelled", "automation_cancelled"})
 
 #: automation_id 前缀（稳定绑定：um-intent-<intent_id>；ID_PATTERN 兼容 ——
 #: intent_id 生成规则 "int-" + hex 与 [A-Za-z0-9_-]{1,100} 相容）
@@ -224,6 +233,22 @@ def user_source_ref_from_record(record: Mapping[str, Any]) -> str | None:
     直接授权来源才可能 ACTIVE（§4 来源纪律 / T06.3）。取不到 → None（调用方
     如实跳过，不伪造授权来源）。
     """
+    metadata = record.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    source_events = metadata.get("source_events")
+    authoritative_refs: set[str] = set()
+    if isinstance(source_events, list):
+        for event in source_events:
+            if not isinstance(event, dict):
+                continue
+            event_id = str(event.get("source_event_id") or "").strip()
+            parts = event_id.split(":")
+            if len(parts) == 5 and parts[0] == "atlas" \
+                    and parts[1] == "ATLAS_USER_MESSAGE" and parts[2].strip():
+                authoritative_refs.add(USER_SOURCE_CHAIN_PREFIX + parts[2].strip())
+    if len(authoritative_refs) == 1:
+        return next(iter(authoritative_refs))
+
     content = record.get("content")
     content = content if isinstance(content, dict) else {}
     chains = content.get("evidence_chains")
@@ -240,6 +265,20 @@ def user_source_ref_from_record(record: Mapping[str, Any]) -> str | None:
             if len(parts) >= 4 and parts[2].strip():
                 return USER_SOURCE_CHAIN_PREFIX + parts[2].strip()
     return None
+
+
+def source_binding_from_record(record: Mapping[str, Any]) -> dict[str, str]:
+    """Return only source identifiers projected from the true USER evidence."""
+    metadata = record.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    binding: dict[str, str] = {}
+    run_id = metadata.get("request_run_id")
+    if isinstance(run_id, str) and run_id.strip():
+        binding["request_run_id"] = run_id.strip()
+    source_ref = user_source_ref_from_record(record)
+    if source_ref:
+        binding["source_message_ref"] = source_ref
+    return binding
 
 
 def aware_iso(raw: Any) -> str:
@@ -509,6 +548,11 @@ class IntentBridge:
         intent_id = str(intent.get("intent_id") or "").strip()
         if not intent_id:
             raise IntentBridgeError("持久化需要 intent_id（unified_intents 行）")
+        lifecycle = str(intent.get("lifecycle") or "ACTIVE").upper()
+        if lifecycle != "ACTIVE":
+            return {"created": False, "reason": f"intent_{lifecycle.lower()}",
+                    "intent_id": intent_id,
+                    "automation_id": automation_id_for_intent(intent_id)}
         due = self._time_due(intent)
         if not due:
             cue = intent.get("cue")
@@ -519,19 +563,90 @@ class IntentBridge:
                     "automation_id": automation_id_for_intent(intent_id)}
         from atlas.automation import reminders as reminder_service
 
+        source_binding = intent.get("source_binding")
+        source_binding = dict(source_binding) if isinstance(source_binding, dict) else {}
+        source_binding["intent_id"] = intent_id
         result = await reminder_service.create_reminder(
             message=self._reminder_text(intent), due_at=due,
             automation_id=automation_id_for_intent(intent_id),
+            source_binding=source_binding,
             now=now, engine=engine, config=self._config)
         result["intent_id"] = intent_id
         result["automation_id"] = (result.get("automation") or {}).get("id")
+        automation = result.get("automation") or {}
+        if (str(result.get("reason") or "") not in _INTENT_TERMINAL_REASONS
+                and automation.get("id") and automation.get("enabled") is not False):
+            # 落库后复查：意图可能在 drain 确认 ACTIVE 之后、Automation 落库
+            # 之前被取消（此时取消侧找不到 Automation，什么也没停）。以 MemoryOS
+            # 里持久的终态意图为墓碑，晚到的落库立即停用，保证取消后不再触发。
+            lifecycle = await self._current_lifecycle(intent_id)
+            if lifecycle in {"CANCELLED", "EXPIRED"}:
+                cancelled = await reminder_service.cancel_reminder(
+                    automation_id=str(automation["id"]),
+                    now=now, engine=engine, config=self._config)
+                result["created"] = False
+                result["reason"] = f"intent_{lifecycle.lower()}_after_persist"
+                if cancelled.get("automation"):
+                    result["automation"] = cancelled["automation"]
+                log.info("memory.intent_automation_disabled_late",
+                         intent_id=intent_id, lifecycle=lifecycle)
+                return result
+        if str(result.get("reason") or "") in _INTENT_TERMINAL_REASONS:
+            # 目标 Automation 在意图投影之前就已被取消（工具取消先于观察者
+            # drain 落意图）→ 意图随之终态化，否则 MemoryOS 会留下「意图
+            # ACTIVE、对应 Automation 已停用」的口径矛盾（F4-B §2.2
+            # 「取消同步更新 intent」）。
+            result["intent_terminalized"] = await self._terminalize_intent(
+                intent_id, intent)
         return result
+
+    async def _current_lifecycle(self, intent_id: str) -> str | None:
+        """读 MemoryOS 里意图当前 lifecycle；读不到返回 None（不据此误停任务）。"""
+        try:
+            listing = await self.client().call(
+                "GET", "/v1/unified/intents", params={"intent_id": intent_id})
+        except Exception as exc:  # noqa: BLE001 — 复查尽力而为，不阻塞建任务
+            log.warning("memory.intent_lifecycle_lookup_failed",
+                        intent_id=intent_id, error=str(exc))
+            return None
+        items = listing.get("items") if isinstance(listing, dict) else listing
+        for row in items or []:
+            if isinstance(row, dict) and str(row.get("intent_id") or "") == intent_id:
+                return str(row.get("lifecycle") or "").upper() or None
+        return None
+
+    async def _terminalize_intent(self, intent_id: str,
+                                  intent: Mapping[str, Any]) -> dict[str, Any]:
+        """把意图转到 CANCELLED 终态（终态自环幂等，重放安全）。"""
+        body: dict[str, Any] = {"transition": "CANCELLED"}
+        revision = intent.get("revision")
+        if revision is not None:
+            body["expected_revision"] = int(revision)
+        try:
+            # 服务端 §1 要求请求携带统一 MemoryContext；与 ensure_intent_from_record
+            # 同源取法（facade 配置绑定的骨架，桥不编造身份）。
+            ctx = self._context(None)
+        except IntentBridgeError as exc:
+            log.warning("memory.intent_terminalize_failed", intent_id=intent_id,
+                        error=str(exc))
+            return {"terminalized": False, "error": str(exc)}
+        if ctx is not None:
+            body["context"] = ctx
+        try:
+            payload = await self.client().transition_intent(str(intent_id), body)
+        except UnifiedMemoryError as exc:
+            log.warning("memory.intent_terminalize_failed", intent_id=intent_id,
+                        error=str(exc))
+            return {"terminalized": False, "error": str(exc)}
+        return {"terminalized": True,
+                "lifecycle": (payload or {}).get("lifecycle"),
+                "revision": (payload or {}).get("revision")}
 
     # ------------------------------------------ 记忆记录 → 意图行（F3-B3 收口）
 
     async def find_intent_for_record(self, record: Mapping[str, Any]
                                      ) -> dict[str, Any] | None:
-        """按幂等键 ``(user_source_ref, due_at)`` 在现有 ACTIVE 意图里查重。
+        """按 source + due instant + unique action 在已存 intent 里查重。
 
         ``GET /v1/unified/intents`` 只支持 lifecycle / intent_id / automation_id /
         subject 过滤（无 user_source_ref）→ 拉 ACTIVE 后本地按来源引用 + 到期时刻
@@ -542,19 +657,51 @@ class IntentBridge:
         if request is None:
             return None
         listing = await self.client().call(
-            "GET", "/v1/unified/intents",
-            params={"lifecycle": "ACTIVE", "limit": 200})
+            "GET", "/v1/unified/intents", params={"limit": 200})
         items = listing.get("items") if isinstance(listing, dict) else listing
+        from atlas.automation.reminders import _same_action
+
+        matches: list[dict[str, Any]] = []
         for row in items or []:
             if not isinstance(row, dict):
                 continue
             if str(row.get("user_source_ref") or "").strip() != request["user_source_ref"]:
                 continue
-            if same_instant(self._time_due(row), request["due_at"]):
-                return row
-        return None
+            if not same_instant(self._time_due(row), request["due_at"]):
+                continue
+            existing_action = row.get("action")
+            existing_action = existing_action if isinstance(existing_action, dict) else {}
+            if _same_action(str(existing_action.get("message") or ""),
+                            str((request.get("action") or {}).get("message") or "")):
+                matches.append(row)
+        if not matches:
+            return None
+        # 规范化（提交→交 等）会让「提交报告」与「交报告」同判，二者同源同时刻
+        # 并存时（例如一条已取消、一条仍 ACTIVE）绝不能凭 created_at（秒精度，
+        # 同秒并列）随便挑最新：先取正文归一后**完全相同**的，才退回等价写法。
+        from atlas.automation.reminders import _core_text
 
-    async def ensure_intent_from_record(self, record: Mapping[str, Any]
+        wanted = _core_text(str((request.get("action") or {}).get("message") or ""))
+        exact = [row for row in matches
+                 if _core_text(str((row.get("action") or {}).get("message") or ""))
+                 == wanted]
+        if exact:
+            matches = exact
+        # F4-B 去重契约（任务书 §2.1「同一个意图只产生一个 Automation 任务」
+        # 「不得建出第二个」）：同一 (source, due, action) 命中多条时取**最新**
+        # 一条（当前态）复用，绝不因歧义再建新行。listing 按 created_at 升序，
+        # 末条即最新。歧义只记日志，不影响选择。
+        if len(matches) > 1:
+            log.warning(
+                "memory.intent_bridge_ambiguous_match",
+                user_source_ref=request["user_source_ref"],
+                due_at=request["due_at"], match_count=len(matches),
+                picked_intent_id=matches[-1].get("intent_id"),
+            )
+        return matches[-1]
+
+    async def ensure_intent_from_record(self, record: Mapping[str, Any], *,
+                                        context: dict[str, Any] | None = None
                                         ) -> dict[str, Any]:
         """INTENT 记忆记录 → **真实** ``unified_intents`` 行（F3-B3 收口；幂等）。
 
@@ -571,17 +718,23 @@ class IntentBridge:
             return {"created": False, "reason": "not_eligible", "intent_id": None,
                     "intent": None, "request": None}
         existing = await self.find_intent_for_record(record)
+        binding = source_binding_from_record(record)
         if existing is not None:
+            if str(existing.get("lifecycle") or "").upper() != "ACTIVE":
+                return {"created": False, "reason": "existing_terminal_intent",
+                        "intent_id": existing.get("intent_id"), "intent": existing,
+                        "request": request, "source_binding": binding}
             return {"created": False, "reason": "already_exists",
                     "intent_id": existing.get("intent_id"), "intent": existing,
-                    "request": request}
+                    "request": request, "source_binding": binding}
         body: dict[str, Any] = dict(request)
-        if (ctx := self._context(None)) is not None:
+        if (ctx := self._context(context)) is not None:
             body["context"] = ctx
         payload = await self.client().create_intent(body)
         return {"created": True, "reason": "created",
                 "intent_id": payload.get("intent_id"), "intent": payload,
-                "lifecycle": payload.get("lifecycle"), "request": request}
+                "lifecycle": payload.get("lifecycle"), "request": request,
+                "source_binding": binding}
 
     @staticmethod
     def persist_input_from_record(ensured: Mapping[str, Any]
@@ -599,10 +752,16 @@ class IntentBridge:
         request = request if isinstance(request, dict) else {}
         row = ensured.get("intent")
         row = dict(row) if isinstance(row, dict) else {}
+        lifecycle = str(ensured.get("lifecycle") or row.get("lifecycle") or "").upper()
+        if lifecycle and lifecycle != "ACTIVE":
+            return None
         row["intent_id"] = intent_id
         for key in ("cue", "due_at", "action"):
             if not row.get(key) and request.get(key):
                 row[key] = request[key]
+        source_binding = ensured.get("source_binding")
+        if isinstance(source_binding, dict) and source_binding:
+            row["source_binding"] = dict(source_binding)
         return row
 
     async def cancel_automation_for_intent(self, intent_id: str, *,
@@ -611,8 +770,18 @@ class IntentBridge:
         """统一意图取消 → 对应 Automation 停用（保留记录，可审计）。"""
         from atlas.automation import reminders as reminder_service
 
+        automation_id = automation_id_for_intent(intent_id)
+        try:
+            store = reminder_service._engine(engine).store
+            matches = [record for record in store.list()
+                       if str((record.get("source_binding") or {}).get("intent_id") or "")
+                       == str(intent_id)]
+            if len(matches) == 1:
+                automation_id = str(matches[0].get("id") or automation_id)
+        except Exception:  # noqa: BLE001 — fall back to legacy stable ID lookup
+            pass
         result = await reminder_service.cancel_reminder(
-            automation_id=automation_id_for_intent(intent_id),
+            automation_id=automation_id,
             now=now, engine=engine)
         result["intent_id"] = str(intent_id)
         return result
@@ -622,6 +791,7 @@ class IntentBridge:
     async def on_automation_event(self, automation_id: str,
                                   event: dict[str, Any] | None = None, *,
                                   context: dict[str, Any] | None = None,
+                                  engine: Any = None,
                                   ) -> dict[str, Any]:
         """Automation fire 回调 → 服务端 transition TRIGGERED（带触发 receipt）。
 
@@ -636,7 +806,19 @@ class IntentBridge:
           * 成功 → 服务端 lifecycle=TRIGGERED，receipt 记录 automation 与
             触发事件（触发器不改事实权威 —— 本方法不执行 action）。
         """
-        intent_id = intent_id_from_automation(automation_id)
+        intent_id = None
+        try:
+            from atlas.automation import reminders as reminder_service
+
+            automation = reminder_service._engine(engine).store.get(automation_id)
+            binding = (automation or {}).get("source_binding")
+            bound_intent_id = binding.get("intent_id") if isinstance(binding, dict) else None
+            if isinstance(bound_intent_id, str) and bound_intent_id.strip():
+                intent_id = bound_intent_id.strip()
+        except Exception:  # noqa: BLE001 — stable legacy ID remains a fallback
+            pass
+        if intent_id is None:
+            intent_id = intent_id_from_automation(automation_id)
         if intent_id is None:
             return {"fired": False, "reason": "not_intent_automation",
                     "automation_id": automation_id}
@@ -788,7 +970,7 @@ class IntentBridge:
             "wired": False,
             "note": ENGINE_WIRING["reason"],
         }
-        if engine is not None:
+        if engine is not None and cancel_ok:
             automation_cancel["result"] = await self.cancel_automation_for_intent(
                 str(intent_id), engine=engine, now=now)
             automation_cancel["wired"] = bool(

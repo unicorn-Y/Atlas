@@ -13,6 +13,10 @@ from typing import Any
 
 
 TEMP_ROOT = Path(r"D:\Temp")
+PRODUCTION_DATA_ROOTS = (
+    Path(r"D:\Atlas\data").resolve(),
+    Path(r"D:\MemoryOSData").resolve(),
+)
 CACHE_VERSION = 1
 SNAPSHOT_DIRECTORIES = ("atlas-data", "hermes-home", "memoryos", "outbox")
 SNAPSHOT_FILES = (
@@ -37,13 +41,49 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _temp_child(path: Path) -> Path:
-    resolved = path.resolve()
+def allowed_temp_roots() -> tuple[Path, ...]:
+    roots = [TEMP_ROOT.resolve()]
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if not local_appdata:
+        return tuple(roots)
     try:
-        resolved.relative_to(TEMP_ROOT.resolve())
-    except ValueError as exc:
-        raise RuntimeError("LongMemEval observation cache paths must stay under D:\\Temp") from exc
-    return resolved
+        profile = Path.home().resolve()
+        users_root = Path(r"C:\Users").resolve()
+        candidate = (Path(local_appdata) / "Temp").resolve()
+        candidate.relative_to(profile)
+        profile.relative_to(users_root)
+    except (OSError, ValueError):
+        return tuple(roots)
+    if (
+        candidate.drive.casefold() == "c:"
+        and profile.drive.casefold() == "c:"
+        and candidate != profile
+    ):
+        roots.append(candidate)
+    return tuple(dict.fromkeys(roots))
+
+
+def preferred_temp_root() -> Path:
+    roots = allowed_temp_roots()
+    return roots[-1]
+
+
+def checked_temp_child(path: Path) -> Path:
+    resolved = path.resolve()
+    if resolved in PRODUCTION_DATA_ROOTS or any(
+        root in resolved.parents for root in PRODUCTION_DATA_ROOTS
+    ):
+        raise RuntimeError("LongMemEval artifacts must not use a production data root")
+    for root in allowed_temp_roots():
+        if resolved != root and root in resolved.parents:
+            return resolved
+    raise RuntimeError(
+        "LongMemEval artifacts must be strict descendants of D:\\Temp or the current user's C:\\Users temp root"
+    )
+
+
+def _temp_child(path: Path) -> Path:
+    return checked_temp_child(path)
 
 
 def question_fingerprint(row: dict[str, Any], identity: dict[str, Any]) -> str:
@@ -250,6 +290,8 @@ def restore_observation_snapshot(
 
 
 __all__ = [
-    "question_fingerprint", "question_cache_key", "question_cache_entry_path", "save_observation_snapshot",
+    "allowed_temp_roots", "preferred_temp_root", "checked_temp_child",
+    "question_fingerprint", "question_cache_key",
+    "question_cache_entry_path", "save_observation_snapshot",
     "restore_observation_snapshot",
 ]

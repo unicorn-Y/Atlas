@@ -30,9 +30,7 @@ from typing import Any
 try:
     from .gemini_runtime import (
         MODEL_ID as F1_MODEL_ID,
-        PROVIDER_ID as F1_PROVIDER_ID,
         bootstrap_model_manager,
-        clear_gateway_fallback_config,
         clear_inherited_gateway_credentials,
         read_isolated_model_settings,
         write_isolated_user_settings,
@@ -40,9 +38,7 @@ try:
 except ImportError:  # direct script invocation
     from gemini_runtime import (
         MODEL_ID as F1_MODEL_ID,
-        PROVIDER_ID as F1_PROVIDER_ID,
         bootstrap_model_manager,
-        clear_gateway_fallback_config,
         clear_inherited_gateway_credentials,
         read_isolated_model_settings,
         write_isolated_user_settings,
@@ -52,6 +48,8 @@ try:
     from .longmemeval_observation_cache import (
         question_cache_entry_path,
         question_fingerprint,
+        checked_temp_child,
+        preferred_temp_root,
         restore_observation_snapshot,
         save_observation_snapshot,
     )
@@ -59,6 +57,8 @@ except ImportError:  # direct script invocation
     from longmemeval_observation_cache import (
         question_cache_entry_path,
         question_fingerprint,
+        checked_temp_child,
+        preferred_temp_root,
         restore_observation_snapshot,
         save_observation_snapshot,
     )
@@ -76,6 +76,7 @@ CANONICAL_CATEGORIES = (
 EXPECTED_S_SHA256 = "08d8dad4be43ee2049a22ff5674eb86725d0ce5ff434cde2627e5e8e7e117894"
 EXPECTED_OFFICIAL_COMMIT = "9e0b455f4ef0e2ab8f2e582289761153549043fc"
 EXPECTED_EVALUATOR_BLOB = "4732f3772b04a2b9069121ade304e6320494abc2"
+FIXED_SUBSET_SEED = 20261007
 OFFICIAL_ORIGIN = "https://github.com/xiaowu0162/LongMemEval.git"
 OBSERVER_INPUT_OVERHEAD_TOKEN_UPPER = 4_096
 OBSERVER_MAX_OUTPUT_TOKENS = 4_000
@@ -85,7 +86,7 @@ DEFAULT_VALIDATION = ROOT / "docs/plan/MEMORY-V1/eval/F1-D-source-validation.jso
 DEFAULT_OFFICIAL_ROOT = Path(
     r"D:\Temp\F1-D-official-longmemeval-9e0b455"
 )
-DEFAULT_OBSERVATION_CACHE = Path(r"D:\Temp\F2-B-longmemeval-observation-cache-v1")
+DEFAULT_OBSERVATION_CACHE = preferred_temp_root() / "F2-B-longmemeval-observation-cache-v1"
 OFFICIAL_NUMPY_TARGET = Path(r"D:\Temp\F1-D-official-numpy-2.5.3-py314")
 PRODUCTION_CONFIG = ROOT / "config/atlas.toml"
 PRODUCTION_SETTINGS = Path(r"D:\Atlas\data\user-settings.json")
@@ -254,9 +255,18 @@ def _checked_child(path: Path, root: Path) -> Path:
     return resolved
 
 
+def _checked_temp_child(path: Path) -> Path:
+    resolved = checked_temp_child(path)
+    if resolved in PRODUCTION_DATA_ROOTS or any(
+        prod in resolved.parents for prod in PRODUCTION_DATA_ROOTS
+    ):
+        raise RuntimeError(f"refusing production data path: {resolved}")
+    return resolved
+
+
 def _write_question_hermes_config(hermes_home: Path) -> Path:
     """Pin auxiliary timeouts and disable provider fallbacks for one isolated question."""
-    hermes_home = _checked_child(hermes_home, TEMP_ROOT)
+    hermes_home = _checked_temp_child(hermes_home)
     hermes_home.mkdir(parents=True, exist_ok=True)
     config_path = hermes_home / "config.yaml"
     if config_path.exists():
@@ -408,10 +418,12 @@ def _load_official_module(script: Path):
 
 def _set_isolated_process_env(run_root: Path) -> None:
     cache = run_root / "cache"
+    process_temp = _checked_child(run_root / "temp", run_root)
+    process_temp.mkdir(parents=True, exist_ok=True)
     paths = {
-        "TEMP": TEMP_ROOT,
-        "TMP": TEMP_ROOT,
-        "TMPDIR": TEMP_ROOT,
+        "TEMP": process_temp,
+        "TMP": process_temp,
+        "TMPDIR": process_temp,
         "ATLAS_ROOT": ROOT,
         "ATLAS_DATA_DIR": run_root / "atlas-data",
         "HERMES_HOME": run_root / "hermes-home",
@@ -454,6 +466,46 @@ def _configured_budget(config_data: dict[str, Any], explicit: int | None) -> int
         return max(0, int(value))
     except (TypeError, ValueError):
         return 50_000
+
+
+def _read_observer_budget_allowlist(path: Path) -> dict[str, Any]:
+    """Read only the integer Observer budget needed by this isolated runner."""
+    section = ""
+    found = False
+    budget: int | None = None
+    section_pattern = re.compile(r"^\s*\[([A-Za-z0-9_.-]+)\]\s*(?:#.*)?$")
+    key_pattern = re.compile(r"^\s*observer_daily_token_budget\s*=")
+    value_pattern = re.compile(
+        r"^\s*observer_daily_token_budget\s*=\s*([+-]?\d(?:_?\d)*)\s*(?:#.*)?$"
+    )
+    with path.open("r", encoding="utf-8") as stream:
+        for line in stream:
+            candidate_line = line.rstrip("\r\n")
+            if not candidate_line.strip() or candidate_line.lstrip().startswith("#"):
+                continue
+            if candidate_line.lstrip().startswith("["):
+                # Any TOML table boundary ends the current section. Only a
+                # plain, exact [memory.v1] header may re-enable allowlisted
+                # budget parsing; quoted and array-table headers are ignored.
+                section = ""
+                section_match = section_pattern.fullmatch(candidate_line)
+                if section_match:
+                    section = section_match.group(1)
+                continue
+            if section != "memory.v1" or not key_pattern.match(candidate_line):
+                continue
+            if found:
+                raise ValueError("duplicate Observer daily token budget in Atlas TOML")
+            found = True
+            value_match = value_pattern.fullmatch(candidate_line)
+            if value_match:
+                try:
+                    budget = int(value_match.group(1).replace("_", ""))
+                except ValueError:
+                    budget = None
+    if not found:
+        return {}
+    return {"memory": {"v1": {"observer_daily_token_budget": budget}}}
 
 
 def _observer_budget_requirement(item: dict[str, Any]) -> int:
@@ -971,7 +1023,7 @@ async def _run_one_question(
     question_started_at = datetime.now(UTC).isoformat()
     phase_timings_ms: dict[str, float] = {}
     qid = str(row["question_id"])
-    question_root = _checked_child(run_root / f"question-{qid}", TEMP_ROOT)
+    question_root = _checked_child(run_root / f"question-{qid}", run_root)
     question_root.mkdir(parents=True, exist_ok=False)
     cache_entry: dict[str, Any] | None = None
     cache_hit = False
@@ -1661,9 +1713,10 @@ def _make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--service-python", type=Path,
                         default=Path(r"D:\MemoryOS\service\.venv\Scripts\python.exe"),
                         help="MemoryOS service interpreter; defaults to the shared service venv")
-    parser.add_argument("--run-root", type=Path, default=None, help="New isolated D:\\Temp\\F1-D-* or F2-B-* run directory")
+    parser.add_argument("--run-root", type=Path, default=None,
+                        help="New isolated run directory under D:\\Temp or the current user's C:\\Users temp root")
     parser.add_argument("--observation-cache", type=Path, default=None,
-                        help="Durable per-question Observer snapshots under D:\\Temp; required for real 6/30 runs")
+                        help="Durable per-question Observer snapshots under an approved temp root; required for real 6/30 runs")
     parser.add_argument("--resume-from", type=Path, default=None,
                         help="Start a new isolated attempt, import only completed question checkpoints, and preserve the prior root")
     parser.add_argument("--observer-daily-token-budget", type=int, default=None,
@@ -1679,9 +1732,15 @@ def _validate_run_args(args: argparse.Namespace) -> None:
     if args.run_real and args.service_port is None:
         raise ValueError("--run-real requires the pre-coordinated --service-port")
     if args.run_real and args.limit in {6, 30} and args.observation_cache is None:
-        raise ValueError("real 6/30 runs require a persistent --observation-cache under D:\\Temp")
+        raise ValueError("real 6/30 runs require a persistent --observation-cache under an approved temp root")
     if args.observation_cache is not None:
-        _checked_child(args.observation_cache, TEMP_ROOT)
+        _checked_temp_child(args.observation_cache)
+    if args.run_root is not None:
+        run_root = _checked_temp_child(args.run_root)
+        if not run_root.name.startswith(("F1-D-", "F2-B-")):
+            raise RuntimeError("run root must use a unique F1-D- or F2-B- prefix under an approved temp root")
+    if args.resume_from is not None:
+        _checked_temp_child(args.resume_from)
     if args.run_real and not args.service_python.resolve().is_file():
         raise FileNotFoundError("configured MemoryOS service interpreter does not exist")
     if args.resume_from is not None and (not args.run_real or args.run_root is None):
@@ -1706,17 +1765,12 @@ async def _run(args: argparse.Namespace) -> int:
         expected_per_category = 1 if args.limit == 6 else 5
         if selected_categories != Counter({category: expected_per_category for category in CANONICAL_CATEGORIES}):
             raise RuntimeError(f"{args.limit}-question selection is not category balanced: {dict(selected_categories)}")
-        if subset.get("metadata", {}).get("random_seed") != 20261007:
+        if subset.get("metadata", {}).get("random_seed") != FIXED_SUBSET_SEED:
             raise RuntimeError("F2-B LongMemEval requires the fixed 20261007 subset seed")
 
     if not PRODUCTION_CONFIG.is_file():
         raise FileNotFoundError("read-only Atlas config is unavailable")
-    try:
-        import tomllib
-    except ModuleNotFoundError:  # pragma: no cover
-        import tomli as tomllib  # type: ignore[no-redef]
-    raw_config = tomllib.loads(PRODUCTION_CONFIG.read_text(encoding="utf-8"))
-    clear_gateway_fallback_config(raw_config)
+    raw_config = _read_observer_budget_allowlist(PRODUCTION_CONFIG)
     selected_stats = {
         str(item["question_id"]): item
         for item in validation.get("question_stats", [])
@@ -1733,16 +1787,16 @@ async def _run(args: argparse.Namespace) -> int:
         raw_config.get("memory", {}).get("v1", {})
         .get("observer_daily_token_budget")
     )
-    run_root = args.run_root or TEMP_ROOT / f"F1-D-real-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
-    run_root = _checked_child(run_root, TEMP_ROOT)
+    run_root = args.run_root or preferred_temp_root() / f"F1-D-real-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
+    run_root = _checked_temp_child(run_root)
     if not run_root.name.startswith(("F1-D-", "F2-B-")):
-        raise RuntimeError("run root must use a unique F1-D- or F2-B- prefix under D:\\Temp")
+        raise RuntimeError("run root must use a unique F1-D- or F2-B- prefix under an approved temp root")
     if run_root.exists():
         raise FileExistsError(f"run root already exists; refusing to reuse artifacts: {run_root}")
     prior_root = None
     prior_summary = None
     if args.resume_from is not None:
-        prior_root = _checked_child(args.resume_from, TEMP_ROOT)
+        prior_root = _checked_temp_child(args.resume_from)
         if not prior_root.is_dir() or not (prior_root / "preflight.json").is_file():
             raise FileNotFoundError("--resume-from must point to an earlier F1-D run with preflight evidence")
         prior_summary = json.loads((prior_root / "preflight.json").read_text(encoding="utf-8"))
@@ -1768,6 +1822,7 @@ async def _run(args: argparse.Namespace) -> int:
         "planned_question_runtime_paths": planned_runtime_paths,
         "source_sha256": validation["source"]["sha256"],
         "subset_sha256": validation["subset"]["sha256"],
+        "random_seed": subset.get("metadata", {}).get("random_seed"),
         "official_commit": commit,
         "official_repository_origin": OFFICIAL_ORIGIN,
         "official_evaluator_source_path": str(official_script),
@@ -1835,7 +1890,7 @@ async def _run(args: argparse.Namespace) -> int:
     )
     summary["model_router"] = model_route
     observation_cache_root = (
-        _checked_child(args.observation_cache, TEMP_ROOT)
+        _checked_temp_child(args.observation_cache)
         if args.observation_cache is not None else None
     )
     observation_cache_identity = _observation_cache_identity(

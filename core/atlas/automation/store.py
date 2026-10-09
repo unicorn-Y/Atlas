@@ -147,11 +147,22 @@ def normalize_state(raw: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def normalize_source_binding(raw: dict[str, Any] | None) -> dict[str, str]:
+    """Normalize the bounded provenance fields used by unified reminders."""
+    raw = raw if isinstance(raw, dict) else {}
+    result: dict[str, str] = {}
+    for field in ("request_run_id", "source_message_ref", "intent_id"):
+        value = raw.get(field)
+        if isinstance(value, str) and value.strip():
+            result[field] = value.strip()
+    return result
+
+
 def normalize_record(raw: dict[str, Any]) -> dict[str, Any]:
     """Fill defaults for every §4 field; returns a normalized copy."""
     raw = raw if isinstance(raw, dict) else {}
     automation_id = _text(raw.get("id")) or new_automation_id()
-    return {
+    record = {
         "id": automation_id,
         "name": _text(raw.get("name"), automation_id),
         "enabled": _bool(raw.get("enabled"), True),
@@ -164,6 +175,9 @@ def normalize_record(raw: dict[str, Any]) -> dict[str, Any]:
         "policy": normalize_policy(raw.get("policy")),
         "state": normalize_state(raw.get("state")),
     }
+    if isinstance(raw.get("source_binding"), dict):
+        record["source_binding"] = normalize_source_binding(raw["source_binding"])
+    return record
 
 
 def validate_record(record: dict[str, Any]) -> None:

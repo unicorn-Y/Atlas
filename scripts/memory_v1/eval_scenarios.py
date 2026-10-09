@@ -43,6 +43,11 @@ if str(CORE_DIR) not in sys.path:
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+try:
+    from scripts.memory_v1.longmemeval_observation_cache import checked_temp_child
+except ModuleNotFoundError:
+    from longmemeval_observation_cache import checked_temp_child
+
 # Production roots that must NEVER be touched during evaluation
 PRODUCTION_ROOTS = (
     Path(r"D:\Atlas\data"),
@@ -1156,8 +1161,8 @@ def _read_capture_source_events(
 ) -> dict[str, Any]:
     """Read source IDs and ACK states from this isolated Atlas outbox, without source text."""
     atlas_data_root = atlas_data_root.resolve()
-    if not _is_within(atlas_data_root, Path(r"D:\Temp")):
-        raise RuntimeError("capture evidence may only be read from an isolated D:\\Temp root")
+    if not _is_isolated_temporary_path(atlas_data_root):
+        raise RuntimeError("capture evidence may only be read from an isolated temporary root")
     path = atlas_data_root / "outbox" / "unified_outbox.sqlite3"
     if not path.is_file():
         return {"status": "not_created", "events": []}
@@ -1209,6 +1214,8 @@ def _read_capture_source_events(
             if not isinstance(observation, dict):
                 continue
             content = observation.get("content") if isinstance(observation.get("content"), dict) else {}
+            metadata = observation.get("metadata") if isinstance(
+                observation.get("metadata"), dict) else {}
             context = envelope.get("context") if isinstance(envelope.get("context"), dict) else {}
             if (conversation_id is not None
                     and str(content.get("session_id") or "") != conversation_id
@@ -1223,6 +1230,8 @@ def _read_capture_source_events(
                 "epistemic_kind": observation.get("epistemic_kind"),
                 "occurred_at": observation.get("occurred_at"),
                 "source_timezone": observation.get("source_timezone"),
+                "event_class": envelope.get("event_class"),
+                "request_run_id": metadata.get("request_run_id"),
                 "time_status": observation.get("time_status"),
                 "content_hash": str(row["content_hash"]),
                 "state": str(row["state"]),
@@ -1386,12 +1395,69 @@ def _capture_evidence_delta(
     }
 
 
+def _effective_test_clock_from_ws(run_id: str,
+                                  events: list[dict[str, Any]]) -> str | None:
+    """Return only the aware effective clock echoed by this run's run.started."""
+    clocks: set[str] = set()
+    for envelope in events:
+        if (not isinstance(envelope, dict)
+                or str(envelope.get("run_id") or "") != run_id
+                or str(envelope.get("event") or "") != "run.started"):
+            continue
+        data = envelope.get("data")
+        value = str(data.get("effective_test_clock") or "").strip() if isinstance(data, dict) else ""
+        if not value:
+            continue
+        try:
+            parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is not None:
+            clocks.add(parsed.isoformat())
+    return next(iter(clocks)) if len(clocks) == 1 else None
+
+
+def _occurred_at_used_by_ws(
+    run_id: str,
+    run_events: list[dict[str, Any]],
+    capture_evidence: dict[str, Any],
+    observer_settlement: dict[str, Any],
+) -> bool:
+    """Require WS acceptance plus the matching persisted and ACKed USER source."""
+    effective_clock = _effective_test_clock_from_ws(run_id, run_events)
+    if not effective_clock or observer_settlement.get("status") != "ready":
+        return False
+    new_events = capture_evidence.get("new_source_events")
+    if not isinstance(new_events, list):
+        return False
+    return any(
+        isinstance(event, dict)
+        and event.get("source_kind") == "ATLAS_USER_MESSAGE"
+        and event.get("event_class") == "TEST"
+        and str(event.get("request_run_id") or "") == run_id
+        and event.get("occurred_at") == effective_clock
+        and bool(str(event.get("source_timezone") or "").strip())
+        and event.get("state") == "ACKED"
+        and not event.get("has_error")
+        for event in new_events
+    )
+
+
 def _is_within(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(root.resolve())
         return True
     except ValueError:
         return False
+
+
+def _is_isolated_temporary_path(path: Path) -> bool:
+    """Return true only for strict descendants of validated isolated temp roots."""
+    try:
+        checked_temp_child(path)
+    except (OSError, RuntimeError):
+        return False
+    return True
 
 
 def enforce_isolation(isolated_dir: Path) -> dict[str, str]:
@@ -1515,8 +1581,8 @@ def _write_isolated_atlas_config(atlas_data_root: Path, memory_url: str, subject
 
 def _write_isolated_hermes_config(hermes_home: Path) -> Path:
     hermes_home = hermes_home.resolve()
-    if not _is_within(hermes_home, Path(r"D:\Temp")):
-        raise RuntimeError("Hermes config may only be written under the isolated D:\\Temp root")
+    if not _is_isolated_temporary_path(hermes_home):
+        raise RuntimeError("Hermes config may only be written under an isolated temporary root")
     hermes_home.mkdir(parents=True, exist_ok=True)
     config_path = hermes_home / "config.yaml"
     if config_path.exists():
@@ -1917,6 +1983,7 @@ async def run_scenario_step(
             "occurred_at": step.occurred_at, "user_input": step.user_input,
             "action": step.action, "action_info": action_info,
             "message_transport": "action_adapter",
+            "occurred_at_used_by_ws": False,
             "execution_status": action_info.get("status", "unsupported") if action_info else "failed",
         }
 
@@ -1951,6 +2018,17 @@ async def run_scenario_step(
     capture_evidence = _capture_evidence_delta(
         outbox_before, outbox_after, assembled_refs, observer_output,
     )
+    effective_test_clock = _effective_test_clock_from_ws(
+        run_id, result.get("events") if isinstance(result.get("events"), list) else [],
+    )
+    occurred_at_used_by_ws = _occurred_at_used_by_ws(
+        run_id,
+        result.get("events") if isinstance(result.get("events"), list) else [],
+        capture_evidence,
+        observer_settlement,
+    )
+    capture_evidence["effective_test_clock_from_ws"] = effective_test_clock
+    capture_evidence["occurred_at_used_by_ws"] = occurred_at_used_by_ws
     if result["status"] != "completed":
         state["execution_errors"].append({
             "kind": "run", "turn_index": step.turn_index,
@@ -1958,7 +2036,8 @@ async def run_scenario_step(
         })
     return {
         "turn_index": step.turn_index, "session_id": step.session_id,
-        "occurred_at": step.occurred_at, "occurred_at_used_by_ws": False,
+        "occurred_at": step.occurred_at,
+        "occurred_at_used_by_ws": occurred_at_used_by_ws,
         "user_input": step.user_input, "action": step.action,
         "action_info": action_info, "message_transport": "atlas_ws",
         "execution_status": result["status"],
@@ -2150,8 +2229,8 @@ async def run_evaluation_suite(
     if model_name not in (None, GEMINI_MODEL_ID):
         raise ValueError(f"F1-D runs are pinned to {GEMINI_MODEL_ID}; refusing {model_name!r}")
     output_path = output_path.resolve()
-    if not _is_within(output_path, Path(r"D:\Temp")):
-        raise RuntimeError("scenario results and plans must be written under D:\\Temp")
+    if not _is_isolated_temporary_path(output_path):
+        raise RuntimeError("scenario results and plans must be written under an isolated temporary root")
     for prod_root in PRODUCTION_ROOTS:
         if _is_within(output_path, prod_root):
             raise RuntimeError(f"result output is inside production root: {prod_root}")
@@ -2170,8 +2249,8 @@ async def run_evaluation_suite(
         }
     else:
         isolated_dir = isolated_dir.resolve()
-        if not _is_within(isolated_dir, Path(r"D:\Temp")):
-            raise RuntimeError("real F1-D runtime roots must be placed under D:\\Temp")
+        if not _is_isolated_temporary_path(isolated_dir):
+            raise RuntimeError("real F1-D runtime roots must be placed under an isolated temporary root")
         if not isolated_dir.name.startswith("F1-D-"):
             raise RuntimeError("real F1-D runtime root name must start with F1-D-")
         try:

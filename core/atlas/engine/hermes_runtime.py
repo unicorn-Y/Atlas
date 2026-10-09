@@ -193,7 +193,7 @@ class HermesRuntime:
         try:
             import yaml
             cfg = yaml.safe_load((self.home / "config.yaml").read_text(encoding="utf-8")) or {}
-            if (self.home.parent / "memory_paused").exists():  # 用户在记忆页暂停了记忆
+            if (self.home.parent / "data" / "memory_paused").exists():  # 用户在记忆页暂停了记忆
                 return False
             return bool(str((cfg.get("memory") or {}).get("provider") or "").strip())
         except Exception:  # missing/invalid config: keep Hermes memory off
@@ -211,7 +211,7 @@ class HermesRuntime:
         self.home.mkdir(parents=True, exist_ok=True)
         os.environ["HERMES_HOME"] = str(self.home)
         # Long-term memory provider (e.g. MemOS "memtensor"): its data lives next to the engine home.
-        os.environ.setdefault("MEMOS_HOME", str(self.home.parent / "memos-home"))
+        os.environ.setdefault("MEMOS_HOME", str(self.home.parent / "data" / "memos-home"))
         _use_system_browser()
         self._hermes_home_ready = True
 

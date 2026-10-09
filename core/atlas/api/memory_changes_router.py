@@ -22,7 +22,7 @@ from atlas.memory import memos_changes
 router = APIRouter(prefix="/api/memory", tags=["memory-changes"])
 
 MEMOS_VIEWER = "http://127.0.0.1:18800"
-PAUSE_FLAG = DATA_ROOT / "memory_paused"
+PAUSE_FLAG = DATA_ROOT / "data" / "memory_paused"  # same path HermesRuntime checks
 
 
 @router.get("/changes")

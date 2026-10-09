@@ -21,7 +21,7 @@ def _memos_db(home):
 
 
 def test_scan_records_add_update_decay_archive_and_delete(tmp_path, monkeypatch):
-    monkeypatch.setattr(memos_changes, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(memos_changes, "DATA_ROOT", tmp_path)  # store lands in tmp_path/data
     monkeypatch.setenv("MEMOS_HOME", str(tmp_path / "memos-home"))
     conn = _memos_db(tmp_path / "memos-home")
     conn.execute("INSERT INTO traces VALUES ('t1', '我住苏州', '住苏州', 0.5, 1.0, x'00')")

@@ -32,6 +32,7 @@ import json
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 import structlog
@@ -140,6 +141,9 @@ class _RunState:
     goal_experiences: list[dict[str, Any]] = field(default_factory=list)
     initial_messages: list[BaseMessage] = field(default_factory=list)
     result: dict[str, Any] = field(default_factory=dict)
+    # Stable USER IDs present before this Hermes turn. ``None`` means that the
+    # boundary could not be read, so current-turn capture must fail closed.
+    preexisting_user_message_ids: set[str] | None = None
     # Detail of a Hermes terminal failed-turn verdict ("" when the turn ended
     # without one). A turn that produced no model output because the provider
     # terminally failed must end as a run failure, never as success (H10.2-2).
@@ -195,6 +199,18 @@ async def execute_run(
         {"type": "done", "message_id": "...", "model": "..."}
         {"type": "error", "detail": "..."}
     """
+    from atlas.time_context import test_clock_context
+
+    with test_clock_context(request.test_clock, config=_agent.get_config()):
+        async with aclosing(_execute_run_scoped(agent, request, callbacks)) as scoped:
+            async for event in scoped:
+                yield event
+
+
+async def _execute_run_scoped(
+    agent, request: RunRequest, callbacks: RunCallbacks,
+) -> AsyncIterator[dict[str, Any]]:
+    """Execute all phases inside the request's scoped, gated clock."""
     state = _RunState(request=request, callbacks=callbacks, message=request.message)
     for phase in (
         _phase_begin, _phase_prompt_hook, _phase_goal_knowledge,
@@ -708,6 +724,14 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
     """
     request = state.request
     initial_messages: list[BaseMessage] = [SystemMessage(content=_agent.SYSTEM_PROMPT)]
+    from atlas.time_context import now_local, timezone_name
+
+    config = _agent.get_config()
+    initial_messages.append(SystemMessage(content=(
+        "Current user-local date and time: "
+        f"{now_local(config).isoformat()} ({timezone_name(config)}). "
+        "Use this timezone when interpreting relative dates and times."
+    )))
     # S3: 画像块 ≤600 token 放系统提示词靠前稳定位 (便于 Prompt Cache)
     if isinstance(state.context, dict):
         sys_prefix = state.context.get("system_prompt_prefix")
@@ -938,53 +962,74 @@ def _terminal_failure_detail(result: Any) -> str:
 #     采集改变（_phase_context 的 extract_memories / _phase_finalize 的
 #     extract_conversation_candidates 原样保留）。
 #
-# 接线判据：只在原消息拥有稳定 ID（SessionDB message_uid，与 session_sync /
-# run_drive `done.message_id` 同一体系）之后调用 capture；不伪造临时 UUID。
+# 接线判据：只捕获本轮前不存在、且正文与本轮用户输入一致的稳定 ID
+#（SessionDB message_uid，与 session_sync / run_drive `done.message_id` 同源）。
+# 无法读取前界、候选不唯一或找不到本轮新消息时 fail closed；不搜索历史旧同文。
 # worker 子任务目标从不写入 SessionDB（见 _build_messages 注释），因此没有
 # 可捕获的持久化用户消息。所有捕获失败只记日志，绝不打断聊天主流程。
 
 async def _capture_run_user_message(state: _RunState) -> None:
-    """用户原话进入统一记忆：engine turn 落库后按真实 message_uid 捕获一次。
+    """Capture the unique, newly persisted SessionDB user message for this run.
 
-    用户消息由引擎回合写入 SessionDB（H2.1 唯一所有者），Atlas 能拿到稳定
-    message_uid 的最早时刻是回合结束 —— 因此捕获点在 turn 收尾，而不是 UI
-    事件流上的每次重绘。转向（steer）等同回合内追加消息时，优先取与本次
-    run 输入内容一致的持久化用户消息，保证记的是本轮原话。
+    Hermes owns transcript persistence. A turn-start UID snapshot distinguishes
+    a newly persisted identical message from an older one. No historical
+    same-text fallback is allowed when the current message is absent.
     """
     request = state.request
     if request.worker:
         return
     try:
         from atlas.config import DATA_ROOT
-        from atlas.engine.session_sync import latest_session_message, read_session_messages
+        from atlas.engine.session_sync import read_session_all_messages
         from atlas.memory.capture import get_capture_service
-
-        from atlas.memory.test_clock import resolve_test_clock
+        from atlas.time_context import (
+            attach_user_timezone,
+            resolve_gated_test_clock,
+            timezone_name,
+        )
 
         capture = get_capture_service()
         if capture is None:
             return
-        # F3-B3：测试时钟只在 TEST + 隔离根下被闸门放行；否则 None → 真实时间
-        clock = resolve_test_clock(request.test_clock)
-        home = DATA_ROOT / "engine"
-        message = await asyncio.to_thread(
-            latest_session_message, home, request.conversation_id, role="user")
-        if message is None:
+        existing_ids = state.preexisting_user_message_ids
+        if existing_ids is None:
             return
+        config = _agent.get_config()
+        source_timezone = timezone_name(config)
+        # A naive evaluation clock is a user-local wall time. Production or
+        # non-isolated requests ignore it and use the timestamp SessionDB wrote.
+        clock = resolve_gated_test_clock(request.test_clock, config)
+        home = DATA_ROOT / "engine"
+        messages = await asyncio.to_thread(
+            read_session_all_messages, home, request.conversation_id)
+        candidates = [
+            item for item in messages
+            if item.get("role") == "user"
+            and str(item.get("id") or "") not in existing_ids
+            and str(item.get("content") or "") == state.message
+            and str(item.get("id") or "")
+        ]
+        if len(candidates) != 1:
+            return
+        message = candidates[0]
         content = str(message.get("content") or "")
-        if content != state.message:
-            recent = await asyncio.to_thread(
-                read_session_messages, home, request.conversation_id, limit=50)
-            for item in reversed(recent):
-                if (item.get("role") == "user"
-                        and str(item.get("content") or "") == state.message):
-                    message, content = item, str(item.get("content") or "")
-                    break
         # 入队是毫秒级本地 sqlite 写，直接在事件循环上调用：保持 CaptureService
         # 的 flush 唤醒（asyncio.Event）在同一线程，语义最简单。
+        occurred_at: Any = clock.isoformat() if clock is not None else None
+        if occurred_at is None and message.get("created_at"):
+            created_at = message["created_at"]
+            try:
+                parsed = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+                occurred_at = attach_user_timezone(parsed, config).isoformat()
+            except (TypeError, ValueError):
+                occurred_at = created_at
+        run_id = request.run_id or request.source_run_id
+        capture_kwargs: dict[str, Any] = {"source_timezone": source_timezone}
+        if run_id:
+            capture_kwargs["request_run_id"] = str(run_id)
         capture.capture_user_message(
             request.conversation_id, str(message.get("id") or ""), content,
-            clock or message.get("created_at") or None)
+            occurred_at, **capture_kwargs)
     except Exception as exc:  # 护栏：捕获失败不打断聊天主流程
         log.debug("memory.capture_user_message_failed", error=str(exc))
 
@@ -1029,6 +1074,19 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
     try:
         from atlas.config import DATA_ROOT
         from atlas.engine import HermesRuntime
+        from atlas.engine.session_sync import read_session_all_messages
+
+        try:
+            before_turn = await asyncio.to_thread(
+                read_session_all_messages, DATA_ROOT / "engine", request.conversation_id,
+            )
+            state.preexisting_user_message_ids = {
+                str(item.get("id")) for item in before_turn
+                if item.get("role") == "user" and item.get("id")
+            }
+        except Exception as exc:  # noqa: BLE001 — boundary read failure must fail closed
+            state.preexisting_user_message_ids = None
+            log.debug("memory.capture_user_message_boundary_failed", error=str(exc))
 
         volatile_prefixes = (
             "Atlas Skill index ", "Project context ", "Active user context ",

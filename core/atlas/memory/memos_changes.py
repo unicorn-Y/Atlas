@@ -5,7 +5,7 @@ MemOS 自己的事件流不记录删除（``POST /api/v1/traces/delete`` 不留�
 做快照对比，记录每一次新增 / 删除 / 修改，以及改动前后的字段内容；再从 MemOS 的
 ``logs/events.jsonl`` 里找出同一对象附近的事件，作为"变动原因"（技能结晶、策略修订……）。
 
-变动记录存在 Atlas 自己的 ``<DATA_ROOT>/memory_changes.sqlite3``，不写 MemOS 的库。
+变动记录存在 Atlas 自己的 ``<DATA_ROOT>/data/memory_changes.sqlite3``，不写 MemOS 的库。
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ _watcher_started = False
 
 
 def memos_home() -> Path:
-    return Path(os.environ.get("MEMOS_HOME") or (DATA_ROOT / "memos-home"))
+    return Path(os.environ.get("MEMOS_HOME") or (DATA_ROOT / "data" / "memos-home"))
 
 
 def memos_db_path() -> Path:
@@ -67,7 +67,8 @@ def memos_db_path() -> Path:
 
 
 def store_path() -> Path:
-    return DATA_ROOT / "memory_changes.sqlite3"
+    (DATA_ROOT / "data").mkdir(parents=True, exist_ok=True)
+    return DATA_ROOT / "data" / "memory_changes.sqlite3"
 
 
 def _store() -> sqlite3.Connection:

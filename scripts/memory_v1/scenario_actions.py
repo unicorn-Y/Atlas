@@ -476,15 +476,25 @@ def audit_reminder_state(ctx: ScenarioActionContext) -> dict[str, Any]:
         new_intents = [item for item in intents
                        if str(item.get("record_ref") or item.get("id") or "") not in baseline_intent_ids
                        and (not term or term in _automation_text(item))]
-        if (len(created) != 1 or not creation_tools
+        # E8 新口径（任务书 F4 §2）：判「用户最终是否拿到一个正确、可取消的
+        # 提醒」—— 提醒由模型调工具建、或由流水线（观察者 → 意图桥）建，都算
+        # 创建证据；两条都没有才算失败。其余断言不放宽（恰好一条、可用、
+        # 不处于终态）。
+        pipeline_created = [item for item in new_intents
+                            if str(item.get("lifecycle") or "").upper() == "ACTIVE"]
+        if (len(created) != 1 or not (creation_tools or pipeline_created)
                 or created[0].get("enabled") is False
                 or str(created[0].get("status") or created[0].get("state") or "").lower()
                 in {"cancelled", "canceled", "deleted", "disabled", "paused"}):
             return trace.result("failed", readback={"turn": turn, "created_ids": [_automation_id(item) for item in created],
-                                                    "creation_tool_names": sorted(creation_tools)},
-                                detail="real chat did not create one matching AutomationStore record through a reminder tool")
+                                                    "creation_tool_names": sorted(creation_tools),
+                                                    "pipeline_intent_refs": [
+                                                        str(item.get("record_ref") or item.get("id") or "")
+                                                        for item in pipeline_created]},
+                                detail="real chat did not create one matching AutomationStore record through a reminder tool or the memory pipeline")
         selected = created[0]
         result = trace.result("ok", readback={"turn": turn, "created": selected,
+                                              "creation_evidence": "tool" if creation_tools else "pipeline",
                                               "new_intent_refs": [str(item.get("record_ref") or item.get("id")) for item in new_intents],
                                               "intent_ids": sorted(item for item in intent_ids if item),
                                               "automation_count": len(current)})
@@ -510,12 +520,21 @@ def audit_reminder_state(ctx: ScenarioActionContext) -> dict[str, Any]:
             cancelled = current_item.get("enabled") is False or state in {
                 "cancelled", "canceled", "deleted", "disabled", "paused",
             }
-        if not cancelled or not cancellation_tools:
+        # E8 新口径（任务书 F4 §2）：取消同样接受流水线证据（同源意图转
+        # CANCELLED），不要求模型必须调取消工具；「同一个 Automation 真的停用」
+        # 这一点不放宽。
+        pipeline_cancelled = [item for item in intents
+                              if str(item.get("lifecycle") or "").upper() == "CANCELLED"]
+        if not cancelled or not (cancellation_tools or pipeline_cancelled):
             return trace.result("failed", readback={"turn": turn, "automation_id": created_id,
                                                     "still_present": current_item is not None,
-                                                    "cancellation_tool_names": sorted(cancellation_tools)},
-                                detail="real chat did not cancel/delete the same reminder through a tool")
+                                                    "cancellation_tool_names": sorted(cancellation_tools),
+                                                    "pipeline_cancelled_intent_refs": [
+                                                        str(item.get("record_ref") or item.get("id") or "")
+                                                        for item in pipeline_cancelled]},
+                                detail="real chat did not cancel/delete the same reminder through a tool or the memory pipeline")
         result = trace.result("ok", readback={"turn": turn, "automation_id": created_id,
+                                              "cancellation_evidence": "tool" if cancellation_tools else "pipeline",
                                               "cancelled_or_deleted": True,
                                               "current_status": current_item.get("status") if current_item else "DELETED",
                                               "current_enabled": current_item.get("enabled") if current_item else None,

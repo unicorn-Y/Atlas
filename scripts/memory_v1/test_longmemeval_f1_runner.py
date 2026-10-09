@@ -47,7 +47,7 @@ class LongMemEvalRunnerInputTests(unittest.TestCase):
         question_id = "001be529"
         subject_id = runner._question_subject_id(question_id)
         service = real_memory.RealMemoryService(
-            Path("D:/Temp/F1-D-subject-test") / "memoryos",
+            Path(tempfile.gettempdir()) / "F1-D-subject-test" / "memoryos",
             subject_id=subject_id, subject_aliases="", service_python=sys.executable,
         )
         modules = [
@@ -91,7 +91,7 @@ class LongMemEvalRunnerInputTests(unittest.TestCase):
         loaded_paths = []
         loaded_configs = []
         for _ in range(2):
-            with tempfile.TemporaryDirectory(prefix="f1d-hermes-", dir="D:/Temp") as test_root:
+            with tempfile.TemporaryDirectory(prefix="f1d-hermes-") as test_root:
                 hermes_home = Path(test_root) / "hermes-home"
                 hermes_home.mkdir()
                 with patch.dict(os.environ, {"HERMES_HOME": str(hermes_home)}):
@@ -152,6 +152,112 @@ class LongMemEvalRunnerInputTests(unittest.TestCase):
 
             args.observation_cache = Path("D:/Temp/F2-B-test-cache")
             runner._validate_run_args(args)
+
+        from unittest.mock import patch
+
+        with patch.dict("os.environ", {
+            "LOCALAPPDATA": "C:/Users/test-user/AppData/Local",
+        }), patch.object(Path, "home", return_value=Path("C:/Users/test-user")):
+            args = runner._make_parser().parse_args([
+                "--limit", "6", "--run-real", "--service-port", "12345",
+                "--service-python", sys.executable,
+                "--run-root", "C:/Users/test-user/AppData/Local/Temp/F2-B-run",
+                "--observation-cache", "C:/Users/test-user/AppData/Local/Temp/F2-B-cache",
+            ])
+            runner._validate_run_args(args)
+
+    def test_temp_artifacts_allow_legacy_and_local_user_temp_only(self) -> None:
+        from unittest.mock import patch
+
+        import longmemeval_observation_cache as cache
+
+        local_appdata = Path("C:/Users/test-user/AppData/Local")
+        user_home = Path("C:/Users/test-user")
+        with patch.dict("os.environ", {"LOCALAPPDATA": str(local_appdata)}), \
+                patch.object(Path, "home", return_value=user_home):
+            local_child = Path("C:/Users/test-user/AppData/Local/Temp/F2-B-run")
+            expected_root = Path("C:/Users/test-user/AppData/Local/Temp").resolve()
+            self.assertEqual(
+                local_child.resolve(), runner._checked_temp_child(local_child),
+            )
+            self.assertEqual(local_child.resolve(), cache._temp_child(local_child))
+            self.assertEqual(expected_root, cache.preferred_temp_root())
+            f2_args = f2_runner._make_parser().parse_args(["--limit", "6"])
+            self.assertEqual(expected_root, f2_runner._runner_args(f2_args).run_root.parent.resolve())
+            self.assertEqual(
+                Path("D:/Temp/F2-B-run").resolve(),
+                runner._checked_temp_child(Path("D:/Temp/F2-B-run")),
+            )
+            for unsafe in (
+                Path("C:/Temp/F2-B-run"),
+                Path("C:/Users/other-user/AppData/Local/Temp/F2-B-run"),
+                Path("D:/Atlas/data/F2-B-run"),
+                Path("D:/MemoryOSData/F2-B-run"),
+            ):
+                with self.subTest(path=str(unsafe)), self.assertRaises(RuntimeError):
+                    runner._checked_temp_child(unsafe)
+
+    def test_observer_budget_config_reader_returns_only_allowlisted_integer(self) -> None:
+        toml = (
+            '[models.gateway]\napi_key = "synthetic-secret"\n'
+            '[memory.v1]\nobserver_daily_token_budget = 6_000_000 # isolated ceiling\n'
+        )
+        with tempfile.TemporaryDirectory(prefix="f4-budget-") as root:
+            config_path = Path(root) / "atlas.toml"
+            config_path.write_text(toml, encoding="utf-8")
+            parsed = runner._read_observer_budget_allowlist(config_path)
+
+        self.assertEqual(
+            {"memory": {"v1": {"observer_daily_token_budget": 6_000_000}}},
+            parsed,
+        )
+        self.assertNotIn("synthetic-secret", json.dumps(parsed))
+
+    def test_observer_budget_config_reader_resets_on_quoted_table_header(self) -> None:
+        toml = (
+            '[memory.v1]\nobserver_daily_token_budget = 6000000\n'
+            '["other.section"]\nobserver_daily_token_budget = 9\n'
+        )
+        with tempfile.TemporaryDirectory(prefix="f4-budget-quoted-") as root:
+            config_path = Path(root) / "atlas.toml"
+            config_path.write_text(toml, encoding="utf-8")
+            parsed = runner._read_observer_budget_allowlist(config_path)
+
+        self.assertEqual(
+            {"memory": {"v1": {"observer_daily_token_budget": 6_000_000}}},
+            parsed,
+        )
+
+    def test_observer_budget_config_reader_resets_on_array_table_header(self) -> None:
+        toml = (
+            '[memory.v1]\nobserver_daily_token_budget = 6000000\n'
+            '[[models.gateway]]\nobserver_daily_token_budget = 9\n'
+        )
+        with tempfile.TemporaryDirectory(prefix="f4-budget-array-") as root:
+            config_path = Path(root) / "atlas.toml"
+            config_path.write_text(toml, encoding="utf-8")
+            parsed = runner._read_observer_budget_allowlist(config_path)
+
+        self.assertEqual(
+            {"memory": {"v1": {"observer_daily_token_budget": 6_000_000}}},
+            parsed,
+        )
+
+    def test_isolated_process_temp_uses_run_scoped_directory(self) -> None:
+        import os
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory(prefix="f4-process-env-") as root:
+            run_root = Path(root) / "F2-B-run"
+            run_root.mkdir()
+            with patch.dict(os.environ, {}, clear=True):
+                runner._set_isolated_process_env(run_root)
+                expected = str(run_root / "temp")
+                self.assertEqual(expected, os.environ["TEMP"])
+                self.assertEqual(expected, os.environ["TMP"])
+                self.assertEqual(expected, os.environ["TMPDIR"])
+                self.assertTrue((run_root / "temp").is_dir())
+                self.assertTrue(Path(os.environ["MEMORYOS_DATA_ROOT"]).is_relative_to(run_root))
 
     def test_observer_budget_uses_model_independent_source_upper_bound(self) -> None:
         estimate = runner._observer_budget_estimate([{
@@ -395,6 +501,7 @@ class LongMemEvalRunnerInputTests(unittest.TestCase):
             with patch.object(f2_runner, "EVAL_ROOT", report_root):
                 report_path = f2_runner.write_completion_report(run_root, limit=6)
                 report = json.loads(report_path.read_text(encoding="utf-8"))
+                self.assertEqual(20261007, report["random_seed"])
                 self.assertEqual(100, report["historical_observation_usage"]["observer_provider_reported_input_tokens"])
                 self.assertEqual(0, report["actual_observer_usage_this_attempt"]["observer_provider_reported_input_tokens"])
                 self.assertEqual(60, report["actual_answer_judge_usage_this_attempt"]["answer_provider_reported_input_tokens"])
@@ -497,7 +604,7 @@ class LongMemEvalRunnerInputTests(unittest.TestCase):
             cache.question_fingerprint(row, {**identity, "observer_model_id": "other-memory-model"}),
         )
 
-        with tempfile.TemporaryDirectory(prefix="f2b-cache-", dir="D:/Temp") as temp:
+        with tempfile.TemporaryDirectory(prefix="f2b-cache-") as temp:
             root = Path(temp)
             source = root / "source"
             for relative in ("atlas-data/engine.sqlite3", "outbox/unified_outbox.sqlite3",
@@ -557,7 +664,7 @@ class LongMemEvalRunnerInputTests(unittest.TestCase):
             "haystack_sessions": [[{"role": "user", "content": "source"}]],
         }
         fingerprint = cache.question_fingerprint(row, {"observer_model_id": "memory-model"})
-        with tempfile.TemporaryDirectory(prefix="f2b-wal-cache-", dir="D:/Temp") as temp:
+        with tempfile.TemporaryDirectory(prefix="f2b-wal-cache-") as temp:
             root = Path(temp)
             source = root / "source"
             db_path = source / "memoryos/db/memoryos.sqlite3"
