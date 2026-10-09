@@ -90,6 +90,9 @@ class RunRequest:
     reasoning_effort: str | None = None
     worker: bool = False
     plan_dependencies: list[dict[str, Any]] | dict[str, Any] | None = None
+    # F3-B3 测试时钟：**仅** event_class=TEST + 隔离数据根时生效（闸门
+    # resolve_test_clock 判定），生产路径一律忽略并回退真实时间。
+    test_clock: str | None = None
 
 
 @dataclass
@@ -951,9 +954,13 @@ async def _capture_run_user_message(state: _RunState) -> None:
         from atlas.engine.session_sync import latest_session_message, read_session_messages
         from atlas.memory.capture import get_capture_service
 
+        from atlas.memory.test_clock import resolve_test_clock
+
         capture = get_capture_service()
         if capture is None:
             return
+        # F3-B3：测试时钟只在 TEST + 隔离根下被闸门放行；否则 None → 真实时间
+        clock = resolve_test_clock(request.test_clock)
         home = DATA_ROOT / "engine"
         message = await asyncio.to_thread(
             latest_session_message, home, request.conversation_id, role="user")
@@ -972,7 +979,7 @@ async def _capture_run_user_message(state: _RunState) -> None:
         # 的 flush 唤醒（asyncio.Event）在同一线程，语义最简单。
         capture.capture_user_message(
             request.conversation_id, str(message.get("id") or ""), content,
-            message.get("created_at") or None)
+            clock or message.get("created_at") or None)
     except Exception as exc:  # 护栏：捕获失败不打断聊天主流程
         log.debug("memory.capture_user_message_failed", error=str(exc))
 

@@ -1258,6 +1258,11 @@ async def _handle_run_start(
     content = data.get("content", "")
     if not isinstance(content, str):
         content = str(content)
+    # F3-B3：测试时钟经唯一闸门（event_class=TEST + 隔离数据根）才放行；
+    # 生产路径这里恒为 None（真实时间）。
+    from atlas.memory.test_clock import resolve_test_clock
+
+    test_clock = resolve_test_clock(data.get("test_clock"))
     requested_workspace = data.get("workspace")
     # W10: resolve the persistent agent first — an empty workspace falls back to
     # the agent's workspace, and its profile merges in at the profile_id block
@@ -1873,6 +1878,7 @@ async def _handle_run_start(
             workspace_rules=run.workspace_rules,
             mode=run.mode,
             manager=manager,
+            test_clock=test_clock,
         )
     execution = _server()._execute_after_rule_trust(run, execute) if run.trust_future else execute
     if agent_profile is not None:
@@ -2145,8 +2151,13 @@ async def _execute_run(
     mode: str = "act",
     continuation: bool = False,
     manager: RuntimeManager | None = None,
+    test_clock: str | None = None,
 ) -> None:
-    """Execute agent run, emitting Runtime Event envelopes."""
+    """Execute agent run, emitting Runtime Event envelopes.
+
+    ``test_clock``（F3-B3）：评测虚拟时间，经 ``resolve_test_clock`` 闸门后
+    才进 RunRequest —— 生产调用方不传（真实时间）。
+    """
     manager = manager or _server().runtime_mgr
     services = manager.services
     model_mgr = getattr(services, "model_mgr", None) or getattr(_server(), "model_mgr", None)
@@ -2596,6 +2607,7 @@ async def _execute_run(
             subtask_completed=subtask_completed,
             subtask_group_completed=subtask_group_completed,
             force_plan=(mode == "plan"),
+            test_clock=test_clock,
         ):
             if await check_pause_cancel():
                 run.status = "cancelled"

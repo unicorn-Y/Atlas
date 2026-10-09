@@ -804,6 +804,7 @@ class AgentOrchestrator:
         subtask_group_completed: Callable[..., Any] | None = None,
         worker: bool = False,
         parent_process_event_callback: Callable[..., Any] | None = None,
+        test_clock: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -839,6 +840,7 @@ class AgentOrchestrator:
             permission_mode=permission_mode, allowed_paths=allowed_paths,
             sandbox_enabled=sandbox_enabled, project_id=project_id,
             task_id=task_id, reasoning_effort=reasoning_effort, worker=worker,
+            test_clock=test_clock,
         )
         callbacks = RunCallbacks(
             cancel_event=cancel_event, pause_event=pause_event,

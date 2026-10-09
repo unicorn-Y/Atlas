@@ -995,6 +995,10 @@ def build_run_start_message(
         "run_id": run_id,
         "content": step.user_input,
         "conversation_id": conversation_id,
+        # F3-B3：场景虚拟时间随产品链路下发（run.start → RunRequest →
+        # 采集点）。**不是**旁路写库：产品侧闸门 resolve_test_clock 只在
+        # event_class=TEST + 隔离数据根时采信，生产恒忽略。
+        "test_clock": step.occurred_at,
         "workspace": str(workspace_path),
         "mode": "act",
         "permission_mode": "ask_writes" if write_tools else "read_only",
