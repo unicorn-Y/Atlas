@@ -48,6 +48,21 @@ except ImportError:  # direct script invocation
         write_isolated_user_settings,
     )
 
+try:
+    from .longmemeval_observation_cache import (
+        question_cache_entry_path,
+        question_fingerprint,
+        restore_observation_snapshot,
+        save_observation_snapshot,
+    )
+except ImportError:  # direct script invocation
+    from longmemeval_observation_cache import (
+        question_cache_entry_path,
+        question_fingerprint,
+        restore_observation_snapshot,
+        save_observation_snapshot,
+    )
+
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "core"
 CANONICAL_CATEGORIES = (
@@ -70,6 +85,8 @@ DEFAULT_VALIDATION = ROOT / "docs/plan/MEMORY-V1/eval/F1-D-source-validation.jso
 DEFAULT_OFFICIAL_ROOT = Path(
     r"D:\Temp\F1-D-official-longmemeval-9e0b455"
 )
+DEFAULT_OBSERVATION_CACHE = Path(r"D:\Temp\F2-B-longmemeval-observation-cache-v1")
+OFFICIAL_NUMPY_TARGET = Path(r"D:\Temp\F1-D-official-numpy-2.5.3-py314")
 PRODUCTION_CONFIG = ROOT / "config/atlas.toml"
 PRODUCTION_SETTINGS = Path(r"D:\Atlas\data\user-settings.json")
 TEMP_ROOT = Path(r"D:\Temp")
@@ -87,6 +104,81 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _source_tree_sha256(paths: list[Path]) -> str:
+    entries: list[tuple[str, str]] = []
+    for root in paths:
+        if root.is_dir():
+            files = sorted(root.rglob("*.py"))
+        elif root.is_file():
+            files = [root]
+        else:
+            raise FileNotFoundError(f"cache fingerprint source is missing: {root}")
+        entries.extend((str(path), sha256_file(path)) for path in files)
+    return hashlib.sha256(json.dumps(entries, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _observation_cache_identity(
+    *,
+    validation: dict[str, Any],
+    raw_config: dict[str, Any],
+    settings: dict[str, Any],
+    model_route: dict[str, Any],
+    service_python: Path,
+    observer_budget: int,
+) -> dict[str, Any]:
+    from atlas.models.router import (
+        _MEMORY_AUXILIARY_PURPOSES,
+        _MEMORY_AUXILIARY_TIMEOUT_SECONDS,
+        _MEMORY_LOW_REASONING_MODELS,
+    )
+
+    memoryos_service = Path(r"D:\MemoryOS\service")
+    observer_model_id = str(model_route.get("observer_model_id") or "")
+    provider_id = str(model_route.get("provider_id") or "")
+    observer_model = next((
+        item for item in settings.get("custom_models", [])
+        if isinstance(item, dict) and str(item.get("id") or "") == observer_model_id
+    ), None)
+    observer_route = {
+        "purpose": "memory_observe",
+        "wire_model": observer_model_id,
+        "provider_id": provider_id,
+        "provider_endpoint_host": model_route.get("provider_endpoint_host"),
+        "auxiliary_timeout_seconds": _MEMORY_AUXILIARY_TIMEOUT_SECONDS
+        if "memory_observe" in _MEMORY_AUXILIARY_PURPOSES else None,
+        "reasoning_effort": "low"
+        if observer_model_id in _MEMORY_LOW_REASONING_MODELS else None,
+    }
+    config_identity = {
+        "memory": raw_config.get("memory", {}),
+        "observer_daily_token_budget": observer_budget,
+        "memory_model": settings.get("memory_model"),
+        "observer_model": observer_model,
+        "observer_provider": settings.get("providers", {}).get(provider_id),
+        "observer_route": observer_route,
+        "embedding_device": os.environ.get("MEMORYOS_EMBEDDING_DEVICE", "auto"),
+    }
+    return {
+        "cache_version": 1,
+        "longmemeval_source_sha256": validation["source"]["sha256"],
+        "fixed_subset_sha256": validation["subset"]["sha256"],
+        "atlas_observer_code_sha256": _source_tree_sha256([CORE / "atlas/memory"]),
+        "atlas_model_router_code_sha256": _source_tree_sha256([CORE / "atlas/models/router.py"]),
+        "memoryos_service_code_sha256": _source_tree_sha256([
+            memoryos_service / "unified",
+            memoryos_service / "semantic_recall.py",
+            memoryos_service / "semantic_runtime.py",
+        ]),
+        "observer_config_sha256": hashlib.sha256(
+            json.dumps(config_identity, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
+        ).hexdigest(),
+        "observer_model_id": observer_model_id,
+        "observer_route_variant": observer_route,
+        "service_python": str(service_python.resolve()),
+        "observer_token_budget": observer_budget,
+    }
 
 
 def parse_source_datetime(value: str) -> datetime:
@@ -125,12 +217,16 @@ def select_questions(
 
     if limit == 1:
         requested = [subset_rows[0]]
+    elif limit == 6:
+        requested = [row for category in CANONICAL_CATEGORIES for row in subset_by_category[category][:1]]
     elif limit == 12:
         requested = [row for category in CANONICAL_CATEGORIES for row in subset_by_category[category][:2]]
+    elif limit == 30:
+        requested = [row for category in CANONICAL_CATEGORIES for row in subset_by_category[category][:5]]
     elif limit == 120:
         requested = list(subset_rows)
     else:
-        raise ValueError("limit must be 1, 12, or 120")
+        raise ValueError("limit must be 1, 6, 12, 30, or 120")
 
     selected: list[dict[str, Any]] = []
     for fixed in requested:
@@ -283,6 +379,23 @@ def verify_official_evaluator(repo: Path) -> tuple[Path, str, str]:
 
 
 def _load_official_module(script: Path):
+    if sys.version_info[:2] != (3, 14):
+        raise RuntimeError(
+            "the pinned LongMemEval evaluator import requires the prepared CPython 3.14 runtime; "
+            "rerun it under the Atlas CPython 3.14 venv"
+        )
+    numpy_package = OFFICIAL_NUMPY_TARGET / "numpy" / "__init__.py"
+    if not numpy_package.is_file():
+        raise FileNotFoundError(f"isolated NumPy 2.5.3 target is unavailable: {OFFICIAL_NUMPY_TARGET}")
+    target_text = str(OFFICIAL_NUMPY_TARGET.resolve())
+    if target_text not in sys.path:
+        sys.path.insert(0, target_text)
+    importlib.invalidate_caches()
+    import numpy
+
+    numpy_path = Path(numpy.__file__).resolve()
+    if numpy.__version__ != "2.5.3" or OFFICIAL_NUMPY_TARGET.resolve() not in numpy_path.parents:
+        raise RuntimeError("official evaluator NumPy must resolve to the isolated NumPy 2.5.3 target")
     spec = importlib.util.spec_from_file_location("longmemeval_official_evaluate_qa", script)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load official evaluator: {script}")
@@ -471,6 +584,142 @@ def _reported_usage(value: Any) -> tuple[int | None, int | None, dict[str, Any]]
         if isinstance(item, (str, int, float, bool)) or item is None:
             safe[key] = item
     return take("input_tokens", "prompt_tokens"), take("output_tokens", "completion_tokens"), safe
+
+
+OBSERVER_TOKEN_FIELDS = (
+    "observer_budget_accounted_input_tokens",
+    "observer_budget_accounted_output_tokens",
+    "observer_provider_reported_input_tokens",
+    "observer_provider_reported_output_tokens",
+)
+ANSWER_JUDGE_TOKEN_FIELDS = (
+    "answer_provider_reported_input_tokens",
+    "answer_provider_reported_output_tokens",
+    "judge_provider_reported_input_tokens",
+    "judge_provider_reported_output_tokens",
+)
+
+
+def _summarize_attempt_usage(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Separate cached observation history from model usage billed during this attempt."""
+    def cache_hit(item: dict[str, Any]) -> bool:
+        return (
+            isinstance(item.get("observation_cache"), dict)
+            and item["observation_cache"].get("hit") is True
+        )
+
+    cache_hits = [item for item in results if cache_hit(item)]
+    new_observations = [item for item in results if not cache_hit(item)]
+
+    def totals(items: list[dict[str, Any]], fields: tuple[str, ...]) -> dict[str, int]:
+        return {
+            field: sum(int(item.get("token_totals", {}).get(field) or 0) for item in items)
+            for field in fields
+        }
+
+    historical_observation: dict[str, Any] = totals(cache_hits, OBSERVER_TOKEN_FIELDS)
+    actual_observer: dict[str, Any] = totals(new_observations, OBSERVER_TOKEN_FIELDS)
+    actual_answer_judge = totals(results, ANSWER_JUDGE_TOKEN_FIELDS)
+    token_totals = {**actual_observer, **actual_answer_judge}
+    token_totals["provider_reported_input_tokens"] = sum(
+        token_totals[field] for field in (
+            "observer_provider_reported_input_tokens",
+            "answer_provider_reported_input_tokens",
+            "judge_provider_reported_input_tokens",
+        )
+    )
+    token_totals["provider_reported_output_tokens"] = sum(
+        token_totals[field] for field in (
+            "observer_provider_reported_output_tokens",
+            "answer_provider_reported_output_tokens",
+            "judge_provider_reported_output_tokens",
+        )
+    )
+    token_totals["observer_provider_usage_complete"] = all(
+        item.get("token_totals", {}).get("observer_provider_reported_complete") is True
+        for item in new_observations
+    )
+    historical_observation["provider_usage_complete"] = all(
+        item.get("token_totals", {}).get("observer_provider_reported_complete") is True
+        for item in cache_hits
+    )
+    historical_observation["question_ids"] = [str(item.get("question_id") or "") for item in cache_hits]
+    actual_observer["question_ids"] = [str(item.get("question_id") or "") for item in new_observations]
+    actual_answer_judge["question_ids"] = [str(item.get("question_id") or "") for item in results]
+    historical_observation["calls_total"] = sum(
+        len(item.get("observer", {}).get("router_calls", [])) for item in cache_hits
+    )
+    actual_observer["calls_total"] = sum(
+        len(item.get("observer", {}).get("router_calls", [])) for item in new_observations
+    )
+    actual_answer_judge["calls_total"] = sum(
+        len(item.get("answer", {}).get("run_usage", [])) + 1 for item in results
+    )
+    return {
+        "token_totals": token_totals,
+        "historical_observation_usage": historical_observation,
+        "actual_observer_usage_this_attempt": actual_observer,
+        "actual_answer_judge_usage_this_attempt": actual_answer_judge,
+    }
+
+
+def _summarize_attempt_cost(results: list[dict[str, Any]]) -> dict[str, Any]:
+    actual_values: list[float] = []
+    historical_observer_values: list[float] = []
+    actual_call_count = 0
+    historical_observer_call_count = 0
+    actual_complete = True
+    historical_observer_complete = True
+    for item in results:
+        cache = item.get("observation_cache")
+        cache_hit = isinstance(cache, dict) and cache.get("hit") is True
+        groups = item.get("provider_reported_cost_usd")
+        groups = groups if isinstance(groups, dict) else {}
+        observer_calls = item.get("observer", {}).get("router_calls", [])
+        answer_calls = item.get("answer", {}).get("run_usage", [])
+        observer_costs = list(groups.get("observer", []))
+        answer_costs = list(groups.get("answer", []))
+        judge_cost = groups.get("judge")
+        if cache_hit:
+            historical_observer_values.extend(
+                float(value) for value in observer_costs if isinstance(value, (int, float))
+            )
+            historical_observer_call_count += len(observer_calls)
+            historical_observer_complete = historical_observer_complete and sum(
+                isinstance(value, (int, float)) for value in observer_costs
+            ) == len(observer_calls)
+            observer_costs = []
+        expected_calls = (0 if cache_hit else len(observer_calls)) + len(answer_calls) + 1
+        actual_call_count += expected_calls
+        values = observer_costs + answer_costs + [judge_cost]
+        known = [float(value) for value in values if isinstance(value, (int, float))]
+        actual_values.extend(known)
+        actual_complete = actual_complete and len(known) == expected_calls
+
+    actual_complete = actual_call_count > 0 and actual_complete
+    historical_observer_complete = (
+        historical_observer_call_count > 0 and historical_observer_complete
+    )
+    return {
+        "provider_reported_cost": {
+            "complete_for_all_calls": actual_complete,
+            "calls_with_known_cost": len(actual_values),
+            "calls_total": actual_call_count,
+            "known_partial_sum_usd": sum(actual_values) if actual_values else None,
+            "complete_sum_usd": sum(actual_values) if actual_complete else None,
+        },
+        "historical_observation_provider_reported_cost_reused_from_cache": {
+            "complete": historical_observer_complete,
+            "calls_with_known_cost": len(historical_observer_values),
+            "calls_total": historical_observer_call_count,
+            "known_partial_sum_usd": (
+                sum(historical_observer_values) if historical_observer_values else None
+            ),
+            "complete_sum_usd": (
+                sum(historical_observer_values) if historical_observer_complete else None
+            ),
+        },
+    }
 
 
 def _summarize_latency_ms(values: list[float]) -> dict[str, int | float | None]:
@@ -715,6 +964,8 @@ async def _run_one_question(
     official_module: Any,
     official_commit: str,
     evaluator_blob: str,
+    observation_cache_root: Path | None = None,
+    observation_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     question_started = time.perf_counter()
     question_started_at = datetime.now(UTC).isoformat()
@@ -722,6 +973,15 @@ async def _run_one_question(
     qid = str(row["question_id"])
     question_root = _checked_child(run_root / f"question-{qid}", TEMP_ROOT)
     question_root.mkdir(parents=True, exist_ok=False)
+    cache_entry: dict[str, Any] | None = None
+    cache_hit = False
+    if observation_cache_root is not None:
+        if observation_fingerprint is None:
+            raise ValueError("observation cache root requires a question fingerprint")
+        cache_entry = restore_observation_snapshot(
+            observation_cache_root, qid, observation_fingerprint, question_root,
+        )
+        cache_hit = cache_entry is not None
     atlas_data_root = question_root / "atlas-data"
     hermes_home = question_root / "hermes-home"
     atlas_data_root.mkdir(parents=True, exist_ok=True)
@@ -928,12 +1188,41 @@ async def _run_one_question(
     transcript_path.parent.mkdir(parents=True, exist_ok=True)
     total_turns = 0
     total_source_sessions = len(row["haystack_sessions"])
+    cache_checkpoint: dict[str, Any] = {}
+    if cache_hit:
+        cache_checkpoint_path = question_root / "observation_checkpoint.json"
+        if not cache_checkpoint_path.is_file():
+            raise ValueError("matching observation cache is missing its checkpoint")
+        cache_checkpoint = json.loads(cache_checkpoint_path.read_text(encoding="utf-8"))
+        source_refs.extend(cache_checkpoint.get("source_refs", []))
+        observer_batches.extend(cache_checkpoint.get("observer_batches", []))
+        observer_router_calls.extend(cache_checkpoint.get("observer_router_calls", []))
+        model_router_call_timings.extend(cache_checkpoint.get("model_router_call_timings", []))
+        http_acks.extend(cache_checkpoint.get("http_acks", []))
+        seen_batch_ids.update(
+            str(item.get("batch_id") or "") for item in observer_batches
+            if item.get("batch_id")
+        )
+        total_turns = int(cache_checkpoint.get("total_turns", 0) or 0)
+        total_source_sessions = int(cache_checkpoint.get("total_source_sessions", total_source_sessions))
+        if cache_checkpoint.get("phase_timings_ms"):
+            phase_timings_ms.update(cache_checkpoint["phase_timings_ms"])
+        print(f"question {qid}: observation snapshot restored; answer/judge will use a disposable clone", flush=True)
+    _write_json_checkpoint(question_root / "checkpoint.json", {
+        "question_id": qid,
+        "phase": "OBSERVATION_COMPLETE" if cache_hit else "OBSERVING",
+        "status": "RUNNING",
+        "observation_cache_hit": cache_hit,
+        "observation_fingerprint": observation_fingerprint,
+        "updated_at_utc": datetime.now(UTC).isoformat(),
+    })
     try:
         source_observe_started = time.perf_counter()
-        with transcript_path.open("w", encoding="utf-8") as transcript:
-            for session_index, (upstream_session_id, source_date, turns) in enumerate(zip(
+        with transcript_path.open("a" if cache_hit else "w", encoding="utf-8") as transcript:
+            sessions = [] if cache_hit else zip(
                 row["haystack_session_ids"], row["haystack_dates"], row["haystack_sessions"],
-            )):
+            )
+            for session_index, (upstream_session_id, source_date, turns) in enumerate(sessions):
                 local_session_id = (
                     f"f1d-{qid}-{session_index:03d}-"
                     f"{hashlib.sha256(str(upstream_session_id).encode('utf-8')).hexdigest()[:12]}"
@@ -995,10 +1284,51 @@ async def _run_one_question(
                 if observer.pending_sessions():
                     raise RuntimeError("Observer left a durable source session pending after drain")
 
-        phase_timings_ms["source_capture_and_observe_ms"] = (time.perf_counter() - source_observe_started) * 1000
+        if not cache_hit:
+            phase_timings_ms["source_capture_and_observe_ms"] = (time.perf_counter() - source_observe_started) * 1000
         semantic_ready_started = time.perf_counter()
         service_status = await _wait_semantic_ready(facade)
         phase_timings_ms["semantic_ready_ms"] = (time.perf_counter() - semantic_ready_started) * 1000
+        if observation_cache_root is not None and not cache_hit:
+            observation_checkpoint = {
+                "phase": "OBSERVATION_COMPLETE",
+                "observe_complete": True,
+                "outbox_drained": not observer.pending_sessions(),
+                "semantic_ready": (
+                    service_status.get("semantic", {}).get("state") == "READY"
+                    and int(service_status.get("semantic", {}).get("pending_count", -1) or 0) == 0
+                ),
+                "answer_stage_started": False,
+                "source_refs": source_refs,
+                "observer_batches": observer_batches,
+                "observer_router_calls": observer_router_calls,
+                "model_router_call_timings": model_router_call_timings,
+                "http_acks": http_acks,
+                "total_turns": total_turns,
+                "total_source_sessions": total_source_sessions,
+                "language_mismatch_count": observer.language_mismatch_count,
+                "phase_timings_ms": {
+                    key: value for key, value in phase_timings_ms.items()
+                    if key in {"source_capture_and_observe_ms", "semantic_ready_ms"}
+                },
+            }
+            _write_json_checkpoint(question_root / "observation_checkpoint.json", observation_checkpoint)
+            cache_entry = save_observation_snapshot(
+                observation_cache_root, qid, observation_fingerprint or "", question_root,
+                observation_checkpoint,
+            )
+        _write_json_checkpoint(question_root / "checkpoint.json", {
+            "question_id": qid,
+            "phase": "OBSERVATION_COMPLETE",
+            "status": "RUNNING",
+            "observation_cache_hit": cache_hit,
+            "observation_fingerprint": observation_fingerprint,
+            "source_turn_count": total_turns,
+            "source_session_count": total_source_sessions,
+            "outbox_drained": True,
+            "semantic_ready": service_status.get("semantic", {}).get("state") == "READY",
+            "updated_at_utc": datetime.now(UTC).isoformat(),
+        })
         question_date_raw = str(row.get("question_date") or "")
         date_reference_instruction = (
             "The benchmark metadata says this exact user question was asked at "
@@ -1113,6 +1443,22 @@ async def _run_one_question(
         answer_text = "".join(answer_chunks).strip()
         if not answer_text:
             raise RuntimeError("run_phases completed without an answer chunk")
+        _write_json_checkpoint(question_root / "answer_checkpoint.json", {
+            "question_id": qid,
+            "phase": "ANSWER_COMPLETE",
+            "answer_sha256": hashlib.sha256(answer_text.encode("utf-8")).hexdigest(),
+            "answer_model_id": answer_model,
+            "updated_at_utc": datetime.now(UTC).isoformat(),
+        })
+        _write_json_checkpoint(question_root / "checkpoint.json", {
+            "question_id": qid,
+            "phase": "ANSWER_COMPLETE",
+            "status": "RUNNING",
+            "observation_cache_hit": cache_hit,
+            "observation_fingerprint": observation_fingerprint,
+            "answer_model_id": answer_model,
+            "updated_at_utc": datetime.now(UTC).isoformat(),
+        })
         judge_prompt = official_module.get_anscheck_prompt(
             str(row["question_type"]), question, str(row["answer"]), answer_text,
             abstention=qid.endswith("_abs"),
@@ -1171,6 +1517,16 @@ async def _run_one_question(
                 "model_router_calls": model_router_call_timings,
             },
             "runtime_root": str(question_root),
+            "observation_cache": {
+                "hit": cache_hit,
+                "fingerprint": observation_fingerprint,
+                "entry_path": str(
+                    question_cache_entry_path(
+                        observation_cache_root, qid, observation_fingerprint,
+                    )
+                ) if observation_cache_root is not None and observation_fingerprint else None,
+                "answer_stage_wrote_only_to_disposable_clone": True,
+            },
             "chat_tool_access": "disabled; answer uses Atlas retrieval/context only",
             "runtime_isolation": {
                 "validated": True,
@@ -1193,7 +1549,10 @@ async def _run_one_question(
                 "router_calls": observer_router_calls,
                 "batches": observer_batches,
                 "http_acknowledgements": http_acks,
-                "language_mismatch_count": observer.language_mismatch_count,
+                "language_mismatch_count": (
+                    int(cache_checkpoint.get("language_mismatch_count", 0) or 0)
+                    if cache_hit else observer.language_mismatch_count
+                ),
             },
             "semantic_status_before_answer": service_status.get("semantic", {}),
             "recall": recall,
@@ -1267,6 +1626,17 @@ async def _run_one_question(
                 "source_dialogue": str(transcript_path),
             },
         }
+        _write_json_checkpoint(question_root / "checkpoint.json", {
+            "question_id": qid,
+            "phase": "JUDGE_COMPLETE",
+            "status": "COMPLETE",
+            "observation_cache_hit": cache_hit,
+            "observation_fingerprint": observation_fingerprint,
+            "official_judge_label": official_label,
+            "answer_model_id": answer_model,
+            "judge_model_id": model_manager.current_model,
+            "updated_at_utc": datetime.now(UTC).isoformat(),
+        })
         return result
     finally:
         model_router.complete_for = original_router_complete
@@ -1284,14 +1654,16 @@ def _make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--subset", type=Path, default=DEFAULT_SUBSET)
     parser.add_argument("--validation", type=Path, default=DEFAULT_VALIDATION)
     parser.add_argument("--official-root", type=Path, default=DEFAULT_OFFICIAL_ROOT)
-    parser.add_argument("--limit", type=int, choices=(1, 12, 120), default=12)
+    parser.add_argument("--limit", type=int, choices=(1, 6, 12, 30, 120), default=12)
     parser.add_argument("--full-evaluation", action="store_true", help="Required together with --limit 120 after root merge signal")
     parser.add_argument("--run-real", action="store_true", help="Start isolated MemoryOS and use configured Atlas ModelRouter")
     parser.add_argument("--service-port", type=int, default=None, help="Pre-coordinated 127.0.0.1 port; required for --run-real")
     parser.add_argument("--service-python", type=Path,
                         default=Path(r"D:\MemoryOS\service\.venv\Scripts\python.exe"),
                         help="MemoryOS service interpreter; defaults to the shared service venv")
-    parser.add_argument("--run-root", type=Path, default=None, help="New isolated D:\\Temp\\F1-D-* run directory")
+    parser.add_argument("--run-root", type=Path, default=None, help="New isolated D:\\Temp\\F1-D-* or F2-B-* run directory")
+    parser.add_argument("--observation-cache", type=Path, default=None,
+                        help="Durable per-question Observer snapshots under D:\\Temp; required for real 6/30 runs")
     parser.add_argument("--resume-from", type=Path, default=None,
                         help="Start a new isolated attempt, import only completed question checkpoints, and preserve the prior root")
     parser.add_argument("--observer-daily-token-budget", type=int, default=None,
@@ -1306,6 +1678,10 @@ def _validate_run_args(args: argparse.Namespace) -> None:
         raise ValueError("--full-evaluation is only valid for --limit 120")
     if args.run_real and args.service_port is None:
         raise ValueError("--run-real requires the pre-coordinated --service-port")
+    if args.run_real and args.limit in {6, 30} and args.observation_cache is None:
+        raise ValueError("real 6/30 runs require a persistent --observation-cache under D:\\Temp")
+    if args.observation_cache is not None:
+        _checked_child(args.observation_cache, TEMP_ROOT)
     if args.run_real and not args.service_python.resolve().is_file():
         raise FileNotFoundError("configured MemoryOS service interpreter does not exist")
     if args.resume_from is not None and (not args.run_real or args.run_root is None):
@@ -1326,6 +1702,12 @@ async def _run(args: argparse.Namespace) -> int:
     selected_categories = Counter(str(row["question_type"]) for row in selected)
     if args.limit == 12 and selected_categories != Counter({category: 2 for category in CANONICAL_CATEGORIES}):
         raise RuntimeError(f"12-question smoke is not category balanced: {dict(selected_categories)}")
+    if args.limit in {6, 30}:
+        expected_per_category = 1 if args.limit == 6 else 5
+        if selected_categories != Counter({category: expected_per_category for category in CANONICAL_CATEGORIES}):
+            raise RuntimeError(f"{args.limit}-question selection is not category balanced: {dict(selected_categories)}")
+        if subset.get("metadata", {}).get("random_seed") != 20261007:
+            raise RuntimeError("F2-B LongMemEval requires the fixed 20261007 subset seed")
 
     if not PRODUCTION_CONFIG.is_file():
         raise FileNotFoundError("read-only Atlas config is unavailable")
@@ -1353,8 +1735,8 @@ async def _run(args: argparse.Namespace) -> int:
     )
     run_root = args.run_root or TEMP_ROOT / f"F1-D-real-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
     run_root = _checked_child(run_root, TEMP_ROOT)
-    if not run_root.name.startswith("F1-D-"):
-        raise RuntimeError("run root must use a unique F1-D- prefix under D:\\Temp")
+    if not run_root.name.startswith(("F1-D-", "F2-B-")):
+        raise RuntimeError("run root must use a unique F1-D- or F2-B- prefix under D:\\Temp")
     if run_root.exists():
         raise FileExistsError(f"run root already exists; refusing to reuse artifacts: {run_root}")
     prior_root = None
@@ -1452,6 +1834,32 @@ async def _run(args: argparse.Namespace) -> int:
         first_cfg, settings, isolated_settings_path,
     )
     summary["model_router"] = model_route
+    observation_cache_root = (
+        _checked_child(args.observation_cache, TEMP_ROOT)
+        if args.observation_cache is not None else None
+    )
+    observation_cache_identity = _observation_cache_identity(
+        validation=validation,
+        raw_config=raw_config,
+        settings=settings,
+        model_route=model_route,
+        service_python=args.service_python,
+        observer_budget=budget,
+    ) if observation_cache_root is not None else None
+    observation_fingerprints = {
+        str(row["question_id"]): question_fingerprint(row, observation_cache_identity)
+        for row in selected
+    } if observation_cache_identity is not None else {}
+    if observation_cache_root is not None:
+        summary["observation_cache"] = {
+            "root": str(observation_cache_root),
+            "identity_sha256": hashlib.sha256(
+                json.dumps(observation_cache_identity, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
+            ).hexdigest(),
+            "fingerprints_by_question_id": observation_fingerprints,
+            "answer_and_judge_model_not_part_of_identity": True,
+            "snapshot_mode": "SQLite backup API plus copied non-database observer assets",
+        }
     summary["read_only_configuration_source"] = {
         "config_sha256": sha256_file(PRODUCTION_CONFIG),
         "settings_sha256": sha256_file(PRODUCTION_SETTINGS),
@@ -1478,6 +1886,15 @@ async def _run(args: argparse.Namespace) -> int:
     )
 
     official_module = _load_official_module(official_script)
+    import numpy
+
+    summary["official_evaluator_runtime"] = {
+        "python_version": sys.version.split()[0],
+        "python_executable": sys.executable,
+        "numpy_version": numpy.__version__,
+        "numpy_path": str(Path(numpy.__file__).resolve()),
+        "numpy_target": str(OFFICIAL_NUMPY_TARGET.resolve()),
+    }
     (run_root / "raw_output.jsonl").touch()
     for qid, result in imported_results.items():
         checkpoint_root = run_root / f"question-{qid}"
@@ -1505,6 +1922,8 @@ async def _run(args: argparse.Namespace) -> int:
                 official_module=official_module,
                 official_commit=commit,
                 evaluator_blob=blob,
+                observation_cache_root=observation_cache_root,
+                observation_fingerprint=observation_fingerprints.get(qid),
             )
         except Exception as exc:
             failure = {
@@ -1519,6 +1938,23 @@ async def _run(args: argparse.Namespace) -> int:
             question_root = run_root / f"question-{qid}"
             if question_root.is_dir():
                 _write_json_checkpoint(question_root / "failure.json", failure)
+                checkpoint_path = question_root / "checkpoint.json"
+                previous_checkpoint: dict[str, Any] = {}
+                if checkpoint_path.is_file():
+                    try:
+                        previous_checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        previous_checkpoint = {}
+                _write_json_checkpoint(question_root / "checkpoint.json", {
+                    **previous_checkpoint,
+                    "question_id": qid,
+                    "phase": "FAILED_ATTEMPT",
+                    "failed_during_phase": previous_checkpoint.get("phase", "UNKNOWN"),
+                    "status": "FAILED_ATTEMPT",
+                    "error_type": failure["error_type"],
+                    "error": failure["error"],
+                    "updated_at_utc": datetime.now(UTC).isoformat(),
+                })
             _write_jsonl(run_root / "failures.jsonl", failure, durable=True)
             summary["status"] = "FAILED_QUESTION"
             summary["failed_question"] = failure
@@ -1544,42 +1980,25 @@ async def _run(args: argparse.Namespace) -> int:
         }
         for category in CANONICAL_CATEGORIES
     }
-    token_fields = (
-        "observer_budget_accounted_input_tokens",
-        "observer_budget_accounted_output_tokens",
-        "observer_provider_reported_input_tokens",
-        "observer_provider_reported_output_tokens",
-        "answer_provider_reported_input_tokens",
-        "answer_provider_reported_output_tokens",
-        "judge_provider_reported_input_tokens",
-        "judge_provider_reported_output_tokens",
-    )
-    token_totals = {
-        field: sum(int(item["token_totals"].get(field) or 0) for item in results)
-        for field in token_fields
+    usage_summary = _summarize_attempt_usage(results)
+    token_totals = usage_summary["token_totals"]
+    cache_hit_ids = {
+        str(item.get("question_id") or "") for item in results
+        if isinstance(item.get("observation_cache"), dict)
+        and item["observation_cache"].get("hit") is True
     }
-    token_totals["provider_reported_input_tokens"] = sum(
-        token_totals[field] for field in (
-            "observer_provider_reported_input_tokens",
-            "answer_provider_reported_input_tokens",
-            "judge_provider_reported_input_tokens",
+    model_router_calls = []
+    historical_observer_calls = []
+    for item in results:
+        item_cache_hit = (
+            isinstance(item.get("observation_cache"), dict)
+            and item["observation_cache"].get("hit") is True
         )
-    )
-    token_totals["provider_reported_output_tokens"] = sum(
-        token_totals[field] for field in (
-            "observer_provider_reported_output_tokens",
-            "answer_provider_reported_output_tokens",
-            "judge_provider_reported_output_tokens",
-        )
-    )
-    token_totals["observer_provider_usage_complete"] = all(
-        item["token_totals"]["observer_provider_reported_complete"] for item in results
-    )
-    model_router_calls = [
-        call
-        for item in results
-        for call in item.get("timing", {}).get("model_router_calls", [])
-    ]
+        for call in item.get("timing", {}).get("model_router_calls", []):
+            if item_cache_hit and call.get("purpose") == "memory_observe":
+                historical_observer_calls.append(call)
+            else:
+                model_router_calls.append(call)
     model_router_calls_by_purpose = Counter(
         f"{call.get('purpose', 'unknown')}:{call.get('status', 'unknown')}"
         for call in model_router_calls
@@ -1599,11 +2018,19 @@ async def _run(args: argparse.Namespace) -> int:
         ]),
         "phase_elapsed_ms_total": {
             name: round(sum(
-                float(item.get("timing", {}).get("phase_elapsed_ms", {}).get(name) or 0)
+                0.0 if (
+                    str(item.get("question_id") or "") in cache_hit_ids
+                    and name == "source_capture_and_observe_ms"
+                ) else float(item.get("timing", {}).get("phase_elapsed_ms", {}).get(name) or 0)
                 for item in results
             ), 3)
             for name in phase_names
         },
+        "historical_observation_elapsed_ms_reused_from_cache": round(sum(
+            float(item.get("timing", {}).get("phase_elapsed_ms", {}).get("source_capture_and_observe_ms") or 0)
+            for item in results if str(item.get("question_id") or "") in cache_hit_ids
+        ), 3),
+        "historical_observer_model_calls_reused_from_cache": len(historical_observer_calls),
         "model_router_call_latency_ms": _summarize_latency_ms([
             float(call["elapsed_ms"])
             for call in model_router_calls
@@ -1611,28 +2038,7 @@ async def _run(args: argparse.Namespace) -> int:
         ]),
         "model_router_calls_by_purpose_and_status": dict(model_router_calls_by_purpose),
     }
-    provider_costs: list[float] = []
-    cost_call_count = 0
-    cost_complete = True
-    for item in results:
-        cost_groups = item["provider_reported_cost_usd"]
-        calls = (
-            list(cost_groups["observer"])
-            + list(cost_groups["answer"])
-            + [cost_groups["judge"]]
-        )
-        expected_calls = (
-            len(item["observer"]["router_calls"])
-            + len(item["answer"]["run_usage"])
-            + 1
-        )
-        cost_call_count += expected_calls
-        known_for_question = 0
-        for value in calls:
-            if isinstance(value, (int, float)):
-                provider_costs.append(float(value))
-                known_for_question += 1
-        cost_complete = cost_complete and known_for_question == expected_calls
+    cost_summary = _summarize_attempt_cost(results)
     summary.update({
         "status": "COMPLETED",
         "run_root": str(run_root),
@@ -1643,14 +2049,16 @@ async def _run(args: argparse.Namespace) -> int:
         "answer_model_ids": sorted({str(item["answer"]["model_id"]) for item in results if item["answer"]["model_id"]}),
         "observer_model_ids": sorted({model for item in results for model in item["observer"]["model_ids"]}),
         "token_totals": token_totals,
+        "historical_observation_usage": usage_summary["historical_observation_usage"],
+        "actual_observer_usage_this_attempt": usage_summary["actual_observer_usage_this_attempt"],
+        "actual_answer_judge_usage_this_attempt": usage_summary["actual_answer_judge_usage_this_attempt"],
         "runtime_measurements": runtime_measurements,
-        "provider_reported_cost": {
-            "complete_for_all_calls": cost_complete,
-            "calls_with_known_cost": len(provider_costs),
-            "calls_total": cost_call_count,
-            "known_partial_sum_usd": sum(provider_costs) if provider_costs else None,
-            "complete_sum_usd": sum(provider_costs) if cost_complete else None,
-        },
+        "observation_cache": {
+            **summary.get("observation_cache", {}),
+            "cache_hit_question_ids": sorted(cache_hit_ids),
+            "new_observation_question_ids": sorted(set(summary["selected_question_ids"]) - cache_hit_ids),
+        } if isinstance(summary.get("observation_cache"), dict) else None,
+        **cost_summary,
         "configured_gateway_all_in_cost_usd": None,
     })
     (run_root / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

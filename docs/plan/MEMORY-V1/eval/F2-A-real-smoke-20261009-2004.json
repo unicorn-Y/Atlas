@@ -1,0 +1,3534 @@
+{
+  "schema": "F2-A-real-observer-smoke-v1",
+  "status": "completed",
+  "run_id": "29beac99",
+  "started_at": "2026-10-09T04:00:09+00:00",
+  "ended_at": "2026-10-09T04:02:03+00:00",
+  "requirements": {
+    "conversation_count": 10,
+    "trials_per_conversation": 3,
+    "batch_count": 30,
+    "questions_per_conversation": "multiple natural Chinese questions per case",
+    "real_model_provider_used": true,
+    "fake_provider_used": false
+  },
+  "isolation": {
+    "ATLAS_DATA_DIR": "C:\\Users\\25011\\AppData\\Local\\Temp\\atlas_f2a_20261009_2004\\atlas_data",
+    "MEMORYOS_DATA_ROOT": "C:\\Users\\25011\\AppData\\Local\\Temp\\atlas_f2a_20261009_2004\\memoryos_data",
+    "MEMORYOS_DB_PATH": "C:\\Users\\25011\\AppData\\Local\\Temp\\atlas_f2a_20261009_2004\\memoryos_data\\db\\memoryos.sqlite3",
+    "HERMES_HOME": "C:\\Users\\25011\\AppData\\Local\\Temp\\atlas_f2a_20261009_2004\\hermes_home"
+  },
+  "route": {
+    "model_id": "gemini-3.8-flash",
+    "observer_model_id": "gemini-3.8-flash",
+    "provider_id": "custom",
+    "provider_endpoint_host": "127.0.0.1:8045",
+    "credential_present": true,
+    "credential_source": "Atlas ModelManager Windows Credential Manager lookup",
+    "credential_value_recorded": false,
+    "router_purpose": "memory_observe",
+    "resolved_provider": "custom",
+    "api_mode": "chat_completions",
+    "resolved_model": "gemini-3.8-flash",
+    "wire_model": "gemini-3.8-flash",
+    "fallback_reason": null,
+    "api_key_recorded": false
+  },
+  "proxy": {
+    "version": "Antigravity Tools 4.8.5-beta.10",
+    "request_reasoning_effort": "low for Gemini bare model memory purposes",
+    "routing_source": "https://github.com/lbjlaq/Antigravity-Manager/blob/main/CHANGELOG_EN.md",
+    "expected_effective_variant": "gemini-3.8-flash-low",
+    "thinking_disabled": false,
+    "proxy_usage_records_during_run": {
+      "available": true,
+      "requests": 30,
+      "by_model": {
+        "gemini-3.8-flash": {
+          "requests": 30,
+          "input_tokens": 185127,
+          "output_tokens": 5187,
+          "cached_tokens": 8144,
+          "total_tokens": 190314
+        }
+      }
+    }
+  },
+  "aggregate": {
+    "extraction_p50_ms": 3545.09,
+    "extraction_p95_ms": 7516.2,
+    "total_http_source_items_accepted": 120,
+    "derived_items_submitted": 30,
+    "derived_items_http_accepted": 30,
+    "derived_http_posts": 27,
+    "item_rejected_by_reason": {},
+    "mixed_rejection_batches": 0,
+    "mixed_rejection_batches_http_accepted": 0,
+    "model_api_call_count_including_retries": 30,
+    "api_calls_with_exact_provider_usage": 30,
+    "api_usage_by_call": [
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6171,
+        "output_tokens": 164,
+        "elapsed_ms": 7844.59
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6161,
+        "output_tokens": 122,
+        "elapsed_ms": 7509.59
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6163,
+        "output_tokens": 155,
+        "elapsed_ms": 3538.92
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6187,
+        "output_tokens": 188,
+        "elapsed_ms": 3627.64
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6166,
+        "output_tokens": 162,
+        "elapsed_ms": 4631.61
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6157,
+        "output_tokens": 152,
+        "elapsed_ms": 3716.83
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6178,
+        "output_tokens": 238,
+        "elapsed_ms": 3786.63
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6177,
+        "output_tokens": 303,
+        "elapsed_ms": 3626.25
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6170,
+        "output_tokens": 215,
+        "elapsed_ms": 3379.91
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6179,
+        "output_tokens": 5,
+        "elapsed_ms": 3921.4
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6171,
+        "output_tokens": 165,
+        "elapsed_ms": 2782.28
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6161,
+        "output_tokens": 150,
+        "elapsed_ms": 4084.28
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6163,
+        "output_tokens": 212,
+        "elapsed_ms": 3349.92
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6187,
+        "output_tokens": 190,
+        "elapsed_ms": 4583.01
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6166,
+        "output_tokens": 207,
+        "elapsed_ms": 3172.31
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6157,
+        "output_tokens": 157,
+        "elapsed_ms": 2610.38
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6178,
+        "output_tokens": 179,
+        "elapsed_ms": 3393.47
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6177,
+        "output_tokens": 395,
+        "elapsed_ms": 3832.43
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6170,
+        "output_tokens": 178,
+        "elapsed_ms": 4045.09
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6179,
+        "output_tokens": 9,
+        "elapsed_ms": 2047.08
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6171,
+        "output_tokens": 206,
+        "elapsed_ms": 4476.83
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6161,
+        "output_tokens": 147,
+        "elapsed_ms": 2677.52
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6163,
+        "output_tokens": 132,
+        "elapsed_ms": 2430.52
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6187,
+        "output_tokens": 185,
+        "elapsed_ms": 2568.16
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6166,
+        "output_tokens": 162,
+        "elapsed_ms": 2905.59
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6157,
+        "output_tokens": 157,
+        "elapsed_ms": 4472.46
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6178,
+        "output_tokens": 186,
+        "elapsed_ms": 2362.71
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6177,
+        "output_tokens": 255,
+        "elapsed_ms": 2768.63
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6170,
+        "output_tokens": 206,
+        "elapsed_ms": 3106.85
+      },
+      {
+        "requested_model": "gemini-3.8-flash",
+        "purpose": "memory_observe",
+        "response_model": "gemini-3.8-flash-low",
+        "input_tokens": 6179,
+        "output_tokens": 5,
+        "elapsed_ms": 3965.8
+      }
+    ]
+  },
+  "manual_fact_review": {
+    "status": "PENDING",
+    "criteria": "Read every stored_records[].stored_text against its source_messages; question/request-only content is not a fact.",
+    "question_as_fact_count": null,
+    "bad_item_caused_valid_batch_loss_count": null,
+    "reviewer_note": "Populate after inspecting all stored record text and the item_rejected/HTTP receipt evidence."
+  },
+  "batches": [
+    {
+      "trial": 1,
+      "case_id": "daughter_age_school",
+      "expected_facts_for_human_review": [
+        "用户有一个6岁的女儿"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t1-daughter_age_school",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-daughter_age_school-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我女儿今年6岁。她明年通常该读几年级？上海小学一般几岁入学？要不要先学拼音？如果生日在十月会影响入学吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-daughter_age_school-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-daughter_age_school-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我想帮她准备入学，先培养阅读习惯有用吗？每天读多久比较合适？需要报数学班吗？你会怎么安排？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-daughter_age_school-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 8542.71,
+      "input_tokens": 6171,
+      "output_tokens": 164,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 用户有个女儿，今年 6 岁。\", \"priority\": \"HIGH\", \"facet\": \"FACT\", \"key\": \"user.family.daughter.age\", \"value\": \"6岁（截至2026年）\", \"entities\": [\"女儿\"], \"valid_from\": \"2026-10-09T03:59:09+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-daughter_age_school-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户有个女儿，今年 6 岁。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-b289bbc94c49bef85208d20f38cc8c75:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-daughter_age_school-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-b40dddcf6b6c4053",
+          "stored_text": "🔴 (03:59) 用户有个女儿，今年 6 岁。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "女儿"
+              ],
+              "facet": "FACT",
+              "key": "user.family.daughter.age",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户有个女儿，今年 6 岁。",
+              "valid_from": "2026-10-09T03:59:09+00:00",
+              "valid_to": null,
+              "value": "6岁（截至2026年）"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-b289bbc94c49bef85208d20f38cc8c75:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-b289bbc94c49bef85208d20f38cc8c75:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 213
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6171,
+          "output_tokens": 164,
+          "elapsed_ms": 7844.59
+        }
+      ],
+      "memoryos_post_ms": 30.89
+    },
+    {
+      "trial": 1,
+      "case_id": "hangzhou_home",
+      "expected_facts_for_human_review": [
+        "用户住在杭州"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t1-hangzhou_home",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-hangzhou_home-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我住在杭州。下周杭州会下雨吗？去西湖几点人少？带伞还是穿雨衣？哪条地铁线最方便？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-hangzhou_home-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-hangzhou_home-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我周末想找个安静的咖啡馆，滨江有什么推荐？哪家有插座？通常几点关门？开车停车方便吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-hangzhou_home-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 7516.2,
+      "input_tokens": 6161,
+      "output_tokens": 122,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 用户住在杭州。\", \"priority\": \"HIGH\", \"facet\": \"FACT\", \"key\": \"user.residence.city\", \"value\": \"杭州\", \"entities\": [\"杭州\"], \"valid_from\": null, \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-hangzhou_home-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户住在杭州。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-140ae59c42b60d8cd2aa040093c54298:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-hangzhou_home-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-956c255a61054582",
+          "stored_text": "🔴 (03:59) 用户住在杭州。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "杭州"
+              ],
+              "facet": "FACT",
+              "key": "user.residence.city",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户住在杭州。",
+              "valid_from": null,
+              "valid_to": null,
+              "value": "杭州"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-140ae59c42b60d8cd2aa040093c54298:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-140ae59c42b60d8cd2aa040093c54298:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 169
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6161,
+          "output_tokens": 122,
+          "elapsed_ms": 7509.59
+        }
+      ],
+      "memoryos_post_ms": 27.83
+    },
+    {
+      "trial": 1,
+      "case_id": "tea_preference",
+      "expected_facts_for_human_review": [
+        "用户喜欢无糖绿茶"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t1-tea_preference",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-tea_preference-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我平时喜欢喝无糖绿茶。晚上喝茶会影响睡眠吗？乌龙茶和绿茶哪个咖啡因更多？有什么低咖啡因饮品？下午几点后不建议喝？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-tea_preference-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-tea_preference-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我想买一只保温杯，选多大容量合适？玻璃内胆会不会容易碎？泡茶用多少度的水？哪些品牌比较耐用？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-tea_preference-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3545.09,
+      "input_tokens": 6163,
+      "output_tokens": 155,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 用户平时喜欢喝无糖绿茶。\", \"priority\": \"HIGH\", \"facet\": \"PREFERENCE\", \"key\": \"user.beverage_preference.tea\", \"value\": \"无糖绿茶\", \"entities\": [\"无糖绿茶\"], \"valid_from\": \"2026-10-09T03:59:26Z\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-tea_preference-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户平时喜欢喝无糖绿茶。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-96307a0564ac30d8fd298c3fe97772c7:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-tea_preference-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-d9af56c4b8034d7c",
+          "stored_text": "🔴 (03:59) 用户平时喜欢喝无糖绿茶。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "无糖绿茶"
+              ],
+              "facet": "PREFERENCE",
+              "key": "user.beverage_preference.tea",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户平时喜欢喝无糖绿茶。",
+              "valid_from": "2026-10-09T03:59:26Z",
+              "valid_to": null,
+              "value": "无糖绿茶"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-96307a0564ac30d8fd298c3fe97772c7:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-96307a0564ac30d8fd298c3fe97772c7:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 211
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6163,
+          "output_tokens": 155,
+          "elapsed_ms": 3538.92
+        }
+      ],
+      "memoryos_post_ms": 25.85
+    },
+    {
+      "trial": 1,
+      "case_id": "meeting_time_change",
+      "expected_facts_for_human_review": [
+        "周报评审会从周二改到周四下午两点"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t1-meeting_time_change",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-meeting_time_change-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "周报评审会原定周二上午十点，现在改到周四下午两点。周四下雨会影响到场吗？要不要通知全组？会议室A有投影吗？提前几分钟到好？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-meeting_time_change-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-meeting_time_change-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果有人临时缺席，改成线上合适吗？会议要留多少时间？需要提前发材料吗？周四午饭后大家通常有空吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-meeting_time_change-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3633.69,
+      "input_tokens": 6187,
+      "output_tokens": 188,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 周报评审会原定周二上午十点，现改到周四下午两点（替代原定时间）。\", \"priority\": \"HIGH\", \"facet\": \"STATE\", \"key\": \"meeting.weekly_review.schedule\", \"value\": \"周四下午两点（原定周二上午十点）\", \"entities\": [\"周报评审会\"], \"valid_from\": \"2026-10-09T03:59:29+00:00\", \"valid_to\": null, \"is_change\": true, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-meeting_time_change-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 周报评审会原定周二上午十点，现改到周四下午两点（替代原定时间）。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-312ea914b60852d27af0e0c17b70f0d7:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-meeting_time_change-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-f021fefd1e52420a",
+          "stored_text": "🔴 (03:59) 周报评审会原定周二上午十点，现改到周四下午两点（替代原定时间）。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": true,
+              "entities": [
+                "周报评审会"
+              ],
+              "facet": "STATE",
+              "key": "meeting.weekly_review.schedule",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 周报评审会原定周二上午十点，现改到周四下午两点（替代原定时间）。",
+              "valid_from": "2026-10-09T03:59:29+00:00",
+              "valid_to": null,
+              "value": "周四下午两点（原定周二上午十点）"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-312ea914b60852d27af0e0c17b70f0d7:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-312ea914b60852d27af0e0c17b70f0d7:1:UPSERT",
+          "evidence_snippet_truncated": true,
+          "evidence_snippet_chars": 240
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6187,
+          "output_tokens": 188,
+          "elapsed_ms": 3627.64
+        }
+      ],
+      "memoryos_post_ms": 25.1
+    },
+    {
+      "trial": 1,
+      "case_id": "atlas_work_role",
+      "expected_facts_for_human_review": [
+        "用户在Atlas项目负责模型调用验收"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t1-atlas_work_role",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-atlas_work_role-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我在Atlas项目负责模型调用验收。ModelRouter的路由规则在哪里看？如果换成OpenAI，缓存还能用吗？超时一般设多少？哪些日志最有用？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-atlas_work_role-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-atlas_work_role-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "验收表应该包含哪些列？需要覆盖重试吗？要测试并发吗？一次跑多少用例比较合理？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-atlas_work_role-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 4637.69,
+      "input_tokens": 6166,
+      "output_tokens": 162,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 用户在Atlas项目负责模型调用验收。\", \"priority\": \"HIGH\", \"facet\": \"FACT\", \"key\": \"user.work.role\", \"value\": \"在Atlas项目负责模型调用验收\", \"entities\": [\"Atlas\", \"ModelRouter\"], \"valid_from\": \"2026-10-09T03:59:33+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-atlas_work_role-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户在Atlas项目负责模型调用验收。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-b209600d7c70e24ae77346cd1c49ccd8:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-atlas_work_role-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-cc03794fd5d34a01",
+          "stored_text": "🔴 (03:59) 用户在Atlas项目负责模型调用验收。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "Atlas",
+                "ModelRouter"
+              ],
+              "facet": "FACT",
+              "key": "user.work.role",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户在Atlas项目负责模型调用验收。",
+              "valid_from": "2026-10-09T03:59:33+00:00",
+              "valid_to": null,
+              "value": "在Atlas项目负责模型调用验收"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-b209600d7c70e24ae77346cd1c49ccd8:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-b209600d7c70e24ae77346cd1c49ccd8:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 230
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6166,
+          "output_tokens": 162,
+          "elapsed_ms": 4631.61
+        }
+      ],
+      "memoryos_post_ms": 29.96
+    },
+    {
+      "trial": 1,
+      "case_id": "running_habit",
+      "expected_facts_for_human_review": [
+        "用户每周三晚上跑步五公里"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t1-running_habit",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-running_habit-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我每周三晚上固定跑步五公里。跑前热身多久比较合适？雨天要改在室内吗？晚上跑步会影响睡眠吗？什么配速适合初学者？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-running_habit-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-running_habit-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我想准备十公里比赛，训练计划怎么排？每周跑几次好？跑鞋多久该换？跑后应该做哪些拉伸？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-running_habit-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3722.9,
+      "input_tokens": 6157,
+      "output_tokens": 152,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 用户每周三晚上固定跑步五公里。\", \"priority\": \"HIGH\", \"facet\": \"HABIT\", \"key\": \"user.habit.running\", \"value\": \"每周三晚上固定跑步五公里\", \"entities\": [\"用户\"], \"valid_from\": \"2026-10-09T03:59:38Z\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-running_habit-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户每周三晚上固定跑步五公里。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-63398ef2fc1117602526ac5cf8dbc106:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-running_habit-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-bc3336f23b064df9",
+          "stored_text": "🔴 (03:59) 用户每周三晚上固定跑步五公里。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "用户"
+              ],
+              "facet": "HABIT",
+              "key": "user.habit.running",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户每周三晚上固定跑步五公里。",
+              "valid_from": "2026-10-09T03:59:38Z",
+              "valid_to": null,
+              "value": "每周三晚上固定跑步五公里"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-63398ef2fc1117602526ac5cf8dbc106:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-63398ef2fc1117602526ac5cf8dbc106:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 205
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6157,
+          "output_tokens": 152,
+          "elapsed_ms": 3716.83
+        }
+      ],
+      "memoryos_post_ms": 26.09
+    },
+    {
+      "trial": 1,
+      "case_id": "colleague_chenlin",
+      "expected_facts_for_human_review": [
+        "用户的同事陈琳来自成都并负责后端数据平台"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t1-colleague_chenlin",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-colleague_chenlin-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我的同事陈琳来自成都，她在后端组负责数据平台。成都最近气温怎么样？她喜欢什么编程语言？你觉得她适合做组长吗？春节去成都哪里好玩？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-colleague_chenlin-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-colleague_chenlin-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果团队要做季度复盘，应该看哪些指标？文档用表格还是幻灯片？会前要不要匿名收集意见？怎样控制会议时间？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-colleague_chenlin-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3792.68,
+      "input_tokens": 6178,
+      "output_tokens": 238,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\n  \"observations\": [\n    {\n      \"text\": \"🔴 (03:59) 用户的同事陈琳来自成都，在后端组负责数据平台。\",\n      \"priority\": \"HIGH\",\n      \"facet\": \"RELATION\",\n      \"key\": \"user.colleague.chen_lin\",\n      \"value\": \"陈琳来自成都，在后端组负责数据平台\",\n      \"entities\": [\n        \"陈琳\",\n        \"成都\",\n        \"后端组\",\n        \"数据平台\"\n      ],\n      \"valid_from\": \"2026-10-09T03:59:41+00:00\",\n      \"valid_to\": null,\n      \"is_change\": false,\n      \"evidence\": [\n        \"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-colleague_chenlin-m1:1:UPSERT\"\n      ],\n      \"speaker\": \"USER\"\n    }\n  ]\n}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户的同事陈琳来自成都，在后端组负责数据平台。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-e568fbf7fb3e8e1b3ab4b78b48d20493:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-colleague_chenlin-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-257e8471cd8a4d78",
+          "stored_text": "🔴 (03:59) 用户的同事陈琳来自成都，在后端组负责数据平台。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "陈琳",
+                "成都",
+                "后端组",
+                "数据平台"
+              ],
+              "facet": "RELATION",
+              "key": "user.colleague.chen_lin",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户的同事陈琳来自成都，在后端组负责数据平台。",
+              "valid_from": "2026-10-09T03:59:41+00:00",
+              "valid_to": null,
+              "value": "陈琳来自成都，在后端组负责数据平台"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-e568fbf7fb3e8e1b3ab4b78b48d20493:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-e568fbf7fb3e8e1b3ab4b78b48d20493:1:UPSERT",
+          "evidence_snippet_truncated": true,
+          "evidence_snippet_chars": 240
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6178,
+          "output_tokens": 238,
+          "elapsed_ms": 3786.63
+        }
+      ],
+      "memoryos_post_ms": 27.02
+    },
+    {
+      "trial": 1,
+      "case_id": "python_react_preference",
+      "expected_facts_for_human_review": [
+        "用户喜欢用Python写数据脚本，前端项目使用React"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t1-python_react_preference",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-python_react_preference-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "数据处理脚本我喜欢用Python，前端项目我用React。Python最新版本有哪些变化？现在升级有兼容问题吗？React用哪种状态管理更合适？我需要学Svelte吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-python_react_preference-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-python_react_preference-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果团队统一格式化工具，选哪一个好？代码评审要检查哪些点？monorepo适合我们吗？你会怎么拆目录？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-python_react_preference-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3634.55,
+      "input_tokens": 6177,
+      "output_tokens": 303,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 用户在编写数据处理脚本时喜欢使用 Python\", \"priority\": \"HIGH\", \"facet\": \"PREFERENCE\", \"key\": \"tech_stack.data_processing\", \"value\": \"Python\", \"entities\": [\"Python\"], \"valid_from\": \"2026-10-09T03:59:45+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-python_react_preference-m1:1:UPSERT\"], \"speaker\": \"USER\"}, {\"text\": \"🔴 (03:59) 用户在前端项目中使用 React\", \"priority\": \"HIGH\", \"facet\": \"FACT\", \"key\": \"tech_stack.frontend\", \"value\": \"React\", \"entities\": [\"React\"], \"valid_from\": \"2026-10-09T03:59:45+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-python_react_preference-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户在编写数据处理脚本时喜欢使用 Python",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-237333ac7db3576384210da773c97f7b:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-python_react_preference-m1:1:UPSERT"
+          ]
+        },
+        {
+          "text": "🔴 (03:59) 用户在前端项目中使用 React",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-05d722a6cae5bd71a64b7a11d18b28e4:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-python_react_preference-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 2,
+        "receipt_count": 2
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-267f79336c184ce3",
+          "stored_text": "🔴 (03:59) 用户在编写数据处理脚本时喜欢使用 Python",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "Python"
+              ],
+              "facet": "PREFERENCE",
+              "key": "tech_stack.data_processing",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户在编写数据处理脚本时喜欢使用 Python",
+              "valid_from": "2026-10-09T03:59:45+00:00",
+              "valid_to": null,
+              "value": "Python"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-237333ac7db3576384210da773c97f7b:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-237333ac7db3576384210da773c97f7b:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 229
+        },
+        {
+          "record_ref": "episode:ev-332940ae898a4ace",
+          "stored_text": "🔴 (03:59) 用户在前端项目中使用 React",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "React"
+              ],
+              "facet": "FACT",
+              "key": "tech_stack.frontend",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户在前端项目中使用 React",
+              "valid_from": "2026-10-09T03:59:45+00:00",
+              "valid_to": null,
+              "value": "React"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-05d722a6cae5bd71a64b7a11d18b28e4:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-05d722a6cae5bd71a64b7a11d18b28e4:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 207
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6177,
+          "output_tokens": 303,
+          "elapsed_ms": 3626.25
+        }
+      ],
+      "memoryos_post_ms": 39.16
+    },
+    {
+      "trial": 1,
+      "case_id": "budget_report_commitment",
+      "expected_facts_for_human_review": [
+        "用户答应在本月28日前提交预算报告"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t1-budget_report_commitment",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-budget_report_commitment-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我答应在本月28日前提交预算报告。预算应该按季度还是年度拆分？需要做敏感性分析吗？谁会评审？周末加班赶得上吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-budget_report_commitment-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-budget_report_commitment-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "报告需要附哪些凭证？用人民币还是也列美元？要不要放现金流预测？提交前找谁校对比较好？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-budget_report_commitment-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3386.56,
+      "input_tokens": 6170,
+      "output_tokens": 215,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 用户承诺在本月28日前提交预算报告。（预计 2026-10-28）\", \"priority\": \"HIGH\", \"facet\": \"COMMITMENT\", \"key\": \"user.work.budget_report_deadline\", \"value\": \"2026-10-28前提交预算报告\", \"entities\": [\"用户\", \"预算报告\"], \"valid_from\": \"2026-10-09T03:59:49+00:00\", \"valid_to\": \"2026-10-28T23:59:59+00:00\", \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-budget_report_commitment-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户承诺在本月28日前提交预算报告。（预计 2026-10-28）",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-1c3474fa7b2422f7a1aef692885ed845:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-budget_report_commitment-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-72493922b7a245f6",
+          "stored_text": "🔴 (03:59) 用户承诺在本月28日前提交预算报告。（预计 2026-10-28）",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "用户",
+                "预算报告"
+              ],
+              "facet": "COMMITMENT",
+              "key": "user.work.budget_report_deadline",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户承诺在本月28日前提交预算报告。（预计 2026-10-28）",
+              "valid_from": "2026-10-09T03:59:49+00:00",
+              "valid_to": "2026-10-28T23:59:59+00:00",
+              "value": "2026-10-28前提交预算报告"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-1c3474fa7b2422f7a1aef692885ed845:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-1c3474fa7b2422f7a1aef692885ed845:1:UPSERT",
+          "evidence_snippet_truncated": true,
+          "evidence_snippet_chars": 240
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6170,
+          "output_tokens": 215,
+          "elapsed_ms": 3379.91
+        }
+      ],
+      "memoryos_post_ms": 27.78
+    },
+    {
+      "trial": 1,
+      "case_id": "hypothetical_travel_questions",
+      "expected_facts_for_human_review": [],
+      "expected_no_fact": true,
+      "session_id": "f2a-29beac99-t1-hypothetical_travel_questions",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-hypothetical_travel_questions-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我以后搬去东京住，三月通常冷吗？需要准备什么衣服？工作签证容易申请吗？我需要带哪些证件？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-hypothetical_travel_questions-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t1-hypothetical_travel_questions-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "假如我去台北旅行，哪里夜市最值得逛？住在哪个区域方便？要不要租车？一天安排几个景点合适？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t1-hypothetical_travel_questions-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3925.4,
+      "input_tokens": 6179,
+      "output_tokens": 5,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": []}",
+      "derived_items": [],
+      "http_post": {
+        "attempted": false,
+        "state": "not_needed_empty_extraction",
+        "accepted": 0,
+        "receipt_count": 0
+      },
+      "stored_records": [],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6179,
+          "output_tokens": 5,
+          "elapsed_ms": 3921.4
+        }
+      ],
+      "memoryos_post_ms": 1.85
+    },
+    {
+      "trial": 2,
+      "case_id": "daughter_age_school",
+      "expected_facts_for_human_review": [
+        "用户有一个6岁的女儿"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t2-daughter_age_school",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-daughter_age_school-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我女儿今年6岁。她明年通常该读几年级？上海小学一般几岁入学？要不要先学拼音？如果生日在十月会影响入学吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-daughter_age_school-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-daughter_age_school-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我想帮她准备入学，先培养阅读习惯有用吗？每天读多久比较合适？需要报数学班吗？你会怎么安排？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-daughter_age_school-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 2789.25,
+      "input_tokens": 6171,
+      "output_tokens": 165,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 用户有个女儿，今年6岁。\", \"priority\": \"HIGH\", \"facet\": \"RELATION\", \"key\": \"user.family.daughter.age\", \"value\": \"6岁（2026年）\", \"entities\": [\"用户\", \"女儿\"], \"valid_from\": \"2026-10-09T03:59:56+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-daughter_age_school-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户有个女儿，今年6岁。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-647313268052710162a99ea4f3142c07:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-daughter_age_school-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-78b63bfac13e477a",
+          "stored_text": "🔴 (03:59) 用户有个女儿，今年6岁。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "用户",
+                "女儿"
+              ],
+              "facet": "RELATION",
+              "key": "user.family.daughter.age",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户有个女儿，今年6岁。",
+              "valid_from": "2026-10-09T03:59:56+00:00",
+              "valid_to": null,
+              "value": "6岁（2026年）"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-647313268052710162a99ea4f3142c07:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-647313268052710162a99ea4f3142c07:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 218
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6171,
+          "output_tokens": 165,
+          "elapsed_ms": 2782.28
+        }
+      ],
+      "memoryos_post_ms": 26.47
+    },
+    {
+      "trial": 2,
+      "case_id": "hangzhou_home",
+      "expected_facts_for_human_review": [
+        "用户住在杭州"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t2-hangzhou_home",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-hangzhou_home-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我住在杭州。下周杭州会下雨吗？去西湖几点人少？带伞还是穿雨衣？哪条地铁线最方便？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-hangzhou_home-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-hangzhou_home-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我周末想找个安静的咖啡馆，滨江有什么推荐？哪家有插座？通常几点关门？开车停车方便吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-hangzhou_home-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 4090.4,
+      "input_tokens": 6161,
+      "output_tokens": 150,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (03:59) 用户陈述自己住在杭州。\", \"priority\": \"HIGH\", \"facet\": \"FACT\", \"key\": \"user.location.residence\", \"value\": \"杭州\", \"entities\": [\"杭州\"], \"valid_from\": \"2026-10-09T03:59:59+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-hangzhou_home-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (03:59) 用户陈述自己住在杭州。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-a7241bf32fa0813c7a88b19eff899ae2:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-hangzhou_home-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-b72f403efc7d445e",
+          "stored_text": "🔴 (03:59) 用户陈述自己住在杭州。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "杭州"
+              ],
+              "facet": "FACT",
+              "key": "user.location.residence",
+              "priority": "HIGH",
+              "text": "🔴 (03:59) 用户陈述自己住在杭州。",
+              "valid_from": "2026-10-09T03:59:59+00:00",
+              "valid_to": null,
+              "value": "杭州"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-a7241bf32fa0813c7a88b19eff899ae2:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-a7241bf32fa0813c7a88b19eff899ae2:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 200
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6161,
+          "output_tokens": 150,
+          "elapsed_ms": 4084.28
+        }
+      ],
+      "memoryos_post_ms": 26.37
+    },
+    {
+      "trial": 2,
+      "case_id": "tea_preference",
+      "expected_facts_for_human_review": [
+        "用户喜欢无糖绿茶"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t2-tea_preference",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-tea_preference-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我平时喜欢喝无糖绿茶。晚上喝茶会影响睡眠吗？乌龙茶和绿茶哪个咖啡因更多？有什么低咖啡因饮品？下午几点后不建议喝？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-tea_preference-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-tea_preference-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我想买一只保温杯，选多大容量合适？玻璃内胆会不会容易碎？泡茶用多少度的水？哪些品牌比较耐用？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-tea_preference-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3355.9,
+      "input_tokens": 6163,
+      "output_tokens": 212,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\n  \"observations\": [\n    {\n      \"text\": \"🔴 (04:00) 用户平时喜欢喝无糖绿茶。\",\n      \"priority\": \"HIGH\",\n      \"facet\": \"PREFERENCE\",\n      \"key\": \"user.tea_preference\",\n      \"value\": \"喜欢喝无糖绿茶\",\n      \"entities\": [\n        \"用户\",\n        \"无糖绿茶\"\n      ],\n      \"valid_from\": \"2026-10-09T04:00:03+00:00\",\n      \"valid_to\": null,\n      \"is_change\": false,\n      \"evidence\": [\n        \"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-tea_preference-m1:1:UPSERT\"\n      ],\n      \"speaker\": \"USER\"\n    }\n  ]\n}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户平时喜欢喝无糖绿茶。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-f82ec08a5c17e4c999eb7b82d2acf592:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-tea_preference-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-1e880d8d81ed465f",
+          "stored_text": "🔴 (04:00) 用户平时喜欢喝无糖绿茶。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "用户",
+                "无糖绿茶"
+              ],
+              "facet": "PREFERENCE",
+              "key": "user.tea_preference",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户平时喜欢喝无糖绿茶。",
+              "valid_from": "2026-10-09T04:00:03+00:00",
+              "valid_to": null,
+              "value": "喜欢喝无糖绿茶"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-f82ec08a5c17e4c999eb7b82d2acf592:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-f82ec08a5c17e4c999eb7b82d2acf592:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 215
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6163,
+          "output_tokens": 212,
+          "elapsed_ms": 3349.92
+        }
+      ],
+      "memoryos_post_ms": 27.73
+    },
+    {
+      "trial": 2,
+      "case_id": "meeting_time_change",
+      "expected_facts_for_human_review": [
+        "周报评审会从周二改到周四下午两点"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t2-meeting_time_change",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-meeting_time_change-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "周报评审会原定周二上午十点，现在改到周四下午两点。周四下雨会影响到场吗？要不要通知全组？会议室A有投影吗？提前几分钟到好？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-meeting_time_change-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-meeting_time_change-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果有人临时缺席，改成线上合适吗？会议要留多少时间？需要提前发材料吗？周四午饭后大家通常有空吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-meeting_time_change-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 4589.38,
+      "input_tokens": 6187,
+      "output_tokens": 190,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户说明周报评审会原定周二上午十点，现改到周四下午两点（替代原定时间）。\", \"priority\": \"HIGH\", \"facet\": \"STATE\", \"key\": \"meeting.weekly_review.time\", \"value\": \"周四下午两点（原定周二上午十点）\", \"entities\": [\"周报评审会\"], \"valid_from\": \"2026-10-09T04:00:07+00:00\", \"valid_to\": null, \"is_change\": true, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-meeting_time_change-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户说明周报评审会原定周二上午十点，现改到周四下午两点（替代原定时间）。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-7d8f4cb60dec4b1c869bf8765a9a0f5f:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-meeting_time_change-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-ef75957a75d24d18",
+          "stored_text": "🔴 (04:00) 用户说明周报评审会原定周二上午十点，现改到周四下午两点（替代原定时间）。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": true,
+              "entities": [
+                "周报评审会"
+              ],
+              "facet": "STATE",
+              "key": "meeting.weekly_review.time",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户说明周报评审会原定周二上午十点，现改到周四下午两点（替代原定时间）。",
+              "valid_from": "2026-10-09T04:00:07+00:00",
+              "valid_to": null,
+              "value": "周四下午两点（原定周二上午十点）"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-7d8f4cb60dec4b1c869bf8765a9a0f5f:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-7d8f4cb60dec4b1c869bf8765a9a0f5f:1:UPSERT",
+          "evidence_snippet_truncated": true,
+          "evidence_snippet_chars": 240
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6187,
+          "output_tokens": 190,
+          "elapsed_ms": 4583.01
+        }
+      ],
+      "memoryos_post_ms": 27.04
+    },
+    {
+      "trial": 2,
+      "case_id": "atlas_work_role",
+      "expected_facts_for_human_review": [
+        "用户在Atlas项目负责模型调用验收"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t2-atlas_work_role",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-atlas_work_role-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我在Atlas项目负责模型调用验收。ModelRouter的路由规则在哪里看？如果换成OpenAI，缓存还能用吗？超时一般设多少？哪些日志最有用？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-atlas_work_role-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-atlas_work_role-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "验收表应该包含哪些列？需要覆盖重试吗？要测试并发吗？一次跑多少用例比较合理？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-atlas_work_role-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3178.93,
+      "input_tokens": 6166,
+      "output_tokens": 207,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\n  \"observations\": [\n    {\n      \"text\": \"🔴 (04:00) 用户在 Atlas 项目中负责模型调用验收。\",\n      \"priority\": \"HIGH\",\n      \"facet\": \"FACT\",\n      \"key\": \"user.work_role\",\n      \"value\": \"在 Atlas 项目负责模型调用验收\",\n      \"entities\": [\n        \"Atlas\"\n      ],\n      \"valid_from\": \"2026-10-09T04:00:11+00:00\",\n      \"valid_to\": null,\n      \"is_change\": false,\n      \"evidence\": [\n        \"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-atlas_work_role-m1:1:UPSERT\"\n      ],\n      \"speaker\": \"USER\"\n    }\n  ]\n}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户在 Atlas 项目中负责模型调用验收。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-8dd2bdbad352c4cf8ddec0c50b059b2d:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-atlas_work_role-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-3edbe402f4cd4f4c",
+          "stored_text": "🔴 (04:00) 用户在 Atlas 项目中负责模型调用验收。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "Atlas"
+              ],
+              "facet": "FACT",
+              "key": "user.work_role",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户在 Atlas 项目中负责模型调用验收。",
+              "valid_from": "2026-10-09T04:00:11+00:00",
+              "valid_to": null,
+              "value": "在 Atlas 项目负责模型调用验收"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-8dd2bdbad352c4cf8ddec0c50b059b2d:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-8dd2bdbad352c4cf8ddec0c50b059b2d:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 221
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6166,
+          "output_tokens": 207,
+          "elapsed_ms": 3172.31
+        }
+      ],
+      "memoryos_post_ms": 33.21
+    },
+    {
+      "trial": 2,
+      "case_id": "running_habit",
+      "expected_facts_for_human_review": [
+        "用户每周三晚上跑步五公里"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t2-running_habit",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-running_habit-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我每周三晚上固定跑步五公里。跑前热身多久比较合适？雨天要改在室内吗？晚上跑步会影响睡眠吗？什么配速适合初学者？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-running_habit-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-running_habit-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我想准备十公里比赛，训练计划怎么排？每周跑几次好？跑鞋多久该换？跑后应该做哪些拉伸？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-running_habit-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 2616.75,
+      "input_tokens": 6157,
+      "output_tokens": 157,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户每周三晚上固定跑步五公里。\", \"priority\": \"HIGH\", \"facet\": \"HABIT\", \"key\": \"user.running_habit\", \"value\": \"每周三晚上固定跑步五公里\", \"entities\": [\"跑步\"], \"valid_from\": \"2026-10-09T04:00:15+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-running_habit-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户每周三晚上固定跑步五公里。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-0466feec1400cf5ae4f4ae8e1666be2c:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-running_habit-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-d16d2964aa254fbe",
+          "stored_text": "🔴 (04:00) 用户每周三晚上固定跑步五公里。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "跑步"
+              ],
+              "facet": "HABIT",
+              "key": "user.running_habit",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户每周三晚上固定跑步五公里。",
+              "valid_from": "2026-10-09T04:00:15+00:00",
+              "valid_to": null,
+              "value": "每周三晚上固定跑步五公里"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-0466feec1400cf5ae4f4ae8e1666be2c:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-0466feec1400cf5ae4f4ae8e1666be2c:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 210
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6157,
+          "output_tokens": 157,
+          "elapsed_ms": 2610.38
+        }
+      ],
+      "memoryos_post_ms": 27.52
+    },
+    {
+      "trial": 2,
+      "case_id": "colleague_chenlin",
+      "expected_facts_for_human_review": [
+        "用户的同事陈琳来自成都并负责后端数据平台"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t2-colleague_chenlin",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-colleague_chenlin-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我的同事陈琳来自成都，她在后端组负责数据平台。成都最近气温怎么样？她喜欢什么编程语言？你觉得她适合做组长吗？春节去成都哪里好玩？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-colleague_chenlin-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-colleague_chenlin-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果团队要做季度复盘，应该看哪些指标？文档用表格还是幻灯片？会前要不要匿名收集意见？怎样控制会议时间？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-colleague_chenlin-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3400.21,
+      "input_tokens": 6178,
+      "output_tokens": 179,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户的同事陈琳来自成都，在后端组负责数据平台。\", \"priority\": \"HIGH\", \"facet\": \"RELATION\", \"key\": \"colleague.chen_lin\", \"value\": \"用户的同事陈琳来自成都，在后端组负责数据平台\", \"entities\": [\"陈琳\", \"成都\", \"后端组\", \"数据平台\"], \"valid_from\": \"2026-10-09T04:00:17Z\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-colleague_chenlin-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户的同事陈琳来自成都，在后端组负责数据平台。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-7bf45e3557fb546aea3c7d4a97058781:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-colleague_chenlin-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-f6d65e5733b24ddb",
+          "stored_text": "🔴 (04:00) 用户的同事陈琳来自成都，在后端组负责数据平台。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "陈琳",
+                "成都",
+                "后端组",
+                "数据平台"
+              ],
+              "facet": "RELATION",
+              "key": "colleague.chen_lin",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户的同事陈琳来自成都，在后端组负责数据平台。",
+              "valid_from": "2026-10-09T04:00:17Z",
+              "valid_to": null,
+              "value": "用户的同事陈琳来自成都，在后端组负责数据平台"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-7bf45e3557fb546aea3c7d4a97058781:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-7bf45e3557fb546aea3c7d4a97058781:1:UPSERT",
+          "evidence_snippet_truncated": true,
+          "evidence_snippet_chars": 240
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6178,
+          "output_tokens": 179,
+          "elapsed_ms": 3393.47
+        }
+      ],
+      "memoryos_post_ms": 27.58
+    },
+    {
+      "trial": 2,
+      "case_id": "python_react_preference",
+      "expected_facts_for_human_review": [
+        "用户喜欢用Python写数据脚本，前端项目使用React"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t2-python_react_preference",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-python_react_preference-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "数据处理脚本我喜欢用Python，前端项目我用React。Python最新版本有哪些变化？现在升级有兼容问题吗？React用哪种状态管理更合适？我需要学Svelte吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-python_react_preference-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-python_react_preference-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果团队统一格式化工具，选哪一个好？代码评审要检查哪些点？monorepo适合我们吗？你会怎么拆目录？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-python_react_preference-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3840.81,
+      "input_tokens": 6177,
+      "output_tokens": 395,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\n  \"observations\": [\n    {\n      \"text\": \"🔴 (04:00) 用户陈述数据处理脚本喜欢用 Python\",\n      \"priority\": \"HIGH\",\n      \"facet\": \"PREFERENCE\",\n      \"key\": \"user.preference.data_processing_language\",\n      \"value\": \"Python\",\n      \"entities\": [\n        \"Python\"\n      ],\n      \"valid_from\": \"2026-10-09T04:00:21+00:00\",\n      \"valid_to\": null,\n      \"is_change\": false,\n      \"evidence\": [\n        \"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-python_react_preference-m1:1:UPSERT\"\n      ],\n      \"speaker\": \"USER\"\n    },\n    {\n      \"text\": \"🔴 (04:00) 用户陈述前端项目使用 React\",\n      \"priority\": \"HIGH\",\n      \"facet\": \"FACT\",\n      \"key\": \"user.tech_stack.frontend\",\n      \"value\": \"React\",\n      \"entities\": [\n        \"React\"\n      ],\n      \"valid_from\": \"2026-10-09T04:00:21+00:00\",\n      \"valid_to\": null,\n      \"is_change\": false,\n      \"evidence\": [\n        \"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-python_react_preference-m1:1:UPSERT\"\n      ],\n      \"speaker\": \"USER\"\n    }\n  ]\n}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户陈述数据处理脚本喜欢用 Python",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-37a74f60b9b7ffdeeb164399a38e5eee:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-python_react_preference-m1:1:UPSERT"
+          ]
+        },
+        {
+          "text": "🔴 (04:00) 用户陈述前端项目使用 React",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-1f145d6048485e36f351d6893c56752c:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-python_react_preference-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 2,
+        "receipt_count": 2
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-2e67e949b9ce44c1",
+          "stored_text": "🔴 (04:00) 用户陈述数据处理脚本喜欢用 Python",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "Python"
+              ],
+              "facet": "PREFERENCE",
+              "key": "user.preference.data_processing_language",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户陈述数据处理脚本喜欢用 Python",
+              "valid_from": "2026-10-09T04:00:21+00:00",
+              "valid_to": null,
+              "value": "Python"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-37a74f60b9b7ffdeeb164399a38e5eee:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-37a74f60b9b7ffdeeb164399a38e5eee:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 240
+        },
+        {
+          "record_ref": "episode:ev-d0b9fa7af5a244a3",
+          "stored_text": "🔴 (04:00) 用户陈述前端项目使用 React",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "React"
+              ],
+              "facet": "FACT",
+              "key": "user.tech_stack.frontend",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户陈述前端项目使用 React",
+              "valid_from": "2026-10-09T04:00:21+00:00",
+              "valid_to": null,
+              "value": "React"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-1f145d6048485e36f351d6893c56752c:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-1f145d6048485e36f351d6893c56752c:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 212
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6177,
+          "output_tokens": 395,
+          "elapsed_ms": 3832.43
+        }
+      ],
+      "memoryos_post_ms": 42.18
+    },
+    {
+      "trial": 2,
+      "case_id": "budget_report_commitment",
+      "expected_facts_for_human_review": [
+        "用户答应在本月28日前提交预算报告"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t2-budget_report_commitment",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-budget_report_commitment-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我答应在本月28日前提交预算报告。预算应该按季度还是年度拆分？需要做敏感性分析吗？谁会评审？周末加班赶得上吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-budget_report_commitment-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-budget_report_commitment-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "报告需要附哪些凭证？用人民币还是也列美元？要不要放现金流预测？提交前找谁校对比较好？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-budget_report_commitment-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 4051.34,
+      "input_tokens": 6170,
+      "output_tokens": 178,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户承诺在本月28日前提交预算报告。（预计 2026-10-28）\", \"priority\": \"HIGH\", \"facet\": \"COMMITMENT\", \"key\": \"user.commitment.budget_report_deadline\", \"value\": \"2026-10-28\", \"entities\": [\"预算报告\"], \"valid_from\": \"2026-10-09T04:00:25Z\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-budget_report_commitment-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户承诺在本月28日前提交预算报告。（预计 2026-10-28）",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-4e0ee7f421aaf4fcf9d02acacd2f681e:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-budget_report_commitment-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-4bcca2a226b94309",
+          "stored_text": "🔴 (04:00) 用户承诺在本月28日前提交预算报告。（预计 2026-10-28）",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "预算报告"
+              ],
+              "facet": "COMMITMENT",
+              "key": "user.commitment.budget_report_deadline",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户承诺在本月28日前提交预算报告。（预计 2026-10-28）",
+              "valid_from": "2026-10-09T04:00:25Z",
+              "valid_to": null,
+              "value": "2026-10-28"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-4e0ee7f421aaf4fcf9d02acacd2f681e:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-4e0ee7f421aaf4fcf9d02acacd2f681e:1:UPSERT",
+          "evidence_snippet_truncated": true,
+          "evidence_snippet_chars": 240
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6170,
+          "output_tokens": 178,
+          "elapsed_ms": 4045.09
+        }
+      ],
+      "memoryos_post_ms": 27.83
+    },
+    {
+      "trial": 2,
+      "case_id": "hypothetical_travel_questions",
+      "expected_facts_for_human_review": [],
+      "expected_no_fact": true,
+      "session_id": "f2a-29beac99-t2-hypothetical_travel_questions",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-hypothetical_travel_questions-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我以后搬去东京住，三月通常冷吗？需要准备什么衣服？工作签证容易申请吗？我需要带哪些证件？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-hypothetical_travel_questions-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t2-hypothetical_travel_questions-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "假如我去台北旅行，哪里夜市最值得逛？住在哪个区域方便？要不要租车？一天安排几个景点合适？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t2-hypothetical_travel_questions-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 2050.51,
+      "input_tokens": 6179,
+      "output_tokens": 9,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\n  \"observations\": []\n}",
+      "derived_items": [],
+      "http_post": {
+        "attempted": false,
+        "state": "not_needed_empty_extraction",
+        "accepted": 0,
+        "receipt_count": 0
+      },
+      "stored_records": [],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6179,
+          "output_tokens": 9,
+          "elapsed_ms": 2047.08
+        }
+      ],
+      "memoryos_post_ms": 2.17
+    },
+    {
+      "trial": 3,
+      "case_id": "daughter_age_school",
+      "expected_facts_for_human_review": [
+        "用户有一个6岁的女儿"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t3-daughter_age_school",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-daughter_age_school-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我女儿今年6岁。她明年通常该读几年级？上海小学一般几岁入学？要不要先学拼音？如果生日在十月会影响入学吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-daughter_age_school-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-daughter_age_school-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我想帮她准备入学，先培养阅读习惯有用吗？每天读多久比较合适？需要报数学班吗？你会怎么安排？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-daughter_age_school-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 4482.72,
+      "input_tokens": 6171,
+      "output_tokens": 206,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\n  \"observations\": [\n    {\n      \"text\": \"🔴 (04:00) 用户的女儿今年6岁。\",\n      \"priority\": \"HIGH\",\n      \"facet\": \"FACT\",\n      \"key\": \"user.family.daughter.age\",\n      \"value\": \"6岁\",\n      \"entities\": [\n        \"用户\",\n        \"女儿\"\n      ],\n      \"valid_from\": \"2026-10-09T04:00:31+00:00\",\n      \"valid_to\": null,\n      \"is_change\": false,\n      \"evidence\": [\n        \"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-daughter_age_school-m1:1:UPSERT\"\n      ],\n      \"speaker\": \"USER\"\n    }\n  ]\n}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户的女儿今年6岁。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-3a1054448e221bf4db606f2c68196224:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-daughter_age_school-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-d53f3975dd7841e2",
+          "stored_text": "🔴 (04:00) 用户的女儿今年6岁。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "用户",
+                "女儿"
+              ],
+              "facet": "FACT",
+              "key": "user.family.daughter.age",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户的女儿今年6岁。",
+              "valid_from": "2026-10-09T04:00:31+00:00",
+              "valid_to": null,
+              "value": "6岁"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-3a1054448e221bf4db606f2c68196224:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-3a1054448e221bf4db606f2c68196224:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 205
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6171,
+          "output_tokens": 206,
+          "elapsed_ms": 4476.83
+        }
+      ],
+      "memoryos_post_ms": 29.77
+    },
+    {
+      "trial": 3,
+      "case_id": "hangzhou_home",
+      "expected_facts_for_human_review": [
+        "用户住在杭州"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t3-hangzhou_home",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-hangzhou_home-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我住在杭州。下周杭州会下雨吗？去西湖几点人少？带伞还是穿雨衣？哪条地铁线最方便？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-hangzhou_home-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-hangzhou_home-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我周末想找个安静的咖啡馆，滨江有什么推荐？哪家有插座？通常几点关门？开车停车方便吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-hangzhou_home-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 2684.17,
+      "input_tokens": 6161,
+      "output_tokens": 147,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户住在杭州。\", \"priority\": \"HIGH\", \"facet\": \"FACT\", \"key\": \"user.residence.city\", \"value\": \"杭州\", \"entities\": [\"杭州\"], \"valid_from\": \"2026-10-09T04:00:35+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-hangzhou_home-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户住在杭州。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-433650efea8541d4212b4c291235adde:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-hangzhou_home-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-59cf99325bb54a41",
+          "stored_text": "🔴 (04:00) 用户住在杭州。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "杭州"
+              ],
+              "facet": "FACT",
+              "key": "user.residence.city",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户住在杭州。",
+              "valid_from": "2026-10-09T04:00:35+00:00",
+              "valid_to": null,
+              "value": "杭州"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-433650efea8541d4212b4c291235adde:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-433650efea8541d4212b4c291235adde:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 192
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6161,
+          "output_tokens": 147,
+          "elapsed_ms": 2677.52
+        }
+      ],
+      "memoryos_post_ms": 28.58
+    },
+    {
+      "trial": 3,
+      "case_id": "tea_preference",
+      "expected_facts_for_human_review": [
+        "用户喜欢无糖绿茶"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t3-tea_preference",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-tea_preference-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我平时喜欢喝无糖绿茶。晚上喝茶会影响睡眠吗？乌龙茶和绿茶哪个咖啡因更多？有什么低咖啡因饮品？下午几点后不建议喝？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-tea_preference-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-tea_preference-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我想买一只保温杯，选多大容量合适？玻璃内胆会不会容易碎？泡茶用多少度的水？哪些品牌比较耐用？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-tea_preference-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 2436.39,
+      "input_tokens": 6163,
+      "output_tokens": 132,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户平时喜欢喝无糖绿茶。\", \"priority\": \"HIGH\", \"facet\": \"PREFERENCE\", \"key\": \"user.preference.tea\", \"value\": \"无糖绿茶\", \"entities\": [\"无糖绿茶\"], \"valid_from\": null, \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-tea_preference-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户平时喜欢喝无糖绿茶。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-92f901273c5e96423538a21841c73d75:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-tea_preference-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-e01cfe08ed2c4756",
+          "stored_text": "🔴 (04:00) 用户平时喜欢喝无糖绿茶。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "无糖绿茶"
+              ],
+              "facet": "PREFERENCE",
+              "key": "user.preference.tea",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户平时喜欢喝无糖绿茶。",
+              "valid_from": null,
+              "valid_to": null,
+              "value": "无糖绿茶"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-92f901273c5e96423538a21841c73d75:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-92f901273c5e96423538a21841c73d75:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 184
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6163,
+          "output_tokens": 132,
+          "elapsed_ms": 2430.52
+        }
+      ],
+      "memoryos_post_ms": 30.08
+    },
+    {
+      "trial": 3,
+      "case_id": "meeting_time_change",
+      "expected_facts_for_human_review": [
+        "周报评审会从周二改到周四下午两点"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t3-meeting_time_change",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-meeting_time_change-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "周报评审会原定周二上午十点，现在改到周四下午两点。周四下雨会影响到场吗？要不要通知全组？会议室A有投影吗？提前几分钟到好？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-meeting_time_change-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-meeting_time_change-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果有人临时缺席，改成线上合适吗？会议要留多少时间？需要提前发材料吗？周四午饭后大家通常有空吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-meeting_time_change-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 2574.54,
+      "input_tokens": 6187,
+      "output_tokens": 185,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户的周报评审会改期至周四下午两点（原定周二上午十点）。\", \"priority\": \"HIGH\", \"facet\": \"STATE\", \"key\": \"meeting.weekly_review.schedule\", \"value\": \"周四下午两点（原定周二上午十点）\", \"entities\": [\"周报评审会\"], \"valid_from\": \"2026-10-09T04:00:41+00:00\", \"valid_to\": null, \"is_change\": true, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-meeting_time_change-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户的周报评审会改期至周四下午两点（原定周二上午十点）。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-92be727ce10b7358490f026abd1576d0:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-meeting_time_change-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-d6a7a93973074594",
+          "stored_text": "🔴 (04:00) 用户的周报评审会改期至周四下午两点（原定周二上午十点）。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": true,
+              "entities": [
+                "周报评审会"
+              ],
+              "facet": "STATE",
+              "key": "meeting.weekly_review.schedule",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户的周报评审会改期至周四下午两点（原定周二上午十点）。",
+              "valid_from": "2026-10-09T04:00:41+00:00",
+              "valid_to": null,
+              "value": "周四下午两点（原定周二上午十点）"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-92be727ce10b7358490f026abd1576d0:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-92be727ce10b7358490f026abd1576d0:1:UPSERT",
+          "evidence_snippet_truncated": true,
+          "evidence_snippet_chars": 240
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6187,
+          "output_tokens": 185,
+          "elapsed_ms": 2568.16
+        }
+      ],
+      "memoryos_post_ms": 53.74
+    },
+    {
+      "trial": 3,
+      "case_id": "atlas_work_role",
+      "expected_facts_for_human_review": [
+        "用户在Atlas项目负责模型调用验收"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t3-atlas_work_role",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-atlas_work_role-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我在Atlas项目负责模型调用验收。ModelRouter的路由规则在哪里看？如果换成OpenAI，缓存还能用吗？超时一般设多少？哪些日志最有用？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-atlas_work_role-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-atlas_work_role-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "验收表应该包含哪些列？需要覆盖重试吗？要测试并发吗？一次跑多少用例比较合理？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-atlas_work_role-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 2911.79,
+      "input_tokens": 6166,
+      "output_tokens": 162,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户在Atlas项目负责模型调用验收。\", \"priority\": \"HIGH\", \"facet\": \"FACT\", \"key\": \"user.project.role\", \"value\": \"在Atlas项目负责模型调用验收\", \"entities\": [\"Atlas\", \"ModelRouter\"], \"valid_from\": \"2026-10-09T04:00:43+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-atlas_work_role-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户在Atlas项目负责模型调用验收。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-61e178d92e944ae1ca7f056cc32865f3:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-atlas_work_role-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-1c737000387f442b",
+          "stored_text": "🔴 (04:00) 用户在Atlas项目负责模型调用验收。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "Atlas",
+                "ModelRouter"
+              ],
+              "facet": "FACT",
+              "key": "user.project.role",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户在Atlas项目负责模型调用验收。",
+              "valid_from": "2026-10-09T04:00:43+00:00",
+              "valid_to": null,
+              "value": "在Atlas项目负责模型调用验收"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-61e178d92e944ae1ca7f056cc32865f3:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-61e178d92e944ae1ca7f056cc32865f3:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 233
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6166,
+          "output_tokens": 162,
+          "elapsed_ms": 2905.59
+        }
+      ],
+      "memoryos_post_ms": 28.61
+    },
+    {
+      "trial": 3,
+      "case_id": "running_habit",
+      "expected_facts_for_human_review": [
+        "用户每周三晚上跑步五公里"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t3-running_habit",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-running_habit-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我每周三晚上固定跑步五公里。跑前热身多久比较合适？雨天要改在室内吗？晚上跑步会影响睡眠吗？什么配速适合初学者？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-running_habit-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-running_habit-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我想准备十公里比赛，训练计划怎么排？每周跑几次好？跑鞋多久该换？跑后应该做哪些拉伸？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-running_habit-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 4478.32,
+      "input_tokens": 6157,
+      "output_tokens": 157,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户每周三晚上固定跑步五公里。\", \"priority\": \"HIGH\", \"facet\": \"HABIT\", \"key\": \"user.habit.running\", \"value\": \"每周三晚上固定跑步五公里\", \"entities\": [\"用户\"], \"valid_from\": \"2026-10-09T04:00:46+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-running_habit-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户每周三晚上固定跑步五公里。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-1562711131923702a480f83889f5f13d:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-running_habit-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-423af5ed7c0c4728",
+          "stored_text": "🔴 (04:00) 用户每周三晚上固定跑步五公里。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "用户"
+              ],
+              "facet": "HABIT",
+              "key": "user.habit.running",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户每周三晚上固定跑步五公里。",
+              "valid_from": "2026-10-09T04:00:46+00:00",
+              "valid_to": null,
+              "value": "每周三晚上固定跑步五公里"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-1562711131923702a480f83889f5f13d:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-1562711131923702a480f83889f5f13d:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 210
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6157,
+          "output_tokens": 157,
+          "elapsed_ms": 4472.46
+        }
+      ],
+      "memoryos_post_ms": 29.01
+    },
+    {
+      "trial": 3,
+      "case_id": "colleague_chenlin",
+      "expected_facts_for_human_review": [
+        "用户的同事陈琳来自成都并负责后端数据平台"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t3-colleague_chenlin",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-colleague_chenlin-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我的同事陈琳来自成都，她在后端组负责数据平台。成都最近气温怎么样？她喜欢什么编程语言？你觉得她适合做组长吗？春节去成都哪里好玩？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-colleague_chenlin-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-colleague_chenlin-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果团队要做季度复盘，应该看哪些指标？文档用表格还是幻灯片？会前要不要匿名收集意见？怎样控制会议时间？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-colleague_chenlin-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 2368.5,
+      "input_tokens": 6178,
+      "output_tokens": 186,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户的同事叫陈琳，来自成都，在后端组负责数据平台。\", \"priority\": \"HIGH\", \"facet\": \"RELATION\", \"key\": \"user.colleague.chen_lin\", \"value\": \"陈琳来自成都，在后端组负责数据平台\", \"entities\": [\"陈琳\", \"成都\", \"后端组\", \"数据平台\"], \"valid_from\": \"2026-10-09T04:00:51+00:00\", \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-colleague_chenlin-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户的同事叫陈琳，来自成都，在后端组负责数据平台。",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-3c1c8453e04872e6bc07a1775d269da1:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-colleague_chenlin-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-932d99365d82424e",
+          "stored_text": "🔴 (04:00) 用户的同事叫陈琳，来自成都，在后端组负责数据平台。",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "陈琳",
+                "成都",
+                "后端组",
+                "数据平台"
+              ],
+              "facet": "RELATION",
+              "key": "user.colleague.chen_lin",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户的同事叫陈琳，来自成都，在后端组负责数据平台。",
+              "valid_from": "2026-10-09T04:00:51+00:00",
+              "valid_to": null,
+              "value": "陈琳来自成都，在后端组负责数据平台"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-3c1c8453e04872e6bc07a1775d269da1:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-3c1c8453e04872e6bc07a1775d269da1:1:UPSERT",
+          "evidence_snippet_truncated": true,
+          "evidence_snippet_chars": 240
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6178,
+          "output_tokens": 186,
+          "elapsed_ms": 2362.71
+        }
+      ],
+      "memoryos_post_ms": 29.05
+    },
+    {
+      "trial": 3,
+      "case_id": "python_react_preference",
+      "expected_facts_for_human_review": [
+        "用户喜欢用Python写数据脚本，前端项目使用React"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t3-python_react_preference",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-python_react_preference-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "数据处理脚本我喜欢用Python，前端项目我用React。Python最新版本有哪些变化？现在升级有兼容问题吗？React用哪种状态管理更合适？我需要学Svelte吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-python_react_preference-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-python_react_preference-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果团队统一格式化工具，选哪一个好？代码评审要检查哪些点？monorepo适合我们吗？你会怎么拆目录？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-python_react_preference-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 2777.37,
+      "input_tokens": 6177,
+      "output_tokens": 255,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户数据处理脚本喜欢用Python\", \"priority\": \"HIGH\", \"facet\": \"PREFERENCE\", \"key\": \"user.tech_stack.data_script_preference\", \"value\": \"Python\", \"entities\": [\"Python\"], \"valid_from\": null, \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-python_react_preference-m1:1:UPSERT\"], \"speaker\": \"USER\"}, {\"text\": \"🔴 (04:00) 用户前端项目使用React\", \"priority\": \"HIGH\", \"facet\": \"FACT\", \"key\": \"user.tech_stack.frontend\", \"value\": \"React\", \"entities\": [\"React\"], \"valid_from\": null, \"valid_to\": null, \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-python_react_preference-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户数据处理脚本喜欢用Python",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-171f15d051e1930688855fb3a5af772d:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-python_react_preference-m1:1:UPSERT"
+          ]
+        },
+        {
+          "text": "🔴 (04:00) 用户前端项目使用React",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-bf5d671c58ec280656721af9179e294e:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-python_react_preference-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 2,
+        "receipt_count": 2
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-7e003d008dee4692",
+          "stored_text": "🔴 (04:00) 用户数据处理脚本喜欢用Python",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "Python"
+              ],
+              "facet": "PREFERENCE",
+              "key": "user.tech_stack.data_script_preference",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户数据处理脚本喜欢用Python",
+              "valid_from": null,
+              "valid_to": null,
+              "value": "Python"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-171f15d051e1930688855fb3a5af772d:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-171f15d051e1930688855fb3a5af772d:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 212
+        },
+        {
+          "record_ref": "episode:ev-09804816b3dc4603",
+          "stored_text": "🔴 (04:00) 用户前端项目使用React",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "React"
+              ],
+              "facet": "FACT",
+              "key": "user.tech_stack.frontend",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户前端项目使用React",
+              "valid_from": null,
+              "valid_to": null,
+              "value": "React"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-bf5d671c58ec280656721af9179e294e:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-bf5d671c58ec280656721af9179e294e:1:UPSERT",
+          "evidence_snippet_truncated": false,
+          "evidence_snippet_chars": 186
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6177,
+          "output_tokens": 255,
+          "elapsed_ms": 2768.63
+        }
+      ],
+      "memoryos_post_ms": 45.95
+    },
+    {
+      "trial": 3,
+      "case_id": "budget_report_commitment",
+      "expected_facts_for_human_review": [
+        "用户答应在本月28日前提交预算报告"
+      ],
+      "expected_no_fact": false,
+      "session_id": "f2a-29beac99-t3-budget_report_commitment",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-budget_report_commitment-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "我答应在本月28日前提交预算报告。预算应该按季度还是年度拆分？需要做敏感性分析吗？谁会评审？周末加班赶得上吗？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-budget_report_commitment-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-budget_report_commitment-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "报告需要附哪些凭证？用人民币还是也列美元？要不要放现金流预测？提交前找谁校对比较好？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-budget_report_commitment-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3113.06,
+      "input_tokens": 6170,
+      "output_tokens": 206,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": [{\"text\": \"🔴 (04:00) 用户承诺在本月28日前提交预算报告。（meaning 2026-10-28）\", \"priority\": \"HIGH\", \"facet\": \"COMMITMENT\", \"key\": \"user.work.budget_report_deadline\", \"value\": \"本月28日前提交预算报告\", \"entities\": [\"预算报告\"], \"valid_from\": \"2026-10-09T04:00:56+00:00\", \"valid_to\": \"2026-10-28T23:59:59+00:00\", \"is_change\": false, \"evidence\": [\"atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-budget_report_commitment-m1:1:UPSERT\"], \"speaker\": \"USER\"}]}",
+      "derived_items": [
+        {
+          "text": "🔴 (04:00) 用户承诺在本月28日前提交预算报告。（meaning 2026-10-28）",
+          "facet": null,
+          "speaker_role": "USER",
+          "source_event_id": "atlas:DERIVED:observer-5f22d2e53df89cfef2d59ea200c37975:1:UPSERT",
+          "evidence": [
+            "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-budget_report_commitment-m1:1:UPSERT"
+          ]
+        }
+      ],
+      "http_post": {
+        "attempted": true,
+        "state": "accepted",
+        "accepted": 1,
+        "receipt_count": 1
+      },
+      "stored_records": [
+        {
+          "record_ref": "episode:ev-075164f558ea4bed",
+          "stored_text": "🔴 (04:00) 用户承诺在本月28日前提交预算报告。（meaning 2026-10-28）",
+          "facet": "EPISODE",
+          "record_content": {
+            "text": {
+              "change": false,
+              "entities": [
+                "预算报告"
+              ],
+              "facet": "COMMITMENT",
+              "key": "user.work.budget_report_deadline",
+              "priority": "HIGH",
+              "text": "🔴 (04:00) 用户承诺在本月28日前提交预算报告。（meaning 2026-10-28）",
+              "valid_from": "2026-10-09T04:00:56+00:00",
+              "valid_to": "2026-10-28T23:59:59+00:00",
+              "value": "本月28日前提交预算报告"
+            },
+            "source_kind": "DERIVED",
+            "speaker_role": "USER",
+            "locator": null,
+            "projection": "RAW_EVIDENCE",
+            "note": "UM01：原始观察的确定性投影；派生形成在 UM04 接入"
+          },
+          "source_refs": [
+            {
+              "source_event_id": "atlas:DERIVED:observer-5f22d2e53df89cfef2d59ea200c37975:1:UPSERT",
+              "source_type": "evidence_event"
+            }
+          ],
+          "evidence_source_event_id": "atlas:DERIVED:observer-5f22d2e53df89cfef2d59ea200c37975:1:UPSERT",
+          "evidence_snippet_truncated": true,
+          "evidence_snippet_chars": 240
+        }
+      ],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6170,
+          "output_tokens": 206,
+          "elapsed_ms": 3106.85
+        }
+      ],
+      "memoryos_post_ms": 24.61
+    },
+    {
+      "trial": 3,
+      "case_id": "hypothetical_travel_questions",
+      "expected_facts_for_human_review": [],
+      "expected_no_fact": true,
+      "session_id": "f2a-29beac99-t3-hypothetical_travel_questions",
+      "source_messages": [
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-hypothetical_travel_questions-m1:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "如果我以后搬去东京住，三月通常冷吗？需要准备什么衣服？工作签证容易申请吗？我需要带哪些证件？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-hypothetical_travel_questions-m2:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_USER_MESSAGE:f2a-29beac99-t3-hypothetical_travel_questions-m3:1:UPSERT",
+          "speaker_role": "USER",
+          "text": "假如我去台北旅行，哪里夜市最值得逛？住在哪个区域方便？要不要租车？一天安排几个景点合适？"
+        },
+        {
+          "source_event_id": "atlas:ATLAS_ASSISTANT_MESSAGE:f2a-29beac99-t3-hypothetical_travel_questions-m4:1:UPSERT",
+          "speaker_role": "ATLAS",
+          "text": "好的，我可以帮你一起梳理。"
+        }
+      ],
+      "source_http_ack": {
+        "accepted": 4,
+        "receipt_count": 4
+      },
+      "model_id": "gemini-3.8-flash",
+      "extraction_ms": 3969.57,
+      "input_tokens": 6179,
+      "output_tokens": 5,
+      "language_status": "ok",
+      "item_rejected": {},
+      "raw_model_output": "{\"observations\": []}",
+      "derived_items": [],
+      "http_post": {
+        "attempted": false,
+        "state": "not_needed_empty_extraction",
+        "accepted": 0,
+        "receipt_count": 0
+      },
+      "stored_records": [],
+      "observer_acknowledged": true,
+      "api_calls": [
+        {
+          "requested_model": "gemini-3.8-flash",
+          "purpose": "memory_observe",
+          "response_model": "gemini-3.8-flash-low",
+          "input_tokens": 6179,
+          "output_tokens": 5,
+          "elapsed_ms": 3965.8
+        }
+      ],
+      "memoryos_post_ms": 2.53
+    }
+  ]
+}

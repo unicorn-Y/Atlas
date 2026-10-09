@@ -12,6 +12,7 @@ if str(HERE) not in sys.path:
 
 import run_longmemeval_f1 as runner
 import gemini_runtime as gemini
+import run_longmemeval_f2 as f2_runner
 
 
 class LongMemEvalRunnerInputTests(unittest.TestCase):
@@ -140,6 +141,18 @@ class LongMemEvalRunnerInputTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "--full-evaluation"):
             runner._validate_run_args(args)
 
+    def test_real_f2_6_and_30_runs_require_a_persistent_cache(self) -> None:
+        for limit in (6, 30):
+            args = runner._make_parser().parse_args([
+                "--limit", str(limit), "--run-real", "--service-port", "12345",
+                "--service-python", sys.executable,
+            ])
+            with self.assertRaisesRegex(ValueError, "observation-cache"):
+                runner._validate_run_args(args)
+
+            args.observation_cache = Path("D:/Temp/F2-B-test-cache")
+            runner._validate_run_args(args)
+
     def test_observer_budget_uses_model_independent_source_upper_bound(self) -> None:
         estimate = runner._observer_budget_estimate([{
             "content_tokens_char_div_3_5": 100,
@@ -147,6 +160,42 @@ class LongMemEvalRunnerInputTests(unittest.TestCase):
         }])
 
         self.assertEqual(33_096, estimate)
+
+    def test_observation_cache_identity_tracks_observer_route_not_answer_model(self) -> None:
+        from unittest.mock import patch
+
+        if str(runner.CORE) not in sys.path:
+            sys.path.insert(0, str(runner.CORE))
+        validation = {"source": {"sha256": "source"}, "subset": {"sha256": "subset"}}
+        raw_config = {"memory": {"v1": {"observer_daily_token_budget": 1000}}}
+        settings = {
+            "memory_model": "gemini-3.8-flash",
+            "custom_models": [{"id": "gemini-3.8-flash", "provider": "custom",
+                               "litellm_model": "gemini-3.8-flash"}],
+            "providers": {"custom": {"base_url": "https://provider.invalid/v1"}},
+            "judge_model": "judge-a",
+        }
+        route = {
+            "model_id": "answer-a", "observer_model_id": "gemini-3.8-flash",
+            "provider_id": "custom", "provider_endpoint_host": "provider.invalid",
+        }
+        with patch.object(runner, "_source_tree_sha256", return_value="code-hash"), \
+                patch.object(runner, "sha256_file", return_value="config-file-hash"):
+            baseline = runner._observation_cache_identity(
+                validation=validation, raw_config=raw_config, settings=settings,
+                model_route=route, service_python=Path(sys.executable), observer_budget=1000,
+            )
+            changed_answer = runner._observation_cache_identity(
+                validation=validation, raw_config=raw_config,
+                settings={**settings, "judge_model": "judge-b"},
+                model_route={**route, "model_id": "answer-b"},
+                service_python=Path(sys.executable), observer_budget=1000,
+            )
+
+        self.assertEqual(baseline, changed_answer)
+        self.assertIn("atlas_model_router_code_sha256", baseline)
+        self.assertEqual("low", baseline["observer_route_variant"]["reasoning_effort"])
+        self.assertEqual(120.0, baseline["observer_route_variant"]["auxiliary_timeout_seconds"])
 
     def test_smoke_is_two_fixed_questions_per_category(self) -> None:
         categories = list(runner.CANONICAL_CATEGORIES)
@@ -172,6 +221,382 @@ class LongMemEvalRunnerInputTests(unittest.TestCase):
             [f"{category}-{i}" for category in categories for i in (1, 2)],
             [row["question_id"] for row in selected],
         )
+
+    def test_f2_smoke_and_reference_selection_take_first_one_or_five_per_category(self) -> None:
+        categories = list(runner.CANONICAL_CATEGORIES)
+        subset_rows = [
+            {"question_id": f"{category}-{i}", "question_type": category,
+             "question": f"question {i}"}
+            for category in categories
+            for i in range(1, 21)
+        ]
+        canonical = {row["question_id"]: row for row in subset_rows}
+
+        smoke = runner.select_questions(subset_rows, canonical, limit=6)
+        reference = runner.select_questions(subset_rows, canonical, limit=30)
+
+        self.assertEqual(
+            [f"{category}-1" for category in categories],
+            [row["question_id"] for row in smoke],
+        )
+        self.assertEqual(
+            [f"{category}-{i}" for category in categories for i in range(1, 6)],
+            [row["question_id"] for row in reference],
+        )
+
+    def test_f2_entrypoint_only_exposes_six_and_thirty_question_modes(self) -> None:
+        parser = f2_runner._make_parser()
+        self.assertEqual(6, parser.parse_args([]).limit)
+        self.assertEqual(30, parser.parse_args(["--limit", "30"]).limit)
+        self.assertEqual(6_000_000, parser.parse_args([]).observer_daily_token_budget)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--limit", "120"])
+
+        filtered = f2_runner._filtered_question_result({
+            "question_id": "q1", "question_type": "single-session-user",
+            "question": "private question", "answer": {"text": "private answer", "model_id": "chat"},
+            "official_judge": {"label": True, "reason": "contains judge details"},
+            "gold_answer": "private gold",
+            "observation_cache": {"hit": True, "fingerprint": "a" * 64, "entry_path": "D:/Temp/cache"},
+        })
+        self.assertEqual("q1", filtered["question_id"])
+        self.assertTrue(filtered["official_judge_label"])
+        self.assertNotIn("question", filtered)
+        self.assertNotIn("answer", filtered)
+        self.assertNotIn("gold_answer", filtered)
+
+    def test_usage_summary_separates_cached_observation_from_current_billing(self) -> None:
+        results = [
+            {
+                "question_id": "cached-q",
+                "observation_cache": {"hit": True},
+                "token_totals": {
+                    "observer_budget_accounted_input_tokens": 80,
+                    "observer_provider_reported_input_tokens": 100,
+                    "observer_provider_reported_output_tokens": 10,
+                    "observer_provider_reported_complete": True,
+                    "answer_provider_reported_input_tokens": 20,
+                    "answer_provider_reported_output_tokens": 5,
+                    "judge_provider_reported_input_tokens": 8,
+                    "judge_provider_reported_output_tokens": 2,
+                },
+                "observer": {"router_calls": [{"purpose": "memory_observe"}]},
+                "answer": {"run_usage": [{"input_tokens": 20}]},
+            },
+            {
+                "question_id": "new-q",
+                "observation_cache": {"hit": False},
+                "token_totals": {
+                    "observer_budget_accounted_input_tokens": 160,
+                    "observer_provider_reported_input_tokens": 200,
+                    "observer_provider_reported_output_tokens": 20,
+                    "observer_provider_reported_complete": True,
+                    "answer_provider_reported_input_tokens": 30,
+                    "answer_provider_reported_output_tokens": 7,
+                    "judge_provider_reported_input_tokens": 9,
+                    "judge_provider_reported_output_tokens": 3,
+                },
+                "observer": {"router_calls": [{"purpose": "memory_observe"}, {"purpose": "memory_observe"}]},
+                "answer": {"run_usage": [{"input_tokens": 30}]},
+            },
+        ]
+
+        usage = runner._summarize_attempt_usage(results)
+
+        self.assertEqual(100, usage["historical_observation_usage"]["observer_provider_reported_input_tokens"])
+        self.assertEqual(200, usage["actual_observer_usage_this_attempt"]["observer_provider_reported_input_tokens"])
+        self.assertEqual(["cached-q"], usage["historical_observation_usage"]["question_ids"])
+        self.assertEqual(["new-q"], usage["actual_observer_usage_this_attempt"]["question_ids"])
+        self.assertEqual(50, usage["actual_answer_judge_usage_this_attempt"]["answer_provider_reported_input_tokens"])
+        self.assertEqual(17, usage["actual_answer_judge_usage_this_attempt"]["judge_provider_reported_input_tokens"])
+        self.assertEqual(267, usage["token_totals"]["provider_reported_input_tokens"])
+        self.assertEqual(37, usage["token_totals"]["provider_reported_output_tokens"])
+
+    def test_cost_summary_separates_cached_observer_cost_from_this_attempt(self) -> None:
+        results = [
+            {
+                "question_id": "cached-q",
+                "observation_cache": {"hit": True},
+                "provider_reported_cost_usd": {"observer": [0.03], "answer": [0.01], "judge": 0.001},
+                "observer": {"router_calls": [{"purpose": "memory_observe"}]},
+                "answer": {"run_usage": [{}]},
+            },
+            {
+                "question_id": "new-q",
+                "observation_cache": {"hit": False},
+                "provider_reported_cost_usd": {"observer": [0.02], "answer": [0.01], "judge": 0.002},
+                "observer": {"router_calls": [{"purpose": "memory_observe"}, {"purpose": "memory_observe"}]},
+                "answer": {"run_usage": [{}]},
+            },
+        ]
+
+        cost = runner._summarize_attempt_cost(results)
+
+        self.assertFalse(cost["provider_reported_cost"]["complete_for_all_calls"])
+        self.assertEqual(6, cost["provider_reported_cost"]["calls_total"])
+        self.assertEqual(5, cost["provider_reported_cost"]["calls_with_known_cost"])
+        self.assertAlmostEqual(0.043, cost["provider_reported_cost"]["known_partial_sum_usd"])
+        self.assertTrue(cost["historical_observation_provider_reported_cost_reused_from_cache"]["complete"])
+        self.assertEqual(1, cost["historical_observation_provider_reported_cost_reused_from_cache"]["calls_total"])
+        self.assertAlmostEqual(
+            0.03,
+            cost["historical_observation_provider_reported_cost_reused_from_cache"]["complete_sum_usd"],
+        )
+
+    def test_f2_report_validates_selected_ids_and_separates_historical_usage(self) -> None:
+        import tempfile
+        from unittest.mock import patch
+
+        categories = list(runner.CANONICAL_CATEGORIES)
+        with tempfile.TemporaryDirectory(prefix="f2-report-test-") as root:
+            run_root = Path(root) / "run"
+            run_root.mkdir()
+            rows = [
+                {
+                    "question_id": f"q-{index}",
+                    "question_type": category,
+                    "official_judge": {"label": index % 2 == 0, "reason": "must not be copied"},
+                    "observation_cache": {"hit": index == 0, "fingerprint": "a" * 64},
+                    "timing": {},
+                    "token_totals": {"observer_provider_reported_input_tokens": 100},
+                    "answer": {"model_id": "chat", "text": "must not be copied"},
+                    "question": "must not be copied",
+                    "gold_answer": "must not be copied",
+                }
+                for index, category in enumerate(categories)
+            ]
+            selected_ids = [row["question_id"] for row in rows]
+            (run_root / "raw_output.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+            )
+            summary = {
+                "status": "COMPLETED", "question_count": 6, "correct": 3,
+                "selected_question_ids": selected_ids,
+                "token_totals": {"provider_reported_input_tokens": 90},
+                "historical_observation_usage": {"observer_provider_reported_input_tokens": 100},
+                "actual_observer_usage_this_attempt": {"observer_provider_reported_input_tokens": 0},
+                "actual_answer_judge_usage_this_attempt": {"answer_provider_reported_input_tokens": 60},
+                "provider_reported_cost": {"known_partial_sum_usd": 0.2, "calls_total": 3},
+                "historical_observation_provider_reported_cost_reused_from_cache": {
+                    "known_partial_sum_usd": 0.1, "calls_total": 1,
+                },
+                "observer_budget_preflight": {
+                    "raw_config_value": 50000,
+                    "explicit_isolated_override": 6000000,
+                    "effective_value": 6000000,
+                },
+                "category_results": {
+                    category: {"total": 1, "correct": int(index % 2 == 0)}
+                    for index, category in enumerate(categories)
+                },
+            }
+            (run_root / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+            report_root = Path(root) / "reports"
+            with patch.object(f2_runner, "EVAL_ROOT", report_root):
+                report_path = f2_runner.write_completion_report(run_root, limit=6)
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+                self.assertEqual(100, report["historical_observation_usage"]["observer_provider_reported_input_tokens"])
+                self.assertEqual(0, report["actual_observer_usage_this_attempt"]["observer_provider_reported_input_tokens"])
+                self.assertEqual(60, report["actual_answer_judge_usage_this_attempt"]["answer_provider_reported_input_tokens"])
+                self.assertEqual(0.2, report["provider_reported_cost"]["known_partial_sum_usd"])
+                self.assertEqual(
+                    0.1,
+                    report["historical_observation_provider_reported_cost_reused_from_cache"]["known_partial_sum_usd"],
+                )
+                self.assertEqual(50000, report["observer_budget_preflight"]["raw_config_value"])
+                self.assertEqual(6000000, report["observer_budget_preflight"]["explicit_isolated_override"])
+                self.assertNotIn("token_totals", report["questions"][0])
+                self.assertIn("original evaluation settings", report["comparison_note"])
+                self.assertNotIn("30-sample reference", report["comparison_note"])
+                self.assertNotIn("question", report["questions"][0])
+                self.assertNotIn("answer", report["questions"][0])
+                self.assertNotIn("gold_answer", report["questions"][0])
+
+                summary["selected_question_ids"] = ["wrong-id"] * 6
+                (run_root / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+                with self.assertRaisesRegex(RuntimeError, "selected question IDs"):
+                    f2_runner.write_completion_report(run_root, limit=6)
+
+    def test_f2_failed_attempt_report_preserves_partial_labels_without_claiming_a_score(self) -> None:
+        import tempfile
+        from unittest.mock import patch
+
+        categories = list(runner.CANONICAL_CATEGORIES)
+        with tempfile.TemporaryDirectory(prefix="f2-failure-report-test-") as root:
+            run_root = Path(root) / "run"
+            run_root.mkdir()
+            selected_ids = [f"q-{index}" for index in range(6)]
+            row = {
+                "question_id": selected_ids[0],
+                "question_type": categories[0],
+                "official_judge": {"label": False},
+                "observation_cache": {"hit": True, "fingerprint": "b" * 64},
+                "timing": {},
+                "token_totals": {"observer_provider_reported_input_tokens": 100},
+                "provider_reported_cost_usd": {"observer": [0.05], "answer": [0.01], "judge": 0.002},
+                "observer": {"router_calls": [{"purpose": "memory_observe"}]},
+                "answer": {"run_usage": [{}]},
+                "question": "private question",
+                "gold_answer": "private gold",
+            }
+            (run_root / "raw_output.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+            (run_root / "summary.json").write_text(json.dumps({
+                "status": "FAILED_QUESTION",
+                "question_count": 0,
+                "selected_question_ids": selected_ids,
+                "completed_question_ids": [selected_ids[0]],
+                "failed_question": {
+                    "question_id": selected_ids[1],
+                    "question_type": categories[1],
+                    "error_type": "TimeoutError",
+                    "error": "safe timeout summary",
+                },
+            }), encoding="utf-8")
+            report_root = Path(root) / "reports"
+            with patch.object(f2_runner, "EVAL_ROOT", report_root):
+                report_path = f2_runner.write_failure_report(run_root, limit=6)
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+
+        self.assertEqual("FAILED_QUESTION", report["status"])
+        self.assertEqual(6, report["target_sample_size"])
+        self.assertEqual(1, report["completed_count"])
+        self.assertEqual([selected_ids[0]], report["completed_question_ids"])
+        self.assertEqual("TimeoutError", report["failure"]["error_type"])
+        self.assertAlmostEqual(
+            0.05,
+            report["historical_observation_provider_reported_cost_reused_from_cache"]["complete_sum_usd"],
+        )
+        self.assertAlmostEqual(0.012, report["provider_reported_cost"]["complete_sum_usd"])
+        self.assertNotIn("accuracy", report)
+        self.assertNotIn("question", report["questions"][0])
+        self.assertNotIn("gold_answer", report["questions"][0])
+
+    def test_observation_cache_fingerprint_and_copy_on_reuse(self) -> None:
+        import importlib
+        import importlib.util
+        import sqlite3
+        from contextlib import closing
+
+        spec = importlib.util.find_spec("longmemeval_observation_cache")
+        self.assertIsNotNone(spec, "F2-B needs a persistent observation cache module")
+        cache = importlib.import_module("longmemeval_observation_cache")
+        row = {
+            "question_id": "fixed-q1", "answer": "gold answer",
+            "haystack_sessions": [[{"role": "user", "content": "source text"}]],
+            "haystack_session_ids": ["session-1"], "haystack_dates": ["2024/01/01"],
+        }
+        identity = {
+            "source_sha256": "source", "subset_sha256": "subset",
+            "observer_model_id": "memory-model", "observer_config_sha256": "config-v1",
+            "observer_code_sha256": "observer-v1",
+        }
+        fingerprint = cache.question_fingerprint(row, identity)
+        self.assertEqual(fingerprint, cache.question_fingerprint({**row, "answer": "other gold"}, identity))
+        self.assertNotEqual(
+            fingerprint,
+            cache.question_fingerprint(row, {**identity, "observer_model_id": "other-memory-model"}),
+        )
+
+        with tempfile.TemporaryDirectory(prefix="f2b-cache-", dir="D:/Temp") as temp:
+            root = Path(temp)
+            source = root / "source"
+            for relative in ("atlas-data/engine.sqlite3", "outbox/unified_outbox.sqlite3",
+                             "memoryos/db/memoryos.sqlite3"):
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with closing(sqlite3.connect(path)) as database:
+                    database.execute("CREATE TABLE marker (value TEXT NOT NULL)")
+                    database.execute("INSERT INTO marker(value) VALUES (?)", (relative,))
+                    database.commit()
+            (source / "hermes-home/config.yaml").parent.mkdir(parents=True, exist_ok=True)
+            (source / "hermes-home/config.yaml").write_text("fallback_model: []\n", encoding="utf-8")
+            (source / "source_dialogue.jsonl").write_text('{"role":"user"}\n', encoding="utf-8")
+            (source / "observer_batches.jsonl").write_text('{"batch_id":"batch-1"}\n', encoding="utf-8")
+            checkpoint = {
+                "phase": "OBSERVATION_COMPLETE", "observe_complete": True,
+                "outbox_drained": True, "semantic_ready": True,
+            }
+            cache_root = root / "cache"
+            cache.save_observation_snapshot(cache_root, "fixed-q1", fingerprint, source, checkpoint)
+            expected_entry = cache.question_cache_entry_path(cache_root, "fixed-q1", fingerprint)
+            restored = root / "restored"
+            restored.mkdir()
+
+            entry = cache.restore_observation_snapshot(
+                cache_root, "fixed-q1", fingerprint, restored,
+            )
+
+            self.assertEqual("OBSERVATION_COMPLETE", entry["checkpoint"]["phase"])
+            self.assertEqual(expected_entry, cache.question_cache_entry_path(cache_root, "fixed-q1", fingerprint))
+            with closing(sqlite3.connect(restored / "outbox/unified_outbox.sqlite3")) as database:
+                self.assertEqual("ok", database.execute("PRAGMA integrity_check").fetchone()[0])
+                self.assertEqual(("outbox/unified_outbox.sqlite3",),
+                                 database.execute("SELECT value FROM marker").fetchone())
+            restored_memoryos = restored / "memoryos/db/memoryos.sqlite3"
+            with closing(sqlite3.connect(restored_memoryos)) as database:
+                database.execute("INSERT INTO marker(value) VALUES ('answer mutation')")
+                database.commit()
+            with closing(sqlite3.connect(cache_root / "questions" / cache.question_cache_key("fixed-q1")
+                                         / fingerprint / "snapshot/memoryos/db/memoryos.sqlite3")) as database:
+                self.assertEqual(("memoryos/db/memoryos.sqlite3",),
+                                 database.execute("SELECT value FROM marker").fetchone())
+
+            mismatch = cache.restore_observation_snapshot(
+                cache_root, "fixed-q1", "0" * 64, root / "miss",
+            )
+            self.assertIsNone(mismatch)
+
+    def test_observation_cache_snapshots_committed_wal_state_without_sidecars(self) -> None:
+        import importlib
+        import sqlite3
+        from contextlib import closing
+
+        cache = importlib.import_module("longmemeval_observation_cache")
+        row = {
+            "question_id": "wal-q1",
+            "haystack_sessions": [[{"role": "user", "content": "source"}]],
+        }
+        fingerprint = cache.question_fingerprint(row, {"observer_model_id": "memory-model"})
+        with tempfile.TemporaryDirectory(prefix="f2b-wal-cache-", dir="D:/Temp") as temp:
+            root = Path(temp)
+            source = root / "source"
+            db_path = source / "memoryos/db/memoryos.sqlite3"
+            db_path.parent.mkdir(parents=True)
+            database = sqlite3.connect(db_path)
+            try:
+                database.execute("PRAGMA journal_mode=WAL")
+                database.execute("CREATE TABLE observations (value TEXT NOT NULL)")
+                database.execute("INSERT INTO observations(value) VALUES ('committed')")
+                database.commit()
+                database.execute("BEGIN")
+                database.execute("INSERT INTO observations(value) VALUES ('uncommitted')")
+
+                for relative in ("outbox/unified_outbox.sqlite3", "atlas-data/engine.sqlite3"):
+                    path = source / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    with closing(sqlite3.connect(path)) as auxiliary:
+                        auxiliary.execute("CREATE TABLE marker (value TEXT)")
+                        auxiliary.commit()
+                (source / "source_dialogue.jsonl").write_text('{"role":"user"}\n', encoding="utf-8")
+                (source / "observer_batches.jsonl").write_text('{"batch_id":"b1"}\n', encoding="utf-8")
+                checkpoint = {
+                    "phase": "OBSERVATION_COMPLETE", "observe_complete": True,
+                    "outbox_drained": True, "semantic_ready": True,
+                }
+                cache_root = root / "cache"
+                cache.save_observation_snapshot(cache_root, "wal-q1", fingerprint, source, checkpoint)
+            finally:
+                database.rollback()
+                database.close()
+
+            snapshot = (cache.question_cache_entry_path(cache_root, "wal-q1", fingerprint)
+                        / "snapshot/memoryos/db/memoryos.sqlite3")
+            self.assertFalse(Path(str(snapshot) + "-wal").exists())
+            self.assertFalse(Path(str(snapshot) + "-shm").exists())
+            with closing(sqlite3.connect(snapshot)) as copied:
+                self.assertEqual("ok", copied.execute("PRAGMA integrity_check").fetchone()[0])
+                self.assertEqual([("committed",)], copied.execute(
+                    "SELECT value FROM observations ORDER BY rowid").fetchall())
 
     def test_dataset_wall_clock_is_normalized_but_retained_as_utc_frame(self) -> None:
         stamp = runner.parse_source_datetime("2023/05/28 (Sun) 19:47")

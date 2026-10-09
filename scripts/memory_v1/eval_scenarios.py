@@ -985,12 +985,9 @@ def build_run_start_message(
     run_id: str,
     conversation_id: str,
     workspace: Path,
-    model_id: str = GEMINI_MODEL_ID,
 ) -> dict[str, Any]:
     if is_control_action_step(step):
         raise ValueError("control action steps must not be sent to the model as chat")
-    if model_id != GEMINI_MODEL_ID:
-        raise ValueError(f"F1-D WS runs are pinned to {GEMINI_MODEL_ID}")
     workspace_path = workspace.resolve()
     write_tools = "workspace_write_tools" in scenario.runtime_capabilities
     return {
@@ -998,7 +995,6 @@ def build_run_start_message(
         "run_id": run_id,
         "content": step.user_input,
         "conversation_id": conversation_id,
-        "model": GEMINI_MODEL_ID,
         "workspace": str(workspace_path),
         "mode": "act",
         "permission_mode": "ask_writes" if write_tools else "read_only",
@@ -1100,6 +1096,10 @@ def _read_capture_source_events(
     if not path.is_file():
         return {"status": "not_created", "events": []}
     events: list[dict[str, Any]] = []
+    observer: dict[str, Any] = {"status": "not_created"}
+    observer_read_error: sqlite3.Error | None = None
+    watermark_rows: list[sqlite3.Row] = []
+    queue_count = pending_batches = pending_sessions = 0
     try:
         with sqlite3.connect(str(path), timeout=5.0) as conn:
             conn.row_factory = sqlite3.Row
@@ -1107,6 +1107,33 @@ def _read_capture_source_events(
                 "SELECT source_event_id,payload_json,content_hash,state,created_at,acked_at,last_error "
                 "FROM outbox_events ORDER BY id"
             ).fetchall()
+            try:
+                if conversation_id is None:
+                    watermark_rows = conn.execute(
+                        "SELECT source_event_id,session_id,status FROM observer_source_watermarks"
+                    ).fetchall()
+                    queue_count = int(conn.execute("SELECT count(*) FROM observer_queue").fetchone()[0])
+                    pending_batches = int(conn.execute(
+                        "SELECT count(*) FROM observer_batches WHERE status='PENDING'"
+                    ).fetchone()[0])
+                    pending_sessions = int(conn.execute("SELECT count(*) FROM observer_sessions").fetchone()[0])
+                else:
+                    watermark_rows = conn.execute(
+                        "SELECT source_event_id,session_id,status FROM observer_source_watermarks WHERE session_id=?",
+                        (str(conversation_id),),
+                    ).fetchall()
+                    queue_count = int(conn.execute(
+                        "SELECT count(*) FROM observer_queue WHERE session_id=?", (str(conversation_id),),
+                    ).fetchone()[0])
+                    pending_batches = int(conn.execute(
+                        "SELECT count(*) FROM observer_batches WHERE session_id=? AND status='PENDING'",
+                        (str(conversation_id),),
+                    ).fetchone()[0])
+                    pending_sessions = int(conn.execute(
+                        "SELECT count(*) FROM observer_sessions WHERE session_id=?", (str(conversation_id),),
+                    ).fetchone()[0])
+            except sqlite3.Error as exc:
+                observer_read_error = exc
         for row in rows:
             try:
                 envelope = json.loads(row["payload_json"])
@@ -1137,9 +1164,110 @@ def _read_capture_source_events(
                 "acked_at": row["acked_at"],
                 "has_error": bool(row["last_error"]),
             })
+        if observer_read_error is not None:
+            observer = {
+                "status": "read_failed", "error_type": type(observer_read_error).__name__,
+            }
+        else:
+            watermarks = {
+                str(row["source_event_id"]): str(row["status"])
+                for row in watermark_rows
+            }
+            expected_source_ids = {event["source_event_id"] for event in events}
+            delivered_source_ids = sorted(
+                source_id for source_id in expected_source_ids
+                if watermarks.get(source_id) == "DELIVERED"
+            )
+            observer = {
+                "status": "ok",
+                "expected_source_count": len(expected_source_ids),
+                "watermark_source_count": len(expected_source_ids & set(watermarks)),
+                "delivered_source_count": len(delivered_source_ids),
+                "undelivered_source_ids": sorted(expected_source_ids - set(delivered_source_ids)),
+                "pending_queue_rows": queue_count,
+                "pending_batches": pending_batches,
+                "active_observer_sessions": pending_sessions,
+            }
     except sqlite3.Error as exc:
-        return {"status": "read_failed", "error_type": type(exc).__name__, "events": []}
-    return {"status": "ok", "events": events}
+        return {
+            "status": "read_failed", "error_type": type(exc).__name__, "events": [],
+            "observer": {"status": "read_failed", "error_type": type(exc).__name__},
+        }
+    return {"status": "ok", "events": events, "observer": observer}
+
+
+async def _wait_for_observer_settlement(
+    atlas_data_root: Path,
+    conversation_id: str,
+    memory: Any,
+    *,
+    timeout_s: float = 1800.0,
+    poll_interval_s: float = 2.0,
+) -> dict[str, Any]:
+    """Wait until this turn's durable capture is ACKed and semantic indexing is ready."""
+    deadline = time.monotonic() + timeout_s
+    outbox: dict[str, Any] = {"status": "not_created", "events": []}
+    semantic: dict[str, Any] = {}
+    last_error: str | None = None
+    while time.monotonic() < deadline:
+        outbox = _read_capture_source_events(atlas_data_root, conversation_id)
+        try:
+            status = memory.request("GET", "/v1/unified/status")
+            if int(status.get("status_code", 0)) == 200 and isinstance(status.get("body"), dict):
+                raw_semantic = status["body"].get("semantic")
+                semantic = raw_semantic if isinstance(raw_semantic, dict) else {}
+                last_error = None
+            else:
+                last_error = f"status_http_{status.get('status_code')}"
+        except Exception as exc:  # noqa: BLE001
+            last_error = type(exc).__name__
+
+        if semantic.get("state") == "ERROR":
+            raise RuntimeError("MemoryOS semantic worker entered ERROR state")
+        events = outbox.get("events") if isinstance(outbox.get("events"), list) else []
+        observer = outbox.get("observer") if isinstance(outbox.get("observer"), dict) else {}
+        all_acked = bool(events) and all(
+            item.get("state") == "ACKED" and not item.get("has_error")
+            for item in events if isinstance(item, dict)
+        ) and all(isinstance(item, dict) for item in events)
+        if (
+            outbox.get("status") == "ok"
+            and all_acked
+            and observer.get("status") == "ok"
+            and observer.get("expected_source_count", 0) > 0
+            and observer.get("watermark_source_count") == observer.get("expected_source_count")
+            and observer.get("delivered_source_count") == observer.get("expected_source_count")
+            and observer.get("pending_queue_rows") == 0
+            and observer.get("pending_batches") == 0
+            and observer.get("active_observer_sessions") == 0
+            and semantic.get("state") == "READY"
+            and int(semantic.get("pending_count", -1)) == 0
+        ):
+            return {
+                "status": "ready",
+                "outbox": {
+                    "status": outbox.get("status"),
+                    "event_count": len(events),
+                    "acked_count": sum(item.get("state") == "ACKED" for item in events),
+                    "source_event_ids": [item.get("source_event_id") for item in events],
+                },
+                "observer": observer,
+                "semantic": semantic,
+            }
+        await asyncio.sleep(max(0.0, poll_interval_s))
+
+    events = outbox.get("events") if isinstance(outbox.get("events"), list) else []
+    acked_count = sum(
+        isinstance(item, dict) and item.get("state") == "ACKED" and not item.get("has_error")
+        for item in events
+    )
+    raise TimeoutError(
+        "Observer capture did not settle before the next scenario turn: "
+        f"outbox_status={outbox.get('status')}, events={len(events)}, acked={acked_count}, "
+        f"semantic_state={semantic.get('state')}, "
+        f"semantic_pending={semantic.get('pending_count')}, observer_status={outbox.get('observer')}, "
+        f"status_error={last_error}"
+    )
 
 
 def _capture_evidence_delta(
@@ -1700,7 +1828,18 @@ async def run_scenario_step(
     before = memory.records()
     result = atlas.chat(message)
     state["last_run"] = result
-    after = memory.records()
+    try:
+        observer_settlement = await _wait_for_observer_settlement(
+            atlas_data_root, conversation_id, memory,
+        )
+        after = memory.records()
+    except Exception as exc:  # noqa: BLE001
+        observer_settlement = {"status": "failed", "error_type": type(exc).__name__}
+        state["execution_errors"].append({
+            "kind": "observer_settlement", "turn_index": step.turn_index,
+            "status": "failed", "error_type": type(exc).__name__,
+        })
+        after = before
     assembled_refs = _extract_assembled_refs(lifecycle.read_log(), conversation_id)
     observer_output = _records_delta(before, after)
     outbox_after = _read_capture_source_events(atlas_data_root, conversation_id)
@@ -1724,6 +1863,7 @@ async def run_scenario_step(
         "usage": result["usage"], "tool_calls": result["tool_calls"],
         "policy_events": result["policy_events"], "assembled_refs": assembled_refs,
         "observer_output": observer_output, "capture_evidence": capture_evidence,
+        "observer_settlement": observer_settlement,
         "events": result["events"],
     }
 
@@ -1759,7 +1899,7 @@ async def run_scenario(
             }
         state["reminder_audit_history"] = []
     records = []
-    for step in scenario.steps:
+    for step_position, step in enumerate(scenario.steps):
         step_record = await run_scenario_step(
             scenario, step, atlas=atlas, memory=memory, lifecycle=lifecycle,
             workspace=workspace, artifact_dir=artifact_dir, subject_id=subject_id,
@@ -1781,6 +1921,25 @@ async def run_scenario(
                     "status": audit.get("status"),
                 })
         records.append(step_record)
+        if (
+            step_record.get("message_transport") == "atlas_ws"
+            and step_record.get("observer_settlement", {}).get("status") != "ready"
+        ):
+            state["execution_errors"].append({
+                "kind": "dependent_turns_blocked", "turn_index": step.turn_index,
+                "status": "observer_not_settled",
+            })
+            records.extend({
+                "turn_index": pending.turn_index,
+                "session_id": pending.session_id,
+                "occurred_at": pending.occurred_at,
+                "occurred_at_used_by_ws": False,
+                "user_input": pending.user_input,
+                "action": pending.action,
+                "execution_status": "blocked_observer_not_settled",
+                "blocking_turn_index": step.turn_index,
+            } for pending in scenario.steps[step_position + 1:])
+            break
     final_records = memory.records()
     final_capture = _read_capture_source_events(lifecycle.runtime_root / "atlas_data")
     final_capture_events = final_capture.get("events", [])
@@ -1823,11 +1982,61 @@ def _plan_scenario(scenario: ScenarioSpec) -> dict[str, Any]:
     }
 
 
+def _scenario_trial_checkpoint_path(output_path: Path, trial_result: dict[str, Any]) -> Path:
+    checkpoint_dir = output_path.parent / f"{output_path.stem}.trials"
+    return checkpoint_dir / (
+        f"trial-{int(trial_result['trial']):02d}-scenario-"
+        f"{int(trial_result['scenario_id']):02d}.json"
+    )
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+        )
+        os.replace(temporary_path, path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _write_scenario_trial_checkpoint(output_path: Path, trial_result: dict[str, Any]) -> Path:
+    checkpoint_path = _scenario_trial_checkpoint_path(output_path, trial_result)
+    if checkpoint_path.is_file():
+        existing = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        if existing.get("execution_status") != "RUNNING":
+            if existing == trial_result:
+                return checkpoint_path
+            raise FileExistsError(f"terminal scenario trial evidence already exists: {checkpoint_path}")
+        if trial_result.get("execution_status") == "RUNNING":
+            raise FileExistsError(f"scenario trial is already marked RUNNING: {checkpoint_path}")
+        trial_result = {**existing, **trial_result}
+    _atomic_write_json(checkpoint_path, trial_result)
+    return checkpoint_path
+
+
+def _write_partial_suite(
+    output_path: Path, metadata: dict[str, Any], results: list[dict[str, Any]],
+) -> Path:
+    partial_path = output_path.with_suffix(".partial.json")
+    finished_runs = sum(item.get("execution_status") != "RUNNING" for item in results)
+    _atomic_write_json(partial_path, {
+        "metadata": metadata,
+        "partial": True,
+        "finished_runs": finished_runs,
+        "total_runs": metadata.get("total_runs"),
+        "scenarios": results,
+    })
+    return partial_path
+
+
 async def run_evaluation_suite(
     scenarios: list[ScenarioSpec], isolated_dir: Path, output_path: Path,
     dry_run: bool = True, model_name: str | None = None, repetitions: int = 1,
     service_python: Path | None = None, atlas_python: Path | None = None,
-    settings_source: Path | None = None,
+    settings_source: Path | None = None, resume: bool = False,
 ) -> Path:
     """Write a plan by default; real mode starts isolated Atlas and MemoryOS services."""
     if repetitions < 1:
@@ -1859,9 +2068,6 @@ async def run_evaluation_suite(
             raise RuntimeError("real F1-D runtime roots must be placed under D:\\Temp")
         if not isolated_dir.name.startswith("F1-D-"):
             raise RuntimeError("real F1-D runtime root name must start with F1-D-")
-        if isolated_dir.exists() and any(isolated_dir.iterdir()):
-            raise FileExistsError(f"real F1-D runtime root is not empty: {isolated_dir}")
-        isolated_dir.mkdir(parents=True, exist_ok=True)
         try:
             from scripts.memory_v1.gemini_runtime import (
                 MODEL_ID, PROVIDER_BASE_URL, read_isolated_model_settings,
@@ -1879,6 +2085,46 @@ async def run_evaluation_suite(
         ))
         safe_settings = read_isolated_model_settings(source)
         endpoint_host = PROVIDER_BASE_URL.split("//", 1)[-1].split("/", 1)[0]
+        checkpoint_dir = output_path.parent / f"{output_path.stem}.trials"
+        manifest_path = checkpoint_dir / "run-manifest.json"
+        partial_path = output_path.with_suffix(".partial.json")
+        run_config = {
+            "scenario_manifest_sha256": scenario_manifest_sha256(),
+            "scenario_ids": [scenario.id for scenario in scenarios],
+            "repetitions": repetitions,
+            "model_id": GEMINI_MODEL_ID,
+            "endpoint_host": endpoint_host,
+            "isolated_dir": str(isolated_dir),
+            "safe_settings_sha256": hashlib.sha256(
+                json.dumps(safe_settings, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            ).hexdigest(),
+        }
+        run_config_sha256 = hashlib.sha256(
+            json.dumps(run_config, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if resume:
+            if not manifest_path.is_file():
+                raise FileNotFoundError(f"scenario resume manifest is missing: {manifest_path}")
+            saved_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if saved_manifest.get("config") != run_config or saved_manifest.get("sha256") != run_config_sha256:
+                raise RuntimeError("scenario resume config differs from the original isolated attempt")
+            if output_path.is_file():
+                final_payload = json.loads(output_path.read_text(encoding="utf-8"))
+                if final_payload.get("metadata", {}).get("run_config_sha256") != run_config_sha256:
+                    raise RuntimeError("existing scenario result does not match the requested resume config")
+                return output_path
+            created_at = str(saved_manifest.get("generated_at") or created_at)
+        else:
+            if checkpoint_dir.exists() or output_path.exists() or partial_path.exists():
+                raise FileExistsError("scenario attempt artifacts already exist; use --resume or a new attempt path")
+            if isolated_dir.exists() and any(isolated_dir.iterdir()):
+                raise FileExistsError(f"real F1-D runtime root is not empty: {isolated_dir}")
+            isolated_dir.mkdir(parents=True, exist_ok=True)
+            checkpoint_dir.mkdir(parents=True, exist_ok=False)
+            _atomic_write_json(manifest_path, {
+                "config": run_config, "sha256": run_config_sha256,
+                "generated_at": created_at,
+            })
         atlas_exe = atlas_python or (CORE_DIR / ".venv" / "Scripts" / "python.exe")
         if service_python is None:
             from scripts.memory_v1.real_memory import DEFAULT_SERVICE_PYTHON

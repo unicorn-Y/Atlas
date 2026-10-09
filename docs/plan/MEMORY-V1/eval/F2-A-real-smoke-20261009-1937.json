@@ -1,0 +1,8 @@
+{
+  "schema": "F2-A-real-observer-smoke-v1",
+  "status": "failed",
+  "run_root": "C:\\Users\\25011\\AppData\\Local\\Temp\\atlas_f2a_1f7d4351",
+  "partial_checkpoint": null,
+  "error_type": "RuntimeError",
+  "error_details": "omitted to avoid recording provider credentials or request data"
+}

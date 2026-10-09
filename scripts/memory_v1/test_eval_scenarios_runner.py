@@ -57,7 +57,7 @@ def test_hard_erase_flag_follows_declared_capability_not_scenario_number(tmp_pat
     assert "MEMORYOS_HARD_ERASE_ENABLED" not in disabled
 
 
-def test_run_start_message_preserves_original_user_input_and_model() -> None:
+def test_run_start_message_preserves_original_input_and_uses_current_product_model() -> None:
     scenario = runner.get_all_scenarios()[2]
     step = scenario.steps[1]
     message = runner.build_run_start_message(
@@ -71,11 +71,144 @@ def test_run_start_message_preserves_original_user_input_and_model() -> None:
     assert message["type"] == "run.start"
     assert message["run_id"] == "run-3-2"
     assert message["content"] == step.user_input
-    assert message["model"] == "gemini-3.8-flash"
+    assert "model" not in message
     assert message["conversation_id"] == "conversation-3-sess2"
     assert Path(message["workspace"]) == Path("D:/Temp/F1-D/workspace").resolve()
     assert message["allowed_paths"] == [str(Path("D:/Temp/F1-D/workspace").resolve())]
     assert step.action_payload["model"] == "gpt-4o"
+
+
+@pytest.mark.asyncio
+async def test_scenario_observation_waits_for_outbox_ack_and_semantic_ready(tmp_path: Path) -> None:
+    outbox = tmp_path / "atlas-data" / "outbox" / "unified_outbox.sqlite3"
+    outbox.parent.mkdir(parents=True)
+    conversation_id = "conversation-settle"
+    payload = json.dumps({
+        "observation": {
+            "source_kind": "ATLAS_USER_MESSAGE", "source_object_id": "msg-settle",
+            "source_revision": "1", "speaker_role": "USER",
+            "epistemic_kind": "USER_ASSERTED", "occurred_at": "2026-10-09T10:00:00+00:00",
+            "source_timezone": "+00:00", "time_status": "KNOWN",
+            "content": {"session_id": conversation_id, "text": "原始提醒请求"},
+        },
+        "context": {"runtime_session_id": conversation_id},
+    })
+    with sqlite3.connect(outbox) as conn:
+        conn.execute(
+            "CREATE TABLE outbox_events (id INTEGER PRIMARY KEY, source_event_id TEXT, "
+            "payload_json TEXT, content_hash TEXT, state TEXT, created_at TEXT, acked_at TEXT, last_error TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE observer_source_watermarks (source_event_id TEXT PRIMARY KEY, "
+            "session_id TEXT, status TEXT, updated_at TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE observer_queue (queue_id INTEGER PRIMARY KEY, session_id TEXT, "
+            "source_event_id TEXT, part_index INTEGER, part_count INTEGER, source_view_json TEXT, created_at TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE observer_batches (batch_id TEXT PRIMARY KEY, session_id TEXT, "
+            "source_event_ids_json TEXT, queue_ids_json TEXT, payload_json TEXT, raw_output TEXT, "
+            "model_id TEXT, input_tokens INTEGER, output_tokens INTEGER, status TEXT, created_at TEXT, acked_at TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE observer_sessions (session_id TEXT PRIMARY KEY, flush_requested INTEGER, "
+            "updated_at TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO outbox_events VALUES (1,?,?,?,?,?,?,?)",
+            ("source-settle", payload, "hash", "PENDING", "now", None, None),
+        )
+        conn.execute("INSERT INTO observer_source_watermarks VALUES (?,?,?,?)",
+                     ("source-settle", conversation_id, "QUEUED", "now"))
+        conn.execute("INSERT INTO observer_queue VALUES (1,?,?,?,?,?,?)",
+                     (conversation_id, "source-settle", 1, 1, "{}", "now"))
+        conn.execute("INSERT INTO observer_batches VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                     ("batch-settle", conversation_id, '["source-settle"]', "[1]", "{}", "", "model", 1, 1,
+                      "PENDING", "now", None))
+        conn.execute("INSERT INTO observer_sessions VALUES (?,?,?)", (conversation_id, 1, "now"))
+
+    class Memory:
+        calls = 0
+
+        def request(self, method: str, path: str) -> dict[str, object]:
+            assert (method, path) == ("GET", "/v1/unified/status")
+            self.calls += 1
+            semantic = {"state": "INDEXING", "pending_count": 1} if self.calls == 1 else {
+                "state": "READY", "pending_count": 0,
+            }
+            if self.calls >= 2:
+                with sqlite3.connect(outbox) as conn:
+                    conn.execute(
+                        "UPDATE outbox_events SET state='ACKED', acked_at='now' WHERE id=1"
+                    )
+                    if self.calls >= 3:
+                        conn.execute("UPDATE observer_source_watermarks SET status='DELIVERED'")
+                        conn.execute("DELETE FROM observer_queue")
+                        conn.execute("DELETE FROM observer_sessions")
+                        conn.execute("UPDATE observer_batches SET status='ACKED', acked_at='now'")
+            return {"status_code": 200, "body": {"semantic": semantic}}
+
+    settled = await runner._wait_for_observer_settlement(
+        tmp_path / "atlas-data", conversation_id, Memory(), timeout_s=1, poll_interval_s=0.001,
+    )
+
+    assert settled["outbox"]["acked_count"] == 1
+    assert settled["observer"]["delivered_source_count"] == 1
+    assert settled["observer"]["pending_batches"] == 0
+    assert settled["semantic"]["state"] == "READY"
+
+
+@pytest.mark.asyncio
+async def test_ack_and_semantic_ready_do_not_hide_pending_observer_batch(tmp_path: Path) -> None:
+    outbox = tmp_path / "atlas-data" / "outbox" / "unified_outbox.sqlite3"
+    outbox.parent.mkdir(parents=True)
+    conversation_id = "conversation-observer-pending"
+    payload = json.dumps({
+        "observation": {
+            "source_kind": "ATLAS_USER_MESSAGE", "source_object_id": "msg-pending",
+            "source_revision": "1", "speaker_role": "USER", "epistemic_kind": "USER_ASSERTED",
+            "occurred_at": "2026-10-09T10:00:00+00:00", "source_timezone": "+00:00",
+            "time_status": "KNOWN", "content": {"session_id": conversation_id, "text": "输入"},
+        },
+        "context": {"runtime_session_id": conversation_id},
+    })
+    with sqlite3.connect(outbox) as conn:
+        conn.executescript(
+            "CREATE TABLE outbox_events (id INTEGER PRIMARY KEY, source_event_id TEXT, "
+            "payload_json TEXT, content_hash TEXT, state TEXT, created_at TEXT, acked_at TEXT, last_error TEXT);"
+            "CREATE TABLE observer_source_watermarks (source_event_id TEXT PRIMARY KEY, "
+            "session_id TEXT, status TEXT, updated_at TEXT);"
+            "CREATE TABLE observer_queue (queue_id INTEGER PRIMARY KEY, session_id TEXT, "
+            "source_event_id TEXT, part_index INTEGER, part_count INTEGER, source_view_json TEXT, created_at TEXT);"
+            "CREATE TABLE observer_batches (batch_id TEXT PRIMARY KEY, session_id TEXT, "
+            "source_event_ids_json TEXT, queue_ids_json TEXT, payload_json TEXT, raw_output TEXT, "
+            "model_id TEXT, input_tokens INTEGER, output_tokens INTEGER, status TEXT, created_at TEXT, acked_at TEXT);"
+            "CREATE TABLE observer_sessions (session_id TEXT PRIMARY KEY, flush_requested INTEGER, updated_at TEXT);"
+        )
+        conn.execute(
+            "INSERT INTO outbox_events VALUES (1,?,?,?,?,?,?,?)",
+            ("source-pending", payload, "hash", "ACKED", "now", "now", None),
+        )
+        conn.execute("INSERT INTO observer_source_watermarks VALUES (?,?,?,?)",
+                     ("source-pending", conversation_id, "QUEUED", "now"))
+        conn.execute("INSERT INTO observer_queue VALUES (1,?,?,?,?,?,?)",
+                     (conversation_id, "source-pending", 1, 1, "{}", "now"))
+        conn.execute("INSERT INTO observer_batches VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                     ("batch-pending", conversation_id, '["source-pending"]', "[1]", "{}", "", "model", 1, 1,
+                      "PENDING", "now", None))
+        conn.execute("INSERT INTO observer_sessions VALUES (?,?,?)", (conversation_id, 1, "now"))
+
+    class ReadyButObserverPending:
+        def request(self, method: str, path: str) -> dict[str, object]:
+            assert (method, path) == ("GET", "/v1/unified/status")
+            return {"status_code": 200, "body": {"semantic": {"state": "READY", "pending_count": 0}}}
+
+    with pytest.raises(TimeoutError, match="observer"):
+        await runner._wait_for_observer_settlement(
+            tmp_path / "atlas-data", conversation_id, ReadyButObserverPending(),
+            timeout_s=0.02, poll_interval_s=0.001,
+        )
 
 
 def test_workspace_tools_follow_declared_capability_instead_of_scenario_number() -> None:
@@ -176,6 +309,34 @@ def test_results_cannot_be_written_outside_temp_even_before_real_start() -> None
     else:
         raise AssertionError("runner must refuse output outside D:\\Temp")
     assert not output_path.exists()
+
+
+def test_scenario_trial_checkpoint_and_partial_journal_are_durable_and_immutable(tmp_path: Path) -> None:
+    output_path = tmp_path / "suite.json"
+    metadata = {"scenario_count": 1, "total_runs": 1, "dry_run": False}
+    failed_result = {
+        "scenario_id": 7, "trial": 1, "execution_status": "setup_failed",
+        "failure_root_cause": {"stage": "setup", "type": "RuntimeError", "message": "isolated service failed"},
+        "records": [],
+    }
+
+    checkpoint_path = runner._write_scenario_trial_checkpoint(output_path, failed_result)
+    partial_path = runner._write_partial_suite(output_path, metadata, [failed_result])
+
+    assert json.loads(checkpoint_path.read_text(encoding="utf-8")) == failed_result
+    partial = json.loads(partial_path.read_text(encoding="utf-8"))
+    assert partial["partial"] is True
+    assert partial["finished_runs"] == 1
+    assert partial["scenarios"][0]["failure_root_cause"]["stage"] == "setup"
+
+    changed_result = {**failed_result, "setup_error": {"type": "DifferentFailure"}}
+    try:
+        runner._write_scenario_trial_checkpoint(output_path, changed_result)
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError("a terminal trial checkpoint must never be overwritten")
+    assert json.loads(checkpoint_path.read_text(encoding="utf-8")) == failed_result
 
 
 def test_isolation_setup_never_copies_the_repository_atlas_config(tmp_path: Path) -> None:

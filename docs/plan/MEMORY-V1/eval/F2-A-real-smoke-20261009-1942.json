@@ -1,0 +1,8 @@
+{
+  "schema": "F2-A-real-observer-smoke-v1",
+  "status": "failed",
+  "run_root": "C:\\Users\\25011\\AppData\\Local\\Temp\\atlas_f2a_20261009_1942",
+  "partial_checkpoint": "D:\\Atlas\\docs\\plan\\MEMORY-V1\\eval\\F2-A-real-smoke-20261009-1942.partial.json",
+  "error_type": "JSONDecodeError",
+  "error_details": "omitted to avoid recording provider credentials or request data"
+}
