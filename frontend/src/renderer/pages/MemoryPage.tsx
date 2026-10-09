@@ -16,6 +16,7 @@ import {
   BookMarked,
   Brain,
   Check,
+  GitCompare,
   History,
   ListTodo,
   LoaderCircle,
@@ -35,6 +36,7 @@ import LearningView from '../components/memory/LearningView';
 import StatusPanel from '../components/memory/StatusPanel';
 import CorrectionDialog from '../components/memory/CorrectionDialog';
 import RecordsView from '../components/memory/RecordsView';
+import MemoryChangesView from '../components/memory/MemoryChangesView';
 import {
   ConfirmButton,
   enumLabel,
@@ -75,6 +77,7 @@ interface Knowledge {
 
 /** 主视图：时间线/它对我的了解/记忆列表/人事/提醒与待办/状态（S5）+ 旧入口 pending/knowledge 兼容保留。 */
 type Tab =
+  | 'changes'
   | 'timeline'
   | 'understanding'
   | 'records'
@@ -354,7 +357,7 @@ export default function MemoryPage({
   onToast: (text: string) => void;
   onPendingChange?: (count: number) => void;
 }) {
-  const [tab, setTab] = useState<Tab>('timeline');
+  const [tab, setTab] = useState<Tab>('changes');
   const [facts, setFacts] = useState<Fact[]>([]);
   const [pending, setPending] = useState<Candidate[]>([]);
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
@@ -535,6 +538,15 @@ export default function MemoryPage({
 
       <div className="filterbar">
         <div className="seg" role="tablist">
+          <button
+            aria-pressed={tab === 'changes'}
+            onClick={() => {
+              setTab('changes');
+              setAdding(false);
+            }}
+          >
+            <GitCompare size={14} />记忆变动
+          </button>
           <button
             aria-pressed={tab === 'timeline'}
             onClick={() => {
@@ -900,6 +912,9 @@ export default function MemoryPage({
       {/* 统一记忆主视图（S5 闭环）：条目点开弹依据；纠错走真实 corrections API；删除走 HARD_ERASE 级闭环。 */}
       {tab !== 'facts' && tab !== 'pending' && tab !== 'knowledge' && (
         <div key={viewKey}>
+          {tab === 'changes' && (
+            <MemoryChangesView apiBaseUrl={apiBaseUrl} connected={connected} />
+          )}
           {tab === 'timeline' && (
             <TimelineView
               apiBaseUrl={apiBaseUrl}

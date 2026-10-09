@@ -36,6 +36,7 @@ from atlas.api.runtime_ws_router import router as runtime_ws_router
 from atlas.api.scheduling_router import router as scheduling_router
 from atlas.api.skills_market_router import router as skills_market_router
 from atlas.api.unified_memory_router import router as unified_memory_router
+from atlas.api.memory_changes_router import router as memory_changes_router
 from atlas.api.workspace_router import router as workspace_router
 from atlas.api.tools_router import router as tools_router
 from atlas.config import get_config
@@ -103,6 +104,8 @@ def create_app(
     # T01.3 UM01 收口：unified-memory 代理路由按配置挂载。默认 disabled →
     # 完全不挂（既有测试与共享 app 守卫的 routes 快照零影响）；测试/部署在
     # atlas.toml 写 [memory.unified] enabled=true 才出现 /api/unified-memory/*。
+    # MemOS 记忆变动记录（新增 / 删除 / 修改 / 淡忘 / 归档）：只读 MemOS 本地库，不依赖 unified 开关。
+    app.include_router(memory_changes_router)
     if get_config().get("memory.unified.enabled"):
         app.include_router(unified_memory_router)
     return app
