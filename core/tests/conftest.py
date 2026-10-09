@@ -1,8 +1,19 @@
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+
+# Tests under ``core/tests`` import the repo-level ``scripts`` namespace package
+# (e.g. ``scripts.unified_memory.cutover``, ``scripts.f2_observer_smoke``), which
+# lives one directory above ``core/``. pytest roots at ``core/`` (its
+# pyproject.toml holds the ini options), so the repo root is not importable and
+# those modules error out at collection. Append — never prepend — the repo root
+# so ``core/tests`` still wins for ``tests.*`` imports.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.append(str(_REPO_ROOT))
 
 # Collection imports application modules before fixtures run. Ordinary test
 # lanes must not resolve settings, MCP clients, credentials, or state in the
