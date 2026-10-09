@@ -14,9 +14,9 @@ tools/** —— 集成收口由后续代理完成，接线点见下）：
       - :class:`LiveVisionChatProvider` —— 活路径：经 ModelManager 解析
         supports_vision 模型，按 LiteLLM chat 多模态消息形状
         （``image_url`` content part，与 agent 循环同形）发视觉请求。
-        **接线点**：``litellm.acompletion(model=manager.current_litellm_model,
-        messages=...)`` —— 与 run_phases.py 的调用同形；等集成收口把 provider
-        挂进导入链路时无需改 bridge 形状。无 vision 模型 / 无网关密钥 →
+        **接线点**：经统一模型网关
+        （``atlas.models.router.ModelRouter.complete_for``）发送 —— 与 agent
+        辅助调用同一条路径（无直连 litellm）。无 vision 模型 / 无网关密钥 →
         ``available()`` False，调用方跳过（活路径**绝不伪造**结果）。
       - :class:`FakeUnderstandingProvider` —— TEST runtime 确定性 provider
         （同字节同输出），测试走完整管线（任务书：无可用本地模型时）。
@@ -137,16 +137,14 @@ class FakeUnderstandingProvider:
 class LiveVisionChatProvider:
     """活路径：视觉 chat 模型（LiteLLM 多模态消息形状）。
 
-    接线点（任务书授权的「封装调用签名」方式）：
+    接线点：
       * 模型解析：``ModelManager.list_models()`` 中 ``capabilities.
-        supports_vision`` 为真的条目（优先当前选中）；``current_litellm_model``
-        给出 LiteLLM 模型名。
-      * 调用形状：``litellm.acompletion(model=..., messages=[{role: "user",
-        content: [{"type": "image_url", "image_url": {"url": "data:<mime>;
-        base64,<b64>"}}, {"type": "text", "text": prompt}]}])`` —— 与 agent
-        循环（run_phases.py）同一 LiteLLM 面。本波不 import run_phases
-        （禁区）；集成收口把本 provider 接进导入链路即可。
-      * 音频 ASR：本仓无本地 ASR、LiteLLM 面也无统一 audio 输入约定 →
+        supports_vision`` 为真的条目（优先当前选中）。
+      * 调用形状：``ModelRouter.complete_for(model_id, "conversation",
+        messages=[{role: "user", content: [{"type": "image_url", "image_url":
+        {"url": "data:<mime>;base64,<b64>"}}, {"type": "text", "text": prompt}]}])``
+        —— 统一模型网关，与 agent 辅助调用同一路径（无直连 litellm）。
+      * 音频 ASR：本仓无本地 ASR、网关也无统一 audio 输入约定 →
         ``available()`` 对音频恒 False（显式不支持，不伪造转写）。
     """
 
@@ -212,7 +210,8 @@ class LiveVisionChatProvider:
         resolved = self.resolve_vision_model()
         if resolved is None:
             raise RuntimeError("no vision-capable model configured")
-        import litellm  # 与 agent 循环同一 LiteLLM 面
+        # 统一模型网关（H2/H4）：与 agent 辅助调用同一路径，无直连 litellm。
+        from atlas.models.router import ModelRouter
 
         b64 = base64.b64encode(data).decode("ascii")
         messages = [{
@@ -223,8 +222,9 @@ class LiveVisionChatProvider:
                 {"type": "text", "text": prompt},
             ],
         }]
-        response = await litellm.acompletion(model=resolved[0], messages=messages)
-        return response.choices[0].message.content
+        result = await ModelRouter(self._manager()).complete_for(
+            resolved[1], "conversation", messages)
+        return result.text
 
 
 # ------------------------------------------------------------------ 观察装配
