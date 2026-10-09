@@ -321,6 +321,35 @@ def capture_enabled(config: Any) -> bool:
     return mode not in {"disabled", "off", "false", "0"}
 
 
+#: 显式采集闸门（None = 交给 PassiveCaptureController 决定）。
+#: 供没有控制器装配的进程（隔离测试/脚本）显式闸停采集。
+_capture_paused_override: bool | None = None
+
+
+def set_capture_paused(paused: bool | None) -> None:
+    """显式设置采集闸门；``None`` 恢复为读 PassiveCaptureController 状态。"""
+    global _capture_paused_override
+    _capture_paused_override = None if paused is None else bool(paused)
+
+
+def capture_paused() -> bool:
+    """采集是否被"暂停采集"闸停（§6.1 / S5 第 4 条）。
+
+    优先取显式闸门；否则读 :class:`PassiveCaptureController`。控制器不可用
+    （capture 未装配、导入失败）时返回 False —— 不闸停，保持既有采集契约。
+    只有显式 ``pause`` 才为 True；初始 STOPPED（含进程重启复位）不闸停。
+    """
+    if _capture_paused_override is not None:
+        return _capture_paused_override
+    try:
+        from atlas.memory.windows_sources import get_passive_capture_controller
+
+        return bool(get_passive_capture_controller().capture_paused)
+    except Exception:  # noqa: BLE001 — 无控制器环境按"未暂停"处理
+        return False
+
+
+
 def _configured_event_class(config: Any) -> str:
     """观察批次 event_class：环境变量 > 配置 > PRODUCTION。
 
@@ -379,6 +408,7 @@ class CaptureService:
         self._event_class = event_class or _configured_event_class(config)
         self._builder = ObservationBuilder(event_class=self._event_class)
         self._seen: set[str] = set()
+        self._paused_skipped = 0
         self._enqueue_lock = threading.Lock()
         self._flush_lock = asyncio.Lock()
         # flush 循环唤醒通道：本服务新入队 → 立即 flush（事件驱动，不做盲目
@@ -446,6 +476,13 @@ class CaptureService:
     def _enqueue(self, observation: dict[str, Any],
                  context_overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         source_event_id = str(observation.get("source_event_id") or "")
+        if capture_paused():
+            # §6.1 / S5 第 4 条：暂停采集期间 capture 与 Observer 都停止。
+            # 不入队、不进 _seen：暂停期内容既不进 outbox（Observer 无从消费），
+            # 恢复后也不补采（内容已过去，不重放）。
+            self._paused_skipped += 1
+            return {"source_event_id": source_event_id, "created": False,
+                    "capture_paused": True}
         with self._enqueue_lock:
             if source_event_id in self._seen:
                 # builder 层 set 去重：同 ID 重入第二次起不再触碰 outbox。
@@ -767,11 +804,13 @@ class CaptureService:
 
     def stats(self) -> dict[str, Any]:
         """outbox 状态（诊断用；队列不是可查询知识库）。"""
+        pause_note = {"capture_paused": capture_paused(),
+                      "paused_skipped": self._paused_skipped}
         if self._outbox is None and not self.outbox_path.exists():
             return {"total": 0, "new": 0, "sending": 0, "acked": 0, "retryable": 0,
                     "blocked": 0, "pending": 0,
-                    "note": "outbox 未创建（尚无采集发生）"}
-        return self._ensure_outbox().stats()
+                    "note": "outbox 未创建（尚无采集发生）", **pause_note}
+        return {**self._ensure_outbox().stats(), **pause_note}
 
     async def flush(self, *, limit: int = 50,
                     backoff_seconds: float | None = None) -> dict[str, Any]:

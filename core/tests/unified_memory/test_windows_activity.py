@@ -14,7 +14,10 @@
       主动开启的被动采集器；普通工具截图仍正常记入工具经历** —— 反向断言
       证明 stop 后 h.tool 截图类工具照常产生 TOOL 观察。
     - 状态机走真实 HTTP（start 幂等/409/pause/stop/start 重入水位不回退）；
-      pause/stop 不影响聊天（h.chat 照常产生 USER 观察）。
+      **pause 闸停对话采集与观察者（§6.1 / S5 第 4 条），stop/初始 STOPPED
+      不影响聊天**（stop 只在重入 RUNNING 后恢复采集）；专门用例
+      test_pause_gate_stops_capture_and_never_backfills 证明暂停期内容既不
+      入记忆、恢复后也不补采。
     - 截图 receipt capture：h.tool 截图类工具 → 服务端出现带 asset_id 的 TOOL
       观察，且 asset_id 可回查 T05.1 媒体元数据。
 
@@ -37,7 +40,9 @@ import base64
 import io
 import json
 import os
+import sqlite3
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -672,6 +677,48 @@ def _wait_for_records(h: UMHarness, predicate: Any, *, timeout: float = 90.0,
     raise AssertionError(f"等待记录超时（{timeout:.0f}s）: {description}；当前 {seen} 条")
 
 
+def _assert_no_records(h: UMHarness, predicate: Any, *, settle: float = 8.0,
+                       description: str = "") -> None:
+    """反向断言：给足 settle 窗口后仍**没有**匹配记录（暂停采集必须为真）。
+
+    先等一个稳定窗口（让任何异步管线把该来的都送来），再连查若干次，
+    避免"还没到"被误判成"不该有"。
+    """
+    time.sleep(settle)
+    for _ in range(3):
+        hits = [item for item in _fetch_records(h) if predicate(item)]
+        assert not hits, f"{description}：不应存在但找到 {len(hits)} 条：{hits[:1]}"
+        time.sleep(1.0)
+
+
+
+def _evidence_rows(h: UMHarness) -> list[tuple[str, str]]:
+    """隔离 MemoryOS 库里的原始证据行（``evidence_events``）。
+
+    "不在任何记忆中"只证明了派生层干净；任务书还要求**证据层**也干净 ——
+    所以直接读隔离库（``runtime_manifest['memoryos_db']``），不经过产品 API。
+    """
+    db_file = Path(h.runtime_manifest["memoryos_db"])
+    assert db_file.exists(), f"隔离 MemoryOS 库不存在: {db_file}"
+    conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+    try:
+        conn.row_factory = sqlite3.Row
+        return [(str(row["source_event_id"]), str(row["payload_json"]))
+                for row in conn.execute(
+                    "SELECT source_event_id, payload_json FROM evidence_events")]
+    finally:
+        conn.close()
+
+
+def _assert_no_evidence(h: UMHarness, marker: str, *,
+                        description: str = "") -> None:
+    """暂停期内容不得留下任何原始证据行。"""
+    rows = _evidence_rows(h)
+    hits = [row for row in rows if marker in row[1]]
+    assert not hits, (
+        f"{description}：证据层不应存在但找到 {len(hits)} 行：{hits[:1]}")
+
+
 def _obs_content(item: dict[str, Any]) -> dict[str, Any]:
     text = item.get("content", {}).get("text")
     return text if isinstance(text, dict) else {}
@@ -786,18 +833,23 @@ def test_capture_lifecycle_over_http(um_x2) -> None:
     assert paused.json()["state"] == CAPTURE_STATE_PAUSED
     assert paused.json()["revision"] == started.json()["revision"] + 1
 
-    # PAUSED 期间：聊天照常（用户原话照常入统一记忆），被动采集器不生产。
+    # PAUSED 期间（§6.1 / S5 第 4 条）：capture 与 Observer 都停止 ——
+    # 聊天照常回答，但**不**产生任何统一记忆观察；被动采集器也不生产。
+    paused_status = _capture_status(h)
+    assert paused_status["capture_paused"] is True
+    paused_since = paused_status["passive_capture_watermark"]
     chat = h.chat("暂停记录当前活动，然后我们正常聊。")
     assert chat["status"] == "completed"
     session_id = chat["conversation_id"]
-    _wait_for_records(
-        h, lambda item: (_obs_content(item).get("session_id") == session_id
-                         and _projection(item).get("source_kind")
-                         == "ATLAS_USER_MESSAGE"),
-        description=f"session {session_id} 的 USER 观察（pause 不影响聊天）")
+    _assert_no_records(
+        h, lambda item: _obs_content(item).get("session_id") == session_id,
+        description=f"session {session_id} 在 PAUSED 期间不应产生观察")
+    # 闸门可观测：入队被跳过并计数。
+    skipped = _capture_status(h)["outbox"].get("paused_skipped", 0)
+    assert skipped >= 1, _capture_status(h)
 
     h.tool("computer_window", {"action": "list"})
-    assert _capture_status(h)["passive_capture_watermark"] == running_watermark
+    assert _capture_status(h)["passive_capture_watermark"] == paused_since
 
     stopped = _capture_call(h, "stop", {"request_id": "life-stop-1"})
     assert stopped.status_code == 200
@@ -819,6 +871,77 @@ def test_capture_lifecycle_over_http(um_x2) -> None:
     assert final["revision"] == stopped.json()["revision"] + 1
     assert final["passive_capture_watermark"] == running_watermark
     assert final["sources"] == sources
+
+
+@pytest.mark.integration
+@pytest.mark.fake_provider
+def test_pause_gate_stops_capture_and_never_backfills(um_x2) -> None:
+    """§6.1 / S5 第 4 条：暂停采集 → capture 与 Observer 都停；恢复后不补采。
+
+    真实 HTTP 状态机：start → pause → （暂停期两条聊天，一条也不进记忆）→
+    start 恢复 → 新聊天照常入记忆。断言暂停期内容在恢复后**仍**不出现
+    （不补采）——这才是"暂停期间说的话不进入记忆"的硬判据。
+    """
+    h = um_x2
+    sources = [{"kind": "screen", "value": "*"}]
+    started = _capture_call(h, "start", {"request_id": "gate-start-1",
+                                         "sources": sources})
+    assert started.status_code == 200, started.text[:300]
+    assert _capture_status(h)["capture_paused"] is False
+
+    paused = _capture_call(h, "pause", {
+        "request_id": "gate-pause-1",
+        "expected_revision": started.json()["revision"]})
+    assert paused.status_code == 200, paused.text[:300]
+    assert _capture_status(h)["capture_paused"] is True
+
+    marker = "暂停期暗号-紫罗兰-7749"
+    paused_sessions: list[str] = []
+    for text in (f"{marker} 第一句。", f"{marker} 第二句。"):
+        reply = h.chat(text)
+        assert reply["status"] == "completed"
+        paused_sessions.append(reply["conversation_id"])
+
+    def _from_paused(item: dict[str, Any]) -> bool:
+        content = _obs_content(item)
+        sid = content.get("session_id")
+        text = json.dumps(item, ensure_ascii=False)
+        return sid in paused_sessions or marker in text
+
+    _assert_no_records(h, _from_paused,
+                       description="暂停期聊天不得进入统一记忆")
+    # 证据层同样干净（原始 evidence_events 里连暗号都不该出现）。
+    # 注意：此刻库里本来可能一行证据都没有（start 之后还没成功采集过），
+    # 所以"查不到"本身不构成证明 —— 敏感性证明放在恢复后（那时必有证据）。
+    _assert_no_evidence(h, marker,
+                        description="暂停期聊天不得留下原始证据")
+
+    resumed = _capture_call(h, "start", {
+        "request_id": "gate-start-2", "sources": sources,
+        "expected_revision": paused.json()["revision"]})
+    assert resumed.status_code == 200, resumed.text[:300]
+    assert _capture_status(h)["capture_paused"] is False
+
+    live = h.chat("恢复采集后的正常一句。")
+    assert live["status"] == "completed"
+    live_session = live["conversation_id"]
+    _wait_for_records(
+        h, lambda item: (_obs_content(item).get("session_id") == live_session
+                         and _projection(item).get("source_kind")
+                         == "ATLAS_USER_MESSAGE"),
+        description=f"恢复后 session {live_session} 的 USER 观察")
+
+    # 恢复后仍不补采：暂停期两条必须始终缺席。
+    _assert_no_records(h, _from_paused, settle=5.0,
+                       description="恢复后仍不得补采暂停期内容")
+    _assert_no_evidence(h, marker,
+                        description="恢复后证据层仍不得出现暂停期内容")
+    # 恢复后的正常聊天**必须**留下证据。这一条同时是**敏感性证明**：
+    # 同一个查询函数对"恢复后"查得到、对"暂停期"查不到，才说明暂停闸门
+    # 真的在挡东西，而不是断言写法失效（查什么都是空）。
+    live_evidence = [row for row in _evidence_rows(h)
+                     if live_session in row[1]]
+    assert live_evidence, "恢复后的正常聊天未产生证据 → 闸门可能把采集整个关死了"
 
 
 @pytest.mark.integration

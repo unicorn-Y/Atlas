@@ -447,4 +447,15 @@ async def capture_status() -> JSONResponse:
                 "范围内真实到达的 x2 工具收据，不假装在录，不可见后台应用不"
                 "声称已记住（T05.3 偏差记录，真实后台采集留后续波）",
     }
+    # §6.1 / S5 第 4 条：暂停采集时 capture 与 Observer 都停。capture_paused
+    # 由 windows_sources 控制器状态派生；paused_skipped 计暂停期被闸掉的入队。
+    from atlas.memory.capture import get_capture_service
+
+    service = get_capture_service()
+    if service is not None:
+        payload["outbox"] = service.stats()
+    else:
+        payload["outbox"] = {"capture_paused": bool(payload.get("capture_paused")),
+                             "paused_skipped": 0,
+                             "note": "采集服务未装配"}
     return JSONResponse(content=payload)

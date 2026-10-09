@@ -1043,7 +1043,15 @@ class PassiveCaptureController:
             return self._remember(request_id, "start", self._response())
 
     def pause(self, request_id: str, *, expected_revision: Any = None) -> dict[str, Any]:
-        """RUNNING → PAUSED。只停被动观察入口；在途观察先排空再报成功。"""
+        """RUNNING → PAUSED。停被动观察入口，并闸住对话采集与观察者。
+
+        §6.1 / S5 第 4 条：暂停采集时 **capture 和 Observer 都停止**。
+        CaptureService 的入队闸门读本控制器状态（``capture_paused``），
+        PAUSED 期间聊天观察不入 outbox，因此也不会被 Observer 消费；
+        恢复（start）后不补采 —— 暂停期内容从未入队，不存在补采。
+
+        在途被动观察先排空再报成功。
+        """
         drained = self._drain_inflight()
         with self._lock:
             replay = self._replay(request_id, "pause")
@@ -1102,6 +1110,17 @@ class PassiveCaptureController:
             payload["in_flight"] = self._in_flight
             payload["gaps"] = list(self._gaps)
             return payload
+
+    @property
+    def capture_paused(self) -> bool:
+        """PAUSED 时对话采集与观察者一并闸停；其余状态不改变既有采集契约。
+
+        只有显式 ``pause`` 才暂停对话采集。初始 ``STOPPED``（含进程重启后的
+        状态复位）**不**闸停 —— 它与"用户从未开启被动采集"等价，既有捕获
+        契约（S1/S2/S5 已验收）在未开启被动采集时照常工作。
+        """
+        with self._lock:
+            return self._state == CAPTURE_STATE_PAUSED
 
     # ---------------------------------------------------- 被动观察记账钩子
 
@@ -1283,6 +1302,7 @@ class PassiveCaptureController:
             "sources": [dict(item) for item in self._sources],
             "config_refs": dict(self._config_refs),
             "notes": list(self._notes),
+            "capture_paused": self._state == CAPTURE_STATE_PAUSED,
         }
 
     # ------------------------------------------------------------ 持久化
