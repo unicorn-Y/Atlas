@@ -13,8 +13,11 @@ npm run build
 ```
 `--ignore-scripts` skips the native builds: copy `node_modules/better-sqlite3/build` and
 `viewer/dist` from an installed copy of the same version (or drop the flag on a machine with build tools).
-Atlas' Hermes engine loads it through the junction `engine/plugins/memory/memtensor` →
-`vendor/memos-local-plugin/adapters/hermes/memos_provider`.
+Hermes loads it as the `memtensor` memory plugin through links to
+`vendor/memos-local-plugin/adapters/hermes/memos_provider` in `../hermes-agent/plugins/memory/`
+(the one Atlas actually loads) and `engine/plugins/memory/`. `core/scripts/setup_hermes.py`
+(run on every launch) creates or repoints both links and hides the checkout's link via
+`.git/info/exclude`.
 
 ## Atlas changes (search for "Atlas fork")
 
