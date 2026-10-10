@@ -1,0 +1,1 @@
+D:\Atlas\data\memos-plugin\dist\bridge.cjs
