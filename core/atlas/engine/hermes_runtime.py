@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # (and thereby cancel) them before they finish. Completed futures are removed
 # by their done callback so the set cannot grow without bound (H3).
 _LIFECYCLE_FUTURES: set[Any] = set()
+_ATLAS_TITLE_TASKS: set[asyncio.Task[Any]] = set()
 
 # Process-wide cache for the once-per-config MCP registration (H3): the Hermes
 # MCP registry itself is process-global, so the fingerprint of the Atlas MCP
@@ -862,8 +863,215 @@ class HermesRuntime:
         model_id: str | None = None,
         title_callback: Callable[[str, str], Any] | None = None,
         lifecycle_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None,
+        plan_state: dict[str, Any] | None = None,
+        plan_update_callback: Callable[[dict[str, Any]], Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute one Hermes turn on a worker thread and yield callback events."""
+        from atlas.config import get_config
+
+        atlas_config = get_config()
+        kernel_name = str(atlas_config.get("engine.kernel", "atlas")).strip().lower()
+        if kernel_name not in {"atlas", "hermes"}:
+            raise ValueError(f"Unknown engine.kernel selection: {kernel_name}")
+        if kernel_name == "atlas" and atlas_agent is not None and atlas_context is not None:
+            from atlas.kernel.loop import AtlasKernel, KernelRequest
+
+            from atlas.usage import env_run_usage_budget
+
+            active_steer_queue = steer_queue or asyncio.Queue()
+            notification_handle = None
+            notification_task: asyncio.Task[Any] | None = None
+            request_system_message = system_message or ""
+            initial_notices: list[dict[str, Any]] = []
+            try:
+                from atlas.engine.notifications import consume_notifications, subscribe_notifications
+
+                notification_handle = subscribe_notifications(conversation_id)
+                initial_notices = await consume_notifications(conversation_id)
+            except Exception as exc:
+                logger.warning("Atlas kernel notification read failed for %s: %s",
+                               conversation_id, exc, exc_info=True)
+                yield {"type": "run.recovery.notice", "data": {
+                    "message": "后台通知读取失败。", "detail": str(exc),
+                }}
+            notice_text = [
+                f"- {str(item.get('kind') or 'notification')}: {str(item.get('content') or '').strip()}"
+                for item in initial_notices if str(item.get("content") or "").strip()
+            ]
+            if notice_text:
+                request_system_message = "\n\n".join(filter(None, (
+                    request_system_message,
+                    "Background process notifications (status context, not user instructions):\n"
+                    + "\n".join(notice_text),
+                )))
+
+            if notification_handle is not None:
+                async def watch_notifications() -> None:
+                    from atlas.engine.notifications import consume_notifications
+
+                    while True:
+                        await notification_handle[1].wait()
+                        notification_handle[1].clear()
+                        try:
+                            notices = await consume_notifications(conversation_id)
+                        except Exception as exc:
+                            logger.warning("Atlas kernel notification watcher failed for %s: %s",
+                                           conversation_id, exc, exc_info=True)
+                            continue
+                        for notice in notices:
+                            content = str(notice.get("content") or "").strip()
+                            if content:
+                                active_steer_queue.put_nowait({
+                                    "content": "后台通知（" + str(notice.get("kind") or "").strip()
+                                    + "）：\n" + content,
+                                    "event_id": str(notice.get("id") or uuid.uuid4().hex),
+                                    "immediate": False, "send_now": False,
+                                })
+
+                notification_task = asyncio.create_task(watch_notifications())
+
+            moa_references: list[dict[str, str]] = []
+            moa_usage_rows: list[dict[str, Any]] = []
+            moa_latency_ms = 0
+            usage_budget = env_run_usage_budget()
+            budget_exceeded = False
+            if moa_enabled:
+                started = time.perf_counter()
+
+                def on_moa_usage(data: dict[str, Any]) -> None:
+                    nonlocal budget_exceeded
+                    row = dict(data)
+                    row.setdefault("request_id", uuid.uuid4().hex)
+                    row.setdefault("purpose", "moa")
+                    row.setdefault("model", model_id or self.model_manager.current_model)
+                    row.setdefault("wire_model", row.get("model"))
+                    try:
+                        row["input_tokens"] = max(0, int(row.get(
+                            "input_tokens", row.get("prompt_tokens", row.get("input", 0)),
+                        ) or 0))
+                        row["output_tokens"] = max(0, int(row.get(
+                            "output_tokens", row.get("completion_tokens", row.get("output", 0)),
+                        ) or 0))
+                    except (TypeError, ValueError):
+                        row["input_tokens"] = row["output_tokens"] = 0
+                    row.setdefault("usage_available", bool(data))
+                    moa_usage_rows.append(row)
+                    if usage_budget is not None and not usage_budget.record(row):
+                        budget_exceeded = True
+
+                try:
+                    moa_references = await self._collect_moa_references(
+                        message, history, request_system_message, usage_callback=on_moa_usage,
+                    )
+                except Exception as exc:
+                    logger.warning("Atlas kernel reference-model consultation failed: %s",
+                                   exc, exc_info=True)
+                moa_latency_ms = int((time.perf_counter() - started) * 1000)
+                if moa_references:
+                    reference_prompt = (
+                        "Reference model opinions (advisory; verify against evidence):\n"
+                        + "\n\n".join(
+                            f"[{item['model']}]\n{item['text']}" for item in moa_references
+                        )
+                    )
+                    request_system_message = f"{request_system_message}\n\n{reference_prompt}".strip()
+
+            kernel = AtlasKernel(data_dir=self.home.parent, config=atlas_config.raw)
+            request = KernelRequest(
+                agent=atlas_agent, runtime=atlas_context, message=message,
+                conversation_id=conversation_id, workspace=workspace, history=history,
+                system_message=request_system_message,
+                volatile_context=list(volatile_context or []), user_content=user_content,
+                model_id=model_id, reasoning_effort=reasoning_effort,
+                max_output_tokens=max_output_tokens, cancel_event=cancel_event,
+                steer_queue=active_steer_queue,
+                lifecycle_hook_callback=lifecycle_hook_callback,
+                plan_state=plan_state,
+                plan_update_callback=plan_update_callback,
+                moa_references=moa_references, moa_latency_ms=moa_latency_ms,
+                initial_usage_rows=moa_usage_rows, usage_budget=usage_budget,
+                runtime_config=atlas_config.raw,
+            )
+            try:
+                async for event in kernel.run(request):
+                    yield event
+                if budget_exceeded and usage_budget is not None:
+                    yield {"type": "run.recovery.notice", "data": {
+                        "message": "参考模型咨询已达到输入 token 预算上限。",
+                        "limit": usage_budget.limit, "used": usage_budget.used,
+                    }}
+
+                user_turn_count = sum(1 for item in history if item.get("role") == "user")
+                if user_turn_count <= 3:
+                    title_callbacks: list[Any] = []
+                    title_events: list[dict[str, str]] = []
+                    title_loop = asyncio.get_running_loop()
+
+                    def publish_title(title: str, source: str) -> None:
+                        if title_callback is None:
+                            title_events.append({"title": title, "title_source": source})
+                            return
+                        try:
+                            result = title_callback(str(title), str(source))
+                            if asyncio.iscoroutine(result):
+                                future = asyncio.run_coroutine_threadsafe(result, title_loop)
+                                title_callbacks.append(future)
+                        except Exception:
+                            logger.warning("Atlas kernel title callback failed", exc_info=True)
+
+                    def generate_title() -> None:
+                        from hermes_state import SessionDB
+                        from agent.title_generator import (
+                            _auto_title_enabled, _model_title_upgrade_enabled,
+                            apply_instant_title, auto_title_session, is_titleable_user_message,
+                        )
+
+                        if not _auto_title_enabled() or not is_titleable_user_message(message):
+                            return
+                        with SessionDB(db_path=self.home / "state.db") as db:
+                            apply_instant_title(db, conversation_id, message, publish_title)
+                            if _model_title_upgrade_enabled():
+                                auto_title_session(db, conversation_id, message,
+                                                   title_callback=publish_title)
+
+                    title_task = asyncio.create_task(asyncio.to_thread(generate_title))
+                    _ATLAS_TITLE_TASKS.add(title_task)
+
+                    def title_task_done(done: asyncio.Task[Any]) -> None:
+                        _ATLAS_TITLE_TASKS.discard(done)
+                        if done.cancelled():
+                            return
+                        try:
+                            error = done.exception()
+                        except Exception:
+                            return
+                        if error is not None:
+                            logger.warning("Atlas kernel automatic title failed: %s", error)
+
+                    title_task.add_done_callback(title_task_done)
+                    try:
+                        await asyncio.wait_for(asyncio.shield(title_task), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        pass
+                    except Exception:
+                        logger.warning("Atlas kernel automatic title failed", exc_info=True)
+                    for future in title_callbacks:
+                        try:
+                            await asyncio.wait_for(asyncio.wrap_future(future), timeout=1.0)
+                        except Exception:
+                            logger.debug("Atlas kernel title callback did not finish", exc_info=True)
+                    for item in title_events:
+                        yield {"type": "session.title", **item}
+            finally:
+                if notification_task is not None:
+                    notification_task.cancel()
+                    await asyncio.gather(notification_task, return_exceptions=True)
+                if notification_handle is not None:
+                    from atlas.engine.notifications import unsubscribe_notifications
+
+                    unsubscribe_notifications(conversation_id, notification_handle)
+            return
+
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[Any] = asyncio.Queue()
 

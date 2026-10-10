@@ -35,6 +35,9 @@ max_references = 3
 engine = "hermes"
 verify_before_stop = true
 
+[engine]
+kernel = "atlas" # atlas | hermes
+
 # API gateway (monkeyapi or direct)
 [models.gateway]
 base_url = "https://api.monkeyapi.net"

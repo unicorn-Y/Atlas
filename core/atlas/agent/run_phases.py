@@ -1166,6 +1166,16 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
         async def lifecycle_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
             return await run_user_hook(callbacks.user_hook_callback, event_name, payload)
 
+        async def update_kernel_plan(value: dict[str, Any]) -> None:
+            plan = TaskPlan.from_dict(value)
+            persist = callbacks.plan_update_callback
+            if persist is None:
+                raise RuntimeError("Plan updates require the existing plan_update_callback")
+            result = persist(plan.to_dict())
+            if inspect.isawaitable(result):
+                await result
+            state.plan = plan
+
         async for event in hermes.run_turn(
             message=state.message,
             user_content=model_input,
@@ -1184,6 +1194,8 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
             moa_enabled=runtime.moa_enabled,
             model_id=runtime.model,
             title_callback=on_session_title,
+            plan_state=state.plan.to_dict() if state.plan is not None else None,
+            plan_update_callback=update_kernel_plan if callbacks.plan_update_callback else None,
             lifecycle_hook_callback=(
                 lifecycle_hook if callbacks.user_hook_callback else None
             ),

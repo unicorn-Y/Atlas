@@ -570,10 +570,14 @@ class DelegationService:
                 summary = str(result.get("result", ""))[:1000] or "子任务已完成。"
                 record.update({"status": status, "progress": summary,
                                "result": result.get("result", "")})
-                return {"backend": "atlas", "session_id": None,
+                return {"backend": "atlas", "session_id": result.get("session_id"),
                         "subtask_id": subtask_id, "status": status,
                         "result": result.get("result", ""),
                         "evidence": result.get("evidence", []),
+                        **{key: result[key] for key in (
+                            "changed_files", "changed_files_complete", "tokens",
+                            "duration_ms", "log_path",
+                        ) if key in result},
                         **({"schema_valid": result["schema_valid"]} if schema else {}),
                         **({"schema_errors": result["schema_errors"]}
                            if schema and not result.get("schema_valid") else {})}

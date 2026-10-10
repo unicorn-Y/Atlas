@@ -101,6 +101,77 @@ def read_session_all_messages(home: str | Path, conversation_id: str) -> list[di
     return [_message_for_atlas(item) for item in payload.get("messages", [])]
 
 
+def read_session_model_messages(home: str | Path, conversation_id: str) -> list[dict[str, Any]]:
+    """Read the canonical active model history with SessionDB row identities intact."""
+    with _open_db(home) as db:
+        rows = db._fetch_conversation_rows(
+            [conversation_id], db._active_clause(False, False), with_session_id=False,
+        )
+        model_history = db._rows_to_conversation(
+            rows, session_id=conversation_id, include_ancestors=False,
+            repair_alternation=False, include_row_ids=True, include_summary_markers=True,
+        )
+    # Older Atlas writes put tool pairing fields in display_metadata. Promote them
+    # before alternation repair so valid tool results are not mistaken for stray rows.
+    for message in model_history:
+        metadata = message.get("display_metadata")
+        if not isinstance(metadata, dict):
+            continue
+        for key in ("tool_calls", "tool_call_id", "tool_name", "finish_reason",
+                    "reasoning", "reasoning_content", "reasoning_details",
+                    "codex_reasoning_items", "codex_message_items", "_compressed_summary"):
+            if key in metadata and key not in message:
+                message[key] = metadata[key]
+    from agent.agent_runtime_helpers import repair_message_sequence
+
+    repair_message_sequence(None, model_history)
+    return model_history
+
+
+def begin_session_compaction(
+    home: str | Path, conversation_id: str, holder: str, *, ttl_seconds: float = 300.0,
+) -> int:
+    """Acquire the canonical SessionDB compaction lease and capture its start watermark."""
+    with _open_db(home) as db:
+        if not db.try_acquire_compression_lock(conversation_id, holder, ttl_seconds):
+            raise RuntimeError("SessionDB compaction is already active for this conversation")
+        return int(db.get_active_message_watermark(conversation_id))
+
+
+def abort_session_compaction(home: str | Path, conversation_id: str, holder: str) -> None:
+    """Release an acquired compaction lease when preparation or publication fails."""
+    with _open_db(home) as db:
+        db.release_compression_lock(conversation_id, holder)
+
+
+def compact_session_messages(
+    home: str | Path, conversation_id: str, holder: str, watermark: int,
+    held_messages: list[dict[str, Any]], compacted_messages: list[dict[str, Any]], *,
+    tail_count: int = 0, carried_messages: list[dict[str, Any]] | None = None,
+) -> int:
+    """Publish model compaction atomically through the existing SessionDB authority."""
+    from agent.conversation_compression_archive import coverage_for_commit
+    from agent.context_compressor import stamp_db_persisted_markers
+
+    with _open_db(home) as db:
+        try:
+            if not db.refresh_compression_lock(conversation_id, holder):
+                raise RuntimeError("SessionDB compaction lease expired before publication")
+            covered_ids, unresolved_held = coverage_for_commit(
+                db, conversation_id, held_messages,
+            )
+            count = db.archive_and_compact(
+                conversation_id, compacted_messages, watermark=watermark,
+                lock_holder=holder, tail_count=tail_count,
+                carried_messages=carried_messages,
+                covered_ids=covered_ids, unresolved_held=unresolved_held,
+            )
+            stamp_db_persisted_markers(compacted_messages)
+            return int(count)
+        finally:
+            db.release_compression_lock(conversation_id, holder)
+
+
 def latest_session_message_id(
     home: str | Path, conversation_id: str, *, role: str | None = None,
 ) -> str | None:
@@ -165,9 +236,17 @@ def append_session_message(
     with _open_db(home) as db:
         if db.get_session(conversation_id) is None:
             db.ensure_session(conversation_id, "api_server")
+        values = dict(metadata or {})
+        formal_fields = (
+            "tool_name", "tool_calls", "tool_call_id", "token_count", "finish_reason",
+            "reasoning", "reasoning_content", "reasoning_details", "codex_reasoning_items",
+            "codex_message_items", "platform_message_id", "observed", "effect_disposition",
+            "_compressed_summary", "timestamp", "api_content", "display_kind",
+        )
+        append_fields = {key: values.pop(key) for key in formal_fields if key in values}
         message_id = db.append_message(
-            conversation_id, role, content=content,
-            display_metadata=metadata or None,
+            conversation_id, role, content=content, display_metadata=values or None,
+            **append_fields,
         )
         messages = db.get_messages(conversation_id, limit=1, latest=True)
         latest = messages[-1] if messages else {}
