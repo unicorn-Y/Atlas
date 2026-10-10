@@ -3,14 +3,14 @@
 - GET  /api/memory/changes   变动记录（新增 / 删除 / 修改 / 淡忘 / 归档 / 评分变化）
 - GET  /api/memory/state     是否暂停、MemOS 面板地址
 - POST /api/memory/pause     {"paused": bool} 暂停后 Atlas 既不召回也不写入记忆（下一轮即生效）
+- GET  /api/memory/facts     「关于你」：当前事实（history=1 含历史版本）
+- GET  /api/memory/library/{kind}  技能 / 策略 / 世界模型列表
 - POST /api/memory/delete    {"entity": "traces", "ids": [...]} 删除对话记录 / 关于你 / 策略 / 世界模型；skills → 归档
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
-import urllib.request
 from urllib.parse import quote
 from typing import Any
 
@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from atlas.config import DATA_ROOT
-from atlas.memory import memos_changes
+from atlas.memory import memos_changes, memos_service
 
 router = APIRouter(prefix="/api/memory", tags=["memory-changes"])
 
@@ -38,6 +38,30 @@ async def get_changes(limit: int = 100, before: int | None = None, entity: str =
 @router.get("/state")
 async def get_state() -> dict[str, Any]:
     return {"paused": PAUSE_FLAG.exists(), "viewer_url": MEMOS_VIEWER}
+
+
+# Lists the 记忆 page shows straight from MemOS (server/routes/{skill,policies}.ts).
+_LIBRARY_PATHS = {"skills": "/api/v1/skills", "policies": "/api/v1/policies",
+                  "world_model": "/api/v1/world-models"}
+
+
+async def _memos_get(path: str) -> Any:
+    try:
+        return await asyncio.to_thread(memos_service.request, "GET", path)
+    except Exception as exc:  # MemOS could not be started / rejected
+        raise HTTPException(502, f"MemOS 没有响应：{exc}") from exc
+
+
+@router.get("/facts")
+async def get_facts(history: bool = False, limit: int = 500) -> Any:
+    return await _memos_get(f"/api/v1/facts?history={1 if history else 0}&limit={limit}")
+
+
+@router.get("/library/{kind}")
+async def get_library(kind: str, limit: int = 100) -> Any:
+    if kind not in _LIBRARY_PATHS:
+        raise HTTPException(404, f"没有这类记忆：{kind}")
+    return await _memos_get(f"{_LIBRARY_PATHS[kind]}?limit={limit}")
 
 
 class PauseBody(BaseModel):
@@ -60,12 +84,7 @@ class DeleteBody(BaseModel):
 
 
 def _memos_post(path: str, payload: dict[str, Any] | None, method: str = "POST") -> Any:
-    data = None if payload is None else json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(MEMOS_VIEWER + path, data=data,
-                                 headers={"Content-Type": "application/json"}, method=method)
-    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310 — fixed loopback URL
-        body = resp.read().decode("utf-8") or "null"
-    return json.loads(body)
+    return memos_service.request(method, path, payload)
 
 
 # MemOS hard-delete routes (server/routes/policies.ts)
