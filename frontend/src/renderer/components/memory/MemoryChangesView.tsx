@@ -30,7 +30,7 @@ interface ChangesPayload {
 }
 
 // 能在这里删除（技能是归档）的记忆类型，对应后端 /api/memory/delete
-const DELETABLE = new Set(['traces', 'policies', 'world_model', 'skills']);
+const DELETABLE = new Set(['user_facts', 'traces', 'policies', 'world_model', 'skills']);
 const OPS: Array<{ value: string; label: string }> = [
   { value: '', label: '全部' },
   { value: 'added', label: '新增' },
@@ -42,6 +42,7 @@ const OPS: Array<{ value: string; label: string }> = [
 ];
 const ENTITIES: Array<{ value: string; label: string }> = [
   { value: '', label: '全部类型' },
+  { value: 'user_facts', label: '关于你' },
   { value: 'traces', label: '对话记录' },
   { value: 'episodes', label: '情节' },
   { value: 'policies', label: '策略' },

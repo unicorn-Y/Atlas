@@ -3,7 +3,7 @@
 - GET  /api/memory/changes   变动记录（新增 / 删除 / 修改 / 淡忘 / 归档 / 评分变化）
 - GET  /api/memory/state     是否暂停、MemOS 面板地址
 - POST /api/memory/pause     {"paused": bool} 暂停后 Atlas 既不召回也不写入记忆（下一轮即生效）
-- POST /api/memory/delete    {"entity": "traces", "ids": [...]} 删除对话记录 / 策略 / 世界模型；skills → 归档
+- POST /api/memory/delete    {"entity": "traces", "ids": [...]} 删除对话记录 / 关于你 / 策略 / 世界模型；skills → 归档
 """
 
 from __future__ import annotations
@@ -69,7 +69,8 @@ def _memos_post(path: str, payload: dict[str, Any] | None, method: str = "POST")
 
 
 # MemOS hard-delete routes (server/routes/policies.ts)
-_DELETE_PATHS = {"policies": "/api/v1/policies", "world_model": "/api/v1/world-models"}
+_DELETE_PATHS = {"policies": "/api/v1/policies", "world_model": "/api/v1/world-models",
+                 "user_facts": "/api/v1/facts"}
 
 
 @router.post("/delete")

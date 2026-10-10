@@ -27,6 +27,7 @@ log = structlog.get_logger()
 
 # 被跟踪的 MemOS 表 → 中文名、标题字段、只算"评分变化"的数值字段。
 ENTITIES: dict[str, dict[str, Any]] = {
+    "user_facts": {"label": "关于你", "title": ("text",), "score": set()},
     "traces": {"label": "对话记录", "title": ("summary", "user_text"),
                "score": {"value", "priority", "alpha", "r_human"}},
     "episodes": {"label": "情节", "title": ("id",), "score": {"r_task"}},
