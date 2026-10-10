@@ -9225,6 +9225,60 @@
       ]
     },
     {
+      "path": "/api/memory/facts",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_facts_api_memory_facts_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "history",
+              "required": false,
+              "schema": {
+                "default": false,
+                "title": "History",
+                "type": "boolean"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 500,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "title": "Response Get Facts Api Memory Facts Get"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/memory/goal-knowledge/evolution/evaluate",
       "operations": [
         {
@@ -10597,6 +10651,59 @@
                     },
                     "title": "Response List Memory Knowledge Verifications Api Memory Knowledge Verifications Get",
                     "type": "array"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/memory/library/{kind}",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_library_api_memory_library__kind__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "kind",
+              "required": true,
+              "schema": {
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 100,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "title": "Response Get Library Api Memory Library  Kind  Get"
                   }
                 }
               },
