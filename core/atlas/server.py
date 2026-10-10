@@ -218,6 +218,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     as one deferred task after ``yield``; per-component state lives on
     ``services.startup`` for /api/health (S4) and S3's bounded MCP gate.
     """
+    from atlas.logs import configure_logging
+
+    configure_logging(get_config())
     services = app.state.services
     manager = services.runtime_mgr
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use

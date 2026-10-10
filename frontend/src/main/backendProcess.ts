@@ -147,18 +147,50 @@ async function startCandidate(
   args: string[],
   cwd: string,
 ): Promise<{ child: ChildProcess; stderr: () => string; outcome: Promise<ProcessOutcome> }> {
-  const child = spawn(command, args, {
-    cwd,
-    env: { ...process.env, ATLAS_SHUTDOWN_TOKEN: shutdownToken },
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const dataRoot = process.env.ATLAS_DATA_DIR
+    ? path.resolve(process.env.ATLAS_DATA_DIR)
+    : process.env.ATLAS_ROOT
+      ? path.resolve(process.env.ATLAS_ROOT)
+      : path.resolve(moduleDir, '../../..');
+  const logDir = path.join(dataRoot, 'data', 'logs');
+  fs.mkdirSync(logDir, { recursive: true });
+  // Share one append-only descriptor for both pipes. Synchronous writes finish
+  // before processing an exit event, so a crash cannot strand buffered traceback.
+  const logFd = fs.openSync(path.join(logDir, 'backend-stdio.log'), 'a');
+  let logClosed = false;
+  const closeLog = () => {
+    if (logClosed) return;
+    logClosed = true;
+    fs.closeSync(logFd);
+  };
+  const appendOutput = (chunk: Buffer | string) => {
+    if (logClosed) return;
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    let offset = 0;
+    while (offset < bytes.length) offset += fs.writeSync(logFd, bytes, offset, bytes.length - offset);
+  };
+  let child: ChildProcess;
+  try {
+    child = spawn(command, args, {
+      cwd,
+      env: { ...process.env, ATLAS_SHUTDOWN_TOKEN: shutdownToken },
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    closeLog();
+    throw error;
+  }
+  // 'close' follows draining stdout/stderr; 'exit' may precede their last chunk.
+  child.once('close', closeLog);
 
   let stderrTail = '';
   child.stdout?.on('data', (chunk: Buffer | string) => {
+    appendOutput(chunk);
     if (process.env.ATLAS_DEBUG_BACKEND === '1') process.stderr.write(chunk);
   });
   child.stderr?.on('data', (chunk: Buffer | string) => {
+    appendOutput(chunk);
     const text = chunk.toString();
     stderrTail = (stderrTail + text).slice(-STDERR_TAIL_LIMIT);
     if (process.env.ATLAS_DEBUG_BACKEND === '1') process.stderr.write(text);

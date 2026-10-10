@@ -209,12 +209,15 @@ async def execute_tools_node(
                         "agent.notification.persist_failed", error=str(exc), exc_info=True,
                     )
 
+    available_tools = agent._model_facing_tools()
+    if getattr(ctx, "kernel_edit", None) is not None:
+        available_tools = [*available_tools, *ctx.kernel_edit.get_tools_for_llm()]
     atlas_options = {
         "model": getattr(ctx, "model", None) or agent._model_mgr.current_model,
         "permission_mode": permission_mode,
         "allowed_paths": allowed_paths,
         "tool_allow": getattr(ctx, "tool_allow", None),
-        "available_tools": [item["function"]["name"] for item in agent._model_facing_tools()],
+        "available_tools": [item["function"]["name"] for item in available_tools],
         "tool_deny": getattr(ctx, "tool_deny", []),
         "cancel_event": ctx.cancel_event,
         "approval_callback": child_approval,
@@ -252,6 +255,16 @@ async def execute_tools_node(
         allowed_tools = getattr(ctx, "tool_allow", None)
         denied_tools = getattr(ctx, "tool_deny", [])
         read_only = getattr(ctx, "read_only", False)
+        edit_tool_names = {"apply_patch", "edit", "write"}
+        policy_tool_name = "local_edit" if fn_name in edit_tool_names else fn_name
+        edit_targets = []
+        if fn_name in edit_tool_names and getattr(ctx, "kernel_edit", None) is not None:
+            try:
+                edit_targets = ctx.kernel_edit.target_paths(fn_name, fn_args)
+            except (KeyError, OSError, ValueError, PermissionError):
+                # The edit manager reports malformed or unauthorized targets through
+                # the normal tool result after the existing policy gate.
+                pass
         from atlas.engine.tool_permissions import tool_allowed
         # 审查链的 delegate_task/review_command/submit_findings 在只读运行里按显式授权放行：
         # 仅当工具名**精确出现**在该运行的 tool_allow 里（目前只有 /review 拦截会这么配），
@@ -260,9 +273,9 @@ async def execute_tools_node(
             read_only
             and fn_name in {"delegate_task", "review_command", "submit_findings"}
             and allowed_tools is not None and fn_name in allowed_tools
-            and tool_allowed(fn_name, allowed_tools, denied_tools)
+            and tool_allowed(policy_tool_name, allowed_tools, denied_tools)
         )
-        denied = (not tool_allowed(fn_name, allowed_tools, denied_tools)
+        denied = (not tool_allowed(policy_tool_name, allowed_tools, denied_tools)
                   or (read_only and not review_tool_explicitly_allowed and fn_name not in {
                       "local_file", "read_office", "coding.repo_map", "coding.ast_grep.run",
                   })
@@ -339,7 +352,7 @@ async def execute_tools_node(
             await ctx.pause_event.wait()
 
         await agent._emit_hook(ctx, "before_tool", name=fn_name, arguments=fn_args)
-        is_write = (fn_name in {"local_edit", "local_shell", "local_exec", "execute_command",
+        is_write = (fn_name in ({"local_edit", "local_shell", "local_exec", "execute_command",
                                 "run_script", "create_document", "create_spreadsheet",
                                 "create_presentation",
                                 # These run project scripts or hand work to sub-agents that can change files.
@@ -349,7 +362,7 @@ async def execute_tools_node(
                                 "subtask_message",
                                 # X2 computer surface (legacy alias names); observe is read-only.
                                 "computer_window", "computer_mouse", "computer_keyboard",
-                                "computer_clipboard"}
+                                "computer_clipboard"} | edit_tool_names)
                     or (fn_name == "local_file" and fn_args.get("action") in {
                         "write", "append", "mkdir", "copy", "move", "delete",
                     })
@@ -445,8 +458,10 @@ async def execute_tools_node(
                     await ctx.event_queue.put(events[-1])
                 continue
         if is_write and permission_mode == "full_access" and _agent.safety_review_enabled():
+            safety_args = ({**fn_args, "path": edit_targets}
+                           if fn_name in edit_tool_names else fn_args)
             assessment = _agent.evaluate_safety_rules(
-                fn_name, fn_args, workspace=workspace, allowed_paths=allowed_paths,
+                policy_tool_name, safety_args, workspace=workspace, allowed_paths=allowed_paths,
                 write_capable_mcp=is_mcp_write,
             )
             dangerous_rules, _floor = assessment.reasons, assessment.floor
@@ -1180,6 +1195,47 @@ async def execute_tools_node(
                 result = await ctx.sandbox_tool_callback(ctx.run_id or "", fn_name, fn_args)
             elif getattr(ctx, "sandbox_enabled", False) and fn_name == "local_process":
                 raise PermissionError("Docker 沙箱模式下不支持后台本机进程工具。")
+            elif fn_name in edit_tool_names and getattr(ctx, "kernel_edit", None) is not None:
+                final_targets = ctx.kernel_edit.target_paths(fn_name, fn_args)
+                if final_targets != edit_targets:
+                    assessment = _agent.evaluate_safety_rules(
+                        policy_tool_name, {**fn_args, "path": final_targets},
+                        workspace=workspace, allowed_paths=allowed_paths,
+                        write_capable_mcp=is_mcp_write,
+                    )
+                    if assessment.floor:
+                        raise PermissionError(
+                            f"触及不可恢复的安全底线：{assessment.floor}"
+                        )
+                    if permission_mode == "ask_writes":
+                        if not ctx.approval_callback or await ctx.approval_callback(
+                            f"approval:edit-target:{tc_id}", fn_name, fn_args,
+                        ) != "allow":
+                            raise PermissionError("编辑目标在审批后发生变化，最终目标未获批准")
+                    if assessment.reasons:
+                        if not ctx.approval_callback or await ctx.approval_callback(
+                            f"safety:edit-target:{tc_id}", fn_name,
+                            {**fn_args, "_reviewer_reason": "; ".join(assessment.reasons)},
+                        ) != "allow":
+                            raise PermissionError("编辑目标变更后的安全审查未获批准")
+                edit_targets = final_targets
+                for target in edit_targets:
+                    try:
+                        checkpoint = agent._checkpoint_path(
+                            target, workspace, ctx.run_id, ctx.conversation_id,
+                        )
+                        await ctx.event_queue.put({
+                            "type": "checkpoint_created", "checkpoint": checkpoint,
+                            "tool": fn_name,
+                        })
+                    except Exception as exc:
+                        log.warning("agent.checkpoint_failed", tool=fn_name,
+                                    error=str(exc), exc_info=True)
+                        await ctx.event_queue.put({
+                            "type": "checkpoint_error", "tool": fn_name,
+                            "detail": str(exc),
+                        })
+                result = await ctx.kernel_edit.execute(fn_name, fn_args)
             elif fn_name.startswith("local_") and agent._local_execution:
                 if ctx.mode == "plan":
                     action = str(fn_args.get("action", ""))
@@ -1230,6 +1286,10 @@ async def execute_tools_node(
                 if (ssh_tool_callback and (workspace or "").startswith("ssh://")
                         and fn_name in {"local_file", "local_edit", "local_git", "local_shell", "local_exec"}):
                     result = await ssh_tool_callback(fn_name, fn_args)
+                elif getattr(ctx, "exec_manager", None) is not None and fn_name in {
+                    "local_shell", "local_exec", "local_process",
+                }:
+                    result = await ctx.exec_manager.execute(fn_name, fn_args)
                 else:
                     result = await agent._local_execution.call_tool(
                         fn_name, fn_args, run_id=ctx.run_id,
@@ -1291,6 +1351,19 @@ async def execute_tools_node(
                 "is_error": True,
             }
 
+        if (fn_name == "local_file" and fn_args.get("action") == "read"
+                and not fn_args.get("binary") and not result.get("is_error")
+                and isinstance(result.get("data"), dict)
+                and isinstance(result["data"].get("content"), str)
+                and getattr(ctx, "kernel_edit", None) is not None):
+            try:
+                ctx.kernel_edit.note_read(
+                    result["data"].get("path") or fn_args.get("path"),
+                    result["data"]["content"], encoding=fn_args.get("encoding"),
+                )
+            except (OSError, UnicodeError, ValueError, PermissionError) as exc:
+                log.info("agent.kernel_edit_read_snapshot_skipped", error=str(exc))
+
         if ((workspace or "").startswith("ssh://")
                 and (fn_name == "local_process" or fn_name.startswith("computer_"))):
             result.setdefault("content", []).append({"type": "text", "text": "在本机执行"})
@@ -1324,6 +1397,12 @@ async def execute_tools_node(
             elif requires_verification(path_value):
                 ctx.changed_paths.add(path_value)
                 ctx.verification_passed = False
+        elif fn_name in edit_tool_names and not result.get("is_error"):
+            data = result.get("data") if isinstance(result.get("data"), dict) else {}
+            for path_value in data.get("changed_paths", []):
+                if isinstance(path_value, str) and requires_verification(path_value):
+                    ctx.changed_paths.add(path_value)
+                    ctx.verification_passed = False
         elif fn_name in {"local_shell", "local_exec"}:
             command_text = " ".join(str(fn_args.get(key, "")) for key in ("command", "script"))
             for match in re.finditer(r"(?:^|\s)([\w./\\-]+\.(?:py|ts|tsx|js|jsx|rs|go|java|cs|cpp|c|h))\b", command_text):

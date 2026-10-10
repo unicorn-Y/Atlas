@@ -358,8 +358,12 @@ class AgentOrchestrator:
         self._delegation = (
             DelegationService(agent_backend_host, self.hooks) if agent_backend_host else None
         )
+        self._subagent_manager = None
         if self._delegation is not None:
-            self._delegation.atlas_runner = self._run_atlas_subtask
+            from atlas.kernel.subagents import SubagentManager
+
+            self._subagent_manager = SubagentManager(self._run_atlas_subtask)
+            self._delegation.atlas_runner = self._subagent_manager.run
         self._codeact = CodeActRuntime(
             AtlasToolBridge(local_execution, computer_use, mcp_client, self.checkpoints)
         )
