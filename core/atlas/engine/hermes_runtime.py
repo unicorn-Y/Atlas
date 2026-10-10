@@ -105,6 +105,54 @@ def _wire_model_from_config(model: dict[str, Any], fallback: str = "") -> str:
     return str(_model_for_provider(model or {}, native=True) or fallback)
 
 
+def _adapt_hermes_anthropic_output_config(auxiliary_client: Any) -> None:
+    """Route Hermes' Anthropic structured-output field through older SDKs' extra_body.
+
+    The Atlas lock currently installs anthropic 0.76.0, whose Messages.stream signature
+    does not expose ``output_config`` even though it supports arbitrary API fields through
+    ``extra_body``. Hermes' auxiliary Anthropic adapter emits ``output_config`` directly,
+    so its optional title upgrade otherwise fails before reaching the provider.
+    """
+    try:
+        import anthropic
+        import inspect
+        from anthropic.resources.messages import Messages
+
+        stream_parameters = inspect.signature(Messages.stream).parameters
+    except Exception:
+        logger.warning(
+            "Atlas could not inspect the Anthropic SDK for title compatibility",
+            exc_info=True,
+        )
+        return
+
+    if "output_config" in stream_parameters:
+        return
+
+    translate = getattr(auxiliary_client, "_translate_anthropic_response_format", None)
+    if not callable(translate) or getattr(translate, "_atlas_output_config_compat", False):
+        return
+
+    def translate_with_extra_body(anthropic_kwargs: dict[str, Any], response_format: Any) -> None:
+        translate(anthropic_kwargs, response_format)
+        output_config = anthropic_kwargs.pop("output_config", None)
+        if output_config is None:
+            return
+        extra_body = anthropic_kwargs.get("extra_body")
+        if extra_body is None:
+            extra_body = {}
+        elif not isinstance(extra_body, dict):
+            raise TypeError("Atlas cannot adapt Anthropic output_config into a non-dict extra_body")
+        anthropic_kwargs["extra_body"] = {**extra_body, "output_config": output_config}
+
+    translate_with_extra_body._atlas_output_config_compat = True  # type: ignore[attr-defined]
+    auxiliary_client._translate_anthropic_response_format = translate_with_extra_body
+    logger.info(
+        "Atlas adapted Hermes Anthropic structured output for SDK %s via extra_body",
+        getattr(anthropic, "__version__", "unknown"),
+    )
+
+
 def _model_family_guidance(model: str) -> str:
     name = str(model or "").lower()
     families = (
@@ -1031,6 +1079,9 @@ class HermesRuntime:
                         with SessionDB(db_path=self.home / "state.db") as db:
                             apply_instant_title(db, conversation_id, message, publish_title)
                             if _model_title_upgrade_enabled():
+                                import agent.auxiliary_client as auxiliary_client
+
+                                _adapt_hermes_anthropic_output_config(auxiliary_client)
                                 auto_title_session(db, conversation_id, message,
                                                    title_callback=publish_title)
 

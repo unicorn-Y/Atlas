@@ -2325,6 +2325,38 @@ async def _execute_run(
             })
             return
 
+        if workspace and not workspace.startswith("ssh://"):
+            try:
+                from atlas.config import DATA_ROOT
+                from atlas.engine.session_sync import read_session_all_messages
+                from atlas.rewind import checkpoint_before_turn
+
+                prior_messages = await asyncio.to_thread(
+                    read_session_all_messages, DATA_ROOT / "engine", run.conversation_id,
+                )
+                tail_id = prior_messages[-1].get("id") if prior_messages else None
+                after_message_id = tail_id if isinstance(tail_id, str) and tail_id else None
+                checkpoint_id = await asyncio.to_thread(
+                    checkpoint_before_turn,
+                    run.conversation_id,
+                    run.run_id,
+                    workspace,
+                    after_message_id=after_message_id,
+                )
+                log.info(
+                    "rewind.checkpoint_created",
+                    conversation_id=run.conversation_id,
+                    run_id=run.run_id,
+                    checkpoint_id=checkpoint_id,
+                )
+            except Exception:
+                log.exception(
+                    "rewind.checkpoint_before_turn_failed",
+                    conversation_id=run.conversation_id,
+                    run_id=run.run_id,
+                    workspace=workspace,
+                )
+
         if run.executor != "atlas":
             if await check_pause_cancel():
                 run.status = "cancelled"

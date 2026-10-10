@@ -291,6 +291,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
     """Expose Atlas tool schemas and bind sync Hermes handlers to this async Atlas run."""
     from tools.registry import registry
     from toolsets import TOOLSETS
+    from atlas.repomap import REPOMAP_TOOL_SPEC
 
     if registry.get_entry("new_context_window") is None:
         registry.register(
@@ -303,7 +304,27 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
             handler=lambda _args, **_kwargs: "Context handoff is only available during an Atlas run.",
             is_async=False, override=True,
         )
-    schemas = agent._model_facing_tools()
+    repo_map_name = str(REPOMAP_TOOL_SPEC["name"])
+    repo_map_parameters = dict(REPOMAP_TOOL_SPEC["input_schema"])
+    repo_map_parameters["properties"] = {
+        key: value
+        for key, value in dict(repo_map_parameters.get("properties", {})).items()
+        if key != "root"
+    }
+    repo_map_parameters["required"] = [
+        key for key in repo_map_parameters.get("required", []) if key != "root"
+    ]
+    schemas = [
+        *agent._model_facing_tools(),
+        {"type": "function", "function": {
+            "name": repo_map_name,
+            "description": (
+                str(REPOMAP_TOOL_SPEC.get("description", ""))
+                + " The repository root is inferred from the active Atlas workspace."
+            ),
+            "parameters": repo_map_parameters,
+        }},
+    ]
     names: list[str] = []
     plan_mode = getattr(runtime, "mode", "act") == "plan"
     atlas_toolset = "atlas-plan" if plan_mode else "atlas"
@@ -315,7 +336,10 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
         if str(item.get("function", {}).get("name", ""))
     }
     scope = registry.current_scope_key()
-    plan_tools = {"read_file", "search_files", "terminal", "web_fetch", "web_search", "web_extract"}
+    plan_tools = {
+        "read_file", "search_files", "terminal", "web_fetch", "web_search", "web_extract",
+        repo_map_name,
+    }
     with _lock:
         # Atlas copies MCP schemas into its own toolset so every call passes through
         # Atlas approval/checkpoint policy. Remove copies whose source server vanished.
@@ -409,6 +433,40 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                             "data": {"summary": str(summary)},
                         }), bound_loop).result()
                     return "已整理交接摘要，正在切换到新上下文。"
+                if _name == repo_map_name:
+                    workspace = str(getattr(bound_runtime, "workspace", "") or "")
+                    call_id = f"atlas:{uuid.uuid4().hex}"
+                    event_queue = getattr(bound_runtime, "event_queue", None)
+                    if event_queue is not None:
+                        asyncio.run_coroutine_threadsafe(event_queue.put({
+                            "type": "tool_call", "id": call_id, "name": _name,
+                            "arguments": args,
+                        }), bound_loop).result()
+                    if not workspace:
+                        result, is_error = "当前运行没有可用的工作区。", True
+                    elif workspace.startswith("ssh://"):
+                        result, is_error = "仓库地图目前需要本地工作区路径。", True
+                    else:
+                        from atlas.repomap import build_repo_map
+
+                        try:
+                            result = build_repo_map(
+                                root=workspace,
+                                focus_files=args.get("focus_files", []),
+                                mentioned=args.get("mentioned", []),
+                                max_tokens=args.get("max_tokens", 2048),
+                            )
+                            is_error = False
+                        except Exception as exc:
+                            result, is_error = f"{type(exc).__name__}: {exc}", True
+                    result = str(result)
+                    if event_queue is not None:
+                        asyncio.run_coroutine_threadsafe(event_queue.put({
+                            "type": "tool_result", "id": call_id, "name": _name,
+                            "content": [{"type": "text", "text": result}],
+                            "data": None, "is_error": is_error,
+                        }), bound_loop).result()
+                    return _append_repetition_reminder(bound_runtime, _name, args, result)
                 if _name in NATIVE_FILE_TOOLS and not str(bound_runtime.workspace or "").startswith("ssh://"):
                     # Keep Hermes' complete file implementation: paging, ripgrep,
                     # stale-write guards, fuzzy/V4A patching and document readers.

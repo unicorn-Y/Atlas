@@ -375,9 +375,7 @@ async def _snapshot_rewind_files(
     run_ids: list[str], roots: list[str], since: datetime | None = None,
     time_filtered: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-    """Checkpoints to restore. Runs named by message metadata are taken whole; runs in
-    ``time_filtered`` (found only via the conversation) contribute checkpoints taken
-    at/after ``since``."""
+    """Legacy fallback snapshots for runs without an Atlas rewind point."""
     snapshots: dict[tuple[str, str], dict[str, Any]] = {}
     checkpoints: list[tuple[str, str, str, str]] = []
     orchestrator = _server().orchestrator
@@ -401,9 +399,10 @@ async def _snapshot_rewind_files(
                         continue
                     exists = target.is_file()
                     data = await asyncio.to_thread(target.read_bytes) if exists else b""
-                    snapshots[key] = {"root": root, "path": str(entry["path"]),
-                                      "exists": exists,
-                                      "data": base64.b64encode(data).decode("ascii")}
+                    snapshots[key] = {
+                        "root": root, "path": str(entry["path"]), "exists": exists,
+                        "data": base64.b64encode(data).decode("ascii"),
+                    }
         for root in roots:
             if not root.startswith("ssh://"):
                 continue
@@ -458,6 +457,54 @@ async def _restore_rewind_files(
                 await asyncio.to_thread(target.unlink)
 
 
+def _snapshot_point_files(workspace: str, files: list[str]) -> list[dict[str, Any]]:
+    """Capture current bytes for the legacy redo record before a point rewind."""
+    base = Path(workspace).resolve()
+    snapshots: list[dict[str, Any]] = []
+    for relative in files:
+        target = (base / relative).resolve()
+        if target != base and base not in target.parents:
+            raise ValueError("回退文件超出了工作目录。")
+        exists = target.is_file()
+        data = target.read_bytes() if exists else b""
+        snapshots.append({
+            "root": str(base), "path": relative, "exists": exists,
+            "data": base64.b64encode(data).decode("ascii"),
+        })
+    return snapshots
+
+
+def _truncate_checkpoint_boundary(
+    conversation_id: str, after_message_id: str | None,
+) -> tuple[dict[str, Any], int]:
+    """Apply a checkpoint's post-boundary cut using the existing SessionDB adapter."""
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import (
+        atlas_turn_ordinal, read_session_all_messages, rewind_user_turn,
+    )
+
+    home = DATA_ROOT / "engine"
+    messages = read_session_all_messages(home, conversation_id)
+    if after_message_id is None:
+        user_ordinal = 0
+        removed_messages = len(messages)
+    else:
+        boundary = next((
+            index for index, item in enumerate(messages)
+            if str(item.get("id")) == after_message_id
+        ), None)
+        user_ordinal = atlas_turn_ordinal(
+            messages, after_message_id, through_target=True,
+        )
+        if boundary is None or user_ordinal is None:
+            raise ValueError("找不到检查点对应的对话边界。")
+        removed_messages = len(messages) - boundary - 1
+    snapshot = rewind_user_turn(home, conversation_id, user_ordinal)
+    if snapshot is None:
+        raise ValueError("找不到要回退的对话。")
+    return snapshot, removed_messages
+
+
 async def _restore_run_checkpoints(
     checkpoints: list[dict[str, str]],
 ) -> tuple[list[str], list[dict[str, str]]]:
@@ -477,37 +524,27 @@ async def _restore_run_checkpoints(
     return restored, skipped
 
 
-@router.post("/api/conversations/{conversation_id}/rewind")
-async def rewind_conversation(
-    services: Annotated[AppServices, Depends(get_app_services)],
-    conversation_id: str, req: dict[str, Any],
+async def _legacy_rewind_conversation(
+    memory: Any, conversation_id: str, message_id: str, files_requested: bool,
 ) -> dict[str, Any]:
-    memory = services.memory
-    if memory is None:
-        from atlas import server as _atlas_server
-
-        memory = _atlas_server.memory
-    assert memory is not None
-    if _conversation_has_active_run(conversation_id):
-        raise HTTPException(status_code=409, detail="这段对话仍在运行，请等它结束后再回退。")
-    message_id = req.get("message_id")
-    if not isinstance(message_id, str) or not message_id:
-        raise HTTPException(status_code=400, detail="请选择要回退到的消息。")
-    if not isinstance(req.get("files"), bool):
-        raise HTTPException(status_code=400, detail="请指定是否同时恢复文件。")
+    """Keep the pre-v2 rewind behavior for history without Atlas points and SSH roots."""
     from atlas.config import DATA_ROOT
-    from atlas.engine.session_sync import read_session_all_messages
+    from atlas.engine.session_sync import (
+        atlas_turn_ordinal, read_session_all_messages, restore_session, rewind_user_turn,
+    )
 
-    messages = await asyncio.to_thread(read_session_all_messages, DATA_ROOT / "engine", conversation_id)
-    boundary = next((index for index, item in enumerate(messages) if item["id"] == message_id), None)
+    messages = await asyncio.to_thread(
+        read_session_all_messages, DATA_ROOT / "engine", conversation_id,
+    )
+    boundary = next((
+        index for index, item in enumerate(messages)
+        if str(item.get("id")) == message_id
+    ), None)
     if boundary is None:
         raise HTTPException(status_code=404, detail="找不到这段对话或指定消息。")
     removed = messages[boundary:]
-    run_ids = []
+    run_ids: list[str] = []
     for item in removed:
-        # H2 regression fix: SessionDB reads return ``metadata`` as a dict (the
-        # legacy Atlas mirror stored a JSON string); decode only what is a
-        # string so checkpoint file restore sees the run ids again.
         metadata = item.get("metadata")
         if isinstance(metadata, str):
             with suppress(TypeError, ValueError):
@@ -517,10 +554,6 @@ async def rewind_conversation(
         run_id = metadata.get("run_id")
         if run_id and run_id not in run_ids:
             run_ids.append(str(run_id))
-    # SessionDB transcripts written by the engine carry no Atlas run id, so the
-    # message metadata above finds nothing for real turns. The runtime keeps every
-    # run of this conversation; their checkpoints taken at/after the rewind point
-    # are exactly the file changes being undone.
     discovered: set[str] = set()
     for run in _server().runtime_mgr.runs.values():
         if run.conversation_id == conversation_id and run.run_id not in run_ids:
@@ -528,21 +561,26 @@ async def rewind_conversation(
             discovered.add(str(run.run_id))
     since: datetime | None = None
     with suppress(ValueError, TypeError):
-        since = datetime.fromisoformat(str(messages[boundary].get("created_at")).replace("Z", "+00:00"))
+        since = datetime.fromisoformat(
+            str(messages[boundary].get("created_at")).replace("Z", "+00:00")
+        )
         if since.tzinfo is None:
             since = since.replace(tzinfo=UTC)
     conversation = await memory.get_conversation(conversation_id) or {}
     roots = [*([conversation["workspace"]] if conversation.get("workspace") else []),
              *conversation.get("extra_roots", [])]
     file_snapshot, checkpoints = ([], [])
-    if req["files"]:
-        file_snapshot, checkpoints = await _snapshot_rewind_files(run_ids, roots, since, discovered)
+    if files_requested:
+        file_snapshot, checkpoints = await _snapshot_rewind_files(
+            run_ids, roots, since, discovered,
+        )
     rewind_id = uuid.uuid4().hex
-    snapshot = {"messages": messages, "files": file_snapshot,
-                "checkpoints": checkpoints, "files_requested": req["files"]}
-    from atlas.config import DATA_ROOT
-    from atlas.engine.session_sync import atlas_turn_ordinal, restore_session, rewind_user_turn
-
+    snapshot = {
+        "messages": messages,
+        "files": file_snapshot,
+        "checkpoints": checkpoints,
+        "files_requested": files_requested,
+    }
     user_ordinal = atlas_turn_ordinal(messages, message_id, through_target=False)
     hermes_snapshot = await asyncio.to_thread(
         rewind_user_turn, DATA_ROOT / "engine", conversation_id, user_ordinal,
@@ -556,21 +594,159 @@ async def rewind_conversation(
     restored_files: list[str] = []
     skipped: list[dict[str, str]] = []
     try:
-        if req["files"]:
+        if files_requested:
             restored_files, skipped = await _restore_run_checkpoints(checkpoints)
     except HTTPException:
         raise
     except Exception:
         if hermes_snapshot:
             await asyncio.to_thread(restore_session, DATA_ROOT / "engine", hermes_snapshot)
-        if req["files"]:
+        if files_requested:
             await _restore_rewind_files(file_snapshot)
         raise
-    # T01.3：经 MemoryStore 公开方法回写运行权威表（authority-map 1.0，
-    # 不再直摸 memory._db）。
     await memory.update_rewind_restored_files(rewind_id, len(restored_files))
-    return {"rewind_id": rewind_id, "removed_messages": len(removed),
-            "restored_files": sorted(set(restored_files)), "skipped": skipped}
+    return {
+        "rewind_id": rewind_id,
+        "removed_messages": len(removed),
+        "restored_files": sorted(set(restored_files)),
+        "skipped": skipped,
+    }
+
+
+@router.post("/api/conversations/{conversation_id}/rewind")
+async def rewind_conversation(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str, req: dict[str, Any],
+) -> dict[str, Any]:
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+
+        memory = _atlas_server.memory
+    assert memory is not None
+    if _conversation_has_active_run(conversation_id):
+        raise HTTPException(status_code=409, detail="这段对话仍在运行，请等它结束后再回退。")
+
+    mode = req.get("mode")
+    point_id = req.get("point_id")
+    legacy_request = mode is None and point_id is None
+    if legacy_request:
+        message_id = req.get("message_id")
+        if not isinstance(message_id, str) or not message_id:
+            raise HTTPException(status_code=400, detail="请选择要回退到的消息。")
+        if not isinstance(req.get("files"), bool):
+            raise HTTPException(status_code=400, detail="请指定是否同时恢复文件。")
+        mode = "both" if req["files"] else "conversation"
+    elif mode is None:
+        raise HTTPException(status_code=400, detail="point_id 请求必须指定 mode。")
+    elif not isinstance(mode, str) or mode not in {"code", "conversation", "both"}:
+        raise HTTPException(status_code=400, detail="mode 必须是 code、conversation 或 both。")
+
+    if point_id is not None and (not isinstance(point_id, str) or not point_id):
+        raise HTTPException(status_code=400, detail="point_id 无效。")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+    from atlas.rewind import list_points, preview as preview_rewind, rewind as rewind_point
+
+    points = await asyncio.to_thread(list_points, conversation_id)
+    selected = next((point for point in points if point.point_id == point_id), None)
+    if point_id is not None and selected is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话的检查点。")
+    if selected is None:
+        message_id = req.get("message_id")
+        if not isinstance(message_id, str) or not message_id:
+            raise HTTPException(status_code=400, detail="请选择要回退到的消息或检查点。")
+        messages = await asyncio.to_thread(
+            read_session_all_messages, DATA_ROOT / "engine", conversation_id,
+        )
+        target = next((
+            index for index, item in enumerate(messages)
+            if str(item.get("id")) == message_id
+        ), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail="找不到这段对话或指定消息。")
+        turn_start = next((
+            index for index in range(target, -1, -1)
+            if messages[index].get("role") == "user"
+        ), target)
+        after_message_id = (
+            str(messages[turn_start - 1].get("id")) if turn_start > 0 else None
+        )
+        selected = next((
+            point for point in points if point.after_message_id == after_message_id
+        ), None)
+        if selected is None:
+            if legacy_request:
+                return await _legacy_rewind_conversation(
+                    memory, conversation_id, message_id, req["files"],
+                )
+            raise HTTPException(status_code=404, detail="找不到对应回合的检查点。")
+
+    rewind_preview = None
+    redo_files: list[dict[str, Any]] = []
+    wants_code = mode in {"code", "both"}
+    if wants_code:
+        rewind_preview = await asyncio.to_thread(preview_rewind, selected.point_id)
+        redo_files = await asyncio.to_thread(
+            _snapshot_point_files, selected.workspace, rewind_preview.files,
+        )
+
+    truncate_state: dict[str, Any] = {}
+
+    def truncate_at_checkpoint(
+        target_conversation_id: str, after_message_id: str | None,
+    ) -> None:
+        hermes_snapshot, removed_messages = _truncate_checkpoint_boundary(
+            target_conversation_id, after_message_id,
+        )
+        truncate_state["hermes_session"] = hermes_snapshot
+        truncate_state["removed_messages"] = removed_messages
+
+    try:
+        result = await asyncio.to_thread(
+            rewind_point, selected.point_id, mode,
+            truncate_conversation=truncate_at_checkpoint,
+        )
+    except Exception:
+        if truncate_state.get("hermes_session"):
+            from atlas.engine.session_sync import restore_session
+            await asyncio.to_thread(
+                restore_session, DATA_ROOT / "engine", truncate_state["hermes_session"],
+            )
+        if wants_code and redo_files:
+            await _restore_rewind_files(redo_files)
+        raise
+
+    rewind_id = uuid.uuid4().hex
+    restored_files = sorted(set(result.restored_files))
+    removed_messages = int(truncate_state.get("removed_messages", 0))
+    snapshot = {
+        "messages": [],
+        "files": redo_files,
+        "files_requested": wants_code,
+        "hermes_session": truncate_state.get("hermes_session"),
+        "atlas_point_id": selected.point_id,
+    }
+    try:
+        await memory.save_rewind({
+            "rewind_id": rewind_id, "conversation_id": conversation_id,
+            "removed_messages": removed_messages,
+            "restored_files": len(restored_files), "snapshot": snapshot,
+        })
+    except Exception:
+        if truncate_state.get("hermes_session"):
+            from atlas.engine.session_sync import restore_session
+            await asyncio.to_thread(
+                restore_session, DATA_ROOT / "engine", truncate_state["hermes_session"],
+            )
+        if wants_code and redo_files:
+            await _restore_rewind_files(redo_files)
+        raise
+    return {
+        "rewind_id": rewind_id, "removed_messages": removed_messages,
+        "restored_files": restored_files, "skipped": [],
+        "point_id": selected.point_id,
+    }
 
 
 @router.post("/api/conversations/{conversation_id}/rewind/{rewind_id}/redo")
@@ -619,7 +795,73 @@ async def list_conversation_rewinds(
     assert memory is not None
     if await memory.get_conversation(conversation_id) is None:
         raise HTTPException(status_code=404, detail="找不到这段对话。")
-    return await memory.list_rewinds(conversation_id)
+    from atlas.rewind import list_points
+
+    legacy_records = await memory.list_rewinds(conversation_id)
+    points = await asyncio.to_thread(list_points, conversation_id)
+    rewinds_by_point: dict[str, dict[str, Any]] = {}
+    for item in legacy_records:
+        detail = await memory.get_rewind(conversation_id, str(item["rewind_id"]))
+        point_id = (detail or {}).get("snapshot", {}).get("atlas_point_id")
+        if isinstance(point_id, str):
+            rewinds_by_point[point_id] = item
+    records: list[dict[str, Any]] = []
+    matched_rewind_ids: set[str] = set()
+    for point in points:
+        rewind_record = rewinds_by_point.get(point.point_id)
+        if rewind_record is not None:
+            matched_rewind_ids.add(str(rewind_record["rewind_id"]))
+        record = dict(rewind_record or {
+            "rewind_id": point.point_id,
+            "created_at": point.created_at,
+            "removed_messages": 0,
+            "restored_files": 0,
+            "redone": False,
+        })
+        record.update({
+            "point_id": point.point_id,
+            "conversation_id": point.conversation_id,
+            "turn_id": point.turn_id,
+            "workspace": point.workspace,
+            "after_message_id": point.after_message_id,
+            "can_redo": rewind_record is not None,
+        })
+        records.append(record)
+    records.extend(
+        item for item in legacy_records
+        if str(item["rewind_id"]) not in matched_rewind_ids
+    )
+    return records
+
+
+@router.get("/api/conversations/{conversation_id}/rewinds/{point_id}/preview")
+async def preview_conversation_rewind(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str, point_id: str,
+) -> dict[str, Any]:
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+
+        memory = _atlas_server.memory
+    assert memory is not None
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话。")
+    from atlas.rewind import list_points, preview
+
+    points = await asyncio.to_thread(list_points, conversation_id)
+    if not any(point.point_id == point_id for point in points):
+        raise HTTPException(status_code=404, detail="找不到这段对话的检查点。")
+    result = await asyncio.to_thread(preview, point_id)
+    return {
+        "point_id": result.point_id,
+        "files": result.files,
+        "diff": result.diff,
+        "changes": [
+            {"path": item.path, "status": item.status, "binary": item.binary}
+            for item in result.changes
+        ],
+    }
 
 
 @router.post("/api/conversations/{conversation_id}/fork", status_code=201)

@@ -150,3 +150,192 @@ class SubagentManager:
             "duration_ms": int((time.monotonic() - started) * 1000),
             "log_path": str(log_paths[-1]) if log_paths else None,
         }
+
+
+class KernelWorkflowSubagentRunner:
+    """Run each workflow node through Atlas's canonical child-run lifecycle.
+
+    The supplied ``AgentOrchestrator._run_atlas_subtask`` creates an isolated
+    conversation and calls ``AgentOrchestrator.run``. With the Atlas engine
+    selected, that public run path reaches the same ``AtlasKernel.run`` loop.
+    """
+
+    def __init__(self, agent: Any, runtime: Any, workflow_id: str) -> None:
+        runner = getattr(agent, "_run_atlas_subtask", None)
+        if not callable(runner):
+            raise RuntimeError("Atlas workflow nodes require the native subagent runner")
+        self._manager = SubagentManager(runner)
+        self._agent = agent
+        self._runtime = runtime
+        self._workflow_id = workflow_id
+        self._sequence = 0
+
+    async def run(
+        self, *, goal: str, context: str, workspace: str, model: str | None,
+    ) -> Any:
+        from atlas.workflow.types import NodeResult
+
+        self._sequence += 1
+        started = time.monotonic()
+        subtask_id = _workflow_subtask_id(self._workflow_id, self._sequence)
+        group_data = {
+            "group_id": self._workflow_id,
+            "workflow_id": self._workflow_id,
+            "index": self._sequence,
+            "title": goal[:160],
+        }
+        parent_cancel = getattr(self._runtime, "cancel_event", None)
+        subtask_cancel: Any = None
+        start_callback = getattr(self._runtime, "subtask_started", None)
+        if callable(start_callback):
+            subtask_cancel = await _call_callback(
+                start_callback, subtask_id, goal, "atlas", group_data,
+            )
+        cancel_event = _AnyCancellationEvent(parent_cancel, subtask_cancel)
+
+        async def on_progress(text: str) -> None:
+            callback = getattr(self._runtime, "subtask_progress", None)
+            if callable(callback):
+                await _call_callback(callback, subtask_id, str(text), group_data)
+            else:
+                await _queue_runtime_event(self._runtime, {
+                    "type": "subtask.output",
+                    "subtask_id": subtask_id,
+                    "text": str(text),
+                    **group_data,
+                })
+
+        options = {
+            "model": model,
+            "cancel_event": cancel_event,
+            "pause_event": getattr(self._runtime, "pause_event", None),
+            "approval_callback": getattr(self._runtime, "approval_callback", None),
+            "tool_allow": getattr(self._runtime, "tool_allow", None),
+            "tool_deny": [*list(getattr(self._runtime, "tool_deny", []) or []), "workflow"],
+            "permission_mode": getattr(self._runtime, "permission_mode", "full_access"),
+            "allowed_paths": list(getattr(self._runtime, "allowed_paths", []) or []),
+            "workspace_trusted": bool(getattr(self._runtime, "workspace_trusted", False)),
+            "user_hook_callback": getattr(self._runtime, "user_hook_callback", None),
+            "ssh_tool_callback": getattr(self._runtime, "ssh_tool_callback", None),
+            "ssh_checkpoint_callback": getattr(self._runtime, "ssh_checkpoint_callback", None),
+            "sandbox_tool_callback": getattr(self._runtime, "sandbox_tool_callback", None),
+            "sandbox_enabled": bool(getattr(self._runtime, "sandbox_enabled", False)),
+            "project_id": getattr(self._runtime, "project_id", None),
+            "task_id": getattr(self._runtime, "task_id", None),
+            "reasoning_effort": getattr(self._runtime, "reasoning_effort", None),
+            "agent_role": "leaf",
+            "agent_type": "workflow_node",
+            "depth": int(getattr(self._runtime, "agent_depth", 0) or 0) + 1,
+        }
+        completion_sent = False
+
+        async def complete(status: str, summary: str) -> None:
+            nonlocal completion_sent
+            if completion_sent:
+                return
+            completion_sent = True
+            await self._complete_subtask(subtask_id, status, summary, started, group_data)
+
+        try:
+            result = await self._manager.run(
+                goal=goal,
+                context=context,
+                cwd=workspace,
+                subtask_id=subtask_id,
+                atlas_options=options,
+                on_progress=on_progress,
+            )
+            status = str(result.get("status") or "failed")
+            summary = str(result.get("result") or "Workflow node returned no result.")
+            if status == "cancelled":
+                await complete(status, summary)
+                if parent_cancel is not None and parent_cancel.is_set():
+                    raise asyncio.CancelledError
+                raise RuntimeError("Workflow node was cancelled")
+            if status != "completed":
+                await complete("failed", summary)
+                raise RuntimeError(summary)
+            await complete(status, summary)
+            return NodeResult(
+                response=summary,
+                model=model,
+                metadata={
+                    key: result.get(key)
+                    for key in ("session_id", "changed_files", "changed_files_complete", "tokens")
+                    if key in result
+                },
+            )
+        except asyncio.CancelledError:
+            await complete("cancelled", "Workflow node cancelled.")
+            raise
+        except Exception as exc:
+            await complete("failed", f"{type(exc).__name__}: {exc}")
+            raise
+
+    async def _complete_subtask(
+        self, subtask_id: str, status: str, summary: str,
+        started: float, group_data: dict[str, Any],
+    ) -> None:
+        callback = getattr(self._runtime, "subtask_completed", None)
+        if callable(callback):
+            await _call_callback(
+                callback, subtask_id, status, summary[:4000],
+                int((time.monotonic() - started) * 1000), group_data,
+            )
+        else:
+            await _queue_runtime_event(self._runtime, {
+                "type": "subtask.completed",
+                "subtask_id": subtask_id,
+                "status": status,
+                "summary": summary[:4000],
+                "duration_ms": int((time.monotonic() - started) * 1000),
+                **group_data,
+            })
+
+
+class _AnyCancellationEvent:
+    """Read-only cancellation view that combines the parent and node event."""
+
+    def __init__(self, *events: Any) -> None:
+        self._events = tuple(event for event in events if event is not None)
+
+    def is_set(self) -> bool:
+        return any(event.is_set() for event in self._events)
+
+    async def wait(self) -> bool:
+        if self.is_set():
+            return True
+        waiters = [asyncio.create_task(event.wait()) for event in self._events]
+        try:
+            if not waiters:
+                await asyncio.Future()
+            await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+            return True
+        finally:
+            for waiter in waiters:
+                if not waiter.done():
+                    waiter.cancel()
+            await asyncio.gather(*waiters, return_exceptions=True)
+
+
+async def _call_callback(callback: Callable[..., Any], *args: Any) -> Any:
+    result = callback(*args)
+    return await result if inspect.isawaitable(result) else result
+
+
+async def _queue_runtime_event(runtime: Any, event: dict[str, Any]) -> None:
+    queue = getattr(runtime, "event_queue", None)
+    if queue is not None:
+        await queue.put(event)
+
+
+def _workflow_subtask_id(workflow_id: str, sequence: int) -> str:
+    safe_workflow = re.sub(r"[^A-Za-z0-9_-]", "_", workflow_id)[:32]
+    value = f"wf_{safe_workflow}_{sequence}_{uuid_hex(6)}"
+    return value[:128]
+
+
+def uuid_hex(length: int) -> str:
+    from uuid import uuid4
+
+    return uuid4().hex[:length]

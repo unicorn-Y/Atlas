@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { setImmediate } from 'node:timers';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';

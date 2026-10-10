@@ -44,6 +44,7 @@ class KernelRequest:
     reasoning_effort: str | None = None
     max_output_tokens: int | None = None
     cancel_event: asyncio.Event | None = None
+    pause_event: asyncio.Event | None = None
     steer_queue: asyncio.Queue[dict[str, Any]] | None = None
     lifecycle_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None
     plan_state: dict[str, Any] | None = None
@@ -163,6 +164,32 @@ def _usage_row(result: ModelCallResult, call_id: str) -> dict[str, Any]:
     return row
 
 
+async def _wait_until_resumed(
+    pause_event: asyncio.Event | None,
+    cancel_event: asyncio.Event | None,
+) -> None:
+    """Wait at a kernel safe point, while keeping cancellation responsive."""
+    if pause_event is None or pause_event.is_set():
+        if cancel_event is not None and cancel_event.is_set():
+            raise asyncio.CancelledError
+        return
+    if cancel_event is not None and cancel_event.is_set():
+        raise asyncio.CancelledError
+    pause_waiter = asyncio.create_task(pause_event.wait())
+    waiters: set[asyncio.Task[Any]] = {pause_waiter}
+    if cancel_event is not None:
+        waiters.add(asyncio.create_task(cancel_event.wait()))
+    try:
+        await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for waiter in waiters:
+            if not waiter.done():
+                waiter.cancel()
+        await asyncio.gather(*waiters, return_exceptions=True)
+    if cancel_event is not None and cancel_event.is_set():
+        raise asyncio.CancelledError
+
+
 class _SteerTarget:
     def __init__(self) -> None:
         self.messages: list[str] = []
@@ -197,6 +224,7 @@ class AtlasKernel:
 
         runtime = request.runtime
         agent = request.agent
+        pause_event = request.pause_event or getattr(runtime, "pause_event", None)
         run_id = str(getattr(runtime, "run_id", None) or uuid.uuid4().hex)
         session_id = request.conversation_id
         selected_model = request.model_id or getattr(runtime, "model", None) or agent._model_mgr.current_model
@@ -410,6 +438,22 @@ class AtlasKernel:
             context_manager = ContextManager(raw_config, output_dir=run_dir / "compact-output")
             stuck = StuckDetector()
             usage_budget = request.usage_budget or env_run_usage_budget()
+
+            async def record_workflow_usage(row: dict[str, Any]) -> None:
+                usage = dict(row)
+                usage_rows.append(usage)
+                record(
+                    "model_request",
+                    purpose=usage.get("purpose", "workflow_planner"),
+                    model=usage.get("model"), provider=usage.get("provider"),
+                    duration_ms=usage.get("duration_ms"),
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                )
+                await event_queue.put({"type": "run_usage", "usage": usage})
+
+            proxy_runtime.kernel_usage_budget = usage_budget
+            proxy_runtime.workflow_usage_callback = record_workflow_usage
             max_turns = max(1, min(int(engine_config.get("max_turns", 64)), 256))
             final_response = ""
             steer_target = _SteerTarget()
@@ -438,6 +482,7 @@ class AtlasKernel:
                 return accepted
 
             for turn_index in range(max_turns):
+                await _wait_until_resumed(pause_event, request.cancel_event)
                 if request.cancel_event is not None and request.cancel_event.is_set():
                     raise asyncio.CancelledError
                 for steer in await apply_pending_steers():
@@ -594,9 +639,30 @@ class AtlasKernel:
                     raise ModelCallError(compaction.error, category="context_budget")
 
                 available_tools = agent._model_facing_tools()
+                from atlas.kernel.tools import kernel_tool_schemas
+
+                include_workflow = (
+                    getattr(runtime, "agent_role", "general") != "leaf"
+                    and int(getattr(runtime, "agent_depth", 0) or 0) < 1
+                )
+                schema_names = {
+                    str((item.get("function") or item).get("name", ""))
+                    for item in available_tools
+                }
+                from atlas.engine.tool_permissions import tool_allowed
+
+                tool_allow = getattr(runtime, "tool_allow", None)
+                tool_deny = getattr(runtime, "tool_deny", ())
+                read_only = bool(getattr(runtime, "read_only", False))
+                available_tools.extend(
+                    schema for schema in kernel_tool_schemas(include_workflow=include_workflow)
+                    if str(schema["function"]["name"]) not in schema_names
+                    and tool_allowed(str(schema["function"]["name"]), tool_allow, tool_deny)
+                    and not (read_only and schema["function"]["name"] == "workflow")
+                )
                 if edit_manager is not None:
                     available_tools = [*available_tools, *edit_manager.get_tools_for_llm()]
-                tools = plan.filter_tools(available_tools)
+                tools = plan.filter_tools(available_tools, read_only_names=("build_repo_map",))
                 tool_json = json.dumps(messages, ensure_ascii=False, default=str)
                 record("model_request", model=turn_model, input_chars=len(tool_json),
                        input_tokens=estimate_tokens(messages), attempt=turn_index + 1)
@@ -704,6 +770,7 @@ class AtlasKernel:
                     }))
                     yield emit("tool_call", id=call_id, name=name, arguments=args)
                 transition(RunPhase.TOOLS)
+                await _wait_until_resumed(pause_event, request.cancel_event)
                 tool_calls_wire = [{"id": call["id"], "function": {
                     "name": call["name"], "arguments": json.dumps(call["args"], ensure_ascii=False),
                 }} for call in calls]
@@ -734,7 +801,14 @@ class AtlasKernel:
                            output_ref=receipt.get("output_ref"),
                            output=_tool_output_text(result.output))
                     content = _tool_output_text(result.output)
-                    is_error = bool(isinstance(result.output, dict) and result.output.get("is_error"))
+                    is_error = (
+                        bool(isinstance(result.output, dict) and (
+                            result.output.get("is_error")
+                            or result.output.get("error")
+                            or result.output.get("success") is False
+                        ))
+                        or receipt["state"] not in {"completed", "cancelled"}
+                    )
                     messages.append({"role": "tool", "tool_call_id": result.call_id,
                                      "name": result.name, "content": content})
                     active_call_ids.discard(result.call_id)
@@ -746,6 +820,20 @@ class AtlasKernel:
                     stuck.observe_tool(result.name, next(
                         (call["args"] for call in calls if call["id"] == result.call_id), {}
                     ), result.output, is_error=is_error)
+                    event_text = _tool_result_event_text(result)
+                    execution = {
+                        "state": receipt["state"],
+                        "duration_ms": receipt["duration_ms"],
+                    }
+                    yield emit(
+                        "tool_result",
+                        id=result.call_id,
+                        name=result.name,
+                        content=[{"type": "text", "text": event_text}],
+                        data=execution,
+                        is_error=is_error,
+                        **({"error_category": "tool"} if is_error else {}),
+                    )
                 batch_hook = await self._run_hook(request, "PostToolBatch", {
                     "tool_uses": [{
                         "tool_use_id": result.call_id,
@@ -869,6 +957,35 @@ class AtlasKernel:
         self, agent: Any, runtime: Any, call_id: str | None, name: str, arguments: dict[str, Any],
         event_queue: asyncio.Queue[Any], *, exec_manager: Any = None, nested: bool = False,
     ) -> Any:
+        if name == "build_repo_map":
+            workspace = str(getattr(runtime, "workspace", "") or "")
+            if not workspace or workspace.startswith("ssh://"):
+                return {"content": "RepoMap requires a local workspace path.", "is_error": True}
+            from atlas.repomap import build_repo_map
+
+            result = await asyncio.to_thread(
+                build_repo_map,
+                workspace,
+                focus_files=list(arguments.get("focus_files") or []),
+                mentioned=list(arguments.get("mentioned") or []),
+                max_tokens=int(arguments.get("max_tokens", 2048)),
+            )
+            return {"content": result, "outcome": "completed"}
+        if name == "workflow":
+            from atlas.kernel.workflow_tool import execute_workflow_tool
+
+            result = await execute_workflow_tool(
+                agent,
+                runtime,
+                arguments,
+                usage_callback=getattr(runtime, "workflow_usage_callback", None),
+            )
+            return {
+                "content": json.dumps(result, ensure_ascii=False),
+                "data": result,
+                "outcome": "failed" if result.get("status") == "failed" else "completed",
+            }
+
         from langchain_core.messages import AIMessage
         from atlas.agent import ToolExecutionState
 
@@ -923,3 +1040,20 @@ def _tool_output_text(output: Any) -> str:
         if "data" in output:
             return json.dumps(output["data"], ensure_ascii=False, default=str)
     return str(output or "")
+
+
+def _tool_result_event_text(result: ToolExecutionResult) -> str:
+    """Expose completion status without forwarding successful raw tool output."""
+    state = result.receipt.state
+    if state == "completed":
+        return "Tool completed."
+    if state == "cancelled":
+        return "Tool cancelled."
+    output = result.output
+    detail = output.get("error") if isinstance(output, dict) else None
+    if not isinstance(detail, str) or not detail.strip():
+        detail = _tool_output_text(output)
+    from atlas.logs import _summary
+
+    safe_detail = _summary(str(detail), key="result")
+    return str(safe_detail or "Tool failed.")

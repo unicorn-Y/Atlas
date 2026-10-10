@@ -37,6 +37,7 @@ verify_before_stop = true
 
 [engine]
 kernel = "atlas" # atlas | hermes
+workflow_max_parallel = 4
 
 # API gateway (monkeyapi or direct)
 [models.gateway]

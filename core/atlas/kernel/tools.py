@@ -24,9 +24,45 @@ Dispatch = Callable[[str, str, dict[str, Any]], Awaitable[Any]]
 READ_ONLY_TOOLS = frozenset({
     "read_file", "search_files", "session_search", "web_search", "web_fetch",
     "read", "glob", "grep", "list_directory", "lsp_diagnostics", "lsp_hover",
-    "lsp_definition", "lsp_references", "lsp_document_symbols",
+    "lsp_definition", "lsp_references", "lsp_document_symbols", "build_repo_map",
 })
 EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write"})
+
+
+def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
+    """Return the extra function schemas owned by AtlasKernel itself."""
+    import copy
+
+    from atlas.repomap import REPOMAP_TOOL_SPEC
+
+    repo_parameters = copy.deepcopy(REPOMAP_TOOL_SPEC["input_schema"])
+    repo_parameters["properties"].pop("root", None)
+    repo_parameters["required"] = [
+        name for name in repo_parameters.get("required", []) if name != "root"
+    ]
+    schemas = [{
+        "type": "function",
+        "function": {
+            "name": str(REPOMAP_TOOL_SPEC["name"]),
+            "description": (
+                str(REPOMAP_TOOL_SPEC.get("description", ""))
+                + " The repository root is inferred from the active Atlas workspace."
+            ),
+            "parameters": repo_parameters,
+        },
+    }]
+    if include_workflow:
+        from atlas.kernel.workflow_tool import WORKFLOW_TOOL_SPEC
+
+        schemas.append({
+            "type": "function",
+            "function": {
+                "name": str(WORKFLOW_TOOL_SPEC["name"]),
+                "description": str(WORKFLOW_TOOL_SPEC["description"]),
+                "parameters": copy.deepcopy(WORKFLOW_TOOL_SPEC["parameters"]),
+            },
+        })
+    return schemas
 
 
 @dataclass(slots=True)
@@ -93,7 +129,12 @@ class ToolScheduler:
                 raise ValueError("Tool calls require an id and name")
             policy_name = "local_edit" if name in EDIT_TOOL_NAMES else name
             if not tool_allowed(policy_name, self.allow, self.deny):
-                output = {"is_error": True, "error": "Tool is not allowed in this run"}
+                state = "failed"
+                output = {
+                    "is_error": True,
+                    "error": "Tool is not allowed in this run",
+                    "outcome": state,
+                }
             else:
                 async with self._slots:
                     state = "unknown"
@@ -106,7 +147,12 @@ class ToolScheduler:
             # later exclusive writes after the user has interrupted this turn.
             raise
         except Exception as exc:
-            output = {"is_error": True, "error": f"{type(exc).__name__}: {exc}", "outcome": state}
+            state = "failed"
+            output = {
+                "is_error": True,
+                "error": f"{type(exc).__name__}: {exc}",
+                "outcome": state,
+            }
         ref = output.get("output_ref") if isinstance(output, dict) else None
         receipt = ToolReceipt(call_id, name, state, int((time.monotonic() - started) * 1000), ref)
         return ToolExecutionResult(call_id, name, output, receipt)
