@@ -640,4 +640,5 @@ export interface UserFactDTO {
   sessionId: string | null;
   createdAt: number;
   updatedAt: number;
+  forgetAfter: number | null;
 }

@@ -45,6 +45,11 @@ CHANGES
 - If the user changes something already known ("改成周五了", "我搬到上海了", "不用 SQLite 了，改用 PostgreSQL"), emit op "set" with the SAME key as the known fact and the new value. The old value is kept as history automatically.
 - If the user says a known fact is no longer true and gives no replacement ("我已经不养猫了"), emit op "retract" for that key.
 - If the message only repeats a known fact with the same value, emit nothing for it.
+- If the user asks you to forget something ("忘掉我住哪", "别记我对花生过敏这件事"), emit op "retract" for that key with the request as quote.
+
+TEMPORARY FACTS
+- Some facts are only true for a while: a state or event tied to a time ("我明天下午有面试", "这周在北京出差", "今天头疼", "下个月在休假"). Give them forget_after = the local date-time when they stop being true (end of that day / week / period), as ISO 8601 with the local UTC offset, resolved with the clock below.
+- Lasting facts (where the user lives, family, preferences, allergies, standing project rules) have forget_after null.
 
 KEYS
 - key is a short English dot-separated slug, lower case: user.home_city, user.employer, user.diet.allergy, user.family.daughter_age, user.preference.answer_style, project.atlas.test_policy, person.<name>.relation.
@@ -54,10 +59,11 @@ OUTPUT
 - value: the bare value, in the user's language ("杭州", "周五", "对花生过敏").
 - text: one short sentence stating the fact in the user's language, written about "用户" (Chinese) or "User" (English), e.g. "用户住在杭州". Resolve relative dates ("明天", "下周三") to an actual date using the clock given below, and include it.
 - quote: the exact span of the user's message that states the fact, copied character for character (no paraphrase, no translation). Proposals whose quote is not in the message are discarded.
+- forget_after: ISO 8601 date-time with offset for temporary facts, otherwise null.
 - Return {"facts": []} when the message states no fact about the user. Most messages state none; do not invent.`;
 
 const SCHEMA_HINT =
-  '{"facts":[{"op":"set|retract","key":"user.home_city","value":"杭州","text":"用户住在杭州","quote":"我住在杭州"}]}';
+  '{"facts":[{"op":"set|retract","key":"user.home_city","value":"杭州","text":"用户住在杭州","quote":"我住在杭州","forget_after":null}]}';
 
 interface FactProposal {
   op: "set" | "retract";
@@ -65,6 +71,7 @@ interface FactProposal {
   value: string;
   text: string;
   quote: string;
+  forgetAfter: number | null;
 }
 
 export interface FactsObserveInput {
@@ -161,6 +168,11 @@ export function createFactsObserver(deps: FactsObserverDeps) {
         result.retracted += current.length;
         continue;
       }
+      if (p.forgetAfter !== null && p.forgetAfter <= ts) {
+        // Already over by the time it was said ("昨天头疼"): history, not a current fact.
+        result.rejected++;
+        continue;
+      }
       if (current.some((row) => squash(row.value) === squash(p.value))) continue;
       const row: UserFactRow = {
         id: `uf_${ids.span()}`,
@@ -175,6 +187,7 @@ export function createFactsObserver(deps: FactsObserverDeps) {
         sessionId: input.sessionId ?? null,
         createdAt: ts,
         updatedAt: ts,
+        forgetAfter: p.forgetAfter,
       };
       deps.repos.userFacts.insert(row);
       for (const old of current) deps.repos.userFacts.markSuperseded(old.id, row.id, ts);
@@ -203,7 +216,11 @@ export type FactsObserver = ReturnType<typeof createFactsObserver>;
 export function renderUserFacts(rows: readonly UserFactRow[], timeZone?: string): string {
   if (rows.length === 0) return "";
   const day = new Intl.DateTimeFormat("sv-SE", { timeZone, dateStyle: "short" });
-  const lines = rows.map((f) => `- ${f.text}（${day.format(new Date(f.updatedAt))} 起）`);
+  const lines = rows.map((f) =>
+    f.forgetAfter
+      ? `- ${f.text}（${day.format(new Date(f.updatedAt))} 起，到 ${day.format(new Date(f.forgetAfter))} 为止）`
+      : `- ${f.text}（${day.format(new Date(f.updatedAt))} 起）`,
+  );
   return [
     "## About the user (facts the user stated; newest value wins)",
     "Use these directly. When the user corrects one, the correction replaces it.",
@@ -221,7 +238,9 @@ function normaliseProposal(raw: unknown): FactProposal | null {
   const quote = typeof o.quote === "string" ? o.quote.trim() : "";
   if (!op || !KEY_RE.test(key) || !quote) return null;
   if (op === "set" && (!value || !text || value.length > 300 || text.length > 400)) return null;
-  return { op, key, value, text, quote };
+  const forgetAfterMs = typeof o.forget_after === "string" ? Date.parse(o.forget_after) : NaN;
+  const forgetAfter = Number.isFinite(forgetAfterMs) ? forgetAfterMs : null;
+  return { op, key, value, text, quote, forgetAfter };
 }
 
 /** Whitespace/quote-insensitive form used to compare quotes and values. */

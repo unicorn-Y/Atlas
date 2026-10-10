@@ -24,6 +24,8 @@ export interface UserFactRow {
   sessionId: string | null;
   createdAt: number;
   updatedAt: number;
+  /** Epoch ms after which a temporary fact is no longer current; null = permanent. */
+  forgetAfter: number | null;
 }
 
 interface RawUserFactRow {
@@ -39,6 +41,7 @@ interface RawUserFactRow {
   session_id: string | null;
   created_at: number;
   updated_at: number;
+  forget_after: number | null;
 }
 
 const COLUMNS = [
@@ -54,6 +57,7 @@ const COLUMNS = [
   "session_id",
   "created_at",
   "updated_at",
+  "forget_after",
 ];
 const SELECT = `SELECT ${COLUMNS.join(", ")} FROM user_facts`;
 
@@ -65,6 +69,10 @@ export function makeUserFactsRepo(db: StorageDb) {
   );
   const selectActive = db.prepare<{ limit: number }, RawUserFactRow>(
     `${SELECT} WHERE status='active' ORDER BY updated_at DESC LIMIT @limit`,
+  );
+  const selectCurrent = db.prepare<{ limit: number; now: number }, RawUserFactRow>(
+    `${SELECT} WHERE status='active' AND (forget_after IS NULL OR forget_after > @now)
+     ORDER BY updated_at DESC LIMIT @limit`,
   );
   const selectAll = db.prepare<{ limit: number }, RawUserFactRow>(
     `${SELECT} ORDER BY updated_at DESC LIMIT @limit`,
@@ -89,6 +97,7 @@ export function makeUserFactsRepo(db: StorageDb) {
         session_id: row.sessionId,
         created_at: row.createdAt,
         updated_at: row.updatedAt,
+        forget_after: row.forgetAfter,
       });
     },
     getById(id: string): UserFactRow | null {
@@ -98,8 +107,13 @@ export function makeUserFactsRepo(db: StorageDb) {
     activeByKey(key: string): UserFactRow[] {
       return selectActiveByKey.all({ key }).map(mapRow);
     },
+    /** Active rows, including temporary ones past their forget_after. */
     listActive(limit = 200): UserFactRow[] {
       return selectActive.all({ limit }).map(mapRow);
+    },
+    /** What is true now: active and not expired. This is what gets injected. */
+    listCurrent(now: number, limit = 200): UserFactRow[] {
+      return selectCurrent.all({ limit, now }).map(mapRow);
     },
     listAll(limit = 500): UserFactRow[] {
       return selectAll.all({ limit }).map(mapRow);
@@ -130,5 +144,6 @@ function mapRow(r: RawUserFactRow): UserFactRow {
     sessionId: r.session_id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    forgetAfter: r.forget_after ?? null,
   };
 }

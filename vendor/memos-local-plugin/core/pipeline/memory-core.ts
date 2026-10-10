@@ -2214,7 +2214,9 @@ export function createMemoryCore(
   function withUserFacts(context: string): string {
     let block = "";
     try {
-      block = renderUserFacts(handle.repos.userFacts.listActive(USER_FACTS_INJECT_LIMIT));
+      block = renderUserFacts(
+        handle.repos.userFacts.listCurrent(Date.now(), USER_FACTS_INJECT_LIMIT),
+      );
     } catch (err) {
       log.warn("user_facts.render_failed", {
         err: err instanceof Error ? err.message : String(err),

@@ -27,6 +27,7 @@ Hermes loads it as the `memtensor` memory plugin through links to
 | "关于你" fact layer: per-turn LLM extraction of user-stated key/value facts with verbatim-quote evidence, one active value per key, older values kept as history | `core/facts/observe.ts`, `core/storage/migrations/020-user-facts.sql`, `core/storage/repos/user_facts.ts`, `core/pipeline/orchestrator.ts` |
 | Current facts injected at the top of every turn's memory context | `core/pipeline/memory-core.ts` |
 | `GET /api/v1/facts`, `DELETE /api/v1/facts/:id` | `server/routes/facts.ts`, `agent-contract/memory-core.ts` |
+| Temporary facts expire (Supermemory `forgetAfter` semantics: expired facts leave the injected context but stay in history); "忘掉…" retracts | `core/facts/observe.ts`, `core/storage/migrations/021-user-facts-forget-after.sql`, `core/storage/repos/user_facts.ts` |
 
 Extraction rules come from Atlas MEMORY-V1 `core/atlas/memory/observer_prompt.py`
 (Mastra observer-agent rules + Chinese rules). Real-model smoke 2026-10-10: 7 turns
