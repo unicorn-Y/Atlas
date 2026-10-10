@@ -120,6 +120,7 @@ def start_job(ids: list[str]) -> dict[str, Any]:
     flags = 0
     if os.name == "nt":
         flags = (subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+                 | subprocess.BELOW_NORMAL_PRIORITY_CLASS  # 装包、跑测试不抢正在用的 Atlas
                  | 0x01000000)  # CREATE_BREAKAWAY_FROM_JOB：Electron 退出时不被一起杀掉
     with log_path.open("w", encoding="utf-8") as handle:
         try:

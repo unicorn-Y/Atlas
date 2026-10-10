@@ -730,11 +730,12 @@ class Runner:
             for item in items:
                 notes[item["id"]] = apply_node_bundled(ws, item)
         elif group.key == "borrowed":
+            # 合并冲突的文件当场记失败、不写入；只拿能干净合并的去跑测试。
             for item in items:
                 try:
                     notes[item["id"]] = apply_borrowed(ws, item, self.ctx)
-                except ItemFailed as exc:
-                    raise ItemFailed(f"{item['id']}::{exc}") from exc
+                except (ItemFailed, LookupFailed) as exc:
+                    self._fail([item], str(exc))
         return notes
 
     def _pip_upgrade_each(self, packages: list[str]) -> tuple[list[str], list[str]]:
@@ -800,6 +801,9 @@ class Runner:
         except (ItemFailed, LookupFailed) as exc:
             self.rollback(group)
             return False, str(exc)
+        if not notes:
+            self.rollback(group)
+            return True, ""  # 这批都已当场记为失败，没有要验证的
         problems = self.verify(group)
         if problems:
             self.rollback(group)
@@ -820,12 +824,16 @@ class Runner:
         ok, reason = self.try_batch(group, group.items)
         if ok:
             return
-        if len(group.items) == 1 or group.key in {"pip-transitive", "npm-transitive"}:
-            self._fail(group.items, reason)
+        # 当场已记失败的（比如合并冲突）不再重试
+        failed_now = {cid for cid, res in self.log.data["results"].items()
+                      if res.get("status") == "failed"}
+        remaining = [item for item in group.items if item["id"] not in failed_now]
+        if len(remaining) <= 1 or group.key in {"pip-transitive", "npm-transitive"}:
+            self._fail(remaining, reason)
             return
         # 先把不跨大版本的一起再试一次（通常都能过），跨大版本的逐个试。
-        safe = [item for item in group.items if same_major(item)]
-        risky = [item for item in group.items if not same_major(item)]
+        safe = [item for item in remaining if same_major(item)]
+        risky = [item for item in remaining if not same_major(item)]
         self.log.step(f"{group.label} 整组没通过：先试 {len(safe)} 个小版本更新，"
                       f"再逐个试 {len(risky)} 个大版本更新")
         if len(safe) > 1 and len(risky) > 0:
