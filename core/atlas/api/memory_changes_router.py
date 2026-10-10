@@ -3,7 +3,7 @@
 - GET  /api/memory/changes   变动记录（新增 / 删除 / 修改 / 淡忘 / 归档 / 评分变化）
 - GET  /api/memory/state     是否暂停、MemOS 面板地址
 - POST /api/memory/pause     {"paused": bool} 暂停后 Atlas 既不召回也不写入记忆（下一轮即生效）
-- POST /api/memory/delete    {"entity": "traces", "ids": [...]} 删除对话记录；skills → 归档
+- POST /api/memory/delete    {"entity": "traces", "ids": [...]} 删除对话记录 / 策略 / 世界模型；skills → 归档
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import urllib.request
+from urllib.parse import quote
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -58,12 +59,17 @@ class DeleteBody(BaseModel):
     ids: list[str]
 
 
-def _memos_post(path: str, payload: dict[str, Any]) -> Any:
-    req = urllib.request.Request(MEMOS_VIEWER + path, data=json.dumps(payload).encode("utf-8"),
-                                 headers={"Content-Type": "application/json"}, method="POST")
+def _memos_post(path: str, payload: dict[str, Any] | None, method: str = "POST") -> Any:
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(MEMOS_VIEWER + path, data=data,
+                                 headers={"Content-Type": "application/json"}, method=method)
     with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310 — fixed loopback URL
         body = resp.read().decode("utf-8") or "null"
     return json.loads(body)
+
+
+# MemOS hard-delete routes (server/routes/policies.ts)
+_DELETE_PATHS = {"policies": "/api/v1/policies", "world_model": "/api/v1/world-models"}
 
 
 @router.post("/delete")
@@ -76,6 +82,9 @@ async def delete_memory(body: DeleteBody) -> dict[str, Any]:
             result = await asyncio.to_thread(_memos_post, "/api/v1/traces/delete", {"ids": ids})
         elif body.entity == "skills":
             result = [await asyncio.to_thread(_memos_post, "/api/v1/skills/archive", {"id": i}) for i in ids]
+        elif body.entity in _DELETE_PATHS:
+            result = [await asyncio.to_thread(_memos_post, f"{_DELETE_PATHS[body.entity]}/{quote(i, safe='')}",
+                                              None, "DELETE") for i in ids]
         else:
             raise HTTPException(400, f"暂不支持删除这类记忆：{body.entity}")
     except HTTPException:

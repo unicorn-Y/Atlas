@@ -29,6 +29,8 @@ interface ChangesPayload {
   memos_db: boolean;
 }
 
+// 能在这里删除（技能是归档）的记忆类型，对应后端 /api/memory/delete
+const DELETABLE = new Set(['traces', 'policies', 'world_model', 'skills']);
 const OPS: Array<{ value: string; label: string }> = [
   { value: '', label: '全部' },
   { value: 'added', label: '新增' },
@@ -221,9 +223,9 @@ ${item.title}`)) return;
         {open.has(item.id) && <div style={{ padding: '4px 12px 12px 34px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <small className="empty-note">编号 {item.entity_id}</small>
-            {item.op !== 'removed' && (item.entity === 'traces' || item.entity === 'skills') &&
+            {item.op !== 'removed' && DELETABLE.has(item.entity) &&
               <button className="btn ghost" disabled={busy === `del-${item.id}`} onClick={() => void remove(item)}>
-                {item.entity === 'skills' ? <Archive size={14} /> : <Trash2 size={14} />}{item.entity === 'skills' ? '归档这个技能' : '删除这条记录'}
+                {item.entity === 'skills' ? <Archive size={14} /> : <Trash2 size={14} />}{item.entity === 'skills' ? '归档这个技能' : `删除这条${item.entity_label}`}
               </button>}
           </div>
           <FieldTable item={item} />
