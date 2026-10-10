@@ -1,6 +1,5 @@
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/unified_exec/process_manager.rs (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/unified_exec/head_tail_buffer.rs (Apache-2.0)
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276ede: apps/zcode-cli/packages/core/src/tool/bash-timeout-policy.ts (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/unified_exec/ (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/tool/bash-timeout-policy.ts (Apache-2.0)
 # SPDX-License-Identifier: Apache-2.0
 """Unified handles and durable bounded output for the existing local executor.
 
@@ -22,11 +21,12 @@ from typing import Any
 
 DEFAULT_BASH_TIMEOUT_MS = 120_000
 DEFAULT_BASH_MAX_TIMEOUT_MS = 600_000
+DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
 
 
 class HeadTailBuffer:
     """Codex stable 50% prefix and rolling 50% suffix, measured in bytes."""
-    def __init__(self, max_bytes: int = 10_000) -> None:
+    def __init__(self, max_bytes: int = DEFAULT_MAX_OUTPUT_BYTES) -> None:
         self.max_bytes = max(0, int(max_bytes))
         self.head = bytearray()
         self.tail = bytearray()
@@ -42,33 +42,32 @@ class HeadTailBuffer:
             self.omitted_bytes += excess
 
     def text(self) -> str:
-        marker = f"\n... {self.omitted_bytes} bytes omitted; see full output file ...\n".encode() if self.omitted_bytes else b""
+        marker = f"\n... {self.omitted_bytes} bytes omitted ...\n".encode() if self.omitted_bytes else b""
         return (bytes(self.head) + marker + bytes(self.tail)).decode("utf-8", errors="replace")
 
 
 def command_timeout(command: str, requested: Any = None) -> float:
     def positive_env(name: str, default: int) -> int:
         try:
-            value = int(os.environ.get(name, ""))
+            match = re.match(r"\s*([+-]?\d+)", os.environ.get(name, ""))
+            value = int(match.group(1)) if match else 0
             return value if value > 0 else default
-        except ValueError:
+        except (TypeError, ValueError):
             return default
     default_ms = positive_env("BASH_DEFAULT_TIMEOUT_MS", DEFAULT_BASH_TIMEOUT_MS)
     max_ms = max(default_ms, positive_env("BASH_MAX_TIMEOUT_MS", DEFAULT_BASH_MAX_TIMEOUT_MS))
-    # Atlas adaptation: installs/builds have the upstream maximum; cheap reads
-    # use a shorter default. Explicit caller timeouts always take precedence.
-    if requested is None:
-        if re.search(r"\b(install|build|compile|test|pytest|cargo|pip)\b", command, re.I):
-            requested = max_ms / 1000
-        elif re.match(r"\s*(ls|dir|pwd|cat|type|rg|Get-Content|Get-ChildItem)\b", command, re.I):
-            requested = min(30, default_ms / 1000)
-        else:
-            requested = default_ms / 1000
+    # Atlas local-process APIs express timeouts in seconds; ZCode's equivalent
+    # Bash request uses milliseconds. A zero request follows its `timeout ||`
+    # defaulting rule.
     if isinstance(requested, bool):
         raise ValueError("timeout must be positive seconds")
+    if requested is None:
+        requested = default_ms / 1000
     seconds = float(requested)
-    if not math.isfinite(seconds) or seconds <= 0:
+    if not math.isfinite(seconds) or seconds < 0:
         raise ValueError("timeout must be positive seconds")
+    if seconds == 0:
+        seconds = default_ms / 1000
     return min(seconds, max_ms / 1000)
 
 
@@ -77,20 +76,21 @@ class ExecHandle:
     execution_id: str
     output_path: Path
     buffer: HeadTailBuffer
-    timeout: float
+    timeout: float | None
+    detached: bool = False
     started: float = field(default_factory=time.monotonic)
     offsets: dict[str, int] = field(default_factory=lambda: {"stdout": 0, "stderr": 0})
     outcome: str = "running"
     timed_out: bool = False
     exit_code: int | None = None
     watcher: asyncio.Task[Any] | None = None
-    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    interaction_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 class ExecManager:
     def __init__(self, dispatch: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]],
                  *, output_dir: str | Path, run_id: str | None = None,
-                 max_output_bytes: int = 10_000, local_runtime: Any = None) -> None:
+                 max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES, local_runtime: Any = None) -> None:
         self.dispatch = dispatch
         self.output_dir = Path(output_dir)
         self.run_id = run_id
@@ -101,8 +101,19 @@ class ExecManager:
     async def start(self, arguments: dict[str, Any]) -> dict[str, Any]:
         args = dict(arguments)
         direct_process_start = args.get("action") == "start"
+        if args.get("background"):
+            args["detached"] = True
+        args.pop("background", None)
         command = str(args.get("command") or args.get("cmd") or args.get("executable") or "")
-        timeout = command_timeout(command, args.get("timeout"))
+        # A resumable start returns a process handle; its default yield/poll
+        # window is not a lifetime timeout. Keep an explicitly requested Atlas
+        # timeout for compatibility, while detached starts have no implicit cap.
+        has_explicit_timeout = args.get("timeout") is not None
+        timeout = (
+            command_timeout(command, args.get("timeout"))
+            if has_explicit_timeout or not (direct_process_start or args.get("detached"))
+            else None
+        )
         args["action"] = "start"
         args.setdefault("detached", True if direct_process_start else False)
         args.setdefault("keep_stdin", True)
@@ -124,7 +135,10 @@ class ExecManager:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         path = self.output_dir / f"{safe_id}.log"
         path.touch(exist_ok=False)
-        handle = ExecHandle(execution_id, path, HeadTailBuffer(self.max_output_bytes), timeout)
+        handle = ExecHandle(
+            execution_id, path, HeadTailBuffer(self.max_output_bytes), timeout,
+            detached=bool(args.get("detached")),
+        )
         self.handles[execution_id] = handle
         handle.watcher = asyncio.create_task(self._watch(handle))
         return await self.poll(execution_id)
@@ -169,6 +183,7 @@ class ExecManager:
         data = {"execution_id": handle.execution_id, "state": handle.outcome,
                 "outcome": handle.outcome, "exit_code": handle.exit_code,
                 "timed_out": handle.timed_out, "output": handle.buffer.text(),
+                "backgrounded": handle.detached,
                 "output_ref": str(handle.output_path.resolve()),
                 "duration_seconds": round(time.monotonic() - handle.started, 3)}
         return {"data": data, "outcome": handle.outcome,
@@ -177,19 +192,32 @@ class ExecManager:
 
     async def poll(self, execution_id: str) -> dict[str, Any]:
         handle = self.handles[execution_id]
-        async with handle.lock:
-            result = await self.dispatch("local_process", {"action": "status", "execution_id": execution_id})
-            if result.get("is_error"):
-                return result
-            await self._capture(handle)
-            data = result.get("data") or {}
+        async with handle.interaction_lock:
+            return await self._poll_locked(handle)
+
+    async def _poll_locked(self, handle: ExecHandle) -> dict[str, Any]:
+        result = await self.dispatch("local_process", {
+            "action": "status", "execution_id": handle.execution_id,
+        })
+        if result.get("is_error"):
+            return result
+        await self._capture(handle)
+        data = result.get("data") or {}
+        if data.get("exit_code") is not None:
             handle.exit_code = data.get("exit_code")
-            if handle.outcome == "running" and data.get("state") != "running":
-                if data.get("state") == "cancelled":
-                    handle.outcome = "unknown"
-                else:
-                    handle.outcome = "completed" if handle.exit_code == 0 else "failed"
-            return self._result(handle)
+        if data.get("timed_out"):
+            handle.timed_out = True
+        if handle.outcome == "running" and data.get("state") != "running":
+            if handle.timed_out:
+                handle.outcome = "timed_out"
+                handle.exit_code = 124
+            elif data.get("state") == "cancelled":
+                handle.outcome = "cancelled"
+            elif data.get("state") == "failed":
+                handle.outcome = "failed"
+            else:
+                handle.outcome = "completed" if handle.exit_code == 0 else "failed"
+        return self._result(handle)
 
     async def _watch(self, handle: ExecHandle) -> None:
         try:
@@ -197,15 +225,16 @@ class ExecManager:
                 await self.poll(handle.execution_id)
                 if handle.outcome != "running":
                     break
-                if time.monotonic() - handle.started >= handle.timeout:
+                if handle.timeout is not None and time.monotonic() - handle.started >= handle.timeout:
                     handle.timed_out = True
-                    await self.kill(handle.execution_id)
+                    await self._timeout(handle)
                     break
                 await asyncio.sleep(0.2)
         except asyncio.CancelledError:
             raise
         except Exception:
-            handle.outcome = "unknown"
+            if handle.outcome == "running":
+                handle.outcome = "unknown"
             # A failed output/poll watcher must not leave an untracked child alive.
             try:
                 await self.dispatch("local_process", {"action": "cancel", "execution_id": handle.execution_id})
@@ -213,15 +242,54 @@ class ExecManager:
                 pass
 
     async def write_stdin(self, execution_id: str, data: str) -> dict[str, Any]:
-        result = await self.dispatch("local_process", {"action": "write_stdin", "execution_id": execution_id, "data": data})
-        return result if result.get("is_error") else await self.poll(execution_id)
+        handle = self.handles[execution_id]
+        async with handle.interaction_lock:
+            result = await self.dispatch("local_process", {
+                "action": "write_stdin", "execution_id": execution_id, "data": data,
+            })
+            if result.get("is_error"):
+                # The process can exit between the caller's last poll and this
+                # write. Preserve its final output/status when that race occurs.
+                status = await self.dispatch("local_process", {
+                    "action": "status", "execution_id": execution_id,
+                })
+                if status.get("is_error") or (status.get("data") or {}).get("state") == "running":
+                    return result
+            return await self._poll_locked(handle)
+
+    async def _timeout(self, handle: ExecHandle) -> dict[str, Any]:
+        async with handle.interaction_lock:
+            if handle.outcome != "running":
+                return self._result(handle)
+            result = await self.dispatch("local_process", {
+                "action": "cancel", "execution_id": handle.execution_id,
+            })
+            if result.get("is_error"):
+                handle.outcome = "unknown"
+                return result
+            handle.timed_out = True
+            handle.outcome = "timed_out"
+            await self._poll_locked(handle)
+            # Match Codex's timeout exit status even when the native backend
+            # reports a platform-specific signal/termination code.
+            handle.exit_code = 124
+            return self._result(handle)
 
     async def kill(self, execution_id: str) -> dict[str, Any]:
         handle = self.handles[execution_id]
-        handle.outcome = "unknown"
-        result = await self.dispatch("local_process", {"action": "cancel", "execution_id": execution_id})
-        await self.poll(execution_id)
-        return result if result.get("is_error") else self._result(handle)
+        async with handle.interaction_lock:
+            if handle.outcome != "running":
+                return self._result(handle)
+            result = await self.dispatch("local_process", {
+                "action": "cancel", "execution_id": execution_id,
+            })
+            if result.get("is_error"):
+                handle.outcome = "unknown"
+                return result
+            await self._poll_locked(handle)
+            if handle.outcome == "running":
+                handle.outcome = "cancelled"
+            return self._result(handle)
 
     async def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         args = dict(arguments)
@@ -237,7 +305,9 @@ class ExecManager:
             try:
                 await asyncio.shield(self.handles[execution_id].watcher)
             except asyncio.CancelledError:
-                await self.kill(execution_id)
+                handle = self.handles[execution_id]
+                if not handle.detached:
+                    await self.kill(execution_id)
                 raise
             return await self.poll(execution_id)
         execution_id = str(args.get("execution_id") or args.get("session_id") or "")
@@ -250,23 +320,31 @@ class ExecManager:
             return await self.write_stdin(execution_id, str(args.get("data") or args.get("chars") or ""))
         if action in {"kill", "cancel"}:
             return await self.kill(execution_id)
-        if action in {"read", "log", "wait"}:
+        if action in {"read", "log"}:
             native_action = "read" if action == "log" else action
-            result = await self.dispatch("local_process", {**args, "action": native_action})
-            if not result.get("is_error") and execution_id in self.handles:
-                handle = self.handles[execution_id]
-                async with handle.lock:
-                    await self._capture(handle)
+            handle = self.handles.get(execution_id)
+            if handle is None:
+                return await self.dispatch("local_process", {**args, "action": native_action})
+            async with handle.interaction_lock:
+                result = await self.dispatch("local_process", {**args, "action": native_action})
+                if result.get("is_error"):
+                    return result
+                await self._capture(handle)
                 data = result.get("data")
                 if isinstance(data, dict):
                     data.setdefault("output_ref", str(handle.output_path.resolve()))
             return result
+        if action == "wait":
+            return await self.dispatch("local_process", {**args, "action": action})
         return await self.dispatch("local_process", args)
 
     async def shutdown(self) -> None:
         for handle in self.handles.values():
-            if handle.outcome == "running":
+            if handle.outcome == "running" and not handle.detached:
                 await self.kill(handle.execution_id)
-            if handle.watcher is not None:
+            if handle.watcher is not None and not handle.detached:
                 handle.watcher.cancel()
-        await asyncio.gather(*(h.watcher for h in self.handles.values() if h.watcher is not None), return_exceptions=True)
+        await asyncio.gather(*(
+            h.watcher for h in self.handles.values()
+            if h.watcher is not None and not h.detached
+        ), return_exceptions=True)

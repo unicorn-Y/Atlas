@@ -76,6 +76,8 @@ async def execute_workflow_tool(
         raise ValueError("engine.workflow_max_parallel must be a positive integer") from exc
     if max_parallel < 1:
         raise ValueError("engine.workflow_max_parallel must be a positive integer")
+    configured_retries = config.get("engine.model_retries")
+    max_retries = int(configured_retries) if configured_retries is not None else None
 
     selected_model = str(
         getattr(runtime, "model", None) or agent._model_mgr.current_model
@@ -98,7 +100,7 @@ async def execute_workflow_tool(
             reasoning_effort=getattr(runtime, "reasoning_effort", None),
             max_output_tokens=int(config.get("engine.workflow_planner_max_tokens", 4096)),
             cancel_event=cancel_event,
-            max_retries=int(config.get("engine.model_retries", 2)),
+            max_retries=max_retries,
             fallback_models=list(getattr(runtime, "fallback_models", []) or []),
             on_text=hold_while_paused,
             usage_budget=getattr(runtime, "kernel_usage_budget", None),
@@ -168,6 +170,7 @@ async def execute_workflow_tool(
                 "attempts": node.attempts,
                 "error": node.error,
                 "output": node.output,
+                "metadata": node.metadata,
             }
             for node in result.graph.nodes
         ],
@@ -264,7 +267,8 @@ async def _complete_workflow_group(runtime: Any, result: WorkflowResult) -> None
                 "title": node.title or node.id,
                 "status": node.status,
                 "summary": node.output or node.error or "",
-                "changed_files": [],
+                "changed_files": list(node.metadata.get("changed_files") or []),
+                "metadata": node.metadata,
             }
             for index, node in enumerate(ordered)
         ],

@@ -1,10 +1,11 @@
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/apply-patch/src/parser.rs (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/apply-patch/src/streaming_parser.rs (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/apply-patch/src/file_update.rs (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/apply-patch/src/seek_sequence.rs (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/apply-patch/src/text_file.rs (Apache-2.0)
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276ede: apps/zcode-cli/packages/core/src/tool/edit-matchers.ts (Apache-2.0)
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276ede: apps/zcode-cli/packages/core/src/tool/read-file-state.ts (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/apply-patch/src/parser.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/apply-patch/src/streaming_parser.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/apply-patch/src/file_update.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/apply-patch/src/seek_sequence.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/apply-patch/src/text_file.rs (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/tool/edit-matchers.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/tool/read-file-state.ts (Apache-2.0)
+# Ported from anomalyco/opencode@7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937: packages/core/src/tool/plugin/edit.ts (MIT)
 # SPDX-License-Identifier: Apache-2.0
 """Three edit tools behind the existing orchestrator's approval/checkpoint gate.
 
@@ -136,6 +137,10 @@ def _positions(content: str, search: str) -> list[tuple[int, int]]:
     return [(m.start(), m.end()) for m in re.finditer(re.escape(search), content)]
 
 
+def _punctuation_positions(content: str, search: str) -> list[tuple[int, int]]:
+    return _positions(content.translate(_PUNCTUATION), search.translate(_PUNCTUATION))
+
+
 def _dedent(lines: list[str]) -> str:
     nonempty = [line for line in lines if line.strip()]
     indent = min((len(line) - len(line.lstrip(" \t")) for line in nonempty), default=0)
@@ -154,7 +159,7 @@ def _similarity(left: str, right: str) -> float:
 
 
 def find_edit_match(content: str, search: str, replace_all: bool = False) -> tuple[str, list[tuple[int, int]]]:
-    """ZCode strategy ordering, strengthened to require a unique location."""
+    """ZCode fallbacks plus OpenCode punctuation matching, with unique locations."""
     if not search:
         raise ValueError("old_string must not be empty; use write to create content")
     strategies: list[tuple[str, list[tuple[int, int]]]] = [
@@ -165,7 +170,8 @@ def find_edit_match(content: str, search: str, replace_all: bool = False) -> tup
     if all(numbered):
         strategies.append(("line_number_prefix_stripped", _positions(content, "\n".join(m[1] for m in numbered if m))))
     strategies.extend([("escape_normalized", _positions(content, _visible(search))),
-                       ("unicode_escape_normalized", _positions(content, _unicode(search)))])
+                       ("unicode_escape_normalized", _positions(content, _unicode(search))),
+                       ("punctuation_normalized", _punctuation_positions(content, search))])
     for strategy, candidates in strategies:
         if candidates:
             if len(candidates) != 1 and not replace_all:
@@ -180,12 +186,15 @@ def find_edit_match(content: str, search: str, replace_all: bool = False) -> tup
     offsets = [0]
     for line in lines:
         offsets.append(offsets[-1] + len(line) + 1)
-    for strategy in ("line_trimmed", "indentation_flexible", "block_anchor"):
+    for strategy in ("line_trimmed", "line_trimmed_punctuation", "indentation_flexible", "block_anchor"):
         candidates = []
         for i in range(len(lines) - len(search_lines) + 1):
             block = lines[i:i + len(search_lines)]
             if strategy == "line_trimmed":
                 matches = all(a.strip() == b.strip() for a, b in zip(block, search_lines))
+            elif strategy == "line_trimmed_punctuation":
+                matches = all(a.rstrip().translate(_PUNCTUATION) == b.rstrip().translate(_PUNCTUATION)
+                              for a, b in zip(block, search_lines))
             elif strategy == "indentation_flexible":
                 matches = len(block) >= 2 and _dedent(block) == _dedent(search_lines)
             else:
@@ -259,7 +268,7 @@ def parse_patch(patch: str) -> list[PatchHunk]:
         if current is None:
             if line.strip().startswith("*** Environment ID:"):
                 raise ValueError("Environment-qualified patches must be routed to that environment, not the local editor")
-            raise ValueError(f"Invalid patch hunk header at line {number}")
+            raise ValueError(f"Invalid patch hunk header at line {number}: expected *** Add File: <path>, *** Delete File: <path> or *** Update File: <path>")
         if current.kind == "add" and line.startswith("+"):
             current.content += line[1:] + "\n"
             continue
@@ -318,7 +327,7 @@ def _seek(lines: list[str], pattern: list[str], start: int, eof: bool = False) -
     return None
 
 
-def apply_chunks(text: str, chunks: list[PatchChunk]) -> str:
+def apply_chunks(text: str, chunks: list[PatchChunk], path: str | None = None) -> str:
     records = _lines(text)
     original = [line for line, _ in records]
     ending = _newline(text)
@@ -328,7 +337,8 @@ def apply_chunks(text: str, chunks: list[PatchChunk]) -> str:
         if chunk.context is not None:
             anchor = _seek(original, [chunk.context], cursor)
             if anchor is None:
-                raise ValueError(f"Patch context not found: {chunk.context}")
+                suffix = f" in {path}" if path else ""
+                raise ValueError(f"Patch context not found{suffix}: {chunk.context}; re-read the file and provide an existing @@ anchor")
             cursor = anchor + 1
         if not chunk.old:
             replacements.append((len(original), 0, chunk.new))
@@ -340,7 +350,9 @@ def apply_chunks(text: str, chunks: list[PatchChunk]) -> str:
             new = new[:-1] if new and new[-1] == "" else new
             index = _seek(original, old, cursor, chunk.eof)
         if index is None:
-            raise ValueError("Patch expected lines not found; re-read the file")
+            suffix = f" in {path}" if path else ""
+            expected = "\n".join(chunk.old)
+            raise ValueError(f"Patch expected lines not found{suffix}:\n{expected}\nRe-read the file and update the hunk context")
         old_start = new_start = 0
         for old_context, new_context in chunk.context_indices:
             if old_context >= len(old) or new_context >= len(new):
@@ -501,6 +513,8 @@ class EditManager:
             try:
                 operations: list[tuple[Path, str | None, ReadSnapshot | None, str]] = []
                 if name in {"edit", "write"}:
+                    if name == "edit" and str(arguments["old_string"]) == str(arguments["new_string"]):
+                        raise ValueError("No changes to make: old_string and new_string are exactly the same")
                     path = self._path(arguments["path"])
                     previous = self._existing(path) if path.exists() else None
                     if name == "edit":
@@ -514,7 +528,10 @@ class EditManager:
                             replacement = _normalize(_visible(replacement))
                         text = previous.text
                         for start, end in reversed(matches):
-                            new = _quote_style(content[start:end], replacement) if strategy == "quote_normalized" else replacement
+                            actual = content[start:end]
+                            new = _quote_style(actual, replacement) if actual != old else replacement
+                            if not new and not old.endswith("\n") and content.startswith("\n", end):
+                                end += 1
                             new = _preserve_newlines(new, text[positions[start]:positions[end]], _newline(previous.text))
                             text = text[:positions[start]] + new + text[positions[end]:]
                     else:
@@ -536,15 +553,14 @@ class EditManager:
                             operations.append((path, None, previous, "delete"))
                         else:
                             assert previous is not None
-                            text = apply_chunks(previous.text, hunk.chunks)
+                            text = apply_chunks(previous.text, hunk.chunks, str(path))
                             if hunk.move_to:
                                 destination = self._path(hunk.move_to)
                                 if destination == path:
                                     raise ValueError("Move destination equals the source")
-                                if destination.exists():
-                                    raise ValueError("Move destination exists; choose a new destination")
+                                destination_previous = self._existing(destination) if destination.exists() else None
                                 # Rename retains the source codec/BOM via explicit staged bytes below.
-                                operations.append((destination, text, None, f"move:{path}"))
+                                operations.append((destination, text, destination_previous, f"move:{path}"))
                                 operations.append((path, None, previous, "delete"))
                             else:
                                 operations.append((path, text, previous, "update"))

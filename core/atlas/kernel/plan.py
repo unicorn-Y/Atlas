@@ -1,7 +1,7 @@
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/models-manager/src/collaboration_mode_presets.rs (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/tools/handlers/plan.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/models-manager/src/collaboration_mode_presets.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/tools/handlers/plan.rs (Apache-2.0)
 # SPDX-License-Identifier: Apache-2.0
-# Behavior from Claude Code v2.1.296 docs: https://code.claude.com/docs/en/common-workflows
+# Behavior from Claude Code v2.1.296 docs: https://code.claude.com/docs/en/permission-modes#analyze-before-you-edit-with-plan-mode
 """Plan mode policy using Atlas TaskPlan, TodoStore and plan persistence callback."""
 
 from __future__ import annotations
@@ -96,7 +96,14 @@ class PlanMode:
         stage = self.config.get("reasoning_stages")
         if stage is None:
             stage = load_stage_config()
-        return selected, engine.get("planning_reasoning_effort") or effort_for_phase(stage, "planning") or effort
+        # Codex's Plan preset retains the current model and sets effort to medium;
+        # keep Atlas's explicit planning overrides ahead of that default.
+        planning_effort = (
+            engine.get("planning_reasoning_effort")
+            or effort_for_phase(stage, "planning")
+            or "medium"
+        )
+        return selected, planning_effort
 
     def prompt(self) -> str:
         if not self.active:

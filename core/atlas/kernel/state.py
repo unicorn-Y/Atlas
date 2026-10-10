@@ -1,5 +1,5 @@
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276ede: apps/zcode-cli/packages/core/src/agent/turn-state.ts (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/session/turn.rs (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/agent/turn-state.ts (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/session/turn.rs (Apache-2.0)
 # SPDX-License-Identifier: Apache-2.0
 """Turn phases and run events for the Atlas kernel.
 
@@ -17,9 +17,12 @@ from typing import Any
 
 class RunPhase(StrEnum):
     PREPARING = "preparing"
+    AWAITING_MODEL_RESPONSE = "awaiting_model_response"
     STREAMING = "streaming"
+    SCHEDULING_TOOLS = "scheduling_tools"
     TOOLS = "tools"
     WAITING_APPROVAL = "waiting_approval"
+    AGGREGATING_RESULTS = "aggregating_results"
     COMPACTING = "compacting"
     DONE = "done"
     FAILED = "failed"
@@ -28,22 +31,36 @@ class RunPhase(StrEnum):
 
 _TRANSITIONS: dict[RunPhase, frozenset[RunPhase]] = {
     RunPhase.PREPARING: frozenset({
-        RunPhase.STREAMING, RunPhase.TOOLS, RunPhase.WAITING_APPROVAL,
+        RunPhase.AWAITING_MODEL_RESPONSE, RunPhase.STREAMING, RunPhase.TOOLS, RunPhase.WAITING_APPROVAL,
         RunPhase.COMPACTING, RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED,
     }),
+    RunPhase.AWAITING_MODEL_RESPONSE: frozenset({
+        RunPhase.STREAMING, RunPhase.COMPACTING, RunPhase.FAILED, RunPhase.INTERRUPTED,
+    }),
     RunPhase.STREAMING: frozenset({
+        RunPhase.AWAITING_MODEL_RESPONSE, RunPhase.SCHEDULING_TOOLS,
         RunPhase.TOOLS, RunPhase.WAITING_APPROVAL, RunPhase.COMPACTING,
         RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED,
     }),
+    RunPhase.SCHEDULING_TOOLS: frozenset({
+        RunPhase.TOOLS, RunPhase.WAITING_APPROVAL, RunPhase.FAILED, RunPhase.INTERRUPTED,
+    }),
     RunPhase.TOOLS: frozenset({
-        RunPhase.STREAMING, RunPhase.WAITING_APPROVAL, RunPhase.COMPACTING,
+        RunPhase.WAITING_APPROVAL, RunPhase.AGGREGATING_RESULTS,
+        RunPhase.STREAMING, RunPhase.COMPACTING,
         RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED,
     }),
     RunPhase.WAITING_APPROVAL: frozenset({
-        RunPhase.TOOLS, RunPhase.STREAMING, RunPhase.FAILED, RunPhase.INTERRUPTED,
+        RunPhase.TOOLS, RunPhase.AGGREGATING_RESULTS, RunPhase.STREAMING,
+        RunPhase.FAILED, RunPhase.INTERRUPTED,
+    }),
+    RunPhase.AGGREGATING_RESULTS: frozenset({
+        RunPhase.AWAITING_MODEL_RESPONSE, RunPhase.STREAMING, RunPhase.COMPACTING,
+        RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED,
     }),
     RunPhase.COMPACTING: frozenset({
-        RunPhase.STREAMING, RunPhase.FAILED, RunPhase.INTERRUPTED,
+        RunPhase.AWAITING_MODEL_RESPONSE, RunPhase.STREAMING,
+        RunPhase.FAILED, RunPhase.INTERRUPTED,
     }),
     RunPhase.DONE: frozenset(),
     RunPhase.FAILED: frozenset(),
@@ -59,6 +76,11 @@ class RunState:
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     response_text: str = ""
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    streamed_text: str = ""
+    streamed_reasoning: str = ""
+    streamed_refusal: str = ""
+    streamed_tool_calls: dict[tuple[int, int], dict[str, str]] = field(default_factory=dict)
+    usage_rows: list[dict[str, Any]] = field(default_factory=list)
     usage: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
 

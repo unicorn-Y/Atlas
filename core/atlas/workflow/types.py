@@ -1,4 +1,4 @@
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276e: apps/zcode-cli/packages/core/src/workflow/scheduler/types.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/workflow/scheduler/types.ts (Apache-2.0)
 """Public data contracts for Atlas's standalone DAG workflow runner."""
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ class WorkflowNode:
     error: str | None = None
     output: str | None = None
     collection_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

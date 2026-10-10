@@ -1,11 +1,11 @@
 # Behavior from Claude Code v2.1.296 docs: https://code.claude.com/docs/en/checkpointing
-# Snapshot and message-boundary behavior translated from OpenCode
-# packages/opencode/src/snapshot/index.ts and packages/opencode/src/session/revert.ts
-# at anomalyco/opencode commit 055d95bb7e278c94baf06235a52cac79dd13ba67 (MIT).
+# Snapshot and message-boundary behavior compared with OpenCode
+# packages/core/src/snapshot.ts and packages/core/src/session/revert.ts
+# at anomalyco/opencode commit 7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937 (MIT).
 # File change statuses and structured unified-diff behavior translated from
 # openai/codex codex-rs/git-utils/src/baseline.rs at commit
-# 806d9732c974bc8a51b8317c1bd8985544fe627c (Apache-2.0). Git command helpers in
-# codex-rs/git-utils/src/operations.rs were reviewed; no Git subprocess is needed
+# 6c0c6759d0617d7670826b61aca0a931bbb6db1f (Apache-2.0). Git command helpers in
+# codex-rs/git-utils/src/operations.rs at the same commit were reviewed; no Git subprocess is needed
 # because the existing byte snapshot store is the authoritative code snapshot.
 
 """Conversation-bound workspace checkpoints and three-mode rewind operations.

@@ -1,6 +1,5 @@
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276ede: apps/zcode-cli/packages/core/src/compact/policy.ts (Apache-2.0)
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276ede: apps/zcode-cli/packages/core/src/compact/microcompact.ts (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/compact.rs (Apache-2.0)
+# Behavior aligned with zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/compact/{policy,microcompact,prompt,manual}.ts (Apache-2.0)
+# Behavior aligned with openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/{compact.rs,compact_remote_v2.rs,compact_remote_history.rs,compact_token_budget.rs,context_manager/} (Apache-2.0)
 # SPDX-License-Identifier: Apache-2.0
 # Behavior from Claude Code v2.1.296 docs: https://code.claude.com/docs/en/how-claude-code-works
 """Copy-on-success context reduction; session persistence belongs to the caller."""
@@ -18,10 +17,10 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 DEFAULT_CONTEXT_WINDOW = 200_000
-DEFAULT_CONTEXT_BUDGET = 120_000
 OUTPUT_RESERVE_TOKENS = 21_000
 BUFFER_TOKENS = 13_000
 MAX_CONSECUTIVE_FAILURES = 3
+COMPACT_USER_MESSAGE_MAX_TOKENS = 20_000
 COMPACTABLE_TOOLS = frozenset({
     "Read", "Bash", "Grep", "Glob", "WebFetch", "WebSearch", "Edit", "Write", "ApplyPatch",
     "read_file", "search_files", "terminal", "local_shell", "local_file", "local_edit",
@@ -29,9 +28,11 @@ COMPACTABLE_TOOLS = frozenset({
 })
 SUMMARY_PROMPT = (
     "Summarize this conversation for another agent to continue the same task. "
-    "Preserve the goal, constraints, plan and task status, changed files, decisions, "
-    "evidence references, unresolved problems and pending tool calls. Do not perform "
-    "any tools or continue the task. Return only a concise continuation summary."
+    "Preserve the user's explicit goals and constraints, the plan and completed or pending steps, "
+    "important files and evidence references, decisions, errors and fixes, current work, "
+    "unresolved problems, and pending tool calls with their IDs and completion state. "
+    "Do not invent progress, perform tools, or continue the task. Return only a concise "
+    "continuation summary."
 )
 
 
@@ -69,10 +70,11 @@ class ContextManager:
 
     def budget(self, model_window: int = DEFAULT_CONTEXT_WINDOW) -> int:
         window = max(1, int(model_window))
-        ratio = float(self.config.get("context_budget_ratio", 0.8))
+        ratio = float(self.config.get("context_budget_ratio", 1.0))
         if not math.isfinite(ratio) or not 0 < ratio <= 1:
             raise ValueError("context_budget_ratio must be in (0, 1]")
-        cap = int(self.config.get("context_budget_tokens", DEFAULT_CONTEXT_BUDGET))
+        configured_cap = self.config.get("context_budget_tokens")
+        cap = window if configured_cap is None else int(configured_cap)
         if cap <= 0:
             raise ValueError("context_budget_tokens must be positive")
         reserve = min(window, max(0, int(self.config.get("max_output_tokens", OUTPUT_RESERVE_TOKENS))),
@@ -104,7 +106,7 @@ class ContextManager:
             return messages
         threshold = max(0, min(int(budget_tokens * 0.9), budget_tokens - 2000))
         idle = (self.last_assistant_completed_at is not None and
-                time.time() - self.last_assistant_completed_at >= float(cfg.get("idle_minutes", 60)) * 60)
+                time.time() - self.last_assistant_completed_at > float(cfg.get("idle_minutes", 60)) * 60)
         if not idle and estimate_tokens(messages) + prefix_tokens < threshold:
             return messages
         groups: list[list[int]] = []
@@ -159,6 +161,7 @@ class ContextManager:
                       summarize: Callable[[list[dict[str, Any]], str], Awaitable[str]] | None = None,
                       preserved: Mapping[str, Any] | None = None, focus: str = "",
                       prefix_tokens: int = 0, manual: bool = False,
+                      force: bool = False,
                       before_compact: Callable[[CompactionResult], Awaitable[None]] | None = None) -> CompactionResult:
         budget = self.budget(model_window)
         before = estimate_tokens(history) + prefix_tokens
@@ -167,9 +170,9 @@ class ContextManager:
         after = estimate_tokens(messages) + prefix_tokens
         method = "microcompact" if messages != list(history) else "none"
         result = CompactionResult(messages, method, before, after, budget)
-        if before_compact is not None and (method != "none" or after > budget or manual):
+        if before_compact is not None and (method != "none" or after > budget or manual or force):
             await before_compact(result)
-        if after <= budget and not manual:
+        if after <= budget and not manual and not force:
             return result
         if summarize is None:
             result.error = "context_over_budget: no summarizer available"
@@ -210,11 +213,22 @@ class ContextManager:
             summary = await summarize(copy.deepcopy(old), prompt)
             if not isinstance(summary, str) or not summary.strip():
                 raise ValueError("compaction completed without a summary")
-            retained_user = [messages[latest_user]] if latest_user is not None and latest_user < cut else []
-            replacement = [m for m in messages[:cut] if m.get("role") == "system"] + [{
+            retained_user: list[dict[str, Any]] = []
+            if latest_user is not None and latest_user < cut:
+                remaining_user_tokens = min(COMPACT_USER_MESSAGE_MAX_TOKENS, budget)
+                for index in range(latest_user, -1, -1):
+                    if messages[index].get("role") != "user":
+                        continue
+                    message_tokens = estimate_tokens([messages[index]])
+                    if message_tokens > remaining_user_tokens:
+                        break
+                    retained_user.append(messages[index])
+                    remaining_user_tokens -= message_tokens
+                retained_user.reverse()
+            replacement = [m for m in messages[:cut] if m.get("role") == "system"] + retained_user + [{
                 "role": "user", "content": "[Conversation continuation summary]\n" + summary.strip() +
                 "\n[Preserved task state]\n" + invariants,
-            }] + retained_user + messages[cut:]
+            }] + messages[cut:]
             size = estimate_tokens(replacement) + prefix_tokens
             if size >= after or size > budget:
                 raise ValueError("compaction summary did not fit the context budget")

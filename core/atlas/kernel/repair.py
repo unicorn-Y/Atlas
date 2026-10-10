@@ -1,5 +1,5 @@
 # Ported from deepseek-ai/deepseek-harness@d743267388641bc76f17c45ce8b4c231aed1d32c: packages/core/session/src/repair.ts (MIT)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/session/turn.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/session/turn.rs (Apache-2.0)
 # SPDX-License-Identifier: MIT AND Apache-2.0
 """Repair unpaired model tool calls without replaying uncertain side effects."""
 

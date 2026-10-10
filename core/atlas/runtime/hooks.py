@@ -1,3 +1,7 @@
+# Codex hook runtime reference: openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f
+# (codex-rs/core/src/hook_runtime.rs; Apache-2.0).
+# Claude Code v2.1.296 hooks behavior (closed source):
+# https://docs.anthropic.com/en/docs/claude-code/hooks
 """Atlas command hooks with Claude Code settings compatibility."""
 
 from __future__ import annotations
@@ -115,6 +119,8 @@ def claude_hook_settings(
 def _event_payload(event: str, payload: Mapping[str, Any], cwd: str | None) -> dict[str, Any]:
     data = dict(payload)
     data["hook_event_name"] = event
+    if "session_id" not in data and data.get("conversation_id"):
+        data["session_id"] = data["conversation_id"]
     if cwd:
         data.setdefault("cwd", cwd)
     if "parameters" in data and "tool_input" not in data:
@@ -186,14 +192,17 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
         if decision is None:
             decision = value.get("decision")
             decision = {"block": "deny", "approve": "allow"}.get(decision, decision)
+        if isinstance(decision, str) and decision in {"allow", "deny", "ask", "defer"}:
+            outcome["permission_decision"] = decision
+        if decision == "allow":
+            outcome["allowed"] = True
         if decision == "deny":
             outcome.update(blocked=True, reason=str(
                 specific.get("permissionDecisionReason") or value.get("reason") or "Blocked by hook"
             ))
         elif decision == "ask":
-            # Atlas has no approval card for hook-originated asks this wave, so "ask"
-            # blocks with a reason pointing at manual confirmation.
-            outcome.update(blocked=True, reason="Hook 要求人工确认")
+            outcome["ask_user"] = True
+            outcome["reason"] = str(specific.get("permissionDecisionReason") or "Hook 要求人工确认")
         updated = specific.get("updatedInput")
         if isinstance(updated, Mapping):
             outcome["updated_input"] = dict(updated)
@@ -207,6 +216,7 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
                 outcome.update(blocked=True, reason=str(
                     decision.get("message") or "Permission denied by hook"
                 ))
+                outcome["interrupt"] = bool(decision.get("interrupt", False))
             elif decision.get("behavior") == "ask":
                 outcome["ask_user"] = True
             elif decision.get("behavior") == "allow":
@@ -214,14 +224,88 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
                 updated = decision.get("updatedInput")
                 if isinstance(updated, Mapping):
                     outcome["updated_input"] = dict(updated)
-    else:
+    elif event == "PermissionDenied":
+        outcome["retry"] = specific.get("retry") is True
+    elif event == "PostToolUse":
+        if value.get("decision") == "block":
+            outcome["feedback"] = str(value.get("reason") or "")
+        if "updatedToolOutput" in specific:
+            outcome["updated_tool_output"] = specific["updatedToolOutput"]
+        elif "updatedMCPToolOutput" in specific:
+            outcome["updated_tool_output"] = specific["updatedMCPToolOutput"]
+        context = specific.get("additionalContext") or value.get("additionalContext")
+        if isinstance(context, str) and context:
+            outcome["additional_context"] = context
+    elif event in {"SessionStart", "SubagentStart", "PostModelSwitch"}:
+        context = specific.get("additionalContext") or value.get("additionalContext")
+        if isinstance(context, str) and context:
+            outcome["additional_context"] = context
+        if event == "SessionStart":
+            for source, target in (
+                ("initialUserMessage", "initial_user_message"),
+                ("sessionTitle", "session_title"),
+                ("watchPaths", "watch_paths"),
+                ("reloadSkills", "reload_skills"),
+            ):
+                if source in specific:
+                    outcome[target] = specific[source]
+    elif event == "MessageDisplay":
+        if isinstance(specific.get("displayContent"), str):
+            outcome["display_content"] = specific["displayContent"]
+    elif event in {"Elicitation", "ElicitationResult"}:
+        action = specific.get("action")
+        if isinstance(action, str) and action in {"accept", "decline", "cancel"}:
+            outcome["action"] = action
+        if "content" in specific:
+            outcome["content"] = specific["content"]
+        if value.get("decision") == "block":
+            outcome.update(action="decline", blocked=True,
+                           reason=str(value.get("reason") or "Declined by hook"))
+    elif event == "WorktreeCreate":
+        worktree_path = specific.get("worktreePath")
+        if isinstance(worktree_path, str) and worktree_path:
+            outcome["worktree_path"] = worktree_path
+    elif event == "Stop":
         if value.get("decision") == "block":
             outcome.update(blocked=True, reason=str(value.get("reason") or "Blocked by hook"))
         context = specific.get("additionalContext") or value.get("additionalContext")
         if isinstance(context, str) and context:
             outcome["additional_context"] = context
-    if event == "Stop":
-        outcome["continue"] = not outcome["blocked"]
+    elif event in {
+        "UserPromptSubmit", "UserPromptExpansion", "PostToolUseFailure",
+        "PostToolBatch", "SubagentStop", "ConfigChange", "PreCompact",
+        "TaskCreated", "TaskCompleted", "TeammateIdle", "PreModelSwitch",
+    }:
+        if value.get("decision") == "block" and event == "PostToolUseFailure":
+            outcome["feedback"] = str(value.get("reason") or "")
+        elif value.get("decision") == "block":
+            outcome.update(blocked=True, reason=str(value.get("reason") or "Blocked by hook"))
+        if event == "PreModelSwitch":
+            decision = specific.get("permissionDecision")
+            if isinstance(decision, str) and decision in {"allow", "deny", "ask"}:
+                outcome["permission_decision"] = decision
+                if decision == "deny":
+                    outcome.update(blocked=True, reason=str(
+                        specific.get("permissionDecisionReason") or value.get("reason") or "Model switch blocked by hook"
+                    ))
+                elif decision == "ask":
+                    outcome["ask_user"] = True
+        context = specific.get("additionalContext") or value.get("additionalContext")
+        if isinstance(context, str) and context:
+            outcome["additional_context"] = context
+        if event == "PostToolBatch" and value.get("continue") is False:
+            outcome.update(blocked=True, reason=str(
+                value.get("reason") or value.get("stopReason") or "Stopped by PostToolBatch hook"
+            ))
+        if event in {"TaskCompleted", "TeammateIdle"} and value.get("continue") is False:
+            outcome.update(blocked=True, reason=str(
+                value.get("stopReason") or value.get("reason") or "Stopped by hook"
+            ))
+    if isinstance(value.get("systemMessage"), str) and value["systemMessage"]:
+        outcome["system_message"] = value["systemMessage"]
+    if value.get("continue") is False:
+        outcome["continue"] = False
+        outcome["stop_reason"] = str(value.get("stopReason") or "")
     return outcome
 
 
@@ -292,6 +376,8 @@ async def execute_claude_hooks(
     result: dict[str, Any] = {
         "blocked": False, "reason": "", "updated_input": None,
         "additional_context": "", "continue": None, "logs": [],
+        "updated_tool_output": None, "feedback": "", "permission_decision": None,
+        "allowed": False, "ask_user": False, "retry": False,
     }
     event_payload = _event_payload(event, payload, cwd)
     for group in hooks:
@@ -311,18 +397,61 @@ async def execute_claude_hooks(
             except json.JSONDecodeError:
                 structured = None
             decision = _json_decision(event, structured)
-            if code == 2 and event in _BLOCKING_EXIT_EVENTS:
-                decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Blocked by hook")
+            if code not in {0, 2}:
+                decision = {"blocked": False, "reason": ""}
+            if event == "ConfigChange" and event_payload.get("source") == "policy_settings":
+                decision.update(blocked=False, reason="")
+            if event in {"Elicitation", "ElicitationResult"} and code == 2:
+                decision = {"blocked": True, "reason": stderr.strip() or output.strip() or "Declined by hook",
+                            "action": "decline"}
+            if event == "WorktreeCreate" and code != 0:
+                decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Worktree creation failed")
+            elif event == "WorktreeRemove" and code != 0:
+                worktree_path = event_payload.get("worktree_path") or event_payload.get("path")
+                if isinstance(worktree_path, str) and os.path.exists(worktree_path):
+                    decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Worktree removal failed")
+            elif code == 2 and event in _BLOCKING_EXIT_EVENTS:
+                if event == "ConfigChange" and event_payload.get("source") == "policy_settings":
+                    pass
+                elif event in {"Elicitation", "ElicitationResult"}:
+                    decision.update(blocked=True, action="decline",
+                                    reason=stderr.strip() or output.strip() or "Declined by hook")
+                else:
+                    decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Blocked by hook")
+            elif code == 2 and event in {"PostToolUse", "PostToolUseFailure"}:
+                if stderr.strip():
+                    decision["feedback"] = "\n".join(
+                        item for item in (str(decision.get("feedback") or ""), stderr.strip()) if item
+                    )
             elif not output.strip() and event in {"SessionStart", "UserPromptSubmit", "UserPromptExpansion", "PostModelSwitch"} and code == 0:
                 decision["additional_context"] = ""
             elif structured is None and code == 0 and event in {"SessionStart", "UserPromptSubmit", "UserPromptExpansion", "PostModelSwitch"}:
                 decision["additional_context"] = output.strip()
+            if event == "WorktreeCreate" and code == 0 and not decision.get("worktree_path"):
+                worktree_path = output.strip()
+                if worktree_path:
+                    decision["worktree_path"] = worktree_path
+            for key in (
+                "updated_tool_output", "permission_decision", "system_message",
+                "session_title", "initial_user_message", "watch_paths", "reload_skills",
+                "display_content", "action", "content", "retry", "allowed", "ask_user",
+                "interrupt", "continue", "stop_reason", "worktree_path",
+            ):
+                if key in decision:
+                    if key in {"watch_paths"} and isinstance(decision[key], list):
+                        result[key] = list(dict.fromkeys([*(result.get(key) or []), *decision[key]]))
+                    else:
+                        result[key] = decision[key]
             if decision.get("updated_input"):
                 current = result["updated_input"] or {}
                 result["updated_input"] = {**current, **decision["updated_input"]}
             if decision.get("additional_context"):
                 result["additional_context"] = "\n".join(
                     item for item in (result["additional_context"], decision["additional_context"]) if item
+                )
+            if decision.get("feedback"):
+                result["feedback"] = "\n".join(
+                    item for item in (result["feedback"], decision["feedback"]) if item
                 )
             if decision.get("blocked"):
                 result.update(blocked=True, reason=decision["reason"])
@@ -466,9 +595,12 @@ class HookStore:
         cwd: str | None = None,
         emit: Any = None,
         claude_hooks: Iterable[Mapping[str, Any]] = (),
+        bridge_event_alias: bool = True,
     ) -> dict[str, Any]:
         blocked = {"blocked": False, "reason": "", "updated_input": None,
-                   "additional_context": "", "continue": None, "logs": []}
+                   "additional_context": "", "continue": None, "logs": [],
+                   "updated_tool_output": None, "feedback": "", "permission_decision": None,
+                   "allowed": False, "ask_user": False, "retry": False}
         for hook in self.list():
             if not hook.get("enabled", True) or hook.get("event") != event:
                 continue
@@ -492,7 +624,9 @@ class HookStore:
 
         if blocked["blocked"]:
             return blocked
-        claude_event = event if event in CLAUDE_HOOK_EVENTS else _ATLAS_TO_CLAUDE.get(event)
+        claude_event = event if event in CLAUDE_HOOK_EVENTS else (
+            _ATLAS_TO_CLAUDE.get(event) if bridge_event_alias else None
+        )
         if claude_event:
             all_hooks = [item for item in self.list_claude(cwd) if item.get("enabled", True)]
             all_hooks.extend(item for item in claude_hooks if item.get("enabled", True))

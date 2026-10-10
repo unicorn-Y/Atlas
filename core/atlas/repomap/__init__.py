@@ -101,19 +101,16 @@ def build_repo_map(
             "Repo maps require grep-ast, tree-sitter, and tree-sitter-language-pack."
         ) from exc
 
+    all_files = [(_relative_path(repo_root, path), path) for path in files]
     source_files: list[tuple[str, Path, str]] = []
-    for path in files:
+    for rel, path in all_files:
         try:
             lang = filename_to_lang(str(path))
         except Exception:
             continue
         if not lang or lang not in TAG_QUERIES:
             continue
-        rel = _relative_path(repo_root, path)
         source_files.append((rel, path, lang))
-
-    if not source_files:
-        return ""
 
     tags_by_file: dict[str, list[_Tag]] = {}
     connection = _open_tag_cache(repo_root)
@@ -132,10 +129,11 @@ def build_repo_map(
         if connection is not None:
             connection.close()
 
-    focus = _resolve_hints(repo_root, focus_files, [item[0] for item in source_files])
-    mentions = _resolve_hints(repo_root, mentioned, [item[0] for item in source_files])
+    all_rel_fnames = [item[0] for item in all_files]
+    focus = _resolve_hints(repo_root, focus_files, all_rel_fnames)
+    mentions = _resolve_hints(repo_root, mentioned, all_rel_fnames)
     mentioned_idents = {str(value) for value in mentioned if value}
-    entries = _ranked_entries(tags_by_file, source_files, focus, mentions, mentioned_idents)
+    entries = _ranked_entries(tags_by_file, all_files, focus, mentions, mentioned_idents)
     return _fit_budget(repo_root, entries, focus, max_tokens)
 
 
@@ -199,6 +197,7 @@ def _source_files(root: Path) -> list[Path]:
             for rel in paths
             if (path := root / Path(rel)).is_file()
             and not any(part in _SKIP_DIRS for part in Path(rel).parts)
+            and not _is_internal_repomap_path(rel)
         )
     except (OSError, subprocess.SubprocessError):
         return _walk_source_files(root)
@@ -226,7 +225,11 @@ def _walk_source_files(root: Path) -> list[Path]:
         kept_dirs: list[str] = []
         for name in dirs:
             rel = (current_path / name).relative_to(root).as_posix()
-            if name not in _SKIP_DIRS and not _ignored_by_patterns(rel, True, inherited):
+            if (
+                name not in _SKIP_DIRS
+                and not _is_internal_repomap_path(rel)
+                and not _ignored_by_patterns(rel, True, inherited)
+            ):
                 kept_dirs.append(name)
                 patterns_by_dir[rel] = list(inherited)
         dirs[:] = kept_dirs
@@ -236,9 +239,15 @@ def _walk_source_files(root: Path) -> list[Path]:
                 continue
             path = current_path / name
             rel = path.relative_to(root).as_posix()
-            if not _ignored_by_patterns(rel, False, inherited):
+            if not _is_internal_repomap_path(rel) and not _ignored_by_patterns(
+                rel, False, inherited
+            ):
                 result.append(path)
     return sorted(result)
+
+
+def _is_internal_repomap_path(rel_path: str) -> bool:
+    return rel_path.replace("\\", "/").startswith("data/repomap/")
 
 
 def _ignored_by_patterns(
@@ -426,7 +435,7 @@ def _run_captures(query: Any, node: Any) -> dict[str, list[Any]]:
 
 def _ranked_entries(
     tags_by_file: dict[str, list[_Tag]],
-    source_files: list[tuple[str, Path, str]],
+    all_files: list[tuple[str, Path]],
     focus: set[str],
     mentioned_files: set[str],
     mentioned_idents: set[str],
@@ -434,7 +443,7 @@ def _ranked_entries(
     defines: dict[str, set[str]] = defaultdict(set)
     references: dict[str, list[str]] = defaultdict(list)
     definitions: dict[tuple[str, str], set[_Tag]] = defaultdict(set)
-    file_paths = {rel: path for rel, path, _lang in source_files}
+    file_paths = {rel: path for rel, path in all_files}
     rel_fnames = sorted(file_paths)
     if not rel_fnames:
         return []

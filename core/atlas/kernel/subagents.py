@@ -1,14 +1,14 @@
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/agent/control.rs (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/tools/handlers/multi_agents.rs (Apache-2.0)
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276ede: apps/zcode-cli/packages/core/src/subagent/runner.ts (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/agent/control.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/tools/handlers/multi_agents.rs (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/subagent/runner.ts (Apache-2.0)
 # SPDX-License-Identifier: Apache-2.0
 """Native child lifecycle receipts over Atlas's existing delegated worker.
 
 Sources (Apache-2.0; lifecycle/status/result aggregation adapted to Python):
-* openai/codex @ 806d9732c974bc8a51b8317c1bd8985544fe627c
+* openai/codex @ 6c0c6759d0617d7670826b61aca0a931bbb6db1f
   codex-rs/core/src/agent/control.rs (completion watcher, final status)
   codex-rs/core/src/tools/handlers/multi_agents.rs (collaboration status mapping)
-* zai-org/ZCode @ 29628c9acdb81b703bbd4080c207a0e7ce5e276ede
+* zai-org/ZCode @ aac4755666d09fdcd70272fcf063c077a639015f
   apps/zcode-cli/packages/core/src/subagent/runner.ts
   (completed/failed receipt, duration/token aggregation, cancellation cleanup)
 

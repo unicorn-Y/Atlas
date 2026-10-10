@@ -1,4 +1,4 @@
-# Ported from OpenHands/software-agent-sdk@1cfba2117e92730b0fe1c32520a39aad8611bb8c: openhands-sdk/openhands/sdk/conversation/stuck_detector.py (MIT)
+# Ported from OpenHands/software-agent-sdk@c4b93299cf2b31c8b5d0b2c5a89965ccc5ff24f9: openhands-sdk/openhands/sdk/conversation/stuck_detector.py (MIT)
 # SPDX-License-Identifier: MIT
 """Windowed action/observation loop detection with one corrective nudge.
 
@@ -92,8 +92,11 @@ class StuckDetector:
         if latest_is_tool and len(pairs) >= n and all(p[:2] == pairs[-1][:2] for p in pairs[-n:]):
             return "repeated_call_result"
         n = self.action_error
-        # Preserve OpenHands same-action error streak, regardless of error wording.
-        if latest_is_tool and len(pairs) >= n and all(p[0] == pairs[-1][0] and p[2] for p in pairs[-n:]):
+        # OpenHands requires the same action and the same error observation.
+        if latest_is_tool and len(pairs) >= n and all(
+            p[0] == pairs[-1][0] and p[1] == pairs[-1][1] and p[2]
+            for p in pairs[-n:]
+        ):
             return "repeated_errors"
         n = self.monologue
         if len(events) >= n and all(kind == "message" for kind, _ in events[-n:]):

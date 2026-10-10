@@ -1,14 +1,21 @@
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/responses_retry.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/responses_retry.rs (Apache-2.0)
+# Claude Code v2.1.296 retry settings are modeled from https://code.claude.com/docs/en/env-vars.
 # SPDX-License-Identifier: Apache-2.0
-"""Routed streaming model calls with bounded recovery and partial response retention."""
+"""Routed streaming model calls with classified retries and partial response retention."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import math
+import os
+import random
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Awaitable, Callable
 
 
@@ -39,6 +46,71 @@ class ModelCallError(RuntimeError):
         self.retryable = retryable
 
 
+_RATE_LIMIT_RETRY_RE = re.compile(
+    r"try again in\s*(\d+(?:\.\d+)?)\s*(s|ms|seconds?)", re.IGNORECASE,
+)
+
+
+def _retry_environment(
+    max_retries: int | None,
+    retry_watchdog: bool | None,
+    retry_watchdog_max_wait_s: float | None,
+    overloaded_retry_base_delay_s: float | None,
+) -> tuple[int, bool, float | None, float]:
+    watchdog = (
+        os.environ.get("CLAUDE_CODE_RETRY_WATCHDOG") == "1"
+        if retry_watchdog is None else bool(retry_watchdog)
+    )
+    env_retry_count: int | None = None
+    if max_retries is None:
+        try:
+            raw_retries = os.environ.get("CLAUDE_CODE_MAX_RETRIES")
+            if raw_retries is not None:
+                parsed_retries = float(raw_retries.replace("_", ""))
+                if (
+                    math.isfinite(parsed_retries)
+                    and parsed_retries >= 0
+                    and parsed_retries.is_integer()
+                ):
+                    env_retry_count = int(parsed_retries)
+        except (TypeError, ValueError, OverflowError):
+            pass
+        retries = env_retry_count if env_retry_count is not None else (300 if watchdog else 10)
+        if env_retry_count is not None and not watchdog:
+            retries = min(retries, 15)
+    else:
+        retries = max(0, int(max_retries))
+
+    if retry_watchdog_max_wait_s is None:
+        try:
+            raw_wait_ms = os.environ.get("CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS", "")
+            wait_ms = int(raw_wait_ms) if raw_wait_ms.isdigit() else 0
+            max_wait = wait_ms / 1000 if wait_ms > 0 else None
+        except (TypeError, ValueError, OverflowError):
+            max_wait = None
+    else:
+        try:
+            value = float(retry_watchdog_max_wait_s)
+            max_wait = value if math.isfinite(value) and value > 0 else None
+        except (TypeError, ValueError, OverflowError):
+            max_wait = None
+
+    if overloaded_retry_base_delay_s is None:
+        try:
+            raw_base_ms = os.environ.get("CLAUDE_CODE_OVERLOADED_RETRY_BASE_DELAY_MS", "")
+            base_ms = int(raw_base_ms) if raw_base_ms.isdigit() else 0
+            base_delay = base_ms / 1000 if 500 <= base_ms <= 32000 else 0.5
+        except (TypeError, ValueError, OverflowError):
+            base_delay = 0.5
+    else:
+        try:
+            value = float(overloaded_retry_base_delay_s)
+            base_delay = value if math.isfinite(value) and 0.5 <= value <= 32.0 else 0.5
+        except (TypeError, ValueError, OverflowError):
+            base_delay = 0.5
+    return retries, watchdog, max_wait, base_delay
+
+
 def _get(value: Any, key: str, default: Any = None) -> Any:
     return value.get(key, default) if isinstance(value, dict) else getattr(value, key, default)
 
@@ -59,41 +131,245 @@ def _overlap_merge(old: str, new: str) -> str:
 
 
 def _status(exc: BaseException) -> int | None:
-    response = getattr(exc, "response", None)
-    value = getattr(response, "status_code", None)
-    if value is None:
-        value = getattr(exc, "status_code", None) or getattr(exc, "status", None)
-    try:
-        return int(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
+    current: Any = exc
+    seen: set[int] = set()
+    for _ in range(4):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        response = _get(current, "response")
+        for value in (
+            _get(response, "status_code"), _get(response, "status"), _get(current, "status_code"),
+            _get(current, "status"), _get(current, "http_status"),
+        ):
+            try:
+                if value is not None:
+                    return int(value)
+            except (TypeError, ValueError):
+                continue
+        current = _get(current, "__cause__") or _get(current, "__context__")
+    return None
+
+
+def _error_text(exc: BaseException) -> str:
+    parts: list[str] = [str(exc)]
+    current: Any = exc
+    seen: set[int] = set()
+    for _ in range(4):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        parts.append(type(current).__name__)
+        for key in ("message", "body", "code", "type", "error", "detail"):
+            try:
+                value = _get(current, key)
+                if value is None:
+                    continue
+                if isinstance(value, (dict, list, tuple)):
+                    parts.append(json.dumps(value, ensure_ascii=False, default=str))
+                else:
+                    parts.append(str(value))
+            except Exception:
+                continue
+        response = _get(current, "response")
+        try:
+            response_text = _get(response, "text")
+            if response_text:
+                parts.append(str(response_text))
+        except Exception:
+            pass
+        current = _get(current, "__cause__") or _get(current, "__context__")
+    return " ".join(parts).lower()
 
 
 def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
     status = _status(exc)
-    text = str(exc).lower()
+    text = _error_text(exc)
     name = type(exc).__name__.lower()
-    if status in {429, 529} or "overload" in text or "rate limit" in text:
+    if status == 413 or any(marker in text for marker in (
+        "context_length_exceeded", "context_window_exceeded", "context_length_error",
+        "context window", "context length", "maximum context", "prompt is too long",
+        "prompt_too_long", "input is too long", "too many tokens", "request_too_large",
+    )):
+        return "context_window_exceeded", False, status
+    if any(marker in text for marker in (
+        "content_filter", "content filter", "safety filter", "content was blocked",
+        "content policy", "moderation_blocked", "blocked by policy",
+    )):
+        return "content_filter", True, status
+    if status == 402 or any(marker in text for marker in (
+        "insufficient_quota", "credit_balance_exhausted", "spend_limit_exceeded",
+        "usage_limit_reached", "billing_error", "billing limit", "spend limit",
+        "usage limit", "credit balance is too low", "insufficient balance",
+        "quota exhausted", "exceeded your current quota",
+    )):
+        return "billing", False, status
+    if status in {401, 403} or any(marker in text for marker in (
+        "authentication_error", "invalid_api_key", "unauthorized", "permission_denied",
+        "authentication failed",
+    )):
+        return "authentication", False, status
+    if status == 404 or any(marker in text for marker in (
+        "model_not_found", "model not found", "unknown model",
+    )):
+        return "model_not_found", False, status
+    if status == 429 or any(marker in text for marker in (
+        "rate_limit_error", "rate_limit_exceeded", "rate limit", "too many requests",
+        "slow_down",
+    )):
+        return "rate_limit", True, status
+    if status == 529 or "overload" in text or "server_is_overloaded" in text:
         return "overloaded", True, status
-    if status in {408, 425} or "timeout" in name or "timed out" in text:
+    if status in {408, 425, 504} or "timeout" in name or "timed out" in text:
         return "timeout", True, status
-    if status is not None and (status >= 500 or status in {409}):
+    if status is not None and (status >= 500 or status == 409):
         return "provider", True, status
     if any(marker in name or marker in text for marker in (
         "connection", "connecterror", "incompleteread", "streamclosed", "remoteprotocol",
+        "network", "unexpected eof", "server disconnected", "connection reset", "broken pipe",
+        "incomplete chunked read", "streamerror", "response stream",
     )):
         return "connection", True, status
+    if status in {400, 422}:
+        return "invalid_request", False, status
     return "model", False, status
 
 
-def _retry_after(exc: BaseException) -> float | None:
-    response = getattr(exc, "response", None)
-    headers = getattr(response, "headers", None)
-    raw = headers.get("Retry-After") if headers is not None else None
-    try:
-        return max(0.0, min(float(raw), 60.0)) if raw is not None else None
-    except (TypeError, ValueError):
+def _retry_after_value(value: Any) -> float | None:
+    if value is None:
         return None
+    if isinstance(value, (int, float)):
+        try:
+            numeric = float(value)
+            return max(0.0, numeric) if math.isfinite(numeric) else None
+        except (TypeError, ValueError, OverflowError):
+            return None
+    seconds = getattr(value, "total_seconds", None)
+    if callable(seconds):
+        try:
+            numeric = float(seconds())
+            return max(0.0, numeric) if math.isfinite(numeric) else None
+        except (TypeError, ValueError, OverflowError):
+            return None
+    raw = str(value).strip()
+    try:
+        numeric = float(raw)
+        return max(0.0, numeric) if math.isfinite(numeric) else None
+    except (TypeError, ValueError, OverflowError):
+        pass
+    try:
+        retry_at = parsedate_to_datetime(raw)
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max(0.0, retry_at.timestamp() - time.time())
+    except (TypeError, ValueError, OverflowError, IndexError):
+        return None
+
+
+def _retry_after(exc: BaseException) -> float | None:
+    status = _status(exc)
+    reset_headers = (
+        "anthropic-ratelimit-requests-reset",
+        "anthropic-ratelimit-tokens-reset",
+        "anthropic-ratelimit-input-tokens-reset",
+        "anthropic-ratelimit-output-tokens-reset",
+        "anthropic-priority-input-tokens-reset",
+        "anthropic-priority-output-tokens-reset",
+    )
+    current: Any = exc
+    seen: set[int] = set()
+    for _ in range(4):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        response = _get(current, "response")
+        headers = _get(response, "headers")
+        raw = None
+        if headers is not None:
+            try:
+                raw = headers.get("Retry-After")
+                if raw is None:
+                    raw = headers.get("retry-after")
+                if raw is None and callable(getattr(headers, "items", None)):
+                    raw = next((value for key, value in headers.items()
+                                if str(key).lower() == "retry-after"), None)
+            except Exception:
+                raw = None
+        delay = _retry_after_value(raw)
+        if delay is not None:
+            return delay
+        if status in {429, 529} and headers is not None:
+            try:
+                items = headers.items() if callable(getattr(headers, "items", None)) else ()
+                lowered = {str(key).lower(): value for key, value in items}
+                for header in reset_headers:
+                    reset = lowered.get(header)
+                    if reset is None:
+                        continue
+                    try:
+                        reset_at = datetime.fromisoformat(str(reset).strip().replace("Z", "+00:00"))
+                        if reset_at.tzinfo is None:
+                            reset_at = reset_at.replace(tzinfo=timezone.utc)
+                        return max(0.0, reset_at.timestamp() - time.time())
+                    except (TypeError, ValueError, OverflowError):
+                        continue
+            except Exception:
+                pass
+        delay = _retry_after_value(_get(current, "retry_after"))
+        if delay is not None:
+            return delay
+        current = _get(current, "__cause__") or _get(current, "__context__")
+    match = _RATE_LIMIT_RETRY_RE.search(_error_text(exc))
+    if match:
+        try:
+            value = float(match.group(1))
+            return max(0.0, value / 1000 if match.group(2).lower() == "ms" else value)
+        except (TypeError, ValueError, OverflowError):
+            pass
+    return None
+
+
+def _backoff(retry_index: int) -> float:
+    """Codex's shared 200 ms exponential backoff with up to 10% jitter."""
+    base = 0.2 * (2 ** max(0, retry_index))
+    return base * random.uniform(0.9, 1.1)
+
+
+def _overloaded_backoff(retry_index: int, base_delay_s: float) -> float:
+    """Claude Code's documented 500 ms exponential start for 529 responses."""
+    return min(300.0, base_delay_s * (2 ** min(max(0, retry_index), 16)))
+
+
+async def _publish(
+    callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None,
+    event: dict[str, Any],
+) -> None:
+    if callback is None:
+        return
+    published = callback(event)
+    if asyncio.iscoroutine(published):
+        await published
+
+
+def _choice_auxiliary_delta(chunk: Any) -> tuple[str, str]:
+    choices = _get(chunk, "choices") or []
+    if not choices:
+        return "", ""
+    delta = _get(choices[0], "delta") or _get(choices[0], "message") or {}
+    reasoning = _get(delta, "reasoning_content") or _get(delta, "reasoning") or ""
+    if isinstance(reasoning, (list, tuple)):
+        pieces = []
+        for item in reasoning:
+            item_type = str(_get(item, "type") or "").lower()
+            if item_type in {"reasoning.text", "text", "summary_text"}:
+                value = _get(item, "text") or _get(item, "content") or ""
+                if isinstance(value, str):
+                    pieces.append(value)
+        reasoning = "".join(pieces)
+    if not isinstance(reasoning, str):
+        reasoning = ""
+    refusal = _get(delta, "refusal") or ""
+    return reasoning, refusal if isinstance(refusal, str) else ""
 
 
 def _stream_next(stream: Any) -> tuple[bool, Any]:
@@ -195,10 +471,15 @@ async def complete_stream(
     reasoning_effort: str | None = None,
     max_output_tokens: int | None = None,
     cancel_event: asyncio.Event | None = None,
-    max_retries: int = 2,
+    max_retries: int | None = None,
     fallback_models: list[str] | None = None,
     on_text: Callable[[str], Awaitable[None] | None] | None = None,
     on_attempt: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
+    on_event: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
+    unbounded_connection_retries: bool = True,
+    retry_watchdog: bool | None = None,
+    retry_watchdog_max_wait_s: float | None = None,
+    overloaded_retry_base_delay_s: float | None = None,
     usage_budget: Any = None,
 ) -> ModelCallResult:
     """Stream one model response through Atlas ModelRouter and Hermes transport."""
@@ -209,9 +490,17 @@ async def complete_stream(
     router = agent._model_router
     candidates = [model_id, *(fallback_models or [])]
     candidates = list(dict.fromkeys(str(item) for item in candidates if item))
-    max_retries = max(0, min(int(max_retries), 8))
+    max_retries, retry_watchdog, retry_watchdog_max_wait_s, overloaded_retry_base_delay_s = (
+        _retry_environment(
+            max_retries, retry_watchdog, retry_watchdog_max_wait_s,
+            overloaded_retry_base_delay_s,
+        )
+    )
     combined_text = ""
-    accumulated_tools: dict[int, _ToolDelta] = {}
+    combined_reasoning = ""
+    combined_refusal = ""
+    request_messages = list(messages)
+    content_filter_guidance_added = False
     last_error: ModelCallError | None = None
     total_attempts = 0
     overall_started = time.monotonic()
@@ -231,14 +520,19 @@ async def complete_stream(
         last_route = route
         wire_model = route.wire_model or route.model
         route_started = time.monotonic()
+        retry_index = 0
+        connection_retry_count = 0
+        connection_retry_delay = 5.0
+        overloaded_retry_count = 0
+        watchdog_capacity_wait_s = 0.0
 
-        for retry_index in range(max_retries + 1):
+        while True:
             if cancel_event is not None and cancel_event.is_set():
                 raise asyncio.CancelledError
             total_attempts += 1
             request_id = uuid.uuid4().hex
             estimated = max(1, estimate_tokens(
-                json.dumps(messages, ensure_ascii=False, default=str), model=wire_model,
+                json.dumps(request_messages, ensure_ascii=False, default=str), model=wire_model,
             ))
             if usage_budget is not None and not usage_budget.reserve(
                 request_id, estimated, purpose="conversation",
@@ -247,8 +541,11 @@ async def complete_stream(
                 raise ModelCallError("Run input-token budget reached", category="budget")
             stream = None
             attempt_text = ""
+            attempt_reasoning = ""
+            attempt_refusal = ""
             attempt_tools: dict[int, _ToolDelta] = {}
             attempt_usage: dict[str, Any] = {}
+            finish_reason: str | None = None
             attempt_started = time.monotonic()
             main_runtime = {
                 "provider": route.provider, "model": wire_model,
@@ -260,7 +557,7 @@ async def complete_stream(
                     "task": "conversation", "provider": route.provider, "model": wire_model,
                     "base_url": route.base_url, "api_key": route.key,
                     "api_mode": route.api_mode, "main_runtime": main_runtime,
-                    "messages": _wire_messages(messages), "tools": tools or None, "stream": True,
+                    "messages": _wire_messages(request_messages), "tools": tools or None, "stream": True,
                     "stream_options": {"include_usage": True},
                 }
                 if max_output_tokens:
@@ -295,7 +592,13 @@ async def complete_stream(
                         has_chunk, chunk = await next_task
                     if not has_chunk:
                         break
+                    choices = _get(chunk, "choices") or []
+                    if choices:
+                        terminal_reason = _get(choices[0], "finish_reason")
+                        if terminal_reason is not None:
+                            finish_reason = str(terminal_reason).lower()
                     text_delta, tool_deltas, usage = _choice_delta(chunk)
+                    reasoning_delta, refusal_delta = _choice_auxiliary_delta(chunk)
                     if usage is not None:
                         attempt_usage = _usage_dict(usage)
                     if text_delta is not None:
@@ -309,27 +612,66 @@ async def complete_stream(
                                 published = on_text(delta)
                                 if asyncio.iscoroutine(published):
                                     await published
+                            await _publish(on_event, {
+                                "type": "text_delta", "delta": delta, "attempt": total_attempts,
+                            })
+                    if reasoning_delta:
+                        attempt_reasoning = _merge_delta(attempt_reasoning, reasoning_delta)
+                        merged = _merge_delta(combined_reasoning, attempt_reasoning)
+                        if merged.startswith(combined_reasoning) and len(merged) > len(combined_reasoning):
+                            delta = merged[len(combined_reasoning):]
+                            combined_reasoning = merged
+                            await _publish(on_event, {
+                                "type": "reasoning_delta", "delta": delta, "attempt": total_attempts,
+                            })
+                    if refusal_delta:
+                        attempt_refusal = _merge_delta(attempt_refusal, refusal_delta)
+                        merged = _merge_delta(combined_refusal, attempt_refusal)
+                        if merged.startswith(combined_refusal) and len(merged) > len(combined_refusal):
+                            delta = merged[len(combined_refusal):]
+                            combined_refusal = merged
+                            await _publish(on_event, {
+                                "type": "refusal_delta", "delta": delta, "attempt": total_attempts,
+                            })
                     if isinstance(tool_deltas, list):
                         for delta in tool_deltas:
-                            index = int(_get(delta, "index", 0) or 0)
+                            try:
+                                index = int(_get(delta, "index", 0) or 0)
+                            except (TypeError, ValueError) as exc:
+                                raise ModelCallError(
+                                    "Model returned an invalid tool-call index",
+                                    category="malformed_response", retryable=True,
+                                ) from exc
                             current = attempt_tools.setdefault(index, _ToolDelta())
                             function = _get(delta, "function") or {}
-                            current.call_id += str(_get(delta, "id") or "")
-                            current.name += str(_get(function, "name") or "")
-                            current.arguments += str(_get(function, "arguments") or "")
-                    if on_attempt is not None:
-                        # This callback is intentionally request-level; callers log
-                        # only completed attempts and retry boundaries.
-                        pass
-                for index, delta in attempt_tools.items():
-                    current = accumulated_tools.setdefault(index, _ToolDelta())
-                    current.call_id = _merge_delta(current.call_id, delta.call_id)
-                    current.name = _merge_delta(current.name, delta.name)
-                    current.arguments = _merge_delta(current.arguments, delta.arguments)
+                            call_id = str(_get(delta, "id") or "")
+                            name = str(_get(function, "name") or "")
+                            arguments = str(_get(function, "arguments") or "")
+                            current.call_id = _merge_delta(current.call_id, call_id)
+                            current.name = _merge_delta(current.name, name)
+                            current.arguments = _merge_delta(current.arguments, arguments)
+                            if call_id or name or arguments:
+                                await _publish(on_event, {
+                                    "type": "tool_call_delta", "attempt": total_attempts,
+                                    "index": index,
+                                    **({"id": call_id} if call_id else {}),
+                                    **({"name": name} if name else {}),
+                                    **({"arguments": arguments} if arguments else {}),
+                                })
+                if finish_reason == "content_filter":
+                    raise ModelCallError(
+                        "Model response stopped by the content filter",
+                        category="content_filter", retryable=True,
+                    )
+                if finish_reason is None:
+                    raise ModelCallError(
+                        "Model stream ended before a completion marker",
+                        category="connection", retryable=True,
+                    )
                 last_usage = attempt_usage or last_usage
                 duration_ms = int((time.monotonic() - overall_started) * 1000)
                 result = ModelCallResult(
-                    combined_text, _tool_calls(accumulated_tools), last_usage,
+                    combined_text, _tool_calls(attempt_tools), last_usage,
                     total_attempts, duration_ms, route.model_id or candidate, route.provider,
                 )
                 if usage_budget is not None:
@@ -368,20 +710,73 @@ async def complete_stream(
                 last_error = error
                 if status in {429, 529}:
                     cool(route.model_id or candidate, 60.0)
+                retry_after = _retry_after(exc)
+                connection_retry = bool(
+                    error.retryable and error.category == "connection"
+                    and unbounded_connection_retries
+                    and "bedrock" not in str(route.provider).lower()
+                )
+                watchdog_capacity_retry = bool(
+                    error.retryable and retry_watchdog and status in {429, 529}
+                    and error.category in {"rate_limit", "overloaded"}
+                )
+                will_retry = connection_retry or watchdog_capacity_retry or bool(
+                    error.retryable and retry_index < max_retries
+                )
+                if watchdog_capacity_retry and retry_watchdog_max_wait_s is not None:
+                    remaining_wait = retry_watchdog_max_wait_s - watchdog_capacity_wait_s
+                    if remaining_wait <= 0:
+                        will_retry = False
+
+                delay = connection_retry_delay if connection_retry else retry_after
+                if will_retry and delay is None:
+                    if status == 529 or error.category == "overloaded":
+                        delay = _overloaded_backoff(
+                            overloaded_retry_count, overloaded_retry_base_delay_s,
+                        )
+                    else:
+                        delay = _backoff(retry_index)
+                if watchdog_capacity_retry and will_retry and retry_watchdog_max_wait_s is not None:
+                    remaining_wait = max(0.0, retry_watchdog_max_wait_s - watchdog_capacity_wait_s)
+                    delay = min(delay or 0.0, remaining_wait)
+                retry_kind = (
+                    "connection" if connection_retry else
+                    "watchdog_capacity" if watchdog_capacity_retry and will_retry else
+                    "overloaded" if status == 529 or error.category == "overloaded" else
+                    "standard" if will_retry else None
+                )
+                retry_number = (
+                    connection_retry_count + 1 if connection_retry else
+                    overloaded_retry_count + 1 if status == 529 or error.category == "overloaded" else
+                    retry_index + 1
+                )
                 if on_attempt is not None:
                     event = {"ok": False, "attempt": total_attempts,
                              "model": route.model_id or candidate,
                              "provider": route.provider, "category": error.category,
                              "status": error.status,
                              "duration_ms": int((time.monotonic() - attempt_started) * 1000),
-                             "retry": bool(error.retryable and retry_index < max_retries)}
+                             "retry": will_retry,
+                             "retry_kind": retry_kind,
+                             "retry_number": retry_number if will_retry else None,
+                             "retry_delay_s": delay,
+                             "retry_after_s": retry_after}
                     published = on_attempt(event)
                     if asyncio.iscoroutine(published):
                         await published
-                if not error.retryable or retry_index >= max_retries:
+                if not will_retry:
                     break
-                delay = _retry_after(exc)
-                delay = delay if delay is not None else min(30.0, 0.5 * (2 ** retry_index))
+                if error.category == "content_filter" and not content_filter_guidance_added:
+                    request_messages.insert(0, {
+                        "role": "system",
+                        "content": (
+                            "<content_filter_guidance>\n"
+                            "Your previous response was blocked by a content filter. Do not treat this as a transient failure or try to reproduce or work around the blocked content through repeated attempts, altered formatting, splitting, encoding, tools, subagents, or later wakes. Briefly explain the limitation and offer a permitted alternative. Continue unrelated authorized work.\n"
+                            "</content_filter_guidance>"
+                        ),
+                    })
+                    content_filter_guidance_added = True
+                assert delay is not None
                 if cancel_event is not None:
                     try:
                         await asyncio.wait_for(cancel_event.wait(), timeout=delay)
@@ -390,6 +785,17 @@ async def complete_stream(
                         pass
                 else:
                     await asyncio.sleep(delay)
+                if connection_retry:
+                    connection_retry_count += 1
+                    connection_retry_delay = min(60.0, connection_retry_delay * 2)
+                elif watchdog_capacity_retry:
+                    watchdog_capacity_wait_s += delay
+                    if status == 529 or error.category == "overloaded":
+                        overloaded_retry_count += 1
+                else:
+                    retry_index += 1
+                    if status == 529 or error.category == "overloaded":
+                        overloaded_retry_count += 1
             finally:
                 if stream is not None:
                     close = getattr(stream, "close", None)

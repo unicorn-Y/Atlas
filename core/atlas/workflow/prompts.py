@@ -1,4 +1,4 @@
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276e: apps/zcode-cli/packages/core/src/workflow/scheduler/prompts.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/workflow/scheduler/prompts.ts (Apache-2.0)
 """Prompt construction kept separate from model access and runtime adapters."""
 
 from __future__ import annotations

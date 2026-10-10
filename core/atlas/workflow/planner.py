@@ -1,6 +1,6 @@
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276e: apps/zcode-cli/packages/core/src/workflow/scheduler/planner-expansion.ts (Apache-2.0)
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276e: apps/zcode-cli/packages/core/src/workflow/scheduler/collection-planner.ts (Apache-2.0)
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276e: apps/zcode-cli/packages/core/src/workflow/scheduler/collection-runtime.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/workflow/scheduler/planner-expansion.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/workflow/scheduler/collection-planner.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/workflow/scheduler/collection-runtime.ts (Apache-2.0)
 # Planner prompt shape follows apps/zcode-cli/packages/core/src/workflow/scheduler/prompts.ts at the same commit.
 """Callback-driven initial planning and validated dynamic DAG expansion."""
 

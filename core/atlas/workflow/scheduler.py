@@ -1,4 +1,4 @@
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276e: apps/zcode-cli/packages/core/src/workflow/scheduler.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/workflow/scheduler.ts (Apache-2.0)
 # Collection scheduling thresholds follow apps/zcode-cli/packages/core/src/workflow/scheduler/collection-planner.ts at the same commit.
 """Bounded DAG scheduling with durable events, retries, pause, and resume."""
 
@@ -27,6 +27,40 @@ async def run_workflow(
     planner: PlannerCallback | None = None,
     journal: WorkflowJournal | None = None,
     _resume: bool = False,
+) -> WorkflowResult:
+    """Run a DAG and always stop owned node tasks when the scheduler exits early."""
+    active: dict[str, asyncio.Task[tuple[float, NodeResult | None, Exception | None]]] = {}
+    try:
+        return await _run_workflow_impl(
+            graph,
+            runner,
+            max_parallel=max_parallel,
+            on_event=on_event,
+            planner=planner,
+            journal=journal,
+            _resume=_resume,
+            _active=active,
+        )
+    except BaseException:
+        tasks = list(active.values())
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+
+async def _run_workflow_impl(
+    graph: WorkflowGraph,
+    runner: SubagentRunner,
+    *,
+    max_parallel: int,
+    on_event: Callable[[dict[str, Any]], Any],
+    planner: PlannerCallback | None,
+    journal: WorkflowJournal | None,
+    _resume: bool,
+    _active: dict[str, asyncio.Task[tuple[float, NodeResult | None, Exception | None]]] | None = None,
 ) -> WorkflowResult:
     """Run or resume a DAG, persisting every transition in the dedicated SQLite journal.
 
@@ -59,7 +93,7 @@ async def run_workflow(
             status="running",
         )
 
-    active: dict[str, asyncio.Task[tuple[float, NodeResult | None, Exception | None]]] = {}
+    active = _active if _active is not None else {}
     consecutive_failures = 0
     threshold_reached = False
 
@@ -207,6 +241,7 @@ async def _collect_completed(
             node.status = "completed"
             node.error = None
             node.output = result.response
+            node.metadata = dict(result.metadata or {})
             await emit_event(
                 journal,
                 graph,
@@ -214,7 +249,7 @@ async def _collect_completed(
                 "node_completed",
                 node_id=node.id,
                 message=f"Node completed: {node.title or node.id}",
-                payload={"model": result.model},
+                payload={"model": result.model, "metadata": node.metadata},
                 status="running",
             )
             outcomes.append((node_id, True))

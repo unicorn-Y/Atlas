@@ -1,6 +1,6 @@
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/tools/parallel.rs (Apache-2.0)
-# Ported from openai/codex@806d9732c974bc8a51b8317c1bd8985544fe627c: codex-rs/core/src/tools/orchestrator.rs (Apache-2.0)
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276ede: apps/zcode-cli/packages/core/src/tool/scheduler.ts (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/tools/parallel.rs (Apache-2.0)
+# Ported from openai/codex@6c0c6759d0617d7670826b61aca0a931bbb6db1f: codex-rs/core/src/tools/orchestrator.rs (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/tool/scheduler.ts (Apache-2.0)
 # SPDX-License-Identifier: Apache-2.0
 """Bounded read concurrency around Atlas's existing approval/dispatch route.
 
@@ -25,6 +25,7 @@ READ_ONLY_TOOLS = frozenset({
     "read_file", "search_files", "session_search", "web_search", "web_fetch",
     "read", "glob", "grep", "list_directory", "lsp_diagnostics", "lsp_hover",
     "lsp_definition", "lsp_references", "lsp_document_symbols", "build_repo_map",
+    "read_office", "coding.repo_map", "coding.ast_grep.run",
 })
 EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write"})
 
@@ -73,8 +74,25 @@ class ToolExecutionResult:
     receipt: ToolReceipt
 
 
-def _call(call: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
-    function = call.get("function") or call
+def _call_identity(call: Any) -> tuple[str, str]:
+    if not isinstance(call, dict):
+        return "", ""
+    function = call.get("function")
+    if function is None:
+        function = call
+    if not isinstance(function, dict):
+        return str(call.get("id") or call.get("call_id") or ""), ""
+    return str(call.get("id") or call.get("call_id") or ""), str(function.get("name") or "")
+
+
+def _call(call: Any) -> tuple[str, str, dict[str, Any]]:
+    if not isinstance(call, dict):
+        raise ValueError("Tool call must be an object")
+    function = call.get("function")
+    if function is None:
+        function = call
+    elif not isinstance(function, dict):
+        raise ValueError("Tool function must be an object")
     args = function.get("arguments", call.get("arguments", {}))
     if isinstance(args, str):
         args = json.loads(args or "{}")
@@ -89,7 +107,9 @@ def is_error(output: Any) -> bool:
             output = json.loads(output)
         except ValueError:
             return False
-    return isinstance(output, dict) and bool(output.get("is_error") or output.get("error"))
+    return isinstance(output, dict) and bool(
+        output.get("is_error") or output.get("error") or output.get("success") is False
+    )
 
 
 class ToolScheduler:
@@ -118,10 +138,15 @@ class ToolScheduler:
             return bool(self.read_only(name, args))
         return name in READ_ONLY_TOOLS
 
-    async def _execute(self, call: dict[str, Any]) -> ToolExecutionResult:
+    async def _execute(
+        self,
+        call: dict[str, Any],
+        cancelled_indices: set[int] | None = None,
+        index: int | None = None,
+    ) -> ToolExecutionResult:
         started = time.monotonic()
-        call_id = str(call.get("id") or call.get("call_id") or "")
-        name = str((call.get("function") or call).get("name") or "")
+        call_id, name = _call_identity(call)
+        handler_started = False
         state = "not_started"
         try:
             call_id, name, args = _call(call)
@@ -138,14 +163,21 @@ class ToolScheduler:
             else:
                 async with self._slots:
                     state = "unknown"
+                    handler_started = True
                     output = await self.dispatch(call_id, name, args)
                 state = "failed" if is_error(output) else "completed"
                 if isinstance(output, dict):
                     state = str(output.get("outcome") or state)
         except asyncio.CancelledError:
-            # Cancellation must reach the batch coordinator so it never starts
-            # later exclusive writes after the user has interrupted this turn.
-            raise
+            if cancelled_indices is not None and index is not None:
+                cancelled_indices.add(index)
+            state = "cancelled"
+            phase = "during execution" if handler_started else "before execution"
+            output = {
+                "is_error": True,
+                "error": f"Tool call cancelled {phase}",
+                "outcome": state,
+            }
         except Exception as exc:
             state = "failed"
             output = {
@@ -160,28 +192,107 @@ class ToolScheduler:
     async def execute(self, call: dict[str, Any]) -> ToolExecutionResult:
         return (await self.run([call]))[0]
 
-    async def run(self, calls: list[dict[str, Any]]) -> list[ToolExecutionResult]:
-        async with self._batch_lock:
+    async def _execute_parallel(
+        self,
+        calls: list[tuple[int, dict[str, Any]]],
+        cancelled_indices: set[int],
+    ) -> tuple[list[ToolExecutionResult], bool]:
+        tasks = [
+            asyncio.create_task(self._execute(call, cancelled_indices, index))
+            for index, call in calls
+        ]
+        try:
+            return list(await asyncio.gather(*tasks)), False
+        except asyncio.CancelledError:
+            # Keep one terminal result per started call when the batch is stopped.
+            # _execute turns handler cancellation into a result; tasks cancelled
+            # before their coroutine begins are represented here as not started.
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            settled = await asyncio.gather(*tasks, return_exceptions=True)
             results: list[ToolExecutionResult] = []
-            reads: list[dict[str, Any]] = []
+            for (index, call), item in zip(calls, settled):
+                if isinstance(item, ToolExecutionResult):
+                    results.append(item)
+                elif isinstance(item, asyncio.CancelledError):
+                    cancelled_indices.add(index)
+                    results.append(_cancelled_result(call, started=False))
+                elif isinstance(item, Exception):
+                    raise item
+                else:
+                    raise item
+            return results, True
 
-            async def flush() -> None:
-                if reads:
-                    # gather retains input order regardless of completion order.
-                    results.extend(await asyncio.gather(*(self._execute(c) for c in reads)))
-                    reads.clear()
+    async def run(self, calls: list[dict[str, Any]]) -> list[ToolExecutionResult]:
+        results_by_index: dict[int, ToolExecutionResult] = {}
+        cancelled_indices: set[int] = set()
+        reads: list[tuple[int, dict[str, Any]]] = []
 
-            for call in calls:
-                try:
-                    parallel = self.supports_parallel(call)
-                except (ValueError, TypeError):
-                    parallel = False
-                if parallel:
-                    reads.append(call)
-                    if len(reads) >= self.max_concurrency:
-                        await flush()
+        async def flush() -> bool:
+            if not reads:
+                return False
+            pending = list(reads)
+            reads.clear()
+            results, cancellation_requested = await self._execute_parallel(
+                pending, cancelled_indices
+            )
+            results_by_index.update(
+                (index, result) for (index, _), result in zip(pending, results)
+            )
+            return cancellation_requested or any(
+                index in cancelled_indices for index, _ in pending
+            )
+
+        try:
+            async with self._batch_lock:
+                for index, call in enumerate(calls):
+                    try:
+                        parallel = self.supports_parallel(call)
+                    except Exception:
+                        # A bad classifier must serialize the call, not prevent its
+                        # canonical dispatch path from returning an error or result.
+                        parallel = False
+                    if parallel:
+                        reads.append((index, call))
+                        if len(reads) >= self.max_concurrency:
+                            if await flush():
+                                break
+                    else:
+                        if await flush():
+                            break
+                        result = await self._execute(call, cancelled_indices, index)
+                        results_by_index[index] = result
+                        if index in cancelled_indices:
+                            break
                 else:
                     await flush()
-                    results.append(await self._execute(call))
-            await flush()
-            return results
+        except asyncio.CancelledError:
+            # Cancellation while queued on the batch lock has no started handlers;
+            # cancellation during a serial call is already captured by _execute.
+            pass
+
+        # A cancellation stops future dispatches, but every model-issued call gets
+        # a terminal receipt, matching the parallel coordinator's abort contract.
+        for index, call in enumerate(calls):
+            if index not in results_by_index:
+                results_by_index[index] = _cancelled_result(
+                    call, started=index in cancelled_indices
+                )
+        return [results_by_index[index] for index in range(len(calls))]
+
+
+def _cancelled_result(call: Any, *, started: bool) -> ToolExecutionResult:
+    call_id, name = _call_identity(call)
+    phase = "during execution" if started else "before execution"
+    output = {
+        "is_error": True,
+        "error": f"Tool call cancelled {phase}",
+        "outcome": "cancelled",
+    }
+    return ToolExecutionResult(
+        call_id,
+        name,
+        output,
+        ToolReceipt(call_id, name, "cancelled", 0),
+    )

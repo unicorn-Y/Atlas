@@ -1,4 +1,4 @@
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276e: apps/zcode-cli/packages/core/src/workflow/scheduler/graph.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/workflow/scheduler/graph.ts (Apache-2.0)
 """Dependency validation, ready-frontier calculation, and graph serialization."""
 
 from __future__ import annotations

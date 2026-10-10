@@ -1,5 +1,8 @@
 # Ported from Aider-AI/aider@5dc9490bb35f9729ef2c95d00a19ccd30c26339c: aider/queries/tree-sitter-language-pack/*-tags.scm (Apache-2.0)
+# Fallback query provenance: aider/queries/tree-sitter-languages/*-tags.scm at the same commit.
 """Tree-sitter definition/reference queries bundled with Aider's repo map."""
+
+from .queries_legacy import LEGACY_TAG_QUERIES
 
 TAG_QUERIES = {
     "arduino": "(function_declarator\r\n  declarator: (identifier) @name.definition.function) @definition.function\r\n\r\n(call_expression\r\n  function: (identifier) @name.reference.call) @reference.call\r\n",
@@ -34,4 +37,6 @@ TAG_QUERIES = {
     "swift": "(class_declaration\r\n  name: (type_identifier) @name.definition.class) @definition.class\r\n\r\n(protocol_declaration\r\n  name: (type_identifier) @name.definition.interface) @definition.interface\r\n\r\n(class_declaration\r\n    (class_body\r\n        [\r\n            (function_declaration\r\n                name: (simple_identifier) @name.definition.method\r\n            )\r\n            (subscript_declaration\r\n                (parameter (simple_identifier) @name.definition.method)\r\n            )\r\n            (init_declaration \"init\" @name.definition.method)\r\n            (deinit_declaration \"deinit\" @name.definition.method)\r\n        ]\r\n    )\r\n) @definition.method\r\n\r\n(protocol_declaration\r\n    (protocol_body\r\n        [\r\n            (protocol_function_declaration\r\n                name: (simple_identifier) @name.definition.method\r\n            )\r\n            (subscript_declaration\r\n                (parameter (simple_identifier) @name.definition.method)\r\n            )\r\n            (init_declaration \"init\" @name.definition.method)\r\n        ]\r\n    )\r\n) @definition.method\r\n\r\n(class_declaration\r\n    (class_body\r\n        [\r\n            (property_declaration\r\n                (pattern (simple_identifier) @name.definition.property)\r\n            )\r\n        ]\r\n    )\r\n) @definition.property\r\n\r\n(property_declaration\r\n    (pattern (simple_identifier) @name.definition.property)\r\n) @definition.property\r\n\r\n(function_declaration\r\n    name: (simple_identifier) @name.definition.function) @definition.function\r\n",
     "udev": "(assignment\r\n  key: \"LABEL\"\r\n  (value\r\n    (content) @name.definition.label)) @definition.label\r\n\r\n(assignment\r\n  key: \"GOTO\"\r\n  (value\r\n    (content) @name.reference.label)) @reference.label\r\n\r\n(assignment\r\n  key: \"ENV\"\r\n  (env_var) @name.definition.variable) @definition.variable\r\n\r\n(match\r\n  key: \"ENV\"\r\n  (env_var) @name.reference.variable) @reference.variable\r\n\r\n(var_sub\r\n  (env_var) @name.reference.variable) @reference.variable\r\n"
 }
+
+TAG_QUERIES.update(LEGACY_TAG_QUERIES)
 

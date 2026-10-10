@@ -2,7 +2,7 @@
 
 ## OpenCode edit matching logic
 
-Source: `https://github.com/anomalyco/opencode`, `packages/opencode/src/tool/edit.ts`, commit `1ddb0873aee50d209d1a8d7f91b89c5daf692d49`. Atlas ports only the unique-anchor variable-length matching strategy; it does not include copied OpenCode source files.
+Source: `https://github.com/anomalyco/opencode`, `packages/opencode/src/tool/edit.ts`, commit `7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937`. Atlas ports only the unique-anchor variable-length matching strategy; it does not include copied OpenCode source files.
 
 ```text
 MIT License
@@ -32,12 +32,12 @@ SOFTWARE.
 
 The following files adapt code from the pinned upstream revisions listed here. Their source headers name the exact source paths and license identifiers.
 
-- `openai/codex` commit `806d9732c974bc8a51b8317c1bd8985544fe627c` — Apache-2.0; used by `core/atlas/kernel/{edit,exec,loop,model_call,plan,repair,state,subagents,tools}.py`.
-- `zai-org/ZCode` commit `29628c9acdb81b703bbd4080c207a0e7ce5e276ede` — Apache-2.0; used by `core/atlas/kernel/{context,edit,exec,loop,plan,prompt,state,subagents,tools}.py`.
+- `openai/codex` commit `6c0c6759d0617d7670826b61aca0a931bbb6db1f` — Apache-2.0; used by `core/atlas/kernel/{edit,exec,loop,model_call,plan,repair,state,subagents,tools}.py`.
+- `zai-org/ZCode` commit `aac4755666d09fdcd70272fcf063c077a639015f` — Apache-2.0; used by `core/atlas/kernel/{context,edit,exec,loop,plan,prompt,state,subagents,tools}.py`.
 - `deepseek-ai/deepseek-harness` commit `d743267388641bc76f17c45ce8b4c231aed1d32c` — MIT; used by `core/atlas/kernel/repair.py`.
-- `OpenHands/software-agent-sdk` commit `1cfba2117e92730b0fe1c32520a39aad8611bb8c` — MIT; used by `core/atlas/kernel/stuck.py`.
+- `OpenHands/software-agent-sdk` commit `c4b93299cf2b31c8b5d0b2c5a89965ccc5ff24f9` — MIT; used by `core/atlas/kernel/stuck.py`.
 
-License texts are available in the pinned upstream `LICENSE` files: [Codex](https://github.com/openai/codex/blob/806d9732c974bc8a51b8317c1bd8985544fe627c/LICENSE), [ZCode](https://github.com/zai-org/ZCode/blob/29628c9acdb81b703bbd4080c207a0e7ce5e276ede/LICENSE), [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/LICENSE), and [OpenHands SDK](https://github.com/OpenHands/software-agent-sdk/blob/1cfba2117e92730b0fe1c32520a39aad8611bb8c/LICENSE).
+License texts are available in the pinned upstream `LICENSE` files: [Codex](https://github.com/openai/codex/blob/6c0c6759d0617d7670826b61aca0a931bbb6db1f/LICENSE), [ZCode](https://github.com/zai-org/ZCode/blob/aac4755666d09fdcd70272fcf063c077a639015f/LICENSE), [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/LICENSE), and [OpenHands SDK](https://github.com/OpenHands/software-agent-sdk/blob/c4b93299cf2b31c8b5d0b2c5a89965ccc5ff24f9/LICENSE).
 
 ## Hermes Agent
 

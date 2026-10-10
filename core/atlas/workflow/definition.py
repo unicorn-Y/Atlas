@@ -1,5 +1,5 @@
-# Ported from zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276e: apps/zcode-cli/packages/core/src/workflow/definition.ts (Apache-2.0)
-# Validation shape follows zai-org/ZCode@29628c9acdb81b703bbd4080c207a0e7ce5e276e: apps/zcode-cli/packages/contracts/src/workflow/index.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/workflow/definition.ts (Apache-2.0)
+# Validation shape follows zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/contracts/src/workflow/index.ts (Apache-2.0)
 """Built-in Expert Workflow definition and its validated phase mapping."""
 
 from __future__ import annotations

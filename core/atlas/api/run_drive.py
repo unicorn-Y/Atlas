@@ -2175,6 +2175,18 @@ async def _execute_run(
     assert orchestrator is not None
     assert memory is not None
     had_tool_failure = False
+
+    def kernel_owns_lifecycle_hooks() -> bool:
+        if run.executor != "atlas":
+            return False
+        try:
+            from atlas.config import get_config
+
+            return str(get_config().get("engine.kernel", "atlas")).strip().lower() == "atlas"
+        except Exception:
+            # HermesRuntime defaults to the Atlas kernel when this setting is absent.
+            return True
+
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
         if event == "run.started":
@@ -2193,10 +2205,11 @@ async def _execute_run(
         await manager.send_run(run, env, fallback_conn_id=conn_id)
         if event in {"run.started", "run.completed", "run.failed"}:
             hooks = _server()._hook_store()
+            bridge_event_alias = not kernel_owns_lifecycle_hooks()
             _spawn_background(hooks.execute(event, {
                 "run_id": run.run_id, "conversation_id": run.conversation_id,
                 "tool_name": "", "parameters": {}, "result": data,
-            }, cwd=workspace, emit=emit))
+            }, cwd=workspace, emit=emit, bridge_event_alias=bridge_event_alias))
         if event in {"run.completed", "run.failed"} and scheduler is not None:
             _spawn_background(scheduler.dispatch_event(event, {
                 "run_id": run.run_id, "conversation_id": run.conversation_id,
@@ -2566,10 +2579,12 @@ async def _execute_run(
                 })
 
         async def user_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+            hook_payload = dict(payload)
+            bridge_event_alias = bool(hook_payload.pop("__atlas_bridge_event_alias__", True))
             return await _server()._hook_store().execute(event_name, {
                 "run_id": run.run_id, "conversation_id": run.conversation_id,
-                **payload,
-            }, cwd=workspace, emit=emit)
+                **hook_payload,
+            }, cwd=workspace, emit=emit, bridge_event_alias=bridge_event_alias)
 
         async def publish_runtime_event(event: dict[str, Any]) -> None:
             if event.get("type") == "session.title":
