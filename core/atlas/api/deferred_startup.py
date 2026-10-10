@@ -188,6 +188,7 @@ async def run_deferred_startup(app: Any, services: Any, components: StartupCompo
             _component(components, "memoryos", memoryos_lifecycle.start),
             name="startup-memoryos",
         ))
+    _schedule_background(app, "upstream-auto", _upstream_auto_loop())
     results = await asyncio.gather(*branches, return_exceptions=True)
     for result in results:
         if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError):
@@ -363,6 +364,24 @@ async def _start_engine_registrations(app: Any, services: Any) -> None:
         app.state._atlas_background_startup_tasks = background_tasks
     background_tasks.add(task)
     task.add_done_callback(background_tasks.discard)
+
+
+def _schedule_background(app: Any, name: str, coro: Awaitable[None]) -> None:
+    """Run an optional long-lived task that the app cancels on shutdown."""
+    task = asyncio.get_running_loop().create_task(coro, name=name)
+    background_tasks = getattr(app.state, "_atlas_background_startup_tasks", None)
+    if background_tasks is None:
+        background_tasks = set()
+        app.state._atlas_background_startup_tasks = background_tasks
+    background_tasks.add(task)
+    task.add_done_callback(background_tasks.discard)
+
+
+async def _upstream_auto_loop() -> None:
+    """自动追新：定时检查第三方组件，自动模式下在预演副本里更新（atlas.upstream）。"""
+    from atlas.upstream.service import auto_loop
+
+    await auto_loop()
 
 
 # Modules the first turn needs. Importing them here, on a worker thread, keeps the

@@ -16,6 +16,7 @@ import ParitySuggestions from '../components/evolution/ParitySuggestions';
 import DraftList from '../components/evolution/DraftList';
 import BranchStatus from '../components/evolution/BranchStatus';
 import SkillCandidates from '../components/evolution/SkillCandidates';
+import UpstreamPanel from '../components/evolution/UpstreamPanel';
 
 const errorText = (cause: unknown, fallback: string): string =>
   cause instanceof Error ? cause.message : fallback;
@@ -198,7 +199,7 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
     <header className="page-head">
       <div>
         <h1>自动追新</h1>
-        <p>盯着上游仓库的新能力，给出保持 / 升级 / 替换建议；批准后走隔离分支施工，合并永远由你确认。</p>
+        <p>把 Atlas 里所有别人的东西（内核、记忆、依赖、MCP、借鉴代码）追到最新；同时盯着上游仓库的新能力，给出保持 / 升级 / 替换建议。</p>
       </div>
       <div className="btns">
         <button className="btn ghost" onClick={() => void refreshAll()}
@@ -207,7 +208,7 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
         </button>
         <button className="btn primary" onClick={() => void checkNow()} disabled={checkBusy}>
           {checkBusy ? <LoaderCircle size={15} className="spin" /> : <Sparkles size={15} />}
-          {checkBusy ? '正在检查上游…' : '立即检查'}
+          {checkBusy ? '正在检查上游…' : '检查上游动态'}
         </button>
       </div>
     </header>
@@ -218,6 +219,8 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
     </div>}
 
     <div className="grid gap-3">
+      <UpstreamPanel apiBaseUrl={apiBaseUrl} onToast={onToast} />
+
       <Section icon={RadioTower} title="上游来源" count={sources.length} open={open.sources}
         hint="监视哪些仓库" onToggle={() => setOpen((value) => ({ ...value, sources: !value.sources }))}
         loading={loading.sources} error={errors.sources}

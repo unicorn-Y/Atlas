@@ -351,7 +351,11 @@ def build_route_snapshot(atlas_root: Path = ATLAS) -> dict[str, Any]:
 
 def test_routes_match_frozen_snapshot() -> None:
     expected = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
-    assert build_route_snapshot() == expected
+    actual = build_route_snapshot()
+    # The route surface is frozen, not the framework release: Atlas 追新 upgrades FastAPI.
+    for snapshot in (expected, actual):
+        snapshot.get("build", {}).pop("fastapi_version", None)
+    assert actual == expected
 
 
 def test_fastapi_lazy_includes_preserve_effective_paths_parameters_and_order() -> None:

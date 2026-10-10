@@ -91,7 +91,11 @@ packages = ["atlas"]
 # dependency: the fork refuses wheel/sdist builds. core/scripts/setup_hermes.py
 # clones/updates the checkout (with Windows long paths) and installs it.
 repository = "https://github.com/unicorn-Y/hermes-agent.git"
-commit = "e0866de014e6fa99721ccaf4f848e1316a58148a"
+commit = "c9e076b41f2163445b506b1cb79862d0dab0eecd"
+# Atlas 追新 (core/atlas/upstream) merges this upstream ref into the fork's branch.
+upstream = "https://github.com/NousResearch/hermes-agent.git"
+upstream_ref = "main"
+branch = "atlas"
 
 [tool.ruff]
 target-version = "py311"

@@ -55,7 +55,8 @@ describe('Evolution page shell', () => {
   it('renders the six sections with Chinese loading states, without touching other pages', () => {
     const html = renderToStaticMarkup(<EvolutionPage apiBaseUrl="http://localhost:8765" />);
     expect(html).toContain('自动追新');
-    expect(html).toContain('立即检查');
+    expect(html).toContain('检查上游动态');
+    expect(html).toContain('aria-label="组件追新"');
     expect(html).toContain('aria-label="上游来源"');
     expect(html).toContain('aria-label="上游能力差异"');
     expect(html).toContain('aria-label="对标建议（KEEP / UPGRADE / REPLACE）"');

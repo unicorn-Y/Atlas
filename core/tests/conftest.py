@@ -34,6 +34,7 @@ if not _LIVE_REQUESTED:
         if _key.endswith(("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_CREDENTIALS")):
             os.environ.pop(_key, None)
     os.environ["ATLAS_SCHEDULER_ENABLED"] = "false"
+    os.environ["ATLAS_UPSTREAM_AUTO"] = "0"  # no background 追新 checks from test apps
     _config = _TEST_ROOT / "atlas/config/atlas.toml"
     _config.parent.mkdir(parents=True, exist_ok=True)
     _config.write_text(

@@ -29,10 +29,23 @@ export async function checkSourceUpdate(root: string | null): Promise<SourceUpda
   if (!root) return { supported: false, ...empty };
   try {
     const branch = await git(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
-    await git(root, ['fetch', '--quiet', 'origin', branch], 60_000);
-    const behind = Number(await git(root, ['rev-list', '--count', `HEAD..origin/${branch}`])) || 0;
+    // A verified Atlas 追新 result that could not be pushed waits in data/upstream (see
+    // scripts/atlas-update.mjs); it counts as an update just like new commits on the remote.
+    const pending = await pendingUpstreamCommit(root);
+    let target = `origin/${branch}`;
+    try {
+      await git(root, ['fetch', '--quiet', 'origin', branch], 60_000);
+    } catch (error) {
+      if (!pending) throw error;
+      target = pending;
+    }
+    if (pending && target !== pending) {
+      const pendingAhead = Number(await git(root, ['rev-list', '--count', `${target}..${pending}`])) || 0;
+      if (pendingAhead) target = pending;
+    }
+    const behind = Number(await git(root, ['rev-list', '--count', `HEAD..${target}`])) || 0;
     const log = behind
-      ? await git(root, ['log', '--format=%h%x09%s', '-n', '20', `HEAD..origin/${branch}`])
+      ? await git(root, ['log', '--format=%h%x09%s', '-n', '20', `HEAD..${target}`])
       : '';
     const dirty = await git(root, ['status', '--porcelain', '--untracked-files=no']);
     return {
@@ -48,6 +61,22 @@ export async function checkSourceUpdate(root: string | null): Promise<SourceUpda
     };
   } catch (error) {
     return { supported: true, ...empty, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function pendingUpstreamCommit(root: string): Promise<string | null> {
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(root, 'data', 'upstream', 'pending-merge.json'), 'utf8'));
+    const commit = typeof data?.commit === 'string' ? data.commit : '';
+    if (!/^[0-9a-f]{40}$/.test(commit)) return null;
+    try {
+      await git(root, ['merge-base', '--is-ancestor', commit, 'HEAD']);
+      return null; // already merged
+    } catch {
+      return commit;
+    }
+  } catch {
+    return null;
   }
 }
 

@@ -60,10 +60,41 @@ function pull() {
     return { pulled: false, reason: '本地有未提交的改动，已跳过更新。', changed: [] };
   }
   const before = sh('git', ['rev-parse', 'HEAD']);
-  sh('git', ['fetch', '--quiet', 'origin', branch]);
-  sh('git', ['merge', '--ff-only', `origin/${branch}`]);
+  try {
+    sh('git', ['fetch', '--quiet', 'origin', branch]);
+    sh('git', ['merge', '--ff-only', `origin/${branch}`]);
+  } catch (error) {
+    // Offline or a local-only branch: an upstream-tracking result can still be merged below.
+    if (!readPending()) throw error;
+    log(`fetch/ff from origin skipped: ${String(error?.message || error).split('\n')[0]}`);
+  }
+  mergePending();
   const after = sh('git', ['rev-parse', 'HEAD']);
   return { pulled: before !== after, before, after, changed: changedFiles(before, after) };
+}
+
+// Atlas 追新 (core/atlas/upstream) leaves a verified commit in data/upstream/pending-merge.json
+// when it could not push it; merge it here so a restart picks it up.
+const pendingFile = path.join(root, 'data', 'upstream', 'pending-merge.json');
+const readPending = () => { try { return JSON.parse(fs.readFileSync(pendingFile, 'utf8')); } catch { return null; } };
+
+function mergePending() {
+  const pending = readPending();
+  if (!pending?.commit) return;
+  try {
+    sh('git', ['merge-base', '--is-ancestor', pending.commit, 'HEAD']);
+    return; // already in
+  } catch { /* not merged yet */ }
+  try {
+    sh('git', ['merge', '--ff-only', pending.commit]);
+  } catch {
+    try {
+      sh('git', ['merge', '--no-edit', '-m', 'merge: Atlas 追新结果', pending.commit]);
+    } catch (error) {
+      try { sh('git', ['merge', '--abort']); } catch { /* nothing to abort */ }
+      throw new Error(`追新结果和本地改动冲突，没有合并：${pending.commit.slice(0, 8)}`);
+    }
+  }
 }
 
 // What the last successful rebuild was built from; changes are measured against it, so a
@@ -85,6 +116,11 @@ function rebuild() {
     sh(python, ['-m', 'pip', 'install', '-q', '-e', 'core']);
     steps.push('python');
   }
+  // Exact third-party versions verified by Atlas 追新; keeps both machines identical.
+  if (changed !== null && touched('core/requirements.lock') && fs.existsSync(path.join(root, 'core', 'requirements.lock'))) {
+    sh(python, ['-m', 'pip', 'install', '-q', '--disable-pip-version-check', '-r', 'core/requirements.lock']);
+    steps.push('python-lock');
+  }
   if ((changed !== null && (touched('package-lock.json') || touched('frontend/package.json')))
       || !fs.existsSync(path.join(root, 'node_modules', 'electron'))) {
     sh(npm, ['ci', '--no-audit', '--no-fund']);
@@ -95,6 +131,14 @@ function rebuild() {
   if (!built || touched('frontend/') || touched('backend-adapter/')) {
     sh(npm, ['--prefix', 'frontend', 'run', 'build']);
     steps.push('frontend');
+  }
+  // Machine-local follow-ups of an upstream update: MCP versions in config/atlas.toml, MemOS rebuild.
+  const memos = changed !== null && touched('vendor/memos-local-plugin/');
+  try {
+    sh(python, ['-m', 'atlas.upstream', 'post-merge', ...(memos ? ['--memos'] : [])], { cwd: path.join(root, 'core') });
+    if (memos) steps.push('memos');
+  } catch (error) {
+    log(`post-merge failed: ${String(error?.stderr || error?.message || error).trim().split('\n').slice(-5).join(' | ')}`);
   }
   fs.writeFileSync(stampFile, JSON.stringify({ commit: head, at: new Date().toISOString(), steps }, null, 2), 'utf8');
   return steps;
