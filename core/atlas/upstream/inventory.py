@@ -21,7 +21,16 @@ from packaging.requirements import InvalidRequirement, Requirement
 from atlas.upstream import provenance, sources
 from atlas.upstream.classify import normalize_pip, npm_category, pip_category
 from atlas.upstream.model import (
-    AUTO, ERROR, HOT, LATEST, MANUAL, MERGE, OUTDATED, REVIEW, UNKNOWN, Component,
+    AUTO,
+    ERROR,
+    HOT,
+    LATEST,
+    MANUAL,
+    MERGE,
+    OUTDATED,
+    REVIEW,
+    UNKNOWN,
+    Component,
 )
 from atlas.upstream.sources import LookupFailed
 
