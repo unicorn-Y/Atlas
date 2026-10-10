@@ -235,6 +235,25 @@ def test_relink_junctions_points_into_destination(tmp_path: Path) -> None:
     assert created.resolve() == (dst / "pkg").resolve()
 
 
+def test_mirror_never_deletes_through_workspace_links(tmp_path: Path) -> None:
+    repo, snap = tmp_path / "repo", tmp_path / "snap"
+    (repo / "frontend").mkdir(parents=True)
+    (repo / "frontend" / "package.json").write_text("{}", encoding="utf-8")
+    (repo / "node_modules" / "@atlas").mkdir(parents=True)
+    (snap / "@atlas").mkdir(parents=True)  # snapshot taken with links skipped
+    (snap / "left-pad").mkdir()
+    link = repo / "node_modules" / "@atlas" / "frontend"
+    if staging.IS_WIN:
+        staging.sources.run(["cmd", "/c", "mklink", "/J", str(link), str(repo / "frontend")],
+                            timeout=30)
+    else:
+        link.symlink_to(repo / "frontend", target_is_directory=True)
+    assert link.is_junction() or link.is_symlink()
+    staging.mirror(snap, repo / "node_modules")
+    assert (repo / "frontend" / "package.json").exists()
+    assert (repo / "node_modules" / "left-pad").is_dir()
+
+
 def test_group_plan_orders_kernel_first() -> None:
     components = [
         {"id": "npm:react", "kind": "npm"}, {"id": "fork:hermes", "kind": "fork"},

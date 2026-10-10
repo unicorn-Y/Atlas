@@ -161,6 +161,7 @@ def mirror(src: Path, dst: Path) -> None:
     if not src.exists():
         return
     dst.parent.mkdir(parents=True, exist_ok=True)
+    drop_links(dst)
     if IS_WIN:
         result = sources.run(["robocopy", str(src), str(dst), "/MIR", "/MT:16", "/R:1", "/W:1",
                               "/NFL", "/NDL", "/NJH", "/NJS", "/NP", "/XJ"], timeout=1800)
@@ -170,6 +171,25 @@ def mirror(src: Path, dst: Path) -> None:
     if dst.exists():
         shutil.rmtree(dst)
     shutil.copytree(src, dst, symlinks=True)
+
+
+def drop_links(directory: Path) -> None:
+    """删掉 directory（及其 @scope 子目录）里的目录链接本身，不碰链接目标。
+
+    robocopy /MIR 清理目标里「多出来」的目录时会顺着链接进去删：node_modules 里
+    指回仓库的 npm 工作区链接（@atlas/frontend → frontend）曾因此把副本里的
+    frontend/ 源码整个删掉。镜像完成后由 relink_junctions 重建。
+    """
+    if not directory.is_dir() or directory.is_junction() or directory.is_symlink():
+        return
+    scopes = [p for p in directory.iterdir() if p.name.startswith("@") and p.is_dir()
+              and not (p.is_junction() or p.is_symlink())]
+    for entry in [*directory.iterdir(), *(q for scope in scopes for q in scope.iterdir())]:
+        if entry.is_junction() or entry.is_symlink():
+            try:
+                entry.unlink()  # 只移除链接本身
+            except OSError:
+                os.rmdir(entry)
 
 
 def mirror_node_modules(src_repo: Path, dst_repo: Path, rel: str) -> None:
@@ -712,6 +732,8 @@ class Runner:
                     specs.append(f"{item['name']}=={item['latest']}")
                 notes[item["id"]] = f"{item['current']} → {item['latest']}"
             pip_install(ws, specs)
+            # 刷新 atlas-core 的已安装元数据，否则 pip check 还拿旧 pin 报「依赖冲突」。
+            pip_install(ws, ["--no-deps", "-e", str(ws.atlas / "core")])
             write_lock(ws)
         elif group.key == "pip-transitive":
             packages = [row["name"] for row in items[0]["detail"].get("packages", [])]
