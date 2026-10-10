@@ -17491,6 +17491,278 @@
       ]
     },
     {
+      "path": "/api/upstream",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_view_api_upstream_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get View Api Upstream Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/upstream/apply",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "apply_api_upstream_apply_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Apply Api Upstream Apply Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/upstream/check",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "start_check_api_upstream_check_post",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Start Check Api Upstream Check Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/upstream/failures/{component_id:path}",
+      "operations": [
+        {
+          "method": "DELETE",
+          "include_in_schema": false,
+          "parameters": [
+            {
+              "name": "component_id",
+              "in": "path",
+              "required": true,
+              "type": "None",
+              "default": null
+            }
+          ],
+          "request_body_model": null,
+          "response_model": "None"
+        }
+      ]
+    },
+    {
+      "path": "/api/upstream/holds",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "add_hold_api_upstream_holds_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Add Hold Api Upstream Holds Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/upstream/holds/{component_id:path}",
+      "operations": [
+        {
+          "method": "DELETE",
+          "include_in_schema": false,
+          "parameters": [
+            {
+              "name": "component_id",
+              "in": "path",
+              "required": true,
+              "type": "None",
+              "default": null
+            }
+          ],
+          "request_body_model": null,
+          "response_model": "None"
+        }
+      ]
+    },
+    {
+      "path": "/api/upstream/run",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_run_api_upstream_run_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Run Api Upstream Run Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/upstream/run/cancel",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "cancel_run_api_upstream_run_cancel_post",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cancel Run Api Upstream Run Cancel Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/upstream/settings",
+      "operations": [
+        {
+          "method": "PUT",
+          "operation_id": "put_settings_api_upstream_settings_put",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Put Settings Api Upstream Settings Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/usage",
       "operations": [
         {
@@ -18615,6 +18887,30 @@
         "title": "AgentSkillsBatch",
         "type": "object"
       },
+      "ApplyBody": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "title": "ApplyBody",
+        "type": "object"
+      },
       "AutomationCreate": {
         "properties": {
           "delivery": {
@@ -19545,6 +19841,24 @@
           "resolution"
         ],
         "title": "HandoffResolution",
+        "type": "object"
+      },
+      "HoldBody": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "default": "手动锁定",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "HoldBody",
         "type": "object"
       },
       "ImageGenerateRequest": {
@@ -20510,6 +20824,45 @@
           "action"
         ],
         "title": "ServerActionBody",
+        "type": "object"
+      },
+      "SettingsBody": {
+        "properties": {
+          "interval_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Hours"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "push": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Push"
+          }
+        },
+        "title": "SettingsBody",
         "type": "object"
       },
       "SideloadBody": {
