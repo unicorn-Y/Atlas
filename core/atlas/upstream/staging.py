@@ -269,6 +269,13 @@ def prepare(ws: Workspace, log: RunLog) -> None:
         _worktree(ws.hermes_main, ws.hermes, ws.pin)
     log.step("复制 Python 环境与 node_modules（增量）")
     mirror(ws.repo / "core" / ".venv", ws.venv)
+    venv_link = ws.atlas / "core" / ".venv"
+    if not venv_link.exists() and ws.venv.exists():
+        # 有的脚本和测试按仓库内的 core/.venv 找解释器：指到副本的环境。
+        if IS_WIN:
+            sources.run(["cmd", "/c", "mklink", "/J", str(venv_link), str(ws.venv)], timeout=30)
+        else:
+            venv_link.symlink_to(ws.venv, target_is_directory=True)
     for rel in ("node_modules", "frontend/node_modules", "vendor/memos-local-plugin/node_modules"):
         mirror_node_modules(ws.repo, ws.atlas, rel)
     for rel in ("vendor/memos-local-plugin/dist", "vendor/memos-local-plugin/viewer/dist"):
@@ -293,6 +300,8 @@ def _clean_env() -> dict[str, str]:
     for key in ("PYTHONPATH", "ATLAS_DATA_DIR", "ATLAS_ROOT", "ATLAS_API_TOKEN", "VIRTUAL_ENV"):
         env.pop(key, None)
     env["PYTHONIOENCODING"] = "utf-8"
+    env["NO_COLOR"] = "1"
+    env["FORCE_COLOR"] = "0"
     return env
 
 
