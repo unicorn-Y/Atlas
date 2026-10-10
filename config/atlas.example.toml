@@ -121,7 +121,7 @@ enabled = true
 [tools.servers.chrome-devtools]
 transport = "stdio"
 command = "npx"
-args = ["--yes", "chrome-devtools-mcp@1.9.0", "--headless", "--no-usage-statistics"]
+args = ["--yes", "chrome-devtools-mcp@1.10.1", "--headless", "--no-usage-statistics"]
 enabled = true
 
 [tools.servers.serena]
