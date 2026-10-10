@@ -306,7 +306,8 @@ def regressions(kind: str, base: dict[str, Any], now: dict[str, Any]) -> list[st
     if kind == "python":
         if base.get("import_ok", True) and not now.get("import_ok"):
             problems.append("后端导入失败：" + now.get("import_error", "")[-600:])
-        new_conflicts = sorted(set(now.get("pip_conflicts", [])) - set(base.get("pip_conflicts", [])))
+        new_conflicts = sorted(
+            set(now.get("pip_conflicts", [])) - set(base.get("pip_conflicts", [])))
         if new_conflicts:
             problems.append("依赖冲突：" + "；".join(new_conflicts[:8]))
         if base.get("ran") and not now.get("ran"):
@@ -333,8 +334,8 @@ def baseline(ws: Workspace, kinds: set[str], log: RunLog) -> None:
         cache = {"key": key}
     for kind in sorted(kinds):
         if kind not in cache:
-            log.step(f"跑基线测试（{'后端' if kind == 'python' else '前端'}），用来对比更新后的结果",
-                     "基线")
+            label = "后端" if kind == "python" else "前端"
+            log.step(f"跑基线测试（{label}），用来对比更新后的结果", "基线")
             cache[kind] = GATES[kind](ws)
         ws.baseline[kind] = cache[kind]
     cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -412,7 +413,9 @@ def restore_python(ws: Workspace) -> None:
         sources.run([ws.python, "-m", "pip", "install", "-q", "-r", str(lock)], timeout=1800)
     else:
         mirror(ws.repo / "core" / ".venv", ws.venv)
-    editables = ["-e", str(ws.atlas / "core")] + (["-e", str(ws.hermes)] if ws.hermes.exists() else [])
+    editables = ["-e", str(ws.atlas / "core")]
+    if ws.hermes.exists():
+        editables += ["-e", str(ws.hermes)]
     sources.run([ws.python, "-m", "pip", "install", "-q", "--no-deps", *editables], timeout=900)
 
 
@@ -489,7 +492,8 @@ def apply_hermes(ws: Workspace, item: dict[str, Any], log: RunLog) -> str:
     target = f"upstream/{settings['upstream_ref']}"
     if not ws.hermes.exists():
         raise ItemFailed("找不到 Hermes 源码目录")
-    sources.git("fetch", "--quiet", "upstream", settings["upstream_ref"], cwd=ws.hermes, timeout=600)
+    sources.git("fetch", "--quiet", "upstream", settings["upstream_ref"], cwd=ws.hermes,
+                timeout=600)
     behind = sources.git("rev-list", "--count", f"{ws.pin}..{target}", cwd=ws.hermes)
     log.step(f"合并 Hermes 上游 {behind} 个提交")
     describe = sources.git("describe", "--tags", "--always", target, cwd=ws.hermes, check=False)
@@ -534,7 +538,8 @@ def apply_memos(ws: Workspace, item: dict[str, Any], log: RunLog) -> str:
     manifest["version"] = latest
     _write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     build_memos(fork_dir, manifest)
-    return f"{base} → {latest}（改 {len(result.changed)}、增 {len(result.added)}、删 {len(result.removed)}）"
+    counts = f"改 {len(result.changed)}、增 {len(result.added)}、删 {len(result.removed)}"
+    return f"{base} → {latest}（{counts}）"
 
 
 def build_memos(fork_dir: Path, manifest: dict[str, Any]) -> None:
@@ -646,8 +651,8 @@ class Runner:
             packages = [row["name"] for row in items[0]["detail"].get("packages", [])]
             ok, skipped = self._pip_upgrade_each(packages)
             write_lock(ws)
-            notes[items[0]["id"]] = f"更新 {len(ok)} 个" + (
-                f"，{len(skipped)} 个因版本冲突保持原样：{'、'.join(skipped[:12])}" if skipped else "")
+            kept = f"，{len(skipped)} 个因版本冲突保持原样：{'、'.join(skipped[:12])}"
+            notes[items[0]["id"]] = f"更新 {len(ok)} 个" + (kept if skipped else "")
         elif group.key == "npm":
             for item in items:
                 set_npm_version(ws, item)

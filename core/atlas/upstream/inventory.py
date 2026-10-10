@@ -64,7 +64,7 @@ def hermes_checkout(repo: Path) -> Path:
         if root is not None and (root / ".git").exists():
             return root
     except Exception:  # noqa: BLE001 —— 没装 Hermes 时退回默认位置
-        pass
+        log.debug("upstream.hermes_root_unknown")
     return repo.parent / "hermes-agent"
 
 
@@ -137,7 +137,8 @@ def scan_pip(ctx: Context) -> list[Component]:
             current=current, latest=outdated.get(name, current) if ctx.fetch else "",
             spec=str(req.specifier), source="PyPI", url=f"https://pypi.org/project/{name}/",
             locations=["core/pyproject.toml"],
-            note="开发依赖" if group in {"dev", "release"} else (f"可选组 [{group}]" if group else ""),
+            note=("开发依赖" if group in {"dev", "release"}
+                  else (f"可选组 [{group}]" if group else "")),
         )
         component.resolve_status()
         items.append(component)
@@ -366,7 +367,7 @@ def _mcp_servers(path: Path) -> dict[str, dict[str, Any]]:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError:
         return {}
-    return dict(((data.get("tools") or {}).get("servers") or {}))
+    return dict((data.get("tools") or {}).get("servers") or {})
 
 
 def scan_mcp(ctx: Context, npm_items: dict[str, Component]) -> list[Component]:
@@ -553,7 +554,8 @@ def scan_borrowed(ctx: Context) -> list[Component]:
 def skills_from_updates(rows: list[dict[str, Any]]) -> list[Component]:
     items = []
     for row in rows:
-        status = {"update_available": OUTDATED, "up_to_date": LATEST}.get(row.get("status"), UNKNOWN)
+        status = {"update_available": OUTDATED, "up_to_date": LATEST}.get(
+            row.get("status"), UNKNOWN)
         items.append(Component(
             id=f"skill:{row['name']}", name=row["name"], category="skills", kind="skill",
             strategy=HOT, status=status, current=str(row.get("version", "")),

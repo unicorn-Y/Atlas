@@ -25,7 +25,8 @@ pytestmark = pytest.mark.unit
      "agent/error_classifier.py"),
     ("# Ported from NousResearch/hermes-agent agent/lsp/client.py @ 562ad75baec0 (MIT).\n",
      "NousResearch/hermes-agent", "562ad75baec0", "agent/lsp/client.py"),
-    ('"""x\n\n# Ported from NousResearch/hermes-agent @ c8301ea6c9 (plugins/platforms/wecom/x.py)\n',
+    ('"""x\n\n# Ported from NousResearch/hermes-agent @ c8301ea6c9 '
+     "(plugins/platforms/wecom/x.py)\n",
      "NousResearch/hermes-agent", "c8301ea6c9", "plugins/platforms/wecom/x.py"),
     ("# Ported from NousResearch/hermes-agent@e287231:agent/review_engine.py (MIT).\n",
      "NousResearch/hermes-agent", "e287231", "agent/review_engine.py"),

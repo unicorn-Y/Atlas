@@ -140,10 +140,12 @@ async def apply(ids: list[str] | None = None, category: str | None = None) -> di
     if not items:
         return {"started": False, "reason": "没有可以更新的项", "hot": {}}
     if not repo_supported():
-        return {"started": False, "reason": "当前不是从 git 源码运行（安装包版本），只能检查不能追新",
+        return {"started": False,
+                "reason": "当前不是从 git 源码运行（安装包版本），只能检查不能追新",
                 "hot": {}}
     hot = [item for item in items if item.get("strategy") == HOT
-           and not (item["kind"] == "mcp-npx" and "atlas.example.toml" in item.get("locations", []))]
+           and not (item["kind"] == "mcp-npx"
+                    and "atlas.example.toml" in item.get("locations", []))]
     rest = [item["id"] for item in items if item not in hot]
     hot_results = await apply_hot(hot) if hot else {}
     job = start_job(rest) if rest else {"started": False, "reason": ""}

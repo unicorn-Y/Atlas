@@ -36,7 +36,8 @@ _NPM: dict[str, str] = {
 
 _NPM_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^@types/"), "dev"),
-    (re.compile(r"^(typescript|vitest|vite|@vitejs/.*|esbuild|concurrently|cross-env|wait-on)$"), "dev"),
+    (re.compile(
+        r"^(typescript|vitest|vite|@vitejs/.*|esbuild|concurrently|cross-env|wait-on)$"), "dev"),
 ]
 
 
