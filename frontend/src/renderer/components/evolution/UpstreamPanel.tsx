@@ -8,6 +8,7 @@ import {
   saveUpstreamSettings, startUpstreamCheck, type UpstreamCategory, type UpstreamComponent,
   type UpstreamMode, type UpstreamView,
 } from '../../services/upstreamApi';
+import WatchSection from './WatchSection';
 
 const errorText = (cause: unknown, fallback: string) => (cause instanceof Error ? cause.message : fallback);
 
@@ -197,6 +198,7 @@ export default function UpstreamPanel({ apiBaseUrl, onToast }: { apiBaseUrl: str
         onRetry={(item) => void act(`retry:${item.id}`, () => clearUpstreamFailure(apiBaseUrl, item.id), `${item.name} 下次会重新尝试`)}
       />)}
     </div>
+    <WatchSection apiBaseUrl={apiBaseUrl} onToast={onToast} />
   </section>;
 }
 

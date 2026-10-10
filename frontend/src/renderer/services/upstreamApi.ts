@@ -126,3 +126,11 @@ export const releaseUpstream = (base: string, id: string, fetcher?: FetchLike) =
 
 export const clearUpstreamFailure = (base: string, id: string, fetcher?: FetchLike) =>
   request<{ ok: boolean }>(base, `/api/upstream/failures/${enc(id)}`, { method: 'DELETE' }, fetcher);
+
+export type UpstreamWatch = { markdown: string; path: string; last_run: number; running: boolean };
+
+export const getUpstreamWatch = (base: string, fetcher?: FetchLike) =>
+  request<UpstreamWatch>(base, '/api/upstream/watch', undefined, fetcher);
+
+export const startUpstreamWatch = (base: string, fetcher?: FetchLike) =>
+  request<{ started: boolean; running: boolean }>(base, '/api/upstream/watch', { method: 'POST' }, fetcher);
