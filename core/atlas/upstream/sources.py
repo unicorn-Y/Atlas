@@ -159,8 +159,20 @@ def ls_remote(url: str, ref: str = "HEAD") -> str:
     raise LookupFailed(f"远端 {url} 没有 {ref}")
 
 
+@lru_cache(maxsize=1)
+def _github_token() -> str:
+    """环境变量里的令牌，没有就借本机 gh 的登录（匿名每小时只有 60 次，很快 403）。"""
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
+    if not token:
+        try:
+            token = run(["gh", "auth", "token"], timeout=15).stdout.strip()
+        except LookupFailed:
+            token = ""
+    return token
+
+
 def _github_headers() -> dict[str, str]:
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    token = _github_token()
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
@@ -179,9 +191,13 @@ def github_resolve(repo: str, short: str) -> str:
     """短提交号 → 完整提交号（GitHub API）。"""
     if len(short) == 40:
         return short
-    data = get_json(f"https://api.github.com/repos/{repo}/commits/{short}",
-                    headers=_github_headers())
-    return str(data["sha"])
+    try:
+        data = get_json(f"https://api.github.com/repos/{repo}/commits/{short}",
+                        headers=_github_headers())
+        return str(data["sha"])
+    except LookupFailed:
+        # 接口限流时退回：raw.githubusercontent.com 也认短提交号。
+        return short
 
 
 def github_file(repo: str, ref: str, path: str) -> str | None:

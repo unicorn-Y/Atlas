@@ -172,6 +172,47 @@ def mirror(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, symlinks=True)
 
 
+def mirror_node_modules(src_repo: Path, dst_repo: Path, rel: str) -> None:
+    """复制 node_modules，并把里面指回仓库的目录链接（npm 工作区包）在副本里重建。
+
+    robocopy 用 /XJ 跳过链接（否则会把链接目标整份复制进来），所以链接要自己补。
+    """
+    mirror(src_repo / rel, dst_repo / rel)
+    relink_junctions(src_repo, dst_repo, rel)
+
+
+def relink_junctions(src_repo: Path, dst_repo: Path, rel: str) -> None:
+    """按 src_repo 里 ``rel`` 下的目录链接，在 dst_repo 对应位置补上同样的链接。"""
+    src, dst = src_repo / rel, dst_repo / rel
+    if not src.exists():
+        return
+    candidates = [p for p in src.iterdir() if p.name.startswith("@") and p.is_dir()]
+    entries = [p for p in src.iterdir()] + [q for scope in candidates for q in scope.iterdir()]
+    for entry in entries:
+        if not (entry.is_junction() or entry.is_symlink()):
+            continue
+        try:
+            target = Path(os.readlink(entry))
+        except OSError:
+            continue
+        if not target.is_absolute():
+            target = (entry.parent / target).resolve()
+        target = Path(str(target).removeprefix("\\\\?\\"))
+        try:
+            relative = target.resolve().relative_to(src_repo.resolve())
+        except ValueError:
+            continue
+        link = dst / entry.relative_to(src)
+        if link.exists() or link.is_junction() or link.is_symlink():
+            continue
+        link.parent.mkdir(parents=True, exist_ok=True)
+        new_target = dst_repo / relative
+        if IS_WIN:
+            sources.run(["cmd", "/c", "mklink", "/J", str(link), str(new_target)], timeout=30)
+        else:
+            link.symlink_to(new_target, target_is_directory=True)
+
+
 @dataclass
 class Workspace:
     repo: Path                 # 正在用的 Atlas 仓库
@@ -228,8 +269,9 @@ def prepare(ws: Workspace, log: RunLog) -> None:
         _worktree(ws.hermes_main, ws.hermes, ws.pin)
     log.step("复制 Python 环境与 node_modules（增量）")
     mirror(ws.repo / "core" / ".venv", ws.venv)
-    for rel in ("node_modules", "frontend/node_modules",
-                "vendor/memos-local-plugin/node_modules", "vendor/memos-local-plugin/dist"):
+    for rel in ("node_modules", "frontend/node_modules", "vendor/memos-local-plugin/node_modules"):
+        mirror_node_modules(ws.repo, ws.atlas, rel)
+    for rel in ("vendor/memos-local-plugin/dist", "vendor/memos-local-plugin/viewer/dist"):
         mirror(ws.repo / rel, ws.atlas / rel)
     editables = ["-e", str(ws.atlas / "core")]
     if ws.hermes.exists():
@@ -417,6 +459,20 @@ def restore_python(ws: Workspace) -> None:
     if ws.hermes.exists():
         editables += ["-e", str(ws.hermes)]
     sources.run([ws.python, "-m", "pip", "install", "-q", "--no-deps", *editables], timeout=900)
+
+
+def _major(version: str) -> str:
+    """语义化版本的「大版本」：1.x → 1；0.x 版本里次版本号就算大版本（0.13 与 0.14 不兼容）。"""
+    parts = re.findall(r"\d+", version or "")
+    if not parts:
+        return version
+    return parts[0] if parts[0] != "0" else f"0.{parts[1] if len(parts) > 1 else '0'}"
+
+
+def same_major(item: dict[str, Any]) -> bool:
+    if item.get("kind") not in {"pip", "npm", "mcp-npx"}:
+        return False
+    return _major(str(item.get("current", ""))) == _major(str(item.get("latest", "")))
 
 
 def npm_spec(old_spec: str, version: str) -> str:
@@ -703,7 +759,7 @@ class Runner:
                 sources.git("reset", "--hard", head_pin, cwd=ws.hermes, check=False)
             restore_python(ws)
         if group.key in {"npm", "npm-transitive"}:
-            restore_npm(ws)
+            self.restore_node()
         if group.key == "memos":
             fork_dir = ws.atlas / inventory.MEMOS_MANIFEST.parent
             mirror(ws.repo / "vendor/memos-local-plugin/node_modules", fork_dir / "node_modules")
@@ -750,17 +806,46 @@ class Runner:
 
     def run_group(self, group: Group) -> None:
         self.log.step(f"更新 {group.label}（{len(group.items)} 项）", group.label)
+        if group.key in {"npm", "npm-transitive"}:
+            self.snapshot_node()
         ok, reason = self.try_batch(group, group.items)
         if ok:
             return
         if len(group.items) == 1 or group.key in {"pip-transitive", "npm-transitive"}:
             self._fail(group.items, reason)
             return
-        self.log.step(f"{group.label} 整组没通过，逐项重试找出有问题的那项")
-        for item in group.items:
+        # 先把不跨大版本的一起再试一次（通常都能过），跨大版本的逐个试。
+        safe = [item for item in group.items if same_major(item)]
+        risky = [item for item in group.items if not same_major(item)]
+        self.log.step(f"{group.label} 整组没通过：先试 {len(safe)} 个小版本更新，"
+                      f"再逐个试 {len(risky)} 个大版本更新")
+        if len(safe) > 1 and len(risky) > 0:
+            ok, reason = self.try_batch(group, safe)
+            if not ok:
+                risky = safe + risky
+        else:
+            risky = safe + risky
+        for item in risky:
             ok, reason = self.try_batch(group, [item])
             if not ok:
                 self._fail([item], reason)
+
+    # -- node_modules 快照：前端组回退时整份换回，比重新 npm ci 快得多 ----------------
+
+    NODE_DIRS = ("node_modules", "frontend/node_modules")
+
+    def snapshot_node(self) -> None:
+        for rel in self.NODE_DIRS:
+            mirror(self.ws.atlas / rel, self.ws.root / "node-snapshot" / rel)
+
+    def restore_node(self) -> None:
+        snap = self.ws.root / "node-snapshot"
+        if not snap.exists():
+            restore_npm(self.ws)
+            return
+        for rel in self.NODE_DIRS:
+            mirror(snap / rel, self.ws.atlas / rel)
+            relink_junctions(self.ws.repo, self.ws.atlas, rel)
 
     def _fail(self, items: list[dict[str, Any]], reason: str) -> None:
         for item in items:

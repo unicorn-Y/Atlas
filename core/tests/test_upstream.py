@@ -210,6 +210,31 @@ def test_regressions_compare_against_baseline() -> None:
                                {"build_ok": False, "build_error": "TS2322", "failures": []})
 
 
+def test_same_major_splits_risky_updates() -> None:
+    assert staging.same_major({"kind": "npm", "current": "1.1.20", "latest": "1.1.21"})
+    assert not staging.same_major({"kind": "npm", "current": "18.3.1", "latest": "19.3.0"})
+    assert not staging.same_major({"kind": "pip", "current": "0.13.10", "latest": "0.14.0"})
+    assert staging.same_major({"kind": "npm", "current": "0.0.45", "latest": "0.0.83"})
+    assert not staging.same_major({"kind": "fork", "current": "a", "latest": "a"})
+
+
+def test_relink_junctions_points_into_destination(tmp_path: Path) -> None:
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    (src / "pkg").mkdir(parents=True)
+    (src / "node_modules" / "@atlas").mkdir(parents=True)
+    (dst / "pkg").mkdir(parents=True)
+    (dst / "node_modules" / "@atlas").mkdir(parents=True)
+    link = src / "node_modules" / "@atlas" / "pkg"
+    try:
+        link.symlink_to(src / "pkg", target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks not permitted here")
+    staging.relink_junctions(src, dst, "node_modules")
+    created = dst / "node_modules" / "@atlas" / "pkg"
+    assert created.is_symlink() or created.is_junction()
+    assert created.resolve() == (dst / "pkg").resolve()
+
+
 def test_group_plan_orders_kernel_first() -> None:
     components = [
         {"id": "npm:react", "kind": "npm"}, {"id": "fork:hermes", "kind": "fork"},
