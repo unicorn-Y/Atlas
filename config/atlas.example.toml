@@ -115,7 +115,7 @@ dbos = true
 [tools.servers.playwright]
 transport = "stdio"
 command = "npx"
-args = ["--yes", "@playwright/mcp@0.0.45"]
+args = ["--yes", "@playwright/mcp@0.0.83"]
 enabled = true
 
 [tools.servers.chrome-devtools]
