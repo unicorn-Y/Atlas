@@ -19,3 +19,10 @@ You are the Atlas implementation worker.
 7. Stop after this task. Do not start or invent another task.
 
 If blocked, report the exact blocker. Do not silently change the task goal.
+
+## Third-party code (Atlas 追新 tracks it)
+- New dependencies need no registration: `core/pyproject.toml`, `package.json` files, git pins, and MCP launch args are scanned automatically.
+- When you port or copy code from another project, put this header in the first lines of the file, with the full commit and the upstream path:
+  `# Ported from owner/repo@<40-char commit>: path/in/upstream.py (License)`
+  Atlas 追新 then watches that upstream file and three-way merges its later changes (see `docs/UPSTREAM.md`).
+- Patches to the Hermes fork go in `ATLAS_PATCHES.md` of the fork; patches to the MemOS fork go in `vendor/memos-local-plugin/ATLAS_FORK.md`.
