@@ -12,6 +12,8 @@ import BrowserHandoffCard from './x2/BrowserHandoffCard';
 import { DiagnosticsList } from './diagnostics';
 import { buildTimeline, cacheShare, describeTool, duration, tokenCount, type Step, type TimelineItem } from './timeline';
 import type { InspectorTab } from '../shell/Inspector';
+import { TokenUsageCard, TokenUsageToggle } from './TokenUsage';
+import { usageSummary } from './runInsights';
 
 interface ConversationActivityProps {
   events: AgentEvent[];
@@ -73,7 +75,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     case 'group': return <WorkerGroup key={item.id} item={item} />;
     case 'checks': return <Checks key={item.id} item={item} />;
     case 'notice': return <div key={item.id} className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
-      {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
+      {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : item.tone === 'todo' ? <ListChecks size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
       <span>{item.text}</span>
     </div>;
     case 'lsp': return <LspNotice key={item.id} item={item} />;
@@ -81,22 +83,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     case 'cancelled': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
       <Square size={12} />你停止了这次任务
     </div>;
-    case 'done': {
-      const tokens = tokenCount(item.usage);
-      const cached = cacheShare(item.usage);
-      const changed = item.changes && item.changes.files > 0 ? item.changes : null;
-      return <div key={item.id} className="my-4 ml-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-3">
-        <Check size={14} className="text-ok" />完成{item.startedAt ? `，用时 ${duration(item.startedAt, item.endedAt)}` : ''}
-        {tokens && <span className="tabular-nums">· {tokens} tokens{cached ? `（${cached}）` : ''}</span>}
-        {changed && <button className="text-fg-2 hover:text-fg" onClick={() => setTab('changes')}>
-          · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
-        </button>}
-        <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
-        {changed && <button className="ml-2 inline-flex items-center gap-1 text-fg-2 hover:text-fg"
-          onClick={() => void store.sendMessage('/review')}><SearchCheck size={13} />审查本次改动</button>}
-        {events[0] && <SaveRecipe runId={events[0].runId} store={store} />}
-      </div>;
-    }
+    case 'done': return <DoneLine key={item.id} item={item} events={events} store={store} setTab={setTab} />;
     case 'failed': return <div key={item.id} role="alert" className="my-4 ml-10 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
       没能完成：{item.detail}
     </div>;
@@ -116,6 +103,29 @@ export default function ConversationActivity({ events, store, username, setTab, 
     if (item.kind !== 'user') headed = true;
     return <TimelineRow key={item.id} item={item} context={{ events, store, username, setTab, busy, onOpenBrowser }} firstInTurn={firstInTurn} last={last} />;
   })}</>;
+}
+
+
+/** The finished-turn line: duration, token usage (unfolds into a breakdown card), changed files, follow-up actions. */
+function DoneLine({ item, events, store, setTab }: { item: Extract<TimelineItem, { kind: 'done' }>; events: AgentEvent[]; store: Store; setTab: (tab: InspectorTab) => void }) {
+  const [usageOpen, setUsageOpen] = useState(false);
+  const summary = useMemo(() => usageSummary(events), [events]);
+  const tokens = summary ? null : tokenCount(item.usage);
+  const cached = summary ? null : cacheShare(item.usage);
+  const changed = item.changes && item.changes.files > 0 ? item.changes : null;
+  return <div className="my-4 ml-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-3">
+    <Check size={14} className="text-ok" />完成{item.startedAt ? `，用时 ${duration(item.startedAt, item.endedAt)}` : ''}
+    {summary && <TokenUsageToggle usage={summary} open={usageOpen} onToggle={() => setUsageOpen((value) => !value)} />}
+    {tokens && <span className="tabular-nums">· {tokens} tokens{cached ? `（${cached}）` : ''}</span>}
+    {changed && <button className="text-fg-2 hover:text-fg" onClick={() => setTab('changes')}>
+      · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
+    </button>}
+    <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
+    {changed && <button className="ml-2 inline-flex items-center gap-1 text-fg-2 hover:text-fg"
+      onClick={() => void store.sendMessage('/review')}><SearchCheck size={13} />审查本次改动</button>}
+    {events[0] && <SaveRecipe runId={events[0].runId} store={store} />}
+    {summary && usageOpen && <TokenUsageCard usage={summary} />}
+  </div>;
 }
 
 function TurnHeader({ working }: { working: boolean }) {

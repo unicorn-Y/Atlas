@@ -7,6 +7,9 @@ import {
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
 import MessageThread from './components/MessageThread';
+import TodoPanel from './components/TodoPanel';
+import ProgressCapsule from './components/ProgressCapsule';
+import { latestTodos } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import RecipesDialog from './components/RecipesDialog';
 import SideChat from './components/SideChat';
@@ -879,11 +882,19 @@ export default function App() {
 
   const conversationQueue = store.queue[store.activeConversationId] ?? [];
   const queuePaused = Boolean(store.queuePaused[store.activeConversationId]);
-  const latestTodos = [...activeEvents].reverse().find((event) => String(event.type) === 'run.todos')?.data.todos;
-  const todoItems = Array.isArray(latestTodos) ? latestTodos.filter((item): item is { text?: string; status?: string } => Boolean(item) && typeof item === 'object') : [];
-  const todoStrip = todoItems.length > 0 && <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-sunken px-3 py-2 text-[12px] text-fg-2" aria-label="任务清单">
-    <ListChecks size={14} className="shrink-0 text-brand" />{todoItems.map((item, index) => <span key={`${index}:${item.text ?? ''}`} className={item.status === 'completed' ? 'text-fg-3 line-through' : item.status === 'in_progress' ? 'text-fg font-medium' : 'text-fg-3'}>{item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○'} {item.text ?? `步骤 ${index + 1}`}</span>)}
-  </div>;
+  // The newest todo list in this conversation: the running task's, or the last one a finished task left behind.
+  const todoSource = useMemo(() => {
+    const own = latestTodos(activeEvents);
+    if (own?.todos.length) return { runId: activeRun?.id ?? '', ...own };
+    const earlier = [...store.runs].reverse().filter((run) => run.conversationId === store.activeConversationId && run.id !== activeRun?.id);
+    for (const run of earlier) {
+      const found = latestTodos(run.events);
+      if (found?.todos.length) return { runId: run.id, ...found };
+    }
+    return null;
+  }, [activeEvents, activeRun?.id, store.runs, store.activeConversationId]);
+  const todoStrip = todoSource && <TodoPanel key={store.activeConversationId} todos={todoSource.todos} revisionKey={`${todoSource.runId}:${todoSource.revision}`}
+    running={Boolean(activeRun && !runDone)} onSubmit={(todos) => store.submitTodos(store.activeConversationId, todos)} />;
   const queueStrip = conversationQueue.length > 0 && <div className="mb-2 grid gap-1.5" aria-label="待发送的消息">
     {queuePaused && <div className="flex items-center gap-2 rounded-xl bg-sunken px-3 py-2 text-[12.5px] text-fg-2">
       <Pause size={13} />任务已停止，后面的 {conversationQueue.length} 条先不发。<span className="flex-1" />
@@ -973,6 +984,9 @@ export default function App() {
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
+            {activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 right-5 z-20 flex justify-end [&>*]:pointer-events-auto">
+              <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
+            </div>}
             {foregroundEvent && <ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={foregroundEvent.runId} className="shrink-0" />}
             <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId}
               history={historyWithBranchNotes} items={timelineItems}

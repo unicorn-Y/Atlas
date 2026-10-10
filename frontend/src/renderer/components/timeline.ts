@@ -1,5 +1,13 @@
 import type { CheckResults } from '@atlas/backend-adapter';
 import type { AgentEvent } from '../../types/runtime';
+import { isTodoEdit, parseTodoEdit } from './runInsights';
+
+/** One line for a todo edit the user handed to the Agent. */
+export function todoEditNotice(content: string): string {
+  const items = parseTodoEdit(content);
+  const done = items.filter((item) => item.status === 'completed').length;
+  return items.length ? `你调整了待办清单（${items.length} 项，已完成 ${done} 项），Atlas 会按新清单继续` : '你调整了待办清单';
+}
 
 /**
  * Turns the raw runtime event stream into what a person wants to read:
@@ -66,7 +74,7 @@ export type TimelineItem =
   | { kind: 'checks'; id: string; results: CheckResults }
   | { kind: 'cancelled'; id: string }
   /** One-line runtime notes: the model was swapped after errors, or Atlas went back to verify its edits. */
-  | { kind: 'notice'; id: string; tone: 'switch' | 'verify'; text: string }
+  | { kind: 'notice'; id: string; tone: 'switch' | 'verify' | 'todo'; text: string }
   /** LSP 在编辑后报的新问题：默认收成一行，可展开看明细。 */
   | { kind: 'lsp'; id: string; path: string; count: number; diagnostics: LspDiagnosticItem[] }
   /** /review 代码审查的结构化结论，由 ReviewFindingsCard 渲染；findings 为空即「没有发现问题」。 */
@@ -261,7 +269,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         if (typeof data.content === 'string' && data.content) {
           // The trust question is asked before the run starts; once the request shows up, put it back under it.
           const early = items.length && items[items.length - 1].kind === 'trust' ? items.pop() : undefined;
-          items.push({ kind: 'user', id: event.id, content: data.content });
+          items.push(isTodoEdit(data.content) ? { kind: 'notice', id: event.id, tone: 'todo', text: todoEditNotice(data.content) } : { kind: 'user', id: event.id, content: data.content });
           if (early) items.push(early);
         }
         closeBlocks(); reply = null; spoken = '';
@@ -436,7 +444,8 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       case 'run.steered':
         if (data.immediate && reply) reply.status = '被用户打断';
         closeReply(); closeBlocks();
-        items.push({ kind: 'user', id: event.id, content: String(data.content ?? ''), steered: true });
+        if (isTodoEdit(String(data.content ?? ''))) items.push({ kind: 'notice', id: event.id, tone: 'todo', text: todoEditNotice(String(data.content ?? '')) });
+        else items.push({ kind: 'user', id: event.id, content: String(data.content ?? ''), steered: true });
         break;
       case 'rules.loaded': {
         const files = Array.isArray(data.files) ? data.files as Array<{ path?: string }> : [];

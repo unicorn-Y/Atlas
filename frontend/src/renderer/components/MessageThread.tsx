@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type MutableRefObject } from 'react';
 import { Virtuoso, type StateSnapshot, type VirtuosoHandle } from 'react-virtuoso';
-import { History } from 'lucide-react';
+import { History, ListChecks } from 'lucide-react';
 import type { ConversationMessage as ConversationMessageData } from '@atlas/backend-adapter';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { TimelineRow } from './ConversationActivity';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
-import { buildTimeline, type TimelineItem } from './timeline';
+import { buildTimeline, todoEditNotice, type TimelineItem } from './timeline';
+import { isTodoEdit } from './runInsights';
 import { Button } from '../ui/Button';
 import type { InspectorTab } from '../shell/Inspector';
 import type { AgentEvent } from '../../types/runtime';
@@ -141,6 +142,9 @@ export default function MessageThread({ history, username, historyActions, empty
           <History size={13} className="shrink-0 text-fg-3" />已折叠早期事件（{row.count} 条）
         </div>;
       case 'history':
+        if (row.message.role === 'user' && isTodoEdit(row.message.content)) return <div className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
+          <ListChecks size={13} className="shrink-0 text-brand" /><span>{todoEditNotice(row.message.content)}</span>
+        </div>;
         return <ConversationMessage role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} actions={historyActions(row.message)} />;
       case 'empty':
         return emptyState;

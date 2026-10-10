@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { todoEditMessage, type TodoItem } from '../components/runInsights';
 import { BackendAdapter, BackendError } from '@atlas/backend-adapter';
 import type { BackendStartupProgress } from '../../shared/ipc';
 import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, CustomModelUpdateRequest, InitProposal, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ProviderState, ReasoningEffort, ReasoningStagesConfig, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
@@ -152,6 +153,8 @@ interface AtlasState extends PersistentSlice {
   takeQueued: (conversationId: string, id: string) => QueuedMessage | undefined;
   sendQueuedNow: (conversationId: string, id: string) => void;
   steerQueued: (conversationId: string, id: string) => void;
+  /** Hands a user-edited todo list to the Agent: steered into the running task, or sent as a new message once it ended. */
+  submitTodos: (conversationId: string, todos: TodoItem[]) => boolean;
   resumeQueue: (conversationId: string) => void;
   retryRun: (runId: string) => void;
   renameConversation: (id: string, title: string) => Promise<void>;
@@ -701,6 +704,13 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       // Interrupt the current run; its terminal event dispatches the queue.
       const running = activeRunFor(conversationId);
       if (running) backend.cancelRun(running.id); else dispatchQueue(conversationId);
+    },
+    submitTodos: (conversationId, todos) => {
+      const running = activeRunFor(conversationId);
+      const content = todoEditMessage(todos, Boolean(running));
+      if (running) return steer(running, { id: crypto.randomUUID(), content, attachments: [], files: [] });
+      void get().sendMessage(content);
+      return true;
     },
     steerQueued: (conversationId, id) => {
       const running = activeRunFor(conversationId);
