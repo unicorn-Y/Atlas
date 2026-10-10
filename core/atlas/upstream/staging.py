@@ -933,14 +933,14 @@ def run(plan: list[str], data_root: Path | None = None, repo: Path | None = None
     repo = repo or PROJECT_ROOT
     status = check.load_status(data_root)
     components = check.decorate(status.get("components") or [], data_root)
-    log = RunLog(data_root, plan)
     lock = data_root / "job.lock"
+    if _lock_is_live(lock):
+        # 不碰正在跑的那个任务的 run.json，只告诉调用方这次没执行。
+        return {"state": "skipped", "reason": "已有一个追新任务在跑", "results": {},
+                "commits": [], "pushed": False}
+    log = RunLog(data_root, plan)
     owned = False
     try:
-        if _lock_is_live(lock):
-            log.step("已有一个追新任务在跑，这次不执行")
-            log.finish("skipped")
-            return log.data
         lock.write_text(str(os.getpid()))
         owned = True
         groups = group_plan(components, plan)

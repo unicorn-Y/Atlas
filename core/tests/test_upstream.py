@@ -414,9 +414,12 @@ def test_run_skips_when_lock_held_and_keeps_the_lock(tmp_path: Path) -> None:
     import os
 
     (tmp_path / "job.lock").write_text(str(os.getpid()), encoding="utf-8")
+    (tmp_path / "run.json").write_text('{"state": "running", "id": "other"}', encoding="utf-8")
     result = staging.run([], data_root=tmp_path, repo=tmp_path)
     assert result["state"] == "skipped"
     assert (tmp_path / "job.lock").exists()
+    # 正在跑的那个任务的进度不能被这次跳过覆盖
+    assert json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["id"] == "other"
 
 
 def test_stale_lock_with_recycled_pid_does_not_block(tmp_path: Path) -> None:
