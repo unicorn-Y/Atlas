@@ -29,8 +29,8 @@ async def _skill_components() -> list[Any]:
         from atlas.api.skills_market_router import get_market
 
         rows = await get_market().check_updates()
-    except Exception as exc:  # noqa: BLE001 —— 技能源连不上不影响其它项
-        log.info("upstream.skills_check_failed", error=str(exc))
+    except Exception:  # 技能源连不上不影响其它项
+        log.info("upstream.skills_check_failed", exc_info=True)
         return []
     return inventory.skills_from_updates(rows)
 
@@ -89,7 +89,8 @@ async def apply_hot(items: list[dict[str, Any]]) -> dict[str, Any]:
                                                               item["latest"])}
             else:
                 results[item["id"]] = {"status": "skipped", "note": "不是即时更新项"}
-        except Exception as exc:  # noqa: BLE001 —— 单项失败记下来继续
+        except Exception as exc:  # 单项失败记下来继续
+            log.warning("upstream.apply_failed", item=item["id"], exc_info=True)
             results[item["id"]] = {"status": "failed", "reason": str(exc)[:1000]}
             check.record_failure(item["id"], str(item.get("latest", "")), str(exc))
     return results

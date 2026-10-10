@@ -80,7 +80,8 @@ def kill_under(root: Path) -> int:
               f"$_.ExecutablePath.StartsWith('{str(root)}', 'OrdinalIgnoreCase') }} | "
               "ForEach-Object { $_.ProcessId }")
     result = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True,
-                            text=True, creationflags=_NO_WINDOW, check=False, timeout=120)
+                            text=True, encoding="utf-8", errors="replace",
+                            creationflags=_NO_WINDOW, check=False, timeout=120)
     pids = [int(line) for line in result.stdout.split()
             if line.isdigit() and int(line) != os.getpid()]
     for pid in pids:

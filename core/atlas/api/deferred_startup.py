@@ -188,7 +188,8 @@ async def run_deferred_startup(app: Any, services: Any, components: StartupCompo
             _component(components, "memoryos", memoryos_lifecycle.start),
             name="startup-memoryos",
         ))
-    _schedule_background(app, "upstream-auto", _upstream_auto_loop())
+    if getattr(app, "state", None) is not None:  # test doubles pass a bare object
+        _schedule_background(app, "upstream-auto", _upstream_auto_loop())
     results = await asyncio.gather(*branches, return_exceptions=True)
     for result in results:
         if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError):
