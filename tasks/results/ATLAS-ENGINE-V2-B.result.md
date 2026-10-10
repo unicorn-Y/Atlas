@@ -40,6 +40,7 @@
 - 隔离后端 `/api/health` 返回 `ok`。
 - 真实模型消息完成：run `bfd7aa0a-ca39-48a2-8f75-4e3d9b3c25d8`，模型调用一次 `build_repo_map`，日志为 `tool_start` 后接 `tool_end` 状态 `completed`。JSONL 位于 `D:\atlas-engine3-runtime\data\logs\runs\2026-10-10\bfd7aa0a-ca39-48a2-8f75-4e3d9b3c25d8.jsonl`。
 - 标题适配器日志确认 SDK 参数兼容路径已执行；随后辅助标题请求收到上游 `Model is unavailable` 400。因此原 SDK 参数异常已绕开，但标题生成成功仍未确认。
+- 清理隔离设置后，无凭据启动最新代码的进程成功创建，但 `/api/health` 保持 `starting`；该验证进程已停止。之前带隔离设置的实例返回 `ok` 并完成上述真实模型调用。
 
 ## 未完成与限制
 
