@@ -121,10 +121,20 @@ function rebuild() {
     sh(python, ['-m', 'pip', 'install', '-q', '--disable-pip-version-check', '--no-cache-dir', '-r', 'core/requirements.lock']);
     steps.push('python-lock');
   }
-  if ((changed !== null && (touched('package-lock.json') || touched('frontend/package.json')))
-      || !fs.existsSync(path.join(root, 'node_modules', 'electron'))) {
+  // Check the binary, not the package folder: a blocked install script once left
+  // node_modules/electron without dist/electron.exe and Atlas could not start.
+  const electronExe = path.join(root, 'node_modules', 'electron', 'dist', isWin ? 'electron.exe' : 'electron');
+  if ((changed !== null && (touched('package-lock.json') || touched('package.json') || touched('frontend/package.json')))
+      || !fs.existsSync(electronExe)) {
     sh(npm, ['ci', '--no-audit', '--no-fund']);
     steps.push('npm');
+  }
+  if (!fs.existsSync(electronExe)) {
+    // GitHub downloads fail on some networks; the npmmirror copy is the usual fallback.
+    sh('node', [path.join(root, 'node_modules', 'electron', 'install.js')], {
+      env: { ...process.env, ELECTRON_MIRROR: process.env.ELECTRON_MIRROR || 'https://npmmirror.com/mirrors/electron/' },
+    });
+    steps.push('electron');
   }
   const built = fs.existsSync(path.join(root, 'frontend', 'dist', 'index.html'))
     && fs.existsSync(path.join(root, 'frontend', 'dist-electron', 'preload', 'index.cjs'));
