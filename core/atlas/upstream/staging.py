@@ -30,9 +30,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import structlog
+
 from atlas.upstream import check, forks, inventory, provenance, sources
 from atlas.upstream.classify import normalize_pip
 from atlas.upstream.sources import LookupFailed
+
+logger = structlog.get_logger()
 
 IS_WIN = os.name == "nt"
 STAGING_DIRNAME = "atlas-upstream-staging"
@@ -990,15 +994,16 @@ def run(plan: list[str], data_root: Path | None = None, repo: Path | None = None
         failed = sum(r["status"] == "failed" for r in results)
         log.step(f"完成：更新 {applied} 项，失败 {failed} 项", "完成")
         log.finish("succeeded" if not failed else ("partial" if applied else "failed"))
-    except Exception as exc:  # noqa: BLE001 —— 任务进程顶层：一切异常都要落到 run.json
+    except Exception as exc:  # 任务进程顶层：一切异常都要落到 run.json
+        logger.exception("upstream.run_failed")
         log.step("出错：" + str(exc))
         log.data["error"] = traceback.format_exc()[-4000:]
         log.finish("failed")
     finally:
         try:
             sources.kill_under(staging_root(repo))
-        except Exception:  # noqa: BLE001,S110 —— 清理失败不影响结果
-            pass
+        except Exception:  # 清理失败不影响结果
+            logger.warning("upstream.cleanup_failed", exc_info=True)
         if owned:
             try:
                 lock.unlink()
@@ -1025,8 +1030,8 @@ def _notify(data: dict[str, Any]) -> None:
         from atlas.notifications.apprise import AppriseNotifier
 
         asyncio.run(AppriseNotifier().notify(title, body))
-    except Exception:  # noqa: BLE001,S110 —— 通知是附带的
-        pass
+    except Exception:  # 通知是附带的
+        logger.warning("upstream.notify_failed", exc_info=True)
 
 
 def wait_for_exit(pid: int, timeout: float = 30.0) -> None:

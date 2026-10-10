@@ -72,8 +72,8 @@ def hermes_checkout(repo: Path) -> Path:
         root = installed_hermes_root()
         if root is not None and (root / ".git").exists():
             return root
-    except Exception:  # noqa: BLE001 —— 没装 Hermes 时退回默认位置
-        log.debug("upstream.hermes_root_unknown")
+    except Exception:  # 没装 Hermes 时退回默认位置
+        log.debug("upstream.hermes_root_unknown", exc_info=True)
     return repo.parent / "hermes-agent"
 
 
@@ -587,8 +587,8 @@ def scan_all(ctx: Context) -> list[Component]:
     def guarded(name: str, fn: Scanner) -> list[Component]:
         try:
             return fn(ctx)
-        except Exception as exc:  # noqa: BLE001 —— 每个扫描器的失败都要落到清单上
-            log.warning("upstream.scan_failed", scanner=name, error=str(exc))
+        except Exception as exc:  # 每个扫描器的失败都要落到清单上
+            log.warning("upstream.scan_failed", scanner=name, exc_info=True)
             ctx.errors.append(f"{name}: {exc}")
             return [Component(id=f"scan:{name}", name=f"{name} 扫描失败", category="backend",
                               kind="scan", status=ERROR, strategy=MANUAL, note=str(exc)[:500])]

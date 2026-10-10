@@ -66,7 +66,7 @@ def ensure_running() -> bool:
         try:
             ok = bool(_load_daemon_manager().ensure_viewer_daemon(runtime_home=MEMOS_HOME))
         except Exception as exc:  # MemOS missing / node unavailable: callers report offline
-            log.warning("memos.start_failed", error=str(exc))
+            log.warning("memos.start_failed", error=str(exc), exc_info=True)
             return False
         log.info("memos.started_on_demand", ok=ok)
         return ok and _listening()
