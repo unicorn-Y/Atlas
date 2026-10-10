@@ -388,6 +388,7 @@ def baseline(ws: Workspace, kinds: set[str], log: RunLog) -> None:
             label = "后端" if kind == "python" else "前端"
             log.step(f"跑基线测试（{label}），用来对比更新后的结果", "基线")
             cache[kind] = GATES[kind](ws)
+            sources.kill_under(ws.root)
         ws.baseline[kind] = cache[kind]
     cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -780,6 +781,8 @@ class Runner:
         for kind in sorted(group.gates):
             self.log.step(f"验证：{'后端测试' if kind == 'python' else '前端构建与测试'}")
             problems += regressions(kind, self.ws.baseline.get(kind, {}), GATES[kind](self.ws))
+            # 测试会拉起后端服务器等子进程，失败或超时时可能漏下来：每轮验证后清干净。
+            sources.kill_under(self.ws.root)
         return problems
 
     def commit(self, group: Group, notes: dict[str, str]) -> None:
@@ -970,6 +973,10 @@ def run(plan: list[str], data_root: Path | None = None, repo: Path | None = None
         log.data["error"] = traceback.format_exc()[-4000:]
         log.finish("failed")
     finally:
+        try:
+            sources.kill_under(staging_root(repo))
+        except Exception:  # noqa: BLE001,S110 —— 清理失败不影响结果
+            pass
         if owned:
             try:
                 lock.unlink()

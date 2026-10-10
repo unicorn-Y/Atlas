@@ -28,21 +28,62 @@ def run(
     args: list[str], cwd: Path | str | None = None, timeout: float = 120,
     env: dict[str, str] | None = None, check: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """跑一个子进程并收集输出；``check`` 时非零退出码抛 :class:`LookupFailed`。"""
-    try:
-        result = subprocess.run(
-            args, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=timeout, env=env, check=False, creationflags=_NO_WINDOW,
-            shell=os.name == "nt" and args[0].lower().endswith((".cmd", ".bat")),
-        )
-    except FileNotFoundError as exc:
-        raise LookupFailed(f"找不到命令：{args[0]}") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise LookupFailed(f"命令超时（{int(timeout)} 秒）：{' '.join(args[:3])}") from exc
+    """跑一个子进程并收集输出；``check`` 时非零退出码抛 :class:`LookupFailed`。
+
+    输出写临时文件而不是管道：测试会拉起 uvicorn 之类的孙子进程，它们继承管道句柄后，
+    管道版 ``subprocess.run`` 会一直等到它们退出（超时也救不回来）。超时时结束整棵进程树。
+    """
+    import tempfile
+
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        try:
+            process = subprocess.Popen(
+                args, cwd=cwd, stdout=out, stderr=err, stdin=subprocess.DEVNULL, env=env,
+                creationflags=_NO_WINDOW,
+                shell=os.name == "nt" and args[0].lower().endswith((".cmd", ".bat")),
+            )
+        except FileNotFoundError as exc:
+            raise LookupFailed(f"找不到命令：{args[0]}") from exc
+        try:
+            code = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            kill_tree(process.pid)
+            process.wait(timeout=30)
+            raise LookupFailed(f"命令超时（{int(timeout)} 秒）：{' '.join(args[:3])}") from exc
+        out.seek(0)
+        err.seek(0)
+        result = subprocess.CompletedProcess(
+            args, code, out.read().decode("utf-8", "replace"), err.read().decode("utf-8", "replace"))
     if check and result.returncode != 0:
         tail = (result.stderr or result.stdout).strip().splitlines()[-12:]
         raise LookupFailed(f"{' '.join(args[:4])} 失败：\n" + "\n".join(tail))
     return result
+
+
+def kill_tree(pid: int) -> None:
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True,
+                       creationflags=_NO_WINDOW, check=False)
+    else:
+        try:
+            os.killpg(os.getpgid(pid), 9)
+        except OSError:
+            pass
+
+
+def kill_under(root: Path) -> int:
+    """结束可执行文件位于 ``root`` 下的所有进程（预演环境里漏下的测试服务器等）。"""
+    if os.name != "nt":
+        return 0
+    script = ("Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and "
+              f"$_.ExecutablePath.StartsWith('{str(root)}', 'OrdinalIgnoreCase') }} | "
+              "ForEach-Object { $_.ProcessId }")
+    result = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True,
+                            text=True, creationflags=_NO_WINDOW, check=False, timeout=120)
+    pids = [int(line) for line in result.stdout.split() if line.isdigit() and int(line) != os.getpid()]
+    for pid in pids:
+        kill_tree(pid)
+    return len(pids)
 
 
 def git(*args: str, cwd: Path | str | None = None, timeout: float = 120, check: bool = True) -> str:
