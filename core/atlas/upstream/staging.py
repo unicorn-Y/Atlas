@@ -908,6 +908,23 @@ def group_plan(components: list[dict[str, Any]], plan: list[str]) -> list[Group]
     return groups
 
 
+JOB_LOCK_MAX_AGE_SECONDS = 6 * 3600  # 追新任务至多几十分钟；比这还旧的锁视为遗留
+
+
+def _lock_is_live(lock: Path) -> bool:
+    """锁存在、年龄正常、且其 PID 仍活着时，才算确有任务在跑。
+
+    只看 PID 会把"进程已死、但 PID 被系统复用"的陈旧锁误判成正在运行，
+    从而永久挡住后续追新。
+    """
+    try:
+        age = time.time() - lock.stat().st_mtime
+        pid = int(lock.read_text(encoding="utf-8") or 0)
+    except (OSError, ValueError):
+        return False
+    return bool(pid) and age < JOB_LOCK_MAX_AGE_SECONDS and pid_alive(pid)
+
+
 def run(plan: list[str], data_root: Path | None = None, repo: Path | None = None) -> dict[str, Any]:
     """执行一次追新（阻塞，几分钟到几十分钟）。"""
     from atlas.config import PROJECT_ROOT
@@ -918,12 +935,14 @@ def run(plan: list[str], data_root: Path | None = None, repo: Path | None = None
     components = check.decorate(status.get("components") or [], data_root)
     log = RunLog(data_root, plan)
     lock = data_root / "job.lock"
+    owned = False
     try:
-        if lock.exists() and pid_alive(int(lock.read_text() or 0)):
+        if _lock_is_live(lock):
             log.step("已有一个追新任务在跑，这次不执行")
             log.finish("skipped")
             return log.data
         lock.write_text(str(os.getpid()))
+        owned = True
         groups = group_plan(components, plan)
         skipped = [cid for cid in plan
                    if not any(cid == item["id"] for group in groups for item in group.items)]
@@ -951,10 +970,11 @@ def run(plan: list[str], data_root: Path | None = None, repo: Path | None = None
         log.data["error"] = traceback.format_exc()[-4000:]
         log.finish("failed")
     finally:
-        try:
-            lock.unlink()
-        except OSError:
-            pass
+        if owned:
+            try:
+                lock.unlink()
+            except OSError:
+                pass
         _notify(log.data)
     return log.data
 

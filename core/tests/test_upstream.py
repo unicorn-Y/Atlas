@@ -403,3 +403,30 @@ def test_upstream_api_view_settings_and_holds(client) -> None:  # noqa: ANN001
     assert released["holds"] == {}
     nothing = client.post("/api/upstream/apply", json={"ids": ["npm:none"]}).json()
     assert nothing["started"] is False
+
+
+# ---------------------------------------------------------------------------
+# 任务锁
+# ---------------------------------------------------------------------------
+
+def test_run_skips_when_lock_held_and_keeps_the_lock(tmp_path: Path) -> None:
+    """别的任务正持锁时要跳过，且不能把对方的锁删掉（否则并发两次会同时开跑）。"""
+    import os
+
+    (tmp_path / "job.lock").write_text(str(os.getpid()), encoding="utf-8")
+    result = staging.run([], data_root=tmp_path, repo=tmp_path)
+    assert result["state"] == "skipped"
+    assert (tmp_path / "job.lock").exists()
+
+
+def test_stale_lock_with_recycled_pid_does_not_block(tmp_path: Path) -> None:
+    """进程已死、PID 被系统复用的陈旧锁，不能永久挡住后续追新。"""
+    import os
+    import time
+
+    lock = tmp_path / "job.lock"
+    lock.write_text(str(os.getpid()), encoding="utf-8")
+    old = time.time() - staging.JOB_LOCK_MAX_AGE_SECONDS - 60
+    os.utime(lock, (old, old))
+    result = staging.run([], data_root=tmp_path, repo=tmp_path)
+    assert result["state"] != "skipped"
