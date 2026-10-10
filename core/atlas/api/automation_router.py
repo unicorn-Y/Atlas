@@ -113,7 +113,8 @@ def _require_started_engine() -> AutomationEngine:
 def _project(record: dict[str, Any]) -> dict[str, Any]:
     """产品记录 + 运行投影（next_run_at 展示值）。"""
     projected = dict(record)
-    projected["next_run_at"] = compute_next_run_at(record)
+    # Disabled / cancelled automations have no next run.
+    projected["next_run_at"] = compute_next_run_at(record) if record.get("enabled", True) else ""
     return projected
 
 

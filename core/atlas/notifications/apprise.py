@@ -45,6 +45,9 @@ def configured_urls() -> list[str]:
                 candidates = [str(url).strip() for url in urls]
     if not candidates:
         candidates = _file_urls()
+    if not candidates and os.name == "nt" and get_config().toast_enabled:
+        # [notifications] toast_enabled (default on): native Windows toast via pywin32.
+        candidates = ["windows://"]
     return [url for url in candidates if url]
 
 

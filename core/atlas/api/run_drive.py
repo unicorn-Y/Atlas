@@ -622,7 +622,8 @@ async def _automation_deliver(record: dict[str, Any], outcome: dict[str, Any]) -
     if channel in ("", "owner", "notification"):
         if _server().notifications is None:
             return False
-        await _server().notifications.notify("Atlas automation", text)
+        is_reminder = str(record.get("name") or "").startswith("提醒：")
+        await _server().notifications.notify("Atlas 提醒" if is_reminder else "Atlas automation", text)
         return True
     if _server().channel_manager is None or not target:
         return False

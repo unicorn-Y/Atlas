@@ -101,6 +101,15 @@ def _run_isolated(coro: Awaitable[Any]) -> Any:
         loop.close()
 
 
+# Same value as atlas.automation.reminders.REMINDER_PREFIX (that module imports this one).
+REMINDER_NAME_PREFIX = "提醒："
+
+
+def _is_reminder(record: dict[str, Any]) -> bool:
+    """Chat-created reminder records are tagged by their name prefix (see reminders.py)."""
+    return str(record.get("name") or "").startswith(REMINDER_NAME_PREFIX)
+
+
 def compute_next_run_at(record: dict[str, Any], *, from_time: datetime | None = None) -> str:
     """展示用 next_run_at：cron 用 croniter 推导；interval 从 last_run_at 顺推。"""
     trigger = record.get("trigger") or {}
@@ -627,6 +636,10 @@ class AutomationEngine:
                     raise RuntimeError("heartbeat_tick 未注入")
                 agent_id = payload.get("agent_id") or record.get("owner_agent_id") or ""
                 result = await self._heartbeat_tick(agent_id, "schedule")
+            elif kind == "agent_turn" and _is_reminder(record):
+                # A reminder is a notification, not a task: never run the agent on
+                # "交周报" — deliver the reminder text itself.
+                result = REMINDER_NAME_PREFIX + str(payload.get("message") or "")
             elif kind == "agent_turn":
                 if self._dispatch_turn is None:
                     raise RuntimeError("dispatch_turn 未注入")
@@ -686,7 +699,8 @@ class AutomationEngine:
         if outcome["status"] == "error":
             return "unknown"
         delivery = record.get("delivery") or {}
-        if delivery.get("mode") != "channel":
+        # Reminders always notify the owner, including ones stored with mode "none".
+        if delivery.get("mode") != "channel" and not _is_reminder(record):
             return "not-requested"
         if self._deliver is None:
             return "not-delivered"
