@@ -59,6 +59,8 @@ dev = [
 ]
 terminal = ["pywinpty>=2.0.13; platform_system == 'Windows'"]
 release = ["pyinstaller>=6.11"]
+# Nightly skill training (atlas.evolution.skill_sleep): microsoft/SkillOpt, MIT, pinned.
+learning = ["skillopt @ git+https://github.com/microsoft/SkillOpt@343db229dbd5ddaf9df6b1d5540d8bcdb2604d5c"]
 # Channel adapters (W2b): optional SDKs, lazily imported; missing extras degrade that
 # channel only (is_available() passive probe, never an automatic install).
 channels = [

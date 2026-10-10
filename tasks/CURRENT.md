@@ -20,7 +20,8 @@ MemoryOS / MEMORY-V1，把各家做得最好的部分并进这一个引擎，每
 | fork 进仓库 + 中文事实规则进源码 + 「关于你」事实层（带原话出处、改口保留历史、每轮注入） | 完成，真实模型冒烟 7/7（f7196af5、43ac3156） |
 | 到点提醒：建/改/取消实测正确；修复到点不通知（改为 Windows 通知，不再跑 agent） | 完成，真机到点弹出通知（58f1a65） |
 | 聊天实际加载的插件链接指向 fork；setup_hermes 自动维护链接 | 完成（3c56cdd） |
-| 技能验证：SkillOpt-Sleep（验证门 + 每晚复盘），数据源=Hermes 会话库 engine/state.db，技能写到 skills/learned/ | 待做：安装 skillopt 需用户批准 |
+| 技能验证：SkillOpt-Sleep（验证门 + 每晚复盘），数据源=Hermes 会话库 engine/state.db，技能写到 skills/learned/ | 接入代码已提交（`python -m atlas.evolution.skill_sleep [--dry-run]`），**未运行、未设定时**：用户决定等真实使用数据多了再跑 |
+| 记忆页面重做（关于你/记忆变动/经验与技能/提醒/资料），退役 MemoryOS 视图删除；打开时自动拉起 MemOS | 完成（3563500） |
 | 失败总结（ACE） | 暂不做：MemOS 已有 decision repair + 反模式策略，功能重叠 |
 | 临时事实过期 + 「忘掉」撤销（Supermemory forgetAfter 设计） | 完成，真实模型冒烟全对（cad89084） |
 
