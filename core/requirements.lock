@@ -30,7 +30,7 @@ cdp-use==1.4.5
 certifi==2026.5.20
 cffi==2.1.1
 charset-normalizer==3.5.2
-claude-agent-sdk==0.2.157
+claude-agent-sdk==0.2.165
 click==8.3.3
 cloudpickle==3.1.2
 colorama==0.4.6
@@ -39,9 +39,9 @@ concurrent-log-handler==0.9.29
 courlan==1.4.0
 croniter==6.0.0
 cryptography==50.0.1
-cua-driver==0.28.2
+cua-driver==0.34.1
 dateparser==1.4.3
-dbos==3.0.0
+dbos==3.2.0
 defusedxml==0.7.1
 distro==1.9.0
 docstring_parser==0.18.0
