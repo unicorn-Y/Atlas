@@ -13,7 +13,7 @@
 4. **一个事实来源**：会话仍存 SessionDB（`engine/session_sync.py`），不建第二个库。
 5. **每个移植文件写来源头**（组件追新靠它跟踪上游更新）：`# Ported from owner/repo@<完整sha>: path (License)`，多来源多行；闭源行为写 `# Behavior from Claude Code <版本> docs: <链接>`。同时追加 `THIRD_PARTY_NOTICES.md`。
 6. **旧路径保留为开关**：`config/atlas.toml` 新增 `[engine] kernel = "atlas"`（默认）/ `"hermes"`，新内核出问题可切回。
-7. **测试**：不新增测试矩阵/E2E 场景表/跑分。最后把现有后端测试跑一遍，被本次改动弄坏的修好（过时的删掉）；纯函数（输出裁剪、调度排序、patch 解析）顺手 1–2 个单测即可。
+7. **不写任何新测试，不跑测试套件**（用户明确要求：浪费时间和 token，他自己用、靠日志查问题）。只做：后端能启动、前端 build 通过、真实模型跑通一条消息。旧测试因本次改动失效的不用管。
 
 固定提交：Codex `806d9732c974`（rust-v0.162.1 之后）、ZCode `29628c9acdb8`（v3.14.3）、Claude Code 行为以 v2.1.296（10-09）文档为准；DeepSeek Harness `d74326738864`、OpenHands SDK `1cfba2117e92`、Oh My OpenAgent `99d1d0ee2c74`。
 
@@ -54,5 +54,5 @@
   C `kernel/tools.py`+`exec.py`+`stuck.py`；
   D `kernel/context.py`+`prompt.py`+`plan.py`；
   E `kernel/edit.py`+`subagents.py`+ hooks 触发 + 接线（`engine/hermes_runtime.py` 按 `[engine] kernel` 分流到新内核）。
-- 做完：现有后端测试跑一遍（`core` 下 `pytest -q -n auto --timeout 300`，终端杀长命令就后台跑写日志），修好改坏的；`npm --prefix frontend run build` 通过；用真实模型发一条「列出当前目录并读一个文件」确认能跑通、日志文件正常生成。
+- 做完：后端能正常启动；`npm --prefix frontend run build` 通过；用真实模型发一条「列出当前目录并读一个文件」确认能跑通、日志文件正常生成。**到此为止，不写测试、不跑测试套件。**
 - 提交到 `engine-v1` 并推送 origin，**不要推 memory-v1**（由 Claude 合并后推）。结果写 `tasks/results/ATLAS-ENGINE-V1.result.md`：做了什么、每个文件的来源、没做完的、最终 SHA。
