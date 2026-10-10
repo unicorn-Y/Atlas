@@ -53,7 +53,8 @@ def run(
         out.seek(0)
         err.seek(0)
         result = subprocess.CompletedProcess(
-            args, code, out.read().decode("utf-8", "replace"), err.read().decode("utf-8", "replace"))
+            args, code, out.read().decode("utf-8", "replace"),
+            err.read().decode("utf-8", "replace"))
     if check and result.returncode != 0:
         tail = (result.stderr or result.stdout).strip().splitlines()[-12:]
         raise LookupFailed(f"{' '.join(args[:4])} 失败：\n" + "\n".join(tail))
@@ -80,7 +81,8 @@ def kill_under(root: Path) -> int:
               "ForEach-Object { $_.ProcessId }")
     result = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True,
                             text=True, creationflags=_NO_WINDOW, check=False, timeout=120)
-    pids = [int(line) for line in result.stdout.split() if line.isdigit() and int(line) != os.getpid()]
+    pids = [int(line) for line in result.stdout.split()
+            if line.isdigit() and int(line) != os.getpid()]
     for pid in pids:
         kill_tree(pid)
     return len(pids)
