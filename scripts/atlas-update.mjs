@@ -154,6 +154,31 @@ function launch() {
   log(`launched Atlas (pid ${child.pid})`);
 }
 
+// One updater at a time: a double-clicked shortcut once started two, and the second launched
+// Atlas while the first was still swapping the Hermes checkout under it (ImportError at run time).
+const lockFile = path.join(root, 'data', 'update.lock');
+function acquireLock() {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx' });
+      return true;
+    } catch { /* held, or stale */ }
+    const holder = Number((() => { try { return fs.readFileSync(lockFile, 'utf8'); } catch { return ''; } })());
+    if (holder && holder !== process.pid) {
+      try { process.kill(holder, 0); return false; } catch { /* holder is gone */ }
+    }
+    try { fs.unlinkSync(lockFile); } catch { /* raced with another cleanup */ }
+  }
+  return false;
+}
+if (!acquireLock()) {
+  log('another updater is running; it starts Atlas when done');
+  process.exit(0);
+}
+process.on('exit', () => {
+  try { if (fs.readFileSync(lockFile, 'utf8') === String(process.pid)) fs.unlinkSync(lockFile); } catch { /* gone */ }
+});
+
 const waitPid = Number(option('--wait-pid'));
 try {
   if (waitPid) await waitForExit(waitPid);
