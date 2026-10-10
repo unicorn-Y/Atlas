@@ -525,11 +525,20 @@ def set_npm_version(ws: Workspace, item: dict[str, Any]) -> None:
         for section in ("dependencies", "devDependencies"):
             if name in (data.get(section) or {}):
                 data[section][name] = npm_spec(str(data[section][name]), latest)
-        scripts = data.get("allowScripts")
-        if isinstance(scripts, dict):
-            for key in [k for k in scripts if k.startswith(f"{name}@")]:
-                scripts[f"{name}@{latest}"] = scripts.pop(key)
         _write(manifest, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    # npm 只认工作区根 package.json 的 allowScripts；版本号对不上时 electron 等包的安装脚本被拦，
+    # 2026-10-10 就因此装出一个没有 dist/electron.exe 的 Electron，Atlas 起不来。
+    for rel in {*item.get("locations", []), "package.json"}:
+        manifest = ws.atlas / rel
+        if not manifest.exists() or not rel.endswith("package.json"):
+            continue
+        data = json.loads(_read(manifest))
+        scripts = data.get("allowScripts")
+        keys = [k for k in scripts if k.startswith(f"{name}@")] if isinstance(scripts, dict) else []
+        if keys:
+            for key in keys:
+                scripts[f"{name}@{latest}"] = scripts.pop(key)
+            _write(manifest, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     for ref in item.get("detail", {}).get("mcp_refs", []) + (
             [{"file": "atlas.example.toml", "version": item.get("current")}]
             if item.get("kind") == "mcp-npx" else []):
