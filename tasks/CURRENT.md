@@ -6,7 +6,7 @@
 ACTIVE_TASK: ATLAS-MEMORY-MEMOS
 BRANCH: memory-v1
 ENGINE: vendor/memos-local-plugin   # MemOS 2.0.20 的 Atlas fork，改动见 ATLAS_FORK.md
-LAST_PUSH: atlas 43ac3156 (2026-10-10)
+LAST_PUSH: atlas cad89084 (2026-10-10)
 
 ## Active
 
@@ -18,9 +18,11 @@ MemoryOS / MEMORY-V1，把各家做得最好的部分并进这一个引擎，每
 | MemOS 接入 Atlas（Hermes 记忆插件）、记忆变动页、暂停、删记录/归档技能 | 完成（a66de15…6a0fe98） |
 | 策略、世界模型可删除 | 完成（e61749f8） |
 | fork 进仓库 + 中文事实规则进源码 + 「关于你」事实层（带原话出处、改口保留历史、每轮注入） | 完成，真实模型冒烟 7/7（f7196af5、43ac3156） |
-| 到点提醒接回（V1 意图桥 → MemOS 事实/对话） | 待做 |
-| 技能验证（微软 SkillOpt）+ 失败总结（ACE） | 待做 |
-| 矛盾处理与过期淡忘（参考 Supermemory） | 待做 |
+| 到点提醒：建/改/取消实测正确；修复到点不通知（改为 Windows 通知，不再跑 agent） | 完成，真机到点弹出通知（58f1a65） |
+| 聊天实际加载的插件链接指向 fork；setup_hermes 自动维护链接 | 完成（3c56cdd） |
+| 技能验证：SkillOpt-Sleep（验证门 + 每晚复盘），数据源=Hermes 会话库 engine/state.db，技能写到 skills/learned/ | 待做：安装 skillopt 需用户批准 |
+| 失败总结（ACE） | 暂不做：MemOS 已有 decision repair + 反模式策略，功能重叠 |
+| 临时事实过期 + 「忘掉」撤销（Supermemory forgetAfter 设计） | 完成，真实模型冒烟全对（cad89084） |
 
 MEMORY-V1（`docs/plan/MEMORY-V1/`）与 MemoryOS 服务：**已退役**，代码保留作参考，不再施工。
 
