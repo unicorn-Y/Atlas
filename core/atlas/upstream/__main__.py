@@ -5,6 +5,8 @@
     python -m atlas.upstream run --all          把所有可处理的项追到最新
     python -m atlas.upstream post-merge [--memos]
         更新器合并追新提交之后跑：把本机配置里 MCP 的版本号对齐到示例配置，必要时重建 MemOS
+    python -m atlas.upstream watch              参考项目动态：一流 Agent 项目最近改了什么
+        报告在 data/upstream/watch/latest.md
 """
 
 from __future__ import annotations
@@ -37,7 +39,19 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--ids", nargs="*", default=[])
     post = sub.add_parser("post-merge")
     post.add_argument("--memos", action="store_true")
+    sub.add_parser("watch")
     args = parser.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+    if args.command == "watch":
+        from atlas.upstream import watch
+
+        report = watch.run_watch()
+        changed = sum(1 for r in report["repos"] if r.get("commits") or r.get("releases"))
+        print(f"{len(report['repos'])} 个项目，{changed} 个有新动态。"
+              f"报告：{watch.watch_root() / 'latest.md'}")
+        return 0
 
     from atlas.upstream import check
 

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -25,6 +26,22 @@ async def get_view() -> dict[str, Any]:
     view["pending"] = service.pending_merge()
     view["supported"] = service.repo_supported()
     return view
+
+
+@upstream_router.get("/watch")
+async def get_watch() -> dict[str, Any]:
+    """参考项目动态的最新报告（Markdown）。"""
+    from atlas.upstream import watch
+
+    return {**watch.latest(), "running": service.is_watching()}
+
+
+@upstream_router.post("/watch")
+async def start_watch() -> dict[str, Any]:
+    if service.is_watching():
+        return {"started": False, "running": True}
+    asyncio.get_running_loop().create_task(service.run_watch_now(), name="upstream-watch")
+    return {"started": True, "running": True}
 
 
 @upstream_router.post("/check")

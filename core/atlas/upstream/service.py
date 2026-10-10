@@ -11,7 +11,7 @@ from typing import Any
 
 import structlog
 
-from atlas.upstream import check, inventory, staging
+from atlas.upstream import check, inventory, staging, watch
 from atlas.upstream.model import HOT, OUTDATED
 
 log = structlog.get_logger()
@@ -199,4 +199,44 @@ async def auto_loop() -> None:
             raise
         except Exception:  # noqa: BLE001 —— 定时任务不能死
             log.exception("upstream.auto_loop_failed")
+        await run_watch_if_due()
         await asyncio.sleep(TICK_SECONDS)
+
+
+_watching = False
+
+
+async def run_watch_now() -> dict[str, Any]:
+    """参考项目动态：在线程里跑一遍，跑完发一条通知。"""
+    global _watching
+    if _watching:
+        return {"started": False}
+    _watching = True
+    try:
+        report = await asyncio.to_thread(watch.run_watch)
+    finally:
+        _watching = False
+    changed = [r["label"] for r in report["repos"] if r.get("commits") or r.get("releases")]
+    if changed:
+        try:
+            from atlas.notifications.apprise import AppriseNotifier
+
+            await AppriseNotifier().notify("参考项目有新动态", "、".join(changed[:6])
+                                           + (" 等" if len(changed) > 6 else ""))
+        except Exception:  # 通知是附带的
+            log.warning("upstream.watch_notify_failed", exc_info=True)
+    return {"started": True, "changed": changed}
+
+
+def is_watching() -> bool:
+    return _watching
+
+
+async def run_watch_if_due() -> None:
+    try:
+        if watch.watch_due():
+            await run_watch_now()
+    except asyncio.CancelledError:
+        raise
+    except Exception:  # 定时任务不能死
+        log.exception("upstream.watch_failed")
