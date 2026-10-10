@@ -113,12 +113,12 @@ function rebuild() {
   const steps = [];
   sh(python, ['core/scripts/setup_hermes.py']); // no-op when already at the pin
   if (touched('core/pyproject.toml') || !fs.existsSync(python)) {
-    sh(python, ['-m', 'pip', 'install', '-q', '-e', 'core']);
+    sh(python, ['-m', 'pip', 'install', '-q', '--no-cache-dir', '-e', 'core']);
     steps.push('python');
   }
   // Exact third-party versions verified by Atlas 追新; keeps both machines identical.
   if (changed !== null && touched('core/requirements.lock') && fs.existsSync(path.join(root, 'core', 'requirements.lock'))) {
-    sh(python, ['-m', 'pip', 'install', '-q', '--disable-pip-version-check', '-r', 'core/requirements.lock']);
+    sh(python, ['-m', 'pip', 'install', '-q', '--disable-pip-version-check', '--no-cache-dir', '-r', 'core/requirements.lock']);
     steps.push('python-lock');
   }
   if ((changed !== null && (touched('package-lock.json') || touched('frontend/package.json')))
