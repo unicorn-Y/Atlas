@@ -930,6 +930,7 @@ class AtlasKernel:
                 if edit_manager is not None:
                     available_tools = [*available_tools, *edit_manager.get_tools_for_llm()]
                 deferred_note = None
+                schema_chars_before = len(json.dumps(available_tools, ensure_ascii=False, default=str))
                 if not tool_allow:
                     # Library: rarely used / MCP schemas collapse to a stable name list.
                     from atlas.library.runtime import partition_tools
@@ -941,6 +942,9 @@ class AtlasKernel:
                         )
                     except Exception:
                         log.warning("kernel.tool_deferral_failed", exc_info=True)
+                record("tool_offer", offered=len(available_tools), deferred=bool(deferred_note),
+                       schema_chars_before=schema_chars_before,
+                       schema_chars=len(json.dumps(available_tools, ensure_ascii=False, default=str)))
                 if deferred_note and not any(
                     item.get("role") == "system" and str(item.get("content", "")).startswith("Deferred tools:")
                     for item in messages

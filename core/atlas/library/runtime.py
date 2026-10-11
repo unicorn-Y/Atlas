@@ -207,7 +207,7 @@ def make_classifier(model_mgr: Any):
             model_id, "library_organize",
             [{"role": "system", "content": "你是严谨的分类器，只输出 JSON。"},
              {"role": "user", "content": prompt}],
-            max_tokens=min(8000, 60 + 40 * len(items)), temperature=0,
+            max_tokens=min(4000, 200 + 30 * len(items)), temperature=0,
         )
         return _parse_json_object(str(getattr(result, "text", "") or ""))
 
@@ -424,8 +424,14 @@ def mark_loaded(session_id: str, names: Iterable[str]) -> list[str]:
     return added
 
 
+# Whole tool families that only matter for specific tasks (mobile dev, Claude-compat task APIs, notebooks).
+DEFERRABLE_PREFIXES = ("android_", "ios_", "mobile_", "notebook_", "Task", "TodoWrite", "git_pr_", "kanban_")
+
+
 def _deferrable(name: str, core: set[str]) -> bool:
-    return name not in core and ("__" in name or name in DEFERRABLE_BUILTINS)
+    return name not in core and (
+        "__" in name or name in DEFERRABLE_BUILTINS or name.startswith(DEFERRABLE_PREFIXES)
+    )
 
 
 def partition_tools(tools: Sequence[dict[str, Any]], *, session_id: str, query: str,

@@ -13,6 +13,7 @@ re-derived at any time, so the state file is cheap to lose.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -338,7 +339,8 @@ class LibraryStore:
         return scores
 
     async def organize(self, items: list[dict[str, Any]], *, classifier: Classifier | None = None,
-                       full: bool = False, batch_size: int = 80) -> dict[str, Any]:
+                       full: bool = False, batch_size: int = 30, concurrency: int = 4,
+                       batch_timeout: float = 90.0) -> dict[str, Any]:
         """Put every unorganized item (or every non-manual one when ``full``) into a category."""
         started = time.time()
         report: dict[str, Any] = {"scanned": 0, "assigned": 0, "by_declared": 0, "by_rule": 0,
@@ -367,14 +369,24 @@ class LibraryStore:
                 pending.append((item, unknown, scores))
 
         if pending and classifier is not None:
-            for start in range(0, len(pending), batch_size):
-                chunk = pending[start:start + batch_size]
-                try:
-                    answer = await classifier([row[0] for row in chunk], self.categories())
-                except Exception as exc:  # noqa: BLE001 — fall back to rules for this batch
-                    report["model_error"] = str(exc)[:300]
-                    log.warning("library.organize_model_failed", error=str(exc))
-                    break
+            chunks = [pending[i:i + batch_size] for i in range(0, len(pending), batch_size)]
+            gate = asyncio.Semaphore(concurrency)
+
+            async def run(chunk: list[Any]) -> tuple[list[Any], dict[str, Any] | None]:
+                async with gate:
+                    try:
+                        answer = await asyncio.wait_for(
+                            classifier([row[0] for row in chunk], self.categories()), timeout=batch_timeout,
+                        )
+                        return chunk, answer
+                    except Exception as exc:  # noqa: BLE001 — this batch falls back to rules
+                        report["model_error"] = (str(exc) or type(exc).__name__)[:300]
+                        log.warning("library.organize_model_failed", error=str(exc))
+                        return chunk, None
+
+            for chunk, answer in await asyncio.gather(*(run(chunk) for chunk in chunks)):
+                if answer is None:
+                    continue
                 with self._lock:
                     for proposal in answer.get("new_categories") or []:
                         if isinstance(proposal, dict) and str(proposal.get("name") or "").strip():
