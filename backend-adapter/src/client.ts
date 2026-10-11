@@ -134,6 +134,10 @@ export class BackendAdapter {
     if (!this.live) return mockProviders.find((provider) => provider.id === providerId)?.keys ?? [];
     return (await this.request<{ keys: KeySlotInfo[] }>(`/api/providers/${encodeURIComponent(providerId)}/keys`)).keys;
   }
+  async activateProviderKey(providerId: string, keyId: string): Promise<void> {
+    if (!this.live) throw new Error('连接 Atlas 后端后才能切换首选密钥');
+    await this.request(`/api/providers/${encodeURIComponent(providerId)}/keys/${encodeURIComponent(keyId)}/activate`, { method: 'PUT' });
+  }
   async removeProviderKey(providerId: string, keyId: string): Promise<void> {
     if (!this.live) throw new Error('连接 Atlas 后端后才能删除服务商密钥');
     await this.request(`/api/providers/${encodeURIComponent(providerId)}/keys/${encodeURIComponent(keyId)}`, { method: 'DELETE' });

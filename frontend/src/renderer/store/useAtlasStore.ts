@@ -123,6 +123,7 @@ interface AtlasState extends PersistentSlice {
   saveProviderConfig: (providerId: string, baseUrl: string | null) => Promise<boolean>;
   addProviderKey: (providerId: string, secret: string, label: string) => Promise<boolean>;
   removeProviderKey: (providerId: string, keyId: string) => Promise<void>;
+  activateProviderKey: (providerId: string, keyId: string) => Promise<boolean>;
   updateCustomModel: (modelId: string, patch: CustomModelUpdateRequest) => Promise<boolean>;
   deleteCustomModel: (modelId: string) => Promise<boolean>;
   saveReasoningStages: (config: ReasoningStagesConfig) => Promise<void>;
@@ -499,6 +500,17 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         await backend.removeProviderKey(providerId, keyId);
         await get().loadProviders();
       } catch (error) { set(errorPatch(error, '删除密钥失败')); }
+    },
+
+    activateProviderKey: async (providerId, keyId) => {
+      try {
+        await backend.activateProviderKey(providerId, keyId);
+        await get().loadProviders();
+        return true;
+      } catch (error) {
+        set(errorPatch(error, '切换首选密钥失败'));
+        return false;
+      }
     },
 
     updateCustomModel: async (modelId, patch) => {

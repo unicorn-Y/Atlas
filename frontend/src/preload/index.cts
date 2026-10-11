@@ -15,10 +15,18 @@ const desktopApi: AtlasDesktopApi = {
   selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:open-directory', defaultPath) as Promise<string | null>,
   openPath: (target) => ipcRenderer.invoke('shell:open-path', target) as Promise<string>,
   getPlatformSettings: () => ipcRenderer.invoke('platform:get-settings'),
+  setPlatformBehavior: (settings) => ipcRenderer.invoke('platform:set-behavior', settings),
+  setTaskActivity: (active) => ipcRenderer.invoke('platform:task-activity', active),
+  openConversationWindow: (conversationId) => ipcRenderer.invoke('platform:conversation-window', conversationId),
+  setUpdateSource: (source) => ipcRenderer.invoke('platform:set-update-source', source),
+  setCrashCapture: (enabled) => ipcRenderer.invoke('crash:set-capture', enabled),
+  getLocalCrashReports: () => ipcRenderer.invoke('crash:list'),
+  exportLocalCrashReport: (reportId) => ipcRenderer.invoke('crash:export', reportId),
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('platform:set-always-on-top', enabled),
   setGlobalShortcut: (accelerator) => ipcRenderer.invoke('platform:set-global-shortcut', accelerator),
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
+  selectEditorExecutable: (editor) => ipcRenderer.invoke('platform:select-editor-executable', editor),
   onDeepLink: (callback: (route: AtlasDeepLink) => void) => {
     let active = true;
     const seen = new Set<string>();

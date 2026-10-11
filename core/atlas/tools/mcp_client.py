@@ -10,6 +10,7 @@ import asyncio
 import os
 import shutil
 import tempfile
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -98,6 +99,9 @@ class MCPServerConfig:
     url: str = ""                   # for sse
     headers: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
+    startup_timeout: float = 30.0
+    oauth: bool = False
+    oauth_scope: str = ""
 
 
 def _parse_server_configs() -> list[MCPServerConfig]:
@@ -141,6 +145,9 @@ def _parse_server_configs() -> list[MCPServerConfig]:
                 for key, value in (data.get("headers", {}) or {}).items()
             },
             enabled=data.get("enabled", True),
+            startup_timeout=float(data.get("startup_timeout", 30.0)),
+            oauth=bool(data.get("oauth", False)),
+            oauth_scope=str(data.get("oauth_scope", "")),
         )
         # Only include servers that are both configured *and* in auto_start
         # (unless auto_start is empty, meaning "start all configured")
@@ -192,6 +199,7 @@ class MCPClient:
         self._server_configs: dict[str, MCPServerConfig] = {}  # name → config
         self._configured_configs: dict[str, MCPServerConfig] = {}
         self._server_status: dict[str, dict[str, Any]] = {}
+        self._connection_tasks: set[asyncio.Task] = set()
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -217,7 +225,7 @@ class MCPClient:
                  names=[c.name for c in enabled])
 
         results = await asyncio.gather(
-            *[self._connect_server(c) for c in enabled],
+            *[self.connect_config(c) for c in enabled],
             return_exceptions=True,
         )
         for cfg, result in zip(enabled, results):
@@ -231,6 +239,11 @@ class MCPClient:
 
     async def stop(self) -> None:
         """Disconnect all MCP servers."""
+        pending = [task for task in self._connection_tasks if task is not asyncio.current_task() and not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
         for name, handle in list(self._servers.items()):
             try:
                 await self._stop_handle(handle)
@@ -244,6 +257,21 @@ class MCPClient:
         self._tool_index.clear()
 
     # -- connecting ----------------------------------------------------------
+
+    async def connect_config(self, cfg: MCPServerConfig) -> None:
+        """Connect with the persisted startup budget, including browser OAuth time."""
+        task = asyncio.current_task()
+        if task is not None:
+            self._connection_tasks.add(task)
+        try:
+            timeout = max(200, cfg.startup_timeout) if cfg.oauth else cfg.startup_timeout
+            await asyncio.wait_for(self._connect_server(cfg), timeout)
+            if cfg.oauth:
+                from atlas.api.mcp_oauth import AUTH_STATUS
+                AUTH_STATUS[cfg.name] = {"state": "connected", "message": "已连接；OAuth 由 MCP SDK 管理"}
+        finally:
+            if task is not None:
+                self._connection_tasks.discard(task)
 
     async def _connect_server(self, cfg: MCPServerConfig) -> None:
         """Connect to a single MCP server."""
@@ -273,8 +301,9 @@ class MCPClient:
                      protocol=init_result.protocol_version,
                      server_info=str(init_result.server_info))
 
-            tools_result = await handle.session.list_tools()
-            for tool in tools_result.tools:
+            capabilities = getattr(init_result, "capabilities", None)
+            tools = (await handle.session.list_tools()).tools if capabilities is None or getattr(capabilities, "tools", None) is not None else []
+            for tool in tools:
                 description = tool.description or ""
                 if handle.instructions.strip():
                     description = (
@@ -351,7 +380,7 @@ class MCPClient:
     async def _connect_sse(self, cfg: MCPServerConfig,
                            handle: MCPServerHandle) -> None:
         """Set up SSE transport."""
-        transport_cm = sse_client(cfg.url)
+        transport_cm = self._remote_transport(cfg)
         await self._start_transport_owner(handle, transport_cm)
 
     async def _connect_streamable_http(self, cfg: MCPServerConfig,
@@ -359,12 +388,34 @@ class MCPClient:
         """Set up MCP Streamable HTTP with configured custom or bearer headers."""
         if not cfg.url:
             raise ValueError("Streamable HTTP MCP server requires a URL")
-        try:
-            from mcp.client.streamable_http import streamablehttp_client
-        except ImportError as exc:
-            raise RuntimeError("Installed MCP SDK does not support Streamable HTTP") from exc
-        transport_cm = streamablehttp_client(cfg.url, headers=cfg.headers or None)
+        transport_cm = self._remote_transport(cfg)
         await self._start_transport_owner(handle, transport_cm)
+
+    @asynccontextmanager
+    async def _remote_transport(self, cfg: MCPServerConfig):
+        from contextlib import AsyncExitStack
+        import inspect
+
+        async with AsyncExitStack() as stack:
+            auth = None
+            if cfg.oauth:
+                from atlas.api.mcp_oauth import oauth_provider
+                auth = await stack.enter_async_context(oauth_provider(cfg))
+            if cfg.transport == "sse":
+                transport = sse_client(cfg.url, headers=cfg.headers or None, auth=auth)
+            else:
+                try:
+                    from mcp.client.streamable_http import streamable_http_client as factory
+                except ImportError:
+                    from mcp.client.streamable_http import streamablehttp_client as factory
+                if "http_client" in inspect.signature(factory).parameters:
+                    from mcp.shared._httpx_utils import create_mcp_http_client
+                    client = await stack.enter_async_context(create_mcp_http_client(headers=cfg.headers or None, auth=auth))
+                    transport = factory(cfg.url, http_client=client)
+                else:
+                    transport = factory(cfg.url, headers=cfg.headers or None, auth=auth)
+            streams = await stack.enter_async_context(transport)
+            yield streams
 
     async def _start_transport_owner(self, handle: MCPServerHandle, transport_cm: Any) -> None:
         """Enter, hold, and exit MCP contexts in one dedicated owner task."""

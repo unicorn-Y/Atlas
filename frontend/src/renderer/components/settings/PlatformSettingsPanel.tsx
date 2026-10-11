@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { AppWindow, Keyboard, MonitorUp } from 'lucide-react';
-import type { GlobalShortcutState, PlatformEditorId, PlatformSettingsState } from '../../../shared/ipc';
+import type { GlobalShortcutState, PlatformEditorId, PlatformSettingsState, SourceUpdateStatus } from '../../../shared/ipc';
 
 export interface PlatformSettingsPanelProps {
   workspacePath?: string | null;
+  conversationId?: string | null;
 }
 
 const EDITORS: Array<[PlatformEditorId, string]> = [
@@ -24,7 +25,7 @@ const initialState: PlatformSettingsState = {
   globalShortcut: { accelerator: null, registered: false },
 };
 
-export default function PlatformSettingsPanel({ workspacePath }: PlatformSettingsPanelProps) {
+export default function PlatformSettingsPanel({ workspacePath, conversationId }: PlatformSettingsPanelProps) {
   const desktop = window.atlasDesktop;
   const [settings, setSettings] = useState(initialState);
   const [accelerator, setAccelerator] = useState('');
@@ -33,6 +34,9 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [remote, setRemote] = useState('origin');
+  const [branch, setBranch] = useState('');
+  const [updateStatus, setUpdateStatus] = useState<SourceUpdateStatus | null>(null);
 
   useEffect(() => {
     if (workspacePath) setFolder(workspacePath);
@@ -44,6 +48,8 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
       if (!active) return;
       setSettings(next);
       setAccelerator(next.globalShortcut.accelerator ?? '');
+      setRemote(next.updateSource?.remote ?? 'origin');
+      setBranch(next.updateSource?.branch ?? '');
     }).catch((reason: unknown) => {
       if (active) setError(reason instanceof Error ? reason.message : String(reason));
     });
@@ -92,6 +98,11 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
   };
 
   const available = Boolean(desktop?.getPlatformSettings);
+  const perform = async (action: () => Promise<unknown>) => {
+    setBusy(true); setError(null); setMessage(null);
+    try { await action(); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  };
   return <div className="grid max-w-[760px] gap-6 text-[13px] text-fg-2">
     <div>
       <h3 className="m-0 flex items-center gap-2 text-[16px] font-semibold text-heading"><AppWindow size={17} />桌面平台</h3>
@@ -106,6 +117,36 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
         <input type="checkbox" checked={settings.alwaysOnTop} disabled={!available || busy} onChange={(event) => void toggleAlwaysOnTop(event.target.checked)} />
         Atlas 窗口始终显示在其他窗口上方
       </label>
+      <label className="flex items-center gap-2.5">
+        <input type="checkbox" checked={settings.trayEnabled ?? false} disabled={!desktop?.setPlatformBehavior || busy} onChange={(event) => void perform(async () => {
+          setSettings(await desktop!.setPlatformBehavior!({ trayEnabled: event.target.checked, preventSleepDuringTasks: settings.preventSleepDuringTasks ?? false }));
+        })} />关闭窗口时驻留系统托盘
+      </label>
+      <label className="flex items-center gap-2.5">
+        <input type="checkbox" checked={settings.preventSleepDuringTasks ?? false} disabled={!desktop?.setPlatformBehavior || busy} onChange={(event) => void perform(async () => {
+          setSettings(await desktop!.setPlatformBehavior!({ trayEnabled: settings.trayEnabled ?? false, preventSleepDuringTasks: event.target.checked }));
+        })} />任务运行期间防止系统休眠
+      </label>
+      <p className="m-0 text-[12px] text-fg-3">托盘菜单可退出应用。任务防休眠允许显示器正常关闭，任务结束后释放。</p>
+      <button disabled={!conversationId || !desktop?.openConversationWindow || busy} onClick={() => void perform(() => desktop!.openConversationWindow!(conversationId!))} className="h-9 rounded-lg border border-line px-3 text-[12px]">在独立窗口打开当前会话</button>
+    </section>
+
+    <section className="grid gap-3 rounded-xl border border-line p-4">
+      <h4 className="m-0 text-[13.5px] font-medium text-heading">源码更新来源</h4>
+      <p className="m-0 text-[12px] text-fg-3">当前没有 stable/beta/nightly 签名发布 feed。源码安装可选择仓库已有 remote 与真实分支；仅支持干净工作区的快进更新。切换来源意味着信任该仓库中的代码。</p>
+      <p className="m-0 text-[12px]">已保存来源：{settings.updateSource ? `${settings.updateSource.remote}/${settings.updateSource.branch}` : 'origin / 当前检出分支（默认）'}</p>
+      <div className="flex flex-wrap gap-2">
+        <input aria-label="更新 remote" value={remote} maxLength={64} onChange={(event) => setRemote(event.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2.5" />
+        <input aria-label="更新分支" value={branch} maxLength={200} placeholder="仓库真实分支名称" onChange={(event) => setBranch(event.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2.5" />
+        <button disabled={!desktop?.setUpdateSource || busy || !branch.trim()} onClick={() => void perform(async () => { setSettings(await desktop!.setUpdateSource!({ remote: remote.trim(), branch: branch.trim() })); setUpdateStatus(null); })} className="h-9 rounded-lg border border-line px-3">保存来源</button>
+        <button disabled={!desktop?.setUpdateSource || busy} onClick={() => void perform(async () => { setSettings(await desktop!.setUpdateSource!(null)); setUpdateStatus(null); })} className="h-9 rounded-lg border border-line px-3">恢复默认</button>
+        <button disabled={!desktop?.checkForUpdate || busy} onClick={() => void perform(async () => { setUpdateStatus(await desktop!.checkForUpdate!()); })} className="h-9 rounded-lg border border-line px-3">检查更新</button>
+      </div>
+      {updateStatus && <div role="status" className="text-[12px]">
+        {updateStatus.error ?? updateStatus.blocked ?? (!updateStatus.supported ? '此安装不支持源码更新。' : `${updateStatus.branch ?? '当前分支'}：${updateStatus.behind} 个新提交`)}
+        {updateStatus.commits.map((commit) => <div key={commit.hash}>{commit.hash} {commit.subject}</div>)}
+      </div>}
+      <button disabled={!desktop?.applyUpdate || busy || !updateStatus?.available || Boolean(updateStatus.blocked || updateStatus.error)} onClick={() => void perform(async () => { if (!await desktop!.applyUpdate!()) setError('当前状态不能应用更新。'); })} className="h-9 rounded-lg bg-brand px-3 text-on-primary disabled:opacity-50">应用更新并重启 Atlas</button>
     </section>
 
     <section className="grid gap-3 rounded-xl border border-line p-4">
@@ -126,7 +167,7 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
     <section className="grid gap-3 rounded-xl border border-line p-4">
       <div>
         <h4 className="m-0 text-[13.5px] font-medium text-heading">在编辑器中打开工作区</h4>
-        <p className="mt-1 mb-0 text-[12px] text-fg-3">仅启动本机已安装且已加入 PATH 的编辑器命令。</p>
+        <p className="mt-1 mb-0 text-[12px] text-fg-3">启动 PATH 中的编辑器，或通过本机文件选择器指定编辑器程序。使用独立参数传入工作区。</p>
       </div>
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
         <input aria-label="工作区目录" value={folder} onChange={(event) => setFolder(event.target.value)} placeholder="选择本地工作区目录" className="h-9 min-w-0 rounded-lg border border-line bg-surface px-2.5 text-[12px] text-fg" />
@@ -137,7 +178,9 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
           {EDITORS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
         </select>
         <button disabled={!available || busy || !folder.trim()} onClick={() => void openInEditor()} className="h-9 rounded-lg bg-brand px-3 text-[12px] font-medium text-on-primary disabled:opacity-50">打开工作区</button>
+        <button disabled={!desktop?.selectEditorExecutable || busy} onClick={() => void perform(async () => { setSettings(await desktop!.selectEditorExecutable!(editor)); })} className="h-9 rounded-lg border border-line px-3">选择编辑器程序</button>
       </div>
+      <p className="m-0 break-all text-[12px] text-fg-3">程序来源：{settings.editorExecutables?.[editor] ?? '系统 PATH'}</p>
     </section>
 
     {error && <p role="alert" className="m-0 text-[12px] text-danger">{error}</p>}

@@ -53,6 +53,8 @@ from atlas.api.unified_memory_router import router as unified_memory_router
 from atlas.api.memory_changes_router import router as memory_changes_router
 from atlas.api.workspace_router import router as workspace_router
 from atlas.api.tools_router import router as tools_router
+from atlas.api.mcp_settings_router import router as mcp_settings_router
+from atlas.api.settings_audit_router import router as settings_audit_router
 from atlas.config import get_config
 from atlas.models.routes import models_router
 from atlas.origin_guard import DEV_ORIGINS, OriginGuard
@@ -115,7 +117,9 @@ def create_app(
         network_settings_router,
         hook_trust_router,
         linear_integration_router,
+        mcp_settings_router,
         mcp_resources_router,
+        settings_audit_router,
         model_catalog_preferences_router,
         output_style_settings_router,
         projects_router,

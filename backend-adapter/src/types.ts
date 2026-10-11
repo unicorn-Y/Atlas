@@ -91,6 +91,7 @@ export interface ProviderCatalogEntry {
 export interface KeySlotInfo {
   id: string;
   label?: string;
+  active?: boolean;
   /** Epoch seconds the key stays in cooldown; absent/past = usable. */
   cooldown_until?: number | null;
   last_error?: string | null;

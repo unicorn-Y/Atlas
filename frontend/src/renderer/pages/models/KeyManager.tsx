@@ -12,6 +12,7 @@ interface KeyManagerProps {
   /** Returns true when the key was stored, so the inputs can be cleared. */
   onAdd: (secret: string, label: string) => Promise<boolean>;
   onRemove: (keyId: string) => void;
+  onActivate?: (keyId: string) => Promise<boolean>;
 }
 
 const shortId = (id: string) => (id.length > 12 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id);
@@ -25,7 +26,7 @@ export function cooldownText(cooldownUntil?: number | null): string | null {
 }
 
 /** Key slots of one provider: add, remove, and see pool status. Secrets are write-only. */
-export default function KeyManager({ keys, busy, disabled, onAdd, onRemove }: KeyManagerProps) {
+export default function KeyManager({ keys, busy, disabled, onAdd, onRemove, onActivate }: KeyManagerProps) {
   const [secret, setSecret] = useState('');
   const [label, setLabel] = useState('');
   const field = 'h-9 rounded-[9px] bg-sunken px-3 text-[13.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]';
@@ -50,6 +51,7 @@ export default function KeyManager({ keys, busy, disabled, onAdd, onRemove }: Ke
             {key.last_error ? ` · 上次错误：${key.last_error}` : ''}
           </span>
         </span>
+        {onActivate && <Button variant={key.active ? 'secondary' : 'ghost'} size="sm" aria-pressed={Boolean(key.active)} disabled={busy || key.active} onClick={() => void onActivate(key.id)}>{key.active ? '优先使用' : '设为优先'}</Button>}
         <Button variant="ghost" size="icon-sm" aria-label={`删除密钥 ${key.label || shortId(key.id)}`} disabled={busy} title="删除这把密钥" onClick={() => onRemove(key.id)}>
           <Trash2 />
         </Button>

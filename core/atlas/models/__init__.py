@@ -240,9 +240,12 @@ class ModelManager:
             if not isinstance(entry, dict):
                 continue
             keys = entry.get("keys")
+            normalized_keys = [key for key in keys if isinstance(key, dict)] if isinstance(keys, list) else []
+            requested_active = str(entry.get("active_key_id") or "")
             providers[str(pid)] = {
                 "base_url": entry.get("base_url") or None,
-                "keys": [key for key in keys if isinstance(key, dict)] if isinstance(keys, list) else [],
+                "keys": normalized_keys,
+                "active_key_id": requested_active if any(str(key.get("id") or "") == requested_active for key in normalized_keys) else None,
                 "api_mode_override": entry.get("api_mode_override")
                 if entry.get("api_mode_override") in {None, "auto", "openai", "chat_completions", "anthropic_messages", "codex_responses"}
                 else None,
@@ -352,6 +355,8 @@ class ModelManager:
             log.warning("model_manager.keyring_write_failed", provider=pid, key_id=key_id, error=str(exc))
             raise RuntimeError(f"密钥写入系统凭据库失败: {exc}") from exc
         entry["keys"].append(meta)
+        if not entry.get("active_key_id"):
+            entry["active_key_id"] = key_id
         entry.pop("api_mode_probe", None)
         self._persist_settings()
         log.info("model_manager.key_added", provider=pid, key_id=key_id)
@@ -370,19 +375,33 @@ class ModelManager:
         except Exception as exc:  # 同上：凭据库失败不阻断元数据清理
             log.warning("model_manager.keyring_delete_failed", provider=pid, key_id=key_id, error=str(exc), exc_info=True)
         entry["keys"] = remaining
+        if str(entry.get("active_key_id") or "") == str(key_id):
+            entry["active_key_id"] = str(remaining[0].get("id") or "") if remaining else None
         entry.pop("api_mode_probe", None)
         if not remaining and not entry.get("base_url"):
             self._providers.pop(pid, None)
         self._persist_settings()
         log.info("model_manager.key_removed", provider=pid, key_id=key_id)
 
+    def activate_key(self, provider_id: str, key_id: str) -> None:
+        """Prefer one local key while keeping automatic pool fallback enabled."""
+        pid = self._require_provider(provider_id)
+        entry = self._providers.get(pid)
+        keys = (entry or {}).get("keys", [])
+        if not any(str(key.get("id")) == str(key_id) for key in keys):
+            raise ValueError(f"未知密钥: {key_id}")
+        entry["active_key_id"] = str(key_id)
+        self._persist_settings()
+
     def list_keys(self, provider_id: str) -> list[dict]:
         """密钥元数据 + 池状态（无原文）；供 B4 的 GET /api/providers/{pid}/keys 使用。"""
         pid = self._require_provider(provider_id)
+        active_key_id = str(self._providers.get(pid, {}).get("active_key_id") or "")
         return [
             {
                 "id": str(key.get("id") or ""),
                 "label": str(key.get("label") or ""),
+                "active": str(key.get("id") or "") == active_key_id,
                 "cooldown_until": key.get("cooldown_until"),
                 "last_error": key.get("last_error"),
                 "request_count": int(key.get("request_count") or 0),
@@ -393,7 +412,11 @@ class ModelManager:
     def resolve_api_key(self, provider_id: str) -> str | None:
         """池中首个非冷却 key 的原文（keyring 读取）；无可用 key / 未配置返回 None。"""
         pid = _catalog.resolve_catalog_id(str(provider_id or "").strip()) or ""
-        keys = self._providers.get(pid, {}).get("keys", [])
+        entry = self._providers.get(pid, {})
+        keys = entry.get("keys", [])
+        preferred_key_id = str(entry.get("active_key_id") or "")
+        if preferred_key_id:
+            keys = sorted(keys, key=lambda item: str(item.get("id") or "") != preferred_key_id)
         now = time.time()
         store: Any = None
         for key in keys:

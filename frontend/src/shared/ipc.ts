@@ -41,9 +41,22 @@ export interface GlobalShortcutState {
   error?: string;
 }
 
+export interface LocalCrashState {
+  requested: boolean;
+  capturing: boolean;
+  restartRequired: boolean;
+  reports: Array<{ id: string; size: number; modifiedAt: string }>;
+}
+
 export interface PlatformSettingsState {
   alwaysOnTop: boolean;
   globalShortcut: GlobalShortcutState;
+  trayEnabled?: boolean;
+  preventSleepDuringTasks?: boolean;
+  sleepBlocked?: boolean;
+  updateSource?: { remote: string; branch: string } | null;
+  windowCount?: number;
+  editorExecutables?: Partial<Record<PlatformEditorId, string>>;
 }
 
 export interface AtlasDesktopApi {
@@ -72,6 +85,14 @@ export interface AtlasDesktopApi {
   setGlobalShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
   /** Open an existing local workspace with a fixed allowlisted IDE CLI (never through a shell). */
   openWorkspaceInEditor?(editor: PlatformEditorId, workspacePath: string): Promise<void>;
+  selectEditorExecutable?(editor: PlatformEditorId): Promise<PlatformSettingsState>;
+  setPlatformBehavior?(settings: { trayEnabled: boolean; preventSleepDuringTasks: boolean }): Promise<PlatformSettingsState>;
+  setTaskActivity?(active: boolean): Promise<void>;
+  openConversationWindow?(conversationId: string): Promise<void>;
+  setUpdateSource?(source: { remote: string; branch: string } | null): Promise<PlatformSettingsState>;
+  setCrashCapture?(enabled: boolean): Promise<LocalCrashState>;
+  getLocalCrashReports?(): Promise<LocalCrashState>;
+  exportLocalCrashReport?(reportId: string): Promise<string | null>;
   /** Receive validated atlas://conversation/<id> or atlas://settings/<section> routes. */
   onDeepLink?(callback: (route: AtlasDeepLink) => void): () => void;
   /** Backend startup progress (H8 §10.3): fires during boot; `ready`/`failed` are terminal. */

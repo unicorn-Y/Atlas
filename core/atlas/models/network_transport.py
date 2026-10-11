@@ -19,6 +19,7 @@ import hashlib
 import json
 import ssl
 import threading
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -175,6 +176,57 @@ def _new_scoped_http_client(
     return client_type(**kwargs)
 
 
+def _install_httpx_summary_observer() -> None:
+    """Record safe request summaries only while Atlas is inside a model scope."""
+    import httpx
+
+    if getattr(httpx.Client.send, "_atlas_summary_observer", False):
+        return
+
+    original_sync_send = httpx.Client.send
+    original_async_send = httpx.AsyncClient.send
+
+    def record(status_code: int | None, started_at: float) -> None:
+        if _ACTIVE_SETTINGS.get() is None:
+            return
+        try:
+            from atlas.api.settings_audit_router import record_http_summary
+
+            record_http_summary(
+                transport="openai-httpx",
+                status_code=status_code,
+                duration_ms=max(0.0, (time.perf_counter() - started_at) * 1000.0),
+                retries=0,
+            )
+        except Exception:  # noqa: BLE001 — observation must not change request behavior
+            return
+
+    def observed_sync_send(self: Any, request: Any, *args: Any, **kwargs: Any) -> Any:
+        started_at = time.perf_counter()
+        status_code: int | None = None
+        try:
+            response = original_sync_send(self, request, *args, **kwargs)
+            status_code = int(response.status_code)
+            return response
+        finally:
+            record(status_code, started_at)
+
+    async def observed_async_send(self: Any, request: Any, *args: Any, **kwargs: Any) -> Any:
+        started_at = time.perf_counter()
+        status_code: int | None = None
+        try:
+            response = await original_async_send(self, request, *args, **kwargs)
+            status_code = int(response.status_code)
+            return response
+        finally:
+            record(status_code, started_at)
+
+    observed_sync_send._atlas_summary_observer = True  # type: ignore[attr-defined]
+    observed_async_send._atlas_summary_observer = True  # type: ignore[attr-defined]
+    httpx.Client.send = observed_sync_send
+    httpx.AsyncClient.send = observed_async_send
+
+
 def build_model_httpx_client(
     settings: ModelNetworkSettings, *, base_url: str, async_mode: bool,
     verify: Any = True, timeout: Any = None,
@@ -194,6 +246,7 @@ def _install_hermes_adapters() -> None:
     with _PATCH_LOCK:
         if _PATCHED:
             return
+        _install_httpx_summary_observer()
         from agent import process_bootstrap
 
         original_builder = process_bootstrap.build_keepalive_http_client
@@ -265,8 +318,7 @@ def _install_hermes_adapters() -> None:
 @contextmanager
 def model_network_scope(settings: ModelNetworkSettings) -> Iterator[None]:
     """Apply model-only transport overrides in this context and propagated worker threads."""
-    if settings.enabled:
-        _install_hermes_adapters()
+    _install_hermes_adapters()
     token = _ACTIVE_SETTINGS.set(settings)
     try:
         yield

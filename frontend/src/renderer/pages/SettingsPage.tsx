@@ -63,6 +63,7 @@ interface SettingsPageProps {
   onSaveProviderConfig: (providerId: string, baseUrl: string | null) => Promise<boolean>;
   onAddProviderKey: (providerId: string, secret: string, label: string) => Promise<boolean>;
   onRemoveProviderKey: (providerId: string, keyId: string) => void;
+  onActivateProviderKey: (providerId: string, keyId: string) => Promise<boolean>;
   onUpdateModel: (modelId: string, patch: CustomModelUpdateRequest) => Promise<boolean>;
   onDeleteModel: (modelId: string) => Promise<boolean>;
   onSaveReasoningStages: (config: ReasoningStagesConfig) => void;
@@ -234,7 +235,8 @@ export default function SettingsPage(props: SettingsPageProps) {
       <div className="mt-4 border-t border-line pt-4">
         <KeyManager keys={provider.keys} busy={props.busy} disabled={!props.connected}
           onAdd={(secret, label) => props.onAddProviderKey(provider.id, secret, label)}
-          onRemove={(keyId) => props.onRemoveProviderKey(provider.id, keyId)} />
+          onRemove={(keyId) => props.onRemoveProviderKey(provider.id, keyId)}
+          onActivate={(keyId) => props.onActivateProviderKey(provider.id, keyId)} />
       </div>
       {provider.keys.some((key) => key.last_error || ((key.cooldown_until ?? 0) * 1000 > Date.now())) && <details className="mt-3 rounded-lg border border-line px-3 py-2 text-[12px]">
         <summary className="cursor-pointer text-danger">密钥错误记录与冷却详情</summary>

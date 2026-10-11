@@ -63,6 +63,7 @@ import RunLimitsPanel from './components/settings/RunLimitsPanel';
 import PlatformSettingsPanel from './components/settings/PlatformSettingsPanel';
 import SettingsIntegrationsPanel from './components/settings/SettingsIntegrationsPanel';
 import NetworkSettingsPanel from './components/settings/NetworkSettingsPanel';
+import SettingsAuditPanel, { type LocalCrashCapture } from './components/settings/SettingsAuditPanel';
 import OutputStyleSettingsPanel from './components/settings/OutputStyleSettingsPanel';
 import McpResourcesPanel from './components/settings/McpResourcesPanel';
 import LocalModelsPanel from './components/settings/LocalModelsPanel';
@@ -81,7 +82,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'telemetry' | 'security' | 'commands' | 'platform' | 'integrations' | 'network';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'telemetry' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'settingsAudit';
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
@@ -108,6 +109,7 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['extensions', '扩展目录与来源', Puzzle, 'extension package registry catalog 扩展 包 目录 来源'],
   ['transfer', '配置导入导出', Download, 'settings config export import backup 配置 导入 导出 备份'],
   ['diagnostics', '诊断', ShieldCheck, 'diagnostics health config errors 诊断 健康 配置 错误'],
+  ['settingsAudit', '设置审计与隐私', ShieldAsk, 'Claude settings settings.json 来源 配置键 遥测 崩溃诊断 资源 HTTP'],
   ['telemetry', '遥测隐私', ShieldCheck, 'telemetry privacy memos ARMS 遥测 隐私'],
   ['platform', '平台集成', Laptop, 'desktop platform global shortcut hotkey always on top VS Code JetBrains deep link'],
   ['integrations', '任务与集成', GitBranchPlus, 'github pull request Slack Linear cloud tasks automation'],
@@ -165,6 +167,21 @@ export default function App() {
     worktreeRequests: state.worktreeRequests, fileOpenRequest: state.fileOpenRequest,
   })));
   const store = useMemo(() => ({ ...useAtlasStore.getState(), ...storeData }), [storeData]);
+  const desktopCrashCapture = useMemo<LocalCrashCapture | undefined>(() => {
+    const desktop = window.atlasDesktop;
+    if (!desktop?.setCrashCapture || !desktop.getLocalCrashReports || !desktop.exportLocalCrashReport) return undefined;
+    return {
+      apply: async (enabled) => {
+        const state = await desktop.setCrashCapture!(enabled);
+        return { enabled: state.capturing, restartRequired: state.restartRequired };
+      },
+      status: async () => {
+        const state = await desktop.getLocalCrashReports!();
+        return { enabled: state.capturing, count: state.reports.length, reports: state.reports };
+      },
+      export: async (reportId) => ({ exported: Boolean(await desktop.exportLocalCrashReport!(reportId)) }),
+    };
+  }, []);
   const storeRef = useRef(store);
   storeRef.current = store;
   const [view, setView] = useState<View>('home');
@@ -320,6 +337,11 @@ export default function App() {
   };
 
   useEffect(() => { void store.initialize(); }, []);
+  useEffect(() => {
+    const active = store.runs.some((run) => run.status === 'running' || run.status === 'planning');
+    void window.atlasDesktop?.setTaskActivity?.(active);
+    return () => { void window.atlasDesktop?.setTaskActivity?.(false); };
+  }, [store.runs]);
   useEffect(() => window.atlasDesktop?.onDeepLink?.((route) => {
     if (route.type === 'settings') {
       const pane = SETTINGS_NAV.find(([candidate]) => candidate === route.section)?.[0];
@@ -1270,7 +1292,7 @@ export default function App() {
       </nav>
       <div className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
         <button aria-label="关闭设置" onClick={() => setSheet(null)} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
-        {sheet === 'models' && <SettingsPage username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} errorDetail={store.errorDetail} models={store.models} selectedModel={store.model} subagentsEnabled={store.subagentsEnabled} subagentDefaultModel={store.subagentDefaultModel} onSaveSubagentSettings={(enabled, model) => store.saveSubagentSettings(enabled, model)} providers={store.providers} reasoningStages={store.reasoningStages} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} onLoadProviders={store.loadProviders} onSaveProviderConfig={store.saveProviderConfig} onAddProviderKey={(providerId, secret, label) => store.addProviderKey(providerId, secret, label)} onRemoveProviderKey={(providerId, keyId) => void store.removeProviderKey(providerId, keyId)} onUpdateModel={(modelId, patch) => store.updateCustomModel(modelId, patch)} onDeleteModel={(modelId) => store.deleteCustomModel(modelId)} onSaveReasoningStages={(config) => void store.saveReasoningStages(config)} />}
+        {sheet === 'models' && <SettingsPage username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} errorDetail={store.errorDetail} models={store.models} selectedModel={store.model} subagentsEnabled={store.subagentsEnabled} subagentDefaultModel={store.subagentDefaultModel} onSaveSubagentSettings={(enabled, model) => store.saveSubagentSettings(enabled, model)} providers={store.providers} reasoningStages={store.reasoningStages} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} onLoadProviders={store.loadProviders} onSaveProviderConfig={store.saveProviderConfig} onAddProviderKey={(providerId, secret, label) => store.addProviderKey(providerId, secret, label)} onRemoveProviderKey={(providerId, keyId) => void store.removeProviderKey(providerId, keyId)} onActivateProviderKey={store.activateProviderKey} onUpdateModel={(modelId, patch) => store.updateCustomModel(modelId, patch)} onDeleteModel={(modelId) => store.deleteCustomModel(modelId)} onSaveReasoningStages={(config) => void store.saveReasoningStages(config)} />}
         {sheet === 'advanced' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">高级设置</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">配置会话压缩使用的辅助模型。</p>
@@ -1327,8 +1349,9 @@ export default function App() {
         {sheet === 'security' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">工作区安全</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理当前对话后续运行的权限与 Docker 隔离。工作区规则仍在首次读取时由你确认。</p>{activeConversation ? <WorkspaceSecurityPanel apiBaseUrl={store.apiBaseUrl} conversation={activeConversation} onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)} /> : <div className="rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再配置该对话的工作区权限和沙箱。</div>}</section>}
         {sheet === 'commands' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">自定义斜杠命令</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看所有已发现命令；这里只能新建和编辑 Atlas 用户级命令，项目、Claude 与插件命令保持只读。</p><CustomCommandsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'limits' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">运行限制</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">控制新运行的主循环轮数上限，并查看当前可用的 token/费用预算边界。</p><RunLimitsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
-        {sheet === 'platform' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">平台集成</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置桌面窗口、系统级快捷键，并在本机 VS Code 或 JetBrains IDE 打开工作区。</p><PlatformSettingsPanel workspacePath={activeConversation?.workspace} /></section>}
-        {sheet === 'integrations' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">任务与集成入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用已接通的 GitHub PR、Linear、Slack 和本机自动化功能；云端任务服务未提供。</p><div className="grid gap-8"><SettingsIntegrationsPanel onOpenCode={() => { setSheet(null); go('code'); }} onOpenChannels={() => setSheet('channels')} onOpenAutomation={() => { setSheet(null); go('auto'); }} /><LinearIntegrationPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
+        {sheet === 'platform' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">平台集成</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置桌面窗口、系统级快捷键，并在本机 VS Code 或 JetBrains IDE 打开工作区。</p><PlatformSettingsPanel workspacePath={activeConversation?.workspace} conversationId={store.activeConversationId} /></section>}
+        {sheet === 'settingsAudit' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">设置审计与隐私</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看实际配置来源、Claude 官方设置键映射、本机资源和隐私状态。</p><SettingsAuditPanel apiBaseUrl={store.apiBaseUrl} desktopCrashCapture={desktopCrashCapture} /></section>}
+        {sheet === 'integrations' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">任务与集成入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用已接通的 GitHub PR、Linear、Slack 和本机自动化功能；云端任务服务未提供。</p><div className="grid gap-8"><SettingsIntegrationsPanel onOpenPullRequests={() => { setSheet(null); go('chat'); showInspectorTab('context'); }} onOpenChannels={() => setSheet('channels')} onOpenAutomation={() => { setSheet(null); go('auto'); }} /><LinearIntegrationPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
       </div>
     </Dialog>
 

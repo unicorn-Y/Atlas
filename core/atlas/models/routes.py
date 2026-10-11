@@ -153,6 +153,21 @@ async def remove_provider_key(
     return Response(status_code=204)
 
 
+@models_router.put("/api/providers/{pid}/keys/{key_id}/activate")
+async def activate_provider_key(
+    pid: str, key_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, bool]:
+    """Prefer one local key while retaining automatic pool fallback."""
+    _, get_provider = _catalog()
+    _require_provider(get_provider, pid)
+    try:
+        _mgr(services).activate_key(pid, key_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # Custom model editing (M6)
 # ---------------------------------------------------------------------------

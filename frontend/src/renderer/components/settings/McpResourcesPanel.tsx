@@ -143,6 +143,7 @@ export default function McpResourcesPanel({ apiBaseUrl }: { apiBaseUrl: string }
   };
 
   return <section className={styles.settingsCard} aria-label="MCP 资源浏览器">
+    <McpProtocolCatalog apiBaseUrl={apiBaseUrl} />
     <div className={styles.settingsCardHeading}>
       <div>
         <h2>MCP 资源</h2>
@@ -204,5 +205,58 @@ export default function McpResourcesPanel({ apiBaseUrl }: { apiBaseUrl: string }
         <Button variant="secondary" size="sm" disabled={!item.base64} onClick={() => saveBlob(item)}><Download />下载</Button>
       </div>)}
     </section>}
+  </section>;
+}
+
+type ProtocolItem = { name: string; title?: string; description?: string; uriTemplate?: string;
+  arguments?: { name: string; description?: string; required?: boolean }[] };
+type ProtocolServer = { name: string; prompts: ProtocolItem[]; templates: ProtocolItem[]; errors: Record<string, string> };
+function McpProtocolCatalog({ apiBaseUrl }: { apiBaseUrl: string }) {
+  const [servers, setServers] = useState<ProtocolServer[]>([]);
+  const [selected, setSelected] = useState<{ server: string; kind: 'prompt' | 'template'; item: ProtocolItem } | null>(null);
+  const [argumentsText, setArgumentsText] = useState('{}');
+  const [result, setResult] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const refresh = useCallback(async () => {
+    setBusy(true); setError('');
+    try { const response = await api<{ servers: ProtocolServer[] }>(apiBaseUrl, '/api/mcp/catalog'); setServers(response.servers); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
+  }, [apiBaseUrl]);
+  useEffect(() => { void refresh(); }, [refresh]);
+  const read = async () => {
+    if (!selected) return;
+    setBusy(true); setError(''); setResult('');
+    try {
+      const args: unknown = JSON.parse(argumentsText);
+      if (!args || typeof args !== 'object' || Array.isArray(args) || Object.values(args).some((item) => typeof item !== 'string')) throw new Error('参数必须是字符串键值 JSON 对象');
+      const response = await api<Record<string, unknown>>(apiBaseUrl, selected.kind === 'prompt' ? '/api/mcp/prompts/get' : '/api/mcp/templates/read', {
+        method: 'POST', json: { server_name: selected.server, name: selected.item.uriTemplate || selected.item.name, arguments: args },
+      });
+      setResult(JSON.stringify(response, null, 2));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
+  };
+  return <section className="grid gap-3 text-[12px]" aria-label="MCP 提示词与资源模板">
+    <div className="flex justify-between"><h3>MCP 提示词与资源模板</h3><Button size="sm" disabled={busy} onClick={() => void refresh()}>刷新</Button></div>
+    <p className="text-fg-3">读取服务实际声明的 prompts 和 URI templates。返回内容仅供查看和复制，发送到会话前请自行审阅。</p>
+    {error && <p role="alert" className="text-danger">{error}</p>}
+    {servers.map((server) => <div key={server.name} className="grid gap-2 rounded-xl bg-sunken p-3"><strong>{server.name}</strong>
+      {Object.entries(server.errors).map(([kind, message]) => <p key={kind} role="status">{kind}: {message}</p>)}
+      {(['prompt', 'template'] as const).map((kind) => (kind === 'prompt' ? server.prompts : server.templates).map((item) =>
+        <Button key={kind + (item.uriTemplate || item.name)} size="sm" disabled={busy} onClick={() => { setSelected({ server: server.name, kind, item }); setResult(''); setArgumentsText(JSON.stringify(Object.fromEntries((item.arguments || []).map((arg) => [arg.name, ''])), null, 2)); }}>
+          {kind === 'prompt' ? '提示词' : '资源模板'} · {item.title || item.name || item.uriTemplate}
+        </Button>))}
+      {!server.prompts.length && !server.templates.length && !Object.keys(server.errors).length && <p>服务未声明提示词或资源模板。</p>}
+    </div>)}
+    {selected && <div className="grid gap-2"><strong>{selected.server} · {selected.item.name}</strong><p>{selected.item.description}</p>
+      {selected.item.uriTemplate && <code>{selected.item.uriTemplate}</code>}
+      {selected.item.arguments?.map((arg) => <p key={arg.name}>{arg.name}{arg.required ? '（必填）' : '（可选）'} {arg.description}</p>)}
+      <label>参数 JSON（模板变量按 URI template 填写）<textarea className="w-full rounded-lg bg-sunken p-2 font-mono" rows={5} value={argumentsText} onChange={(event) => setArgumentsText(event.target.value)} /></label>
+      <Button size="sm" disabled={busy} onClick={() => void read()}>{busy ? '读取中…' : '读取'}</Button>
+    </div>}
+    {result && <div><Button size="sm" onClick={() => { void navigator.clipboard.writeText(result).catch(() => setError('复制失败，请手动选择内容复制')); }}>复制内容</Button>
+      <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-sunken p-3">{result}</pre></div>}
   </section>;
 }

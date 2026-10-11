@@ -23,8 +23,8 @@ function Entry({ icon: Icon, title, description, action, onClick, disabled = fal
   </article>;
 }
 
-export default function SettingsIntegrationsPanel({ onOpenCode, onOpenChannels, onOpenAutomation }: {
-  onOpenCode: () => void;
+export default function SettingsIntegrationsPanel({ onOpenPullRequests, onOpenChannels, onOpenAutomation }: {
+  onOpenPullRequests: () => void;
   onOpenChannels: () => void;
   onOpenAutomation: () => void;
 }) {
@@ -32,7 +32,7 @@ export default function SettingsIntegrationsPanel({ onOpenCode, onOpenChannels, 
     <p className="m-0 mb-1 text-[12.5px] leading-relaxed text-fg-3">
       这里汇总 Atlas 当前可用的入口。GitHub PR 使用本机工作区和已安装的 gh CLI；Slack 作为本机 Gateway 渠道运行；自动化由本机调度器执行。
     </p>
-    <Entry icon={GitPullRequest} title="GitHub Pull Request" description="查看工作区变更、创建 PR 并在 Atlas Code 页面跟进。需要本机 git/gh 登录状态。" action="打开 Code" onClick={onOpenCode} />
+    <Entry icon={GitPullRequest} title="GitHub Pull Request" description="在当前对话的工作区检查 PR 状态与 CI；没有 PR 时可从任务面板创建。需要本机 git/gh 登录状态。" action="打开 PR 面板" onClick={onOpenPullRequests} />
     <Entry icon={MessageCircle} title="Slack Gateway" description="配置 Slack Socket Mode 机器人凭据，连接本机 Atlas Gateway。可用性取决于可选依赖和凭据。" action="配置渠道" onClick={onOpenChannels} />
     <Entry icon={Timer} title="本机计划任务" description="创建定时、间隔、Webhook 或事件触发自动化；任务在这台机器的 Atlas 实例运行。" action="打开自动化" onClick={onOpenAutomation} />
     <Entry icon={XCircle} title="云端托管任务" description="当前版本没有 Atlas 云执行服务；请使用本机 Automations。Linear issue 集成可在本页下方配置。" action="当前不可用" disabled />

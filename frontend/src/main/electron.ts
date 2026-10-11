@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, session, shell, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
@@ -6,7 +6,9 @@ import { setImmediate } from 'node:timers';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
-import { checkSourceUpdate, launchSourceUpdater, sourceRoot } from './sourceUpdate.js';
+import { sourceRoot } from './sourceUpdate.js';
+import { applyConfiguredUpdate, checkConfiguredUpdate, defaultUpdateSource, validateUpdateSource, type UpdateSource } from './configuredSourceUpdate.js';
+import { exportLocalCrashReport, loadCrashPrivacy, localCrashState, setCrashCapture } from './localCrashReports.js';
 import {
   BACKEND_STARTUP_CHANNEL,
   type AtlasDeepLink,
@@ -27,8 +29,17 @@ function themeIcon(theme: string): Electron.NativeImage | undefined {
   return image.isEmpty() ? undefined : image;
 }
 let windowRef: BrowserWindow | null = null;
-type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null };
-let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null };
+type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; trayEnabled: boolean; preventSleepDuringTasks: boolean; updateSource: UpdateSource | null; editorExecutables: Partial<Record<PlatformEditorId, string>> };
+const defaultPlatformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, trayEnabled: false, preventSleepDuringTasks: false, updateSource: null, editorExecutables: {} };
+let platformPreferences: PlatformPreferences = { ...defaultPlatformPreferences };
+const appWindows = new Set<BrowserWindow>();
+const conversationWindows = new Map<string, BrowserWindow>();
+const windowRoutes = new Map<number, AtlasDeepLink>();
+const windowSubscribers = new Set<number>();
+const activeTaskWindows = new Set<number>();
+let tray: Tray | null = null;
+let sleepBlocker: number | null = null;
+let quitting = false;
 let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
 let pendingDeepLinks: AtlasDeepLink[] = [];
 let deepLinkSubscriber: Electron.WebContents | null = null;
@@ -76,9 +87,13 @@ function loadPlatformPreferences(): PlatformPreferences {
     return {
       alwaysOnTop: data.alwaysOnTop === true,
       globalShortcut: typeof data.globalShortcut === 'string' ? data.globalShortcut : null,
+      trayEnabled: data.trayEnabled === true,
+      preventSleepDuringTasks: data.preventSleepDuringTasks === true,
+      updateSource: data.updateSource ? validateUpdateSource(data.updateSource) : null,
+      editorExecutables: data.editorExecutables && typeof data.editorExecutables === 'object' ? Object.fromEntries(Object.entries(data.editorExecutables).filter(([id, value]) => Object.hasOwn(IDE_COMMANDS, id) && typeof value === 'string')) : {},
     };
   } catch {
-    return { alwaysOnTop: false, globalShortcut: null };
+    return { ...defaultPlatformPreferences };
   }
 }
 
@@ -90,7 +105,32 @@ function savePlatformPreferences(next: PlatformPreferences): void {
 }
 
 function platformSettingsSnapshot(): PlatformSettingsState {
-  return { alwaysOnTop: platformPreferences.alwaysOnTop, globalShortcut: { ...globalShortcutState } };
+  return { ...platformPreferences, globalShortcut: { ...globalShortcutState }, sleepBlocked: sleepBlocker !== null, windowCount: appWindows.size };
+}
+
+function updateSleepBlocker(): void {
+  const needed = platformPreferences.preventSleepDuringTasks && activeTaskWindows.size > 0;
+  if (needed && sleepBlocker === null) sleepBlocker = powerSaveBlocker.start('prevent-app-suspension');
+  if (!needed && sleepBlocker !== null) { powerSaveBlocker.stop(sleepBlocker); sleepBlocker = null; }
+}
+
+function updateTray(): void {
+  if (!platformPreferences.trayEnabled) {
+    const wasResident = Boolean(tray);
+    tray?.destroy(); tray = null;
+    if (wasResident && app.isReady()) focusAtlasWindow();
+    return;
+  }
+  if (tray) return;
+  const icon = themeIcon('dark');
+  if (!icon) throw new Error('未找到托盘图标，无法启用托盘驻留。');
+  tray = new Tray(icon);
+  tray.setToolTip('Atlas');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '显示 Atlas', click: focusAtlasWindow },
+    { label: '退出 Atlas', click: () => app.quit() },
+  ]));
+  tray.on('double-click', focusAtlasWindow);
 }
 
 function validateGlobalAccelerator(value: string): string | null {
@@ -141,7 +181,7 @@ function registerPreferredGlobalShortcut(): void {
 }
 
 function assertTrustedAppSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
-  if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {
+  if (![...appWindows].some((win) => !win.isDestroyed() && win.webContents === event.sender) || event.senderFrame !== event.sender.mainFrame) {
     throw new Error('此操作仅允许 Atlas 主窗口调用。');
   }
   const url = event.senderFrame.url;
@@ -175,6 +215,16 @@ function parseAtlasDeepLink(raw: string): AtlasDeepLink | null {
 function receiveAtlasDeepLink(raw: string): boolean {
   const route = parseAtlasDeepLink(raw);
   if (!route) return false;
+  if (route.type === 'conversation') {
+    const win = conversationWindows.get(route.conversationId);
+    if (win && !win.isDestroyed()) {
+      windowRoutes.set(win.webContents.id, route);
+      if (windowSubscribers.has(win.webContents.id)) win.webContents.send('app:deep-link', route);
+      if (win.isMinimized()) win.restore();
+      win.show(); win.focus();
+      return true;
+    }
+  }
   if (deepLinkSubscriber && !deepLinkSubscriber.isDestroyed()) {
     deepLinkSubscriber.send('app:deep-link', route);
   } else {
@@ -219,8 +269,10 @@ function openWorkspaceInEditor(editor: PlatformEditorId, workspacePath: string):
     if (error instanceof Error && error.message === '工作区路径不是目录。') throw error;
     throw new Error('工作区目录不存在或无法访问。');
   }
+  const selectedExecutable = platformPreferences.editorExecutables[editor];
+  const executable = selectedExecutable ? validateEditorExecutable(selectedExecutable) : IDE_COMMANDS[editor];
   return new Promise((resolve, reject) => {
-    const child = spawn(IDE_COMMANDS[editor], [canonicalPath], {
+    const child = spawn(executable, [canonicalPath], {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
@@ -238,6 +290,17 @@ function openWorkspaceInEditor(editor: PlatformEditorId, workspacePath: string):
       resolve();
     });
   });
+}
+
+function validateEditorExecutable(value: string): string {
+  if (!path.isAbsolute(value) || value.startsWith('\\\\') || value.includes('\0')) throw new Error('请选择本机编辑器可执行文件。');
+  const canonical = realpathSync(value);
+  const stat = statSync(canonical);
+  if (!stat.isFile() || /\.(cmd|bat|ps1|sh|js|cjs|mjs)$/i.test(canonical)
+    || (process.platform === 'win32' ? !/\.exe$/i.test(canonical) : !(stat.mode & 0o111))) {
+    throw new Error('必须选择可直接启动的编辑器程序，不能选择脚本或目录。');
+  }
+  return canonical;
 }
 
 /** Pages in the browser panel are ordinary web content: no preload, no Node, their own session, web URLs only. */
@@ -274,13 +337,13 @@ function attachBackendToken() {
   });
 }
 
-function createWindow() {
-  if (windowRef && !windowRef.isDestroyed()) {
+function createWindow(conversationId?: string): BrowserWindow {
+  if (!conversationId && windowRef && !windowRef.isDestroyed()) {
     windowRef.show();
     windowRef.focus();
-    return;
+    return windowRef;
   }
-  windowRef = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1050,
@@ -299,10 +362,18 @@ function createWindow() {
       webviewTag: true,
     },
   });
-  windowRef.setAlwaysOnTop(platformPreferences.alwaysOnTop);
+  appWindows.add(win);
+  const webContentsId = win.webContents.id;
+  if (!conversationId) windowRef = win;
+  else {
+    conversationWindows.set(conversationId, win);
+    win.setTitle(`Atlas · ${conversationId}`);
+    windowRoutes.set(win.webContents.id, { id: randomUUID(), type: 'conversation', conversationId });
+  }
+  win.setAlwaysOnTop(platformPreferences.alwaysOnTop);
 
-  windowRef.on('maximize', () => windowRef?.webContents.send('window:maximize-change', true));
-  windowRef.on('unmaximize', () => windowRef?.webContents.send('window:maximize-change', false));
+  win.on('maximize', () => win.webContents.send('window:maximize-change', true));
+  win.on('unmaximize', () => win.webContents.send('window:maximize-change', false));
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   // The app window carries the preload API and its requests get the backend token, so it must
   // never become a window onto someone else's page: links open in the system browser instead,
@@ -316,17 +387,16 @@ function createWindow() {
       return false;
     }
   };
-  windowRef.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
-  windowRef.webContents.on('will-navigate', (event, url) => {
+  win.webContents.on('will-navigate', (event, url) => {
     if (isAppUrl(url)) return;
     event.preventDefault();
     if (/^atlas:/i.test(url)) receiveAtlasDeepLink(url);
     else if (/^https?:/i.test(url)) void shell.openExternal(url);
   });
-  const win = windowRef;
   const loadApp = () => {
     if (devUrl) void win.loadURL(devUrl);
     else void win.loadFile(path.join(here, '../../dist/index.html'));
@@ -335,6 +405,7 @@ function createWindow() {
   // A dead renderer or a failed first paint would otherwise leave an all-white
   // window until the user manually restarts: bring the page back on its own.
   win.webContents.on('render-process-gone', (_event, details) => {
+    activeTaskWindows.delete(win.webContents.id); updateSleepBlocker();
     if (details.reason === 'clean-exit') return;
     win.webContents.reload();
   });
@@ -343,13 +414,27 @@ function createWindow() {
     if (!isMainFrame || code === -3) return; // -3: aborted by a newer navigation
     if (loadRetries >= 5) return;
     loadRetries += 1;
-    setTimeout(() => loadApp(), 500 * loadRetries);
+    setTimeout(() => { if (!win.isDestroyed()) loadApp(); }, 500 * loadRetries);
   });
   win.webContents.on('did-finish-load', () => { loadRetries = 0; });
   win.webContents.on('did-start-loading', () => {
+    windowSubscribers.delete(win.webContents.id);
+    activeTaskWindows.delete(win.webContents.id); updateSleepBlocker();
     if (deepLinkSubscriber === win.webContents) deepLinkSubscriber = null;
   });
-  windowRef.on('closed', () => { windowRef = null; });
+  win.on('close', (event) => {
+    if (platformPreferences.trayEnabled && tray && !quitting) { event.preventDefault(); win.hide(); }
+  });
+  win.on('closed', () => {
+    appWindows.delete(win);
+    windowSubscribers.delete(webContentsId);
+    windowRoutes.delete(webContentsId);
+    activeTaskWindows.delete(webContentsId); updateSleepBlocker();
+    if (conversationId) conversationWindows.delete(conversationId);
+    if (windowRef === win) windowRef = null;
+    if (deepLinkSubscriber?.id === webContentsId) deepLinkSubscriber = null;
+  });
+  return win;
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -369,12 +454,15 @@ if (!hasSingleInstanceLock) {
 
 ipcMain.handle('deep-link:subscribe', (event) => {
   assertTrustedAppSender(event);
+  const route = windowRoutes.get(event.sender.id);
+  if (route) { windowSubscribers.add(event.sender.id); return [route]; }
   deepLinkSubscriber = event.sender;
   const queued = pendingDeepLinks;
   pendingDeepLinks = [];
   return queued;
 });
 ipcMain.on('deep-link:unsubscribe', (event) => {
+  windowSubscribers.delete(event.sender.id);
   if (deepLinkSubscriber === event.sender) deepLinkSubscriber = null;
 });
 ipcMain.handle('platform:get-settings', (event) => {
@@ -385,7 +473,7 @@ ipcMain.handle('platform:set-always-on-top', (event, enabled: unknown) => {
   assertTrustedAppSender(event);
   if (typeof enabled !== 'boolean') throw new Error('置顶设置必须是布尔值。');
   savePlatformPreferences({ ...platformPreferences, alwaysOnTop: enabled });
-  if (windowRef && !windowRef.isDestroyed()) windowRef.setAlwaysOnTop(enabled);
+  for (const win of appWindows) if (!win.isDestroyed()) win.setAlwaysOnTop(enabled);
   return platformSettingsSnapshot();
 });
 ipcMain.handle('platform:set-global-shortcut', (event, accelerator: unknown) => {
@@ -401,30 +489,100 @@ ipcMain.handle('platform:open-workspace-in-editor', async (event, editor: unknow
   if (typeof workspacePath !== 'string') throw new Error('请选择一个有效的本地工作区目录。');
   await openWorkspaceInEditor(editor as PlatformEditorId, workspacePath);
 });
-
-ipcMain.on('window:minimize', () => windowRef?.minimize());
-ipcMain.on('window:maximize', () => {
-  if (!windowRef) return;
-  if (windowRef.isMaximized()) windowRef.unmaximize();
-  else windowRef.maximize();
+ipcMain.handle('platform:select-editor-executable', async (event, editor: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof editor !== 'string' || !Object.hasOwn(IDE_COMMANDS, editor)) throw new Error('不支持的编辑器。');
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  if (!owner) throw new Error('窗口已关闭。');
+  const result = await dialog.showOpenDialog(owner, { title: '选择本机编辑器程序', properties: ['openFile'], ...(process.platform === 'win32' ? { filters: [{ name: 'Editor executable', extensions: ['exe'] }] } : {}) });
+  if (!result.canceled && result.filePaths[0]) {
+    const executable = validateEditorExecutable(result.filePaths[0]);
+    savePlatformPreferences({ ...platformPreferences, editorExecutables: { ...platformPreferences.editorExecutables, [editor]: executable } });
+  }
+  return platformSettingsSnapshot();
 });
-ipcMain.on('window:close', () => windowRef?.close());
+
+ipcMain.handle('platform:set-behavior', (event, value: unknown) => {
+  assertTrustedAppSender(event);
+  if (!value || typeof value !== 'object') throw new Error('平台设置无效。');
+  const next = value as { trayEnabled: boolean; preventSleepDuringTasks: boolean };
+  if (typeof next.trayEnabled !== 'boolean' || typeof next.preventSleepDuringTasks !== 'boolean') throw new Error('平台设置必须是布尔值。');
+  const previous = platformPreferences;
+  platformPreferences = { ...previous, ...next };
+  try { updateTray(); savePlatformPreferences(platformPreferences); }
+  catch (error) { platformPreferences = previous; updateTray(); throw error; }
+  updateSleepBlocker();
+  return platformSettingsSnapshot();
+});
+ipcMain.handle('platform:task-activity', (event, active: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof active !== 'boolean') throw new Error('任务活动状态无效。');
+  if (active) activeTaskWindows.add(event.sender.id); else activeTaskWindows.delete(event.sender.id);
+  updateSleepBlocker();
+});
+ipcMain.handle('platform:conversation-window', (event, conversationId: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof conversationId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(conversationId)) throw new Error('会话 ID 无效。');
+  const existing = conversationWindows.get(conversationId);
+  if (existing && !existing.isDestroyed()) { if (existing.isMinimized()) existing.restore(); existing.show(); existing.focus(); return; }
+  if (appWindows.size >= 8) throw new Error('最多打开 8 个 Atlas 窗口。');
+  createWindow(conversationId);
+});
+ipcMain.handle('platform:set-update-source', (event, value: unknown) => {
+  assertTrustedAppSender(event);
+  savePlatformPreferences({ ...platformPreferences, updateSource: value === null ? null : validateUpdateSource(value) });
+  return platformSettingsSnapshot();
+});
+ipcMain.handle('crash:set-capture', (event, enabled: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof enabled !== 'boolean') throw new Error('崩溃采集状态无效。');
+  return setCrashCapture(enabled);
+});
+ipcMain.handle('crash:list', (event) => { assertTrustedAppSender(event); return localCrashState(); });
+ipcMain.handle('crash:export', (event, reportId: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof reportId !== 'string' || reportId.length > 200) throw new Error('报告 ID 无效。');
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  if (!owner) throw new Error('窗口已关闭。');
+  return exportLocalCrashReport(owner, reportId);
+});
+
+ipcMain.on('window:minimize', (event) => { assertTrustedAppSender(event); BrowserWindow.fromWebContents(event.sender)?.minimize(); });
+ipcMain.on('window:maximize', (event) => {
+  assertTrustedAppSender(event);
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+});
+ipcMain.on('window:close', (event) => { assertTrustedAppSender(event); BrowserWindow.fromWebContents(event.sender)?.close(); });
 // Source mode (running from a git checkout without the Vite dev server): updates are
 // pulled and rebuilt by scripts/atlas-update.mjs instead of reinstalling a package.
 const updateRoot = () => (!app.isPackaged && !process.env.VITE_DEV_SERVER_URL ? sourceRoot(app.getAppPath()) : null);
-ipcMain.handle('update:check', () => checkSourceUpdate(updateRoot()));
-ipcMain.handle('update:apply', () => {
+ipcMain.handle('update:check', async (event) => {
+  assertTrustedAppSender(event);
+  const root = updateRoot();
+  if (!root) return { supported: false, available: false, behind: 0, commits: [], blocked: '此安装不是源码模式，没有可用的签名发布 feed。' };
+  return checkConfiguredUpdate(root, platformPreferences.updateSource ?? await defaultUpdateSource(root));
+});
+ipcMain.handle('update:apply', async (event) => {
+  assertTrustedAppSender(event);
   const root = updateRoot();
   if (!root) return false;
-  launchSourceUpdater(root);
+  const source = platformPreferences.updateSource ?? await defaultUpdateSource(root);
+  const status = await checkConfiguredUpdate(root, source);
+  if (!status.available || status.blocked || status.error) return false;
+  await applyConfiguredUpdate(root, source);
   setImmediate(() => app.quit());
   return true;
 });
-ipcMain.on('window:theme', (_event, theme: unknown) => {
+ipcMain.on('window:theme', (event, theme: unknown) => {
+  assertTrustedAppSender(event);
   const icon = typeof theme === 'string' ? themeIcon(theme) : undefined;
-  if (icon && windowRef && !windowRef.isDestroyed()) windowRef.setIcon(icon);
+  if (icon) BrowserWindow.fromWebContents(event.sender)?.setIcon(icon);
 });
 ipcMain.handle('dialog:open-directory', async (event, defaultPath?: unknown) => {
+  assertTrustedAppSender(event);
   const owner = BrowserWindow.fromWebContents(event.sender);
   const options = { title: '选择工作目录', properties: ['openDirectory' as const], defaultPath: typeof defaultPath === 'string' ? defaultPath : undefined };
   const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
@@ -434,15 +592,14 @@ ipcMain.handle('dialog:open-directory', async (event, defaultPath?: unknown) => 
 // compromised page run programs, so they are shown in Explorer instead.
 const RUNNABLE = /\.(exe|com|bat|cmd|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|msi|msp|scr|lnk|url|hta|cpl|jar|reg|appref-ms)$/i;
 ipcMain.handle('shell:open-path', async (event, target?: unknown) => {
-  if (event.sender !== windowRef?.webContents || typeof target !== 'string' || !path.isAbsolute(target)) return 'invalid path';
+  assertTrustedAppSender(event);
+  if (typeof target !== 'string' || !path.isAbsolute(target)) return 'invalid path';
   if (RUNNABLE.test(target)) { shell.showItemInFolder(target); return 'revealed'; }
   const error = await shell.openPath(target);
   return error || 'opened';
 });
 ipcMain.handle('skill-center:token', (event) => {
-  if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {
-    throw new Error('Skill Center authority is available only to the Atlas main window');
-  }
+  assertTrustedAppSender(event);
   const frameUrl = event.senderFrame.url;
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   const appFileUrl = pathToFileURL(path.resolve(here, '../../dist/index.html')).href;
@@ -458,6 +615,7 @@ app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   platformPreferences = loadPlatformPreferences();
   registerPreferredGlobalShortcut();
+  try { updateTray(); } catch { platformPreferences.trayEnabled = false; }
   if (app.isPackaged) app.setAsDefaultProtocolClient('atlas');
   else if (process.platform === 'win32' || process.platform === 'linux') {
     app.setAsDefaultProtocolClient('atlas', process.execPath, [path.resolve(process.argv[1] ?? '.')]);
@@ -491,9 +649,10 @@ app.whenReady().then(async () => {
   let lastProgress: BackendStartupProgress = { phase: 'probing', managed: false, elapsedMs: 0 };
   const forwardProgress = (progress: BackendStartupProgress) => {
     lastProgress = progress;
-    windowRef?.webContents.send(BACKEND_STARTUP_CHANNEL, progress);
+    for (const win of appWindows) if (!win.isDestroyed()) win.webContents.send(BACKEND_STARTUP_CHANNEL, progress);
   };
   const backendReady = ensureBackendRunning({ onProgress: forwardProgress });
+  void backendReady.then(() => loadCrashPrivacy(process.env.ATLAS_API_BASE_URL ?? `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}`)).catch(() => undefined);
   void backendReady.catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     dialog.showErrorBox('Atlas backend startup failed', `Atlas could not start its backend.\n\n${message}`);
@@ -513,15 +672,18 @@ app.whenReady().then(async () => {
 let shutdownStarted = false;
 let shutdownComplete = false;
 app.on('before-quit', (event) => {
+  quitting = true;
   if (shutdownComplete) return;
   event.preventDefault();
   if (shutdownStarted) return;
   shutdownStarted = true;
   globalShortcut.unregisterAll();
+  tray?.destroy(); tray = null;
+  activeTaskWindows.clear(); updateSleepBlocker();
   void stopManagedBackend().finally(() => {
     shutdownComplete = true;
     app.quit();
   });
 });
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin' && !tray) app.quit(); });
