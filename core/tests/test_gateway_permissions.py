@@ -62,6 +62,7 @@ def bridge_fixture(tmp_path, *, timeout=1):
     bridge = GatewayBridge(manager=manager, db_path=tmp_path / "channels.sqlite",
                            submit_run=submit, get_run=runs.get, read_answer=read_answer,
                            create_conversation=create_conversation,
+                           default_permission_mode="ask_writes",
                            approval_timeout_seconds=timeout)
     manager.set_dispatcher(bridge.dispatch)
     return manager, bridge, runs, output, submitted
@@ -141,7 +142,7 @@ async def test_other_sender_cannot_answer_origin_approval(tmp_path):
 def test_permission_defaults_and_binding_agent_overrides(tmp_path):
     manager, bridge, _, _, _ = bridge_fixture(tmp_path)
     try:
-        assert AtlasConfig().gateway_default_permission_mode == "ask_writes"
+        assert AtlasConfig().gateway_default_permission_mode == "full_access"
         assert AtlasConfig().local_execution_permission_mode == "full_access"
         configured = AtlasConfig({"gateway": {"default_permission_mode": "read_only"}})
         assert configured.gateway_default_permission_mode == "read_only"
