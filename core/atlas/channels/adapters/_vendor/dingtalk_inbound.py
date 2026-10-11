@@ -1,6 +1,6 @@
 """Pure parsers for inbound DingTalk ``ChatbotMessage`` payloads (no I/O, no adapter state).
 
-# Ported from NousResearch/hermes-agent @ c8301ea6c9 (plugins/platforms/dingtalk/inbound.py)
+# Ported from NousResearch/hermes-agent @ ae3598c7cdf3a2e4a6f60d0d869602813dded97a (plugins/platforms/dingtalk/inbound.py)
 # Atlas changes vs. upstream:
 #   - the single hermes import now targets the frozen Atlas contract
 #     (``atlas.channels.contract.MessageType`` instead of ``gateway.platforms.event.MessageType``);
@@ -114,11 +114,11 @@ def extract_text(message: Any) -> str:
     return fallback(message) if fallback else content
 
 
-def extract_media(message: Any) -> Tuple[MessageType, List[str], List[str]]:
+def extract_media(message: Any) -> tuple[MessageType, list[str], list[str]]:
     """Return ``(MessageType, [download codes/urls], [mime types])`` for a message."""
     msg_type = MessageType.TEXT
-    media_urls: List[str] = []
-    media_types: List[str] = []
+    media_urls: list[str] = []
+    media_types: list[str] = []
     image_content = getattr(message, "image_content", None)
     if download_code := (getattr(image_content, "download_code", None) if image_content else None):
         media_urls.append(download_code)
@@ -163,9 +163,9 @@ def extract_media(message: Any) -> Tuple[MessageType, List[str], List[str]]:
     return msg_type, media_urls, media_types
 
 
-def collect_download_codes(message: Any) -> List[Tuple[Any, str]]:
+def collect_download_codes(message: Any) -> list[tuple[Any, str]]:
     """Return ``(container, key)`` pairs whose download code should be resolved to a URL."""
-    codes: List[Tuple[Any, str]] = []
+    codes: list[tuple[Any, str]] = []
     img_content = getattr(message, "image_content", None)
     if img_content and getattr(img_content, "download_code", None):
         codes.append((img_content, "download_code"))
