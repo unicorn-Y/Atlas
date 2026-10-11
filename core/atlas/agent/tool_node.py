@@ -230,7 +230,7 @@ async def execute_tools_node(
         "agent_role": getattr(ctx, "agent_role", "leaf"),
         "agent_type": getattr(ctx, "agent_type", "general"),
         "depth": getattr(ctx, "agent_depth", 0),
-        "max_spawn_depth": int(_agent.get_config().get("delegation.max_spawn_depth", 2)),
+        "max_spawn_depth": int(_agent.get_config().get("delegation.max_spawn_depth", 4)),
         "subtask_started": getattr(ctx, "subtask_started", None),
         "subtask_progress": getattr(ctx, "subtask_progress", None),
         "subtask_completed": getattr(ctx, "subtask_completed", None),
@@ -932,7 +932,7 @@ async def execute_tools_node(
                                  "depth": ctx.agent_depth + 1, "model": agent_model,
                                  "permission_mode": child_permission,
                                  "max_spawn_depth": int(_agent.get_config().get(
-                                     "delegation.max_spawn_depth", 2)),
+                                     "delegation.max_spawn_depth", 4)),
                                  "tool_allow": tool_allow}
                 delegated_goal = fn_args.get("goal")
                 delegated_context = fn_args.get("context")
@@ -1044,7 +1044,7 @@ async def execute_tools_node(
                 data = await agent._delegation.delegate_parallel(
                     parallel_tasks,
                     max_concurrency=int(fn_args.get(
-                        "max_concurrency", _agent.get_config().get("delegation.max_concurrent_children", 3),
+                        "max_concurrency", _agent.get_config().get("delegation.max_concurrent_children", 8),
                     )),
                     cwd=workspace,
                     cancel_event=ctx.cancel_event,

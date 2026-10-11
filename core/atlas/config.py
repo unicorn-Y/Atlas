@@ -98,7 +98,7 @@ class AtlasConfig:
     def gateway_default_permission_mode(self) -> str:
         from atlas.channels.routing import validate_permission_mode
 
-        return validate_permission_mode(self.get("gateway.default_permission_mode", "ask_writes"))
+        return validate_permission_mode(self.get("gateway.default_permission_mode", "full_access"))
 
     @property
     def gateway_approval_timeout_seconds(self) -> float:

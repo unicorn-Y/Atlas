@@ -117,7 +117,7 @@ class GatewayBridge:
         create_conversation: CreateConversation,
         default_workspace: str | None = None,
         set_agent_status: SetAgentStatus | None = None,
-        default_permission_mode: str = "ask_writes",
+        default_permission_mode: str = "full_access",
         approval_timeout_seconds: float = 600,
         get_agent: Callable[[str], dict[str, Any] | None] | None = None,
         recovery_notice: Callable[[str, str], Awaitable[None]] | None = None,

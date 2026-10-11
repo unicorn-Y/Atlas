@@ -9,13 +9,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from atlas.config import get_config, load_user_settings, save_user_settings
+from atlas.kernel.loop import DEFAULT_MAX_TURNS, MAX_TURNS_CAP
 
 router = APIRouter(tags=["run-limits"])
 
 
 class RunLimitsPayload(BaseModel):
     # None clears the user override and restores engine.max_turns.
-    max_turns: int | None = Field(default=None, ge=1, le=256, strict=True)
+    max_turns: int | None = Field(default=None, ge=1, le=MAX_TURNS_CAP, strict=True)
     # Estimated USD cap; exact provider billing is not available for every route.
     max_cost_usd: Decimal | None = Field(
         default=None, ge=Decimal("0.001"), le=Decimal("100000"),
@@ -24,9 +25,9 @@ class RunLimitsPayload(BaseModel):
 
 
 def _engine_max_turns() -> int:
-    configured = get_config().get("engine.max_turns", 64)
+    configured = get_config().get("engine.max_turns", DEFAULT_MAX_TURNS)
     try:
-        return max(1, min(int(configured), 256))
+        return max(1, min(int(configured), MAX_TURNS_CAP))
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=500, detail="engine.max_turns is not a valid integer") from exc
 
@@ -34,7 +35,7 @@ def _engine_max_turns() -> int:
 def _user_max_turns(settings: dict[str, Any]) -> int | None:
     limits = settings.get("run_limits")
     value = limits.get("max_turns") if isinstance(limits, dict) else None
-    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 256:
+    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= MAX_TURNS_CAP:
         return value
     return None
 
@@ -59,8 +60,8 @@ def _response() -> dict[str, Any]:
     return {
         "engine_max_turns": engine_limit,
         "user_max_turns": user_limit,
-        "effective_max_turns": min(engine_limit, user_limit) if user_limit is not None else engine_limit,
-        "max_turns_limit": min(engine_limit, 256),
+        "effective_max_turns": user_limit if user_limit is not None else engine_limit,
+        "max_turns_limit": MAX_TURNS_CAP,
         "user_max_cost_usd": str(cost_limit) if cost_limit is not None else None,
         "cost_limit_supported": True,
         "cost_limit_reason": (
@@ -77,13 +78,6 @@ async def get_run_limits() -> dict[str, Any]:
 
 @router.put("/api/run-limits")
 async def update_run_limits(payload: RunLimitsPayload) -> dict[str, Any]:
-    engine_limit = _engine_max_turns()
-    if payload.max_turns is not None and payload.max_turns > engine_limit:
-        raise HTTPException(
-            status_code=422,
-            detail=f"max_turns must be between 1 and the engine limit ({engine_limit})",
-        )
-
     settings = load_user_settings()
     limits = settings.get("run_limits")
     if not isinstance(limits, dict):

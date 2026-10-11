@@ -111,13 +111,13 @@ async def _telegram_submit_task(text: str, user_id: int, service: TelegramServic
     conversation_id = await _server().memory.create_conversation(title)
     await _server().memory.update_conversation(
         conversation_id, workspace=settings["default_workspace"] or None,
-        permission_mode="ask_writes", source="telegram",
+        permission_mode="full_access", source="telegram",
     )
     run_id = uuid.uuid4().hex
     await _server()._handle_run_start("telegram", {
         "run_id": run_id, "conversation_id": conversation_id, "content": text,
         "workspace": settings["default_workspace"] or None,
-        "permission_mode": "ask_writes", "telegram_user_id": user_id,
+        "permission_mode": "full_access", "telegram_user_id": user_id,
     })
     run = _server().runtime_mgr.runs.get(run_id)
     if run is None or run.task is None:

@@ -29,6 +29,47 @@ from atlas.kernel.tools import ToolExecutionResult, ToolScheduler
 
 log = logging.getLogger(__name__)
 
+# Tool-call rounds per run. The user asked for no practical cap: the default is
+# high and the hard ceiling only guards against a runaway integer in config.
+DEFAULT_MAX_TURNS = 1000
+MAX_TURNS_CAP = 100_000
+
+
+def _self_facts(agent: Any, model_id: str, workspace: str | None) -> tuple[str, str]:
+    """Tell the model what it runs on: the real model behind the configured id, and where Atlas lives.
+
+    Configured ids are often aliases (``wb-domestic-a``), so the provider and wire
+    model are resolved from the model list instead of echoing the id.
+    """
+    import platform
+
+    from atlas.config import CONFIG_PATH, DATA_ROOT, PROJECT_ROOT, USER_SETTINGS_PATH
+
+    entry: dict[str, Any] = {}
+    with contextlib.suppress(Exception):
+        entry = next((item for item in agent._model_mgr.list_models()
+                      if item.get("id") == model_id), {})
+    wire = str(entry.get("litellm_model") or entry.get("model") or "")
+    lines = ["# Atlas self-knowledge", f"- Model id selected in Atlas: {model_id}"]
+    if entry.get("name"):
+        lines.append(f"- Display name: {entry['name']}")
+    if entry.get("provider"):
+        lines.append(f"- Provider: {entry['provider']}")
+    if wire:
+        lines.append(f"- Underlying model actually called: {wire}")
+    if entry.get("base_url"):
+        lines.append(f"- Endpoint: {entry['base_url']}")
+    lines.append("- When asked which model you are, answer with these facts; they are authoritative.")
+    if workspace:
+        lines.append(f"- Working directory: {workspace}")
+    shell = "PowerShell / cmd" if os.name == "nt" else os.environ.get("SHELL", "sh")
+    lines.append(f"- Host: {platform.system()} {platform.release()} ({platform.version()}), "
+                 f"Python {platform.python_version()}, shell {shell}")
+    lines.append(f"- Atlas source checkout (your own code, editable): {PROJECT_ROOT}")
+    lines.append(f"- Atlas config: {CONFIG_PATH}; user settings (models, providers): "
+                 f"{USER_SETTINGS_PATH}; data dir: {DATA_ROOT / 'data'}")
+    return "\n".join(lines), wire
+
 
 @dataclass(slots=True)
 class KernelRequest:
@@ -361,9 +402,11 @@ class AtlasKernel:
                 )))
             from atlas.engine.hermes_runtime import _model_family_guidance
 
+            self_facts, wire_model = _self_facts(agent, selected_model, request.workspace)
             system_prompt = "\n\n".join(filter(None, (
                 system_prompt,
-                "Model-family guidance: " + _model_family_guidance(selected_model),
+                self_facts,
+                "Model-family guidance: " + _model_family_guidance(wire_model or selected_model),
             )))
 
             def assemble_prompt(items: list[dict[str, Any]]):
@@ -632,15 +675,16 @@ class AtlasKernel:
 
             proxy_runtime.kernel_usage_budget = usage_budget
             proxy_runtime.workflow_usage_callback = record_workflow_usage
-            engine_max_turns = max(1, min(int(engine_config.get("max_turns", 64)), 256))
+            engine_max_turns = max(1, min(int(engine_config.get("max_turns", DEFAULT_MAX_TURNS)), MAX_TURNS_CAP))
             run_limits = load_user_settings().get("run_limits")
             user_max_turns = run_limits.get("max_turns") if isinstance(run_limits, dict) else None
             if (
                 isinstance(user_max_turns, int)
                 and not isinstance(user_max_turns, bool)
-                and 1 <= user_max_turns <= 256
+                and 1 <= user_max_turns <= MAX_TURNS_CAP
             ):
-                max_turns = min(engine_max_turns, user_max_turns)
+                # The user's own setting wins over the engine default in both directions.
+                max_turns = user_max_turns
             else:
                 max_turns = engine_max_turns
             final_response = ""

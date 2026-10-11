@@ -346,7 +346,7 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
                                   }, "required": ["id"], "additionalProperties": False},
                               }, "required": ["title"],
                                   "additionalProperties": False}},
-                    "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 8},
+                    "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 16},
                     "executor": {"type": "string"},
                     "verify": {"type": ["object", "null"], "properties": {
                         "criteria": {"type": "string"},

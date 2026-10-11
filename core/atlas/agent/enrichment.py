@@ -736,8 +736,8 @@ class DelegationService:
     ) -> dict[str, Any]:
         if not isinstance(tasks, list) or not 1 <= len(tasks) <= 8:
             raise ValueError("delegate_parallel accepts one to eight tasks")
-        if not isinstance(max_concurrency, int) or not 1 <= max_concurrency <= 8:
-            raise ValueError("max_concurrency must be between 1 and 8")
+        if not isinstance(max_concurrency, int) or not 1 <= max_concurrency <= 16:
+            raise ValueError("max_concurrency must be between 1 and 16")
         if any(not isinstance(item, dict) or not str(item.get("goal", "")).strip()
                or not str(item.get("title", "")).strip() for item in tasks):
             raise ValueError("each parallel task requires a title and goal")

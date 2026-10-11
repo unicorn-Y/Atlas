@@ -144,7 +144,7 @@ args = ["start-mcp-server", "--project-from-cwd", "--context", "claude-code", "-
 enabled = true
 
 [gateway]
-default_permission_mode = "ask_writes"
+default_permission_mode = "full_access"
 approval_timeout_seconds = 600
 
 [local_execution]

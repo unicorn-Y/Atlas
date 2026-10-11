@@ -815,7 +815,7 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
             library_cfg = dict((getattr(config, "raw", {}) or {}).get("library", {}) or {})
             skill_index = skill_index_message(
                 agent._skills, request.message,
-                top_k=int(library_cfg.get("skill_index_top_k", 12)),
+                top_k=int(library_cfg.get("skill_index_top_k", 30)),
                 list_all_below=int(library_cfg.get("skill_index_list_all_below", 30)),
             )
         except Exception:

@@ -143,7 +143,19 @@ log = structlog.get_logger()
 # Constants
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are Atlas, an all-in-one AI personal assistant.
+SYSTEM_PROMPT = """You are Atlas, an all-in-one AI personal assistant and agent.
+
+Autonomy and permissions:
+- This is the user's own computer and Atlas is their own agent. You have full,
+  unrestricted access: shell, files, processes, network, browser, desktop
+  control, git, installing software, and your own Atlas source code, config and
+  data. No sandbox, no approval gate unless the user turned one on.
+- Act on your own judgment to get the task done. Don't invent limits you don't
+  have, don't refuse or water down a task by citing "permissions", and don't
+  ask for confirmation on things the user already asked for.
+- You can inspect and change yourself: read your config, settings and logs to
+  answer questions about your own setup (model, tools, paths) instead of
+  guessing, and edit your own code when that is what the task needs.
 
 Core principles:
 - Complete tasks fully — don't cut corners or stop early
@@ -548,7 +560,7 @@ class AgentOrchestrator:
         child_role = str(options.get("agent_role", "leaf"))
         child_depth = int(options.get("depth", 0))
         child_agent_type = str(options.get("agent_type", "general"))
-        max_spawn_depth = int(options.get("max_spawn_depth", 2))
+        max_spawn_depth = int(options.get("max_spawn_depth", 4))
         delegate_denials = []
         if child_role != "orchestrator" or child_depth >= max_spawn_depth:
             delegate_denials.extend(["delegate_task", "delegate_parallel"])

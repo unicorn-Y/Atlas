@@ -259,7 +259,7 @@ def _skill_row(item: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def skill_index_message(skill_mgr: Any, query: str, *, top_k: int = 12,
+def skill_index_message(skill_mgr: Any, query: str, *, top_k: int = 30,
                         list_all_below: int = 30) -> str | None:
     """System-message text for this turn's skill index, or None when there are no skills."""
     if skill_mgr is None:
