@@ -155,6 +155,20 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
                     "name": {"type": "string"},
                 }, "required": ["name"], "additionalProperties": False},
             },
+        }, {
+            "type": "function",
+            "function": {
+                "name": "skill_search",
+                "description": (
+                    "Search the whole Atlas skill library (installed and fetch-on-use skills) "
+                    "when the skill index does not list a fitting one. Returns names to pass to use_skill."
+                ),
+                "parameters": {"type": "object", "properties": {
+                    "query": {"type": "string"},
+                    "category": {"type": "string", "description": "Optional category name or id."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 30},
+                }, "required": ["query"], "additionalProperties": False},
+            },
         }]
     if agent._memory is not None:
         tools = [*tools, {

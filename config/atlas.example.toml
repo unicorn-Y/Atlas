@@ -39,6 +39,15 @@ verify_before_stop = true
 kernel = "atlas" # atlas | hermes
 workflow_max_parallel = 4
 
+# 技能与工具库（省 token）：技能索引只放本轮最相关的几条，少用的工具 / MCP 工具折叠成名字清单
+[library]
+skill_index_top_k = 12            # 每轮提示词里列出的技能数
+skill_index_list_all_below = 30   # 技能总数少于这个数时全部列出
+defer_tools = true                # 折叠少用的工具，模型用 tool_search 按需加载
+defer_min_tools = 30              # 工具总数超过这个数才折叠
+auto_load = 3                     # 每轮按用户消息自动展开最相关的几个折叠工具
+core_tools = []                   # 永远不折叠的工具名
+
 # API gateway (monkeyapi or direct)
 [models.gateway]
 base_url = "https://api.monkeyapi.net"

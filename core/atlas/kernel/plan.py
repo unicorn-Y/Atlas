@@ -21,7 +21,7 @@ READ_ONLY_TOOLS = frozenset({
     "android_ui_describe", "android_ui_resolve", "ios_preflight",
     "ios_list_simulators", "ios_discover_project", "ios_logs", "ios_ui_status",
     "ios_ui_describe", "view_image", "update_plan", "list_available_plugins_to_install",
-    "TaskGet", "TaskList",
+    "TaskGet", "TaskList", "tool_search", "skill_search", "use_skill",
 })
 
 

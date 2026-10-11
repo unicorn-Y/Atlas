@@ -34,6 +34,7 @@ import Palette, { type PaletteItem } from './components/Palette';
 import VoiceOverlay, { getSpeechRecognition, type SpeechRecognitionLike } from './components/VoiceOverlay';
 import SettingsPage, { STATUS_BAR_ITEMS, type StatusBarPreferences } from './pages/SettingsPage';
 import SkillsMarketPage from './pages/SkillsMarketPage';
+import LibraryPage from './pages/LibraryPage';
 import EvolutionPage from './pages/EvolutionPage';
 import MemoryPage from './pages/MemoryPage';
 import AutomationPage from './pages/AutomationPage';
@@ -1248,6 +1249,7 @@ export default function App() {
     {view === 'agents' && <AgentsPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} username={username} />}
     {view === 'devices' && <DevicesPage onToast={notify} />}
     {view === 'workbench' && <WorkbenchPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
+    {view === 'library' && <LibraryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
     {view === 'groups' && <GroupsView onToast={notify} />}
     {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} initialPrompt={createPrompt} />}

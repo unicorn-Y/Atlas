@@ -1309,6 +1309,16 @@ async def execute_tools_node(
                 )
             elif fn_name == "use_skill" and agent._skills is not None:
                 result = await agent._use_skill_result(str(fn_args.get("name", "")))
+            elif fn_name == "skill_search" and agent._skills is not None:
+                from atlas.library.runtime import search_skills
+
+                hits = search_skills(
+                    agent._skills, str(fn_args.get("query", "")),
+                    category=str(fn_args.get("category", "") or ""),
+                    limit=max(1, min(30, int(fn_args.get("limit", 10) or 10))),
+                )
+                result = {"data": {"skills": hits}, "is_error": False,
+                          "content": [{"type": "text", "text": json.dumps(hits, ensure_ascii=False)}]}
             elif fn_name in {"web_search", "web_fetch"} and agent._web is not None:
                 if getattr(ctx, "sandbox_enabled", False):
                     raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")

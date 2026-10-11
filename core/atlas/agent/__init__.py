@@ -459,6 +459,13 @@ class AgentOrchestrator:
                 "is_error": True,
             }
         try:
+            # Library catalog skills are fetched the first time they are used.
+            from atlas.library.runtime import ensure_skill
+
+            await ensure_skill(self._skills, name)
+        except Exception as exc:
+            log.warning("agent.use_skill.fetch_failed", name=name, error=str(exc))
+        try:
             content = await self._skills.activate(name.strip())
         except Exception as exc:
             content = None
@@ -547,7 +554,7 @@ class AgentOrchestrator:
             delegate_denials.extend(["delegate_task", "delegate_parallel"])
         if child_role == "leaf":
             delegate_denials.extend(["ask_user", "remember", "session_search",
-                                     "project_sources_search", "use_skill"])
+                                     "project_sources_search", "use_skill", "skill_search"])
         await run_user_hook(options.get("user_hook_callback"), "SubagentStart", {
             "agent_type": child_agent_type, "subtask_id": subtask_id,
             "description": goal, "prompt": worker_prompt,

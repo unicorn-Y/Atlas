@@ -808,20 +808,21 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
             + skill["content"]
         )))
     if agent._skills is not None and not request.worker:
+        # Retrieval over the whole library: only this message's top hits reach the prompt.
         try:
-            skill_index = [
-                {"name": item.name, "description": item.description[:80]}
-                for item in agent._skills.list_skills()[:60]
-            ]
+            from atlas.library.runtime import skill_index_message
+
+            library_cfg = dict((getattr(config, "raw", {}) or {}).get("library", {}) or {})
+            skill_index = skill_index_message(
+                agent._skills, request.message,
+                top_k=int(library_cfg.get("skill_index_top_k", 12)),
+                list_all_below=int(library_cfg.get("skill_index_list_all_below", 30)),
+            )
         except Exception:
             log.debug("agent.skill_index_unavailable", exc_info=True)
-            skill_index = []
+            skill_index = None
         if skill_index:
-            initial_messages.append(SystemMessage(content=(
-                "Atlas Skill index (call use_skill(name) to load full instructions "
-                "when one matches this task):\n"
-                + json.dumps(skill_index, ensure_ascii=False)
-            )))
+            initial_messages.append(SystemMessage(content=skill_index))
     if agent._projects is not None and not request.worker:
         try:
             project_context = await agent._project_context_block(

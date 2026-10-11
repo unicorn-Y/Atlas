@@ -144,3 +144,4 @@ data/memory_paused
 # Machine-local clutter (never commit): construction pack + config backups
 /.construction-pack/
 data/user-settings.json.bak-*
+data/library/

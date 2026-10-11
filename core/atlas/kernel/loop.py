@@ -929,6 +929,25 @@ class AtlasKernel:
                 )
                 if edit_manager is not None:
                     available_tools = [*available_tools, *edit_manager.get_tools_for_llm()]
+                deferred_note = None
+                if not tool_allow:
+                    # Library: rarely used / MCP schemas collapse to a stable name list.
+                    from atlas.library.runtime import partition_tools
+
+                    try:
+                        available_tools, deferred_note = partition_tools(
+                            available_tools, session_id=session_id, query=request.message,
+                            config=raw_config,
+                        )
+                    except Exception:
+                        log.warning("kernel.tool_deferral_failed", exc_info=True)
+                if deferred_note and not any(
+                    item.get("role") == "system" and str(item.get("content", "")).startswith("Deferred tools:")
+                    for item in messages
+                ):
+                    insert_at = 1 if messages and messages[0].get("role") == "system" else 0
+                    messages = [*messages[:insert_at], {"role": "system", "content": deferred_note},
+                                *messages[insert_at:]]
                 tools = plan.filter_tools(available_tools, read_only_names=("build_repo_map",))
                 tool_json = json.dumps(messages, ensure_ascii=False, default=str)
                 record("model_request", model=turn_model, input_chars=len(tool_json),
@@ -1790,24 +1809,16 @@ class AtlasKernel:
         if name == "tool_search":
             from atlas.kernel.tools import kernel_tool_schemas
 
-            query = str(arguments.get("query") or "").strip().casefold()
-            limit = max(1, min(50, int(arguments.get("limit", 20))))
+            from atlas.library.runtime import search_tools
+
+            query = str(arguments.get("query") or "").strip()
+            limit = max(1, min(50, int(arguments.get("limit", 8) or 8)))
             candidates = list(agent._model_facing_tools())
             candidates.extend(kernel_tool_schemas(include_workflow=True))
-            matches = []
-            seen: set[str] = set()
-            for item in candidates:
-                function = item.get("function", {}) if isinstance(item, dict) else {}
-                tool_name = str(function.get("name") or "")
-                description = str(function.get("description") or "")
-                if not tool_name or tool_name in seen:
-                    continue
-                seen.add(tool_name)
-                text = f"{tool_name} {description}".casefold()
-                if query in text:
-                    matches.append({"name": tool_name, "description": description})
-            matches.sort(key=lambda row: (not row["name"].casefold().startswith(query), row["name"]))
-            return {"content": json.dumps(matches[:limit], ensure_ascii=False), "data": {"tools": matches[:limit]}}
+            # Loads the matches into this conversation; the next model call offers their schemas.
+            found = search_tools(candidates, query, limit=limit,
+                                 session_id=str(getattr(runtime, "conversation_id", "") or ""))
+            return {"content": json.dumps(found, ensure_ascii=False), "data": found}
         if name == "get_context_remaining":
             callback = getattr(runtime, "context_remaining_callback", None)
             if not callable(callback):

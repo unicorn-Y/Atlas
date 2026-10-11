@@ -558,7 +558,7 @@ class SkillManager:
 # Higher priority wins duplicate skill names. The ladder mirrors the custom
 # command sources (atlas/runtime/commands.py): bundled Atlas lowest, then
 # opt-in Hermes, user-level Claude, project-level Claude, plugins on top.
-SKILL_SOURCE_PRIORITY = {"atlas": 10, "atlas-user": 12, "hermes": 15, "claude-user": 20, "claude-project": 30, "plugin": 60}
+SKILL_SOURCE_PRIORITY = {"atlas": 10, "library": 11, "atlas-user": 12, "hermes": 15, "claude-user": 20, "claude-project": 30, "plugin": 60}
 
 
 def plugin_skill_sources(
@@ -614,6 +614,12 @@ def default_skill_sources(
             "atlas-user", Path(env_home), SKILL_SOURCE_PRIORITY["atlas-user"],
             layout="category",
         ))
+    # Skills fetched on demand from the library catalog (data/library/skills/<category>/<name>).
+    from atlas.library.runtime import library_skills_dir
+
+    sources.append(SkillSource(
+        "library", library_skills_dir(), SKILL_SOURCE_PRIORITY["library"], layout="category",
+    ))
     if hermes_skills_dir:
         sources.append(SkillSource(
             "hermes", Path(hermes_skills_dir).expanduser(),
