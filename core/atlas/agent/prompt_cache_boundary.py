@@ -1,4 +1,4 @@
-# Ported from NousResearch/hermes-agent@663362680b6ffa4fbffeb58f6682564239a1953b:
+# Ported from NousResearch/hermes-agent@ae3598c7cdf3a2e4a6f60d0d869602813dded97a:
 # agent/prompt_cache_boundary.py (MIT, (c) Nous Research).
 # Changes: package path only; stable-prefix behavior retained.
 """Builder-declared stable prefixes for Anthropic prompt caching.
@@ -23,7 +23,7 @@ _MAX_ENTRIES = 32
 _MAX_CHARS = 4 * 1024 * 1024
 
 _lock = threading.Lock()
-_prefixes: "OrderedDict[str, None]" = OrderedDict()
+_prefixes: OrderedDict[str, None] = OrderedDict()
 
 
 def register_stable_prefix(prefix: str) -> None:

@@ -1,4 +1,4 @@
-# Ported from NousResearch/hermes-agent agent/lsp/protocol.py @ 562ad75baec0c8360f6ce2d48b7d9de56506956c (MIT)
+# Ported from NousResearch/hermes-agent agent/lsp/protocol.py @ ae3598c7cdf3a2e4a6f60d0d869602813dded97a (MIT)
 """Minimal LSP JSON-RPC 2.0 framer over async streams.
 
 Wire format: ``Content-Length: <bytes>\\r\\n\\r\\n<utf-8 JSON body>`` where the
@@ -120,7 +120,7 @@ def make_error_response(req_id: Any, code: int, message: str, data: Any = None) 
     return {"jsonrpc": "2.0", "id": req_id, "error": err}
 
 
-def classify_message(msg: dict) -> Tuple[str, Any]:
+def classify_message(msg: dict) -> tuple[str, Any]:
     """Return ``(kind, key)``: kind ∈ request/response/notification/invalid; key is the id (request/response),
     the method (notification) or ``None`` (invalid)."""
     if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0":
@@ -133,7 +133,15 @@ def classify_message(msg: dict) -> Tuple[str, Any]:
 
 
 __all__ = [
-    "ERROR_CONTENT_MODIFIED", "ERROR_METHOD_NOT_FOUND", "LSPProtocolError", "LSPRequestError",
-    "encode_message", "read_message", "make_request", "make_notification", "make_response",
-    "make_error_response", "classify_message",
+    "ERROR_CONTENT_MODIFIED",
+    "ERROR_METHOD_NOT_FOUND",
+    "LSPProtocolError",
+    "LSPRequestError",
+    "classify_message",
+    "encode_message",
+    "make_error_response",
+    "make_notification",
+    "make_request",
+    "make_response",
+    "read_message",
 ]

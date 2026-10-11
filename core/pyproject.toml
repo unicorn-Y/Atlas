@@ -32,7 +32,7 @@ dependencies = [
     # P18X upstream integrations (versions pinned for reproducible packaging).
     "cua-driver==0.34.1",
     "pywinauto==0.6.9",
-    "browser-use==0.13.10",
+    "browser-use==0.13.11",
     "dbos==3.2.0",
     "claude-agent-sdk==0.2.165",
     "agent-client-protocol==0.12.1",
@@ -48,8 +48,8 @@ dependencies = [
     "youtube-transcript-api>=1.2",
     # Aider-style tree-sitter repository map; versions follow Aider 5dc9490bb35f.
     "grep-ast==0.9.0",
-    "tree-sitter==0.25.2",
-    "tree-sitter-language-pack==0.13.0",
+    "tree-sitter==0.26.0",
+    "tree-sitter-language-pack==1.21.3",
 ]
 
 [project.optional-dependencies]

@@ -24,7 +24,7 @@ boto3==1.43.103
 botocore==1.43.103
 browser-harness==0.1.13
 browser-use-sdk==3.4.2
-browser-use==0.13.10
+browser-use==0.13.11
 bubus==1.5.6
 cdp-use==1.4.5
 certifi==2026.5.20
@@ -63,6 +63,7 @@ google-auth==2.48.0
 google-genai==1.65.0
 googleapis-common-protos==1.75.4
 greenlet==3.5.6
+grep-ast==0.9.0
 groq==1.0.0
 h11==0.16.0
 h2==4.4.1
@@ -180,7 +181,7 @@ rich==14.3.3
 rpds-py==2026.6.3
 rsa==4.9.1
 ruamel.yaml==0.18.16
-ruff==0.16.10
+ruff==0.17.0
 s3transfer==0.19.2
 screeninfo==0.8.1
 setuptools==84.0.0
@@ -202,10 +203,15 @@ termcolor==3.3.0
 tiktoken==0.14.0
 tld==0.13.2
 tokenizers==0.23.2
-tomli==2.4.1
+tomli==2.5.0
 tomli_w==1.2.0
 tqdm==4.70.1
 trafilatura==2.3.1
+tree-sitter-c-sharp==0.23.5
+tree-sitter-embedded-template==0.25.0
+tree-sitter-language-pack==1.21.3
+tree-sitter-yaml==0.7.2
+tree-sitter==0.26.0
 truststore==0.10.4
 typer==0.27.2
 typing-inspection==0.4.4
