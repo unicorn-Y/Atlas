@@ -29,6 +29,19 @@ from atlas.api.local_models_router import router as local_models_router
 from atlas.api.memory_router import router as memory_router
 from atlas.api.models_settings_router import router as models_settings_router
 from atlas.api.plugins_router import router as plugins_router
+from atlas.api.recipes_router import router as recipe_templates_router
+from atlas.api.extension_packages_router import router as extension_packages_router
+from atlas.api.settings_export_router import router as settings_export_router
+from atlas.api.diagnostics_router import router as diagnostics_router
+from atlas.api.external_history_router import router as external_history_router
+from atlas.api.workspace_trust_settings_router import router as workspace_trust_settings_router
+from atlas.api.run_limits_router import router as run_limits_router
+from atlas.api.network_settings_router import router as network_settings_router
+from atlas.api.hook_trust_router import router as hook_trust_router
+from atlas.api.linear_integration_router import router as linear_integration_router
+from atlas.api.mcp_resources_router import router as mcp_resources_router
+from atlas.api.model_catalog_preferences_router import router as model_catalog_preferences_router
+from atlas.api.output_style_settings_router import router as output_style_settings_router
 from atlas.api.projects_router import router as projects_router
 from atlas.api.records_router import router as records_router
 from atlas.api.runtime import RuntimeManager
@@ -92,6 +105,19 @@ def create_app(
         memory_router,
         models_settings_router,
         plugins_router,
+        recipe_templates_router,
+        extension_packages_router,
+        settings_export_router,
+        diagnostics_router,
+        external_history_router,
+        workspace_trust_settings_router,
+        run_limits_router,
+        network_settings_router,
+        hook_trust_router,
+        linear_integration_router,
+        mcp_resources_router,
+        model_catalog_preferences_router,
+        output_style_settings_router,
         projects_router,
         records_router,
         skills_router,

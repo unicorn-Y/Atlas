@@ -22,6 +22,30 @@ export interface SourceUpdateStatus {
   error?: string;
 }
 
+export type AtlasSettingsSection =
+  | 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels'
+  | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp'
+  | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'telemetry' | 'security' | 'commands' | 'platform' | 'integrations' | 'network';
+
+export type AtlasDeepLink =
+  | { id: string; type: 'conversation'; conversationId: string }
+  | { id: string; type: 'settings'; section: AtlasSettingsSection };
+
+export type PlatformEditorId =
+  | 'vscode' | 'idea' | 'pycharm' | 'webstorm' | 'goland' | 'rider'
+  | 'clion' | 'phpstorm' | 'rubymine' | 'datagrip';
+
+export interface GlobalShortcutState {
+  accelerator: string | null;
+  registered: boolean;
+  error?: string;
+}
+
+export interface PlatformSettingsState {
+  alwaysOnTop: boolean;
+  globalShortcut: GlobalShortcutState;
+}
+
 export interface AtlasDesktopApi {
   platform: string;
   apiBaseUrl: string;
@@ -40,6 +64,16 @@ export interface AtlasDesktopApi {
   checkForUpdate?(): Promise<SourceUpdateStatus>;
   /** Source mode only: quit, pull, rebuild and relaunch. Resolves false when not possible. */
   applyUpdate?(): Promise<boolean>;
+  /** Read native platform preferences and global shortcut registration state. */
+  getPlatformSettings?(): Promise<PlatformSettingsState>;
+  /** Persist and apply the native window's always-on-top state. */
+  setAlwaysOnTop?(enabled: boolean): Promise<PlatformSettingsState>;
+  /** Register a single OS-wide show/focus shortcut, or clear it with null. */
+  setGlobalShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
+  /** Open an existing local workspace with a fixed allowlisted IDE CLI (never through a shell). */
+  openWorkspaceInEditor?(editor: PlatformEditorId, workspacePath: string): Promise<void>;
+  /** Receive validated atlas://conversation/<id> or atlas://settings/<section> routes. */
+  onDeepLink?(callback: (route: AtlasDeepLink) => void): () => void;
   /** Backend startup progress (H8 §10.3): fires during boot; `ready`/`failed` are terminal. */
   onBackendStartupProgress(callback: (progress: BackendStartupProgress) => void): () => void;
 }

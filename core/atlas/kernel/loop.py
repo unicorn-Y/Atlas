@@ -243,7 +243,7 @@ class AtlasKernel:
         active_call_ids: set[str] = set()
         open_call_ids: set[str] = set()
 
-        from atlas.config import get_config
+        from atlas.config import get_config, load_user_settings
         from atlas.logs import LOG_DIR, append_run_event
 
         app_config = get_config()
@@ -608,7 +608,17 @@ class AtlasKernel:
 
             proxy_runtime.kernel_usage_budget = usage_budget
             proxy_runtime.workflow_usage_callback = record_workflow_usage
-            max_turns = max(1, min(int(engine_config.get("max_turns", 64)), 256))
+            engine_max_turns = max(1, min(int(engine_config.get("max_turns", 64)), 256))
+            run_limits = load_user_settings().get("run_limits")
+            user_max_turns = run_limits.get("max_turns") if isinstance(run_limits, dict) else None
+            if (
+                isinstance(user_max_turns, int)
+                and not isinstance(user_max_turns, bool)
+                and 1 <= user_max_turns <= 256
+            ):
+                max_turns = min(engine_max_turns, user_max_turns)
+            else:
+                max_turns = engine_max_turns
             final_response = ""
             steer_target = _SteerTarget()
             steer_messages: list[str] = []

@@ -211,11 +211,23 @@ function HubPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   </section>;
 }
 
+// Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: packages/ui/src/settings/PluginsSection.tsx (Apache-2.0)
+// Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: packages/ui/src/settings/PluginStoreListView.tsx (Apache-2.0)
+// Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: packages/ui/src/settings/PluginStoreDetailView.tsx (Apache-2.0)
+// Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: packages/ui/src/settings/PluginStoreSourcesDialog.tsx (Apache-2.0)
 interface Plugin {
   name: string;
   display_name?: string;
   version: string;
   description?: string;
+  author?: string | Record<string, unknown>;
+  homepage?: string;
+  repository?: string;
+  license?: string;
+  keywords?: string[];
+  metadata?: Record<string, unknown>;
+  manifest?: string | null;
+  path?: string;
   source?: string;
   marketplace?: string | null;
   enabled: boolean;
@@ -226,6 +238,27 @@ interface Plugin {
   agents?: string[];
   hooks?: number;
   mcp_servers?: string[];
+}
+
+interface PluginMarketplace {
+  name?: string;
+  type?: string;
+  source?: string;
+  path?: string;
+}
+
+interface MarketplacePluginEntry {
+  name?: string;
+  displayName?: string;
+  description?: string;
+  version?: string;
+  author?: string | Record<string, unknown>;
+  category?: string;
+  keywords?: string[];
+  source?: string | Record<string, unknown>;
+  homepage?: string;
+  repository?: string;
+  license?: string;
 }
 
 interface ReloadReport { loaded?: string[]; skipped?: Array<{ name?: string; reason?: string }>; errors?: Record<string, string> }
@@ -247,14 +280,43 @@ const SOURCE_LABEL: Record<string, string> = { local: '本地', git: 'git', mark
 
 export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [marketplaces, setMarketplaces] = useState<Array<{ name?: string; type?: string; source?: string; path?: string }>>([]);
+  const [marketplaces, setMarketplaces] = useState<PluginMarketplace[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [marketplaceError, setMarketplaceError] = useState<string | null>(null);
+  const [marketplaceStatuses, setMarketplaceStatuses] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [source, setSource] = useState('');
+  const [sourceRef, setSourceRef] = useState('');
   const [marketSource, setMarketSource] = useState('');
+  const [marketSourceRef, setMarketSourceRef] = useState('');
+  const [pluginQuery, setPluginQuery] = useState('');
+  const [pluginStatus, setPluginStatus] = useState<'all' | 'enabled' | 'disabled' | 'updates' | 'loaded'>('all');
+  const [marketplaceQuery, setMarketplaceQuery] = useState('');
+  const [marketPluginQuery, setMarketPluginQuery] = useState('');
   const [confirmRemove, setConfirmRemove] = useState('');
-  const [browsing, setBrowsing] = useState<{ name: string; entries: Array<{ name?: string; description?: string }> } | null>(null);
+  const [browsing, setBrowsing] = useState<{ name: string; entries: MarketplacePluginEntry[] } | null>(null);
+
+  const authorText = (author: Plugin['author']): string => {
+    if (typeof author === 'string') return author;
+    if (!author || typeof author !== 'object') return '';
+    const name = author.name;
+    return typeof name === 'string' ? name : JSON.stringify(author) ?? '[作者信息]';
+  };
+  const valueText = (value: unknown): string => {
+    if (typeof value === 'string') return value;
+    if (value === undefined || value === null) return '';
+    return JSON.stringify(value) ?? String(value);
+  };
+  const safeExternalUrl = (value?: string): string | null => {
+    if (!value) return null;
+    try {
+      const url = new URL(value);
+      return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+    } catch {
+      return null;
+    }
+  };
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -264,8 +326,15 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
         fetch(`${apiBaseUrl}/api/plugin-marketplaces`).catch(() => null),
       ]);
       if (!pluginsResponse.ok) throw new Error(`HTTP ${pluginsResponse.status}`);
-      setPlugins((await pluginsResponse.json()).plugins);
-      if (marketResponse?.ok) setMarketplaces((await marketResponse.json()).marketplaces);
+      const pluginBody = await pluginsResponse.json();
+      setPlugins(Array.isArray(pluginBody.plugins) ? pluginBody.plugins : []);
+      if (marketResponse?.ok) {
+        const marketBody = await marketResponse.json();
+        setMarketplaces(Array.isArray(marketBody.marketplaces) ? marketBody.marketplaces : []);
+        setMarketplaceError(null);
+      } else {
+        setMarketplaceError(marketResponse ? `HTTP ${marketResponse.status}` : '无法连接插件市场接口');
+      }
       setError(null);
     } catch (exc) {
       setError(String(exc));
@@ -277,25 +346,28 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   useEffect(() => { void refresh(); }, [refresh]);
 
   /** Shared wrapper for every button action; shows the reload report in plain Chinese. */
-  const act = async (input: RequestInfo, init?: RequestInit, done?: string) => {
+  const act = async (input: RequestInfo, init?: RequestInit, done?: string | ((body: Record<string, unknown>) => string)): Promise<boolean> => {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const response = await fetch(input, init);
       if (!response.ok) throw new Error(await response.json().then((body) => body?.detail).catch(() => `HTTP ${response.status}`));
-      const body = await response.json().catch(() => ({}));
-      const detail = reportText(body?.report);
-      setNotice([done, detail].filter(Boolean).join('。') || '已完成');
+      const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+      const detail = reportText(body.report as ReloadReport | undefined);
+      const doneMessage = typeof done === 'function' ? done(body) : done;
+      setNotice([doneMessage, detail].filter(Boolean).join('。') || '已完成');
       setConfirmRemove('');
       await refresh();
+      return true;
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : String(exc));
+      return false;
     } finally {
       setBusy(false);
     }
   };
-  const post = (path: string, body?: unknown) => act(`${apiBaseUrl}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const post = (path: string, body?: unknown, done?: string | ((body: Record<string, unknown>) => string)) => act(`${apiBaseUrl}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }, done);
 
   const browse = async (name: string) => {
     setBusy(true);
@@ -312,6 +384,36 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
     }
   };
 
+  const normalizedPluginQuery = pluginQuery.trim().toLocaleLowerCase();
+  const visiblePlugins = plugins.filter((plugin) => {
+    if (pluginStatus === 'enabled' && !plugin.enabled) return false;
+    if (pluginStatus === 'disabled' && plugin.enabled) return false;
+    if (pluginStatus === 'updates' && !plugin.update_available) return false;
+    if (pluginStatus === 'loaded' && !plugin.loaded) return false;
+    if (!normalizedPluginQuery) return true;
+    const text = [
+      plugin.name, plugin.display_name, plugin.description, authorText(plugin.author),
+      plugin.version, plugin.source, plugin.marketplace, plugin.path, plugin.manifest,
+      plugin.repository, plugin.homepage, plugin.license, ...(plugin.keywords ?? []),
+      ...(plugin.skills ?? []), ...(plugin.commands ?? []), ...(plugin.agents ?? []),
+      ...(plugin.mcp_servers ?? []), valueText(plugin.metadata),
+    ].filter(Boolean).join(' ').toLocaleLowerCase();
+    return text.includes(normalizedPluginQuery);
+  });
+  const visibleMarketplaces = marketplaces.filter((market) => {
+    const query = marketplaceQuery.trim().toLocaleLowerCase();
+    return !query || [market.name, market.source, market.path, market.type].filter(Boolean)
+      .join(' ').toLocaleLowerCase().includes(query);
+  });
+  const visibleMarketEntries = (browsing?.entries ?? []).filter((entry) => {
+    const query = marketPluginQuery.trim().toLocaleLowerCase();
+    const text = [entry.name, entry.displayName, entry.description, entry.version,
+      authorText(entry.author), entry.category, ...(entry.keywords ?? []),
+      valueText(entry.source), entry.homepage, entry.repository, entry.license]
+      .filter(Boolean).join(' ').toLocaleLowerCase();
+    return !query || text.includes(query);
+  });
+
   return <section className={styles.settingsCard} aria-label="插件管理">
     <header className={styles.settingsCardHeading}>
       <h2>插件</h2>
@@ -322,26 +424,42 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
     <form className={styles.settingsForm} onSubmit={async (event) => {
       event.preventDefault();
       if (!source.trim()) return;
-      await post('/api/plugins/install', { source: source.trim() });
-      setSource('');
+      const installed = await post('/api/plugins/install', { source: source.trim(), ref: sourceRef.trim() || undefined });
+      if (installed) { setSource(''); setSourceRef(''); }
     }}>
       <label>从哪里安装
-        <input placeholder="本地目录路径、git 地址，或 用户名/仓库" value={source} onChange={(e) => setSource(e.target.value)} />
+        <input aria-label="插件来源" placeholder="本地目录路径、git 地址，或 用户名/仓库" value={source} onChange={(e) => setSource(e.target.value)} />
       </label>
-      <p style={{ margin: 0, fontSize: 12.5 }}>本地目录要装 Claude Code 插件的格式（带 plugin.json）；git 地址或「用户名/仓库」会自动克隆安装。填一个 marketplace 仓库则注册为插件市场。</p>
+      <label>分支或标签（可选）
+        <input aria-label="插件分支或标签" placeholder="默认使用仓库默认分支" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} />
+      </label>
+      <p style={{ margin: 0, fontSize: 12.5 }}>支持 Claude Code 的 .claude-plugin/plugin.json、根目录 plugin.json 插件包、git 地址或「用户名/仓库」。Codex 专属 .codex-plugin/plugin.json 回退清单尚不支持；填 marketplace 仓库会注册为插件市场。</p>
       <button className={styles.settingsAction} disabled={busy || !source.trim()}>安装</button>
     </form>
-    {plugins.length === 0 && !busy && <p>还没有插件。装一个，或者把含 plugin.json 的目录放进 plugins/ 文件夹。</p>}
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end', margin: '10px 0' }}>
+      <label style={{ flex: '1 1 220px' }}>搜索插件
+        <input aria-label="搜索已安装插件" placeholder="名称、说明、作者、来源或组件" value={pluginQuery} onChange={(e) => setPluginQuery(e.target.value)} />
+      </label>
+      <label>状态
+        <select aria-label="按插件状态筛选" value={pluginStatus} onChange={(e) => setPluginStatus(e.target.value as typeof pluginStatus)}>
+          <option value="all">全部（{plugins.length}）</option>
+          <option value="enabled">已启用</option>
+          <option value="disabled">已停用</option>
+          <option value="updates">有更新</option>
+          <option value="loaded">已加载</option>
+        </select>
+      </label>
+    </div>
+    {plugins.length === 0 && !busy && <p>还没有插件。可安装插件目录或 git 来源，也可以从已添加的市场安装。</p>}
+    {plugins.length > 0 && visiblePlugins.length === 0 && <p>没有符合当前搜索和状态筛选的插件。</p>}
     <ul>
-      {plugins.map((plugin) => (
+      {visiblePlugins.map((plugin) => (
         <li key={plugin.name}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <strong>{plugin.display_name || plugin.name}</strong> <small>v{plugin.version} · {SOURCE_LABEL[plugin.source ?? ''] ?? plugin.source ?? '本地'}{plugin.marketplace ? ` · ${plugin.marketplace}` : ''}{plugin.loaded ? ' · 已加载' : ''}{plugin.update_available ? ' · 有新版本' : ''}</small>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ flex: '1 1 240px', minWidth: 0 }}>
+              <strong>{plugin.display_name || plugin.name}</strong> <small>v{plugin.version} · {SOURCE_LABEL[plugin.source ?? ''] ?? plugin.source ?? '本地'}{plugin.marketplace ? ` · ${plugin.marketplace}` : ''} · {plugin.enabled ? '已启用' : '已停用'} · {plugin.loaded ? '已加载' : '未加载'}{plugin.update_available ? ' · 有更新' : ''}</small>
               {plugin.description && <div><small>{plugin.description}</small></div>}
-              {(plugin.skills?.length || plugin.commands?.length || plugin.agents?.length || plugin.mcp_servers?.length || plugin.hooks) && (
-                <div><small>技能 {plugin.skills?.length ?? 0} · 命令 {plugin.commands?.length ?? 0} · Agent {plugin.agents?.length ?? 0} · Hook {plugin.hooks ?? 0} · MCP {plugin.mcp_servers?.length ?? 0}</small></div>
-              )}
+              <div><small>技能 {plugin.skills?.length ?? 0} · 命令 {plugin.commands?.length ?? 0} · Agent {plugin.agents?.length ?? 0} · Hook {plugin.hooks ?? 0} · MCP {plugin.mcp_servers?.length ?? 0}</small></div>
             </span>
             <button className={styles.quietButton} onClick={() => void post(`/api/plugins/${encodeURIComponent(plugin.name)}/enabled`, { enabled: !plugin.enabled })} disabled={busy}>
               {plugin.enabled ? '停用' : '启用'}
@@ -355,28 +473,52 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
               {confirmRemove === plugin.name ? '确认卸载' : '卸载'}
             </button>
           </div>
+          <details style={{ margin: '6px 0 0' }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12.5 }}>查看详情与已注册组件</summary>
+            <div style={{ display: 'grid', gap: 4, padding: '8px 0 0', fontSize: 12.5 }}>
+              {authorText(plugin.author) && <div>作者：{authorText(plugin.author)}</div>}
+              {plugin.homepage && <div>主页：{safeExternalUrl(plugin.homepage) ? <a href={safeExternalUrl(plugin.homepage) ?? undefined} target="_blank" rel="noreferrer">{plugin.homepage}</a> : <code>{plugin.homepage}</code>}</div>}
+              {plugin.repository && <div>仓库：{plugin.repository}</div>}
+              {plugin.license && <div>许可证：{plugin.license}</div>}
+              {plugin.path && <div>安装路径：<code>{plugin.path}</code></div>}
+              {plugin.manifest && <div>清单：<code>{plugin.manifest}</code></div>}
+              {plugin.keywords?.length ? <div>关键词：{plugin.keywords.join('、')}</div> : null}
+              {plugin.skills?.length ? <div>技能：{plugin.skills.join('、')}</div> : null}
+              {plugin.commands?.length ? <div>命令：{plugin.commands.join('、')}</div> : null}
+              {plugin.agents?.length ? <div>Agent：{plugin.agents.join('、')}</div> : null}
+              {plugin.mcp_servers?.length ? <div>MCP：{plugin.mcp_servers.join('、')}</div> : null}
+              {plugin.metadata && Object.keys(plugin.metadata).length > 0 && <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>插件元数据：{JSON.stringify(plugin.metadata, null, 2)}</pre>}
+            </div>
+          </details>
         </li>
       ))}
     </ul>
 
     <h2 style={{ marginTop: 18 }}>插件市场</h2>
-    <p style={{ margin: '0 0 10px', fontSize: 13 }}>市场是一次性加进来的一批插件目录。添加后可以浏览里面的插件并逐个安装。</p>
+    <p style={{ margin: '0 0 10px', fontSize: 13 }}>市场是按来源添加的一批插件目录。可浏览条目并逐个安装。</p>
     <form className={styles.settingsForm} onSubmit={async (event) => {
       event.preventDefault();
       if (!marketSource.trim()) return;
-      await post('/api/plugin-marketplaces', { source: marketSource.trim() });
-      setMarketSource('');
-      setNotice('插件市场已添加');
+      const added = await post('/api/plugin-marketplaces', { source: marketSource.trim(), ref: marketSourceRef.trim() || undefined });
+      if (added) { setMarketSource(''); setMarketSourceRef(''); setNotice('插件市场已添加'); }
     }}>
       <label>市场来源
-        <input placeholder="本地路径或 git 地址（仓库里要有 marketplace.json）" value={marketSource} onChange={(e) => setMarketSource(e.target.value)} />
+        <input aria-label="插件市场来源" placeholder="本地路径或 git 地址（仓库里要有 marketplace.json）" value={marketSource} onChange={(e) => setMarketSource(e.target.value)} />
+      </label>
+      <label>分支或标签（可选）
+        <input aria-label="插件市场分支或标签" placeholder="默认使用仓库默认分支" value={marketSourceRef} onChange={(e) => setMarketSourceRef(e.target.value)} />
       </label>
       <button className={styles.settingsAction} disabled={busy || !marketSource.trim()}>添加市场</button>
     </form>
-    {marketplaces.length > 0 && <ul>
-      {marketplaces.map((market) => (
+    {marketplaceError && <p className={styles.settingsError} role="alert">无法读取插件市场：{marketplaceError}</p>}
+    {marketplaces.length > 0 && <label style={{ display: 'block', margin: '10px 0' }}>搜索市场来源
+      <input aria-label="搜索插件市场来源" placeholder="名称、类型、来源路径" value={marketplaceQuery} onChange={(e) => setMarketplaceQuery(e.target.value)} />
+    </label>}
+    {marketplaces.length > 0 && visibleMarketplaces.length === 0 && <p>没有符合搜索条件的市场来源。</p>}
+    {visibleMarketplaces.length > 0 && <ul>
+      {visibleMarketplaces.map((market) => (
         <li key={market.name ?? market.path}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ flex: 1, minWidth: 0 }}>
               <strong>{market.name ?? '未命名市场'}</strong> <small>{market.type === 'git' ? 'git' : '本地'}{market.source ? ` · ${market.source}` : ''}</small>
             </span>
@@ -384,24 +526,64 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
               onClick={() => { if (browsing?.name === market.name) setBrowsing(null); else void browse(market.name ?? ''); }}>
               {browsing?.name === market.name ? '收起' : '浏览'}
             </button>
+            {market.type === 'git' && <button className={styles.quietButton} disabled={busy || !market.name}
+              onClick={() => {
+                const name = market.name;
+                if (!name) return;
+                void post(`/api/plugin-marketplaces/${encodeURIComponent(name)}/update`, undefined, (body) => {
+                  const status = body.updated === true ? '已更新' : '未更新';
+                  setMarketplaceStatuses((current) => ({ ...current, [name]: status }));
+                  return body.updated === true ? '插件市场已更新' : '插件市场无需更新';
+                });
+              }}>
+              更新来源
+            </button>}
           </div>
+          <small role="status">{marketplaceStatuses[market.name ?? ''] ?? (market.type === 'git' ? 'git 来源，尚未更新' : '本地来源，无需更新')}</small>
+          <details style={{ margin: '4px 0 0' }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12.5 }}>查看市场来源详情</summary>
+            <div style={{ display: 'grid', gap: 4, padding: '6px 0', fontSize: 12.5 }}>
+              {market.source && <div>来源：<code>{market.source}</code></div>}
+              {market.path && <div>目录：<code>{market.path}</code></div>}
+              <div>类型：{market.type === 'git' ? 'git' : '本地'}</div>
+            </div>
+          </details>
           {browsing && browsing.name === market.name && (browsing.entries.length ? (
-            <ul style={{ margin: '8px 0 0' }}>
-              {browsing.entries.map((entry, index) => (
+            <div style={{ margin: '8px 0 0' }}>
+              <label style={{ display: 'block', margin: '8px 0' }}>搜索市场插件
+                <input aria-label="搜索当前市场插件" placeholder="名称、说明、作者或关键词" value={marketPluginQuery} onChange={(e) => setMarketPluginQuery(e.target.value)} />
+              </label>
+              {visibleMarketEntries.length === 0 ? <p>没有符合搜索条件的插件。</p> : <ul>
+              {visibleMarketEntries.map((entry, index) => {
+                const installed = plugins.some((plugin) => plugin.name === entry.name);
+                return (
                 <li key={entry.name ?? index}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <strong>{entry.name ?? '未命名插件'}</strong>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ flex: '1 1 240px', minWidth: 0 }}>
+                      <strong>{entry.displayName ?? entry.name ?? '未命名插件'}</strong> <small>{entry.version ? `v${entry.version} · ` : ''}{installed ? '已安装' : '未安装'}</small>
                       {entry.description && <div><small>{entry.description}</small></div>}
+                      {entry.category && <div><small>分类：{entry.category}</small></div>}
                     </span>
-                    <button className={styles.quietButton} disabled={busy || !entry.name}
+                    <button className={styles.quietButton} disabled={busy || !entry.name || installed}
                       onClick={() => void post(`/api/plugin-marketplaces/${encodeURIComponent(market.name ?? '')}/install`, { plugin: entry.name })}>
-                      安装
+                      {installed ? '已安装' : '安装'}
                     </button>
                   </div>
+                  <details style={{ margin: '4px 0 0' }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 12.5 }}>查看市场条目详情</summary>
+                    <div style={{ display: 'grid', gap: 4, padding: '6px 0', fontSize: 12.5 }}>
+                      {authorText(entry.author) && <div>作者：{authorText(entry.author)}</div>}
+                      {entry.homepage && <div>主页：{safeExternalUrl(entry.homepage) ? <a href={safeExternalUrl(entry.homepage) ?? undefined} target="_blank" rel="noreferrer">{entry.homepage}</a> : <code>{entry.homepage}</code>}</div>}
+                      {entry.repository && <div>仓库：{entry.repository}</div>}
+                      {entry.license && <div>许可证：{entry.license}</div>}
+                      {entry.keywords?.length ? <div>关键词：{entry.keywords.join('、')}</div> : null}
+                      {entry.source && <div>安装来源：<code>{valueText(entry.source)}</code></div>}
+                    </div>
+                  </details>
                 </li>
-              ))}
-            </ul>
+              ); })}
+              </ul>}
+            </div>
           ) : <small style={{ display: 'block', marginTop: 6 }}>这个市场里还没有列出插件。</small>)}
         </li>
       ))}

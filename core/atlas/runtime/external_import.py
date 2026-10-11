@@ -13,18 +13,22 @@ on the Atlas side through the existing persistence layers:
 - commands   -> ``<data_root>/data/commands/<rel>.md`` (atlas/runtime/commands.py)
 - agents     -> ``<data_root>/data/agents/<name>.md`` (atlas/agent/definitions.py)
 - model prefs-> user settings key ``selected_model`` via save_user_settings
-- history    -> listed read-only, never imported
+- history    -> session counts in this legacy manifest; visible text turns are
+                selected and imported by ``atlas.api.external_history_router``
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
+import tempfile
 import tomllib
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -49,6 +53,17 @@ _KIND_LABELS = {
     "model_prefs": "模型偏好", "history": "历史",
 }
 _KIND_ORDER = ("mcp", "hooks", "rules", "skills", "agents", "commands", "model_prefs", "history")
+
+# History import is deliberately narrower than extension import: only text
+# turns from Claude Code project transcripts and Codex rollout transcripts are
+# considered. Source paths never cross the API boundary; session keys are
+# opaque hashes of root-relative paths.
+_HISTORY_MAX_RESULTS = 500
+_HISTORY_MAX_DISCOVERED = 10_000
+_HISTORY_MAX_FILE_BYTES = 32 * 1024 * 1024
+_HISTORY_MAX_RECORDS = 50_000
+_HISTORY_PREVIEW_CHARS = 320
+_HISTORY_INDEX_PATH = DATA_ROOT / "data" / "external-history-imports.json"
 
 
 # ---------------------------------------------------------------------------
@@ -379,12 +394,13 @@ def _scan_claude(home: Path, ws: Path | None,
     if model_item:
         items.append(model_item)
 
-    # History: read-only listing, never imported
+    # Legacy count only. Selectable transcript import is handled by the
+    # dedicated external-history endpoints, which do not expose source paths.
     history_root = user / "projects"
     if history_root.is_dir():
         count = sum(1 for _ in history_root.rglob("*.jsonl"))
         items.append(_item("history", f"Claude 会话历史（{count} 条）", history_root, "skip",
-                           detail="只读历史，不导入"))
+                           detail="请在下方逐条预览并选择可导入的文本会话"))
 
     items.sort(key=lambda item: _KIND_ORDER.index(item["kind"]))
     return items, _claude_roots(home, ws)
@@ -442,14 +458,368 @@ def _scan_codex(home: Path, ws: Path | None,
     if sessions.is_dir():
         count = sum(1 for _ in sessions.rglob("*.jsonl"))
         items.append(_item("history", f"Codex 会话历史（{count} 条）", sessions, "skip",
-                           detail="只读历史，不导入"))
+                           detail="请在下方逐条预览并选择可导入的文本会话"))
     history_file = user / "history.jsonl"
     if history_file.is_file():
         items.append(_item("history", "Codex 命令历史（history.jsonl）", history_file, "skip",
-                           detail="只读历史，不导入"))
+                           detail="Codex 输入命令历史不是会话转录，不导入"))
 
     items.sort(key=lambda item: _KIND_ORDER.index(item["kind"]))
     return items, _codex_roots(home)
+
+
+# ---------------------------------------------------------------------------
+# Read-only transcript discovery for the dedicated external-history API
+# ---------------------------------------------------------------------------
+
+def _history_roots(source: str) -> tuple[Path, ...]:
+    if source == "claude":
+        config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+        configured = Path(config_dir).expanduser() if config_dir else Path.home() / ".claude"
+        if not configured.is_absolute():
+            configured = Path.home() / ".claude"
+        return (configured / "projects",)
+    if source == "codex":
+        codex_home = os.environ.get("CODEX_HOME")
+        home = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
+        return home / "sessions", home / "archived_sessions"
+    raise ValueError(f"source must be one of {SOURCES}: got {source!r}")
+
+
+def _is_history_link(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    is_junction = getattr(path, "is_junction", None)
+    return bool(is_junction and is_junction())
+
+
+def _history_files(
+    root: Path, source: str, *, cutoff: float | None = None,
+) -> tuple[list[tuple[Path, int, float]], int, bool]:
+    """Return recent regular JSONL files strictly beneath the recognized root."""
+    if _is_history_link(root) or (
+        source == "claude" and _is_history_link(root.parent)
+    ) or (
+        source == "codex" and not os.environ.get("CODEX_HOME") and _is_history_link(root.parent)
+    ):
+        return [], 0, False
+    try:
+        resolved_root = root.resolve(strict=True)
+    except OSError:
+        return [], 0, False
+    if not resolved_root.is_dir():
+        return [], 0, False
+
+    candidates: list[tuple[Path, int, float]] = []
+    discovered = 0
+    reached_cap = False
+    visited_dirs = {resolved_root}
+    for current, dirnames, filenames in os.walk(resolved_root, topdown=True, followlinks=False):
+        base = Path(current)
+        safe_dirs: list[str] = []
+        for name in sorted(dirnames):
+            child = base / name
+            if name.lower() in {"subagents", "tool-results"} or _is_history_link(child):
+                continue
+            try:
+                resolved_child = child.resolve(strict=True)
+                resolved_child.relative_to(resolved_root)
+            except (OSError, ValueError):
+                continue
+            if resolved_child in visited_dirs:
+                continue
+            visited_dirs.add(resolved_child)
+            safe_dirs.append(name)
+        dirnames[:] = safe_dirs
+        for filename in filenames:
+            if not filename.lower().endswith(".jsonl"):
+                continue
+            path = base / filename
+            try:
+                if _is_history_link(path):
+                    continue
+                stat = path.stat()
+                path.resolve(strict=True).relative_to(resolved_root)
+            except (OSError, ValueError):
+                continue
+            if not path.is_file():
+                continue
+            if cutoff is not None and stat.st_mtime < cutoff:
+                continue
+            discovered += 1
+            candidates.append((path, stat.st_size, stat.st_mtime))
+            if discovered >= _HISTORY_MAX_DISCOVERED:
+                reached_cap = True
+                break
+        if reached_cap:
+            break
+
+    candidates.sort(key=lambda item: (-item[2], item[0].as_posix()))
+    return candidates[:_HISTORY_MAX_RESULTS], discovered, reached_cap or discovered > _HISTORY_MAX_RESULTS
+
+
+def _text_from_blocks(value: Any, *, codex: bool = False) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if not isinstance(value, list):
+        return ""
+    allowed = {"text", "input_text", "output_text"} if codex else {"text"}
+    parts = [
+        str(block.get("text") or "")
+        for block in value
+        if isinstance(block, dict) and block.get("type") in allowed
+        and isinstance(block.get("text"), str)
+    ]
+    return "\n".join(part for part in parts if part.strip()).strip()
+
+
+def _timestamp(value: Any) -> str | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value, UTC).isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str) and value.strip():
+        raw = value.strip()
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return parsed.astimezone(UTC).isoformat() if parsed.tzinfo else parsed.replace(tzinfo=UTC).isoformat()
+        except ValueError:
+            return None
+    return None
+
+
+def _append_transcript_message(
+    messages: list[dict[str, str]], source: str, session_key: str, role: Any,
+    content: Any, timestamp_value: Any, source_id: Any, occurrences: dict[str, int],
+    sequence: int,
+) -> None:
+    if role not in {"user", "assistant"}:
+        return
+    text = _text_from_blocks(content, codex=source == "codex")
+    if not text:
+        return
+    timestamp = _timestamp(timestamp_value)
+    identity = str(source_id or "")
+    basis = identity or f"{role}\0{timestamp or ''}\0{text}"
+    occurrence = occurrences.get(basis, 0)
+    occurrences[basis] = occurrence + 1
+    message_key = hashlib.sha256(
+        f"{session_key}\0{basis}\0{occurrence}".encode("utf-8", errors="replace")
+    ).hexdigest()
+    message: dict[str, str] = {
+        "role": str(role), "content": text,
+        "external_message_key": message_key,
+        "_sequence": str(sequence),
+    }
+    if timestamp:
+        message["timestamp"] = timestamp
+    messages.append(message)
+
+
+def _parse_history_file(source: str, root: Path, path: Path, size: int, modified: float) -> dict[str, Any] | None:
+    if size < 0 or size > _HISTORY_MAX_FILE_BYTES:
+        return None
+    try:
+        resolved_root = root.resolve(strict=True)
+        resolved_path = path.resolve(strict=True)
+        relative = resolved_path.relative_to(resolved_root).as_posix()
+        file_stat = resolved_path.stat()
+        if _is_history_link(path) or file_stat.st_size != size or size > _HISTORY_MAX_FILE_BYTES:
+            return None
+    except (OSError, ValueError):
+        return None
+    session_key = hashlib.sha256(f"{source}\0{root.name}\0{relative}".encode("utf-8")).hexdigest()
+    messages: list[dict[str, str]] = []
+    codex_user_fallbacks: list[tuple[Any, Any, Any]] = []
+    occurrences: dict[str, int] = {}
+    title = ""
+    records = 0
+    try:
+        with resolved_path.open("r", encoding="utf-8", errors="replace") as stream:
+            for line in stream:
+                records += 1
+                if records > _HISTORY_MAX_RECORDS:
+                    return None
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                if source == "claude":
+                    record_type = row.get("type")
+                    if record_type in {"custom-title", "summary"} and not title:
+                        title = str(row.get("customTitle") or row.get("summary") or "").strip()
+                    if record_type not in {"user", "assistant"}:
+                        continue
+                    if row.get("isMeta") or row.get("isSidechain") or row.get("isCompactSummary"):
+                        continue
+                    if row.get("isVisibleInTranscript") is False:
+                        continue
+                    message = row.get("message")
+                    if not isinstance(message, dict):
+                        continue
+                    _append_transcript_message(
+                        messages, source, session_key, record_type,
+                        message.get("content"), row.get("timestamp") or message.get("timestamp"),
+                        row.get("uuid") or message.get("id"), occurrences, records,
+                    )
+                else:
+                    row_type = row.get("type")
+                    payload = row.get("payload")
+                    if not isinstance(payload, dict):
+                        continue
+                    if row_type == "session_meta":
+                        title = title or str(payload.get("title") or "").strip()
+                        continue
+                    if row_type == "response_item" and payload.get("type") == "message":
+                        channel = str(payload.get("channel") or "").lower()
+                        phase = str(payload.get("phase") or "").lower()
+                        if channel in {"analysis", "reasoning", "justify"} or phase in {"analysis", "commentary"}:
+                            continue
+                        _append_transcript_message(
+                            messages, source, session_key, payload.get("role"),
+                            payload.get("content"), payload.get("timestamp") or row.get("timestamp"),
+                            payload.get("id") or row.get("id"), occurrences, records,
+                        )
+                    elif row_type == "event_msg" and payload.get("type") == "user_message":
+                        # Newer rollouts also mirror user turns in event_msg. Use
+                        # this only when no response_item user message exists.
+                        fallback = payload.get("message")
+                        if isinstance(fallback, str) and fallback.strip():
+                            codex_user_fallbacks.append((
+                                fallback, payload.get("timestamp") or row.get("timestamp"),
+                                payload.get("id") or row.get("id"), records,
+                            ))
+    except OSError:
+        return None
+
+    if source == "codex" and not any(item["role"] == "user" for item in messages):
+        for content, timestamp_value, source_id, sequence in codex_user_fallbacks:
+            _append_transcript_message(
+                messages, source, session_key, "user", content,
+                timestamp_value, source_id, occurrences, sequence,
+            )
+        messages.sort(key=lambda item: int(item.get("_sequence") or 0))
+    for message in messages:
+        message.pop("_sequence", None)
+    if not messages:
+        return None
+
+    first_user = next((item["content"] for item in messages if item["role"] == "user"), "")
+    last_assistant = next((item["content"] for item in reversed(messages) if item["role"] == "assistant"), "")
+    if not title:
+        title = first_user or f"{source.title()} 会话"
+    title = re.sub(r"\s+", " ", title).strip()[:120] or f"{source.title()} 会话"
+    preview_parts = []
+    if first_user:
+        preview_parts.append(f"用户：{first_user}")
+    if last_assistant:
+        preview_parts.append(f"助手：{last_assistant}")
+    preview = "\n".join(preview_parts) or first_user or last_assistant
+    if len(preview) > _HISTORY_PREVIEW_CHARS:
+        preview = preview[:_HISTORY_PREVIEW_CHARS].rstrip() + "…"
+    try:
+        modified_at = datetime.fromtimestamp(modified, UTC).isoformat()
+    except (OverflowError, OSError, ValueError):
+        modified_at = ""
+    return {
+        "key": session_key, "title": title, "modified_at": modified_at,
+        "message_count": len(messages), "preview": preview, "messages": messages,
+    }
+
+
+def _history_index() -> dict[str, Any]:
+    try:
+        raw = json.loads(_HISTORY_INDEX_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"version": 1, "sessions": {}}
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("外部会话导入索引无法读取；为避免重复导入，未继续操作") from exc
+    if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("sessions"), dict):
+        raise ValueError("外部会话导入索引格式未知；为避免重复导入，未继续操作")
+    return {"version": 1, "sessions": raw["sessions"]}
+
+
+def _save_history_index(index: Mapping[str, Any]) -> None:
+    target = _HISTORY_INDEX_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=".external-history-", suffix=".tmp", dir=target.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            json.dump(index, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_name, target)
+    finally:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+
+
+def load_external_history(
+    source: str, *, max_age_days: int | None = None,
+) -> dict[str, Any]:
+    """Scan recognized local history roots and return summaries plus import data.
+
+    This helper is local-only: callers cannot supply an arbitrary root or file
+    path. The `messages` member is for the import route and must not be exposed
+    as part of the list response.
+    """
+    if max_age_days is not None and (
+        isinstance(max_age_days, bool) or max_age_days not in {7, 30, 90}
+    ):
+        raise ValueError("max_age_days must be 7, 30, 90, or None")
+    cutoff = (
+        datetime.now(UTC).timestamp() - max_age_days * 24 * 60 * 60
+        if max_age_days is not None else None
+    )
+    roots = _history_roots(source)
+    files: list[tuple[Path, Path, int, float]] = []
+    discovered = 0
+    truncated = False
+    for root in roots:
+        root_files, root_discovered, root_truncated = _history_files(root, source, cutoff=cutoff)
+        files.extend((root, path, size, modified) for path, size, modified in root_files)
+        discovered += root_discovered
+        truncated = truncated or root_truncated
+    files.sort(key=lambda item: (-item[3], item[1].as_posix()))
+    files = files[:_HISTORY_MAX_RESULTS]
+    sessions = []
+    unreadable = 0
+    for root, path, size, modified in files:
+        session = _parse_history_file(source, root, path, size, modified)
+        if session is None:
+            unreadable += 1
+            continue
+        sessions.append(session)
+    index = _history_index()["sessions"]
+    for session in sessions:
+        receipt = index.get(session["key"])
+        session["imported"] = bool(isinstance(receipt, dict) and receipt.get("completed"))
+    return {
+        "source": source,
+        "sessions": sessions,
+        "total_files": discovered,
+        "omitted_files": max(0, discovered - len(files)) + unreadable,
+        "truncated": truncated or discovered > len(files),
+    }
+
+
+def list_external_history(source: str, max_age_days: int | None = None) -> dict[str, Any]:
+    result = load_external_history(source, max_age_days=max_age_days)
+    return {
+        key: value for key, value in result.items()
+        if key != "sessions"
+    } | {
+        "sessions": [
+            {key: value for key, value in session.items() if key != "messages"}
+            for session in result["sessions"]
+        ],
+    }
 
 
 def _atlas_servers(config_path: Path) -> dict[str, Any]:

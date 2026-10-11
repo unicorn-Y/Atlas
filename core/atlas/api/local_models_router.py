@@ -18,11 +18,17 @@ router stays safe when mounted standalone (tests, tooling).
 """
 from __future__ import annotations
 
+import asyncio
+import json
+import uuid
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from atlas.api.app_services import AppServices
+from atlas.api.dependencies import get_app_services
 from atlas.engine.local_runtime_adapter import (
     LocalRuntimeAdapter,
     LocalRuntimeError,
@@ -32,6 +38,13 @@ from atlas.origin_guard import TOKEN_HEADER, is_trusted
 router = APIRouter(tags=["local-models"])
 
 _adapter = LocalRuntimeAdapter()
+
+# Ollama access is fixed to the local IPv4 loopback daemon. Callers cannot
+# provide a host, proxy, or redirect target.
+_OLLAMA_BASE = "http://127.0.0.1:11434"
+_OLLAMA_OPENAI_BASE = f"{_OLLAMA_BASE}/v1"
+_OLLAMA_PULL_JOBS: dict[str, dict[str, Any]] = {}
+_OLLAMA_PULL_TASKS: set[asyncio.Task[None]] = set()
 
 
 def get_adapter() -> LocalRuntimeAdapter:
@@ -85,12 +98,115 @@ class EjectBody(BaseModel):
     model_id: str
 
 
+class OllamaPullBody(BaseModel):
+    name: str
+
+
+class OllamaActivateBody(BaseModel):
+    name: str
+
+
 def _guard(fn, *args, **kwargs):
     """Run an adapter call, mapping LocalRuntimeError.status_code onto the HTTP error."""
     try:
         return fn(*args, **kwargs)
     except LocalRuntimeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+def _validate_ollama_name(value: str) -> str:
+    name = str(value or "").strip()
+    if not name or len(name) > 256 or any(ord(char) < 32 for char in name):
+        raise HTTPException(status_code=422, detail="Ollama 模型名不能为空且不得超过 256 个字符。")
+    return name
+
+
+async def _ollama_tags() -> list[dict[str, Any]]:
+    """Read installed tags from the fixed local Ollama API, without proxy/redirects."""
+    try:
+        async with httpx.AsyncClient(
+            trust_env=False,
+            follow_redirects=False,
+            timeout=httpx.Timeout(8.0, connect=3.0),
+        ) as client:
+            response = await client.get(f"{_OLLAMA_BASE}/api/tags")
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="无法连接本机 Ollama（127.0.0.1:11434）。") from exc
+    if response.is_redirect:
+        raise HTTPException(status_code=502, detail="本机 Ollama 返回重定向，已拒绝连接其他地址。")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=503, detail=f"本机 Ollama 返回 HTTP {response.status_code}。")
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="本机 Ollama 返回了无效 JSON。") from exc
+    rows = payload.get("models") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        raise HTTPException(status_code=502, detail="本机 Ollama 响应缺少 models 列表。")
+    return [row for row in rows if isinstance(row, dict) and isinstance(row.get("name") or row.get("model"), str)]
+
+
+def _safe_model_manager(services: AppServices) -> Any:
+    manager = services.model_mgr
+    if manager is None:
+        from atlas import server as atlas_server
+
+        manager = atlas_server.model_mgr
+    if manager is None:
+        raise HTTPException(status_code=503, detail="Atlas 模型路由当前不可用。")
+    return manager
+
+
+async def _run_ollama_pull(job_id: str, name: str) -> None:
+    job = _OLLAMA_PULL_JOBS[job_id]
+    job.update(status="connecting", detail="正在连接本机 Ollama…")
+    seen = False
+    try:
+        timeout = httpx.Timeout(180.0, connect=5.0, write=15.0, pool=5.0)
+        async with httpx.AsyncClient(
+            trust_env=False,
+            follow_redirects=False,
+            timeout=timeout,
+        ) as client:
+            async with client.stream(
+                "POST",
+                f"{_OLLAMA_BASE}/api/pull",
+                json={"name": name, "stream": True},
+            ) as response:
+                if response.is_redirect:
+                    raise RuntimeError("本机 Ollama 返回重定向，已拒绝连接其他地址。")
+                if response.status_code >= 400:
+                    await response.aread()
+                    raise RuntimeError(f"本机 Ollama 返回 HTTP {response.status_code}。")
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    seen = True
+                    try:
+                        event = json.loads(line)
+                    except ValueError as exc:
+                        raise RuntimeError("本机 Ollama 返回了无效下载进度。") from exc
+                    if not isinstance(event, dict):
+                        continue
+                    if event.get("error"):
+                        raise RuntimeError(str(event["error"])[:500])
+                    total = event.get("total")
+                    completed = event.get("completed")
+                    percent = None
+                    if isinstance(total, (int, float)) and total > 0 and isinstance(completed, (int, float)):
+                        percent = min(100, max(0, int(completed * 100 / total)))
+                    job.update(
+                        status="downloading",
+                        detail=str(event.get("status") or "正在下载")[:160],
+                        percent=percent,
+                        completed=completed if isinstance(completed, (int, float)) else None,
+                        total=total if isinstance(total, (int, float)) else None,
+                    )
+        if not seen:
+            raise RuntimeError("本机 Ollama 未返回下载结果。")
+        job.update(status="completed", detail="模型已下载。", percent=100)
+    except Exception as exc:  # noqa: BLE001 — report local daemon errors to the initiating UI
+        job.update(status="failed", detail=str(exc)[:500])
 
 
 # ── read models ──────────────────────────────────────────────
@@ -195,3 +311,106 @@ def local_models_eject(body: EjectBody, adapter: LocalRuntimeAdapter = Depends(g
 def local_models_diagnostics(job_id: str | None = None,
                              adapter: LocalRuntimeAdapter = Depends(get_adapter)):
     return _guard(adapter.diagnostics, job_id)
+
+
+# ── Ollama-local model discovery / pull / route registration ────────────────
+@router.get("/api/local/models/ollama/tags", dependencies=[Depends(_require_trusted_origin)])
+async def ollama_local_tags() -> dict[str, Any]:
+    """List models already installed in the default local Ollama instance."""
+    rows = await _ollama_tags()
+    return {
+        "models": [
+            {
+                "name": row.get("name") or row.get("model"),
+                "size": row.get("size"),
+                "modified_at": row.get("modified_at"),
+                "details": row.get("details") if isinstance(row.get("details"), dict) else {},
+            }
+            for row in rows
+        ],
+        "base_url": _OLLAMA_BASE,
+    }
+
+
+@router.post("/api/local/models/ollama/pull", dependencies=[Depends(_require_trusted_origin)])
+async def ollama_local_pull(body: OllamaPullBody) -> dict[str, str]:
+    """Start an explicit Ollama pull requested by the user; progress is polled by job id."""
+    name = _validate_ollama_name(body.name)
+    if any(
+        job.get("name") == name and job.get("status") in {"pending", "connecting", "downloading"}
+        for job in _OLLAMA_PULL_JOBS.values()
+    ):
+        raise HTTPException(status_code=409, detail="该 Ollama 模型正在下载。")
+
+    while len(_OLLAMA_PULL_JOBS) >= 64:
+        stale_id = next((
+            key for key, job in _OLLAMA_PULL_JOBS.items()
+            if job.get("status") in {"completed", "failed"}
+        ), None)
+        if stale_id is None:
+            raise HTTPException(status_code=429, detail="本机 Ollama 下载任务过多，请稍后再试。")
+        _OLLAMA_PULL_JOBS.pop(stale_id, None)
+
+    job_id = uuid.uuid4().hex
+    _OLLAMA_PULL_JOBS[job_id] = {
+        "job_id": job_id,
+        "name": name,
+        "status": "pending",
+        "detail": "等待连接 Ollama…",
+        "percent": None,
+        "completed": None,
+        "total": None,
+    }
+    task = asyncio.create_task(_run_ollama_pull(job_id, name))
+    _OLLAMA_PULL_TASKS.add(task)
+    task.add_done_callback(_OLLAMA_PULL_TASKS.discard)
+    return {"job_id": job_id, "name": name}
+
+
+@router.get("/api/local/models/ollama/jobs/{job_id}", dependencies=[Depends(_require_trusted_origin)])
+async def ollama_local_pull_job(job_id: str) -> dict[str, Any]:
+    job = _OLLAMA_PULL_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Ollama 下载任务不存在或已过期。")
+    return dict(job)
+
+
+@router.post("/api/local/models/ollama/activate", dependencies=[Depends(_require_trusted_origin)])
+async def ollama_local_activate(
+    body: OllamaActivateBody,
+    services: AppServices = Depends(get_app_services),
+) -> dict[str, Any]:
+    """Register an installed Ollama tag in the route resolver's local-only path."""
+    name = _validate_ollama_name(body.name)
+    rows = await _ollama_tags()
+    installed = {str(row.get("name") or row.get("model") or "") for row in rows}
+    if name not in installed:
+        raise HTTPException(status_code=404, detail="该模型尚未安装在本机 Ollama。")
+
+    model_id = f"ollama-local:{name}"
+    manager = _safe_model_manager(services)
+    existing = next(
+        (item for item in manager.list_models() if str(item.get("id")) == model_id),
+        None,
+    )
+    if existing is not None:
+        if (str(existing.get("provider")) != "ollama"
+                or str(existing.get("litellm_model")) != f"ollama/{name}"
+                or str(existing.get("base_url")) != _OLLAMA_OPENAI_BASE
+                or existing.get("local_only") is not True):
+            raise HTTPException(status_code=409, detail="Atlas 中已有同名但路由不同的模型条目。")
+        return {"id": model_id, "name": name, "added": False, "provider": "ollama"}
+
+    try:
+        manager.add_model({
+            "id": model_id,
+            "name": name,
+            "provider": "ollama",
+            "litellm_model": f"ollama/{name}",
+            "base_url": _OLLAMA_OPENAI_BASE,
+            "local_only": True,
+            "category": "local",
+        })
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"id": model_id, "name": name, "added": True, "provider": "ollama"}

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AtlasDesktopApi, BackendStartupProgress } from '../shared/ipc.js';
+import type { AtlasDeepLink, AtlasDesktopApi, BackendStartupProgress, PlatformEditorId } from '../shared/ipc.js';
 import { BACKEND_STARTUP_CHANNEL } from '../shared/ipc.js';
 
 const desktopApi: AtlasDesktopApi = {
@@ -14,6 +14,28 @@ const desktopApi: AtlasDesktopApi = {
   getSkillCenterToken: () => ipcRenderer.invoke('skill-center:token') as Promise<string | undefined>,
   selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:open-directory', defaultPath) as Promise<string | null>,
   openPath: (target) => ipcRenderer.invoke('shell:open-path', target) as Promise<string>,
+  getPlatformSettings: () => ipcRenderer.invoke('platform:get-settings'),
+  setAlwaysOnTop: (enabled) => ipcRenderer.invoke('platform:set-always-on-top', enabled),
+  setGlobalShortcut: (accelerator) => ipcRenderer.invoke('platform:set-global-shortcut', accelerator),
+  openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>
+    ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
+  onDeepLink: (callback: (route: AtlasDeepLink) => void) => {
+    let active = true;
+    const seen = new Set<string>();
+    const deliver = (route: AtlasDeepLink) => {
+      if (!active || seen.has(route.id)) return;
+      seen.add(route.id);
+      callback(route);
+    };
+    const listener = (_event: Electron.IpcRendererEvent, route: AtlasDeepLink) => deliver(route);
+    ipcRenderer.on('app:deep-link', listener);
+    void ipcRenderer.invoke('deep-link:subscribe').then((queued: AtlasDeepLink[]) => queued.forEach(deliver)).catch(() => undefined);
+    return () => {
+      active = false;
+      ipcRenderer.removeListener('app:deep-link', listener);
+      ipcRenderer.send('deep-link:unsubscribe');
+    };
+  },
   onMaximizeChange: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);
     ipcRenderer.on('window:maximize-change', listener);
