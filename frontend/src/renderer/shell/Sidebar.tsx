@@ -3,7 +3,7 @@
 // workspace-grouped-tasks/task-context-menu-content.tsx, WorkspaceGroupedTasksSection.tsx.
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
-  Archive, ArchiveRestore, ArrowUpDown, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
+  Archive, ArchiveRestore, ArrowUpDown, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
   Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Users, X, Wand2, type LucideIcon,
 } from 'lucide-react';
@@ -19,11 +19,12 @@ import { Tip } from '../ui/Tooltip';
 import { cn } from '../ui/cn';
 import { nextTheme, themeInfo, type Theme } from './themes';
 
-export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution';
+export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution' | 'workbench';
 
 export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
   { view: 'chat', label: '聊天', icon: MessageSquare },
   { view: 'agents', label: 'Agents', icon: Bot },
+  { view: 'workbench', label: '工作台', icon: Blocks },
   { view: 'auto', label: '自动化', icon: Repeat },
   { view: 'skills', label: '技能', icon: Puzzle },
   { view: 'devices', label: '设备', icon: MonitorSmartphone },

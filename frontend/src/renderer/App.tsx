@@ -44,6 +44,7 @@ import ProfilesPanel from './pages/ProfilesPanel';
 import HooksPanel from './pages/HooksPanel';
 import AgentsPage from './pages/agents/AgentsPage';
 import DevicesPage from './pages/DevicesPage';
+import WorkbenchPage from './pages/WorkbenchPage';
 import GroupsView from './pages/GroupsView';
 import ChannelsSettings from './pages/settings/ChannelsSettings';
 import LocalModelsSettings from './pages/settings/LocalModelsSettings';
@@ -1239,6 +1240,7 @@ export default function App() {
       onOpen={openConversation} onStop={store.stopRun} onArchive={store.toggleArchived} />}
     {view === 'agents' && <AgentsPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} username={username} />}
     {view === 'devices' && <DevicesPage onToast={notify} />}
+    {view === 'workbench' && <WorkbenchPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
     {view === 'groups' && <GroupsView onToast={notify} />}
     {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} initialPrompt={createPrompt} />}
