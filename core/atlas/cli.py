@@ -282,6 +282,7 @@ def hub_start(port: int | None) -> None:
     import subprocess
     import sys
     import time
+
     import httpx
 
 
@@ -319,6 +320,7 @@ def hub_start(port: int | None) -> None:
 def hub_stop() -> None:
     """Stop a running Hub."""
     import json
+
     import httpx
 
     control = _hub_control_file()
@@ -339,6 +341,7 @@ def hub_stop() -> None:
 def hub_status() -> None:
     """Show Hub health and scheduler status."""
     import json
+
     import httpx
 
     control = _hub_control_file()
@@ -360,6 +363,7 @@ def hub_status() -> None:
 def hub_tasks() -> None:
     """List Hub scheduled tasks."""
     import json
+
     import httpx
 
     control = _hub_control_file()
@@ -613,6 +617,7 @@ async def _drive_turn(
     import uuid
 
     from websockets.asyncio.client import connect
+
     from atlas.usage import aggregate_run_usage
 
     run_id = uuid.uuid4().hex
@@ -951,8 +956,8 @@ def _check_hermes() -> dict[str, Any]:
 
 def _check_sessions() -> dict[str, Any]:
     """Read-only audit of transcript ownership, counts and tool-call pairing."""
-    from contextlib import closing
     import sqlite3
+    from contextlib import closing
 
     from atlas.config import DATA_ROOT, get_config
 

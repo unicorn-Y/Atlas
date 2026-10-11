@@ -10,7 +10,6 @@ import mimetypes
 from pathlib import Path
 from typing import Any
 
-
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 # file signature -> mime. Checked before the extension guess so a mislabeled

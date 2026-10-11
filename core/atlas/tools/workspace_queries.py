@@ -7,9 +7,9 @@ implementation against Atlas's workspace boundary; no upstream source is copied.
 
 from __future__ import annotations
 
-import re
 import fnmatch
 import os
+import re
 from pathlib import Path
 from typing import Any
 

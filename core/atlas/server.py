@@ -30,8 +30,7 @@ from atlas.agent.enrichment import (
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.api.app_services import AppServices
 from atlas.api.application import create_app
-from atlas.api.deferred_startup import restore_lifespan_routes, start_lifespan_components
-from atlas.api.startup_components import COMPONENT_NAMES, StartupComponents
+from atlas.api.deferred_startup import start_lifespan_components
 from atlas.api.models_settings_router import (
     _model_supports_reasoning,  # noqa: F401,E402 — compat re-export
 )
@@ -39,6 +38,7 @@ from atlas.api.runtime import (  # noqa: F401 — RunState re-exported for tests
     RunState,
     RuntimeManager,
 )
+from atlas.api.startup_components import COMPONENT_NAMES, StartupComponents
 from atlas.api.tools_router import ws_terminal  # noqa: F401,E402 — compat re-export
 from atlas.api.usage_router import runtime_protocol  # noqa: F401,E402 — compat re-export
 from atlas.asr import ASRManager
@@ -111,7 +111,6 @@ if TYPE_CHECKING:  # H8 O1/S2: annotations are strings (PEP 563); the heavy
     from atlas.tools.mcp_client import MCPClient
     from atlas.tools.node_runtime import get_node_runtime_status  # noqa: F401
     from atlas.tools.web import WebRuntime
-    from atlas.tools.web_extract import extract_web
 
 # PEP 562: keep the historical ``atlas.server.<name>`` surface resolvable
 # (attribute access and ``from atlas.server import <name>``) without the
@@ -793,7 +792,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if observer_drain_task is not None and not observer_drain_task.done():
             try:
                 await asyncio.wait_for(asyncio.shield(observer_drain_task), timeout=15.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 observer_drain_task.cancel()
                 await asyncio.gather(observer_drain_task, return_exceptions=True)
                 log.warning("memory.observer_shutdown_drain_timeout")
@@ -815,7 +814,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # Let deferred startup settle before reverse teardown; a stuck step is bounded.
             try:
                 await asyncio.wait_for(deferred_startup, timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 log.error("startup.deferred_shutdown_timeout")
                 startup_aborted = True
             except asyncio.CancelledError:

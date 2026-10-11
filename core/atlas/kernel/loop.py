@@ -7,8 +7,8 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import contextlib
+import copy
 import json
 import logging
 import os
@@ -1997,7 +1997,8 @@ class AtlasKernel:
             return {"content": json.dumps(data, ensure_ascii=False), "data": data, "outcome": "completed"}
         if name.startswith(("android_", "ios_")):
             from atlas.tools.mobile_simulator import (
-                MOBILE_MUTATING_TOOLS, call_mobile_tool,
+                MOBILE_MUTATING_TOOLS,
+                call_mobile_tool,
             )
 
             if name in MOBILE_MUTATING_TOOLS:
@@ -2059,6 +2060,7 @@ class AtlasKernel:
             }
 
         from langchain_core.messages import AIMessage
+
         from atlas.agent import ToolExecutionState
 
         proxy = copy.copy(runtime)

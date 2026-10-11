@@ -11,14 +11,13 @@ from __future__ import annotations
 
 import html as html_module
 import json
+import logging
 import re
 from html.parser import HTMLParser
 from typing import Any, Sequence
 from urllib.parse import quote_plus, urljoin
 
 from atlas.tools.ssrf_transport import create_ssrf_safe_async_client
-
-import logging
 
 logger = logging.getLogger(__name__)
 

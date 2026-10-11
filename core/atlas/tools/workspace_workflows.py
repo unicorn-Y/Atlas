@@ -25,13 +25,11 @@ import math
 import os
 import re
 import sqlite3
-import subprocess
 import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
-
 
 MAX_APP_HTML = 256 * 1024
 MAX_ARTIFACT_HTML = 512 * 1024
@@ -289,7 +287,7 @@ def _svg_donut(rows: list[tuple[str, float]]) -> str:
     radius, center, stroke = 125, 180, 52
     circumference = 2 * math.pi * radius
     offset = 0.0
-    pieces = [f'<svg viewBox="0 0 900 420" role="img" aria-label="Donut chart"><g transform="rotate(-90 180 180)">']
+    pieces = ['<svg viewBox="0 0 900 420" role="img" aria-label="Donut chart"><g transform="rotate(-90 180 180)">']
     for i, (_label, value) in enumerate(rows):
         length = circumference * value / total
         pieces.append(f'<circle cx="180" cy="180" r="{radius}" fill="none" stroke="{_PALETTE[i % len(_PALETTE)]}" stroke-width="{stroke}" stroke-dasharray="{length:.3f} {circumference-length:.3f}" stroke-dashoffset="{-offset:.3f}"/>')
@@ -340,9 +338,7 @@ def _render_chart(kind: str, title: str, rows: list[tuple[str, float]], descript
             f"Atlas has no renderer for {kind!r}; available renderers are bar, line, donut and radar."
         )
     svg = renderer(rows)
-    return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{}</title><style>body{{font:16px system-ui,sans-serif;background:#f5f7fb;color:#172033;margin:0;padding:32px}}main{{max-width:980px;margin:auto;background:white;padding:24px;border-radius:16px;box-shadow:0 6px 28px #17203314}}svg{{width:100%;height:auto;font:13px system-ui,sans-serif}}.desc{{color:#536078;white-space:pre-wrap}}</style></head><body><main><h1>{}</h1><p class=\"desc\">{}</p>{}</main></body></html>".format(
-        html.escape(title), html.escape(title), html.escape(description), svg,
-    )
+    return f"<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{html.escape(title)}</title><style>body{{font:16px system-ui,sans-serif;background:#f5f7fb;color:#172033;margin:0;padding:32px}}main{{max-width:980px;margin:auto;background:white;padding:24px;border-radius:16px;box-shadow:0 6px 28px #17203314}}svg{{width:100%;height:auto;font:13px system-ui,sans-serif}}.desc{{color:#536078;white-space:pre-wrap}}</style></head><body><main><h1>{html.escape(title)}</h1><p class=\"desc\">{html.escape(description)}</p>{svg}</main></body></html>"
 
 
 def _read_workflow_rows(path: Path) -> list[dict[str, Any]]:
@@ -542,7 +538,11 @@ def _parse_worktree_list(stdout: str) -> list[dict[str, str]]:
 
 
 def _list_worktrees(workspace: Path) -> dict[str, Any]:
-    from atlas.agent.subagent_worktree import noninteractive_repo_git_env, resolve_repo_root, _run_git
+    from atlas.agent.subagent_worktree import (
+        _run_git,
+        noninteractive_repo_git_env,
+        resolve_repo_root,
+    )
 
     repo_root = resolve_repo_root(str(workspace))
     if not repo_root:
@@ -770,8 +770,8 @@ async def _visualization(args: dict[str, Any], runtime: Any) -> dict[str, Any]:
 async def _call_hierarchy_async(service: Any, server: Any, root: Path, source: Path,
                                 line: int, character: int, depth: int,
                                 symbol_filter: str | None) -> dict[str, Any]:
-    from atlas.lsp.servers import language_id_for
     from atlas.lsp.client import file_uri
+    from atlas.lsp.servers import language_id_for
 
     client = await service._get_or_spawn(str(source))
     if client is None:
@@ -871,7 +871,11 @@ async def _focused_call_graph(args: dict[str, Any], runtime: Any) -> dict[str, A
 
 
 def _summary_paths(workspace: Path, requested: list[str], max_files: int) -> list[Path]:
-    from atlas.agent.subagent_worktree import noninteractive_repo_git_env, resolve_repo_root, _run_git
+    from atlas.agent.subagent_worktree import (
+        _run_git,
+        noninteractive_repo_git_env,
+        resolve_repo_root,
+    )
 
     repo_root = resolve_repo_root(str(workspace))
     if not repo_root:

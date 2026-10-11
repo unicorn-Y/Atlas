@@ -102,9 +102,10 @@ def _descriptor(runtime: Any = None) -> dict[str, Any]:
     dialog_available = False
     if usable:
         try:
-            from atlas.tools.x2.context import current_context
             import tools.browser_tool as browser_tool
             from tools.browser_supervisor import SUPERVISOR_REGISTRY
+
+            from atlas.tools.x2.context import current_context
 
             session_id = browser_tool._last_session_key(str(current_context().session_id or "default"))
             supervisor = SUPERVISOR_REGISTRY.get(session_id)
