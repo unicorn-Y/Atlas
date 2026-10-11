@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
-  SlidersHorizontal, Square, Sun, Volume2, VolumeX, X, Gauge, Search,
+  SlidersHorizontal, Square, Sun, Zap, Volume2, VolumeX, X, Gauge, Search,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
@@ -64,6 +64,7 @@ import RunLimitsPanel from './components/settings/RunLimitsPanel';
 import PlatformSettingsPanel from './components/settings/PlatformSettingsPanel';
 import SettingsIntegrationsPanel from './components/settings/SettingsIntegrationsPanel';
 import NetworkSettingsPanel from './components/settings/NetworkSettingsPanel';
+import ExpertModePanel, { ExpertModeBadge } from './components/settings/ExpertModePanel';
 import OutputStyleSettingsPanel from './components/settings/OutputStyleSettingsPanel';
 import McpResourcesPanel from './components/settings/McpResourcesPanel';
 import LocalModelsPanel from './components/settings/LocalModelsPanel';
@@ -82,10 +83,11 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'telemetry' | 'security' | 'commands' | 'platform' | 'integrations' | 'network';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'telemetry' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert';
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
+  ['expert', '专家模式', Zap, 'expert 专家 模式 切换 覆盖 overlay 额外配置 附加说明'],
   ['network', '模型网络', Server, 'proxy 代理 CA certificate certificate authority 网络 HTTPS TLS'],
   ['security', '工作区安全', ShieldCheck, 'workspace trust 信任 sandbox 沙箱 network permission 权限 rules AGENTS CLAUDE'],
   ['channels', 'Gateway 与渠道账号', Radio, 'gateway channel 渠道 账号'],
@@ -1315,6 +1317,7 @@ export default function App() {
         {sheet === 'channels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Gateway 与渠道账号</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置当前已注册渠道的账号和密钥；消息进来后交给哪个 Agent，在 Agents → Channels 里绑定。</p><ChannelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'devices' && <div className="-mx-2 -mt-1"><DevicesPage onToast={notify} /></div>}
         {sheet === 'localModels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本地模型</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理本机 GGUF 模型；Ollama 模型在 loopback 上独立发现、下载并注册到 Atlas。</p><div className="grid gap-8"><LocalModelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /><LocalModelsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
+        {sheet === 'expert' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">专家模式</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">一键切换：开着时在普通配置之上额外加载你自己写的配置和说明。</p><ExpertModePanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'network' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">模型网络</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">为支持的模型连接配置本机代理与自定义 CA 证书。</p><NetworkSettingsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，只在这台电脑上生效。</p><ShortcutsPanel /></section>}
         {sheet === 'hooks' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Hooks</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在任务开始、用工具前后、完成或失败时运行你自己的命令。</p><HooksPanel /></section>}
@@ -1382,6 +1385,7 @@ export default function App() {
     {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}
 
     <UpdateBanner />
+    <ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} />
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
 }

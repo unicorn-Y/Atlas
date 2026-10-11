@@ -47,6 +47,8 @@ config/atlas.toml.*
 config/*.bak-*
 config/*.bak
 config/*.local.toml
+config/expert.toml
+config/expert-instructions.md
 *.bak-2026*
 
 # voice-demo local config (holds a real API key — use config.example.json)

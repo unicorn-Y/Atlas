@@ -290,6 +290,10 @@ def load_config(path: Path | None = None) -> AtlasConfig:
         data = tomllib.load(f)
 
     log.info("config.loaded", path=str(cfg_path))
+    if path is None:
+        from atlas.expert_mode import apply_overlay
+
+        data = apply_overlay(data)
     return AtlasConfig(data)
 
 

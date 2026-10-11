@@ -931,6 +931,10 @@ class HermesRuntime:
         from atlas.usage import configured_run_usage_budget, use_run_usage_budget
 
         atlas_config = get_config()
+        from atlas.expert_mode import instructions as expert_instructions
+
+        if expert_text := expert_instructions():
+            system_message = "\n\n".join(filter(None, (system_message, expert_text)))
         kernel_name = str(atlas_config.get("engine.kernel", "atlas")).strip().lower()
         if kernel_name not in {"atlas", "hermes"}:
             raise ValueError(f"Unknown engine.kernel selection: {kernel_name}")
