@@ -1,6 +1,6 @@
 # D-TC-02：Agent 委派、计划与任务生命周期
 
-基线：`origin/memory-v1`（`e0bbfcf0587fc41ad6bb90f54f7362bfb2b0b0d6`）  
+基线：`origin/memory-v1`（`e0bbfcf0587fc41ad6bb90f54f7362bfb2b0b0d6`）
 分支：`card-d-tc-02`
 
 ## 逐项结果
