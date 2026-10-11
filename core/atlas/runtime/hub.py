@@ -24,7 +24,7 @@ from typing import Any
 
 from atlas.config import get_config
 
-DEFAULT_PORT = 8791
+DEFAULT_PORT = 8793
 
 
 def _hub_port() -> int:

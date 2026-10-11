@@ -274,7 +274,7 @@ def hub() -> None:
 
 
 @hub.command("start")
-@click.option("--port", default=None, type=int, help="Hub port (default 8791)")
+@click.option("--port", default=None, type=int, help="Hub port (default 8793)")
 def hub_start(port: int | None) -> None:
     """Start the Hub as a detached background process."""
     import json
@@ -296,7 +296,7 @@ def hub_start(port: int | None) -> None:
         except (OSError, httpx.HTTPError, json.JSONDecodeError, KeyError, TypeError, ValueError):
             control.unlink(missing_ok=True)
 
-    hub_port = port or int(os.environ.get("ATLAS_HUB_PORT", "8791"))
+    hub_port = port or int(os.environ.get("ATLAS_HUB_PORT", "8793"))
     env = {**os.environ, "ATLAS_HUB_PORT": str(hub_port)}
     flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     process = subprocess.Popen(

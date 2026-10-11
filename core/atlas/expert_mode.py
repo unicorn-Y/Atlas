@@ -71,7 +71,7 @@ def instructions() -> str:
 
 
 def _reload_config() -> None:
-    _config._config = None
+    _config.reload_config()
 
 
 def set_enabled(enabled: bool) -> None:

@@ -478,7 +478,8 @@ def _persist_mcp_server_config(name: str, server_config: dict[str, Any] | None) 
     from atlas.config import get_config
 
     config = get_config()
-    data = copy.deepcopy(config.raw)
+    # 只改 atlas.toml 本身：专家模式开着时 raw 里混着覆盖层，不能写回去。
+    data = copy.deepcopy(config.base_raw)
     tools = data.setdefault("tools", {})
     servers = tools.setdefault("servers", {})
     auto_start = list(tools.get("auto_start", []) or [])
@@ -504,8 +505,7 @@ def _persist_mcp_server_config(name: str, server_config: dict[str, Any] | None) 
     temporary = config_path.with_suffix(config_path.suffix + ".tmp")
     temporary.write_text(tomli_w.dumps(data), encoding="utf-8")
     temporary.replace(config_path)
-    config.raw.clear()
-    config.raw.update(data)
+    config_module.reload_config()
 
 
 @router.post("/api/mcp/servers/{server_name}/restart")
