@@ -1,7 +1,7 @@
 """Per-chat FIFO send queues (OpenClaw chat-queue.ts) + token bucket for WeCom's 30 msgs/min/chat limit (846607).
 Two lanes per chat: normal, and a control lane (approval prompts, finalize frames) backed by a reserved token pool.
 
-# Ported from NousResearch/hermes-agent @ c8301ea6c9 (plugins/platforms/wecom/send_queue.py)
+# Ported from NousResearch/hermes-agent @ ae3598c7cdf3a2e4a6f60d0d869602813dded97a (plugins/platforms/wecom/send_queue.py)
 # Atlas changes: logger name and H1 send-failure diagnostics.
 """
 
@@ -23,7 +23,7 @@ class ChatSendQueueMixin:
     _BUCKET_NORMAL_TOKENS = 24
     _BUCKET_RESERVED_TOKENS = 6
 
-    def _get_token_usage(self, chat_id: str) -> Dict[str, float]:
+    def _get_token_usage(self, chat_id: str) -> dict[str, float]:
         return self._chat_token_usage.setdefault(str(chat_id or "").strip(), {"normal": 0.0, "reserved": 0.0, "last_reset": time.monotonic()})
 
     def _bucket_try_consume(self, chat_id: str, is_control: bool = False) -> float:

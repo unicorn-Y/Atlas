@@ -1,4 +1,4 @@
-# Ported from NousResearch/hermes-agent agent/lsp/range_shift.py @ 562ad75baec0c8360f6ce2d48b7d9de56506956c (MIT)
+# Ported from NousResearch/hermes-agent agent/lsp/range_shift.py @ ae3598c7cdf3a2e4a6f60d0d869602813dded97a (MIT)
 """Diff-aware line-shift map for cross-edit LSP delta filtering.
 
 An edit that inserts/deletes lines moves every diagnostic below it, and the delta
@@ -43,7 +43,7 @@ def build_line_shift(pre_text: str, post_text: str) -> _Shift:
     return shift
 
 
-def shift_diagnostic_range(diag: Dict[str, Any], shift: _Shift) -> Optional[Dict[str, Any]]:
+def shift_diagnostic_range(diag: dict[str, Any], shift: _Shift) -> Optional[dict[str, Any]]:
     """Copy of ``diag`` with its line range remapped; ``None`` if the start line was deleted.
 
     A multi-line diagnostic whose end straddles the deletion collapses to a
@@ -68,10 +68,10 @@ def shift_diagnostic_range(diag: Dict[str, Any], shift: _Shift) -> Optional[Dict
     }
 
 
-def shift_baseline(baseline: List[Dict[str, Any]], shift: _Shift) -> List[Dict[str, Any]]:
+def shift_baseline(baseline: list[dict[str, Any]], shift: _Shift) -> list[dict[str, Any]]:
     """Apply ``shift`` to every diagnostic in ``baseline``, dropping deleted entries."""
     shifted = (shift_diagnostic_range(d, shift) for d in baseline if isinstance(d, dict))
     return [s for s in shifted if s is not None]
 
 
-__all__ = ["build_line_shift", "shift_diagnostic_range", "shift_baseline"]
+__all__ = ["build_line_shift", "shift_baseline", "shift_diagnostic_range"]
