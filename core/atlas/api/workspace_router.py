@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
+import os
 import structlog
 import fnmatch
 import mimetypes
@@ -16,6 +18,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from contextlib import suppress
@@ -26,7 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from atlas.config import get_config
+from atlas.config import DATA_ROOT, get_config
 from atlas.office import MAX_PREVIEW_BYTES, render_office
 from atlas.ssh import ssh_workspaces
 
@@ -52,6 +55,267 @@ def _service(name: str, services: AppServices) -> Any:
     if value is None:
         value = getattr(_server(), name, None)
     return value
+
+
+_DASHBOARD_MAX_BYTES = 256 * 1024
+_DASHBOARD_MAX_BOARDS = 20
+_DASHBOARD_MAX_WIDGETS = 100
+_DASHBOARD_MAX_ID_CHARS = 128
+_DASHBOARD_MAX_BOARD_TITLE_CHARS = 160
+_DASHBOARD_MAX_WIDGET_TITLE_CHARS = 160
+_DASHBOARD_MAX_CONTENT_CHARS = 16_000
+_DASHBOARD_MAX_SOURCE_EVENT_ID_CHARS = 256
+_DASHBOARD_WIDGET_KINDS = {"text", "link", "code", "metric"}
+
+
+@router.post("/api/chat/prompt-enhance")
+async def enhance_chat_prompt(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    request: Request,
+) -> dict[str, str]:
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > 32 * 1024:
+            raise HTTPException(status_code=413, detail="Prompt is too large to enhance")
+        raw.extend(chunk)
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        raise HTTPException(status_code=400, detail="Request body must be valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Request body must be an object")
+    text = payload.get("text")
+    model_id = payload.get("model")
+    if not isinstance(text, str) or not text.strip() or len(text) > 24_000:
+        raise HTTPException(status_code=400, detail="text must contain 1 to 24000 characters")
+    if model_id is not None and (not isinstance(model_id, str) or len(model_id) > 256):
+        raise HTTPException(status_code=400, detail="model must be a valid model id")
+    model_mgr = services.model_mgr
+    if model_mgr is None:
+        from atlas import server as _atlas_server
+
+        model_mgr = _atlas_server.model_mgr
+    if model_mgr is None or model_mgr.model_router is None:
+        raise HTTPException(status_code=503, detail="No configured model is available for prompt enhancement")
+    selected = model_id or model_mgr.current_model
+    try:
+        route = await model_mgr.model_router.resolve(selected, "prompt_enhance")
+        result = await model_mgr.model_router.complete(
+            route,
+            messages=[
+                {"role": "system", "content": (
+                    "Rewrite the user's draft into a clearer, more actionable prompt. Preserve the user's intent, "
+                    "language, named entities, constraints, and scope. Do not add facts, requirements, or assumptions. "
+                    "Do not answer or execute the prompt. Return only the rewritten prompt; if no improvement is needed, "
+                    "return the original text."
+                )},
+                {"role": "user", "content": text.strip()},
+            ],
+            max_tokens=min(16_384, max(1_024, len(text) * 2)),
+            temperature=0.2,
+            timeout=30,
+        )
+    except Exception as exc:  # noqa: BLE001 — provider SDK errors are surfaced to the composer.
+        log.warning("chat.prompt_enhance_failed", model=selected, error=str(exc))
+        raise HTTPException(status_code=502, detail=f"Prompt enhancement failed: {exc}") from exc
+    raw_result = getattr(result, "raw", None)
+    choice = raw_result.get("choices", [None])[0] if isinstance(raw_result, dict) and raw_result.get("choices") else None
+    reason = (choice.get("finish_reason") if isinstance(choice, dict) else None) or (
+        raw_result.get("stop_reason") if isinstance(raw_result, dict) else None
+    )
+    if isinstance(reason, str) and reason in {"length", "max_tokens"}:
+        raise HTTPException(status_code=502, detail="Prompt enhancement was truncated; your original draft was kept")
+    enhanced = str(getattr(result, "text", "") or "").strip()
+    if not enhanced:
+        raise HTTPException(status_code=502, detail="The selected model returned no rewritten prompt")
+    return {"text": enhanced, "model": selected}
+
+
+def _dashboard_store_path(conversation_id: str) -> Path:
+    """Resolve a per-conversation dashboard file under Atlas's isolated data root."""
+    data_root = Path(DATA_ROOT).expanduser().resolve()
+    data_directory = data_root / "data"
+    directory = data_directory / "conversation-dashboards"
+    if data_directory.is_symlink() or directory.is_symlink():
+        raise HTTPException(status_code=409, detail="Dashboard storage directory cannot be a symlink")
+    try:
+        directory = directory.resolve()
+        directory.relative_to(data_root)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail="Dashboard storage path escapes ATLAS_DATA_DIR") from exc
+    name = hashlib.sha256(conversation_id.encode("utf-8")).hexdigest() + ".json"
+    path = directory / name
+    return path
+
+
+def _dashboard_default(conversation_id: str) -> dict[str, Any]:
+    return {"conversation_id": conversation_id, "boards": []}
+
+
+def _read_conversation_dashboard(conversation_id: str) -> dict[str, Any]:
+    path = _dashboard_store_path(conversation_id)
+    if path.is_symlink():
+        raise HTTPException(status_code=409, detail="Dashboard storage path is not a regular file")
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return _dashboard_default(conversation_id)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Could not read conversation dashboard") from exc
+    if len(raw) > _DASHBOARD_MAX_BYTES:
+        raise HTTPException(status_code=500, detail="Stored conversation dashboard exceeds size limit")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        raise HTTPException(status_code=500, detail="Stored conversation dashboard is invalid") from exc
+    if not isinstance(payload, dict) or payload.get("conversation_id") != conversation_id:
+        raise HTTPException(status_code=500, detail="Stored conversation dashboard identity mismatch")
+    return payload
+
+
+def _validate_dashboard_payload(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict) or not isinstance(payload.get("boards"), list):
+        raise HTTPException(status_code=400, detail="Request body must contain a boards array")
+    boards = payload["boards"]
+    if len(boards) > _DASHBOARD_MAX_BOARDS:
+        raise HTTPException(status_code=413, detail=f"At most {_DASHBOARD_MAX_BOARDS} boards are allowed")
+
+    result: list[dict[str, Any]] = []
+    board_ids: set[str] = set()
+    widget_count = 0
+    for board in boards:
+        if not isinstance(board, dict):
+            raise HTTPException(status_code=400, detail="Each board must be an object")
+        board_id = board.get("id")
+        title = board.get("title")
+        widgets = board.get("widgets")
+        if not isinstance(board_id, str) or not board_id or len(board_id) > _DASHBOARD_MAX_ID_CHARS:
+            raise HTTPException(status_code=400, detail="Board id must be a non-empty string of at most 128 characters")
+        if board_id in board_ids:
+            raise HTTPException(status_code=400, detail="Board ids must be unique")
+        board_ids.add(board_id)
+        if not isinstance(title, str) or len(title) > _DASHBOARD_MAX_BOARD_TITLE_CHARS:
+            raise HTTPException(status_code=400, detail="Board title must be a string of at most 160 characters")
+        if not isinstance(widgets, list):
+            raise HTTPException(status_code=400, detail="Board widgets must be an array")
+
+        normalized_widgets: list[dict[str, Any]] = []
+        widget_ids: set[str] = set()
+        for widget in widgets:
+            widget_count += 1
+            if widget_count > _DASHBOARD_MAX_WIDGETS:
+                raise HTTPException(status_code=413, detail=f"At most {_DASHBOARD_MAX_WIDGETS} widgets are allowed")
+            if not isinstance(widget, dict):
+                raise HTTPException(status_code=400, detail="Each widget must be an object")
+            widget_id = widget.get("id")
+            widget_title = widget.get("title")
+            kind = widget.get("kind")
+            content = widget.get("content")
+            position = widget.get("position")
+            if not isinstance(widget_id, str) or not widget_id or len(widget_id) > _DASHBOARD_MAX_ID_CHARS:
+                raise HTTPException(status_code=400, detail="Widget id must be a non-empty string of at most 128 characters")
+            if widget_id in widget_ids:
+                raise HTTPException(status_code=400, detail="Widget ids must be unique within a board")
+            widget_ids.add(widget_id)
+            if not isinstance(widget_title, str) or len(widget_title) > _DASHBOARD_MAX_WIDGET_TITLE_CHARS:
+                raise HTTPException(status_code=400, detail="Widget title must be a string of at most 160 characters")
+            if not isinstance(kind, str) or kind not in _DASHBOARD_WIDGET_KINDS:
+                raise HTTPException(status_code=400, detail="Widget kind must be text, link, code, or metric")
+            if not isinstance(content, str) or len(content) > _DASHBOARD_MAX_CONTENT_CHARS:
+                raise HTTPException(status_code=400, detail="Widget content must be a string of at most 16000 characters")
+            if (isinstance(position, bool) or not isinstance(position, (int, float))
+                    or not 0 <= position <= _DASHBOARD_MAX_WIDGETS or int(position) != position):
+                raise HTTPException(status_code=400, detail="Widget position must be an integer from 0 to 100")
+
+            normalized = {
+                "id": widget_id,
+                "title": widget_title,
+                "kind": kind,
+                "content": content,
+                "position": position,
+            }
+            source_event_id = widget.get("source_event_id")
+            if source_event_id is not None:
+                if not isinstance(source_event_id, str) or len(source_event_id) > _DASHBOARD_MAX_SOURCE_EVENT_ID_CHARS:
+                    raise HTTPException(status_code=400, detail="source_event_id must be a string of at most 256 characters")
+                normalized["source_event_id"] = source_event_id
+            normalized_widgets.append(normalized)
+        result.append({"id": board_id, "title": title, "widgets": normalized_widgets})
+    return result
+
+
+def _write_conversation_dashboard(conversation_id: str, boards: list[dict[str, Any]]) -> dict[str, Any]:
+    payload = {"conversation_id": conversation_id, "boards": boards}
+    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    if len(raw) > _DASHBOARD_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Dashboard exceeds 256 KiB")
+    path = _dashboard_store_path(conversation_id)
+    temporary_path: Path | None = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=f".{path.stem}.", suffix=".tmp", dir=path.parent, delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(raw)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+    except OSError as exc:
+        try:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail="Could not save conversation dashboard") from exc
+    return payload
+
+
+async def _dashboard_memory(services: AppServices) -> Any:
+    memory = _service("memory", services)
+    if memory is None:
+        raise HTTPException(status_code=503, detail="Conversation store is unavailable")
+    return memory
+
+
+@router.get("/api/conversations/{conversation_id}/dashboard")
+async def get_conversation_dashboard(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+) -> dict[str, Any]:
+    if not conversation_id or len(conversation_id) > 512:
+        raise HTTPException(status_code=400, detail="Invalid conversation id")
+    memory = await _dashboard_memory(services)
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return _read_conversation_dashboard(conversation_id)
+
+
+@router.put("/api/conversations/{conversation_id}/dashboard")
+async def put_conversation_dashboard(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+    request: Request,
+) -> dict[str, Any]:
+    if not conversation_id or len(conversation_id) > 512:
+        raise HTTPException(status_code=400, detail="Invalid conversation id")
+    memory = await _dashboard_memory(services)
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > _DASHBOARD_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Dashboard request exceeds 256 KiB")
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > _DASHBOARD_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Dashboard request exceeds 256 KiB")
+        raw.extend(chunk)
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        raise HTTPException(status_code=400, detail="Request body must be valid JSON") from exc
+    boards = _validate_dashboard_payload(payload)
+    return _write_conversation_dashboard(conversation_id, boards)
 
 
 @router.get("/api/workspace/trust")
@@ -852,11 +1116,202 @@ async def list_checkpoints(
              ("id", "workspace", "created_at", "run_id", "files")} for item in items]
 
 
-@router.get("/api/runs/{run_id}/changes")
-async def get_run_changes(
-    services: Annotated[AppServices, Depends(get_app_services)],
-    run_id: str,
-) -> dict[str, Any]:
+_RUN_HUNK_REVIEW_MAX_BYTES = 256 * 1024
+
+
+def _run_hunk_review_path(run_id: str) -> Path:
+    data_root = Path(DATA_ROOT).expanduser().resolve()
+    data_directory = data_root / "data"
+    directory = data_directory / "run-hunk-reviews"
+    if data_directory.is_symlink() or directory.is_symlink():
+        raise HTTPException(status_code=409, detail="Hunk review storage directory cannot be a symlink")
+    try:
+        directory = directory.resolve()
+        directory.relative_to(data_root)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail="Hunk review storage escapes ATLAS_DATA_DIR") from exc
+    return directory / (hashlib.sha256(run_id.encode("utf-8")).hexdigest() + ".json")
+
+
+def _read_run_hunk_reviews(run_id: str) -> list[dict[str, str]]:
+    path = _run_hunk_review_path(run_id)
+    if path.is_symlink():
+        raise HTTPException(status_code=409, detail="Hunk review storage file cannot be a symlink")
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return []
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Could not read hunk review state") from exc
+    if len(raw) > _RUN_HUNK_REVIEW_MAX_BYTES:
+        raise HTTPException(status_code=500, detail="Stored hunk review state exceeds size limit")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        raise HTTPException(status_code=500, detail="Stored hunk review state is invalid") from exc
+    if not isinstance(payload, dict) or payload.get("run_id") != run_id or not isinstance(payload.get("reviews"), list):
+        raise HTTPException(status_code=500, detail="Stored hunk review identity mismatch")
+    reviews = payload["reviews"]
+    if any(not isinstance(item, dict) for item in reviews):
+        raise HTTPException(status_code=500, detail="Stored hunk review entry is invalid")
+    return reviews
+
+
+def _write_run_hunk_review(run_id: str, hunk_id: str, diff_hash: str, action: str) -> None:
+    # Reviews are only valid for the exact diff generation. A rejected hunk
+    # changes that diff, so older decisions cannot be safely applied afterward.
+    reviews = [item for item in _read_run_hunk_reviews(run_id) if item.get("diff_hash") == diff_hash]
+    record = {"hunk_id": hunk_id, "diff_hash": diff_hash, "status": "accepted" if action == "accept" else "rejected"}
+    reviews = [item for item in reviews if not (
+        item.get("hunk_id") == hunk_id and item.get("diff_hash") == diff_hash
+    )]
+    reviews.append(record)
+    raw = json.dumps({"run_id": run_id, "reviews": reviews}, ensure_ascii=False,
+                     separators=(",", ":"), allow_nan=False).encode("utf-8")
+    if len(raw) > _RUN_HUNK_REVIEW_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Hunk review history exceeds 256 KiB")
+    path = _run_hunk_review_path(run_id)
+    temporary_path: Path | None = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(mode="wb", prefix=f".{path.stem}.", suffix=".tmp",
+                                         dir=path.parent, delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(raw)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+    except OSError as exc:
+        try:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail="Could not save hunk review state") from exc
+
+
+def _change_hunks(run_id: str, item: dict[str, Any], review_lookup: dict[tuple[str, str], str]) -> tuple[str, list[dict[str, Any]]]:
+    diff = str(item.get("diff", ""))
+    diff_hash = hashlib.sha256(diff.encode("utf-8")).hexdigest()
+    root = str(item.get("root") or item.get("workspace") or "")
+    relative_path = str(item.get("relative_path") or item.get("path") or "")
+    hunks: list[dict[str, Any]] = []
+    matches = list(re.finditer(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*$", diff, re.MULTILINE))
+    for index, match in enumerate(matches):
+        old_start, old_count = int(match.group(1)), int(match.group(2) or 1)
+        new_start, new_count = int(match.group(3)), int(match.group(4) or 1)
+        hunk_id = hashlib.sha256(
+            f"{run_id}\0{root}\0{relative_path}\0{diff_hash}\0{index}".encode("utf-8")
+        ).hexdigest()[:32]
+        hunks.append({
+            "id": hunk_id,
+            "old_start": old_start,
+            "old_count": old_count,
+            "new_start": new_start,
+            "new_count": new_count,
+            "status": review_lookup.get((hunk_id, diff_hash), "pending"),
+            "reviewable": not bool(item.get("truncated")) and not root.startswith("ssh://"),
+        })
+    return diff_hash, hunks
+
+
+def _parse_hunk_body(diff: str, hunk_index: int) -> tuple[int, int, int, list[str], list[str]]:
+    lines = diff.splitlines(keepends=True)
+    headers = [i for i, line in enumerate(lines) if line.startswith("@@ ")]
+    if hunk_index < 0 or hunk_index >= len(headers):
+        raise HTTPException(status_code=409, detail="Diff hunk is no longer available")
+    start = headers[hunk_index]
+    match = re.match(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", lines[start])
+    if not match:
+        raise HTTPException(status_code=409, detail="Diff hunk header is invalid")
+    old_start, old_count = int(match.group(1)), int(match.group(2) or 1)
+    new_start, new_count = int(match.group(3)), int(match.group(4) or 1)
+    old_lines: list[str] = []
+    new_lines: list[str] = []
+    for line in lines[start + 1:headers[hunk_index + 1] if hunk_index + 1 < len(headers) else len(lines)]:
+        if line.startswith("\\ No newline at end of file"):
+            raise HTTPException(status_code=409, detail="Cannot safely reverse a hunk without a final newline")
+        if not line or line[0] not in " +-":
+            continue
+        content = line[1:]
+        if line[0] in " -":
+            old_lines.append(content)
+        if line[0] in " +":
+            new_lines.append(content)
+    if len(old_lines) != old_count or len(new_lines) != new_count:
+        raise HTTPException(status_code=409, detail="Diff hunk is incomplete or truncated")
+    return old_start, new_start, new_count, old_lines, new_lines
+
+
+def _reject_run_hunk(item: dict[str, Any], diff_hash: str, hunk_index: int,
+                     orchestrator: Any, run_id: str) -> None:
+    if item.get("truncated"):
+        raise HTTPException(status_code=409, detail="Cannot reject a truncated diff")
+    if item.get("root", "").startswith("ssh://"):
+        raise HTTPException(status_code=409, detail="Hunk rejection is unavailable for remote workspaces")
+    root = str(item.get("root") or item.get("workspace") or "")
+    relative_path = str(item.get("relative_path") or item.get("path") or "")
+    base, target = _server()._workspace_path(root, relative_path)
+    candidate = base / relative_path
+    if candidate.is_symlink() or (target.exists() and not target.is_file()):
+        raise HTTPException(status_code=409, detail="Cannot safely reject a hunk in this file")
+    diff = str(item.get("diff", ""))
+    if hashlib.sha256(diff.encode("utf-8")).hexdigest() != diff_hash:
+        raise HTTPException(status_code=409, detail="Diff changed; reload the file before reviewing")
+    _old_start, new_start, new_count, old_lines, new_lines = _parse_hunk_body(diff, hunk_index)
+    try:
+        before_bytes = target.read_bytes() if target.is_file() else b""
+        current_text = before_bytes.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=409, detail="Only readable UTF-8 text files can be reviewed") from exc
+    crlf_count = before_bytes.count(b"\r\n")
+    lf_count = before_bytes.count(b"\n") - crlf_count
+    cr_count = before_bytes.count(b"\r") - crlf_count
+    newline = max(((crlf_count, "\r\n"), (lf_count, "\n"), (cr_count, "\r")), key=lambda item: item[0])[1]
+    normalized_text = re.sub(r"\r\n|\r|\n", "\n", current_text)
+    current_lines = normalized_text.splitlines(keepends=True)
+    offset = max(0, new_start - 1) if new_count else new_start
+    if current_lines[offset:offset + len(new_lines)] != new_lines:
+        raise HTTPException(status_code=409, detail="Hunk no longer matches the current file; reload before reviewing")
+    updated_lines = current_lines[:offset] + old_lines + current_lines[offset + len(new_lines):]
+    updated_text = "".join(updated_lines)
+    if newline != "\n":
+        updated_text = updated_text.replace("\n", newline)
+    updated = updated_text.encode("utf-8")
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="Checkpoint service is unavailable")
+    try:
+        orchestrator.checkpoints.create_checkpoint(base, [relative_path], run_id=run_id)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail="Could not checkpoint the file before reversing this hunk") from exc
+    try:
+        current_bytes = target.read_bytes() if target.is_file() else b""
+        if current_bytes != before_bytes:
+            raise HTTPException(status_code=409, detail="File changed during review; reload before reviewing")
+        if item.get("status") == "added" and not updated:
+            target.unlink(missing_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path: Path | None = None
+            with tempfile.NamedTemporaryFile(mode="wb", prefix=f".{target.name}.", suffix=".tmp",
+                                             dir=target.parent, delete=False) as temporary:
+                temporary_path = Path(temporary.name)
+                temporary.write(updated)
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            os.replace(temporary_path, target)
+    except HTTPException:
+        raise
+    except OSError as exc:
+        try:
+            if "temporary_path" in locals() and temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail="Could not reverse this hunk") from exc
+
+
+async def _collect_run_changes(run_id: str) -> dict[str, Any]:
     run = _server().runtime_mgr.runs.get(run_id)
     if not run:
         return _server()._run_changes(run_id)
@@ -868,13 +1323,83 @@ async def get_run_changes(
         else:
             data = _server()._run_changes(run_id, workspace=root)
         for item in data.get("files", []):
-            entry = {**item, "root": root}
+            entry = {**item, "root": root, "relative_path": item.get("path", "")}
             if index > 0:
                 name = (PurePosixPath(root.split("?", 1)[0]).name
                         if root.startswith("ssh://") else Path(root).name)
                 entry["path"] = f"{name or f'目录{index}'}/{item['path']}"
             combined.append(entry)
     return {"run_id": run_id, "files": combined}
+
+
+@router.get("/api/runs/{run_id}/changes")
+async def get_run_changes(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    run_id: str,
+) -> dict[str, Any]:
+    result = await _collect_run_changes(run_id)
+    stored = _read_run_hunk_reviews(run_id)
+    review_lookup = {
+        (item["hunk_id"], item["diff_hash"]): item["status"]
+        for item in stored
+        if item.get("status") in {"accepted", "rejected"}
+        and isinstance(item.get("hunk_id"), str)
+        and isinstance(item.get("diff_hash"), str)
+    }
+    for item in result.get("files", []):
+        diff_hash, hunks = _change_hunks(run_id, item, review_lookup)
+        item["relative_path"] = item.get("relative_path") or item.get("path", "")
+        item["diff_hash"] = diff_hash
+        item["hunks"] = hunks
+    return result
+
+
+@router.post("/api/runs/{run_id}/changes/hunks/review")
+async def review_run_hunk(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    run_id: str,
+    request: Request,
+) -> dict[str, Any]:
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > 16 * 1024:
+            raise HTTPException(status_code=413, detail="Hunk review request exceeds 16 KiB")
+        raw.extend(chunk)
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        raise HTTPException(status_code=400, detail="Request body must be valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Request body must be an object")
+    workspace = payload.get("workspace")
+    relative_path = payload.get("path")
+    hunk_id = payload.get("hunk_id")
+    action = payload.get("action")
+    expected_diff_hash = payload.get("expected_diff_hash")
+    if not all(isinstance(value, str) and value for value in
+               (workspace, relative_path, hunk_id, expected_diff_hash)):
+        raise HTTPException(status_code=400, detail="workspace, path, hunk_id, and expected_diff_hash are required")
+    if action not in {"accept", "reject"}:
+        raise HTTPException(status_code=400, detail="action must be accept or reject")
+    result = await _collect_run_changes(run_id)
+    target = next((item for item in result.get("files", [])
+                   if str(item.get("root") or item.get("workspace") or "") == workspace
+                   and str(item.get("relative_path") or item.get("path") or "") == relative_path), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Changed file was not found in this run")
+    diff_hash, hunks = _change_hunks(run_id, target, {})
+    if diff_hash != expected_diff_hash:
+        raise HTTPException(status_code=409, detail="Diff changed; reload the file before reviewing")
+    hunk_index = next((index for index, item in enumerate(hunks) if item["id"] == hunk_id), None)
+    if hunk_index is None:
+        raise HTTPException(status_code=404, detail="Diff hunk was not found")
+    if not hunks[hunk_index]["reviewable"]:
+        raise HTTPException(status_code=409, detail="This hunk cannot be reviewed")
+    if action == "reject":
+        _reject_run_hunk(target, diff_hash, hunk_index, _service("orchestrator", services), run_id)
+    _write_run_hunk_review(run_id, hunk_id, diff_hash, action)
+    return {"run_id": run_id, "workspace": workspace, "path": relative_path,
+            "hunk_id": hunk_id, "status": "accepted" if action == "accept" else "rejected"}
 
 
 @router.get("/api/runs/{run_id}/diagnostics")

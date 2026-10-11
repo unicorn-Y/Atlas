@@ -9,8 +9,13 @@ import Mark from './Mark';
 import { buildTimeline, todoEditNotice, type TimelineItem } from './timeline';
 import { isTodoEdit } from './runInsights';
 import { Button } from '../ui/Button';
+import { loadBindings, matchShortcut } from '../services/shortcuts';
+import { clearConversationHighlights, ConversationSearch, findConversationMatches, highlightConversationRow } from './conversation-search/ConversationSearch';
+import type { ConversationSearchRow } from './conversation-search/ConversationSearch';
 import type { InspectorTab } from '../shell/Inspector';
 import type { AgentEvent } from '../../types/runtime';
+import { ThreadClassGroup, ThreadPresentationControls, THREAD_CLASSES, useThreadPresentationSettings, type ThreadClassId } from './ThreadPresentation';
+import ComputerUseTrail from './ComputerUseTrail';
 
 /** 每个会话最近一次的虚拟列表滚动状态，切回来时原位恢复。 */
 const savedScrollStates = new Map<string, StateSnapshot>();
@@ -26,6 +31,105 @@ type ThreadRow =
   | { kind: 'history'; id: string; message: ConversationMessageData }
   | { kind: 'empty'; id: string }
   | { kind: 'timeline'; id: string; item: TimelineItem; firstInTurn: boolean; last: boolean };
+
+type ThreadDisplayRow =
+  | { kind: 'row'; id: string; row: ThreadRow }
+  | { kind: 'category'; id: string; classId: ThreadClassId; rows: ThreadRow[]; grouped: boolean };
+
+function timelineClass(item: TimelineItem): ThreadClassId {
+  switch (item.kind) {
+    case 'user': case 'reply': return 'messages';
+    case 'reasoning': return 'model';
+    case 'steps': case 'group': return 'tools';
+    case 'approval': case 'question': case 'trust': case 'foreground': case 'handoff': return 'approvals';
+    case 'plan': return 'plans';
+    case 'checks': case 'review': case 'lsp': return 'checks';
+    case 'artifact': case 'done': return 'files';
+    case 'cancelled': case 'notice': case 'failed': return 'status';
+  }
+}
+
+function pendingInteraction(row: ThreadRow, answers: Record<string, string | undefined>): boolean {
+  if (row.kind !== 'timeline') return false;
+  const item = row.item;
+  switch (item.kind) {
+    case 'foreground':
+    case 'handoff':
+    case 'approval':
+      return true;
+    case 'question':
+    case 'plan':
+    case 'trust': {
+      const eventId = String(item.event.data.event_id ?? item.event.id);
+      return answers[eventId] === undefined;
+    }
+    default:
+      return false;
+  }
+}
+
+function presentRows(rows: ThreadRow[], settings: ReturnType<typeof useThreadPresentationSettings>[0], answers: Record<string, string | undefined>): ThreadDisplayRow[] {
+  const visible = rows.filter((row) => {
+    if (row.kind !== 'timeline') return true;
+    const classId = timelineClass(row.item);
+    return settings.show[classId] || pendingInteraction(row, answers);
+  });
+  const output: ThreadDisplayRow[] = [];
+  let group: ThreadRow[] = [];
+  let groupClass: ThreadClassId | null = null;
+  const flush = () => {
+    if (!group.length || !groupClass) return;
+    output.push({ kind: 'category', id: `category-${groupClass}-${group[0].id}`, classId: groupClass, rows: group, grouped: true });
+    group = [];
+    groupClass = null;
+  };
+  for (const row of visible) {
+    if (row.kind !== 'timeline') {
+      flush();
+      output.push({ kind: 'row', id: row.id, row });
+      continue;
+    }
+    const classId = timelineClass(row.item);
+    if (settings.groupByClass) {
+      if (groupClass !== classId) flush();
+      groupClass = classId;
+      group.push(row);
+    } else if (settings.collapsed[classId]) {
+      flush();
+      output.push({ kind: 'category', id: `category-${classId}-${row.id}`, classId, rows: [row], grouped: false });
+    } else {
+      flush();
+      output.push({ kind: 'row', id: row.id, row });
+    }
+  }
+  flush();
+  return output;
+}
+
+const OMIT_SEARCH_KEYS = new Set(['id', 'kind', 'timestamp', 'startedAt', 'endedAt', 'imagePreview', 'preview']);
+
+function collectSearchText(value: unknown, output: string[], key = '') {
+  if (OMIT_SEARCH_KEYS.has(key)) return;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const text = String(value).trim();
+    if (text) output.push(text);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectSearchText(item, output);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  for (const [childKey, child] of Object.entries(value)) collectSearchText(child, output, childKey);
+}
+
+function searchTextForRow(row: ThreadRow): string {
+  if (row.kind === 'history') return row.message.content;
+  if (row.kind !== 'timeline') return '';
+  const values: string[] = [];
+  collectSearchText(row.item, values);
+  return values.join('\n');
+}
 
 export interface MessageThreadProps {
   /** 历史消息（已按分叉备注排好序、去掉当前运行那一轮）。 */
@@ -62,9 +166,22 @@ export default function MessageThread({ history, username, historyActions, empty
   const loadEarlier = useAtlasStore((state) => state.loadEarlier);
 
   const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null);
+  const [presentation, setPresentation] = useThreadPresentationSettings();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchKey, setActiveSearchKey] = useState<string | null>(null);
+  const [searchHistoryLoading, setSearchHistoryLoading] = useState(false);
+  const [searchHistoryIncomplete, setSearchHistoryIncomplete] = useState(false);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const conversationRef = useRef(conversationId);
-  conversationRef.current = conversationId;
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const historyLoadAttemptRef = useRef<string | null>(null);
+  const searchTargetRef = useRef('');
+  const scrollStateKey = `${conversationId}:${searchOpen ? 'search' : JSON.stringify(presentation)}`;
+  const scrollStateKeyRef = useRef(scrollStateKey);
+  const lastAnnouncedReplyRef = useRef<{ conversationId: string; eventId: string } | null>(null);
+  const [screenReaderAnnouncement, setScreenReaderAnnouncement] = useState('');
+  scrollStateKeyRef.current = scrollStateKey;
   const previousHistory = useRef({ conversationId: '', length: 0 });
 
   const timelineItems = useMemo(() => buildTimeline(events), [events]);
@@ -90,6 +207,131 @@ export default function MessageThread({ history, username, historyActions, empty
     }
     return rows;
   }, [history, loading, timelineItems, hasEarlier, truncatedCount]);
+
+  const displayRows = useMemo(() => searchOpen
+    ? rows.map((row) => ({ kind: 'row' as const, id: row.id, row }))
+    : presentRows(rows, presentation, answers), [answers, presentation, rows, searchOpen]);
+  const latestCompletedEvent = useMemo(() => [...events].reverse().find((event) => event.type === 'message.completed'), [events]);
+
+  useEffect(() => {
+    const previous = lastAnnouncedReplyRef.current;
+    if (!previous || previous.conversationId !== conversationId) {
+      lastAnnouncedReplyRef.current = { conversationId, eventId: latestCompletedEvent?.id ?? '' };
+      setScreenReaderAnnouncement('');
+      return;
+    }
+    if (latestCompletedEvent?.id && latestCompletedEvent.id !== previous.eventId) {
+      lastAnnouncedReplyRef.current = { conversationId, eventId: latestCompletedEvent.id };
+      setScreenReaderAnnouncement(typeof latestCompletedEvent.data.content === 'string' ? latestCompletedEvent.data.content : '已收到回复');
+    }
+  }, [conversationId, latestCompletedEvent]);
+
+  const searchableRows = useMemo<ConversationSearchRow[]>(() => rows.flatMap((row) => {
+    if (row.kind !== 'history' && row.kind !== 'timeline') return [];
+    return [{ id: row.id, text: searchTextForRow(row) }];
+  }), [rows]);
+  const searchMatches = useMemo(() => findConversationMatches(searchableRows, searchQuery), [searchableRows, searchQuery]);
+  const activeSearchIndex = activeSearchKey ? searchMatches.findIndex((match) => match.key === activeSearchKey) : -1;
+  const activeSearchMatch = searchMatches[activeSearchIndex >= 0 ? activeSearchIndex : 0];
+
+  const openSearch = useCallback(() => {
+    if (!searchOpen && document.activeElement instanceof HTMLElement) previousFocusRef.current = document.activeElement;
+    setSearchOpen(true);
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [searchOpen]);
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    clearConversationHighlights();
+    requestAnimationFrame(() => previousFocusRef.current?.focus());
+  }, []);
+
+  const moveSearch = useCallback((direction: number) => {
+    if (!searchMatches.length) return;
+    const current = activeSearchIndex < 0 ? 0 : activeSearchIndex;
+    setActiveSearchKey(searchMatches[(current + direction + searchMatches.length) % searchMatches.length].key);
+  }, [activeSearchIndex, searchMatches]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.target as HTMLElement | null)?.closest?.('[data-shortcut-recorder]')) return;
+      const isSearchShortcut = (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'f';
+      if (isSearchShortcut && !event.defaultPrevented && !matchShortcut(event, loadBindings())) {
+        event.preventDefault();
+        event.stopPropagation();
+        openSearch();
+        return;
+      }
+      if (!searchOpen) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeSearch();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSearch(event.shiftKey ? -1 : 1);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [closeSearch, moveSearch, openSearch, searchOpen]);
+
+  // Searching the whole conversation intentionally pages older history in through the store's existing API.
+  useEffect(() => {
+    if (!searchOpen || !searchQuery.trim() || !conversationId || !hasEarlier || loading || loadingEarlier) {
+      if (!searchQuery.trim() || !searchOpen) {
+        if (searchHistoryLoading) setSearchHistoryLoading(false);
+        if (searchHistoryIncomplete) setSearchHistoryIncomplete(false);
+      }
+      return;
+    }
+    const oldestId = history[0]?.id ?? '';
+    const attemptKey = `${conversationId}:${oldestId}`;
+    if (historyLoadAttemptRef.current === attemptKey) return;
+    historyLoadAttemptRef.current = attemptKey;
+    setSearchHistoryLoading(true);
+    void loadEarlier(conversationId).then(() => {
+      const state = useAtlasStore.getState();
+      if (state.activeConversationId !== conversationId) return;
+      const nextOldestId = state.conversationMessages[conversationId]?.[0]?.id ?? '';
+      const failedToAdvance = nextOldestId === oldestId && state.messagesHasEarlier[conversationId] !== false;
+      setSearchHistoryLoading(false);
+      setSearchHistoryIncomplete(failedToAdvance);
+    });
+  }, [conversationId, hasEarlier, history, loadEarlier, loading, loadingEarlier, searchHistoryIncomplete, searchHistoryLoading, searchOpen, searchQuery]);
+
+  useEffect(() => {
+    if (!searchOpen || !searchQuery.trim() || !activeSearchMatch) {
+      clearConversationHighlights();
+      searchTargetRef.current = '';
+      return;
+    }
+    const targetSignature = `${conversationId}:${searchQuery}:${activeSearchMatch.key}`;
+    if (searchTargetRef.current === targetSignature) return;
+    searchTargetRef.current = targetSignature;
+    const index = rows.findIndex((row) => row.id === activeSearchMatch.rowId);
+    if (index < 0) return;
+    virtuosoRef.current?.scrollToIndex({ index, align: 'center', behavior: 'smooth' });
+
+    let attempts = 0;
+    let frame = 0;
+    const reveal = () => {
+      const root = Array.from(threadRef.current?.querySelectorAll<HTMLElement>('[data-conversation-search-row]') ?? [])
+        .find((element) => element.dataset.conversationSearchRow === activeSearchMatch.rowId);
+      if (!root && attempts++ < 16) { frame = requestAnimationFrame(reveal); return; }
+      if (!root) return;
+      const range = highlightConversationRow(root, searchQuery, activeSearchMatch.occurrence);
+      if (!range) return;
+      const rect = range.getBoundingClientRect();
+      const parent = threadRef.current;
+      if (!parent || !rect.height) return;
+      const parentRect = parent.getBoundingClientRect();
+      parent.scrollTo({ top: parent.scrollTop + rect.top - parentRect.top - Math.min(120, parent.clientHeight * 0.2), behavior: 'smooth' });
+    };
+    frame = requestAnimationFrame(reveal);
+    return () => cancelAnimationFrame(frame);
+  }, [activeSearchMatch, conversationId, rows, searchOpen, searchQuery, threadRef]);
 
   const context = useMemo(() => ({ events, store: activityStore, username, setTab, busy: working, onOpenBrowser }), [events, activityStore, username, setTab, working, onOpenBrowser]);
 
@@ -118,8 +360,8 @@ export default function MessageThread({ history, username, historyActions, empty
 
   // 每次滚动停下就存档一次，切会话/切视图时最多丢最后半屏的精确位置。
   const saveScrollState = useCallback(() => {
-    const id = conversationRef.current;
-    virtuosoRef.current?.getState((state) => { savedScrollStates.set(id, state); });
+    const key = scrollStateKeyRef.current;
+    virtuosoRef.current?.getState((state) => { savedScrollStates.set(key, state); });
   }, []);
 
   const startReached = useCallback(() => {
@@ -155,32 +397,59 @@ export default function MessageThread({ history, username, historyActions, empty
     }
   }, [context, conversationId, emptyState, historyActions, loadEarlier, loadingEarlier, username]);
 
+  const renderDisplayRow = useCallback((displayRow: ThreadDisplayRow) => {
+    if (displayRow.kind === 'row') return renderRow(displayRow.row);
+    const label = THREAD_CLASSES.find(({ id }) => id === displayRow.classId)?.label ?? displayRow.classId;
+    return <ThreadClassGroup key={displayRow.id} classId={displayRow.classId} label={label} count={displayRow.rows.length}
+      collapsed={presentation.collapsed[displayRow.classId]}>
+      {displayRow.rows.map((row) => <div key={row.id}>{renderRow(row)}</div>)}
+    </ThreadClassGroup>;
+  }, [presentation.collapsed, renderRow]);
+
   return <div
     ref={(element) => { threadRef.current = element; setScrollParent(element); }}
+    role="region"
     aria-label="任务活动"
     className="min-h-0 flex-1 overflow-auto px-8 pt-2"
   >
+    <ThreadPresentationControls settings={presentation} onChange={setPresentation} />
+    <ConversationSearch
+      open={searchOpen}
+      query={searchQuery}
+      active={searchMatches.length ? (activeSearchIndex >= 0 ? activeSearchIndex : 0) + 1 : 0}
+      total={searchMatches.length}
+      historyLoading={searchHistoryLoading}
+      historyIncomplete={searchHistoryIncomplete}
+      inputRef={searchInputRef}
+      onOpen={openSearch}
+      onQueryChange={(value) => { setSearchQuery(value); setActiveSearchKey(null); }}
+      onPrevious={() => moveSearch(-1)}
+      onNext={() => moveSearch(1)}
+      onClose={closeSearch}
+    />
     <div className="mx-auto w-[min(720px,100%)] pb-8">
       {scrollParent && !loading && <Virtuoso
-        key={conversationId}
+        key={scrollStateKey}
         ref={virtuosoRef}
         customScrollParent={scrollParent}
-        data={rows}
+        data={displayRows}
         computeItemKey={(_index, row) => row.id}
-        itemContent={(_index, row) => renderRow(row)}
+        itemContent={(_index, row) => <div data-conversation-search-row={row.kind === 'row' ? row.id : row.rows[0]?.id} style={{ display: 'contents' }}>{renderDisplayRow(row)}</div>}
         increaseViewportBy={{ top: 600, bottom: 600 }}
         atBottomThreshold={160}
         followOutput={(isAtBottom: boolean) => (isAtBottom ? 'auto' : false)}
         startReached={startReached}
         isScrolling={(scrolling) => { if (!scrolling) saveScrollState(); }}
-        initialTopMostItemIndex={Math.max(0, rows.length - 1)}
+        initialTopMostItemIndex={Math.max(0, displayRows.length - 1)}
         firstItemIndex={firstItemIndex}
-        restoreStateFrom={savedScrollStates.get(conversationId)}
+        restoreStateFrom={savedScrollStates.get(scrollStateKey)}
       />}
       {loading && <p className="py-6 text-center text-[13px] text-fg-3" role="status">正在载入这段对话…</p>}
+      {presentation.show.tools && <ComputerUseTrail events={events} />}
       {thinking && <div className="my-5 flex items-center gap-3 text-[13px] text-fg-3" aria-label="Atlas 正在思考">
         <Mark className="size-[26px]" working />正在想…
       </div>}
+      {screenReaderAnnouncement && <div className="sr-only" role="status" aria-live={presentation.announceCompletedReplies ? 'polite' : 'off'} aria-atomic="true">Atlas 回复：{screenReaderAnnouncement}</div>}
       {footerNote}
     </div>
   </div>;

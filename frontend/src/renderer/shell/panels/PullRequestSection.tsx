@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { CircleCheck, CircleDashed, CircleX, GitPullRequest, LoaderCircle, Wrench } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleX, ExternalLink, GitPullRequest, LoaderCircle, Wrench } from 'lucide-react';
 import type { PullRequestInfo } from '@atlas/backend-adapter';
 import { backend } from '../../store/useAtlasStore';
 import { cn } from '../../ui/cn';
@@ -46,12 +46,17 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
     {pr === undefined && !error && <p className="m-0 text-[12.5px] text-fg-3">正在查…</p>}
     {error && <p role="alert" className="m-0 mb-2 rounded-lg bg-danger-soft px-3 py-2 text-[12px] text-danger">{/gh|auth|login/i.test(error) ? `需要先安装并登录 GitHub CLI（gh auth login）。${error}` : error}</p>}
     {pr && <div className="rounded-xl bg-sunken px-3 py-2.5 text-[12.5px]">
-      <button onClick={() => onOpenUrl(pr.url)} className="block w-full truncate text-left font-medium text-fg hover:underline">#{pr.number} {pr.title}</button>
+      <button type="button" aria-label={`在浏览器打开 PR #${pr.number}：${pr.title}`} onClick={() => onOpenUrl(pr.url)} className="block w-full truncate text-left font-medium text-fg hover:underline">#{pr.number} {pr.title}</button>
       <p className="m-0 mt-0.5 text-fg-3">{pr.draft ? '草稿 · ' : ''}{pr.state} · {pr.head} → {pr.base}</p>
+      <button type="button" onClick={() => onOpenUrl(pr.url)} className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] text-fg-2 hover:bg-hover hover:text-fg">
+        <ExternalLink size={11} />在浏览器查看 PR 时间线与评论
+      </button>
       {pr.checks.length > 0 && <ul className="m-0 mt-2 grid list-none gap-1 p-0">
         {pr.checks.map((check) => <li key={check.name} className="flex items-center gap-1.5">
           {failed(check.conclusion) ? <CircleX size={13} className="shrink-0 text-danger" /> : check.conclusion ? <CircleCheck size={13} className="shrink-0 text-ok" /> : <CircleDashed size={13} className="shrink-0 text-fg-3" />}
-          <span className={cn('min-w-0 flex-1 truncate', failed(check.conclusion) ? 'text-danger' : 'text-fg-2')}>{check.name}</span>
+          {check.url
+            ? <button type="button" aria-label={`打开检查 ${check.name}：${check.conclusion ?? check.status}`} onClick={() => onOpenUrl(check.url!)} className={cn('min-w-0 flex-1 truncate text-left hover:underline', failed(check.conclusion) ? 'text-danger' : 'text-fg-2')}>{check.name}<span className="ml-1 text-fg-3">{check.conclusion ?? check.status}</span></button>
+            : <span className={cn('min-w-0 flex-1 truncate', failed(check.conclusion) ? 'text-danger' : 'text-fg-2')}>{check.name}<span className="ml-1 text-fg-3">{check.conclusion ?? check.status}</span></span>}
           {failed(check.conclusion) && <button disabled={Boolean(busy)} onClick={() => void fix(check.name)} className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50">
             {busy === check.name ? <LoaderCircle size={12} className="spin" /> : <Wrench size={12} />}让 Atlas 修</button>}
         </li>)}

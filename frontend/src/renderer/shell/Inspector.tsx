@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { FileText, FolderOpen, GitBranch, GitMerge, Trash2, X } from 'lucide-react';
-import type { WorktreeInfo } from '@atlas/backend-adapter';
+import type { ConversationMessage, WorktreeInfo } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import type { AgentCapabilityInfo, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import { buildTimeline, duration, shortPath } from '../components/timeline';
-import { backend } from '../store/useAtlasStore';
+import { backend, useAtlasStore } from '../store/useAtlasStore';
 import { cn } from '../ui/cn';
 import { Empty } from './panels/Empty';
 import ChangesPanel from './panels/ChangesPanel';
@@ -15,10 +15,21 @@ import TerminalPanel from './panels/TerminalPanel';
 import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
 import ProcessesPanel from './panels/ProcessesPanel';
 import PullRequestSection from './panels/PullRequestSection';
+import SessionDashboardPanel from './panels/SessionDashboardPanel';
 
-export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes';
+export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard';
 
+const EMPTY_MESSAGES: ConversationMessage[] = [];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
+const terminalCommandOwners = new Map<string, string>();
+function commandForConversation(command: { id: string; text: string } | null, conversationId: string) {
+  if (!command || !conversationId) return command;
+  const owner = terminalCommandOwners.get(command.id);
+  if (owner) return owner === conversationId ? command : null;
+  terminalCommandOwners.set(command.id, conversationId);
+  if (terminalCommandOwners.size > 100) terminalCommandOwners.delete(terminalCommandOwners.keys().next().value!);
+  return command;
+}
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
 const WIDE: InspectorTab[] = ['changes', 'files', 'specs', 'terminal', 'browser'];
 const WIDTH_KEY = 'atlas.preference.inspector-width';
@@ -91,14 +102,19 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
   const [terminalOpened, setTerminalOpened] = useState(false);
   const [browserOpened, setBrowserOpened] = useState(false);
   useEffect(() => { if (tab === 'terminal') setTerminalOpened(true); if (tab === 'browser') setBrowserOpened(true); }, [tab]);
+  const messages: ConversationMessage[] = useAtlasStore((state) => state.conversationMessages[conversationId]) ?? EMPTY_MESSAGES;
+  const conversationRuns = useAtlasStore((state) => state.runs);
   const events: AgentEvent[] = run?.events ?? [];
   const steps = useMemo(() => buildTimeline(events).flatMap((item) => item.kind === 'steps' ? item.steps : []), [events]);
+  const dashboardSteps = useMemo(() => conversationRuns.filter((item) => item.conversationId === conversationId)
+    .flatMap((item) => buildTimeline(item.events).flatMap((entry) => entry.kind === 'steps' ? entry.steps : [])), [conversationRuns, conversationId]);
   const current = artifacts.find((item) => item.id === selected);
   const refreshKey = `${run?.id}:${run?.status}`;
+  const scopedTerminalCommand = commandForConversation(terminalCommand, conversationId);
 
   const resize = useResizableWidth();
   const tabs: Array<[InspectorTab, string]> = [
-    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'],
+    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'], ['dashboard', '看板'],
   ];
   return <aside aria-label="任务面板" style={resize.width ? { width: resize.width } : undefined}
     className={cn('anim-fade relative flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)]', !resize.dragging && 'transition-[width] duration-200', !resize.width && (WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]'))}>
@@ -148,7 +164,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
         {workspace || !connected ? connected
           ? workspace!.startsWith('ssh://')
             ? <Empty title="远程目录暂时不能开终端" body="终端面板只能打开这台电脑上的 PowerShell。远程目录里的命令可以直接让 Atlas 去运行。" />
-            : <TerminalPanel cwd={workspace!} active={tab === 'terminal'} command={terminalCommand} onSendToAtlas={onSendToAtlas} />
+            : <TerminalPanel conversationId={conversationId} cwd={workspace!} active={tab === 'terminal'} command={scopedTerminalCommand} onSendToAtlas={onSendToAtlas} />
           : <Empty title="后端没有连接" body="连上 Atlas 后端后才能打开终端。" />
           : <Empty title="先选工作目录" body="终端会在这个会话的工作目录里打开。" icon={<FolderOpen size={22} />}
             action={<button onClick={onChooseWorkspace} className="primary-fill inline-flex h-8 items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-medium"><FolderOpen size={15} />选择文件夹</button>} />}
@@ -160,6 +176,8 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
       </div>}
 
       {tab === 'processes' && <ProcessesPanel onToast={onToast} />}
+
+      {tab === 'dashboard' && <SessionDashboardPanel apiBaseUrl={apiBaseUrl} conversationId={conversationId} messages={messages} steps={dashboardSteps} />}
 
       {tab === 'context' && <ContextTab conversationTitle={conversationTitle} modelName={modelName} run={run} tools={tools} skills={skills} activeSkills={activeSkills}
         capabilities={capabilities} workspace={workspace} onChooseWorkspace={onChooseWorkspace} connected={connected}

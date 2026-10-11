@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { ChevronRight, FileDiff, History, LoaderCircle, MessageSquarePlus, RotateCcw, Send, X } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Check, ChevronDown, ChevronRight, ChevronUp, ExternalLink, FileDiff, History, LoaderCircle, MessageSquarePlus, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import type { RunChangeFile, RunDiagnosticsFile } from '@atlas/backend-adapter';
-import { backend } from '../../store/useAtlasStore';
+import { backend, useAtlasStore } from '../../store/useAtlasStore';
 import { api, relativeTime } from '../../services/api';
 import { DiagnosticsList, SeverityDots } from '../../components/diagnostics';
 import type { LspDiagnosticItem } from '../../components/timeline';
@@ -13,12 +13,28 @@ import { Empty } from './Empty';
 interface LineComment { id: string; path: string; line: number | null; side: 'new' | 'old'; code: string; text: string }
 
 interface Checkpoint { id: string; workspace: string; created_at: string; run_id?: string | null; files: Array<{ path: string; directory?: boolean }> }
+interface RunChangeHunk {
+  id: string; old_start: number; old_count: number; new_start: number; new_count: number;
+  status: 'pending' | 'accepted' | 'rejected'; reviewable: boolean;
+}
+type RunChange = RunChangeFile & { root?: string; relative_path?: string; diff_hash?: string; hunks?: RunChangeHunk[] };
+interface FileRestoreTarget { id: string; workspace: string; path: string }
 
 const STATUS: Record<RunChangeFile['status'], { label: string; tone: string }> = {
   added: { label: '新增', tone: 'text-ok' },
   modified: { label: '修改', tone: 'text-brand' },
   deleted: { label: '删除', tone: 'text-danger' },
 };
+
+const normalizePath = (path: string) => path.replace(/\\/g, '/').replace(/\/$/, '');
+const changeRoot = (file: RunChange) => file.root ?? file.workspace;
+const changeKey = (file: RunChange) => `${changeRoot(file)}\0${normalizePath(file.path)}`;
+const workspaceName = (workspace: string) => workspace.replace(/[\\/]+$/, '').split(/[\\/]/).filter(Boolean).pop() ?? '';
+function samePath(left: string, right: string): boolean {
+  const a = normalizePath(left);
+  const b = normalizePath(right);
+  return /^[A-Za-z]:\//.test(a) || /^[A-Za-z]:\//.test(b) ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
 
 /** What this run changed on disk, and the snapshots that can put it back. */
 export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, onToast, onAsk }: {
@@ -33,18 +49,84 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
     setComments([]);
     onToast('评论已发给 Atlas');
   };
-  const [files, setFiles] = useState<RunChangeFile[] | null>(null);
+  const [files, setFiles] = useState<RunChange[] | null>(null);
   const [open, setOpen] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [changesReload, setChangesReload] = useState(0);
+  const [restoreTargets, setRestoreTargets] = useState<Record<string, FileRestoreTarget>>({});
+  const [restoreNotice, setRestoreNotice] = useState('');
+  const [restoreConfirm, setRestoreConfirm] = useState('');
+  const [restoringFile, setRestoringFile] = useState('');
+  const [restoreError, setRestoreError] = useState('');
+  const [hunkBusyId, setHunkBusyId] = useState('');
+  const [hunkError, setHunkError] = useState('');
   useEffect(() => {
-    if (!runId || !connected) { setFiles([]); return; }
+    if (!runId || !connected) { setFiles([]); setError(''); return; }
     let stale = false;
+    setFiles(null);
     setError('');
     backend.getRunChanges(runId)
-      .then((result) => { if (!stale) { setFiles(result); setOpen(result.length === 1 ? [result[0].path] : []); } })
+      .then((result) => { if (!stale) { setFiles(result as RunChange[]); setOpen(result.length === 1 ? [result[0].path] : []); } })
       .catch((exc) => { if (!stale) { setFiles([]); setError(exc instanceof Error ? exc.message : String(exc)); } });
     return () => { stale = true; };
-  }, [runId, runStatus, connected]);
+  }, [runId, runStatus, connected, changesReload]);
+
+  // A run's earliest checkpoint containing a changed path is the version from before
+  // that file was first edited. Only files with that concrete snapshot get a restore action.
+  useEffect(() => {
+    if (!runId || !connected || !files?.length) {
+      setRestoreTargets({});
+      setRestoreNotice('');
+      return;
+    }
+    let stale = false;
+    setRestoreTargets({});
+    setRestoreNotice('');
+    setRestoreConfirm('');
+    setRestoreError('');
+    const roots = [...new Set(files.map((file) => changeRoot(file)).filter(Boolean))];
+    void Promise.all(roots.map(async (workspace) => {
+      const params = new URLSearchParams({ workspace, run_id: runId });
+      try {
+        return { workspace, items: await api<Checkpoint[]>(apiBaseUrl, `/api/checkpoints?${params}`) };
+      } catch {
+        return { workspace, items: null };
+      }
+    })).then((groups) => {
+      if (stale) return;
+      const targets: Record<string, FileRestoreTarget> = {};
+      const failedRoot = groups.some((group) => group.items === null);
+      for (const file of files) {
+        const workspace = changeRoot(file);
+        const group = groups.find((item) => samePath(item.workspace, workspace));
+        if (!group?.items) continue;
+        const rootName = workspaceName(workspace);
+        const candidates = new Set<string>();
+        for (const checkpoint of group.items) {
+          if (checkpoint.run_id && checkpoint.run_id !== runId) continue;
+          for (const saved of checkpoint.files) {
+            if (saved.directory) continue;
+            if (samePath(saved.path, file.path) || (rootName && samePath(file.path, `${rootName}/${saved.path}`))) {
+              candidates.add(normalizePath(saved.path));
+            }
+          }
+        }
+        // Multi-root run-change rows include the root's basename in their display path.
+        // If both that path and its stripped form exist, don't guess which file to mutate.
+        if (candidates.size !== 1) continue;
+        const path = [...candidates][0];
+        const checkpoint = group.items
+          .filter((item) => (!item.run_id || item.run_id === runId)
+            && item.files.some((saved) => !saved.directory && samePath(saved.path, path)))
+          .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+        if (checkpoint) targets[changeKey(file)] = { id: checkpoint.id, workspace, path };
+      }
+      setRestoreTargets(targets);
+      if (failedRoot) setRestoreNotice('部分工作目录的任务前快照无法读取；没有安全快照的文件不会提供恢复操作。');
+      else if (Object.keys(targets).length < files.length) setRestoreNotice('没有找到部分文件的任务前快照；这些文件不会提供逐文件恢复操作。');
+    });
+    return () => { stale = true; };
+  }, [apiBaseUrl, connected, files, runId]);
   // 这次运行改过的文件当前的 LSP 诊断。路径统一成正斜杠再对上；拉不到就不显示徽标。
   const [diagnostics, setDiagnostics] = useState<Record<string, RunDiagnosticsFile>>({});
   useEffect(() => {
@@ -59,6 +141,41 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
   const toggle = (path: string) => setOpen((current) => current.includes(path) ? current.filter((item) => item !== path) : [...current, path]);
   const additions = files?.reduce((sum, file) => sum + file.additions, 0) ?? 0;
   const deletions = files?.reduce((sum, file) => sum + file.deletions, 0) ?? 0;
+  const restoreFile = async (file: RunChange) => {
+    const key = changeKey(file);
+    const target = restoreTargets[key];
+    if (!target || !runId || restoringFile) return;
+    if (restoreConfirm !== key) { setRestoreConfirm(key); return; }
+    setRestoreConfirm('');
+    setRestoringFile(key);
+    setRestoreError('');
+    try {
+      await backend.restoreVersion(target.workspace, target.path, `checkpoint:${target.id}`);
+      onToast(`已恢复 ${file.path} 到本次任务前的版本`);
+      setChangesReload((value) => value + 1);
+    } catch (exc) {
+      setRestoreError(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setRestoringFile('');
+    }
+  };
+  const reviewHunk = async (file: RunChange, hunk: RunChangeHunk, action: 'accept' | 'reject') => {
+    if (!runId || !file.diff_hash || !hunk.reviewable || hunkBusyId) return;
+    setHunkBusyId(hunk.id);
+    setHunkError('');
+    try {
+      await api(apiBaseUrl, `/api/runs/${encodeURIComponent(runId)}/changes/hunks/review`, {
+        method: 'POST',
+        json: { workspace: changeRoot(file), path: file.relative_path ?? file.path,
+          hunk_id: hunk.id, action, expected_diff_hash: file.diff_hash },
+      });
+      setChangesReload((value) => value + 1);
+    } catch (exc) {
+      setHunkError(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setHunkBusyId('');
+    }
+  };
 
   return <div className="grid gap-6">
     <section>
@@ -66,14 +183,26 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
         这次的改动{files && files.length > 0 && <span className="font-normal tabular-nums text-fg-3">{files.length} 个文件 <span className="text-ok">+{additions}</span> <span className="text-danger">−{deletions}</span></span>}
       </h3>
       {error && <p role="alert" className="m-0 mb-2 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">{error}</p>}
+      {hunkError && <div role="alert" className="mb-2 flex items-center gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger"><span className="min-w-0 flex-1">Diff 审核未完成：{hunkError}</span><button type="button" onClick={() => setChangesReload((value) => value + 1)} className="shrink-0 underline underline-offset-2">重新载入</button></div>}
+      {restoreError && <p role="alert" className="m-0 mb-2 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">逐文件恢复失败：{restoreError}</p>}
+      {restoreNotice && <p role="status" className="m-0 mb-2 rounded-lg bg-sunken px-3 py-2 text-[12px] text-fg-3">{restoreNotice}</p>}
       {files === null ? <p className="py-6 text-center text-[13px] text-fg-3">正在读取改动…</p>
         : files.length ? <div className="grid gap-1.5">{files.map((file) => {
           const expanded = open.includes(file.path);
           const fileDiagnostics = diagnostics[normalizePath(file.path)];
+          const fileKey = changeKey(file);
+          const restoreTarget = restoreTargets[fileKey];
+          const active = useAtlasStore.getState();
+          const activeConversation = active.conversations.find((item) => item.id === active.activeConversationId);
+          const activeWorkspace = activeConversation?.worktree_path ?? activeConversation?.workspace ?? '';
+          const relativePath = file.relative_path ?? file.path;
+          const openPath = samePath(changeRoot(file), activeWorkspace) && file.status !== 'deleted'
+            ? `${activeWorkspace.replace(/[\\/]+$/, '')}${activeWorkspace.includes('\\') ? '\\' : '/'}${relativePath.replace(/[\\/]/g, activeWorkspace.includes('\\') ? '\\' : '/')}`
+            : undefined;
           return <div key={`${file.workspace}:${file.path}`} className="overflow-hidden rounded-xl card-surface">
             <button onClick={() => toggle(file.path)} aria-expanded={expanded} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-hover">
               <ChevronRight size={13} className={cn('shrink-0 text-fg-3 transition-transform', expanded && 'rotate-90')} />
-              <span className={cn('shrink-0 text-[11.5px]', STATUS[file.status]?.tone)}>{STATUS[file.status]?.label ?? file.status}</span>
+              <span aria-label={`文件状态：${STATUS[file.status]?.label ?? file.status}`} className={cn('shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[11px]', STATUS[file.status]?.tone)}>{STATUS[file.status]?.label ?? file.status}</span>
               <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg" title={file.path}>{shortPath(file.path)}</code>
               {fileDiagnostics && fileDiagnostics.count > 0 && <span title="LSP 诊断" className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sunken px-2 py-0.5 text-[11px] tabular-nums text-fg-2">
                 <SeverityDots diagnostics={fileDiagnostics.diagnostics as LspDiagnosticItem[]} />{fileDiagnostics.count} 个问题
@@ -81,9 +210,18 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
               <span className="shrink-0 text-[11.5px] tabular-nums"><span className="text-ok">+{file.additions}</span> <span className="text-danger">−{file.deletions}</span></span>
             </button>
             {expanded && <>
-              <DiffView diff={file.diff} truncated={file.truncated} path={file.path} comments={onAsk ? comments.filter((comment) => comment.path === file.path) : undefined}
+              <DiffView diff={file.diff} truncated={file.truncated} path={file.path} openPath={openPath} hunks={file.hunks}
+                busyHunkId={hunkBusyId} onReviewHunk={(hunk, action) => void reviewHunk(file, hunk, action)} comments={onAsk ? comments.filter((comment) => comment.path === file.path) : undefined}
                 onAdd={(comment) => setComments((current) => [...current, { ...comment, id: `${Date.now()}-${current.length}` }])}
                 onRemove={(id) => setComments((current) => current.filter((comment) => comment.id !== id))} />
+              {restoreTarget && <div className="flex items-center gap-2 border-t border-line px-3 py-2">
+                <button type="button" disabled={Boolean(restoringFile)} onClick={() => void restoreFile(file)}
+                  className={cn('inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] disabled:opacity-50', restoreConfirm === fileKey ? 'bg-danger-soft text-danger' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
+                  {restoringFile === fileKey ? <LoaderCircle size={12} className="spin" /> : <RotateCcw size={12} />}
+                  {restoringFile === fileKey ? '正在恢复…' : restoreConfirm === fileKey ? '确认恢复此文件' : '恢复此文件到任务前'}
+                </button>
+                {restoreConfirm === fileKey && <span role="status" className="text-[11.5px] text-fg-3">只还原这个文件，会先保存当前版本供文件历史恢复。</span>}
+              </div>}
               {fileDiagnostics && fileDiagnostics.diagnostics.length > 0 && <div className="border-t border-line px-3 py-2">
                 <p className="m-0 mb-1.5 text-[11.5px] text-fg-3">LSP 诊断（当前共 {fileDiagnostics.count} 个）</p>
                 <DiagnosticsList diagnostics={fileDiagnostics.diagnostics as LspDiagnosticItem[]} />
@@ -103,34 +241,77 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
   </div>;
 }
 
-type DiffLine = { text: string; kind: 'add' | 'del' | 'ctx' | 'hunk'; oldNo: number | null; newNo: number | null };
+type DiffLine = { text: string; kind: 'add' | 'del' | 'ctx' | 'hunk'; oldNo: number | null; newNo: number | null; hunkIndex: number };
+interface DiffSearchHit { lineIndex: number; start: number; end: number }
 
 /** 诊断表和改动清单都按正斜杠对齐路径，避免 \ 与 / 混写对不上。 */
-const normalizePath = (path: string) => path.replace(/\\/g, '/');
-
 /** Unified diff lines with their old/new line numbers, read from the @@ hunk headers. */
 function numberLines(diff: string): DiffLine[] {
   let oldNo = 0, newNo = 0;
+  let hunkIndex = -1;
   const raw = diff.replace(/\n$/, '').split('\n');
-  return raw.filter((line) => !line.startsWith('---') && !line.startsWith('+++')).map((text) => {
+  let skippedHeaders = 0;
+  return raw.filter((line) => {
+    if (skippedHeaders < 2 && (line.startsWith('--- ') || line.startsWith('+++ '))) { skippedHeaders += 1; return false; }
+    return true;
+  }).map((text) => {
     const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(text);
-    if (hunk) { oldNo = Number(hunk[1]); newNo = Number(hunk[2]); return { text, kind: 'hunk', oldNo: null, newNo: null }; }
+    if (hunk) { oldNo = Number(hunk[1]); newNo = Number(hunk[2]); hunkIndex += 1; return { text, kind: 'hunk', oldNo: null, newNo: null, hunkIndex }; }
     // "\ No newline at end of file" describes the line above; it is not a line of the file.
-    if (text.startsWith('\\')) return { text, kind: 'hunk', oldNo: null, newNo: null };
-    if (text.startsWith('+')) return { text, kind: 'add', oldNo: null, newNo: newNo++ };
-    if (text.startsWith('-')) return { text, kind: 'del', oldNo: oldNo++, newNo: null };
-    return { text, kind: 'ctx', oldNo: oldNo++, newNo: newNo++ };
+    if (text.startsWith('\\')) return { text, kind: 'hunk', oldNo: null, newNo: null, hunkIndex };
+    if (text.startsWith('+')) return { text, kind: 'add', oldNo: null, newNo: newNo++, hunkIndex };
+    if (text.startsWith('-')) return { text, kind: 'del', oldNo: oldNo++, newNo: null, hunkIndex };
+    return { text, kind: 'ctx', oldNo: oldNo++, newNo: newNo++, hunkIndex };
   });
 }
 
 /** 统一 diff 渲染（含行号）；InitDialog 复用它来预览 AGENTS.md 的提案差异。 */
-export function DiffView({ diff, truncated, path, comments, onAdd, onRemove }: {
-  diff: string; truncated?: boolean; path: string; comments?: LineComment[];
+export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, onReviewHunk, comments, onAdd, onRemove }: {
+  diff: string; truncated?: boolean; path: string; openPath?: string; hunks?: RunChangeHunk[]; busyHunkId?: string;
+  onReviewHunk?: (hunk: RunChangeHunk, action: 'accept' | 'reject') => void; comments?: LineComment[];
   onAdd: (comment: Omit<LineComment, 'id'>) => void; onRemove: (id: string) => void;
 }) {
-  const lines = numberLines(diff);
+  const lines = useMemo(() => numberLines(diff), [diff]);
   const [draft, setDraft] = useState<{ index: number; text: string } | null>(null);
+  const [externalError, setExternalError] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [activeSearchHit, setActiveSearchHit] = useState(0);
+  const searchInputId = useId();
+  const searchHitRefs = useRef<Array<HTMLElement | null>>([]);
   const commentable = Boolean(comments);
+  const searchHits = useMemo<DiffSearchHit[]>(() => {
+    if (!searchText) return [];
+    const escaped = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const matcher = new RegExp(escaped, 'giu');
+    const hits: DiffSearchHit[] = [];
+    lines.forEach((line, lineIndex) => {
+      if (line.kind === 'hunk') return;
+      const content = line.text.slice(1);
+      for (const match of content.matchAll(matcher)) {
+        if (match.index !== undefined) hits.push({ lineIndex, start: match.index, end: match.index + match[0].length });
+      }
+    });
+    return hits;
+  }, [lines, searchText]);
+  const searchHitsByLine = useMemo(() => {
+    const grouped = new Map<number, number[]>();
+    searchHits.forEach((hit, hitIndex) => {
+      const indexes = grouped.get(hit.lineIndex) ?? [];
+      indexes.push(hitIndex);
+      grouped.set(hit.lineIndex, indexes);
+    });
+    return grouped;
+  }, [searchHits]);
+  const moveSearchHit = (direction: -1 | 1) => {
+    if (!searchHits.length) return;
+    setActiveSearchHit((current) => (current + direction + searchHits.length) % searchHits.length);
+  };
+  useEffect(() => {
+    if (searchText && searchHits.length) searchHitRefs.current[activeSearchHit]?.scrollIntoView({ block: 'center', inline: 'nearest' });
+  }, [activeSearchHit, searchHits.length, searchText]);
+  useEffect(() => {
+    setActiveSearchHit((current) => searchHits.length ? Math.min(current, searchHits.length - 1) : 0);
+  }, [searchHits.length]);
   const save = () => {
     if (!draft?.text.trim()) { setDraft(null); return; }
     const line = lines[draft.index];
@@ -138,9 +319,53 @@ export function DiffView({ diff, truncated, path, comments, onAdd, onRemove }: {
     setDraft(null);
   };
   return <div className="max-h-96 overflow-auto bg-code py-2 font-mono text-[11.5px] leading-[1.6] shadow-[inset_0_1px_0_var(--line)]">
+    {openPath && window.atlasDesktop?.openPath && <div className="mb-1 flex justify-end px-3 font-sans">
+      <button type="button" onClick={() => { setExternalError(''); void window.atlasDesktop!.openPath(openPath).then((result) => { if (result !== 'opened' && result !== 'revealed') setExternalError(`无法打开文件：${result}`); }).catch((error) => setExternalError(error instanceof Error ? error.message : String(error))); }}
+        className="inline-flex min-h-7 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-fg-2 hover:bg-hover hover:text-fg"><ExternalLink size={12} />用默认编辑器打开</button>
+    </div>}
+    {externalError && <p role="alert" className="mx-3 my-1 rounded-md bg-danger-soft px-2 py-1 font-sans text-[11.5px] text-danger">{externalError}</p>}
+    <div role="search" aria-label="在当前文件改动中搜索" className="mb-1 flex flex-wrap items-center gap-1.5 px-3 font-sans">
+      <label htmlFor={searchInputId} className="sr-only">搜索当前文件改动</label>
+      <div className="flex h-7 min-w-32 flex-1 items-center gap-1.5 rounded-md bg-sunken px-2 shadow-[inset_0_0_0_1px_var(--line)] focus-within:shadow-[inset_0_0_0_1px_var(--brand)]">
+        <Search size={12} aria-hidden="true" className="shrink-0 text-fg-3" />
+        <input id={searchInputId} type="search" value={searchText} autoComplete="off" spellCheck={false}
+          onChange={(event) => { setSearchText(event.target.value); setActiveSearchHit(0); }}
+          onKeyDown={(event) => {
+            // Navigation is scoped to this input; comment fields keep their own Ctrl/Meta+Enter and Escape behavior.
+            if (event.key === 'Enter') { event.preventDefault(); moveSearchHit(event.shiftKey ? -1 : 1); }
+            else if (event.key === 'Escape' && searchText) { event.preventDefault(); setSearchText(''); setActiveSearchHit(0); }
+          }}
+          placeholder="搜索 diff 文本"
+          className="min-w-0 flex-1 bg-transparent text-[11.5px] text-fg outline-none placeholder:text-fg-3" />
+        {searchText && <button type="button" aria-label="清空 diff 搜索" onClick={() => { setSearchText(''); setActiveSearchHit(0); }}
+          className="grid h-5 w-5 shrink-0 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><X size={11} /></button>}
+      </div>
+      <span role="status" aria-live="polite" aria-atomic="true" className="min-w-20 text-right text-[11px] tabular-nums text-fg-3">
+        {searchText ? searchHits.length ? `${activeSearchHit + 1} / ${searchHits.length} 项` : '0 / 0 · 无结果' : '输入文本搜索'}
+      </span>
+      <button type="button" aria-label="上一个 diff 搜索命中" title="上一个命中（Shift+Enter）" disabled={!searchHits.length}
+        onClick={() => moveSearchHit(-1)} className="grid h-7 w-7 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"><ChevronUp size={14} /></button>
+      <button type="button" aria-label="下一个 diff 搜索命中" title="下一个命中（Enter）" disabled={!searchHits.length}
+        onClick={() => moveSearchHit(1)} className="grid h-7 w-7 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"><ChevronDown size={14} /></button>
+    </div>
     {lines.map((line, index) => {
       const number = line.newNo ?? line.oldNo;
       const notes = comments?.filter((comment) => comment.line === number && comment.side === (line.kind === 'del' ? 'old' : 'new') && line.kind !== 'hunk') ?? [];
+      const lineHitIndexes = searchHitsByLine.get(index) ?? [];
+      const lineContent = line.kind === 'hunk' ? line.text : line.text.slice(1);
+      const highlighted: ReactNode[] = [];
+      let cursor = 0;
+      for (const hitIndex of lineHitIndexes) {
+        const hit = searchHits[hitIndex];
+        if (hit.start > cursor) highlighted.push(lineContent.slice(cursor, hit.start));
+        highlighted.push(<mark key={`search-${hitIndex}`} ref={(node) => { searchHitRefs.current[hitIndex] = node; }}
+          aria-current={activeSearchHit === hitIndex ? 'true' : undefined}
+          className={cn('rounded-sm', activeSearchHit === hitIndex ? 'bg-amber-300 text-black ring-1 ring-amber-500' : 'bg-amber-900/50 text-inherit')}>
+          {lineContent.slice(hit.start, hit.end)}
+        </mark>);
+        cursor = hit.end;
+      }
+      if (lineHitIndexes.length) highlighted.push(lineContent.slice(cursor));
       return <div key={index}>
         <div className={cn('group flex', line.kind === 'add' ? 'bg-ok-soft text-fg' : line.kind === 'del' ? 'bg-danger-soft text-fg' : line.kind === 'hunk' ? 'text-fg-3' : 'text-fg-2')}>
           <span className="w-9 shrink-0 pr-1.5 text-right text-fg-3 select-none tabular-nums">{line.kind === 'hunk' ? '' : number}</span>
@@ -148,8 +373,27 @@ export function DiffView({ diff, truncated, path, comments, onAdd, onRemove }: {
             ? <button aria-label={`评论第 ${number} 行`} onClick={() => setDraft({ index, text: '' })}
               className="grid w-4 shrink-0 place-items-center text-brand opacity-0 group-hover:opacity-100 focus:opacity-100"><MessageSquarePlus size={11} /></button>
             : <span className="w-4 shrink-0" />}
-          <span className="min-w-0 flex-1 pr-3 whitespace-pre">{line.text || ' '}</span>
+          <span className="min-w-0 flex-1 pr-3 whitespace-pre">{line.kind === 'hunk' ? line.text || ' ' : <>{line.text.slice(0, 1)}{lineHitIndexes.length ? highlighted : line.text.slice(1) || ' '}</>}</span>
         </div>
+        {line.kind === 'hunk' && line.text.startsWith('@@') && (() => {
+          const hunk = hunks?.[line.hunkIndex];
+          if (!hunk) return null;
+          return <div className="flex items-center gap-2 border-y border-line/60 bg-sunken/50 px-3 py-1 font-sans text-[11.5px]" aria-label={`差异块 ${line.hunkIndex + 1} 审核`}>
+            <span className="min-w-0 flex-1 text-fg-3">差异块 {line.hunkIndex + 1} · {hunk.status === 'accepted' ? '已接受' : hunk.status === 'rejected' ? '已拒绝' : '待审核'}</span>
+            {hunk.status === 'pending' && <>
+              <button type="button" aria-label={`接受差异块 ${line.hunkIndex + 1}`} disabled={!hunk.reviewable || busyHunkId === hunk.id}
+                onClick={() => onReviewHunk?.(hunk, 'accept')} className="inline-flex min-h-7 items-center gap-1 rounded-md px-2 text-ok hover:bg-ok-soft disabled:cursor-not-allowed disabled:opacity-45">
+                {busyHunkId === hunk.id ? <LoaderCircle size={12} className="spin" /> : <ThumbsUp size={12} />}接受
+              </button>
+              <button type="button" aria-label={`拒绝差异块 ${line.hunkIndex + 1}`} disabled={!hunk.reviewable || busyHunkId === hunk.id}
+                onClick={() => onReviewHunk?.(hunk, 'reject')} className="inline-flex min-h-7 items-center gap-1 rounded-md px-2 text-danger hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-45">
+                <ThumbsDown size={12} />拒绝
+              </button>
+            </>}
+            {hunk.status === 'accepted' && <Check size={13} aria-hidden="true" className="text-ok" />}
+            {!hunk.reviewable && hunk.status === 'pending' && <span className="text-fg-3">此差异块不可安全审核</span>}
+          </div>;
+        })()}
         {notes.map((note) => <div key={note.id} className="mx-3 my-1 flex items-start gap-2 rounded-lg bg-overlay px-2.5 py-1.5 font-sans text-[12px] text-fg shadow-[inset_0_0_0_1px_var(--line)]">
           <span className="min-w-0 flex-1 whitespace-pre-wrap">{note.text}</span>
           <button aria-label="删除这条评论" onClick={() => onRemove(note.id)} className="shrink-0 text-fg-3 hover:text-fg"><X size={12} /></button>

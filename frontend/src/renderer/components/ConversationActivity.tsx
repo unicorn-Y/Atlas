@@ -1,9 +1,10 @@
-import { memo, useEffect, useMemo, useState } from 'react';
-import { BookMarked, Check, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
+import { memo, useMemo, useState } from 'react';
+import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
+import ToolExecutionCard from './tool-cards/ToolExecutionCard';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
 import ReviewFindingsCard from './ReviewFindingsCard';
@@ -41,6 +42,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} />;
     case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn} streaming={item.streaming}
       status={item.status ?? (item.streaming ? '正在回复' : undefined)} working={item.streaming && busy} />;
+    case 'reasoning': return <ReasoningDetails key={item.id} item={item} />;
     case 'steps': return <div key={item.id}>
       {firstInTurn && <TurnHeader working={last && busy} />}
       <StepTrack steps={item.steps} live={last && busy} runId={events[0]?.runId ?? ''} store={store} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
@@ -91,6 +93,27 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
   }
 });
 
+function ReasoningDetails({ item }: { item: Extract<TimelineItem, { kind: 'reasoning' }> }) {
+  const [copyStatus, setCopyStatus] = useState('');
+  return <details className="my-2 ml-10 rounded-lg border border-line/70 bg-surface/40 px-3 py-2">
+    <summary className="cursor-pointer text-[12px] text-fg-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
+      运行时提供的推理文本 · {item.eventCount} 条更新
+    </summary>
+    <div className="mt-2 grid gap-2">
+      <p className="m-0 text-[11.5px] text-fg-3">来源：Atlas <code>run.status</code> 事件的 <code>text</code> 字段（<code>status=reasoning</code>）。只显示事件实际提供的内容。</p>
+      <pre className="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] text-fg-2">{item.text}</pre>
+      {item.truncated && <p className="m-0 text-[11.5px] text-fg-3">显示内容达到 4,000 字符上限，后续文本未保留。</p>}
+      <button type="button" onClick={() => {
+        if (!navigator.clipboard) { setCopyStatus('复制失败，浏览器未提供剪贴板权限'); return; }
+        void navigator.clipboard.writeText(item.text).then(() => setCopyStatus('已复制推理文本')).catch(() => setCopyStatus('复制失败，浏览器未提供剪贴板权限'));
+      }} className="inline-flex w-fit items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-fg-2 hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
+        <ClipboardCopy size={13} aria-hidden="true" />复制文本
+      </button>
+      <span role="status" aria-live="polite" className="sr-only">{copyStatus}</span>
+    </div>
+  </details>;
+}
+
 export default function ConversationActivity({ events, store, username, setTab, onOpenBrowser }: ConversationActivityProps) {
   const items = useMemo(() => buildTimeline(events), [events]);
   const busy = store.busy && !store.paused;
@@ -125,7 +148,86 @@ function DoneLine({ item, events, store, setTab }: { item: Extract<TimelineItem,
       onClick={() => void store.sendMessage('/review')}><SearchCheck size={13} />审查本次改动</button>}
     {events[0] && <SaveRecipe runId={events[0].runId} store={store} />}
     {summary && usageOpen && <TokenUsageCard usage={summary} />}
+    <RunTraceDetails events={events} usage={summary} />
   </div>;
+}
+
+function reportedReasoningTokens(events: AgentEvent[]): number | null {
+  const rows = new Map<string, Record<string, unknown>>();
+  let anonymous = 0;
+  for (const event of events) {
+    if (event.type !== 'run.usage') continue;
+    const id = typeof event.data.request_id === 'string' && event.data.request_id ? event.data.request_id : `anon-${anonymous++}`;
+    rows.set(id, event.data);
+  }
+  let total = 0;
+  let reported = false;
+  for (const row of rows.values()) {
+    const completion = row.completion_tokens_details && typeof row.completion_tokens_details === 'object'
+      ? row.completion_tokens_details as Record<string, unknown> : undefined;
+    const output = row.output_tokens_details && typeof row.output_tokens_details === 'object'
+      ? row.output_tokens_details as Record<string, unknown> : undefined;
+    const value = [row.reasoning_tokens, completion?.reasoning_tokens, output?.reasoning_tokens]
+      .find((candidate) => typeof candidate === 'number' && Number.isFinite(candidate));
+    if (typeof value === 'number') { total += value; reported = true; }
+  }
+  return reported ? total : null;
+}
+
+/** Model text is shown only when a run.status event explicitly carries status=reasoning and text. */
+function RunTraceDetails({ events, usage }: { events: AgentEvent[]; usage: ReturnType<typeof usageSummary> }) {
+  const steps = useMemo(() => buildTimeline(events).flatMap((item) => item.kind === 'steps' ? item.steps : []), [events]);
+  const switches = events.filter((event) => event.type === 'run.model_switched');
+  const reasoningTokens = useMemo(() => reportedReasoningTokens(events), [events]);
+  const sources = useMemo(() => [
+    events.some((event) => event.type === 'run.usage') && 'run.usage',
+    switches.length > 0 && 'run.model_switched',
+    events.some((event) => event.type === 'tool.started' || event.type === 'tool.output' || event.type === 'tool.completed') && 'tool.started/tool.output/tool.completed',
+    events.some((event) => event.type.startsWith('subtask.')) && 'subtask.*',
+  ].filter(Boolean).join(' · '), [events, switches.length]);
+  const traceText = useMemo(() => {
+    const lines = ['Atlas 本次运行轨迹'];
+    if (usage) {
+      lines.push(`模型调用：${usage.requests} 次`);
+      for (const model of usage.byModel) lines.push(`- ${model.model}：${model.requests} 次，输入 ${model.input} tokens，输出 ${model.output} tokens，缓存 ${model.cached} tokens`);
+      lines.push(`推理 token：${reasoningTokens === null ? '提供方未返回' : reasoningTokens.toLocaleString()}`);
+      if (usage.cost !== null) lines.push(`费用：$${usage.cost.toFixed(4)}`);
+    } else lines.push('模型用量：运行事件未提供');
+    if (switches.length) lines.push(`模型切换：${switches.map((event) => `${String(event.data.from ?? '未知模型')} → ${String(event.data.to ?? '未知模型')}`).join('；')}`);
+    if (sources) lines.push(`事件来源：${sources}`);
+    lines.push(`工具步骤：${steps.length} 项`);
+    for (const step of steps) {
+      lines.push(`- ${step.verb}${step.target ? ` ${step.target}` : ''}：${step.state === 'failed' ? '失败' : step.state === 'cancelled' ? '已取消' : step.state === 'running' ? '进行中' : '完成'}`);
+      if (step.summary || step.failureReason) lines.push(`  ${step.failureReason ?? step.summary}`);
+    }
+    return lines.join('\n');
+  }, [reasoningTokens, sources, steps, switches, usage]);
+  const [copyStatus, setCopyStatus] = useState('');
+  const requests = usage?.requests ?? 0;
+  const label = requests ? `模型与工具轨迹 · ${requests} 次模型调用 · ${steps.length} 个工具步骤` : `运行轨迹 · ${steps.length} 个工具步骤`;
+  if (!usage && !steps.length && !switches.length) return null;
+  return <details className="basis-full rounded-lg border border-line/70 bg-surface/40 px-2.5 py-2">
+    <summary className="cursor-pointer text-[12px] text-fg-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">{label}</summary>
+    <div className="mt-2 grid gap-2 text-left">
+      <p className="m-0 text-[11.5px] text-fg-3">模型和用量来自 <code>run.usage</code>，工具步骤来自运行时工具事件。推理文本只有在 <code>run.status</code> 明确提供时才会单独显示。</p>
+      {usage && <div className="grid gap-1 text-[12px] text-fg-2">
+        {usage.byModel.map((model) => <p key={model.model} className="m-0">{model.model} · {model.requests} 次 · 输入 {model.input.toLocaleString()} / 输出 {model.output.toLocaleString()} tokens</p>)}
+        <p className="m-0">推理 tokens：{reasoningTokens === null ? '提供方未返回' : reasoningTokens.toLocaleString()}{usage.cost !== null ? ` · 费用 $${usage.cost.toFixed(4)}` : ''}</p>
+      </div>}
+      {switches.map((event) => <p key={event.id} className="m-0 text-[12px] text-fg-2">模型切换：{String(event.data.from ?? '未知模型')} → {String(event.data.to ?? '未知模型')}{typeof event.data.reason === 'string' && event.data.reason ? `（${event.data.reason}）` : ''}</p>)}
+      {steps.length > 0 && <ol className="m-0 grid max-h-48 gap-1 overflow-auto pl-5 text-[12px] text-fg-2">
+        {steps.map((step) => <li key={step.id}>{step.verb}{step.target ? ` · ${step.target}` : ''} · {step.state === 'failed' ? `失败：${step.failureReason ?? '未提供原因'}` : step.state === 'cancelled' ? '已取消' : step.state === 'running' ? '进行中' : step.summary ?? '完成'}</li>)}
+      </ol>}
+      <button type="button" onClick={() => {
+        if (!navigator.clipboard) { setCopyStatus('复制失败，浏览器未提供剪贴板权限'); return; }
+        void navigator.clipboard.writeText(traceText).then(() => setCopyStatus('已复制轨迹摘要')).catch(() => setCopyStatus('复制失败，浏览器未提供剪贴板权限'));
+      }}
+        className="inline-flex w-fit items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-fg-2 hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
+        <ClipboardCopy size={13} aria-hidden="true" />复制轨迹摘要
+      </button>
+      <span role="status" aria-live="polite" className="sr-only">{copyStatus}</span>
+    </div>
+  </details>;
 }
 
 function TurnHeader({ working }: { working: boolean }) {
@@ -146,32 +248,20 @@ function StepTrack({ steps, live, runId, store, onCancelSubtask }: { steps: Step
 }
 
 function StepRow({ step, live, runId, store, onCancelSubtask }: { step: Step; live: boolean; runId: string; store: Store; onCancelSubtask: (subtaskId: string) => void }) {
-  const [open, setOpen] = useState(false);
   const [steerText, setSteerText] = useState('');
   const [steerState, setSteerState] = useState<{ sequence: number; text: string } | null>(null);
   const running = step.state === 'running' && live;
-  const detail = [step.input && `输入\n${step.input}`, step.result && `结果\n${step.result}`, step.output && `输出\n${step.output}`].filter(Boolean).join('\n\n');
-  const hasDetail = Boolean(detail);
   const steerFeedback = steerState && store.getRun(runId)?.events.find((event) => event.sequence > steerState.sequence
     && event.data.subtask_id === step.subtaskId
     && (event.type === 'subtask.steered' || event.type === 'subtask.steer_rejected'));
-  // A failure you have to click to see is a failure hidden: show its evidence straight away.
-  useEffect(() => { if (step.state === 'failed' && hasDetail) setOpen(true); }, [step.state, hasDetail]);
   return <li className="relative py-[5px]">
-    <span className={cn('absolute -left-[31px] top-[11px] size-[9px] rounded-full ring-4 ring-[var(--sheet-solid)]',
+    <span className={cn('absolute -left-[31px] top-[15px] size-[9px] rounded-full ring-4 ring-[var(--sheet-solid)]',
       running ? 'bg-brand shadow-[0_0_0_4px_var(--brand-soft)]' : step.state === 'failed' ? 'bg-danger' : step.state === 'cancelled' ? 'bg-fg-3' : 'bg-ok')} />
-    <button type="button" onClick={() => detail && setOpen((value) => !value)} aria-expanded={detail ? open : undefined}
-      className={cn('group flex w-full items-baseline gap-2 rounded-lg px-2 py-0.5 -mx-2 text-left text-[13.5px]', detail && 'hover:bg-hover')}>
-      <span className={cn('shrink-0', step.state === 'failed' ? 'text-danger' : 'text-fg')}>{running ? `正在${step.verb}` : step.verb}</span>
-      {step.target && <code className="min-w-0 truncate rounded-[5px] bg-code px-1.5 font-mono text-[12px] text-fg-2">{step.target}</code>}
-      <span className="flex-1" />
-      <span className="shrink-0 text-[12px] tabular-nums text-fg-3">
-        {step.state === 'failed' ? '失败' : step.state === 'cancelled' ? '已取消' : running ? '进行中' : duration(step.startedAt, step.endedAt)}
-      </span>
-      {detail && <ChevronRight size={13} className={cn('shrink-0 self-center text-fg-3 transition-transform', open && 'rotate-90')} />}
-    </button>
-    {step.imagePreview && <img src={step.imagePreview} alt={step.target || '读取的图片'} className="mt-2 max-h-32 max-w-48 rounded-lg border border-line object-contain" />}
-    {running && step.subtaskId && <button onClick={() => onCancelSubtask(step.subtaskId!)} className="ml-0 text-[12px] text-fg-3 hover:text-danger">停止这个子任务</button>}
+    <ToolExecutionCard step={step} live={live}>
+      {running && step.subtaskId && <div className="flex items-center justify-between gap-2">
+        <span className="text-[11.5px] text-fg-3">子 Agent 正在运行</span>
+        <button type="button" onClick={() => onCancelSubtask(step.subtaskId!)} className="rounded-md px-1.5 py-0.5 text-[11.5px] text-fg-3 hover:bg-hover hover:text-danger">停止这个子任务</button>
+      </div>}
     {running && step.subtaskId && <form className="mt-2 flex items-center gap-2" onSubmit={(event) => {
       event.preventDefault();
       const text = steerText.trim();
@@ -190,12 +280,28 @@ function StepRow({ step, live, runId, store, onCancelSubtask }: { step: Step; li
     {steerState && <p role="status" className={cn('m-0 mt-1 text-[11px]', steerFeedback?.type === 'subtask.steer_rejected' ? 'text-danger' : 'text-fg-3')}>
       {steerFeedback?.type === 'subtask.steer_rejected' ? `子任务拒绝补充：${String(steerFeedback.data.reason ?? '子任务已不在运行')}` : steerFeedback?.type === 'subtask.steered' ? '补充要求已送达' : `已发送补充要求：${steerState.text}`}
     </p>}
-    {open && <pre className="anim-fade mt-1.5 mb-1 max-h-72 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">{detail}</pre>}
-    {open && step.fullOutputPath && <p className="m-0 mb-1 text-[12px] text-fg-3">结果太长，只显示了开头和结尾。完整内容：
-      {window.atlasDesktop?.openPath
-        ? <button onClick={() => void window.atlasDesktop!.openPath(step.fullOutputPath!)} className="ml-1 font-mono text-fg-2 underline decoration-line-strong underline-offset-2 hover:text-fg">{step.fullOutputPath}</button>
-        : <code className="ml-1">{step.fullOutputPath}</code>}</p>}
+    </ToolExecutionCard>
+    <StepCopyButton step={step} />
   </li>;
+}
+
+function StepCopyButton({ step }: { step: Step }) {
+  const [status, setStatus] = useState('');
+  const copy = () => {
+    const lines = [`${step.verb}${step.target ? `：${step.target}` : ''}`, `状态：${step.state}`];
+    if (step.summary || step.failureReason) lines.push(`摘要：${step.failureReason ?? step.summary}`);
+    if (step.input) lines.push(`输入参数：\n${step.input}`);
+    if (step.result) lines.push(`工具结果：\n${step.result}`);
+    if (step.output) lines.push(`运行输出：\n${step.output}`);
+    if (!navigator.clipboard) { setStatus('复制失败'); return; }
+    void navigator.clipboard.writeText(lines.join('\n')).then(() => setStatus('已复制')).catch(() => setStatus('复制失败'));
+  };
+  return <div className="mt-1 ml-2 flex items-center gap-2">
+    <button type="button" onClick={copy} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
+      <ClipboardCopy size={12} aria-hidden="true" />复制此步骤
+    </button>
+    <span role="status" aria-live="polite" className="sr-only">{status}</span>
+  </div>;
 }
 
 function Approval({ event, store }: { event: AgentEvent; store: ReturnType<typeof useAtlasStore.getState> }) {
