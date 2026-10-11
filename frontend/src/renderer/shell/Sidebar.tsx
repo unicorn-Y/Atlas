@@ -3,7 +3,7 @@
 // workspace-grouped-tasks/task-context-menu-content.tsx, WorkspaceGroupedTasksSection.tsx.
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
-  Archive, ArchiveRestore, ArrowUpDown, BookOpen, Bot, Check, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
+  Archive, ArchiveRestore, ArrowUpDown, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
   Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Users, X, Wand2, type LucideIcon,
 } from 'lucide-react';
@@ -405,6 +405,9 @@ export default function Sidebar(props: SidebarProps) {
 
   const row = (conversation: ConversationSummary, groupId = 'all') => {
     const key = groupId + ':' + conversation.id;
+    const navigationIndex = props.conversations.findIndex((item) => item.id === conversation.id);
+    const previousConversation = navigationIndex >= 0 ? props.conversations[navigationIndex + 1] : undefined;
+    const nextConversation = navigationIndex > 0 ? props.conversations[navigationIndex - 1] : undefined;
     const current = conversation.id === props.activeConversationId && props.view === 'chat';
     const isPinned = props.pinned.includes(conversation.id);
     const isArchived = props.archived.includes(conversation.id);
@@ -462,6 +465,8 @@ export default function Sidebar(props: SidebarProps) {
         <MenuContent align="start" className="min-w-[205px]">
           <MenuLabel>{conversation.title || '会话操作'}</MenuLabel>
           <MenuItem onSelect={() => setDetails(conversation)}><Info />会话信息</MenuItem>
+          <MenuItem disabled={!previousConversation} onSelect={() => { if (previousConversation) props.onOpenConversation(previousConversation); }}><ChevronLeft />上一个会话（更早）</MenuItem>
+          <MenuItem disabled={!nextConversation} onSelect={() => { if (nextConversation) props.onOpenConversation(nextConversation); }}><ChevronRight />下一个会话（更新）</MenuItem>
           <MenuItem onSelect={() => setEditing({ id: conversation.id, title: conversation.title })}><Pencil />重命名</MenuItem>
           <MenuItem onSelect={() => setManualOrder((current) => [conversation.id, ...current.filter((id) => id !== conversation.id)])}><ArrowUpDown />移到顶部</MenuItem>
           <div className="flex items-center gap-1.5 px-2.5 py-1.5" role="group" aria-label="颜色标签">
