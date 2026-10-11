@@ -9,7 +9,7 @@ import ClipboardAction from '../message-actions/ClipboardAction';
 import ImagePreview from '../message-actions/ImagePreview';
 import { duration, type Step, type ToolCategory } from '../timeline';
 
-const CATEGORY: Record<ToolCategory, { label: string; icon: LucideIcon }> = {
+export const CATEGORY: Record<ToolCategory, { label: string; icon: LucideIcon }> = {
   'file-read': { label: '读取文件', icon: FileText },
   'file-write': { label: '写入文件', icon: FileText },
   'file-edit': { label: '编辑文件', icon: Pencil },
@@ -97,7 +97,7 @@ export default function ToolExecutionCard({ step, live, children }: {
   </div>;
 }
 
-function Detail({ label, value, copyLabel }: { label: string; value: string; copyLabel?: string }) {
+export function Detail({ label, value, copyLabel }: { label: string; value: string; copyLabel?: string }) {
   return <div className="min-w-0 overflow-hidden rounded-lg bg-code shadow-[inset_0_0_0_1px_var(--line)]">
     <div className="flex items-center justify-between border-b border-line px-2.5 py-1">
       <p className="m-0 text-[10.5px] text-fg-3">{label}</p>

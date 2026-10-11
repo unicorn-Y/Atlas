@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowUpCircle, LoaderCircle, X } from 'lucide-react';
 import type { SourceUpdateStatus } from '../../shared/ipc';
 
-const RECHECK_MS = 30 * 60 * 1000;
+const RECHECK_MS = 5 * 60 * 1000;
 
 /**
  * Source-mode update notice: when Atlas runs from a git checkout and the remote has new
@@ -21,7 +21,11 @@ export default function UpdateBanner() {
     const check = () => { void api.checkForUpdate!().then((status) => { if (alive) setUpdate(status); }).catch(() => undefined); };
     const first = window.setTimeout(check, 8_000);
     const timer = window.setInterval(check, RECHECK_MS);
-    return () => { alive = false; window.clearTimeout(first); window.clearInterval(timer); };
+    // Coming back to the window re-checks too (at most once a minute), so a fresh push shows up promptly.
+    let lastFocusCheck = 0;
+    const onFocus = () => { if (Date.now() - lastFocusCheck > 60_000) { lastFocusCheck = Date.now(); check(); } };
+    window.addEventListener('focus', onFocus);
+    return () => { alive = false; window.clearTimeout(first); window.clearInterval(timer); window.removeEventListener('focus', onFocus); };
   }, []);
 
   if (!update?.available || (dismissedAt && update.behind <= dismissedAt)) return null;

@@ -6,7 +6,7 @@ import { useAtlasStore } from '../store/useAtlasStore';
 import { TimelineRow } from './ConversationActivity';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
-import { buildTimeline, todoEditNotice, type TimelineItem } from './timeline';
+import { attachHistoryResult, buildTimeline, historyStep, todoEditNotice, type Step, type TimelineItem } from './timeline';
 import { isTodoEdit } from './runInsights';
 import { Button } from '../ui/Button';
 import { loadBindings, matchShortcut } from '../services/shortcuts';
@@ -28,7 +28,7 @@ const EMPTY_EVENTS: AgentEvent[] = [];
 type ThreadRow =
   | { kind: 'load-earlier'; id: string }
   | { kind: 'truncated'; id: string; count: number }
-  | { kind: 'history'; id: string; message: ConversationMessageData }
+  | { kind: 'history'; id: string; message: ConversationMessageData; continued?: boolean }
   | { kind: 'empty'; id: string }
   | { kind: 'timeline'; id: string; item: TimelineItem; firstInTurn: boolean; last: boolean };
 
@@ -194,7 +194,46 @@ export default function MessageThread({ history, username, historyActions, empty
     const rows: ThreadRow[] = [];
     if (hasEarlier) rows.push({ kind: 'load-earlier', id: 'load-earlier' });
     if (truncatedCount > 0) rows.push({ kind: 'truncated', id: 'truncated', count: truncatedCount });
-    for (const message of history) rows.push({ kind: 'history', id: `h-${message.id}`, message });
+    // Stored turns: text replies stay messages; tool calls and their results fold into the same
+    // compact step track the live view uses, so reopened chats don't show empty "Atlas" headers.
+    let historyHeaded = false;
+    let pending: Step[] = [];
+    const stepsById = new Map<string, Step>();
+    const flushSteps = () => {
+      if (!pending.length) return;
+      const id = `hs-${pending[0].id}`;
+      rows.push({ kind: 'timeline', id, item: { kind: 'steps', id, steps: pending }, firstInTurn: !historyHeaded, last: false });
+      historyHeaded = true;
+      pending = [];
+    };
+    for (const message of history) {
+      const metadata = (message.metadata && typeof message.metadata === 'object' ? message.metadata : {}) as Record<string, unknown>;
+      const createdAt = message.created_at ?? '';
+      if (message.role === 'tool') {
+        const step = stepsById.get(String(metadata.tool_call_id ?? ''));
+        if (step) attachHistoryResult(step, message.content, metadata, createdAt);
+        continue;
+      }
+      if (message.role === 'assistant') {
+        const calls = Array.isArray(metadata.tool_calls) ? metadata.tool_calls : [];
+        if (message.content.trim()) {
+          flushSteps();
+          rows.push({ kind: 'history', id: `h-${message.id}`, message, continued: historyHeaded });
+          historyHeaded = true;
+        }
+        for (const call of calls) {
+          const step = historyStep(call, createdAt);
+          if (!step) continue;
+          pending.push(step);
+          stepsById.set(step.id, step);
+        }
+        continue;
+      }
+      flushSteps();
+      if (message.role === 'user') historyHeaded = false;
+      rows.push({ kind: 'history', id: `h-${message.id}`, message });
+    }
+    flushSteps();
     if (!history.length && !timelineItems.length && !loading && emptyState) rows.push({ kind: 'empty', id: 'empty' });
     // Each Atlas turn shows its header once; later steps and replies in the same turn hang beneath it.
     let headed = false;
@@ -387,7 +426,7 @@ export default function MessageThread({ history, username, historyActions, empty
         if (row.message.role === 'user' && isTodoEdit(row.message.content)) return <div className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
           <ListChecks size={13} className="shrink-0 text-brand" /><span>{todoEditNotice(row.message.content)}</span>
         </div>;
-        return <ConversationMessage role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} actions={historyActions(row.message)} />;
+        return <ConversationMessage role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} />;
       case 'empty':
         return emptyState;
       case 'timeline':

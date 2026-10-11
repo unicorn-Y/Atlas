@@ -1,10 +1,10 @@
 import { memo, useMemo, useState } from 'react';
-import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
+import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, LoaderCircle, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
-import ToolExecutionCard from './tool-cards/ToolExecutionCard';
+import ToolExecutionCard, { CATEGORY, Detail } from './tool-cards/ToolExecutionCard';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
 import ReviewFindingsCard from './ReviewFindingsCard';
@@ -240,23 +240,93 @@ function TurnHeader({ working }: { working: boolean }) {
   </div>;
 }
 
-/** The "航迹": each step Atlas took, in plain words, strung along a brass meridian line. */
+/** Claude Code / Codex style work log: one quiet line per step; a finished batch folds into a single summary line. */
 function StepTrack({ steps, live, runId, store, onCancelSubtask }: { steps: Step[]; live: boolean; runId: string; store: Store; onCancelSubtask: (subtaskId: string) => void }) {
-  return <ol className="relative my-3 ml-[13px] list-none border-l border-line-strong py-1 pl-[26px]" aria-label="Atlas 的步骤">
-    {steps.map((step) => <StepRow key={step.id} step={step} live={live} runId={runId} store={store} onCancelSubtask={onCancelSubtask} />)}
-  </ol>;
+  const [open, setOpen] = useState<boolean | null>(null);
+  const running = live && steps.some((step) => step.state === 'running');
+  const failed = steps.filter((step) => step.state === 'failed').length;
+  const foldable = steps.length > 2;
+  const expanded = !foldable || (open ?? running);
+  const startedAt = steps[0]?.startedAt;
+  const endedAt = steps.reduce<string | undefined>((latest, step) => (step.endedAt && (!latest || step.endedAt > latest) ? step.endedAt : latest), undefined);
+  return <div className="my-2 ml-10">
+    {foldable && <button type="button" onClick={() => setOpen(!expanded)} aria-expanded={expanded}
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[13px] text-fg-3 hover:text-fg">
+      <ChevronRight size={13} className={cn('shrink-0 transition-transform', expanded && 'rotate-90')} />
+      {running && <LoaderCircle size={13} className="spin shrink-0 text-brand" />}
+      <span className="min-w-0 truncate">{summarizeSteps(steps, running)}</span>
+      {failed > 0 && <span className="shrink-0 text-danger">· {failed} 步失败</span>}
+      {!running && startedAt && endedAt && <span className="shrink-0 tabular-nums">· {duration(startedAt, endedAt)}</span>}
+    </button>}
+    {expanded && <ol className={cn('m-0 list-none p-0', foldable && 'ml-[6px] border-l border-line pl-3')} aria-label="Atlas 的步骤">
+      {steps.map((step) => step.subtaskId
+        ? <SubtaskRow key={step.id} step={step} live={live} runId={runId} store={store} onCancelSubtask={onCancelSubtask} />
+        : <StepLine key={step.id} step={step} live={live} />)}
+    </ol>}
+  </div>;
 }
 
-function StepRow({ step, live, runId, store, onCancelSubtask }: { step: Step; live: boolean; runId: string; store: Store; onCancelSubtask: (subtaskId: string) => void }) {
+const STEP_GROUPS: Array<{ match: (step: Step) => boolean; done: (n: number) => string; doing: (n: number) => string }> = [
+  { match: (s) => s.category === 'file-read', done: (n) => `读取了 ${n} 个文件`, doing: (n) => `读取 ${n} 个文件` },
+  { match: (s) => s.category === 'file-write' || s.category === 'file-edit' || s.category === 'file-patch', done: (n) => `改动了 ${n} 个文件`, doing: (n) => `改动 ${n} 个文件` },
+  { match: (s) => s.category === 'shell' || s.category === 'exec' || s.category === 'process', done: (n) => `运行了 ${n} 条命令`, doing: (n) => `运行 ${n} 条命令` },
+  { match: (s) => s.category === 'search', done: (n) => `搜索了 ${n} 次`, doing: (n) => `搜索 ${n} 次` },
+  { match: (s) => s.category === 'web' || s.category === 'browser', done: (n) => `访问了 ${n} 次网页`, doing: (n) => `访问 ${n} 次网页` },
+];
+
+function summarizeSteps(steps: Step[], running: boolean): string {
+  const parts: string[] = [];
+  let rest = steps.length;
+  for (const group of STEP_GROUPS) {
+    const count = steps.filter(group.match).length;
+    if (!count) continue;
+    parts.push(running ? group.doing(count) : group.done(count));
+    rest -= count;
+  }
+  if (rest > 0) parts.push(`其他 ${rest} 步`);
+  return (running ? '正在工作：' : '') + parts.join('、');
+}
+
+function StepLine({ step, live }: { step: Step; live: boolean }) {
+  const [open, setOpen] = useState(false);
+  const active = step.state === 'running' && live;
+  const { icon: Icon } = CATEGORY[step.category] ?? CATEGORY.other;
+  const hasDetails = Boolean(step.input || step.result || step.output || step.fullOutputPath || step.summary);
+  return <li className="min-w-0">
+    <button type="button" onClick={() => { if (hasDetails) setOpen((value) => !value); }} aria-expanded={hasDetails ? open : undefined}
+      className={cn('group flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-[3px] text-left text-[13px]', hasDetails && 'hover:bg-hover')}>
+      {active ? <LoaderCircle size={13} className="spin shrink-0 text-brand" />
+        : <Icon size={13} className={cn('shrink-0', step.state === 'failed' ? 'text-danger' : 'text-fg-3')} />}
+      <span className={cn('shrink-0', step.state === 'failed' ? 'text-danger' : 'text-fg-2')}>{step.verb}</span>
+      {step.target && <span className="min-w-0 truncate font-mono text-[12px] text-fg-3" title={step.target}>{step.target}</span>}
+      <span className="flex-1" />
+      {step.state === 'failed' ? <X size={12} className="shrink-0 text-danger" />
+        : step.state === 'cancelled' ? <span className="shrink-0 text-[11px] text-fg-3">已取消</span>
+          : step.endedAt ? <span className="shrink-0 text-[11px] tabular-nums text-fg-3 opacity-0 group-hover:opacity-100">{duration(step.startedAt, step.endedAt)}</span> : null}
+    </button>
+    {step.failureReason && !open && <p className="m-0 ml-[29px] truncate text-[12px] text-danger" title={step.failureReason}>{step.failureReason}</p>}
+    {open && <div className="anim-fade mb-1.5 ml-[29px] mt-1 grid gap-2 text-[12.5px]">
+      {step.summary && <p className="m-0 break-words text-fg-2">{step.summary.replace(/\s+/g, ' ').trim()}</p>}
+      {step.failureReason && <p role="alert" className="m-0 break-words text-danger">失败原因：{step.failureReason}</p>}
+      {step.input && <Detail label="输入参数" value={step.input} copyLabel="复制输入" />}
+      {step.result && <Detail label="工具结果" value={step.result} copyLabel="复制结果" />}
+      {step.output && <Detail label="运行输出" value={step.output} copyLabel="复制输出" />}
+      {step.fullOutputPath && <p className="m-0 text-[11.5px] text-fg-3">完整输出：{window.atlasDesktop?.openPath
+        ? <button type="button" onClick={() => void window.atlasDesktop!.openPath(step.fullOutputPath!)} className="break-all font-mono text-fg-2 underline decoration-line-strong underline-offset-2 hover:text-fg">{step.fullOutputPath}</button>
+        : <code className="break-all">{step.fullOutputPath}</code>}</p>}
+    </div>}
+  </li>;
+}
+
+/** Sub-agents keep the full card: they can be stopped and steered while running. */
+function SubtaskRow({ step, live, runId, store, onCancelSubtask }: { step: Step; live: boolean; runId: string; store: Store; onCancelSubtask: (subtaskId: string) => void }) {
   const [steerText, setSteerText] = useState('');
   const [steerState, setSteerState] = useState<{ sequence: number; text: string } | null>(null);
   const running = step.state === 'running' && live;
   const steerFeedback = steerState && store.getRun(runId)?.events.find((event) => event.sequence > steerState.sequence
     && event.data.subtask_id === step.subtaskId
     && (event.type === 'subtask.steered' || event.type === 'subtask.steer_rejected'));
-  return <li className="relative py-[5px]">
-    <span className={cn('absolute -left-[31px] top-[15px] size-[9px] rounded-full ring-4 ring-[var(--sheet-solid)]',
-      running ? 'bg-brand shadow-[0_0_0_4px_var(--brand-soft)]' : step.state === 'failed' ? 'bg-danger' : step.state === 'cancelled' ? 'bg-fg-3' : 'bg-ok')} />
+  return <li className="my-1.5">
     <ToolExecutionCard step={step} live={live}>
       {running && step.subtaskId && <div className="flex items-center justify-between gap-2">
         <span className="text-[11.5px] text-fg-3">子 Agent 正在运行</span>
@@ -281,27 +351,7 @@ function StepRow({ step, live, runId, store, onCancelSubtask }: { step: Step; li
       {steerFeedback?.type === 'subtask.steer_rejected' ? `子任务拒绝补充：${String(steerFeedback.data.reason ?? '子任务已不在运行')}` : steerFeedback?.type === 'subtask.steered' ? '补充要求已送达' : `已发送补充要求：${steerState.text}`}
     </p>}
     </ToolExecutionCard>
-    <StepCopyButton step={step} />
   </li>;
-}
-
-function StepCopyButton({ step }: { step: Step }) {
-  const [status, setStatus] = useState('');
-  const copy = () => {
-    const lines = [`${step.verb}${step.target ? `：${step.target}` : ''}`, `状态：${step.state}`];
-    if (step.summary || step.failureReason) lines.push(`摘要：${step.failureReason ?? step.summary}`);
-    if (step.input) lines.push(`输入参数：\n${step.input}`);
-    if (step.result) lines.push(`工具结果：\n${step.result}`);
-    if (step.output) lines.push(`运行输出：\n${step.output}`);
-    if (!navigator.clipboard) { setStatus('复制失败'); return; }
-    void navigator.clipboard.writeText(lines.join('\n')).then(() => setStatus('已复制')).catch(() => setStatus('复制失败'));
-  };
-  return <div className="mt-1 ml-2 flex items-center gap-2">
-    <button type="button" onClick={copy} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
-      <ClipboardCopy size={12} aria-hidden="true" />复制此步骤
-    </button>
-    <span role="status" aria-live="polite" className="sr-only">{status}</span>
-  </div>;
 }
 
 function Approval({ event, store }: { event: AgentEvent; store: ReturnType<typeof useAtlasStore.getState> }) {

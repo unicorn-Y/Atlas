@@ -254,7 +254,10 @@ export default function App() {
   const runPrompt = activeRun && activeRun.conversationId === store.activeConversationId
     ? String(activeEvents.find((event) => event.type === 'run.started')?.data.content ?? '') : '';
   const runTurnIndex = runPrompt ? messages.map((message) => message.role === 'user' ? message.content : null).lastIndexOf(runPrompt) : -1;
-  const history = runTurnIndex >= 0 && runTurnIndex >= messages.length - 3 ? messages.slice(0, runTurnIndex) : messages;
+  // History also keeps tool messages so stored tool calls show their results in the step track.
+  const threadMessages = (store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'tool');
+  const runTurnStart = runTurnIndex >= 0 && runTurnIndex >= messages.length - 3 ? threadMessages.indexOf(messages[runTurnIndex]) : -1;
+  const history = runTurnStart >= 0 ? threadMessages.slice(0, runTurnStart) : threadMessages;
   const historyWithBranchNotes = [...history];
   for (const note of history.filter((item) => {
     const metadata = item.metadata as Record<string, unknown> | undefined;

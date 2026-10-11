@@ -265,7 +265,12 @@ export function describeTool(name: string, args: unknown): { verb: string; targe
     case 'local_edit':
       return { verb: '修改', target: str(a.path) && shortPath(str(a.path)!) };
     case 'local_shell':
+    case 'powershell':
       return { verb: '运行命令', target: str(a.command)?.slice(0, 120) };
+    case 'exec_command':
+      return { verb: '运行命令', target: str(a.cmd)?.slice(0, 120) };
+    case 'write_stdin':
+      return { verb: a.stop ? '停止进程' : str(a.chars) ? '向进程输入' : '查看进程输出', target: str(a.session_id) };
     case 'local_exec':
       return { verb: '运行', target: [str(a.executable), ...(Array.isArray(a.args) ? a.args.map(String) : [])].filter(Boolean).join(' ').slice(0, 120) };
     case 'local_process':
@@ -665,4 +670,34 @@ export function duration(from?: string, to?: string): string {
   if (seconds < 1) return '不到 1 秒';
   if (seconds < 60) return `${Math.round(seconds)} 秒`;
   return `${Math.floor(seconds / 60)} 分 ${Math.round(seconds % 60)} 秒`;
+}
+
+/** One stored tool call (assistant metadata.tool_calls entry) as a finished Step; its result is attached later. */
+export function historyStep(call: unknown, createdAt: string): Step | null {
+  if (!call || typeof call !== 'object') return null;
+  const record = call as Record<string, unknown>;
+  const fn = record.function && typeof record.function === 'object' ? record.function as Record<string, unknown> : record;
+  const name = typeof fn.name === 'string' ? fn.name : '';
+  if (!name) return null;
+  let args: unknown = fn.arguments;
+  if (typeof args === 'string') {
+    try { args = JSON.parse(args); } catch { /* keep the raw string */ }
+  }
+  const { verb, target } = describeTool(name, args);
+  return {
+    id: String(record.id ?? `${name}-${createdAt}`), toolName: name, category: classifyTool(name, args),
+    verb, target, state: 'cancelled', startedAt: createdAt, output: '',
+    input: args === undefined ? undefined : text(args),
+  };
+}
+
+/** Fill a history Step from its stored tool message. */
+export function attachHistoryResult(step: Step, content: string, metadata: Record<string, unknown>, createdAt: string) {
+  const receipt = typeof metadata.receipt_state === 'string' ? metadata.receipt_state : '';
+  step.state = receipt === 'failed' || receipt === 'error' || receipt === 'denied' ? 'failed' : 'done';
+  step.result = content;
+  step.endedAt = createdAt;
+  if (typeof metadata.duration_ms === 'number') step.endedAt = new Date(Date.parse(step.startedAt) + metadata.duration_ms).toISOString();
+  if (typeof metadata.output_ref === 'string' && metadata.output_ref) step.fullOutputPath = metadata.output_ref;
+  if (step.state === 'failed') step.failureReason = content.split('\n').map((line) => line.trim()).filter(Boolean).pop()?.slice(0, 200);
 }
