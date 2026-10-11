@@ -602,6 +602,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             [PROJECT_ROOT / "plugins", get_config().db_path.parent / "plugins"],
             get_config().db_path.parent / "plugins" / "state.json",
         )
+        if orchestrator is not None:
+            orchestrator._plugin_runtime = plugin_runtime
         # S2.4: plugin_runtime.load_all(...) + _refresh_extension_sources() are the
         # deferred ``plugins`` component (after the initial skill scan).
 

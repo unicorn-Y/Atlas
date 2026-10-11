@@ -13,10 +13,10 @@ import html as html_module
 import json
 import re
 from html.parser import HTMLParser
-from typing import Any
+from typing import Any, Sequence
 from urllib.parse import quote_plus, urljoin
 
-import httpx
+from atlas.tools.ssrf_transport import create_ssrf_safe_async_client
 
 import logging
 
@@ -105,6 +105,28 @@ def parse_ddg_results(html: str, base_url: str = "https://duckduckgo.com") -> li
     return results
 
 
+def _host_of(url: str) -> str:
+    """Lowercased hostname of a URL, empty when unparseable."""
+    match = re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://([^/?#]+)", url)
+    authority = match.group(1) if match else ""
+    if "@" in authority:
+        authority = authority.rsplit("@", 1)[1]
+    host = authority.split(":", 1)[0].strip().casefold()
+    return host[4:] if host.startswith("www.") else host
+
+
+def _domain_matches(host: str, allowed: Sequence[str]) -> bool:
+    for entry in allowed:
+        pattern = str(entry or "").strip().casefold()
+        if pattern.startswith("*."):
+            pattern = pattern[2:]
+        if not pattern:
+            continue
+        if host == pattern or host.endswith("." + pattern):
+            return True
+    return False
+
+
 class WebRuntime:
     """Stateless web tools exposed to the Agent."""
 
@@ -114,6 +136,9 @@ class WebRuntime:
             if name == "web_search":
                 data = await self.web_search(
                     str(args.get("query", "")), int(args.get("max_results", 5)),
+                    allowed_domains=args.get("allowed_domains"),
+                    blocked_domains=args.get("blocked_domains"),
+                    mode=str(args.get("mode") or "balanced"),
                 )
             elif name == "web_fetch":
                 data = await self.web_fetch(
@@ -129,12 +154,44 @@ class WebRuntime:
             "is_error": False,
         }
 
-    async def web_search(self, query: str, max_results: int = 5) -> dict[str, Any]:
+    async def web_search(self, query: str, max_results: int = 5, *,
+                         allowed_domains: Any = None,
+                         blocked_domains: Any = None,
+                         mode: str = "balanced") -> dict[str, Any]:
         if not query.strip():
             raise ValueError("query is required")
+
+        def _list(value: Any) -> list[str]:
+            return [str(item).strip() for item in (value or [])
+                    if isinstance(item, str) and str(item).strip()]
+
+        allowed = _list(allowed_domains)
+        blocked = _list(blocked_domains)
+        search_mode = str(mode or "balanced").strip().casefold()
+        if search_mode not in {"balanced", "strict", "long"}:
+            search_mode = "balanced"
+        if allowed:
+            query = f"{query} " + " ".join(f"site:{item}" for item in allowed)
+        else:
+            for item in blocked:
+                query = f"{query} -site:{item}"
         response = await self._get(SEARCH_URL.format(query=quote_plus(query.strip())))
-        results = parse_ddg_results(response)[: max(1, max_results)]
-        return {"query": query, "results": results}
+        results = parse_ddg_results(response)
+        if allowed or blocked:
+            filtered: list[dict[str, str]] = []
+            for item in results:
+                host = _host_of(str(item.get("url") or ""))
+                if allowed and not _domain_matches(host, allowed):
+                    continue
+                if blocked and _domain_matches(host, blocked):
+                    continue
+                filtered.append(item)
+            results = filtered
+        return {
+            "query": query, "mode": search_mode,
+            "allowed_domains": allowed, "blocked_domains": blocked,
+            "results": results[: max(1, max_results)],
+        }
 
     async def web_fetch(self, url: str, max_chars: int = 8000) -> dict[str, Any]:
         if not re.match(r"^https?://", url):
@@ -144,7 +201,10 @@ class WebRuntime:
         return {"url": url, "text": text[: max(200, max_chars)], "length": len(text)}
 
     async def _get(self, url: str) -> str:
-        async with httpx.AsyncClient(
+        # Every hop, including redirects, passes the connect-time DNS guard in
+        # atlas.tools.ssrf_transport: a hostname answered with a private or
+        # loopback address is blocked before a socket opens.
+        async with create_ssrf_safe_async_client(
             follow_redirects=True, timeout=15.0, headers={"User-Agent": USER_AGENT},
         ) as client:
             response = await client.get(url)
@@ -169,6 +229,11 @@ WEB_TOOLS = [
             "parameters": {"type": "object", "properties": {
                 "query": {"type": "string"},
                 "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
+                "allowed_domains": {"type": "array", "items": {"type": "string"},
+                    "description": "Restrict results to these hosts and their subdomains."},
+                "blocked_domains": {"type": "array", "items": {"type": "string"},
+                    "description": "Drop results served by these hosts and their subdomains."},
+                "mode": {"type": "string", "enum": ["balanced", "strict", "long"]},
             }, "required": ["query"], "additionalProperties": False},
         },
     },
