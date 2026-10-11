@@ -48,7 +48,7 @@ dependencies = [
     "youtube-transcript-api>=1.2",
     # Aider-style tree-sitter repository map; versions follow Aider 5dc9490bb35f.
     "grep-ast==0.9.0",
-    "tree-sitter==0.25.2",
+    "tree-sitter==0.26.0",
     "tree-sitter-language-pack==0.13.0",
 ]
 
