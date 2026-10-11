@@ -160,6 +160,100 @@ def version() -> None:
     console.print("Atlas v0.1.0")
 
 
+@main.command("exec")
+@click.argument("prompt", required=False)
+@click.option("--model", "-m", default=None, help="Model to use")
+@click.option("--workspace", type=click.Path(file_okay=False, path_type=Path), default=".",
+              show_default=True, help="Workspace directory for this run")
+@click.option("--conversation-id", default=None, help="Resume an existing Atlas conversation")
+@click.option("--output-format", type=click.Choice(["text", "jsonl"]), default="text",
+              show_default=True, help="Stream plain text or one JSON object per event")
+@click.option("--approve-writes", is_flag=True,
+              help="Approve write-capable tool calls for this non-interactive run")
+def exec_command(
+    prompt: str | None, model: str | None, workspace: Path,
+    conversation_id: str | None, output_format: str, approve_writes: bool,
+) -> None:
+    """Run one non-interactive agent turn; PROMPT may also come from stdin."""
+    from atlas.agent import AgentOrchestrator
+    from atlas.config import DATA_ROOT, get_config
+    from atlas.memory import MemoryStore
+    from atlas.memory.unified_facade import UnifiedMemoryFacade
+    from atlas.models import ModelManager
+
+    user_prompt = prompt if prompt is not None else sys.stdin.read()
+    user_prompt = user_prompt.strip()
+    if not user_prompt:
+        raise click.UsageError("PROMPT or non-empty stdin input is required.")
+    root = workspace.expanduser().resolve()
+    if not root.is_dir():
+        raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
+
+    async def _run_once() -> bool:
+        cfg = get_config()
+        model_mgr = ModelManager()
+        if model:
+            model_mgr.select(model)
+        unified = UnifiedMemoryFacade.from_config(cfg) if cfg.get("memory.unified.enabled") else None
+        memory = MemoryStore(unified=unified)
+        await memory.init()
+        try:
+            from atlas.engine.session_migration import migrate_legacy_sessions
+
+            migration = await migrate_legacy_sessions(DATA_ROOT / "engine", memory)
+            if migration.status != "ready":
+                raise RuntimeError(migration.error or "历史会话尚未完成安全迁移")
+            conv_id = conversation_id or str(__import__("uuid").uuid4())
+            await memory.save_conversation_metadata(conv_id, title_hint=user_prompt)
+            orchestrator = AgentOrchestrator(model_mgr=model_mgr, memory=memory)
+            async def approve_once(event_id: str, tool_name: str, arguments: dict[str, Any]) -> str:
+                return "allow" if approve_writes else "deny"
+
+            failed = False
+            async for event in orchestrator.run(
+                user_prompt, conv_id, workspace=str(root), workspace_trusted=True,
+                permission_mode="ask_writes",
+                approval_callback=approve_once if approve_writes else None,
+            ):
+                if output_format == "jsonl":
+                    _write_line(event, sys.stdout)
+                elif event.get("type") == "chunk":
+                    print(str(event.get("content", "")), end="", flush=True)
+                elif event.get("type") == "error":
+                    failed = True
+                    print(str(event.get("detail", "Agent run failed")), file=sys.stderr)
+            if output_format == "text":
+                print()
+            return failed
+        finally:
+            await memory.close()
+            if unified is not None:
+                await unified.aclose()
+
+    try:
+        failed = asyncio.run(_run_once())
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    if failed:
+        sys.exit(EXIT_RUN_FAILED)
+
+
+@main.command("app-server")
+@click.option("--workspace", type=click.Path(file_okay=False, path_type=Path), default=".",
+              show_default=True, help="Default workspace for sessions")
+def app_server_command(workspace: Path) -> None:
+    """Start the newline-delimited JSON-RPC SDK server on stdin/stdout."""
+    from atlas.tools.app_server import serve_stdio
+
+    root = workspace.expanduser().resolve()
+    if not root.is_dir():
+        raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
+    try:
+        asyncio.run(serve_stdio(workspace=str(root)))
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 def _hub_control_file() -> Any:
     from pathlib import Path
 
@@ -188,6 +282,7 @@ def hub_start(port: int | None) -> None:
     import subprocess
     import sys
     import time
+
     import httpx
 
 
@@ -225,6 +320,7 @@ def hub_start(port: int | None) -> None:
 def hub_stop() -> None:
     """Stop a running Hub."""
     import json
+
     import httpx
 
     control = _hub_control_file()
@@ -245,6 +341,7 @@ def hub_stop() -> None:
 def hub_status() -> None:
     """Show Hub health and scheduler status."""
     import json
+
     import httpx
 
     control = _hub_control_file()
@@ -266,6 +363,7 @@ def hub_status() -> None:
 def hub_tasks() -> None:
     """List Hub scheduled tasks."""
     import json
+
     import httpx
 
     control = _hub_control_file()
@@ -519,6 +617,7 @@ async def _drive_turn(
     import uuid
 
     from websockets.asyncio.client import connect
+
     from atlas.usage import aggregate_run_usage
 
     run_id = uuid.uuid4().hex
@@ -857,8 +956,8 @@ def _check_hermes() -> dict[str, Any]:
 
 def _check_sessions() -> dict[str, Any]:
     """Read-only audit of transcript ownership, counts and tool-call pairing."""
-    from contextlib import closing
     import sqlite3
+    from contextlib import closing
 
     from atlas.config import DATA_ROOT, get_config
 

@@ -26,8 +26,15 @@ READ_ONLY_TOOLS = frozenset({
     "read", "glob", "grep", "list_directory", "lsp_diagnostics", "lsp_hover",
     "lsp_definition", "lsp_references", "lsp_document_symbols", "build_repo_map",
     "read_office", "coding.repo_map", "coding.ast_grep.run",
+    "view_image",
+    "list_available_plugins_to_install",
+    "android_preflight", "android_discover_project", "android_list_devices",
+    "android_list_avds", "android_logs", "android_ui_status",
+    "android_ui_describe", "android_ui_resolve", "ios_preflight",
+    "ios_list_simulators", "ios_discover_project", "ios_logs", "ios_ui_status",
+    "ios_ui_describe", "TaskGet", "TaskList",
 })
-EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write"})
+EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write", "notebook_edit"})
 
 
 def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
@@ -52,6 +59,129 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
             "parameters": repo_parameters,
         },
     }]
+    schemas.extend([
+        _function_schema("list_mcp_resources", "List resources exposed by connected MCP servers.", {
+            "server": {"type": "string", "description": "Optional exact MCP server name."},
+            "cursor": {"type": "string", "description": "Optional nextCursor from the previous page."},
+        }),
+        _function_schema("list_mcp_resource_templates", "List resource templates exposed by connected MCP servers.", {
+            "server": {"type": "string", "description": "Optional exact MCP server name."},
+            "cursor": {"type": "string", "description": "Optional nextCursor from the previous page."},
+        }),
+        _function_schema("read_mcp_resource", "Read an MCP resource by its exact server name and URI.", {
+            "server": {"type": "string"}, "uri": {"type": "string"},
+        }, ["server", "uri"]),
+        _function_schema("tool_search", "Search currently registered Atlas, MCP, and browser tools by name or description.", {
+            "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+        }, ["query"]),
+        _function_schema("clock.curr_time", "Return the current UTC time.", {}),
+        _function_schema("clock.sleep", "Wait for a bounded number of seconds before continuing.", {
+            "seconds": {"type": "number", "minimum": 0, "maximum": 300},
+        }, ["seconds"]),
+        _function_schema("view_image", "Attach a local workspace image to the next model turn.", {
+            "path": {"type": "string"},
+            "detail": {"type": "string", "enum": ["auto", "low", "high", "original"]},
+        }, ["path"]),
+        _function_schema("update_plan", "Update the visible plan with ordered steps and their current statuses.", {
+            "explanation": {"type": "string"},
+            "plan": {"type": "array", "items": {"type": "object",
+                "properties": {
+                    "step": {"type": "string"},
+                    "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]},
+                }, "required": ["step", "status"], "additionalProperties": False}},
+        }, ["plan"]),
+        _function_schema("get_context_remaining", "Report remaining context tokens when the active runtime exposes a measured budget.", {}),
+        _function_schema("new_context", "Prepare a concise handoff summary for a fresh model context.", {}),
+        _function_schema("request_permissions", "Request user approval for a specific permission; approval applies only to this request.", {
+            "permission": {"type": "string"}, "reason": {"type": "string"},
+            "scope": {"type": "string"},
+        }, ["permission", "reason"]),
+        _function_schema("request_user_input", "Ask the user one or more structured questions and wait for their answers.", {
+            "questions": {"type": "array", "items": {"type": "object",
+                "properties": {
+                    "id": {"type": "string"}, "header": {"type": "string"},
+                    "question": {"type": "string"},
+                    "options": {"type": "array", "items": {"type": "object",
+                        "properties": {"label": {"type": "string"}, "description": {"type": "string"}},
+                        "required": ["label", "description"], "additionalProperties": False}},
+                }, "required": ["id", "header", "question", "options"], "additionalProperties": False}},
+        }, ["questions"]),
+        _function_schema("request_user_input_async", "Ask the user one or more structured questions using Atlas's interactive input channel.", {
+            "questions": {"type": "array", "items": {"type": "object",
+                "properties": {
+                    "id": {"type": "string"}, "header": {"type": "string"},
+                    "question": {"type": "string"},
+                    "options": {"type": "array", "items": {"type": "object",
+                        "properties": {"label": {"type": "string"}, "description": {"type": "string"}},
+                        "required": ["label", "description"], "additionalProperties": False}},
+                }, "required": ["id", "header", "question", "options"], "additionalProperties": False}},
+        }, ["questions"]),
+        _function_schema("send_message_to_user_async", "Send a short asynchronous message to the user in the current run.", {
+            "message": {"type": "string"},
+        }, ["message"]),
+        _function_schema("wait_for_environment", "Wait briefly for a local workspace path to become available.", {
+            "path": {"type": "string"}, "timeout_seconds": {"type": "number", "minimum": 0, "maximum": 60},
+        }, ["path"]),
+        _function_schema("list_available_plugins_to_install", "List plugins available in configured Atlas marketplaces.", {
+            "marketplace": {"type": "string"}, "query": {"type": "string"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+        }),
+        _function_schema("request_plugin_install", "Request approval to install a plugin from a configured marketplace.", {
+            "marketplace": {"type": "string"}, "plugin_name": {"type": "string"},
+        }, ["marketplace", "plugin_name"]),
+        _function_schema("git_pr_create", "Push the current branch and create a GitHub pull request from the active workspace.", {
+            "title": {"type": "string"}, "body": {"type": "string"},
+            "base": {"type": "string"}, "draft": {"type": "boolean"},
+        }, ["title", "body"]),
+        _function_schema("git_pr_comment", "Post a comment on the current or selected GitHub pull request.", {
+            "body": {"type": "string"}, "pr_number": {"type": "integer", "minimum": 1},
+        }, ["body"]),
+        _function_schema("exec_command", "Run a command in the active workspace using Atlas's managed terminal policy.", {
+            "cmd": {"type": "string"}, "workdir": {"type": "string"},
+            "yield_time_ms": {"type": "integer", "minimum": 0, "maximum": 30000},
+            "max_output_tokens": {"type": "integer", "minimum": 1, "maximum": 20000},
+        }, ["cmd"]),
+        _function_schema("powershell", "Run a command explicitly in Windows PowerShell using Atlas's managed terminal policy.", {
+            "command": {"type": "string"}, "cwd": {"type": "string"},
+            "yield_time_ms": {"type": "integer", "minimum": 0, "maximum": 30000},
+            "max_output_tokens": {"type": "integer", "minimum": 1, "maximum": 20000},
+        }, ["command"]),
+        _function_schema("write_stdin", "Write input to, poll, or stop an Atlas managed process.", {
+            "session_id": {"type": "string"}, "chars": {"type": "string"},
+            "yield_time_ms": {"type": "integer", "minimum": 0, "maximum": 30000},
+            "stop": {"type": "boolean"},
+        }, ["session_id"]),
+    ])
+    from atlas.tools.notebook_edit import notebook_edit_tool_schema
+
+    schemas.append(notebook_edit_tool_schema())
+    from atlas.tools.claude_tasks import task_tool_schemas
+
+    schemas.extend(task_tool_schemas())
+    from atlas.tools.mobile_simulator import mobile_tool_schemas
+
+    schemas.extend(mobile_tool_schemas())
+    from atlas.tools.workspace_queries import query_tool_schemas
+
+    schemas.extend(query_tool_schemas())
+    from atlas.tools.workspace_lsp import lsp_tool_schemas
+
+    schemas.extend(lsp_tool_schemas())
+    from atlas.tools.media_generation_search import f1_d_tool_schemas
+
+    schemas.extend(f1_d_tool_schemas())
+    from atlas.tools.workspace_workflows import workspace_workflow_schemas
+
+    schemas.extend(workspace_workflow_schemas())
+    schemas.append(_function_schema(
+        "browser_use",
+        "Call an Atlas X2 browser operation. Use runtime.list/capability.list first to discover the active runtime and supported operations; unsupported operations return an explicit capability error.",
+        {
+            "operation": {"type": "string", "minLength": 1},
+            "arguments": {"type": "object", "additionalProperties": True},
+        },
+        ["operation"],
+    ))
     if include_workflow:
         from atlas.kernel.workflow_tool import WORKFLOW_TOOL_SPEC
 
@@ -64,6 +194,23 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
             },
         })
     return schemas
+
+
+def _function_schema(
+    name: str, description: str, properties: dict[str, Any],
+    required: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object", "properties": properties,
+                "required": required or [], "additionalProperties": False,
+            },
+        },
+    }
 
 
 @dataclass(slots=True)

@@ -16,6 +16,12 @@ READ_ONLY_TOOLS = frozenset({
     "read_file", "search_files", "glob", "grep", "Read", "Glob", "Grep",
     "local_file",
     "web_search", "web_fetch", "WebSearch", "WebFetch", "session_search", "clarify", "ask_user",
+    "android_preflight", "android_discover_project", "android_list_devices",
+    "android_list_avds", "android_logs", "android_ui_status",
+    "android_ui_describe", "android_ui_resolve", "ios_preflight",
+    "ios_list_simulators", "ios_discover_project", "ios_logs", "ios_ui_status",
+    "ios_ui_describe", "view_image", "update_plan", "list_available_plugins_to_install",
+    "TaskGet", "TaskList",
 })
 
 

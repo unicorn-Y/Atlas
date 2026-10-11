@@ -7,8 +7,8 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import contextlib
+import copy
 import json
 import logging
 import os
@@ -443,6 +443,17 @@ class AtlasKernel:
             proxy_runtime.plan_state = request.plan_state
             proxy_runtime.plan_update_callback = request.plan_update_callback
             proxy_runtime.kernel_edit = edit_manager
+            proxy_runtime.conversation_id = session_id
+            try:
+                from atlas.config import get_config
+                from atlas.task_artifacts import WorktreeService
+
+                proxy_runtime.workspace_worktree_service = WorktreeService(
+                    get_config().db_path.parent,
+                )
+            except Exception:
+                proxy_runtime.workspace_worktree_service = None
+            proxy_runtime._preapproved_tool_call_ids = set()
             tool_allow = getattr(runtime, "tool_allow", None)
             tool_deny = getattr(runtime, "tool_deny", [])
             tool_inputs: dict[str, dict[str, Any]] = {}
@@ -494,7 +505,9 @@ class AtlasKernel:
                         record("tool_blocked", tool_call_id=call_id, name=name,
                                decision="permission_request_denied", reason=reason)
                         return {"content": reason, "is_error": True, "outcome": "denied"}
-                    if not permission_hook.get("allowed"):
+                    if permission_hook.get("allowed"):
+                        proxy_runtime._preapproved_tool_call_ids.add(call_id)
+                    else:
                         approval_callback = getattr(proxy_runtime, "approval_callback", None)
                         if not callable(approval_callback):
                             reason = str(pre_tool.get("reason") or
@@ -519,6 +532,7 @@ class AtlasKernel:
                             record("tool_blocked", tool_call_id=call_id, name=name,
                                    decision="ask_denied", reason=reason)
                             return {"content": reason, "is_error": True, "outcome": "denied"}
+                        proxy_runtime._preapproved_tool_call_ids.add(call_id)
                         pretool_blocked.discard(call_id)
                 active_call_ids.add(call_id)
                 record("tool_start", tool_call_id=call_id, name=name, arguments=tool_args)
@@ -533,6 +547,16 @@ class AtlasKernel:
                 allow=tool_allow, deny=tool_deny,
             )
             context_manager = ContextManager(raw_config, output_dir=run_dir / "compact-output")
+            def context_remaining_callback() -> dict[str, Any]:
+                budget = context_manager.budget(model_window)
+                used = estimate_tokens(messages)
+                return {
+                    "remaining_tokens": max(0, budget - used),
+                    "budget_tokens": budget, "estimated_used_tokens": used,
+                    "estimate": True,
+                }
+
+            proxy_runtime.context_remaining_callback = context_remaining_callback
             stuck = StuckDetector()
             usage_budget = request.usage_budget or env_run_usage_budget()
 
@@ -1255,8 +1279,19 @@ class AtlasKernel:
                         record("tool_result", tool_call_id=result.call_id, name=result.name,
                                state=receipt["state"], is_error=is_error,
                                output_ref=receipt.get("output_ref"), output=content)
+                        tool_content: Any = content
+                        image_url = (
+                            result.output.get("data", {}).get("_image_data_url")
+                            if isinstance(result.output, dict)
+                            and isinstance(result.output.get("data"), dict) else None
+                        )
+                        if isinstance(image_url, str):
+                            tool_content = [
+                                {"type": "text", "text": content},
+                                {"type": "image_url", "image_url": {"url": image_url}},
+                            ]
                         messages.append({"role": "tool", "tool_call_id": result.call_id,
-                                         "name": result.name, "content": content})
+                                         "name": result.name, "content": tool_content})
                         active_call_ids.discard(result.call_id)
                         open_call_ids.discard(result.call_id)
                         pretool_blocked.discard(result.call_id)
@@ -1443,6 +1478,568 @@ class AtlasKernel:
         self, agent: Any, runtime: Any, call_id: str | None, name: str, arguments: dict[str, Any],
         event_queue: asyncio.Queue[Any], *, exec_manager: Any = None, nested: bool = False,
     ) -> Any:
+        async def dispatch_alias(target: str, args: dict[str, Any]) -> Any:
+            internal_events: asyncio.Queue[Any] = asyncio.Queue()
+            result = await self._dispatch(
+                agent, runtime, call_id, target, args, internal_events,
+                exec_manager=exec_manager, nested=nested,
+            )
+            while not internal_events.empty():
+                event = internal_events.get_nowait()
+                if not isinstance(event, dict) or event.get("type") not in {
+                    "tool_call", "tool_result", "approval_required",
+                }:
+                    await event_queue.put(event)
+            return result
+
+        async def request_tool_approval(reason: str) -> bool:
+            approved_ids = getattr(runtime, "_preapproved_tool_call_ids", set())
+            if call_id and call_id in approved_ids:
+                return True
+            approval = getattr(runtime, "approval_callback", None)
+            if not callable(approval):
+                return False
+            approval_id = f"approval:{call_id or uuid.uuid4().hex}"
+            await event_queue.put({
+                "type": "approval_required", "event_id": approval_id,
+                "tool_call_id": call_id, "name": name,
+                "arguments": dict(arguments), "reason": reason,
+            })
+            decision = approval(approval_id, name, dict(arguments))
+            if hasattr(decision, "__await__"):
+                decision = await decision
+            return decision == "allow"
+
+        if name == "browser_use":
+            operation = str(arguments.get("operation") or "").strip().lower()
+            normalized = operation.removeprefix("browser.")
+            browser_arguments = arguments.get("arguments")
+            if not isinstance(browser_arguments, dict):
+                browser_arguments = {}
+            write_operations = {
+                "browsers.open", "tabs.new", "tabs.open", "tabs.finalize", "tabs.finalise",
+                "tab.goto", "tab.back", "tab.forward", "tab.reload", "tab.close",
+                "tab.evaluate", "tab.cua.click", "tab.cua.double_click", "tab.cua.move",
+                "tab.cua.scroll", "tab.cua.drag", "tab.cua.keypress", "tab.cua.type",
+                "tab.dom_cua.click", "tab.dom_cua.double_click", "tab.dom_cua.scroll",
+                "tab.dom_cua.keypress", "tab.dom_cua.type", "tab.markhandoff",
+                "tab.mark_handoff", "tab.markdeliverable", "tab.mark_deliverable",
+                "tab.respondjsdialog", "tab.respond_js_dialog", "recording.start",
+                "recording.cancel", "capability.set", "capabilities.set",
+                "capability.visibility.set", "capability.headless.set",
+                "tab.setviewportsize", "tab.set_viewport_size",
+                "tab.waitforfunction", "tab.wait_for_function",
+            }
+            action = str(browser_arguments.get("action") or "").lower()
+            changes_page = normalized in write_operations or (
+                normalized in {"tab.locator", "tab.getbyrole", "tab.getbytext",
+                               "tab.getbylabel", "tab.getbyplaceholder", "tab.getbytestid",
+                               "tab.getbyalttext", "tab.getbytitle"}
+                and action in {"click", "fill", "check", "hover"}
+            )
+            if changes_page and not await request_tool_approval(
+                "Browser navigation, page interaction, recording, or browser state changes require approval."
+            ):
+                return {"content": "Browser operation was not approved.", "is_error": True,
+                        "outcome": "denied"}
+            from atlas.tools.browser_use_compat import browser_use_call
+
+            result = await browser_use_call(
+                operation, browser_arguments, runtime=runtime,
+            )
+            return {"content": json.dumps(result, ensure_ascii=False, default=str),
+                    "data": result, "is_error": not bool(result.get("success")),
+                    "outcome": "completed" if result.get("success") else "failed"}
+
+        if name in {
+            "image_generate", "image_edit", "x_search", "video_analyze",
+            "video_generate", "video_edit", "video_extend", "video_job_status",
+            "text_to_speech", "music_generate", "security_scan",
+        }:
+            writes = {
+                "image_generate", "image_edit", "video_generate", "video_edit",
+                "video_extend", "text_to_speech", "music_generate", "x_search",
+                "video_analyze",
+            }
+            sends_source_for_review = name == "security_scan" and bool(
+                arguments.get("include_model_review")
+            )
+            if (name in writes or sends_source_for_review) and not await request_tool_approval(
+                "This media operation contacts a provider, may incur charges, and/or writes an artifact."
+            ):
+                return {"content": f"{name} was not approved.", "is_error": True,
+                        "outcome": "denied"}
+            from atlas.tools.media_generation_search import f1_d_dispatch
+
+            return await f1_d_dispatch(name, arguments, agent, runtime)
+
+        if name in {
+            "workflow_run_manage", "workspace_session_manage", "workspace_worktree_manage",
+            "model_provider_discovery", "workspace_app_manage", "visualization_artifact",
+            "focused_call_graph", "workspace_summarize", "recording_skill",
+        }:
+            if name == "workspace_worktree_manage" and not getattr(
+                runtime, "workspace_worktree_service", None,
+            ):
+                try:
+                    from atlas.config import get_config
+                    from atlas.task_artifacts import WorktreeService
+
+                    runtime.workspace_worktree_service = WorktreeService(
+                        get_config().db_path.parent,
+                    )
+                except Exception:
+                    pass
+            from atlas.tools.workspace_workflows import workspace_workflow_dispatch
+
+            return await workspace_workflow_dispatch(name, arguments, agent, runtime)
+
+        if name == "clock.curr_time":
+            from datetime import UTC, datetime
+
+            return {"content": datetime.now(UTC).isoformat(), "outcome": "completed"}
+        if name == "clock.sleep":
+            seconds = max(0.0, min(300.0, float(arguments.get("seconds", 0))))
+            await asyncio.sleep(seconds)
+            return {"content": f"Waited {seconds:g} seconds.", "outcome": "completed"}
+        if name == "view_image":
+            from atlas.tools.local_image import view_workspace_image
+
+            try:
+                result = view_workspace_image(
+                    str(getattr(runtime, "workspace", "") or ""),
+                    str(arguments.get("path") or ""),
+                    str(arguments.get("detail") or "auto"),
+                )
+            except (OSError, ValueError) as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+            return {"content": result["content"], "data": result["data"], "outcome": "completed"}
+        if name in {"glob", "grep"}:
+            from atlas.tools.workspace_queries import glob_workspace, grep_workspace
+
+            workspace = str(getattr(runtime, "workspace", "") or "")
+            if not workspace:
+                return {"content": "Workspace queries require an active workspace.", "is_error": True}
+            try:
+                if name == "glob":
+                    data = await asyncio.to_thread(
+                        glob_workspace, workspace,
+                        pattern=arguments.get("pattern"), path=arguments.get("path"),
+                        hidden=bool(arguments.get("hidden", False)),
+                        limit=arguments.get("limit", 200),
+                    )
+                else:
+                    data = await asyncio.to_thread(
+                        grep_workspace, workspace,
+                        pattern=arguments.get("pattern"), path=arguments.get("path"),
+                        include=arguments.get("include"),
+                        literal=bool(arguments.get("literal", False)),
+                        case_sensitive=bool(arguments.get("caseSensitive", True)),
+                        limit=arguments.get("limit", 200),
+                    )
+            except (OSError, RuntimeError, ValueError) as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+            return {"content": json.dumps(data, ensure_ascii=False),
+                    "data": data, "outcome": "completed"}
+        if name in {"lsp_diagnostics", "lsp_hover", "lsp_definition",
+                    "lsp_references", "lsp_document_symbols"}:
+            from atlas.tools.workspace_lsp import query_lsp
+
+            workspace = str(getattr(runtime, "workspace", "") or "")
+            if not workspace:
+                return {"content": "LSP queries require an active workspace.", "is_error": True}
+            operation = {
+                "lsp_diagnostics": "diagnostics", "lsp_hover": "hover",
+                "lsp_definition": "definition", "lsp_references": "references",
+                "lsp_document_symbols": "document_symbols",
+            }[name]
+            try:
+                data = await asyncio.to_thread(
+                    query_lsp, workspace, operation=operation,
+                    path=arguments.get("path"), line=arguments.get("line"),
+                    character=arguments.get("character"),
+                    include_declaration=bool(arguments.get("includeDeclaration", True)),
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+            return {"content": json.dumps(data, ensure_ascii=False, default=str),
+                    "data": data, "outcome": "completed"}
+        if name == "update_plan":
+            from atlas.agent.planning import TaskPlan
+
+            entries = arguments.get("plan")
+            if not isinstance(entries, list) or not entries:
+                return {"content": "plan must contain at least one step.", "is_error": True}
+            if len(entries) > 100:
+                return {"content": "plan is limited to 100 steps.", "is_error": True}
+            todos = []
+            subtasks = []
+            for index, item in enumerate(entries, start=1):
+                if not isinstance(item, dict):
+                    return {"content": "Each plan step must be an object.", "is_error": True}
+                title = str(item.get("step") or "").strip()
+                status = str(item.get("status") or "pending")
+                if not title or status not in {"pending", "in_progress", "completed"}:
+                    return {"content": f"Invalid plan step at index {index}.", "is_error": True}
+                task_id = f"step-{index}"
+                todos.append({"id": task_id, "content": title, "status": status})
+                subtasks.append({
+                    "id": task_id, "title": title,
+                    "verification": "Completion status supplied through update_plan.",
+                    "status": "completed" if status == "completed" else "pending",
+                })
+            goal = str(arguments.get("explanation") or getattr(runtime, "goal", "") or "Updated plan").strip()
+            snapshot = TaskPlan.from_dict({"goal": goal, "subtasks": subtasks}).to_dict()
+            callback = getattr(runtime, "plan_update_callback", None)
+            if callable(callback):
+                result = callback(snapshot)
+                if hasattr(result, "__await__"):
+                    await result
+            todo_store = getattr(runtime, "todo_store", None)
+            if todo_store is not None:
+                todo_snapshot = todo_store.write(todos)
+                await event_queue.put({"type": "run_todos", **todo_snapshot})
+            if not callable(callback) and todo_store is None:
+                return {"content": "This run does not expose a plan or todo update channel.", "is_error": True}
+            await event_queue.put({"type": "plan_updated", "plan": snapshot})
+            return {"content": json.dumps(snapshot, ensure_ascii=False),
+                    "data": {"plan": snapshot}, "outcome": "completed"}
+        if name in {"list_available_plugins_to_install", "request_plugin_install"}:
+            from atlas.tools.plugin_marketplace import plugin_runtime_for
+
+            try:
+                plugin_runtime = plugin_runtime_for(agent)
+                if name == "list_available_plugins_to_install":
+                    marketplace_filter = str(arguments.get("marketplace") or "")
+                    query = str(arguments.get("query") or "").casefold()
+                    limit = max(1, min(100, int(arguments.get("limit", 50))))
+                    marketplaces = plugin_runtime.list_marketplaces()
+                    installed = {item.get("name") for item in plugin_runtime.discover()}
+                    plugins = []
+                    for marketplace in marketplaces:
+                        market_name = str(marketplace.get("name") or "")
+                        if marketplace_filter and market_name != marketplace_filter:
+                            continue
+                        for item in plugin_runtime.list_marketplace_plugins(market_name):
+                            plugin_name = str(item.get("name") or "")
+                            if not plugin_name or plugin_name in installed:
+                                continue
+                            if query and query not in f"{plugin_name} {item.get('description', '')}".casefold():
+                                continue
+                            plugins.append({key: item[key] for key in (
+                                "name", "description", "version", "marketplace", "source",
+                            ) if key in item})
+                    return {"content": json.dumps(plugins[:limit], ensure_ascii=False),
+                            "data": {"plugins": plugins[:limit]}}
+
+                approved_ids = getattr(runtime, "_preapproved_tool_call_ids", set())
+                if call_id not in approved_ids:
+                    approval = getattr(runtime, "approval_callback", None)
+                    if not callable(approval):
+                        return {"content": "Plugin installation approval is unavailable in this run.",
+                                "is_error": True, "outcome": "denied"}
+                    approval_id = f"approval:{call_id or uuid.uuid4().hex}"
+                    await event_queue.put({
+                        "type": "approval_required", "event_id": approval_id,
+                        "tool_call_id": call_id, "name": name, "arguments": dict(arguments),
+                    })
+                    choice = approval(approval_id, name, dict(arguments))
+                    if hasattr(choice, "__await__"):
+                        choice = await choice
+                    if choice != "allow":
+                        return {"content": "Plugin installation was not approved.",
+                                "is_error": True, "outcome": "denied"}
+                result = await asyncio.to_thread(
+                    plugin_runtime.install_marketplace_plugin,
+                    str(arguments.get("marketplace") or ""),
+                    str(arguments.get("plugin_name") or ""),
+                )
+                report = await plugin_runtime.load_all(
+                    hook_bus=getattr(agent, "hooks", None),
+                    mcp_client=getattr(agent, "_mcp", None),
+                    capabilities=getattr(agent, "capabilities", None),
+                )
+                result["loaded"] = result.get("name") in report.get("loaded", [])
+                result["load_report"] = report
+                return {"content": json.dumps(result, ensure_ascii=False),
+                        "data": result, "outcome": "completed"}
+            except (KeyError, OSError, RuntimeError, ValueError, PermissionError) as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+        if name in {"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"}:
+            client = getattr(agent, "_mcp", None)
+            if client is None:
+                return {"content": "No MCP client is attached to this run.", "is_error": True}
+            if name == "list_mcp_resources":
+                result = await client.list_resources(
+                    arguments.get("server"), arguments.get("cursor"),
+                )
+            elif name == "list_mcp_resource_templates":
+                result = await client.list_resource_templates(
+                    arguments.get("server"), arguments.get("cursor"),
+                )
+            else:
+                result = await client.read_resource(
+                    str(arguments.get("server") or ""), str(arguments.get("uri") or ""),
+                )
+            return {
+                "content": json.dumps(result, ensure_ascii=False),
+                "data": result,
+                "is_error": bool(result.get("is_error")) if isinstance(result, dict) else False,
+                "outcome": "failed" if isinstance(result, dict) and result.get("is_error") else "completed",
+            }
+        if name == "tool_search":
+            from atlas.kernel.tools import kernel_tool_schemas
+
+            query = str(arguments.get("query") or "").strip().casefold()
+            limit = max(1, min(50, int(arguments.get("limit", 20))))
+            candidates = list(agent._model_facing_tools())
+            candidates.extend(kernel_tool_schemas(include_workflow=True))
+            matches = []
+            seen: set[str] = set()
+            for item in candidates:
+                function = item.get("function", {}) if isinstance(item, dict) else {}
+                tool_name = str(function.get("name") or "")
+                description = str(function.get("description") or "")
+                if not tool_name or tool_name in seen:
+                    continue
+                seen.add(tool_name)
+                text = f"{tool_name} {description}".casefold()
+                if query in text:
+                    matches.append({"name": tool_name, "description": description})
+            matches.sort(key=lambda row: (not row["name"].casefold().startswith(query), row["name"]))
+            return {"content": json.dumps(matches[:limit], ensure_ascii=False), "data": {"tools": matches[:limit]}}
+        if name == "get_context_remaining":
+            callback = getattr(runtime, "context_remaining_callback", None)
+            if not callable(callback):
+                return {"content": json.dumps({"available": False, "reason": "runtime has no measured token budget"})}
+            remaining = callback()
+            if asyncio.iscoroutine(remaining):
+                remaining = await remaining
+            return {"content": json.dumps(remaining, ensure_ascii=False), "data": remaining}
+        if name == "new_context":
+            callback = getattr(runtime, "new_context_window_callback", None)
+            hermes_agent = getattr(runtime, "hermes_agent", None)
+            if callback is None or hermes_agent is None:
+                return {"content": "A fresh-context handoff is unavailable for this runtime.", "is_error": True}
+            summary = await callback()
+            hermes_agent.set_context_handoff_summary(str(summary))
+            await event_queue.put({
+                "type": "context.window.switched", "data": {"summary": str(summary)},
+            })
+            return {"content": "Prepared a context handoff.", "outcome": "completed"}
+        if name == "request_permissions":
+            approval = getattr(runtime, "approval_callback", None)
+            if not callable(approval):
+                return {"content": "Permission approval is unavailable in this run.", "is_error": True}
+            approval_id = f"permission:{call_id or uuid.uuid4().hex}"
+            request = {
+                "permission": str(arguments.get("permission") or ""),
+                "reason": str(arguments.get("reason") or ""),
+                "scope": str(arguments.get("scope") or "this request"),
+            }
+            await event_queue.put({
+                "type": "approval_required", "event_id": approval_id,
+                "tool_call_id": call_id, "name": name, "arguments": request,
+            })
+            result = approval(approval_id, name, request)
+            if hasattr(result, "__await__"):
+                result = await result
+            allowed = result == "allow"
+            return {
+                "content": "Permission approved for this request only." if allowed else "Permission was not approved.",
+                "is_error": not allowed, "outcome": "completed" if allowed else "denied",
+            }
+        if name in {"request_user_input", "request_user_input_async"}:
+            input_callback = getattr(runtime, "input_callback", None)
+            questions = arguments.get("questions")
+            if not callable(input_callback):
+                return {"content": "This run has no interactive user-input channel.", "is_error": True}
+            if not isinstance(questions, list) or not questions:
+                return {"content": "questions must contain at least one question.", "is_error": True}
+            answers: dict[str, Any] = {}
+            for index, question_data in enumerate(questions, start=1):
+                if not isinstance(question_data, dict):
+                    return {"content": f"Question {index} must be an object.", "is_error": True}
+                question = str(question_data.get("question") or "").strip()
+                question_id = str(question_data.get("id") or f"question-{index}")
+                options = [str(item.get("label") or "") for item in question_data.get("options", [])
+                           if isinstance(item, dict) and str(item.get("label") or "").strip()]
+                if not question:
+                    return {"content": f"Question {index} is empty.", "is_error": True}
+                answer = input_callback(f"{call_id or 'input'}:{question_id}", question, options or None)
+                if hasattr(answer, "__await__"):
+                    answer = await answer
+                answers[question_id] = answer
+            return {"content": json.dumps(answers, ensure_ascii=False),
+                    "data": {"answers": answers}, "outcome": "completed"}
+        if name == "send_message_to_user_async":
+            message = str(arguments.get("message") or "").strip()
+            if not message:
+                return {"content": "message must not be empty.", "is_error": True}
+            await event_queue.put({"type": "chunk", "content": message})
+            return {"content": "Message sent to the user in the current run.",
+                    "data": {"sent": True}, "outcome": "completed"}
+        if name in {"TaskCreate", "TaskGet", "TaskList", "TaskUpdate", "TodoWrite"}:
+            from atlas.tools.claude_tasks import call_task_tool
+
+            result = call_task_tool(name, arguments, runtime)
+            if not result.get("is_error") and name in {"TaskCreate", "TaskUpdate", "TodoWrite"}:
+                todo_store = getattr(runtime, "todo_store", None)
+                if todo_store is not None:
+                    await event_queue.put({"type": "run_todos", **todo_store.snapshot()})
+            return result
+        if name == "notebook_edit":
+            if str(arguments.get("edit_mode") or "replace") != "read":
+                approved_ids = getattr(runtime, "_preapproved_tool_call_ids", set())
+                if call_id not in approved_ids:
+                    approval = getattr(runtime, "approval_callback", None)
+                    if not callable(approval):
+                        return {"content": "Notebook edits require user approval in this run.",
+                                "is_error": True, "outcome": "denied"}
+                    approval_id = f"approval:{call_id or uuid.uuid4().hex}"
+                    await event_queue.put({
+                        "type": "approval_required", "event_id": approval_id,
+                        "tool_call_id": call_id, "name": name, "arguments": dict(arguments),
+                    })
+                    choice = approval(approval_id, name, dict(arguments))
+                    if hasattr(choice, "__await__"):
+                        choice = await choice
+                    if choice != "allow":
+                        return {"content": "Notebook edit was not approved.",
+                                "is_error": True, "outcome": "denied"}
+            from atlas.tools.notebook_edit import notebook_edit
+
+            try:
+                result = await asyncio.to_thread(
+                    notebook_edit,
+                    str(getattr(runtime, "workspace", "") or ""),
+                    str(arguments.get("notebook_path") or ""),
+                    edit_mode=str(arguments.get("edit_mode") or "replace"),
+                    cell_id=arguments.get("cell_id"),
+                    cell_type=arguments.get("cell_type"),
+                    new_source=arguments.get("new_source"),
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+            return {"content": json.dumps(result, ensure_ascii=False),
+                    "data": result, "outcome": "completed"}
+        if name == "wait_for_environment":
+            import time
+            from pathlib import Path
+
+            target = Path(str(arguments.get("path") or getattr(runtime, "workspace", ""))).expanduser()
+            timeout = max(0.0, min(60.0, float(arguments.get("timeout_seconds", 10))))
+            deadline = time.monotonic() + timeout
+            while not target.exists() and time.monotonic() < deadline:
+                await asyncio.sleep(min(0.25, max(0.0, deadline - time.monotonic())))
+            ready = target.exists()
+            result = {"ready": ready, "path": str(target), "waited_seconds": round(timeout - max(0.0, deadline - time.monotonic()), 3)}
+            return {"content": json.dumps(result, ensure_ascii=False), "data": result,
+                    "is_error": not ready, "outcome": "completed" if ready else "failed"}
+        if name == "exec_command":
+            command = str(arguments.get("cmd") or "")
+            if not command.strip():
+                return {"content": "cmd must not be empty.", "is_error": True}
+            return await dispatch_alias("terminal", {
+                    "command": command, "cwd": arguments.get("workdir") or getattr(runtime, "workspace", None),
+                    "yield_time_ms": arguments.get("yield_time_ms", 1000),
+                    "max_output_tokens": arguments.get("max_output_tokens", 2000),
+                })
+        if name == "powershell":
+            import os
+
+            if os.name != "nt":
+                return {"content": "The PowerShell tool is available only on Windows.", "is_error": True}
+            command = str(arguments.get("command") or "")
+            if not command.strip():
+                return {"content": "command must not be empty.", "is_error": True}
+            return await dispatch_alias("terminal", {
+                "command": command,
+                "shell": "powershell",
+                "cwd": arguments.get("cwd") or getattr(runtime, "workspace", None),
+                "yield_time_ms": arguments.get("yield_time_ms", 1000),
+                "max_output_tokens": arguments.get("max_output_tokens", 2000),
+            })
+        if name == "write_stdin":
+            stop = bool(arguments.get("stop"))
+            chars = str(arguments.get("chars") or "")
+            action = "stop" if stop else ("write" if chars else "poll")
+            mapped = {
+                "action": action, "process_id": str(arguments.get("session_id") or ""),
+                "input": chars, "yield_time_ms": arguments.get("yield_time_ms", 1000),
+            }
+            return await dispatch_alias("process_manage", mapped)
+        if name in {"git_pr_create", "git_pr_comment"}:
+            approved_ids = getattr(runtime, "_preapproved_tool_call_ids", set())
+            if call_id not in approved_ids:
+                approval = getattr(runtime, "approval_callback", None)
+                if not callable(approval):
+                    return {"content": "GitHub write approval is unavailable in this run.", "is_error": True}
+                approval_id = f"approval:{call_id or uuid.uuid4().hex}"
+                await event_queue.put({
+                    "type": "approval_required", "event_id": approval_id,
+                    "tool_call_id": call_id, "name": name, "arguments": dict(arguments),
+                })
+                result = approval(approval_id, name, dict(arguments))
+                if hasattr(result, "__await__"):
+                    result = await result
+                if result != "allow":
+                    return {"content": "GitHub write was not approved.", "is_error": True, "outcome": "denied"}
+            from atlas.tools.git_platform import comment_pull_request, create_pull_request
+
+            workspace = str(getattr(runtime, "workspace", "") or "")
+            try:
+                if name == "git_pr_create":
+                    data = await asyncio.to_thread(
+                        create_pull_request, workspace,
+                        title=str(arguments.get("title") or ""),
+                        body=str(arguments.get("body") or ""),
+                        base=arguments.get("base"), draft=bool(arguments.get("draft", False)),
+                    )
+                else:
+                    data = await asyncio.to_thread(
+                        comment_pull_request, workspace,
+                        body=str(arguments.get("body") or ""),
+                        pr_number=arguments.get("pr_number"),
+                    )
+            except (OSError, RuntimeError, ValueError, PermissionError) as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+            return {"content": json.dumps(data, ensure_ascii=False), "data": data, "outcome": "completed"}
+        if name.startswith(("android_", "ios_")):
+            from atlas.tools.mobile_simulator import (
+                MOBILE_MUTATING_TOOLS,
+                call_mobile_tool,
+            )
+
+            if name in MOBILE_MUTATING_TOOLS:
+                approved_ids = getattr(runtime, "_preapproved_tool_call_ids", set())
+                if call_id not in approved_ids:
+                    approval = getattr(runtime, "approval_callback", None)
+                    if not callable(approval):
+                        return {"content": "Mobile simulator write approval is unavailable in this run.",
+                                "is_error": True, "outcome": "denied"}
+                    approval_id = f"approval:{call_id or uuid.uuid4().hex}"
+                    await event_queue.put({
+                        "type": "approval_required", "event_id": approval_id,
+                        "tool_call_id": call_id, "name": name, "arguments": dict(arguments),
+                    })
+                    result = approval(approval_id, name, dict(arguments))
+                    if hasattr(result, "__await__"):
+                        result = await result
+                    if result != "allow":
+                        return {"content": "Mobile simulator operation was not approved.",
+                                "is_error": True, "outcome": "denied"}
+            try:
+                data = await call_mobile_tool(
+                    name, arguments, str(getattr(runtime, "workspace", "") or ""),
+                )
+            except (OSError, RuntimeError, ValueError, PermissionError, TimeoutError) as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+            if isinstance(data.get("content"), list):
+                return {"content": data["content"], "data": data.get("data", {}),
+                        "outcome": "completed"}
+            return {"content": json.dumps(data, ensure_ascii=False, default=str),
+                    "data": data, "outcome": "completed"}
         if name == "build_repo_map":
             workspace = str(getattr(runtime, "workspace", "") or "")
             if not workspace or workspace.startswith("ssh://"):
@@ -1473,6 +2070,7 @@ class AtlasKernel:
             }
 
         from langchain_core.messages import AIMessage
+
         from atlas.agent import ToolExecutionState
 
         proxy = copy.copy(runtime)
