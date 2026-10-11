@@ -7,6 +7,7 @@ import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
 import { createEventBuffer } from '../services/eventBuffer';
+import { notificationIsSilent, shouldNotify, type NotificationKind } from '../services/notificationsSettings';
 import { createPersistentSlice, type PersistentSlice } from './persistentSlice';
 type SetPersistent = (partial: Partial<PersistentSlice> | ((state: PersistentSlice) => Partial<PersistentSlice>)) => void;
 
@@ -252,10 +253,10 @@ const flags = (conversations: ConversationSummary[]) => ({
 });
 
 /** Native desktop notification, only when Atlas is not what the user is looking at. */
-function notifyDesktop(title: string, body: string, onClick: () => void) {
+function notifyDesktop(title: string, body: string, kind: NotificationKind, onClick: () => void) {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  if (typeof document !== 'undefined' && document.hasFocus()) return;
-  const notification = new Notification(title, { body, silent: false });
+  if (!shouldNotify(kind)) return;
+  const notification = new Notification(title, { body, silent: notificationIsSilent() });
   notification.onclick = () => { window.focus(); onClick(); notification.close(); };
 }
 const RUN_OUTCOME: Record<string, string> = { 'run.completed': '已完成', 'run.failed': '出错了', 'run.cancelled': '已停止' };
@@ -586,12 +587,13 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const title = get().conversations.find((item) => item.id === run.conversationId)?.title ?? run.title;
       if (event.type === 'approval.required' || event.type === 'input.required' || event.type === 'run.plan.proposed' || event.type === 'rules.trust_required') {
         const heading = event.type === 'input.required' ? 'Atlas 有个问题要问你' : event.type === 'run.plan.proposed' ? 'Atlas 的计划等你确认' : event.type === 'rules.trust_required' ? '要不要信任这个目录的规则文件？' : 'Atlas 需要你确认';
-        notifyDesktop(heading, title, () => get().setActiveRun(run.id));
+        notifyDesktop(heading, title, event.type === 'input.required' ? 'question' : 'approval', () => get().setActiveRun(run.id));
       }
       if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') {
         const background = run.conversationId !== get().activeConversationId || (typeof document !== 'undefined' && !document.hasFocus());
         if (background) set((state) => ({ unread: state.unread.includes(run.conversationId) ? state.unread : [...state.unread, run.conversationId] }));
-        notifyDesktop(`Atlas ${RUN_OUTCOME[event.type]}`, title, () => {
+        const notificationKind: NotificationKind = event.type === 'run.completed' ? 'completion' : event.type === 'run.failed' ? 'failure' : 'background';
+        notifyDesktop(`Atlas ${RUN_OUTCOME[event.type]}`, title, notificationKind, () => {
           const conversation = get().conversations.find((item) => item.id === run.conversationId);
           if (conversation) void get().openConversation(conversation);
         });

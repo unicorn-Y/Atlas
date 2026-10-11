@@ -35,6 +35,9 @@ export function InitDialogBody({ busy, applying, proposal, error, onApply, onClo
     <div>
       <h2 className="m-0 flex items-center gap-2 text-[16px] font-semibold text-heading"><FileText size={17} className="text-brand" />AGENTS.md</h2>
       <p className="m-0 mt-1 truncate font-mono text-[12px] text-fg-3" title={proposal.path}>{proposal.path}</p>
+      <p className="m-0 mt-2 text-[12px] leading-5 text-fg-3">
+        目标是当前工作区根目录。受信任工作区中的 CLAUDE.md 也可作为项目指令读取；此操作只写入上方的 AGENTS.md 路径，请先核对预览差异。
+      </p>
     </div>
     <div className="flex flex-wrap gap-1.5">
       {languages && <Chip icon={<Languages size={13} className="shrink-0 text-fg-3" />} label={`语言：${languages}${scan.languages.length > 3 ? ` 等 ${scan.languages.length} 种` : ''}`} />}

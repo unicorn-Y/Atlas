@@ -9,6 +9,7 @@ import os
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -111,16 +112,26 @@ def aggregate_run_usage(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 class RunUsageBudget:
-    """Harness opt-in input-token cap shared by requests in one runtime process."""
+    """Per-run input-token and optional estimated USD budget."""
 
     def __init__(
         self, limit: int | None, audit_path: str | None = None, budget_id: str = "",
+        *, cost_limit_usd: Decimal | str | float | None = None,
     ) -> None:
         self.limit = limit
         self.audit_path = audit_path
         self.budget_id = budget_id
+        try:
+            parsed_cost_limit = Decimal(str(cost_limit_usd)) if cost_limit_usd is not None else None
+        except (InvalidOperation, TypeError, ValueError):
+            parsed_cost_limit = None
+        self.cost_limit_usd = (
+            parsed_cost_limit if parsed_cost_limit is not None and parsed_cost_limit > 0 else None
+        )
         self.used = 0
         self.reserved = 0
+        self.used_cost_usd = Decimal(0)
+        self.reserved_cost_usd = Decimal(0)
         self.usage_unknown = False
         self._pending: dict[str, dict[str, Any]] = {}
         self._request_ids: set[str] = set()
@@ -135,13 +146,26 @@ class RunUsageBudget:
             if self.usage_unknown:
                 return False
             if request_id in self._pending:
-                self.reserved -= self._pending.pop(request_id)["estimate"]
+                previous = self._pending.pop(request_id)
+                self.reserved -= previous["estimate"]
+                self.reserved_cost_usd -= previous["estimated_cost_usd"]
+            estimated_cost = self._estimate_cost(
+                model, input_tokens=estimate, output_tokens=0,
+            ) if self.cost_limit_usd is not None else Decimal(0)
+            if self.cost_limit_usd is not None and estimated_cost is None:
+                return False
             if self.limit is not None and self.used + self.reserved + estimate > self.limit:
                 return False
+            if (
+                self.cost_limit_usd is not None
+                and self.used_cost_usd + self.reserved_cost_usd + estimated_cost > self.cost_limit_usd
+            ):
+                return False
             self.reserved += estimate
+            self.reserved_cost_usd += estimated_cost or Decimal(0)
             self._pending[request_id] = {
                 "estimate": estimate, "purpose": purpose, "model": model,
-                "wire_model": wire_model,
+                "wire_model": wire_model, "estimated_cost_usd": estimated_cost or Decimal(0),
             }
             return True
 
@@ -153,6 +177,9 @@ class RunUsageBudget:
             estimate = pending["estimate"]
             self.reserved -= estimate
             self.used += estimate
+            estimated_cost = pending["estimated_cost_usd"]
+            self.reserved_cost_usd -= estimated_cost
+            self.used_cost_usd += estimated_cost
             self.usage_unknown = True
             if request_id:
                 self._request_ids.add(request_id)
@@ -168,6 +195,8 @@ class RunUsageBudget:
                     "estimated_input_tokens": estimate,
                     "budget_input_tokens": estimate,
                     "budget_usage_unknown": True,
+                    "budget_estimated_cost_usd": str(estimated_cost),
+                    "budget_cost_usage_unknown": self.cost_limit_usd is not None,
                     "budget_id": self.budget_id or os.environ.get("ATLAS_RUN_BUDGET_ID", ""),
                 }
                 path = Path(self.audit_path).expanduser()
@@ -190,6 +219,7 @@ class RunUsageBudget:
             if pending is None:
                 return
             self.reserved -= pending["estimate"]
+            self.reserved_cost_usd -= pending["estimated_cost_usd"]
             if request_id:
                 self._request_ids.add(request_id)
 
@@ -197,18 +227,41 @@ class RunUsageBudget:
         request_id = str(usage.get("request_id") or "")
         with self._lock:
             if request_id and request_id in self._request_ids:
-                return not self.usage_unknown and (self.limit is None or self.used <= self.limit)
+                token_budget_ok = self.limit is None or self.used + self.reserved <= self.limit
+                cost_budget_ok = (
+                    self.cost_limit_usd is None
+                    or self.used_cost_usd + self.reserved_cost_usd <= self.cost_limit_usd
+                )
+                return not self.usage_unknown and token_budget_ok and cost_budget_ok
             if request_id:
                 self._request_ids.add(request_id)
             pending = self._pending.pop(request_id, None)
             estimate = pending["estimate"] if pending else None
             if estimate is not None:
                 self.reserved -= estimate
+                self.reserved_cost_usd -= pending["estimated_cost_usd"]
             if usage.get("usage_available") is False:
                 self.used += estimate or 0
                 self.usage_unknown = True
             else:
                 self.used += max(0, int(usage.get("input_tokens") or 0))
+            if self.cost_limit_usd is not None:
+                if usage.get("usage_available") is False:
+                    self.used_cost_usd += (
+                        pending["estimated_cost_usd"] if pending is not None else Decimal(0)
+                    )
+                else:
+                    cost = self._estimate_cost(
+                        str(usage.get("model") or (pending or {}).get("model") or ""),
+                        input_tokens=max(0, int(usage.get("input_tokens") or 0)),
+                        output_tokens=max(0, int(usage.get("output_tokens") or 0)),
+                        cached_input_tokens=max(0, int(usage.get("cached_input_tokens") or 0)),
+                        cache_write_tokens=max(0, int(usage.get("cache_write_tokens") or 0)),
+                    )
+                    if cost is None:
+                        self.usage_unknown = True
+                    else:
+                        self.used_cost_usd += cost
             if self.audit_path:
                 audit_row = {
                     key: usage.get(key) for key in (
@@ -224,14 +277,34 @@ class RunUsageBudget:
                     else max(0, int(usage.get("input_tokens") or 0))
                 )
                 audit_row["budget_usage_unknown"] = self.usage_unknown
+                audit_row["budget_estimated_cost_usd"] = str(self.used_cost_usd)
+                audit_row["budget_cost_usage_unknown"] = (
+                    self.cost_limit_usd is not None and self.usage_unknown
+                )
                 audit_row["budget_id"] = self.budget_id or os.environ.get("ATLAS_RUN_BUDGET_ID", "")
                 path = Path(self.audit_path).expanduser()
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with path.open("a", encoding="utf-8") as stream:
                     stream.write(json.dumps(audit_row, ensure_ascii=False, separators=(",", ":")) + "\n")
-            return not self.usage_unknown and (
-                self.limit is None or self.used + self.reserved <= self.limit
+            token_budget_ok = self.limit is None or self.used + self.reserved <= self.limit
+            cost_budget_ok = (
+                self.cost_limit_usd is None
+                or self.used_cost_usd + self.reserved_cost_usd <= self.cost_limit_usd
             )
+            return not self.usage_unknown and token_budget_ok and cost_budget_ok
+
+    @staticmethod
+    def _estimate_cost(
+        model: str, *, input_tokens: int, output_tokens: int,
+        cached_input_tokens: int = 0, cache_write_tokens: int = 0,
+    ) -> Decimal | None:
+        model_key = (model or "").strip().lower()
+        if model_key.startswith(("ollama/", "llama.cpp/", "llama_cpp/")):
+            return Decimal(0)
+        return estimate_cost(
+            model, input_tokens=input_tokens, output_tokens=output_tokens,
+            cached_input_tokens=cached_input_tokens, cache_write_tokens=cache_write_tokens,
+        )
 
 
 _ENV_BUDGETS: dict[str, RunUsageBudget] = {}
@@ -276,6 +349,24 @@ def env_run_usage_budget() -> RunUsageBudget | None:
         return _ENV_BUDGETS.setdefault(
             key, RunUsageBudget(limit, audit_path, os.environ.get("ATLAS_RUN_BUDGET_ID", key)),
         )
+
+
+def configured_run_usage_budget() -> RunUsageBudget | None:
+    """Create a fresh user cost budget for one run, unless a harness budget is active."""
+    existing = env_run_usage_budget()
+    if existing is not None:
+        return existing
+    try:
+        from atlas.config import load_user_settings
+
+        limits = load_user_settings().get("run_limits")
+        raw_limit = limits.get("max_cost_usd") if isinstance(limits, dict) else None
+        cost_limit = Decimal(str(raw_limit)) if raw_limit is not None else None
+    except (InvalidOperation, OSError, TypeError, ValueError):
+        return None
+    if cost_limit is None or not cost_limit.is_finite() or cost_limit <= 0:
+        return None
+    return RunUsageBudget(None, budget_id=f"user-cost:{os.getpid()}", cost_limit_usd=cost_limit)
 
 
 class UsageLedger:

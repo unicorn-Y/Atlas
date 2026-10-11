@@ -12,7 +12,7 @@ export default function AgentChannelsTab({ apiBaseUrl, agent, onToast }: {
 }) {
   const [channels, setChannels] = useState<AgentChannelBinding[]>(agent.agent?.channels ?? []);
   const [gateway, setGateway] = useState<string[]>([]);
-  const [form, setForm] = useState({ channel: 'telegram', target: '', account: '' });
+  const [form, setForm] = useState({ channel: '', target: '', account: '' });
   const [busy, setBusy] = useState(false);
   const base = apiBaseUrl;
   const agentId = agent.id;
@@ -22,13 +22,22 @@ export default function AgentChannelsTab({ apiBaseUrl, agent, onToast }: {
   }, [base, agentId]);
   useEffect(() => { void reload(); }, [reload]);
   useEffect(() => {
-    channelsApi.status(base).then((status) => setGateway(status.channels.map((row) => row.name))).catch(() => setGateway([]));
+    let active = true;
+    channelsApi.status(base).then((status) => {
+      if (!active) return;
+      const registered = status.channels.map((row) => row.name);
+      setGateway(registered);
+      setForm((current) => ({ ...current, channel: registered.includes(current.channel) ? current.channel : registered[0] ?? '' }));
+    }).catch(() => {
+      if (!active) return;
+      setGateway([]);
+      setForm((current) => ({ ...current, channel: '' }));
+    });
+    return () => { active = false; };
   }, [base]);
 
-  const options = [...new Set([...gateway, 'telegram', 'webhook', 'email', 'slack', 'feishu', 'dingtalk', 'wecom'])];
-
   const add = async () => {
-    if (!form.target.trim()) return;
+    if (!form.channel || !gateway.includes(form.channel) || !form.target.trim()) return;
     setBusy(true);
     try {
       setChannels((await agentsApi.addChannel(base, agentId, {
@@ -61,12 +70,12 @@ export default function AgentChannelsTab({ apiBaseUrl, agent, onToast }: {
         {binding.account && <span className="shrink-0 text-[11.5px] text-fg-3">账号 {binding.account}</span>}
         <Button size="icon-sm" variant="ghost" aria-label="移除绑定" disabled={busy} onClick={() => void remove(binding)}><Trash2 /></Button>
       </div>)}
-      {!channels.length && <p className="text-[12.5px] text-fg-3">还没有绑定。下面加一条，比如 telegram → 你的 chat id。</p>}
+      {!channels.length && <p className="text-[12.5px] text-fg-3">还没有绑定。请选择已注册渠道并填写目标 chat id。</p>}
     </div>
     <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); void add(); }}>
       <label className="grid gap-1 text-[12.5px] text-fg-2">渠道
-        <select value={form.channel} onChange={(event) => setForm({ ...form, channel: event.target.value })} className={cn(field, 'w-32')}>
-          {options.map((name) => <option key={name} value={name}>{name}</option>)}
+        <select value={form.channel} disabled={!gateway.length} onChange={(event) => setForm({ ...form, channel: event.target.value })} className={cn(field, 'w-32')}>
+          {!gateway.length && <option value="">暂无已注册渠道</option>}{gateway.map((name) => <option key={name} value={name}>{name}</option>)}
         </select>
       </label>
       <label className="grid min-w-[180px] flex-1 gap-1 text-[12.5px] text-fg-2">目标（chat id / 群 id）
@@ -75,7 +84,7 @@ export default function AgentChannelsTab({ apiBaseUrl, agent, onToast }: {
       <label className="grid gap-1 text-[12.5px] text-fg-2">账号（可选）
         <input value={form.account} onChange={(event) => setForm({ ...form, account: event.target.value })} className={cn(field, 'w-36 text-[12.5px]')} />
       </label>
-      <Button type="submit" variant="primary" disabled={busy || !form.target.trim()}><Plus />添加绑定</Button>
+      <Button type="submit" variant="primary" disabled={busy || !form.channel || !gateway.includes(form.channel) || !form.target.trim()}><Plus />添加绑定</Button>
     </form>
   </div>;
 }

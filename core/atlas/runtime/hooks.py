@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 import tomllib
 from pathlib import Path
@@ -499,6 +500,91 @@ class HookStore:
         self.path = path
         self.plugin_hooks = plugin_hooks
         self._recent_logs: list[dict[str, Any]] = []
+        self._trust_path = path.with_name("hooks.trust.json")
+        self._trust_lock = threading.RLock()
+
+    @staticmethod
+    def _fingerprint(hook: Mapping[str, Any]) -> str:
+        """Bind review to the exact command, event, matcher and source."""
+        identity = {
+            key: hook.get(key) for key in (
+                "id", "event", "source", "matcher", "timeout_s",
+                "hooks", "plugin_root",
+            )
+        }
+        if not isinstance(hook.get("hooks"), list):
+            identity["command"] = hook.get("command")
+        raw = json.dumps(identity, sort_keys=True, ensure_ascii=False, default=str)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _read_trust_records(self) -> dict[str, Any]:
+        try:
+            with self._trust_path.open("r", encoding="utf-8") as stream:
+                data = json.load(stream)
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return {}
+        if not isinstance(data, Mapping) or data.get("version") != 1:
+            return {}
+        hooks = data.get("hooks")
+        return dict(hooks) if isinstance(hooks, Mapping) else {}
+
+    def trust_status(self, hook: Mapping[str, Any]) -> dict[str, Any]:
+        """Return a fail-closed review state without changing hook config."""
+        hook_id = str(hook.get("id") or "")
+        fingerprint = self._fingerprint(hook)
+        with self._trust_lock:
+            record = self._read_trust_records().get(hook_id)
+        current = record if isinstance(record, Mapping) else {}
+        same_config = current.get("fingerprint") == fingerprint
+        trusted = same_config and current.get("trusted") is True
+        if trusted:
+            state = "approved"
+        elif same_config and current.get("trusted") is False:
+            state = "revoked"
+        elif current:
+            state = "changed"
+        else:
+            state = "unreviewed"
+        return {
+            "trusted": trusted,
+            "trust_state": state,
+            "trust_fingerprint": fingerprint,
+            "reviewed_at": current.get("reviewed_at") if same_config else None,
+        }
+
+    def set_hook_trust(
+        self, hook_id: str, trusted: bool, *, fingerprint: str, cwd: str | None = None,
+    ) -> dict[str, Any]:
+        """Approve/revoke one current hook revision; config changes need review again."""
+        matches = [hook for hook in self.list_all(cwd) if hook.get("id") == hook_id]
+        if not matches:
+            raise KeyError(hook_id)
+        if len(matches) > 1:
+            raise ValueError("Hook ID 不唯一，无法安全审批")
+        hook = matches[0]
+        current_fingerprint = self._fingerprint(hook)
+        if fingerprint != current_fingerprint:
+            raise ValueError("Hook 配置已变化，请刷新并重新审查")
+
+        from datetime import datetime, timezone
+
+        with self._trust_lock:
+            records = self._read_trust_records()
+            records[hook_id] = {
+                "fingerprint": current_fingerprint,
+                "trusted": bool(trusted),
+                "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self._trust_path.parent.mkdir(parents=True, exist_ok=True)
+            temp = self._trust_path.with_name(
+                f"{self._trust_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+            )
+            temp.write_text(
+                json.dumps({"version": 1, "hooks": records}, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            os.replace(temp, self._trust_path)
+        return {**hook, **self.trust_status(hook)}
 
     def _data(self) -> dict[str, Any]:
         if not self.path.exists():
@@ -531,9 +617,15 @@ class HookStore:
                 "id": group["id"], "event": group["event"],
                 "matcher": group.get("matcher"), "source": group.get("source", "claude"),
                 "enabled": group.get("enabled", True), "hooks": group.get("hooks", []),
+                "plugin_root": group.get("plugin_root"),
                 "command": "; ".join(str(spec.get("command") or "") for spec in group.get("hooks", [])),
             })
-        return legacy + claude
+        result: list[dict[str, Any]] = []
+        for hook in [*legacy, *claude]:
+            default_source = "claude" if isinstance(hook.get("hooks"), list) else "atlas"
+            normalized = {**hook, "source": hook.get("source") or default_source}
+            result.append({**normalized, **self.trust_status(normalized)})
+        return result
 
     def set_hook_enabled(self, hook_id: str, enabled: bool, cwd: str | None = None) -> dict[str, Any]:
         legacy = self.list()
@@ -601,9 +693,50 @@ class HookStore:
                    "additional_context": "", "continue": None, "logs": [],
                    "updated_tool_output": None, "feedback": "", "permission_decision": None,
                    "allowed": False, "ask_user": False, "retry": False}
-        for hook in self.list():
-            if not hook.get("enabled", True) or hook.get("event") != event:
+
+        atlas_hooks = [
+            hook for hook in self.list()
+            if hook.get("enabled", True) and hook.get("event") == event
+        ]
+        claude_event = event if event in CLAUDE_HOOK_EVENTS else (
+            _ATLAS_TO_CLAUDE.get(event) if bridge_event_alias else None
+        )
+        claude_hooks_to_run: list[Mapping[str, Any]] = []
+        claude_payload: dict[str, Any] = {}
+        if claude_event:
+            claude_hooks_to_run = [
+                item for item in self.list_claude(cwd) if item.get("enabled", True)
+            ]
+            claude_hooks_to_run.extend(
+                item for item in claude_hooks if item.get("enabled", True)
+            )
+            claude_payload = _event_payload(claude_event, payload, cwd)
+
+        # Preflight every matching hook before any command runs so an unreviewed
+        # hook cannot execute after another hook has already produced side effects.
+        for hook in atlas_hooks:
+            atlas_hook = {**hook, "source": "atlas", "matcher": None}
+            status = self.trust_status(atlas_hook)
+            if not status["trusted"]:
+                return self._deny_untrusted(atlas_hook, event, "atlas")
+        for group in claude_hooks_to_run:
+            if group.get("event") != claude_event or not _matches(
+                group.get("matcher"), str(claude_event), claude_payload,
+            ):
                 continue
+            matching_command = any(
+                isinstance(spec, Mapping)
+                and spec.get("type", "command") == "command"
+                and _matches_if(spec.get("if"), str(claude_event), claude_payload)
+                for spec in group.get("hooks", [])
+            )
+            reviewed_group = {**group, "source": group.get("source") or "claude"}
+            if matching_command and not self.trust_status(reviewed_group)["trusted"]:
+                return self._deny_untrusted(
+                    reviewed_group, str(claude_event), str(reviewed_group["source"]),
+                )
+
+        for hook in atlas_hooks:
             started = time.monotonic()
             code, output, stderr = await _run_command(
                 {"command": hook["command"], "timeout": hook.get("timeout_s", 30)},
@@ -624,13 +757,10 @@ class HookStore:
 
         if blocked["blocked"]:
             return blocked
-        claude_event = event if event in CLAUDE_HOOK_EVENTS else (
-            _ATLAS_TO_CLAUDE.get(event) if bridge_event_alias else None
-        )
         if claude_event:
-            all_hooks = [item for item in self.list_claude(cwd) if item.get("enabled", True)]
-            all_hooks.extend(item for item in claude_hooks if item.get("enabled", True))
-            result = await execute_claude_hooks(all_hooks, claude_event, payload, cwd=cwd, emit=emit)
+            result = await execute_claude_hooks(
+                claude_hooks_to_run, claude_event, payload, cwd=cwd, emit=emit,
+            )
             for log in result["logs"]:
                 self._record(log)
             prior_logs = blocked["logs"]
@@ -649,6 +779,9 @@ class HookStore:
     async def test(self, hook_id: str, cwd: str | None = None) -> dict[str, Any]:
         hook = next((item for item in self.list() if item.get("id") == hook_id), None)
         if hook:
+            atlas_hook = {**hook, "source": "atlas", "matcher": None}
+            if not self.trust_status(atlas_hook)["trusted"]:
+                return self._deny_untrusted_sync(atlas_hook, hook["event"], "atlas")
             started = time.monotonic()
             code, output, stderr = await _run_command(
                 {"command": hook["command"], "timeout": hook.get("timeout_s", 30)},
@@ -664,6 +797,11 @@ class HookStore:
         group = next((item for item in self.list_claude(cwd) if item.get("id") == hook_id), None)
         if not group:
             raise KeyError(hook_id)
+        reviewed_group = {**group, "source": group.get("source") or "claude"}
+        if not self.trust_status(reviewed_group)["trusted"]:
+            return self._deny_untrusted_sync(
+                reviewed_group, str(reviewed_group.get("event") or ""), str(reviewed_group["source"]),
+            )
         payload = {
             "session_id": "example-session", "tool_name": "example",
             "tool_input": {"command": "example", "file_path": "example.txt"},
@@ -674,6 +812,32 @@ class HookStore:
             log["hook_id"] = hook_id
             self._record(log)
         return {"hook_id": hook_id, "event": group["event"], **result}
+
+    def _deny_untrusted_sync(
+        self, hook: Mapping[str, Any], event: str, source: str,
+    ) -> dict[str, Any]:
+        hook_id = str(hook.get("id") or "")
+        reason = f"Hook「{hook_id}」尚未通过信任审查，已阻止执行。请在 Hooks 设置页明确批准后重试。"
+        log = {
+            "hook_id": hook_id, "event": event, "exit_code": None,
+            "duration_ms": 0, "output": "", "stderr": reason,
+            "source": source, "trust_state": self.trust_status(hook)["trust_state"],
+            "blocked": True, "review_required": True, "reason": reason,
+        }
+        self._record(log)
+        return log
+
+    def _deny_untrusted(
+        self, hook: Mapping[str, Any], event: str, source: str,
+    ) -> dict[str, Any]:
+        log = self._deny_untrusted_sync(hook, event, source)
+        return {
+            "blocked": True, "reason": log["reason"], "updated_input": None,
+            "additional_context": "", "continue": None, "logs": [log],
+            "updated_tool_output": None, "feedback": "", "permission_decision": None,
+            "allowed": False, "ask_user": False, "retry": False,
+            "review_required": True,
+        }
 
 
 async def maybe_awaitable(value: Any) -> None:

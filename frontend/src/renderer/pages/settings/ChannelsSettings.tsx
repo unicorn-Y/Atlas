@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { LoaderCircle, Radio, RefreshCw, Save } from 'lucide-react';
 import { channelsApi, type ChannelStatusRow } from '../../services/persistentApi';
+import { api } from '../../services/api';
 import { Button } from '../../ui/Button';
 import { cn } from '../../ui/cn';
 import { field } from '../agents/shared';
@@ -11,8 +12,7 @@ const CHANNEL_FIELDS: Record<string, ChannelField[]> = {
   telegram: [{ key: 'bot_token', label: '机器人密钥', secret: true, placeholder: '123456:ABC-DEF…' }],
   slack: [
     { key: 'bot_token', label: 'Bot Token（xoxb…）', secret: true },
-    { key: 'app_token', label: 'App Token（xapp…）', secret: true },
-    { key: 'bot_user_id', label: 'Bot User ID（可选）', secret: true },
+    { key: 'app_token', label: 'App Token（Socket Mode）', secret: true },
   ],
   webhook: [{ key: 'secret', label: 'HMAC 签名密钥', secret: true }],
   email: [
@@ -22,21 +22,28 @@ const CHANNEL_FIELDS: Record<string, ChannelField[]> = {
     { key: 'password', label: '密码 / 授权码', secret: true },
     { key: 'smtp_host', label: 'SMTP 服务器（可选）' },
   ],
-  feishu: [
-    { key: 'app_id', label: 'App ID', secret: true },
-    { key: 'app_secret', label: 'App Secret', secret: true },
-  ],
-  dingtalk: [
-    { key: 'client_id', label: 'Client ID', secret: true },
-    { key: 'client_secret', label: 'Client Secret', secret: true },
-  ],
-  wecom: [
-    { key: 'token', label: 'Token', secret: true },
-    { key: 'encoding_aes_key', label: 'Encoding AES Key', secret: true },
-  ],
 };
-const ALL_CHANNELS = ['telegram', 'slack', 'feishu', 'dingtalk', 'wecom', 'email', 'webhook'];
 
+type ChannelPolicy = {
+  dm_policy: 'disabled' | 'pairing' | 'open' | 'allowlist';
+  dm_allowlist: string[];
+  allow_when_empty: boolean;
+  group_policy: 'disabled' | 'open' | 'allowlist';
+  group_allowlist: string[];
+  require_mention: boolean;
+};
+type ChannelStatusWithPolicy = ChannelStatusRow & { policy?: ChannelPolicy };
+type ChannelPolicyPatch = Partial<ChannelPolicy>;
+const DEFAULT_CHANNEL_POLICY: ChannelPolicy = {
+  dm_policy: 'open', dm_allowlist: ['*'], allow_when_empty: true,
+  group_policy: 'open', group_allowlist: [], require_mention: false,
+};
+function cloneChannelPolicy(policy?: ChannelPolicy): ChannelPolicy {
+  return { ...DEFAULT_CHANNEL_POLICY, ...policy,
+    dm_allowlist: [...(policy?.dm_allowlist ?? DEFAULT_CHANNEL_POLICY.dm_allowlist)],
+    group_allowlist: [...(policy?.group_allowlist ?? DEFAULT_CHANNEL_POLICY.group_allowlist)],
+  };
+}
 /** 设置 → 渠道与 Gateway：网关状态 / 各渠道账号与凭据 / 测试发送。 */
 export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: string; onToast: (text: string) => void }) {
   const [rows, setRows] = useState<ChannelStatusRow[]>([]);
@@ -44,15 +51,21 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   const [degraded, setDegraded] = useState('');
   const [loading, setLoading] = useState(true);
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
+  const [policies, setPolicies] = useState<Record<string, ChannelPolicy>>({});
   const [values, setValues] = useState<Record<string, Record<string, string>>>({});
   const [busyChannel, setBusyChannel] = useState('');
-  const [test, setTest] = useState({ channel: 'telegram', chatId: '', text: 'Atlas 测试消息' });
+  const [test, setTest] = useState({ channel: '', chatId: '', text: 'Atlas 测试消息' });
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const status = await channelsApi.status(apiBaseUrl);
+      const status = await channelsApi.status(apiBaseUrl) as { channels: ChannelStatusWithPolicy[]; dispatcher_connected?: boolean };
       setRows(status.channels);
+      setPolicies((current) => {
+        const next = { ...current };
+        for (const row of status.channels) next[row.name] ??= cloneChannelPolicy(row.policy);
+        return next;
+      });
       setDispatcher(status.dispatcher_connected ?? null);
       setDegraded('');
       setEnabled((current) => ({ ...Object.fromEntries(status.channels.map((row) => [row.name, row.enabled])), ...current }));
@@ -63,31 +76,69 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   }, [apiBaseUrl]);
   useEffect(() => { void reload(); }, [reload]);
 
-  const channelNames = useMemo(() => {
-    const known = new Set(rows.map((row) => row.name));
-    return [...ALL_CHANNELS.filter((name) => !known.has(name)), ...rows.map((row) => row.name)];
-  }, [rows]);
+  const enabledRows = rows.filter((row) => row.enabled);
+  useEffect(() => {
+    if (enabledRows.some((row) => row.name === test.channel)) return;
+    setTest((current) => ({ ...current, channel: enabledRows[0]?.name ?? '' }));
+  }, [rows, test.channel]);
 
   const saveChannel = async (name: string) => {
     setBusyChannel(name);
+    let backendChanged = false;
     try {
       const fields = CHANNEL_FIELDS[name] ?? [];
+      const wasEnabled = rowFor(name)?.enabled ?? false;
+      const willEnable = enabled[name] ?? false;
       const config: Record<string, unknown> = { enabled: enabled[name] ?? false };
+      let credentialsChanged = false;
+      let channelRestarted = false;
+      if (!willEnable) {
+        await channelsApi.putAccounts(apiBaseUrl, { [name]: config });
+        backendChanged = true;
+      }
       for (const spec of fields) {
         const value = (values[name]?.[spec.key] ?? '').trim();
         if (!value) continue;
-        if (spec.secret) await channelsApi.setCredential(apiBaseUrl, name, spec.key, value);
-        else config[spec.key] = value;
+        if (spec.secret) {
+          const result = await channelsApi.setCredential(apiBaseUrl, name, spec.key, value) as { ok: boolean; set: boolean; restarted?: boolean };
+          backendChanged = true;
+          credentialsChanged = true;
+          channelRestarted = channelRestarted || result.restarted === true;
+        } else config[spec.key] = value;
       }
-      await channelsApi.putAccounts(apiBaseUrl, { [name]: config });
+      if (willEnable) {
+        await channelsApi.putAccounts(apiBaseUrl, { [name]: config });
+        backendChanged = true;
+      }
       setValues((current) => ({ ...current, [name]: {} }));
-      onToast(`${name} 已保存（密钥进了系统凭据库）`);
       await reload();
+      if (!credentialsChanged) onToast(`${name} 设置已保存，状态已刷新`);
+      else if (channelRestarted) onToast(`${name} 凭据已保存，已触发渠道重连；连接结果见 Gateway 状态`);
+      else if (!wasEnabled && willEnable) onToast(`${name} 凭据已保存并提交启用；Gateway 状态已刷新`);
+      else if (!willEnable) onToast(`${name} 凭据已保存；渠道未启用，启用时会读取新凭据`);
+      else onToast(`${name} 凭据已保存；Gateway 未在线重连，新凭据会在下次启动时读取`);
+    } catch (error) {
+      if (backendChanged) await reload();
+      onToast(error instanceof Error ? error.message : String(error));
+    }
+    setBusyChannel('');
+  };
+
+  const clearCredential = async (name: string, key: string) => {
+    setBusyChannel(name);
+    try {
+      const result = await channelsApi.setCredential(apiBaseUrl, name, key, '') as { ok: boolean; set: boolean; restarted?: boolean };
+      setValue(name, key, '');
+      await reload();
+      onToast(result.restarted
+        ? `${name} 的 ${key} 已从系统凭据库清除并触发渠道重连；环境变量仍可能提供回退凭据`
+        : `${name} 的 ${key} 已从系统凭据库清除；未在线重连，环境变量仍可能提供回退凭据`);
     } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
     setBusyChannel('');
   };
 
   const sendTest = async () => {
+    if (!test.channel) { onToast('没有已启用的渠道可发送测试消息'); return; }
     if (!test.chatId.trim()) { onToast('先填目标 chat id'); return; }
     setBusyChannel('__test');
     try {
@@ -97,6 +148,22 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
     setBusyChannel('');
   };
 
+  const policyFor = (name: string) => policies[name] ?? cloneChannelPolicy();
+  const updatePolicy = (name: string, patch: ChannelPolicyPatch) => setPolicies((current) => ({
+    ...current, [name]: { ...cloneChannelPolicy(current[name]), ...patch },
+  }));
+  const parseAllowlist = (value: string) => [...new Set(value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean))];
+  const savePolicy = async (name: string) => {
+    setBusyChannel(name);
+    try {
+      const saved = await api<{ ok: boolean; channel: string; policy: ChannelPolicy }>(apiBaseUrl, `/api/channels/${encodeURIComponent(name)}/policy`, {
+        method: 'PUT', json: policyFor(name),
+      });
+      setPolicies((current) => ({ ...current, [name]: cloneChannelPolicy(saved.policy) }));
+      onToast(`${name} 消息访问策略已保存并应用`);
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setBusyChannel('');
+  };
   const rowFor = (name: string) => rows.find((row) => row.name === name);
   const setValue = (name: string, key: string, value: string) =>
     setValues((current) => ({ ...current, [name]: { ...current[name], [key]: value } }));
@@ -127,9 +194,10 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       </div>
     </section>
 
-    {channelNames.map((name) => {
+    {rows.map(({ name }) => {
       const fields = CHANNEL_FIELDS[name] ?? [];
       const status = rowFor(name);
+      const policy = policyFor(name);
       return <section key={name} aria-label={`${name} 渠道配置`} className="rounded-[14px] px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
         <header className="flex items-center gap-2.5">
           <b className="font-medium text-fg">{name}</b>
@@ -140,16 +208,45 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
           </label>
         </header>
         <div className="mt-2.5 grid gap-2">
-          {fields.map((spec) => <label key={spec.key} className="grid gap-1 text-[12.5px] text-fg-2">
-            {spec.label}{spec.secret && <small className="text-fg-3">保存在系统凭据库，不会回显</small>}
-            <input type={spec.secret ? 'password' : 'text'} autoComplete="new-password" value={values[name]?.[spec.key] ?? ''}
-              onChange={(event) => setValue(name, spec.key, event.target.value)} placeholder={spec.placeholder}
-              className={cn(field, 'font-mono text-[12.5px]')} />
-          </label>)}
+          {fields.map((spec) => <div key={spec.key} className="grid gap-1 text-[12.5px] text-fg-2">
+            <label htmlFor={`${name}-${spec.key}`}>
+              {spec.label}{spec.secret && <small className="ml-1.5 text-fg-3">保存在系统凭据库，不会回显</small>}
+            </label>
+            <div className="flex gap-2">
+              <input id={`${name}-${spec.key}`} type={spec.secret ? 'password' : 'text'} autoComplete="new-password" value={values[name]?.[spec.key] ?? ''}
+                onChange={(event) => setValue(name, spec.key, event.target.value)} placeholder={spec.placeholder}
+                className={cn(field, 'min-w-0 flex-1 font-mono text-[12.5px]')} />
+              {spec.secret && <Button size="sm" variant="ghost" disabled={busyChannel === name} onClick={() => void clearCredential(name, spec.key)}>清除</Button>}
+            </div>
+          </div>)}
           {!fields.length && <p className="m-0 text-[12px] text-fg-3">这个渠道没有额外配置，直接启用即可。</p>}
         </div>
         <div className="mt-2.5 flex justify-end">
           <Button size="sm" variant="secondary" disabled={busyChannel === name} onClick={() => void saveChannel(name)}><Save size={13} />保存 {name}</Button>
+        </div>
+        <div className="mt-4 border-t border-line pt-3">
+          <div className="flex items-center gap-2"><b className="font-medium text-fg">消息访问策略</b><span className="flex-1" /><Button type="button" size="sm" variant="secondary" disabled={busyChannel === name} onClick={() => void savePolicy(name)}><Save size={13} />保存策略</Button></div>
+          <div className="mt-2.5 grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1 text-[12.5px] text-fg-2">私聊策略
+              <select value={policy.dm_policy} onChange={(event) => updatePolicy(name, { dm_policy: event.target.value as ChannelPolicy['dm_policy'] })} className={field}>
+                <option value="disabled">禁用</option><option value="open">开放（仍检查允许名单）</option><option value="allowlist">仅允许名单</option><option value="pairing">配对门控（当前仅检查允许名单）</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-[12.5px] text-fg-2">私聊允许发送者 ID（每行一项；* 匹配所有人）
+              <textarea rows={3} value={policy.dm_allowlist.join('\n')} onChange={(event) => updatePolicy(name, { dm_allowlist: parseAllowlist(event.target.value) })} className={cn(field, 'w-full resize-y font-mono text-[12px]')} />
+            </label>
+            <label className="flex items-start gap-2 text-[12.5px] text-fg-2"><input type="checkbox" checked={policy.allow_when_empty} onChange={(event) => updatePolicy(name, { allow_when_empty: event.target.checked })} />空私聊允许名单时放行（仅影响开放 / 仅名单策略）</label>
+            <label className="grid gap-1 text-[12.5px] text-fg-2">群消息策略
+              <select value={policy.group_policy} onChange={(event) => updatePolicy(name, { group_policy: event.target.value as ChannelPolicy['group_policy'] })} className={field}>
+                <option value="disabled">禁用</option><option value="open">开放</option><option value="allowlist">仅允许名单</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-[12.5px] text-fg-2">群消息允许发送者 ID（每行一项；* 匹配所有人）
+              <textarea rows={3} value={policy.group_allowlist.join('\n')} onChange={(event) => updatePolicy(name, { group_allowlist: parseAllowlist(event.target.value) })} className={cn(field, 'w-full resize-y font-mono text-[12px]')} />
+            </label>
+            <label className="flex items-start gap-2 text-[12.5px] text-fg-2"><input type="checkbox" checked={policy.require_mention} onChange={(event) => updatePolicy(name, { require_mention: event.target.checked })} />群消息要求提及或回复事件</label>
+          </div>
+          <p className="mb-0 mt-2 text-[11.5px] leading-[1.55] text-fg-3">群策略设为“仅允许名单”且群名单为空时，运行时回退到私聊允许名单；两者都空时，现有运行时会放行。提及检查使用事件的 is_mention 或 reply_to_event_id。配对门控目前没有自动申请 / 批准流程。</p>
         </div>
       </section>;
     })}
@@ -160,8 +257,8 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       <div className="flex flex-wrap items-end gap-2">
         <label className="grid gap-1 text-[12.5px] text-fg-2">渠道
           <select value={test.channel} onChange={(event) => setTest({ ...test, channel: event.target.value })} className={cn(field, 'w-32')}>
-            {rows.filter((row) => row.enabled).map((row) => <option key={row.name} value={row.name}>{row.name}</option>)}
-            {!rows.some((row) => row.enabled) && <option value="telegram">telegram</option>}
+            {!enabledRows.length && <option value="">暂无已启用渠道</option>}
+            {enabledRows.map((row) => <option key={row.name} value={row.name}>{row.name}</option>)}
           </select>
         </label>
         <label className="grid gap-1 text-[12.5px] text-fg-2">目标 chat id
@@ -170,7 +267,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
         <label className="grid min-w-[160px] flex-1 gap-1 text-[12.5px] text-fg-2">内容
           <input value={test.text} onChange={(event) => setTest({ ...test, text: event.target.value })} className={field} />
         </label>
-        <Button variant="secondary" disabled={busyChannel === '__test'} onClick={() => void sendTest()}>发送测试</Button>
+        <Button variant="secondary" disabled={busyChannel === '__test' || !enabledRows.length} onClick={() => void sendTest()}>发送测试</Button>
       </div>
     </section>
   </div>;

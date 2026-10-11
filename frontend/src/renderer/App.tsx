@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
-  SlidersHorizontal, Square, Sun, Volume2, VolumeX, X, Gauge,
+  SlidersHorizontal, Square, Sun, Volume2, VolumeX, X, Gauge, Search,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
@@ -49,11 +49,29 @@ import ChannelsSettings from './pages/settings/ChannelsSettings';
 import LocalModelsSettings from './pages/settings/LocalModelsSettings';
 import ImportPanel from './components/ImportPanel';
 import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
+import McpServersPanel from './components/settings/McpServersPanel';
+import ConfigTransferPanel from './components/settings/ConfigTransferPanel';
+import DiagnosticsPanel from './components/settings/DiagnosticsPanel';
+import TelemetryPrivacyPanel from './pages/TelemetryPrivacyPanel';
+import RecipeManagerPanel, { type RecipeLaunchRequest } from './components/settings/RecipeManagerPanel';
+import ExtensionPackagesPanel from './components/settings/ExtensionPackagesPanel';
+import ExtensionCatalogPanel from './components/settings/ExtensionCatalogPanel';
+import AppearanceNotificationsPanel from './components/settings/AppearanceNotificationsPanel';
+import WorkspaceSecurityPanel from './components/settings/WorkspaceSecurityPanel';
+import CustomCommandsPanel from './components/settings/CustomCommandsPanel';
+import RunLimitsPanel from './components/settings/RunLimitsPanel';
+import PlatformSettingsPanel from './components/settings/PlatformSettingsPanel';
+import SettingsIntegrationsPanel from './components/settings/SettingsIntegrationsPanel';
+import NetworkSettingsPanel from './components/settings/NetworkSettingsPanel';
+import OutputStyleSettingsPanel from './components/settings/OutputStyleSettingsPanel';
+import McpResourcesPanel from './components/settings/McpResourcesPanel';
+import LocalModelsPanel from './components/settings/LocalModelsPanel';
+import LinearIntegrationPanel from './components/settings/LinearIntegrationPanel';
 import Sidebar, { MORE_NAV, NAV, type View } from './shell/Sidebar';
 import HomeView, { type Suggestion } from './shell/HomeView';
 import Inspector, { type InspectorTab } from './shell/Inspector';
 import type { PickedElement } from './shell/panels/BrowserPanel';
-import { THEMES, isTheme, nextTheme, themeInfo, type Theme } from './shell/themes';
+import { THEMES, applyStoredTheme, clearCustomTheme, initialTheme, nextTheme, themeInfo, type Theme } from './shell/themes';
 import { api, relativeTime } from './services/api';
 import { buildTimeline } from './components/timeline';
 import { ComputerEdgeBar } from './components/x2';
@@ -63,7 +81,37 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'telemetry' | 'security' | 'commands' | 'platform' | 'integrations' | 'network';
+
+const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
+  ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
+  ['network', '模型网络', Server, 'proxy 代理 CA certificate certificate authority 网络 HTTPS TLS'],
+  ['security', '工作区安全', ShieldCheck, 'workspace trust 信任 sandbox 沙箱 network permission 权限 rules AGENTS CLAUDE'],
+  ['channels', 'Gateway 与渠道账号', Radio, 'gateway channel 渠道 账号'],
+  ['localModels', '本地模型', Cpu, 'local 本地模型'],
+  ['advanced', '高级', Settings, 'compression 压缩 高级'],
+  ['usage', '用量', Gauge, 'usage token cost 费用 预算 个人资料 profile'],
+  ['limits', '运行限制', Gauge, 'run limits max turns 轮数 token budget cost limit 费用上限'],
+  ['profiles', '角色', UserCog, 'profile 角色 agent'],
+  ['hooks', 'Hooks', Webhook, 'hook 事件'],
+  ['commands', '自定义命令', BookMarked, 'slash command 命令 prompt 参数'],
+  ['tools', '脚本工具', Wrench, 'script tool 工具'],
+  ['telegram', '手机远程', Smartphone, 'telegram remote 手机 远程'],
+  ['devices', '设备', Monitor, 'device remote pairing 设备 配对'],
+  ['shortcuts', '快捷键', Keyboard, 'shortcut keybinding 快捷键 按键'],
+  ['appearance', '外观与语音', Sun, 'appearance theme font voice 外观 主题 字体 语音'],
+  ['plugins', '插件与导入', Puzzle, 'plugin import 插件 导入 Claude Codex'],
+  ['skills', 'Skills', BookMarked, 'skill 技能 安全发现'],
+  ['mcp', 'MCP 服务', Server, 'mcp server tool 服务'],
+  ['notifications', '通知', Bell, 'notification sound 通知 声音'],
+  ['recipes', '配方', BookMarked, 'recipe template 参数化 配方'],
+  ['extensions', '扩展目录与来源', Puzzle, 'extension package registry catalog 扩展 包 目录 来源'],
+  ['transfer', '配置导入导出', Download, 'settings config export import backup 配置 导入 导出 备份'],
+  ['diagnostics', '诊断', ShieldCheck, 'diagnostics health config errors 诊断 健康 配置 错误'],
+  ['telemetry', '遥测隐私', ShieldCheck, 'telemetry privacy memos ARMS 遥测 隐私'],
+  ['platform', '平台集成', Laptop, 'desktop platform global shortcut hotkey always on top VS Code JetBrains deep link'],
+  ['integrations', '任务与集成', GitBranchPlus, 'github pull request Slack Linear cloud tasks automation'],
+];
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
@@ -122,7 +170,7 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
-  const [theme, setTheme] = useState<Theme>(() => { const saved = pref('appearance'); return isTheme(saved) ? saved : 'light'; });
+  const [theme, setTheme] = useState<Theme>(() => initialTheme());
   const [sideMini, setSideMini] = useState(() => pref('sidebar-mini') === 'true');
   // Narrow windows collapse the sidebar to icons without touching the saved preference.
   const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 900px)').matches);
@@ -133,6 +181,7 @@ export default function App() {
     return () => query.removeEventListener('change', update);
   }, []);
   const [sheet, setSheet] = useState<SheetPane | null>(null);
+  const [settingsQuery, setSettingsQuery] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -241,8 +290,47 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [input]);
   const notify = useCallback((text: string) => setToast(text), []);
+  const saveUsername = (value: string) => {
+    const next = value.trim() || 'User';
+    setPref('username', next);
+    setUsername(next);
+  };
+  const launchRecipeTemplate = async (request: RecipeLaunchRequest) => {
+    if (request.modelId && request.modelId !== store.model) {
+      if (!store.models.some((model) => model.id === request.modelId)) throw new Error('配方指定的模型当前不可用');
+      await store.selectModel(request.modelId);
+    }
+    setSheet(null);
+    go('chat');
+    setInput(request.renderedPrompt);
+    setToast('配方提示词已填入输入框；请检查后发送。扩展权限和结构化输出设置尚未接入当前运行时。');
+  };
 
   useEffect(() => { void store.initialize(); }, []);
+  useEffect(() => window.atlasDesktop?.onDeepLink?.((route) => {
+    if (route.type === 'settings') {
+      const pane = SETTINGS_NAV.find(([candidate]) => candidate === route.section)?.[0];
+      if (!pane) return;
+      go('chat');
+      setSheet(pane);
+      return;
+    }
+    const openLinkedConversation = async () => {
+      const current = useAtlasStore.getState();
+      await current.refreshConversations();
+      const target = useAtlasStore.getState().conversations.find((item) => item.id === route.conversationId);
+      if (!target) {
+        setToast('深链接中的对话不存在或已删除。');
+        return;
+      }
+      setSheet(null);
+      go('chat');
+      await useAtlasStore.getState().openConversation(target);
+    };
+    void openLinkedConversation().catch((error: unknown) => {
+      setToast(error instanceof Error ? error.message : '无法打开深链接中的对话。');
+    });
+  }), [go]);
   // H8 §10.3/§10.4: the backend boots in parallel with the window; startup progress
   // drives the「启动中」surfaces and re-reads real data once the backend is ready.
   useEffect(() => window.atlasDesktop?.onBackendStartupProgress(
@@ -276,9 +364,10 @@ export default function App() {
   useEffect(() => window.atlasDesktop?.onMaximizeChange(setMaximized), []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name=theme-color]')?.setAttribute('content', themeInfo(theme).windowColor);
-    window.atlasDesktop?.setTheme?.(theme);
+    const activeTheme = applyStoredTheme(theme);
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', themeInfo(activeTheme).windowColor);
+    window.atlasDesktop?.setTheme?.(activeTheme);
+    if (activeTheme !== theme) setTheme(activeTheme);
   }, [theme]);
 
   // Streamed read-aloud. Events are always consumed so switching it on later never replays a backlog;
@@ -475,7 +564,7 @@ export default function App() {
     if (!enabled) { speechBufferRef.current = ''; window.speechSynthesis?.cancel(); }
     setToast(enabled ? '新回复会自动朗读' : '已关闭自动朗读');
   };
-  const chooseTheme = (next: Theme) => { setTheme(next); setPref('appearance', next); };
+  const chooseTheme = (next: Theme) => { clearCustomTheme(); setTheme(next); setPref('appearance', next); };
   const toggleTheme = () => { const next = nextTheme(theme); chooseTheme(next); setToast(`已切换到${themeInfo(next).label}`); };
   const toggleMini = () => setSideMini((current) => { setPref('sidebar-mini', String(!current)); return !current; });
   const toggleInspector = (open?: boolean) => setInspectorOpen((current) => { const next = open ?? !current; setPref('canvas', String(next)); return next; });
@@ -1049,19 +1138,25 @@ export default function App() {
 
     <Dialog open={Boolean(sheet)} onOpenChange={(open) => { if (!open) setSheet(null); }} label="设置"
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
-      <nav aria-label="设置分类" className="bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
+      <nav aria-label="设置分类" className="overflow-y-auto bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
-        {([['models', '模型与服务', SlidersHorizontal], ['channels', 'Gateway 与渠道账号', Radio], ['localModels', '本地模型', Cpu], ['advanced', '高级', Settings], ['usage', '用量', Gauge], ['profiles', '角色', UserCog], ['hooks', 'Hooks', Webhook], ['tools', '脚本工具', Wrench], ['telegram', '手机远程', Smartphone], ['devices', '设备', Monitor], ['shortcuts', '快捷键', Keyboard], ['appearance', '外观与语音', Sun], ['plugins', '插件与扩展', Puzzle], ['notifications', '通知', Bell]] as Array<[SheetPane, string, typeof Bell]>).map(([pane, label, Icon]) =>
-          <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
+        <label className="mx-1 mb-3 flex h-9 items-center gap-2 rounded-lg bg-surface px-2.5 shadow-[inset_0_0_0_1px_var(--line)] focus-within:shadow-[inset_0_0_0_1px_var(--brand)]">
+          <Search size={14} className="shrink-0 text-fg-3" />
+          <input aria-label="搜索设置" value={settingsQuery} onChange={(event) => setSettingsQuery(event.target.value)} placeholder="搜索设置项…" className="min-w-0 flex-1 bg-transparent text-[12px] text-fg outline-none placeholder:text-fg-3" />
+          {settingsQuery && <button type="button" aria-label="清除设置搜索" onClick={() => setSettingsQuery('')} className="text-[11px] text-fg-3 hover:text-fg">清除</button>}
+        </label>
+        {SETTINGS_NAV.filter(([, label, , terms]) => `${label} ${terms}`.toLowerCase().includes(settingsQuery.trim().toLowerCase())).map(([pane, label, Icon]) =>
+          <button key={pane} aria-current={sheet === pane} onClick={() => { setSheet(pane); setSettingsQuery(''); }}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
           </button>)}
+        {SETTINGS_NAV.every(([, label, , terms]) => !`${label} ${terms}`.toLowerCase().includes(settingsQuery.trim().toLowerCase())) && <p className="px-2.5 py-2 text-[11px] text-fg-3">没有匹配的设置。</p>}
         <button onClick={() => { setSheet(null); setOnboardingOpen(true); }} className="mt-3 flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
           <Sparkles size={16} />开始向导</button>
       </nav>
       <div className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
         <button aria-label="关闭设置" onClick={() => setSheet(null)} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
-        {sheet === 'models' && <SettingsPage username={username} onSaveUsername={(value) => { const next = value.trim() || 'User'; setPref('username', next); setUsername(next); }} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} models={store.models} selectedModel={store.model} subagentsEnabled={store.subagentsEnabled} subagentDefaultModel={store.subagentDefaultModel} onSaveSubagentSettings={(enabled, model) => store.saveSubagentSettings(enabled, model)} providers={store.providers} reasoningStages={store.reasoningStages} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} onLoadProviders={store.loadProviders} onSaveProviderConfig={store.saveProviderConfig} onAddProviderKey={(providerId, secret, label) => store.addProviderKey(providerId, secret, label)} onRemoveProviderKey={(providerId, keyId) => void store.removeProviderKey(providerId, keyId)} onUpdateModel={(modelId, patch) => store.updateCustomModel(modelId, patch)} onDeleteModel={(modelId) => store.deleteCustomModel(modelId)} onSaveReasoningStages={(config) => void store.saveReasoningStages(config)} />}
+        {sheet === 'models' && <SettingsPage username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} errorDetail={store.errorDetail} models={store.models} selectedModel={store.model} subagentsEnabled={store.subagentsEnabled} subagentDefaultModel={store.subagentDefaultModel} onSaveSubagentSettings={(enabled, model) => store.saveSubagentSettings(enabled, model)} providers={store.providers} reasoningStages={store.reasoningStages} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} onLoadProviders={store.loadProviders} onSaveProviderConfig={store.saveProviderConfig} onAddProviderKey={(providerId, secret, label) => store.addProviderKey(providerId, secret, label)} onRemoveProviderKey={(providerId, keyId) => void store.removeProviderKey(providerId, keyId)} onUpdateModel={(modelId, patch) => store.updateCustomModel(modelId, patch)} onDeleteModel={(modelId) => store.deleteCustomModel(modelId)} onSaveReasoningStages={(config) => void store.saveReasoningStages(config)} />}
         {sheet === 'advanced' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">高级设置</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">配置会话压缩使用的辅助模型。</p>
@@ -1082,20 +1177,13 @@ export default function App() {
         {sheet === 'appearance' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">外观与语音</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">只影响这台电脑。</p>
-          <div role="radiogroup" aria-label="外观" className="mb-6 grid grid-cols-3 gap-3">
-            {THEMES.map((item) => <button key={item.id} role="radio" aria-checked={theme === item.id} onClick={() => chooseTheme(item.id)}
-              className={cn('card-surface rounded-2xl p-2.5 text-left transition-shadow', theme === item.id && 'shadow-[0_0_0_2px_var(--brand)]')}>
-              <span className="block h-20 rounded-xl shadow-[inset_0_0_0_1px_var(--line)]" style={{ background: item.swatch }} />
-              <b className="mt-2.5 block px-1 text-[13.5px] font-medium text-fg">{item.label}</b>
-              <small className="block px-1 pb-0.5 text-[12px] text-fg-3">{item.hint}</small>
-            </button>)}
-          </div>
+          <AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="appearance" />
           <div className="set-list">
             <div className="set-row"><div>收起侧边栏<small>只显示图标，给内容更多空间</small></div><button className="switch" role="switch" aria-label="收起侧边栏" aria-checked={sideMini} onClick={toggleMini} /></div>
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
           </div>
         </section>}
-        {sheet === 'usage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">用量</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">每次任务用了多少 token、缓存帮你省了多少、大概花了多少钱。</p><UsagePanel /></section>}
+        {sheet === 'usage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">用量</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">每次任务用了多少 token、缓存帮你省了多少、大概花了多少钱。</p><UsagePanel username={username} onSaveUsername={saveUsername} /></section>}
         {sheet === 'plugins' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">插件与扩展</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力，也可以把 Claude Code / Codex 里已有的配置搬进来。</p>
@@ -1105,15 +1193,28 @@ export default function App() {
           </div>
         </section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
-          <ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /></section>}
+          <div className="grid gap-8"><ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /><OutputStyleSettingsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
         {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">脚本工具</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">用一个小脚本给 Atlas 加新能力。</p><ScriptToolsPanel /></section>}
         {sheet === 'telegram' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">手机远程（Telegram）</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">不在电脑前时，用手机给 Atlas 布置任务、看结果、批准操作。</p><TelegramPanel /></section>}
-        {sheet === 'channels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Gateway 与渠道账号</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">Telegram、Slack、飞书这些入口的账号和密钥；消息进来后交给哪个 Agent，在 Agents → Channels 里绑定。</p><ChannelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
+        {sheet === 'channels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Gateway 与渠道账号</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置当前已注册渠道的账号和密钥；消息进来后交给哪个 Agent，在 Agents → Channels 里绑定。</p><ChannelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'devices' && <div className="-mx-2 -mt-1"><DevicesPage onToast={notify} /></div>}
-        {sheet === 'localModels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本地模型</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在你的显卡和内存里跑一个开源模型，Atlas 就能完全离线干活。</p><LocalModelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
+        {sheet === 'localModels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本地模型</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理本机 GGUF 模型；Ollama 模型在 loopback 上独立发现、下载并注册到 Atlas。</p><div className="grid gap-8"><LocalModelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /><LocalModelsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
+        {sheet === 'network' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">模型网络</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">为支持的模型连接配置本机代理与自定义 CA 证书。</p><NetworkSettingsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，只在这台电脑上生效。</p><ShortcutsPanel /></section>}
         {sheet === 'hooks' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Hooks</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在任务开始、用工具前后、完成或失败时运行你自己的命令。</p><HooksPanel /></section>}
-        {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><div className="grid gap-6"><AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="notifications" /><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
+        {sheet === 'mcp' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">MCP 服务</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理 Atlas 已支持的 MCP 服务，并浏览服务显式提供的资源。</p><div className="grid gap-8"><McpServersPanel apiBaseUrl={store.apiBaseUrl} /><McpResourcesPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
+        {sheet === 'skills' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Skills</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">搜索、安装和审阅技能；外部技能会先进入安全复核。</p><SkillsMarketPage apiBaseUrl={store.apiBaseUrl} onToast={notify} onTryInConversation={(name) => { store.applySkill(name); go('chat'); setSheet(null); }} /></section>}
+        {sheet === 'recipes' && <RecipeManagerPanel apiBaseUrl={store.apiBaseUrl} models={store.models} providers={store.providers} onLaunch={launchRecipeTemplate} />}
+        {sheet === 'extensions' && <div className="grid gap-8"><ExtensionCatalogPanel apiBaseUrl={store.apiBaseUrl} /><ExtensionPackagesPanel apiBaseUrl={store.apiBaseUrl} /></div>}
+        {sheet === 'transfer' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">配置导入导出</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">转移允许携带的本地偏好；密钥、地址和路径不会进入导出文件。</p><ConfigTransferPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'diagnostics' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本机诊断</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">只读检查本机 Atlas 状态；报告不会上传原始配置、日志、密钥或路径。</p><DiagnosticsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'telemetry' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">遥测隐私</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">只管理 Atlas 附带的 MemOS Local 插件 sender，不影响其他服务。</p><TelemetryPrivacyPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'security' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">工作区安全</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理当前对话后续运行的权限与 Docker 隔离。工作区规则仍在首次读取时由你确认。</p>{activeConversation ? <WorkspaceSecurityPanel apiBaseUrl={store.apiBaseUrl} conversation={activeConversation} onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)} /> : <div className="rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再配置该对话的工作区权限和沙箱。</div>}</section>}
+        {sheet === 'commands' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">自定义斜杠命令</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看所有已发现命令；这里只能新建和编辑 Atlas 用户级命令，项目、Claude 与插件命令保持只读。</p><CustomCommandsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'limits' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">运行限制</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">控制新运行的主循环轮数上限，并查看当前可用的 token/费用预算边界。</p><RunLimitsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'platform' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">平台集成</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置桌面窗口、系统级快捷键，并在本机 VS Code 或 JetBrains IDE 打开工作区。</p><PlatformSettingsPanel workspacePath={activeConversation?.workspace} /></section>}
+        {sheet === 'integrations' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">任务与集成入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用已接通的 GitHub PR、Linear、Slack 和本机自动化功能；云端任务服务未提供。</p><div className="grid gap-8"><SettingsIntegrationsPanel onOpenCode={() => { setSheet(null); go('code'); }} onOpenChannels={() => setSheet('channels')} onOpenAutomation={() => { setSheet(null); go('auto'); }} /><LinearIntegrationPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
       </div>
     </Dialog>
 

@@ -9,16 +9,19 @@ import SkillDetail from '../components/skills/SkillDetail';
 import InstalledSkillCard from '../components/skills/InstalledSkillCard';
 import UpdatesTab from '../components/skills/UpdatesTab';
 import SourcesManager from '../components/skills/SourcesManager';
+import SkillDiscoveryPage from './SkillDiscoveryPage';
+import { useAtlasStore } from '../store/useAtlasStore';
 
-export type SkillsTabId = 'market' | 'installed' | 'updates';
+export type SkillsTabId = 'market' | 'installed' | 'updates' | 'discovery';
 
 const TABS: Array<{ id: SkillsTabId; label: string }> = [
   { id: 'market', label: '市场' },
   { id: 'installed', label: '已安装' },
   { id: 'updates', label: '更新' },
+  { id: 'discovery', label: '安全发现' },
 ];
 
-const isTab = (value: unknown): value is SkillsTabId => value === 'market' || value === 'installed' || value === 'updates';
+const isTab = (value: unknown): value is SkillsTabId => value === 'market' || value === 'installed' || value === 'updates' || value === 'discovery';
 
 /** 侧栏「技能」入口的主页面：市场 / 已安装 / 更新 三个标签页。 */
 export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversation, initialTab = 'market' }: {
@@ -27,6 +30,7 @@ export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversat
   onTryInConversation?: (name: string) => void;
   initialTab?: SkillsTabId;
 }) {
+  const activeSkills = useAtlasStore((state) => state.activeSkills);
   const [tab, setTab] = useState<SkillsTabId>(() => (isTab(initialTab) ? initialTab : 'market'));
   const [taps, setTaps] = useState<MarketTap[]>([]);
   const [query, setQuery] = useState('');
@@ -93,6 +97,20 @@ export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversat
     } catch (cause) {
       onToast?.(cause instanceof Error ? cause.message : `${name} 卸载失败，请稍后再试。`);
     } finally { setBusyName(''); }
+  };
+
+  const applyDiscoveredSkill = (name: string) => {
+    if (activeSkills.includes(name)) {
+      useAtlasStore.getState().removeSkill(name);
+      onToast?.(`已从后续对话移除技能 ${name}`);
+      return;
+    }
+    if (onTryInConversation) {
+      onTryInConversation(name);
+      return;
+    }
+    useAtlasStore.getState().applySkill(name);
+    onToast?.(`已将 ${name} 应用到后续对话`);
   };
 
   const installedNameSet = new Set(installed.map((item) => item.name));
@@ -183,5 +201,11 @@ export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversat
     </section>}
 
     {tab === 'updates' && <UpdatesTab apiBaseUrl={apiBaseUrl} onDone={onToast} />}
+    {tab === 'discovery' && <section aria-label="技能安全发现与信任审查">
+      <div className="mb-3 rounded-xl border border-line bg-sunken px-3 py-2 text-[12.5px] leading-relaxed text-fg-2">
+        外部来源的技能会先经过内容与依赖审查；风险项需要明确确认，信任、固定版本和回滚操作会留下审计记录。
+      </div>
+      <SkillDiscoveryPage apiBaseUrl={apiBaseUrl} activeSkills={activeSkills} onApplySkill={applyDiscoveredSkill} />
+    </section>}
   </div></div>;
 }

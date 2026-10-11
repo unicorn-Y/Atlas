@@ -154,6 +154,7 @@ class ChannelManager:
         self._supervisor_tasks: dict[str, asyncio.Task[None]] = {}
         self._reconcile_task: asyncio.Task[None] | None = None
         self._pending_reconcile: set[str] = set()
+        self._channel_reconcile_locks: dict[str, asyncio.Lock] = {}
         # Config snapshot each running adapter was constructed with — lets the
         # runtime reconcile tell "already running this exact config" apart from
         # "config changed, reconnect this one channel".
@@ -236,40 +237,67 @@ class ChannelManager:
             self._pending_reconcile.discard(name)
             await self._reconcile_channel(name)
 
-    async def _reconcile_channel(self, name: str) -> None:
+    async def restart_channel(self, name: str) -> bool:
+        """Restart one enabled adapter to apply newly stored credentials.
+
+        Returns whether a new channel supervisor was scheduled. Disabled
+        channels and gateways that have not started keep the credential for
+        the channel's next enable/start without starting anything here.
+        """
+        if (
+            name not in self.registry
+            or not self._started
+            or self._stopping
+            or not (self.configs.get(name) or {}).get("enabled", False)
+        ):
+            return False
+        return await self._reconcile_channel(name, force=True)
+
+    async def _reconcile_channel(self, name: str, *, force: bool = False) -> bool:
         """Start/stop/restart at most one channel's supervisor — never the gateway."""
         if name not in self.registry:
-            return
-        config = dict(self.configs.get(name) or {})
-        enabled = bool(config.get("enabled", False))
-        if (
-            not self._stopping
-            and enabled
-            and name in self._supervisor_tasks
-            and self._adapter_configs.get(name) == config
-        ):
-            return  # already running exactly this config
-        old = self._supervisor_tasks.get(name)
-        if old is not None:
-            old.cancel()
-            await asyncio.gather(old, return_exceptions=True)
-            self._supervisor_tasks.pop(name, None)
-        stale = self.adapters.pop(name, None)
-        if stale is not None:
-            with contextlib.suppress(Exception):
-                await stale.stop()
-        self._adapter_configs.pop(name, None)
-        if self._stopping or not self._started or not enabled:
-            return
-        self._supervisor_tasks[name] = asyncio.create_task(
-            self._supervise(name), name=f"atlas-channel-supervisor-{name}"
-        )
+            return False
+        lock = self._channel_reconcile_locks.get(name)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._channel_reconcile_locks[name] = lock
+        async with lock:
+            config = dict(self.configs.get(name) or {})
+            enabled = bool(config.get("enabled", False))
+            if (
+                not force
+                and not self._stopping
+                and enabled
+                and name in self._supervisor_tasks
+                and self._adapter_configs.get(name) == config
+            ):
+                return False  # already running exactly this config
+            old = self._supervisor_tasks.get(name)
+            if old is not None:
+                old.cancel()
+                await asyncio.gather(old, return_exceptions=True)
+                self._supervisor_tasks.pop(name, None)
+            stale = self.adapters.pop(name, None)
+            if stale is not None:
+                with contextlib.suppress(Exception):
+                    await stale.stop()
+            self._adapter_configs.pop(name, None)
+            if self._stopping or not self._started or not enabled:
+                return False
+            self._state(name).last_error = ""
+            self._supervisor_tasks[name] = asyncio.create_task(
+                self._supervise(name), name=f"atlas-channel-supervisor-{name}"
+            )
+            return True
 
     def set_policy(self, channel: str, policy: dict[str, Any]) -> None:
         merged = dict(DEFAULT_POLICY)
+        merged["dm_allowlist"] = list(DEFAULT_POLICY["dm_allowlist"])
+        merged["group_allowlist"] = list(DEFAULT_POLICY["group_allowlist"])
         merged.update(self.policies.get(channel) or {})
         merged.update(policy or {})
         self.policies[channel] = merged
+        self._save_configs()
 
     def set_bindings(self, bindings: list[dict[str, Any]]) -> None:
         self.bindings = list(bindings or [])
@@ -306,7 +334,35 @@ class ChannelManager:
         except (OSError, ValueError):
             return
         if isinstance(data, dict):
+            stored_policies = data.get("__atlas_policies__")
+            if isinstance(stored_policies, dict):
+                for channel, saved_policy in stored_policies.items():
+                    if not isinstance(saved_policy, dict):
+                        continue
+                    policy = dict(DEFAULT_POLICY)
+                    policy["dm_allowlist"] = list(DEFAULT_POLICY["dm_allowlist"])
+                    policy["group_allowlist"] = list(DEFAULT_POLICY["group_allowlist"])
+                    allowed_policies = {
+                        "dm_policy": {"disabled", "pairing", "open", "allowlist"},
+                        "group_policy": {"disabled", "open", "allowlist"},
+                    }
+                    for key, allowed in allowed_policies.items():
+                        if saved_policy.get(key) in allowed:
+                            policy[key] = saved_policy[key]
+                    for key in ("dm_allowlist", "group_allowlist"):
+                        entries = saved_policy.get(key)
+                        if isinstance(entries, list):
+                            policy[key] = list(dict.fromkeys(
+                                entry.strip() for entry in entries
+                                if isinstance(entry, str) and entry.strip()
+                            ))
+                    for key in ("allow_when_empty", "require_mention"):
+                        if isinstance(saved_policy.get(key), bool):
+                            policy[key] = saved_policy[key]
+                    self.policies[str(channel)] = policy
             for name, config in data.items():
+                if name == "__atlas_policies__":
+                    continue
                 if isinstance(config, dict):
                     self.configs[name] = dict(config)
                     self._state(name).enabled = bool(config.get("enabled", False))
@@ -315,8 +371,13 @@ class ChannelManager:
         if self.config_path is None:
             return
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        data = {name: dict(config) for name, config in self.configs.items()}
+        if self.policies:
+            data["__atlas_policies__"] = {
+                name: dict(policy) for name, policy in self.policies.items()
+            }
         self.config_path.write_text(
-            json.dumps(self.configs, ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
     # -- lifecycle ----------------------------------------------------------------
@@ -657,6 +718,7 @@ class ChannelManager:
             config = self.configs.get(name) or {}
             channels.append({
                 "name": name,
+                "policy": {**DEFAULT_POLICY, **(self.policies.get(name) or {})},
                 "enabled": state.enabled or bool(config.get("enabled", False)),
                 "running": state.running,
                 "paused": state.paused,

@@ -350,6 +350,18 @@ class HermesRuntime:
                           or (get_provider(catalog_id) or {}).get("default_base_url") or base_url),
                 api_key=self.model_manager.resolve_api_key(catalog_id) or api_key,
                 credential_pool=self.model_manager.credential_pool(catalog_id))
+        from atlas.models.network_transport import (
+            assert_transport_supported, load_model_network_settings,
+        )
+        network = load_model_network_settings()
+        assert_transport_supported(
+            network, provider=str(route_kwargs.get("provider") or ""),
+            api_mode=str(route_kwargs.get("api_mode") or ""),
+        )
+        route_kwargs["_atlas_network_transport"] = {
+            "proxy_url": network.proxy_url,
+            "ca_bundle_path": network.ca_bundle_path,
+        }
         return route_kwargs
 
     def _sweep_idle_agents(self) -> None:
@@ -916,6 +928,7 @@ class HermesRuntime:
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute one Hermes turn on a worker thread and yield callback events."""
         from atlas.config import get_config
+        from atlas.usage import configured_run_usage_budget, use_run_usage_budget
 
         atlas_config = get_config()
         kernel_name = str(atlas_config.get("engine.kernel", "atlas")).strip().lower()
@@ -923,8 +936,6 @@ class HermesRuntime:
             raise ValueError(f"Unknown engine.kernel selection: {kernel_name}")
         if kernel_name == "atlas" and atlas_agent is not None and atlas_context is not None:
             from atlas.kernel.loop import AtlasKernel, KernelRequest
-
-            from atlas.usage import env_run_usage_budget
 
             active_steer_queue = steer_queue or asyncio.Queue()
             notification_handle = None
@@ -981,7 +992,7 @@ class HermesRuntime:
             moa_references: list[dict[str, str]] = []
             moa_usage_rows: list[dict[str, Any]] = []
             moa_latency_ms = 0
-            usage_budget = env_run_usage_budget()
+            usage_budget = configured_run_usage_budget()
             budget_exceeded = False
             if moa_enabled:
                 started = time.perf_counter()
@@ -1008,9 +1019,10 @@ class HermesRuntime:
                         budget_exceeded = True
 
                 try:
-                    moa_references = await self._collect_moa_references(
-                        message, history, request_system_message, usage_callback=on_moa_usage,
-                    )
+                    with use_run_usage_budget(usage_budget):
+                        moa_references = await self._collect_moa_references(
+                            message, history, request_system_message, usage_callback=on_moa_usage,
+                        )
                 except Exception as exc:
                     logger.warning("Atlas kernel reference-model consultation failed: %s",
                                    exc, exc_info=True)
@@ -1041,12 +1053,17 @@ class HermesRuntime:
                 runtime_config=atlas_config.raw,
             )
             try:
-                async for event in kernel.run(request):
-                    yield event
+                with use_run_usage_budget(usage_budget):
+                    async for event in kernel.run(request):
+                        yield event
                 if budget_exceeded and usage_budget is not None:
                     yield {"type": "run.recovery.notice", "data": {
-                        "message": "参考模型咨询已达到输入 token 预算上限。",
-                        "limit": usage_budget.limit, "used": usage_budget.used,
+                        "message": (
+                            "参考模型咨询达到估算费用上限或费用无法继续估算。"
+                            if usage_budget.cost_limit_usd is not None else "参考模型咨询已达到输入 token 预算上限。"
+                        ),
+                        "limit": str(usage_budget.cost_limit_usd) if usage_budget.cost_limit_usd is not None else usage_budget.limit,
+                        "used": str(usage_budget.used_cost_usd) if usage_budget.cost_limit_usd is not None else usage_budget.used,
                     }}
 
                 user_turn_count = sum(1 for item in history if item.get("role") == "user")
@@ -1129,9 +1146,7 @@ class HermesRuntime:
         def emit(event: dict[str, Any]) -> None:
             loop.call_soon_threadsafe(queue.put_nowait, event)
 
-        from atlas.usage import env_run_usage_budget
-
-        usage_budget = env_run_usage_budget()
+        usage_budget = configured_run_usage_budget()
         budget_stopped = {"v": False}
 
         def on_stream_delta(text: Any) -> None:
@@ -1230,8 +1245,12 @@ class HermesRuntime:
             usage_rows.append(row)
             if usage_budget is not None and not usage_budget.record(row):
                 emit({"type": "run.recovery.notice", "data": {
-                    "message": "本次运行已达到输入 token 预算上限。",
-                    "limit": usage_budget.limit, "used": usage_budget.used,
+                    "message": (
+                        "本次运行已达到估算费用上限或费用无法继续估算。"
+                        if usage_budget.cost_limit_usd is not None else "本次运行已达到输入 token 预算上限。"
+                    ),
+                    "limit": str(usage_budget.cost_limit_usd) if usage_budget.cost_limit_usd is not None else usage_budget.limit,
+                    "used": str(usage_budget.used_cost_usd) if usage_budget.cost_limit_usd is not None else usage_budget.used,
                 }})
             emit({"type": "run_usage", "usage": row})
 
@@ -1243,8 +1262,12 @@ class HermesRuntime:
                 return False
             budget_stopped["v"] = True
             emit({"type": "run.recovery.notice", "data": {
-                "message": "本次运行的预计输入 token 将超过预算上限，已停止发送下一请求。",
-                "limit": usage_budget.limit, "used": usage_budget.used,
+                "message": (
+                    "下一请求的输入 token 估算费用将超过上限或价格未知，已停止发送。"
+                    if usage_budget.cost_limit_usd is not None else "本次运行的预计输入 token 将超过预算上限，已停止发送下一请求。"
+                ),
+                "limit": str(usage_budget.cost_limit_usd) if usage_budget.cost_limit_usd is not None else usage_budget.limit,
+                "used": str(usage_budget.used_cost_usd) if usage_budget.cost_limit_usd is not None else usage_budget.used,
                 "estimated_input_tokens": max(0, int(estimated_input_tokens or 0)),
             }})
             return True
@@ -1371,6 +1394,22 @@ class HermesRuntime:
             (item for item in settings.list_models() if item.get("id") == current), {},
         )
         route_kwargs = await self._resolve_conversation_route(current, model_config)
+        network_payload = route_kwargs.pop("_atlas_network_transport", {})
+        from atlas.models.network_transport import (
+            ModelNetworkSettings, assert_transport_supported, load_model_network_settings,
+            model_network_scope, network_settings_fingerprint,
+        )
+        network_settings = (
+            ModelNetworkSettings(
+                proxy_url=network_payload.get("proxy_url"),
+                ca_bundle_path=network_payload.get("ca_bundle_path"),
+            )
+            if isinstance(network_payload, dict) else load_model_network_settings()
+        )
+        assert_transport_supported(
+            network_settings, provider=str(route_kwargs.get("provider") or ""),
+            api_mode=str(route_kwargs.get("api_mode") or ""),
+        )
         if atlas_agent is not None:
             try:
                 from atlas.engine.notifications import consume_notifications
@@ -1474,7 +1513,7 @@ class HermesRuntime:
             agent_fingerprint = ("mem1|" if memory_on else "mem0|") + self._agent_cache_fingerprint(
                 self._fingerprint_route(route_kwargs), hermes_cwd, resolved_toolsets,
                 resolved_fallback, resolved_max_tokens,
-            )
+            ) + "|network:" + network_settings_fingerprint(network_settings)
             volatile_prompt = "\n\n".join(
                 str(section).strip() for section in (volatile_context or []) if str(section).strip()
             )
@@ -1540,26 +1579,29 @@ class HermesRuntime:
                 entry["last_used"] = time.monotonic()
             else:
                 # AIAgent construction resolves tools and opens stores: off the loop.
-                agent = await asyncio.to_thread(lambda: factory(
-                    **route_kwargs,
-                    session_id=conversation_id,
-                    cwd=hermes_cwd,
-                    skip_memory=not memory_on,
-                    checkpoints_enabled=False,
-                    enabled_toolsets=resolved_toolsets,
-                    fallback_model=resolved_fallback,
-                    max_tokens=resolved_max_tokens,
-                    reasoning_config={"effort": reasoning_effort} if reasoning_effort else None,
-                    stream_delta_callback=on_stream_delta,
-                    reasoning_callback=lambda text: emit({"type": "thinking", "content": str(text)}),
-                    tool_start_callback=atlas_or_native_mcp_tool_start,
-                    tool_complete_callback=atlas_or_native_mcp_tool_complete,
-                    clarify_callback=on_clarify,
-                    status_callback=on_status,
-                    event_callback=on_event,
-                    hooks=hooks,
-                    identity="You are Atlas, the AI assistant for this workspace.",
-                ))
+                def create_agent() -> Any:
+                    with model_network_scope(network_settings):
+                        return factory(
+                            **route_kwargs,
+                            session_id=conversation_id,
+                            cwd=hermes_cwd,
+                            skip_memory=not memory_on,
+                            checkpoints_enabled=False,
+                            enabled_toolsets=resolved_toolsets,
+                            fallback_model=resolved_fallback,
+                            max_tokens=resolved_max_tokens,
+                            reasoning_config={"effort": reasoning_effort} if reasoning_effort else None,
+                            stream_delta_callback=on_stream_delta,
+                            reasoning_callback=lambda text: emit({"type": "thinking", "content": str(text)}),
+                            tool_start_callback=atlas_or_native_mcp_tool_start,
+                            tool_complete_callback=atlas_or_native_mcp_tool_complete,
+                            clarify_callback=on_clarify,
+                            status_callback=on_status,
+                            event_callback=on_event,
+                            hooks=hooks,
+                            identity="You are Atlas, the AI assistant for this workspace.",
+                        )
+                agent = await asyncio.to_thread(create_agent)
             # Turn-scoped rebind (applies equally to a fresh or a reused agent):
             # callbacks, hooks and run limits are per-turn Atlas closures bound to
             # this turn's queue/loop; every target is a public Hermes attribute.
@@ -1673,17 +1715,18 @@ class HermesRuntime:
                             # Hermes SessionDB is the canonical cross-turn history. Atlas text
                             # history is passed only once to import pre-C1 conversations.
                             turn_history = stored
-                    result = agent.run_conversation(
-                        user_message=message if user_content is None else user_content,
-                        system_message=system_message,
-                        conversation_history=turn_history,
-                        # A stable per-conversation task id: the fork keys
-                        # file/terminal cwd records, checkpoints and terminal
-                        # environments by it (the gateway passes its session id
-                        # the same way). The previous random-per-turn id made
-                        # every cwd record unfindable (H10.2-DEFECT-3).
-                        task_id=conversation_id,
-                    )
+                    with model_network_scope(network_settings):
+                        result = agent.run_conversation(
+                            user_message=message if user_content is None else user_content,
+                            system_message=system_message,
+                            conversation_history=turn_history,
+                            # A stable per-conversation task id: the fork keys
+                            # file/terminal cwd records, checkpoints and terminal
+                            # environments by it (the gateway passes its session id
+                            # the same way). The previous random-per-turn id made
+                            # every cwd record unfindable (H10.2-DEFECT-3).
+                            task_id=conversation_id,
+                        )
                     from agent.title_generator import wait_for_title_upgrades
 
                     wait_for_title_upgrades(timeout=5.0)
@@ -1736,7 +1779,8 @@ class HermesRuntime:
                         clear_atlas_tool_context()
                     loop.call_soon_threadsafe(queue.put_nowait, _DONE)
 
-            task = asyncio.create_task(asyncio.to_thread(run_sync))
+            with use_run_usage_budget(usage_budget):
+                task = asyncio.create_task(asyncio.to_thread(run_sync))
 
             def drain_process_inbox() -> None:
                 inbox = getattr(atlas_context, "process_notifications", None)

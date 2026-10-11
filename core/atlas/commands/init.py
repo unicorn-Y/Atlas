@@ -409,14 +409,39 @@ def _compose(existing_raw: str | None, scan: dict[str, Any]) -> str:
     eol = _detect_eol(existing_raw)
     body = _managed_body(scan, eol)
     managed = f"{MANAGED_BEGIN}{eol}{body}{eol}{MANAGED_END}"
-    match = _MANAGED_RE.search(existing_raw)
-    if match is None:
-        human = existing_raw.rstrip("\r\n")
-    else:
-        human = existing_raw[: match.start()].rstrip("\r\n")
-    if not human.strip():
+
+    matches = list(_MANAGED_RE.finditer(existing_raw))
+    begin_count = existing_raw.count(MANAGED_BEGIN)
+    end_count = existing_raw.count(MANAGED_END)
+    if begin_count != len(matches) or end_count != len(matches):
+        raise ValueError(
+            "AGENTS.md 中的 Atlas 托管标记不完整或格式异常；为保护原文，未生成提案。"
+            "请先手动检查这些标记后再运行 /init。"
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            "AGENTS.md 中存在多个 Atlas 托管区段；为避免重复或覆盖内容，未生成提案。"
+            "请先手动保留唯一一组托管标记后再运行 /init。"
+        )
+
+    if matches:
+        # Refresh one managed block in place and preserve both surrounding
+        # user sections byte-for-byte, including any later content.
+        match = matches[0]
+        return existing_raw[:match.start()] + managed + existing_raw[match.end():]
+
+    if not existing_raw:
         return managed + eol
-    return human + eol + eol + managed + eol
+
+    # Add only the missing separator newlines. Existing user whitespace and
+    # text remain byte-for-byte intact ahead of the new managed block.
+    trailing_newlines = re.search(r"(?:\r\n|\r|\n)*$", existing_raw)
+    trailing_count = (
+        len(re.findall(r"\r\n|\r|\n", trailing_newlines.group(0)))
+        if trailing_newlines else 0
+    )
+    separator = eol * max(0, len(_SECTION_GAP) - trailing_count)
+    return existing_raw + separator + managed + eol
 
 
 def build_proposal(workspace: str) -> dict[str, Any]:

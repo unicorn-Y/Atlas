@@ -24,10 +24,18 @@ from typing import Any, Callable
 import httpx
 
 from atlas.models import catalog
+from atlas.models.network_transport import (
+    ModelNetworkSettings,
+    assert_transport_supported,
+    build_model_httpx_client,
+    load_model_network_settings,
+    model_network_scope,
+)
 
 _MEMORY_AUXILIARY_TIMEOUT_SECONDS = 120.0
 _MEMORY_AUXILIARY_PURPOSES = frozenset({"memory_observe", "memory_reflect"})
 _MEMORY_LOW_REASONING_MODELS = frozenset({"gemini-3.8-flash"})
+_OLLAMA_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1"
 
 
 @dataclass(frozen=True)
@@ -46,6 +54,9 @@ class RouteSpec:
     # transport consumer sends ``wire_model`` (the bare/native id) instead.
     wire_model: str = ""
     model_id: str = ""
+    # Atlas-only transport configuration; proxy credentials never appear in repr/logs.
+    network_proxy_url: str | None = field(default=None, repr=False, compare=False)
+    network_ca_bundle_path: str | None = field(default=None, repr=False, compare=False)
 
 
 _USAGE_CALLBACK: ContextVar[Callable[[dict[str, Any]], Any] | None] = ContextVar(
@@ -88,8 +99,16 @@ async def _probe_anthropic_messages(base_url: str, api_key: str, model: str) -> 
         "max_tokens": 1,
         "messages": [{"role": "user", "content": "OK"}],
     }
+    network = load_model_network_settings()
+    assert_transport_supported(network, provider="anthropic", api_mode="anthropic_messages")
+    client = (
+        build_model_httpx_client(
+            network, base_url=base_url, async_mode=True, timeout=httpx.Timeout(5.0),
+        )
+        if network.enabled else httpx.AsyncClient(timeout=5.0)
+    )
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with client:
             response = await client.post(endpoint, headers=headers, json=body)
     except httpx.HTTPError as exc:
         return False, f"Anthropic Messages 探测失败：{type(exc).__name__}"
@@ -139,6 +158,24 @@ class ModelRouter:
         native_supported = configured_mode == "anthropic_messages"
         litellm_model = _model_for_provider(selected, native=False)
         native_model = _model_for_provider(selected, native=True)
+
+        if selected.get("local_only") is True:
+            # Local Ollama routes must not inherit provider/global credentials,
+            # gateway endpoints, or the configured model proxy. Reject malformed
+            # persisted entries instead of silently routing them elsewhere.
+            if (
+                provider_id != "ollama"
+                or str(selected.get("base_url") or "") != _OLLAMA_LOCAL_BASE_URL
+                or not litellm_model.startswith("ollama/")
+                or not litellm_model.removeprefix("ollama/").strip()
+            ):
+                raise ValueError("Invalid local-only Ollama model route")
+            return self._route(
+                selected, provider_id, litellm_model, _OLLAMA_LOCAL_BASE_URL,
+                None, None, "chat_completions", purpose,
+                wire_model=native_model, direct_local=True,
+            )
+
         provider_cfg = self.model_manager.provider_config(provider_id)
         provider_key = self.model_manager.resolve_api_key(provider_id)
         pool = self.model_manager.credential_pool(provider_id)
@@ -151,6 +188,7 @@ class ModelRouter:
             or provider_cfg.get("base_url")
             or provider_entry.get("default_base_url")
         )
+
         gateway_base = str(getattr(self.model_manager, "gateway_base_url", "") or "").strip()
         gateway_key = str(getattr(self.model_manager, "gateway_api_key", "") or "")
         override = self.model_manager.get_api_mode_override(provider_id)
@@ -247,12 +285,16 @@ class ModelRouter:
     def _route(
         model_data: dict[str, Any], provider: str, model: str, base_url: str | None,
         key: str | None, pool: Any | None, api_mode: str, purpose: str,
-        fallback_reason: str | None = None, wire_model: str = "",
+        fallback_reason: str | None = None, wire_model: str = "", direct_local: bool = False,
     ) -> RouteSpec:
+        network = ModelNetworkSettings() if direct_local else load_model_network_settings()
+        assert_transport_supported(network, provider=provider, api_mode=api_mode)
         return RouteSpec(
             provider=provider, api_mode=api_mode, model=model, base_url=base_url,
             key=key, credential_pool=pool, purpose=purpose, fallback_reason=fallback_reason,
             wire_model=wire_model or model, model_id=str(model_data.get("id") or ""),
+            network_proxy_url=network.proxy_url,
+            network_ca_bundle_path=network.ca_bundle_path,
         )
 
     async def complete(self, route: RouteSpec, messages: list[dict[str, Any]], **kwargs: Any) -> CompletionResult:
@@ -290,6 +332,11 @@ class ModelRouter:
             kwargs["extra_body"] = memory_extra_body
 
         request_id = new_usage_request_id()
+        network = ModelNetworkSettings(
+            proxy_url=route.network_proxy_url,
+            ca_bundle_path=route.network_ca_bundle_path,
+        )
+        assert_transport_supported(network, provider=route.provider, api_mode=route.api_mode)
         budget = env_run_usage_budget()
         request_text = "\n".join(str(item.get("content") or "") for item in messages)
         estimate = max(1, estimate_tokens(request_text, model=wire_model))
@@ -297,28 +344,34 @@ class ModelRouter:
             request_id, estimate, purpose=route.purpose,
             model=route.model_id or route.model, wire_model=wire_model,
         ):
-            raise RuntimeError("Run input-token budget reached; the auxiliary model request was not sent.")
-        try:
-            response = await asyncio.to_thread(
-                call_llm,
-                task=route.purpose,
-                provider=route.provider,
-                model=wire_model,
-                base_url=route.base_url,
-                api_key=route.key,
-                api_mode=route.api_mode,
-                main_runtime={
-                    "provider": route.provider,
-                    "model": wire_model,
-                    "base_url": route.base_url,
-                    "api_key": route.key,
-                    "api_mode": route.api_mode,
-                    "disable_provider_retries": budget is not None,
-                },
-                messages=messages,
-                stream=False,
-                **kwargs,
+            reason = (
+                "Estimated run cost limit reached or model price is unknown"
+                if budget.cost_limit_usd is not None else "Run input-token budget reached"
             )
+            raise RuntimeError(f"{reason}; the auxiliary model request was not sent.")
+        def invoke_model_transport() -> Any:
+            with model_network_scope(network):
+                return call_llm(
+                    task=route.purpose,
+                    provider=route.provider,
+                    model=wire_model,
+                    base_url=route.base_url,
+                    api_key=route.key,
+                    api_mode=route.api_mode,
+                    main_runtime={
+                        "provider": route.provider,
+                        "model": wire_model,
+                        "base_url": route.base_url,
+                        "api_key": route.key,
+                        "api_mode": route.api_mode,
+                        "disable_provider_retries": budget is not None,
+                    },
+                    messages=messages,
+                    stream=False,
+                    **kwargs,
+                )
+        try:
+            response = await asyncio.to_thread(invoke_model_transport)
         except BaseException:
             if budget is not None:
                 budget.release(request_id)
@@ -361,6 +414,11 @@ class ModelRouter:
         endpoint exposes. Passing the registry's litellm-style id here made real
         relays 404 every conversation turn (H10.2-DEFECT-1).
         """
+        network = ModelNetworkSettings(
+            proxy_url=route.network_proxy_url,
+            ca_bundle_path=route.network_ca_bundle_path,
+        )
+        assert_transport_supported(network, provider=route.provider, api_mode=route.api_mode)
         return {
             "provider": route.provider,
             "model": route.wire_model or route.model,
@@ -368,6 +426,10 @@ class ModelRouter:
             "api_key": route.key,
             "api_mode": route.api_mode,
             "credential_pool": route.credential_pool,
+            "_atlas_network_transport": {
+                "proxy_url": route.network_proxy_url,
+                "ca_bundle_path": route.network_ca_bundle_path,
+            },
         }
 
 

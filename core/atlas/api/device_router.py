@@ -37,7 +37,11 @@ Integration note for the owner of ``atlas/server.py``::
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
+import threading
+import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -67,6 +71,8 @@ logger = logging.getLogger("atlas.device_router")
 # lazily builds the default registry and self-registers the local laptop).
 _registry: DeviceRegistry | None = None
 _takeover: TakeoverStateMachine | None = None
+_node_capability_lock = threading.RLock()
+_NODE_CAPABILITY_ID = re.compile(r"^[a-z][a-z0-9_.:-]{0,63}$")
 
 
 def set_registry(registry: DeviceRegistry | None) -> None:
@@ -123,6 +129,213 @@ def _require_trusted_origin(request: Request) -> None:
 
 def _device_error(exc: DeviceError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
+def _node_state_path(registry: DeviceRegistry):
+    """Keep node enrollment metadata beside, not inside, the legacy device store."""
+    return registry.path.with_name(f"{registry.path.stem}.node-capabilities.json")
+
+
+def _empty_node_capability_state(device: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "device_id": str(device.get("device_id") or ""),
+        "declared": [],
+        "pending": [],
+        "approved": [],
+        "revoked": [],
+        "updated_at": None,
+        "generation": int(device.get("generation") or 1),
+        "execution_available": False,
+    }
+
+
+def _read_node_capability_store(registry: DeviceRegistry) -> dict[str, Any]:
+    path = _node_state_path(registry)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"schema_version": 1, "devices": {}}
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=503, detail="节点能力状态文件不可读") from exc
+    if not isinstance(value, dict) or value.get("schema_version") != 1 or not isinstance(value.get("devices"), dict):
+        raise HTTPException(status_code=503, detail="节点能力状态文件格式无效")
+    return value
+
+
+def _write_node_capability_store(registry: DeviceRegistry, store: dict[str, Any]) -> None:
+    path = _node_state_path(registry)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _node_entry_state(entry: Any, device: dict[str, Any]) -> dict[str, Any]:
+    """Project only metadata belonging to this specific device registration."""
+    empty = _empty_node_capability_state(device)
+    if not isinstance(entry, dict) or entry.get("device_created_at") != device.get("created_at"):
+        return empty
+    declared = sorted({item for item in entry.get("declared", []) if isinstance(item, str)})
+    revoked = sorted({item for item in entry.get("revoked", []) if item in declared})
+    approved = sorted({item for item in entry.get("approved", []) if item in declared and item not in revoked})
+    pending = sorted(set(declared) - set(approved) - set(revoked))
+    return {
+        **empty,
+        "declared": declared,
+        "pending": pending,
+        "approved": approved,
+        "revoked": revoked,
+        "updated_at": entry.get("updated_at"),
+    }
+
+
+def _require_node_device(registry: DeviceRegistry, device_id: str, *, mutable: bool) -> dict[str, Any]:
+    device = registry.get(device_id, project=False)
+    if device is None:
+        raise HTTPException(status_code=404, detail=f"没有 id 为 {device_id!r} 的设备")
+    if mutable and (device_id == SELF_DEVICE_ID or device.get("kind") == "atlas-laptop"):
+        raise HTTPException(status_code=409, detail="本机能力由 Atlas 本地注册，不接受远程节点审批")
+    return device
+
+
+def _validated_capability_names(values: list[str]) -> list[str]:
+    if len(values) > 64:
+        raise HTTPException(status_code=422, detail="最多声明 64 项节点能力")
+    normalized: set[str] = set()
+    for value in values:
+        name = value.strip().lower()
+        if not _NODE_CAPABILITY_ID.fullmatch(name):
+            raise HTTPException(status_code=422, detail=f"无效的能力标识：{value!r}")
+        normalized.add(name)
+    return sorted(normalized)
+
+
+def _node_capability_snapshot(registry: DeviceRegistry, device_id: str) -> dict[str, Any]:
+    with _node_capability_lock:
+        device = _require_node_device(registry, device_id, mutable=False)
+        store = _read_node_capability_store(registry)
+        return _node_entry_state(store["devices"].get(device_id), device)
+
+
+def _save_node_capability_entry(
+    registry: DeviceRegistry, device: dict[str, Any], state: dict[str, Any],
+) -> dict[str, Any]:
+    store = _read_node_capability_store(registry)
+    entry = {
+        "device_created_at": device.get("created_at"),
+        "declared": state["declared"],
+        "approved": state["approved"],
+        "revoked": state["revoked"],
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    store["devices"][str(device["device_id"])] = entry
+    _write_node_capability_store(registry, store)
+    return _node_entry_state(entry, device)
+
+
+class NodeCapabilityDeclaration(BaseModel):
+    capabilities: list[str] = Field(default_factory=list, max_length=64)
+
+
+@router.get("/{device_id}/node-capabilities")
+async def node_capability_state(
+    device_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    return await asyncio.to_thread(_node_capability_snapshot, _registry_for(services), device_id)
+
+
+@router.put("/{device_id}/node-capabilities", dependencies=[Depends(_require_trusted_origin)])
+async def declare_node_capabilities(
+    device_id: str, req: NodeCapabilityDeclaration,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
+    names = _validated_capability_names(req.capabilities)
+
+    def update() -> dict[str, Any]:
+        with _node_capability_lock:
+            device = _require_node_device(registry, device_id, mutable=True)
+            store = _read_node_capability_store(registry)
+            previous = _node_entry_state(store["devices"].get(device_id), device)
+            declared = names
+            approved = sorted(set(previous["approved"]) & set(declared))
+            revoked = sorted(set(previous["revoked"]) & set(declared))
+            state = {
+                **previous,
+                "declared": declared,
+                "approved": approved,
+                "revoked": revoked,
+                "pending": sorted(set(declared) - set(approved) - set(revoked)),
+            }
+            if set(previous["approved"]) - set(approved):
+                try:
+                    registry.bump_generation(device_id, reason="node capability declaration removed approved capability")
+                except DeviceError as exc:
+                    raise _device_error(exc) from exc
+                device = _require_node_device(registry, device_id, mutable=True)
+            return _save_node_capability_entry(registry, device, state)
+
+    return await asyncio.to_thread(update)
+
+
+@router.post("/{device_id}/node-capabilities/{capability}/approve", dependencies=[Depends(_require_trusted_origin)])
+async def approve_node_capability(
+    device_id: str, capability: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
+    name = _validated_capability_names([capability])[0]
+
+    def approve() -> dict[str, Any]:
+        with _node_capability_lock:
+            device = _require_node_device(registry, device_id, mutable=True)
+            store = _read_node_capability_store(registry)
+            state = _node_entry_state(store["devices"].get(device_id), device)
+            if name not in state["declared"]:
+                raise HTTPException(status_code=404, detail="该能力未由节点声明")
+            if name in state["approved"]:
+                return state
+            state["approved"] = sorted(set(state["approved"]) | {name})
+            state["pending"] = sorted(set(state["pending"]) - {name})
+            state["revoked"] = sorted(set(state["revoked"]) - {name})
+            try:
+                registry.bump_generation(device_id, reason=f"node capability approved: {name}")
+            except DeviceError as exc:
+                raise _device_error(exc) from exc
+            device = _require_node_device(registry, device_id, mutable=True)
+            return _save_node_capability_entry(registry, device, state)
+
+    return await asyncio.to_thread(approve)
+
+
+@router.delete("/{device_id}/node-capabilities/{capability}", dependencies=[Depends(_require_trusted_origin)])
+async def revoke_node_capability(
+    device_id: str, capability: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
+    name = _validated_capability_names([capability])[0]
+
+    def revoke() -> dict[str, Any]:
+        with _node_capability_lock:
+            device = _require_node_device(registry, device_id, mutable=True)
+            store = _read_node_capability_store(registry)
+            state = _node_entry_state(store["devices"].get(device_id), device)
+            if name not in state["declared"]:
+                raise HTTPException(status_code=404, detail="该能力未由节点声明")
+            was_approved = name in state["approved"]
+            state["approved"] = sorted(set(state["approved"]) - {name})
+            state["pending"] = sorted(set(state["pending"]) - {name})
+            state["revoked"] = sorted(set(state["revoked"]) | {name})
+            if was_approved:
+                try:
+                    registry.bump_generation(device_id, reason=f"node capability revoked: {name}")
+                except DeviceError as exc:
+                    raise _device_error(exc) from exc
+                device = _require_node_device(registry, device_id, mutable=True)
+            return _save_node_capability_entry(registry, device, state)
+
+    return await asyncio.to_thread(revoke)
 
 
 def _takeover_error(exc: TakeoverError) -> HTTPException:

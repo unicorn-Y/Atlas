@@ -1,10 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Laptop, LoaderCircle, Plus, RefreshCw, Smartphone, Trash2 } from 'lucide-react';
+import { api } from '../services/api';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import TakeoverSection from './devices/TakeoverSection';
 import { field } from './agents/shared';
+
+interface NodeCapabilityState {
+  device_id: string;
+  declared: string[];
+  pending: string[];
+  approved: string[];
+  revoked: string[];
+  updated_at?: string | null;
+  generation: number;
+  execution_available: false;
+}
 
 /** 设备页：设备清单（本机 = atlas-laptop，其余是 ingress）+ 控制权 + 交接卡片 + 动态。 */
 export default function DevicesPage({ onToast }: { onToast: (text: string) => void }) {
@@ -16,15 +28,41 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
   const patchDevice = useAtlasStore((state) => state.patchDevice);
   const removeDevice = useAtlasStore((state) => state.removeDevice);
   const registerDevice = useAtlasStore((state) => state.registerDevice);
+  const apiBaseUrl = useAtlasStore((state) => state.apiBaseUrl);
 
   const [form, setForm] = useState({ device_id: '', display_name: '', kind: 'phone', os: '', notes: '' });
   const [busy, setBusy] = useState(false);
   const [confirmId, setConfirmId] = useState('');
+  const [nodeStates, setNodeStates] = useState<Record<string, NodeCapabilityState>>({});
+  const [nodeDrafts, setNodeDrafts] = useState<Record<string, string>>({});
+  const [nodeErrors, setNodeErrors] = useState<Record<string, string>>({});
+  const [nodeBusy, setNodeBusy] = useState('');
+  const nodeDeviceIds = devices.filter((device) => device.kind !== 'atlas-laptop' && device.id !== selfDeviceId).map((device) => device.id).join('\n');
   useEffect(() => { void loadDevices(); }, [loadDevices]);
   useEffect(() => {
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void loadDevices(); }, 20000);
     return () => window.clearInterval(timer);
   }, [loadDevices]);
+  useEffect(() => {
+    let active = true;
+    const ids = nodeDeviceIds ? nodeDeviceIds.split('\n') : [];
+    void Promise.all(ids.map(async (id) => {
+      try { return [id, await api<NodeCapabilityState>(apiBaseUrl, `/api/devices/${encodeURIComponent(id)}/node-capabilities`)] as const; }
+      catch (error) { return [id, error instanceof Error ? error.message : String(error)] as const; }
+    })).then((results) => {
+      if (!active) return;
+      const states: Record<string, NodeCapabilityState> = {};
+      const errors: Record<string, string> = {};
+      for (const [id, value] of results) {
+        if (typeof value === 'string') errors[id] = value;
+        else states[id] = value;
+      }
+      setNodeStates(states);
+      setNodeErrors(errors);
+      setNodeDrafts((current) => Object.fromEntries(Object.entries(states).map(([id, state]) => [id, current[id] ?? state.declared.join('\n')])));
+    });
+    return () => { active = false; };
+  }, [apiBaseUrl, nodeDeviceIds]);
 
   const register = async () => {
     setBusy(true);
@@ -35,6 +73,49 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
     setBusy(false);
     if (ok) { setForm({ device_id: '', display_name: '', kind: 'phone', os: '', notes: '' }); onToast('设备已登记'); }
     else onToast(useAtlasStore.getState().devicesError || '登记失败');
+  };
+
+  const updateNodeState = (id: string, state: NodeCapabilityState) => {
+    setNodeStates((current) => ({ ...current, [id]: state }));
+    setNodeDrafts((current) => ({ ...current, [id]: state.declared.join('\n') }));
+    setNodeErrors((current) => ({ ...current, [id]: '' }));
+  };
+
+  const saveNodeDeclaration = async (id: string) => {
+    setNodeBusy(id);
+    try {
+      const capabilities = (nodeDrafts[id] ?? '').split(/\r?\n/).map((name) => name.trim()).filter(Boolean);
+      const state = await api<NodeCapabilityState>(apiBaseUrl, `/api/devices/${encodeURIComponent(id)}/node-capabilities`, {
+        method: 'PUT', json: { capabilities },
+      });
+      updateNodeState(id, state);
+      onToast('节点能力声明已保存；新能力仍需逐项批准');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setNodeBusy('');
+  };
+
+  const approveNodeCapability = async (id: string, capability: string) => {
+    setNodeBusy(id);
+    try {
+      const state = await api<NodeCapabilityState>(apiBaseUrl,
+        `/api/devices/${encodeURIComponent(id)}/node-capabilities/${encodeURIComponent(capability)}/approve`, { method: 'POST' });
+      updateNodeState(id, state);
+      onToast(`已明确批准 ${capability} 声明`);
+      void loadDevices();
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setNodeBusy('');
+  };
+
+  const revokeNodeCapability = async (id: string, capability: string) => {
+    setNodeBusy(id);
+    try {
+      const state = await api<NodeCapabilityState>(apiBaseUrl,
+        `/api/devices/${encodeURIComponent(id)}/node-capabilities/${encodeURIComponent(capability)}`, { method: 'DELETE' });
+      updateNodeState(id, state);
+      onToast(`已撤销 ${capability}`);
+      void loadDevices();
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setNodeBusy('');
   };
 
   return <div className="screen page"><div className="page-inner">
@@ -81,6 +162,43 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
                 <Trash2 />{confirmId === device.id ? '确认移除' : '移除'}
               </Button>}
             </div>
+            {!self && <div className="mt-3 border-t border-line pt-3" aria-label={`${device.display_name}节点能力审批`}>
+              <div className="flex items-center gap-2 text-[12.5px]">
+                <b className="font-medium text-fg">节点能力声明</b>
+                <span className="flex-1" />
+                {nodeStates[device.id] && <span className="text-fg-3">generation {nodeStates[device.id].generation}</span>}
+              </div>
+              <p className="mb-2 mt-1 text-[11.5px] leading-[1.5] text-fg-3">能力声明是待审的登记信息；Atlas 当前没有远程节点执行 runtime。批准不会开放远程执行。</p>
+              {nodeErrors[device.id]
+                ? <p role="alert" className="m-0 text-[12px] text-danger">无法读取节点能力：{nodeErrors[device.id]}</p>
+                : <>
+                  <label className="grid gap-1 text-[11.5px] text-fg-3">每行一个能力标识
+                    <textarea rows={2} value={nodeDrafts[device.id] ?? ''}
+                      onChange={(event) => setNodeDrafts((current) => ({ ...current, [device.id]: event.target.value }))}
+                      placeholder={'computer\nbrowser'} className={cn(field, 'min-h-14 resize-y font-mono text-[12px]')} />
+                  </label>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <Button size="sm" variant="secondary" disabled={nodeBusy === device.id}
+                      onClick={() => void saveNodeDeclaration(device.id)}>保存声明</Button>
+                    {nodeBusy === device.id && <LoaderCircle size={13} className="spin text-fg-3" />}
+                  </div>
+                  {nodeStates[device.id]?.pending.map((capability) => <div key={`pending:${capability}`} className="mt-2 flex items-center gap-2 text-[12px]">
+                    <span className="text-fg-2">待批准：<code>{capability}</code></span><span className="flex-1" />
+                    <Button size="sm" variant="secondary" disabled={nodeBusy === device.id}
+                      onClick={() => void approveNodeCapability(device.id, capability)}>明确批准</Button>
+                  </div>)}
+                  {nodeStates[device.id]?.approved.map((capability) => <div key={`approved:${capability}`} className="mt-2 flex items-center gap-2 text-[12px]">
+                    <span className="text-ok">已批准：<code>{capability}</code></span><span className="flex-1" />
+                    <Button size="sm" variant="ghost" disabled={nodeBusy === device.id}
+                      onClick={() => void revokeNodeCapability(device.id, capability)}>撤销</Button>
+                  </div>)}
+                  {nodeStates[device.id]?.revoked.map((capability) => <div key={`revoked:${capability}`} className="mt-2 flex items-center gap-2 text-[12px]">
+                    <span className="text-fg-3">已撤销：<code>{capability}</code></span><span className="flex-1" />
+                    <Button size="sm" variant="ghost" disabled={nodeBusy === device.id}
+                      onClick={() => void approveNodeCapability(device.id, capability)}>重新批准</Button>
+                  </div>)}
+                </>}
+            </div>}
           </article>;
         })}
         {!devices.length && !loading && <div className="empty py-10"><Laptop size={20} /><b>还没有登记任何设备</b>本机首次启动时会自动登记为 atlas-laptop。</div>}

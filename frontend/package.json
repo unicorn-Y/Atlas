@@ -81,6 +81,12 @@
   "build": {
     "appId": "com.atlas.desktop",
     "productName": "Atlas",
+    "protocols": [
+      {
+        "name": "Atlas",
+        "schemes": ["atlas"]
+      }
+    ],
     "artifactName": "${productName}-${version}-Setup.${ext}",
     "directories": {
       "output": "windows-release"

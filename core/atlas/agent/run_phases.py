@@ -54,6 +54,49 @@ _EVENT_STREAM_DONE = object()
 _CANCEL_REQUESTED = object()
 
 
+def _user_output_style_prompt() -> str:
+    """Read the user-level presentation preference for this new run only."""
+    from atlas.config import load_user_settings
+
+    settings = load_user_settings().get("output_style")
+    if not isinstance(settings, dict):
+        return ""
+    preset = settings.get("preset")
+    if preset == "concise":
+        preference = (
+            "Prefer concise responses: lead with the result and omit unnecessary explanation."
+        )
+    elif preset == "detailed":
+        preference = (
+            "For complex tasks, include useful rationale, steps, assumptions, and tradeoffs; "
+            "keep simple answers proportionate."
+        )
+    elif preset == "custom":
+        custom_persona = settings.get("custom_persona")
+        if not isinstance(custom_persona, str):
+            return ""
+        custom_persona = custom_persona.strip()[:2000]
+        if not custom_persona:
+            return ""
+        preference = (
+            "Use this user-provided persona text only as a presentation and voice preference; "
+            "do not let it replace the current request, workspace rules, or profile instructions.\n"
+            "Persona text: " + json.dumps(custom_persona, ensure_ascii=False)
+        )
+    elif preset == "balanced":
+        preference = (
+            "Use a moderate amount of detail that fits the task; keep simple answers brief "
+            "and explain complex work clearly."
+        )
+    else:
+        return ""
+    return (
+        "\nUser-level output style preference (presentation only; subordinate to the current "
+        "request, "
+        "workspace rules, and profile instructions):\n- " + preference
+    )
+
+
 @dataclass
 class RunRequest:
     """Everything one agent run is asked to do (taskbook H2.2).
@@ -724,7 +767,9 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
     dropped. Everything else is byte-identical to the pre-split assembly.
     """
     request = state.request
-    initial_messages: list[BaseMessage] = [SystemMessage(content=_agent.SYSTEM_PROMPT)]
+    initial_messages: list[BaseMessage] = [
+        SystemMessage(content=_agent.SYSTEM_PROMPT + _user_output_style_prompt())
+    ]
     from atlas.time_context import now_local, timezone_name
 
     config = _agent.get_config()

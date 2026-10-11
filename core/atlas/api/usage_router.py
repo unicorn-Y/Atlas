@@ -8,14 +8,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import re
+import tempfile
 from contextlib import suppress
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import structlog
+import yaml
 
 from atlas.asr import ASRManager
 from atlas.config import get_config
@@ -25,7 +29,7 @@ from atlas.safety.policy import (
     rule_catalog as get_safety_rules,
     update_settings as update_safety_settings,
 )
-from atlas.runtime.commands import list_user_commands, render_user_command, UserCommand
+from atlas.runtime.commands import _frontmatter, list_user_commands, render_user_command, UserCommand
 from atlas.runtime.hooks import HookStore
 
 from atlas.api.app_services import AppServices
@@ -149,6 +153,169 @@ async def test_hook(
 # ---------------------------------------------------------------------------
 # Custom commands (E5)
 # ---------------------------------------------------------------------------
+
+class AtlasUserCommandPayload(BaseModel):
+    name: str | None = Field(default=None, max_length=63)
+    description: str = Field(default="", max_length=500)
+    argument_hint: str = Field(default="", max_length=200)
+    body: str = Field(min_length=1, max_length=100_000)
+
+
+_ATLAS_COMMAND_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}\Z")
+
+
+def _atlas_command_path(name: str, *, create_root: bool = False) -> Path:
+    """Resolve a flat Atlas-user command path without permitting traversal or symlinks."""
+    if not _ATLAS_COMMAND_NAME.fullmatch(name):
+        raise HTTPException(status_code=422, detail="name must be a 1-63 character command slug")
+    root = Path(get_config().db_path).expanduser().parent / "commands"
+    if root.is_symlink():
+        raise HTTPException(status_code=409, detail="Atlas commands directory cannot be a symbolic link")
+    if not root.exists() and create_root:
+        root.mkdir(parents=True, exist_ok=True)
+    if not root.exists():
+        raise HTTPException(status_code=404, detail="Atlas user commands directory does not exist")
+    if not root.is_dir():
+        raise HTTPException(status_code=409, detail="Atlas commands path is not a directory")
+    target = root / f"{name}.md"
+    if target.is_symlink():
+        raise HTTPException(status_code=409, detail="Symbolic-link command files are not managed")
+    try:
+        if target.resolve(strict=False).parent != root.resolve(strict=True):
+            raise HTTPException(status_code=422, detail="Command path escapes the Atlas user directory")
+    except OSError as exc:
+        raise HTTPException(status_code=409, detail="Cannot safely resolve Atlas command path") from exc
+    return target
+
+
+def _ensure_no_casefold_collision(root: Path, name: str) -> None:
+    for item in root.iterdir():
+        if item.suffix == ".md" and item.stem.casefold() == name.casefold():
+            raise HTTPException(status_code=409, detail="An Atlas command already uses this name")
+
+
+def _read_atlas_command(name: str) -> tuple[dict[str, Any], str]:
+    target = _atlas_command_path(name)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Atlas user command not found")
+    try:
+        metadata, body = _frontmatter(target.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as exc:
+        raise HTTPException(status_code=422, detail="Existing command frontmatter cannot be safely edited") from exc
+    return metadata, body
+
+
+def _command_document(metadata: dict[str, Any], body: str) -> str:
+    frontmatter = yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    return f"---\n{frontmatter}---\n\n{body}" + ("" if body.endswith("\n") else "\n")
+
+
+def _atomic_write_command(target: Path, document: str, *, create_only: bool = False) -> None:
+    temp_path: Path | None = None
+    try:
+        descriptor, raw_temp = tempfile.mkstemp(prefix=f".{target.stem}-", suffix=".tmp", dir=target.parent)
+        temp_path = Path(raw_temp)
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(document)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.chmod(temp_path, 0o600)
+        except OSError:
+            # Windows ACL inheritance is the available protection on Windows.
+            pass
+        if create_only:
+            # A hard-link create is atomic and refuses to clobber a file that appeared
+            # after the earlier collision check. Both paths are in the same directory.
+            os.link(temp_path, target)
+            temp_path.unlink()
+        else:
+            os.replace(temp_path, target)
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail="An Atlas command already uses this name") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not save Atlas command: {exc}") from exc
+    finally:
+        if temp_path is not None:
+            with suppress(OSError):
+                temp_path.unlink()
+
+
+def _command_response(name: str, metadata: dict[str, Any], body: str) -> dict[str, Any]:
+    hint = metadata.get("argument-hint") or ""
+    if isinstance(hint, list):
+        hint = " ".join(str(item) for item in hint)
+    return {
+        "id": f"atlas:{name}", "name": name,
+        "description": str(metadata.get("description") or "").strip(),
+        "argument_hint": str(hint).strip(), "body": body, "source": "atlas",
+    }
+
+
+@router.get("/api/commands/atlas-user/{name}")
+async def get_atlas_user_command(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+) -> dict[str, Any]:
+    metadata, body = _read_atlas_command(name)
+    return _command_response(name, metadata, body)
+
+
+@router.post("/api/commands/atlas-user", status_code=201)
+async def create_atlas_user_command(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    payload: AtlasUserCommandPayload,
+) -> dict[str, Any]:
+    name = str(payload.name or "")
+    target = _atlas_command_path(name, create_root=True)
+    _ensure_no_casefold_collision(target.parent, name)
+    if any(item.name.casefold() == name.casefold() for item in _user_commands()):
+        raise HTTPException(status_code=409, detail="A command with this name is already available")
+    metadata: dict[str, Any] = {}
+    if payload.description.strip():
+        metadata["description"] = payload.description.strip()
+    if payload.argument_hint.strip():
+        metadata["argument-hint"] = payload.argument_hint.strip()
+    _atomic_write_command(target, _command_document(metadata, payload.body), create_only=True)
+    return _command_response(name, metadata, payload.body)
+
+
+@router.put("/api/commands/atlas-user/{name}")
+async def update_atlas_user_command(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+    payload: AtlasUserCommandPayload,
+) -> dict[str, Any]:
+    if payload.name and payload.name != name:
+        raise HTTPException(status_code=422, detail="Command names are immutable during editing")
+    target = _atlas_command_path(name)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Atlas user command not found")
+    metadata, _old_body = _read_atlas_command(name)
+    # Keep unrelated Claude-compatible frontmatter (tool restrictions, model, mode, etc.)
+    # intact when the Atlas editor changes only the visible summary and command body.
+    for key, value in (("description", payload.description.strip()), ("argument-hint", payload.argument_hint.strip())):
+        if value:
+            metadata[key] = value
+        else:
+            metadata.pop(key, None)
+    _atomic_write_command(target, _command_document(metadata, payload.body))
+    return _command_response(name, metadata, payload.body)
+
+
+@router.delete("/api/commands/atlas-user/{name}")
+async def delete_atlas_user_command(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+) -> dict[str, Any]:
+    target = _atlas_command_path(name)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Atlas user command not found")
+    try:
+        target.unlink()
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not remove Atlas command: {exc}") from exc
+    return {"id": f"atlas:{name}", "deleted": True}
 
 def _user_commands(workspace: str | None = None) -> list[UserCommand]:
     """Atlas, Claude, plugin, and Recipe commands through the shared listing."""

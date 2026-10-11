@@ -14,7 +14,7 @@ The manager instance is injected at startup by the integration owner via
 from __future__ import annotations
 
 import inspect
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -57,6 +57,17 @@ def _require_trusted_origin(request: Request) -> None:
 async def channel_status() -> dict[str, Any]:
     """Aggregate channel gateway status."""
     return get_channel_manager().status()
+
+
+class ChannelPolicyPayload(BaseModel):
+    """Runtime DM/group admission policy; fields mirror ChannelManager._admit."""
+
+    dm_policy: Literal["disabled", "pairing", "open", "allowlist"]
+    dm_allowlist: list[str]
+    allow_when_empty: bool
+    group_policy: Literal["disabled", "open", "allowlist"]
+    group_allowlist: list[str]
+    require_mention: bool
 
 
 class AccountsPayload(BaseModel):
@@ -123,6 +134,19 @@ async def put_accounts(payload: AccountsPayload) -> dict[str, Any]:
     return {"ok": True, "configs": saved, **_without_channels(manager.status())}
 
 
+@router.put("/{channel}/policy", dependencies=[Depends(_require_trusted_origin)])
+async def put_channel_policy(channel: str, payload: ChannelPolicyPayload) -> dict[str, Any]:
+    """Persist and apply a channel's real DM/group admission policy."""
+    manager = get_channel_manager()
+    if channel not in manager.registry:
+        raise HTTPException(status_code=404, detail=f"未注册的渠道：{channel}")
+    policy = payload.model_dump()
+    for key in ("dm_allowlist", "group_allowlist"):
+        policy[key] = list(dict.fromkeys(entry.strip() for entry in policy[key] if entry.strip()))
+    manager.set_policy(channel, policy)
+    return {"ok": True, "channel": channel, "policy": dict(manager.policies[channel])}
+
+
 class CredentialPayload(BaseModel):
     channel: str
     field: str
@@ -144,7 +168,14 @@ async def set_credential(payload: CredentialPayload) -> dict[str, Any]:
             store.delete(channel, field_name)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return {"ok": True, "channel": channel, "field": field_name, "set": bool(payload.value.strip())}
+    restarted = await manager.restart_channel(channel)
+    return {
+        "ok": True,
+        "channel": channel,
+        "field": field_name,
+        "set": bool(payload.value.strip()),
+        "restarted": restarted,
+    }
 
 
 class TestPayload(BaseModel):

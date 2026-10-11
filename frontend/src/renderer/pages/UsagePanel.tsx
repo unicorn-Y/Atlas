@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { UsageGroup, UsageReport, UsageRow } from '@atlas/backend-adapter';
 import { backend, useAtlasStore } from '../store/useAtlasStore';
 import { cn } from '../ui/cn';
@@ -17,9 +17,25 @@ function isoDaysAgo(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+interface UsagePanelProps {
+  username?: string;
+  onSaveUsername?: (username: string) => void;
+}
+
+function readLocalProfile(): { name: string; about: string } {
+  try {
+    const value = JSON.parse(localStorage.getItem('atlas.preference.profile-local') ?? '{}') as Record<string, unknown>;
+    return { name: typeof value.name === 'string' ? value.name : '', about: typeof value.about === 'string' ? value.about : '' };
+  } catch { return { name: '', about: '' }; }
+}
+
 /** Token usage and cost from the backend ledger: totals, a per-day bar chart, and the table behind it. */
-export default function UsagePanel() {
+export default function UsagePanel({ username, onSaveUsername }: UsagePanelProps = {}) {
   const conversations = useAtlasStore((state) => state.conversations);
+  const [savedProfile] = useState(readLocalProfile);
+  const [displayName, setDisplayName] = useState(username ?? savedProfile.name ?? '');
+  const [about, setAbout] = useState(savedProfile.about);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [days, setDays] = useState<number | null>(7);
   const [group, setGroup] = useState<UsageGroup>('day');
   const [report, setReport] = useState<UsageReport | null>(null);
@@ -34,14 +50,51 @@ export default function UsagePanel() {
     return () => { live = false; };
   }, [group, days]);
 
+  const [heat, setHeat] = useState<UsageReport | null>(null);
+
+  // The activity heatmap always reads a fixed 12-week daily window, independent of the range pills above,
+  // so the view stays comparable no matter which range/group the rest of the panel is showing.
+  useEffect(() => {
+    let live = true;
+    backend.getUsage('day', isoDaysAgo(84))
+      .then((value) => { if (live) setHeat(value); })
+      .catch(() => { if (live) setHeat(null); });
+    return () => { live = false; };
+  }, []);
+
   const titles = useMemo(() => new Map(conversations.map((item) => [item.id, item.title])), [conversations]);
   const label = (row: UsageRow) => group === 'conversation' ? titles.get(row.key) ?? '已删除的对话' : group === 'model' ? row.key.replace(/^[a-z]+\//, '') : row.key.slice(5);
   const rows = report?.rows ?? [];
   const totals = report?.totals;
   const noUsage = totals !== undefined && totals.input_tokens + totals.output_tokens === 0;
+  const averageTokens = totals && totals.runs > 0 ? Math.round((totals.input_tokens + totals.output_tokens) / totals.runs) : 0;
+
+  useEffect(() => { if (username !== undefined) setDisplayName(username); }, [username]);
+
+  const saveProfile = (event: FormEvent) => {
+    event.preventDefault();
+    const name = displayName.trim().slice(0, 48) || 'User';
+    setDisplayName(name);
+    onSaveUsername?.(name);
+    try { localStorage.setItem('atlas.preference.profile-local', JSON.stringify({ name, about: about.trim().slice(0, 240) })); } catch { /* storage unavailable */ }
+    setProfileMessage('已保存在本机');
+  };
 
   const pill = 'h-8 rounded-lg px-3 text-[12.5px] transition-colors';
   return <div className="grid max-w-[720px] gap-5 text-[13px] text-fg-2">
+    <form onSubmit={saveProfile} className="rounded-xl card-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div><h4 className="m-0 text-[13.5px] font-medium text-heading">本机资料</h4><p className="mt-1 mb-0 text-[12px] text-fg-3">用于这台电脑上的 Atlas 个性化显示，不是云账号或在线个人主页。</p></div>
+        <span className="shrink-0 rounded-full bg-sunken px-2.5 py-1 text-[11px] text-fg-3">仅本机</span>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1.5fr_auto] sm:items-end">
+        <label className="text-[12px] text-fg-3">显示名称<input aria-label="本机显示名称" value={displayName} maxLength={48} onChange={(event) => setDisplayName(event.target.value)} placeholder="User" className="mt-1 block h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-[13px] text-fg" /></label>
+        <label className="text-[12px] text-fg-3">个人备注<textarea aria-label="本机个人备注" rows={1} value={about} maxLength={240} onChange={(event) => setAbout(event.target.value)} placeholder="可选，只保存在本机" className="mt-1 block min-h-9 w-full resize-y rounded-lg border border-line bg-surface px-2.5 py-2 text-[13px] text-fg" /></label>
+        <button type="submit" className="h-9 rounded-lg bg-brand px-3 text-[12px] font-medium text-on-primary">保存</button>
+      </div>
+      {profileMessage && <p role="status" className="mt-2 mb-0 text-[11.5px] text-fg-3">{profileMessage}</p>}
+    </form>
+
     <div className="flex flex-wrap items-center gap-3">
       <div role="radiogroup" aria-label="时间范围" className="flex gap-1 rounded-[10px] bg-sunken p-1">
         {RANGES.map(([text, value]) => <button key={text} role="radio" aria-checked={days === value} onClick={() => setDays(value)}
@@ -55,6 +108,12 @@ export default function UsagePanel() {
 
     {error && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-danger">没能读取用量：{error}</p>}
 
+    {totals && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <Tile label="当前范围任务轮次" value={String(totals.runs)} hint="按上方选择的时间范围统计" />
+      <Tile label="每轮平均 Token" value={tokens(averageTokens)} hint="当前范围输入与输出 Token 总量除以任务轮次" />
+      <Tile label="个人资料范围" value="本机" hint="资料保存在当前设备浏览器存储中" />
+    </div>}
+
     {totals && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Tile label="输入" value={tokens(totals.input_tokens)} />
       <Tile label="输出" value={tokens(totals.output_tokens)} />
@@ -65,6 +124,7 @@ export default function UsagePanel() {
     {noUsage && <p className="m-0 rounded-xl card-surface px-4 py-3 text-fg-3">这段时间还没有用量记录。新的任务跑完后会出现在这里。</p>}
 
     {group === 'day' && rows.length > 0 && !noUsage && <DayBars rows={days ? fillDays(rows, days) : rows} label={label} />}
+    <ActivityHeatmap rows={heat?.rows ?? []} />
 
     {rows.length > 0 && !noUsage && <div className="overflow-hidden rounded-xl card-surface">
       <table className="w-full border-collapse text-[12.5px]">
@@ -99,6 +159,60 @@ function fillDays(rows: UsageRow[], days: number): UsageRow[] {
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     return byDay.get(key) ?? { key, label: key, ...empty };
   });
+}
+
+/** Five discrete intensity levels mapped to --brand mixes; 0 tokens stays a flat empty cell. */
+const HEAT_LEVELS = [
+  'color-mix(in srgb, var(--brand) 14%, transparent)',
+  'color-mix(in srgb, var(--brand) 32%, transparent)',
+  'color-mix(in srgb, var(--brand) 54%, transparent)',
+  'color-mix(in srgb, var(--brand) 76%, transparent)',
+  'var(--brand)',
+];
+
+/** GitHub-style 12-week activity calendar. Columns are weeks (Mon→Sun); the last cell is today. */
+function ActivityHeatmap({ rows }: { rows: UsageRow[] }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const start = new Date(monday);
+  start.setDate(monday.getDate() - 11 * 7);
+  const end = new Date(monday);
+  end.setDate(monday.getDate() + 6);
+
+  const byDay = new Map(rows.map((row) => [row.key, row]));
+  const days: Array<{ key: string; nice: string; date: Date; tokens: number; runs: number }> = [];
+  for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+    const clone = new Date(cursor);
+    const key = `${clone.getFullYear()}-${String(clone.getMonth() + 1).padStart(2, '0')}-${String(clone.getDate()).padStart(2, '0')}`;
+    const row = byDay.get(key);
+    days.push({ key, nice: key.slice(5), date: clone, tokens: row ? row.input_tokens + row.output_tokens : 0, runs: row?.runs ?? 0 });
+  }
+  const cycle = days.filter((day) => day.date <= today);
+  const max = Math.max(...cycle.map((day) => day.tokens), 0);
+  const level = (tokens: number) => (tokens <= 0 || max <= 0 ? 0 : Math.min(5, Math.ceil((tokens / max) * 5)));
+  const activeDays = cycle.filter((day) => day.tokens > 0).length;
+
+  return <figure className="m-0 rounded-xl card-surface px-4 pt-3 pb-2">
+    <figcaption className="mb-3 flex flex-wrap items-baseline justify-between gap-2 text-[12px] text-fg-3">
+      <span>近 12 周活动（每天输入 + 输出 token）</span>
+      <span className="tabular-nums">活跃 {activeDays} 天</span>
+    </figcaption>
+    <div className="overflow-x-auto">
+      <div className="grid grid-flow-col grid-rows-7 gap-[3px]" style={{ gridAutoColumns: '12px' }}>
+        {days.map((day) => day.date > today
+          ? <span key={day.key} className="size-3 rounded-[3px] opacity-0" aria-hidden />
+          : <span key={day.key} role="img" aria-label={`${day.nice}：${tokens(day.tokens)} token，${day.runs} 轮`}
+            title={`${day.nice} · ${tokens(day.tokens)} token · ${day.runs} 轮`}
+            className="size-3 rounded-[3px] border border-line"
+            style={{ background: level(day.tokens) ? HEAT_LEVELS[level(day.tokens) - 1] : undefined }} />)}
+      </div>
+    </div>
+    <div className="mt-2 flex items-center justify-end gap-1.5 text-[11px] text-fg-3">
+      <span>少</span>{HEAT_LEVELS.map((color, index) => <span key={index} className="size-3 rounded-[3px] border border-line" style={{ background: color }} />)}<span>多</span>
+    </div>
+  </figure>;
 }
 
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {

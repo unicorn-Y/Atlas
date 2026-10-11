@@ -143,6 +143,23 @@ async def add_plugin_marketplace(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/api/plugin-marketplaces/{name}/update")
+async def update_plugin_marketplace(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+) -> dict[str, Any]:
+    """Update a registered git marketplace without accepting a caller-supplied path."""
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        return await asyncio.to_thread(plugin_runtime.update_marketplace, name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0] if exc.args else exc)) from exc
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/api/plugin-marketplaces/{name}/plugins")
 async def list_marketplace_plugins(
     services: Annotated[AppServices, Depends(get_app_services)],

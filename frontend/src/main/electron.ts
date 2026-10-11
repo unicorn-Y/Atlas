@@ -1,12 +1,21 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
-import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell } from 'electron';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { setImmediate } from 'node:timers';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
 import { checkSourceUpdate, launchSourceUpdater, sourceRoot } from './sourceUpdate.js';
-import { BACKEND_STARTUP_CHANNEL, type BackendStartupProgress } from '../shared/ipc.js';
+import {
+  BACKEND_STARTUP_CHANNEL,
+  type AtlasDeepLink,
+  type AtlasSettingsSection,
+  type BackendStartupProgress,
+  type GlobalShortcutState,
+  type PlatformEditorId,
+  type PlatformSettingsState,
+} from '../shared/ipc.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +27,11 @@ function themeIcon(theme: string): Electron.NativeImage | undefined {
   return image.isEmpty() ? undefined : image;
 }
 let windowRef: BrowserWindow | null = null;
+type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null };
+let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null };
+let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
+let pendingDeepLinks: AtlasDeepLink[] = [];
+let deepLinkSubscriber: Electron.WebContents | null = null;
 process.env.ATLAS_SKILL_CENTER_TOKEN ??= randomBytes(32).toString('base64url');
 // Proves to the backend that a request comes from this app rather than some web page.
 // Only the main process ever sees it: it is attached below, outside the renderer.
@@ -25,6 +39,206 @@ process.env.ATLAS_API_TOKEN ??= randomBytes(32).toString('base64url');
 
 /** Session for pages shown in the browser panel. Separate from the app's, so they never get the backend token. */
 export const BROWSER_PARTITION = 'persist:atlas-browser';
+
+const SETTINGS_SECTIONS = new Set<AtlasSettingsSection>([
+  'models', 'advanced', 'usage', 'limits', 'profiles', 'hooks', 'tools', 'telegram', 'channels',
+  'devices', 'localModels', 'shortcuts', 'appearance', 'plugins', 'notifications', 'mcp',
+  'skills', 'recipes', 'extensions', 'transfer', 'diagnostics', 'telemetry', 'security', 'commands', 'platform', 'integrations', 'network',
+]);
+const ACCELERATOR_KEYS = new Set([
+  'Space', 'Escape', 'Tab', 'Return', 'Backspace', 'Delete', 'Insert', 'Home', 'End',
+  'PageUp', 'PageDown', 'Up', 'Down', 'Left', 'Right', 'Plus', 'Minus', 'Comma', 'Period',
+]);
+const RESERVED_ACCELERATORS = new Set([
+  'Alt+F4', 'Control+F4', 'CommandOrControl+Q', 'Control+Q', 'CommandOrControl+W', 'Control+W',
+  'Super+L', 'Super+Tab', 'CommandOrControl+Alt+Delete',
+].map((accelerator) => accelerator.toLowerCase()));
+const IDE_COMMANDS: Record<PlatformEditorId, string> = {
+  vscode: process.platform === 'win32' ? 'Code.exe' : 'code',
+  idea: process.platform === 'win32' ? 'idea64.exe' : 'idea',
+  pycharm: process.platform === 'win32' ? 'pycharm64.exe' : 'pycharm',
+  webstorm: process.platform === 'win32' ? 'webstorm64.exe' : 'webstorm',
+  goland: process.platform === 'win32' ? 'goland64.exe' : 'goland',
+  rider: process.platform === 'win32' ? 'rider64.exe' : 'rider',
+  clion: process.platform === 'win32' ? 'clion64.exe' : 'clion',
+  phpstorm: process.platform === 'win32' ? 'phpstorm64.exe' : 'phpstorm',
+  rubymine: process.platform === 'win32' ? 'rubymine64.exe' : 'rubymine',
+  datagrip: process.platform === 'win32' ? 'datagrip64.exe' : 'datagrip',
+};
+
+function preferencesPath(): string {
+  return path.join(app.getPath('userData'), 'platform-settings.json');
+}
+
+function loadPlatformPreferences(): PlatformPreferences {
+  try {
+    const data = JSON.parse(readFileSync(preferencesPath(), 'utf8')) as Record<string, unknown>;
+    return {
+      alwaysOnTop: data.alwaysOnTop === true,
+      globalShortcut: typeof data.globalShortcut === 'string' ? data.globalShortcut : null,
+    };
+  } catch {
+    return { alwaysOnTop: false, globalShortcut: null };
+  }
+}
+
+function savePlatformPreferences(next: PlatformPreferences): void {
+  const target = preferencesPath();
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  platformPreferences = next;
+}
+
+function platformSettingsSnapshot(): PlatformSettingsState {
+  return { alwaysOnTop: platformPreferences.alwaysOnTop, globalShortcut: { ...globalShortcutState } };
+}
+
+function validateGlobalAccelerator(value: string): string | null {
+  const accelerator = value.trim();
+  if (!accelerator || accelerator.length > 80) return '请填写长度不超过 80 个字符的快捷键。';
+  const parts = accelerator.split('+').map((part) => part.trim());
+  const key = parts.pop() ?? '';
+  const allowedModifiers = new Set(['CommandOrControl', 'Control', 'Alt', 'Shift', 'Super']);
+  if (!key || parts.length === 0 || parts.length > 3 || parts.some((part) => !allowedModifiers.has(part))) {
+    return '格式示例：CommandOrControl+Shift+Space。';
+  }
+  if (new Set(parts).size !== parts.length || !parts.some((part) => part !== 'Shift')) {
+    return '快捷键必须有 Ctrl、Alt、CommandOrControl 或 Super 修饰键。';
+  }
+  const validKey = /^[A-Z0-9]$/i.test(key) || /^F(?:[1-9]|1[0-9]|2[0-4])$/i.test(key)
+    || [...ACCELERATOR_KEYS].some((candidate) => candidate.toLowerCase() === key.toLowerCase());
+  if (!validKey) return '不支持这个按键名称。';
+  const canonical = [...parts, key].join('+');
+  if (RESERVED_ACCELERATORS.has(canonical.toLowerCase())) return '这个快捷键保留给系统或应用。';
+  return null;
+}
+
+function focusAtlasWindow(): void {
+  if (!app.isReady()) return;
+  if (!windowRef || windowRef.isDestroyed()) createWindow();
+  if (!windowRef || windowRef.isDestroyed()) return;
+  if (windowRef.isMinimized()) windowRef.restore();
+  windowRef.show();
+  windowRef.focus();
+}
+
+function tryRegisterGlobalShortcut(accelerator: string | null): GlobalShortcutState {
+  if (!accelerator) return { accelerator: null, registered: false };
+  const invalid = validateGlobalAccelerator(accelerator);
+  if (invalid) return { accelerator, registered: false, error: invalid };
+  try {
+    const registered = globalShortcut.register(accelerator, focusAtlasWindow);
+    return registered
+      ? { accelerator, registered: true }
+      : { accelerator, registered: false, error: '系统未能注册此快捷键，可能已被其他应用占用。' };
+  } catch {
+    return { accelerator, registered: false, error: '系统未能注册此快捷键。' };
+  }
+}
+
+function registerPreferredGlobalShortcut(): void {
+  globalShortcutState = tryRegisterGlobalShortcut(platformPreferences.globalShortcut);
+}
+
+function assertTrustedAppSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
+  if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {
+    throw new Error('此操作仅允许 Atlas 主窗口调用。');
+  }
+  const url = event.senderFrame.url;
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  const appFileUrl = pathToFileURL(path.resolve(here, '../../dist/index.html')).href;
+  let trusted = url.split('#')[0] === appFileUrl;
+  if (devUrl) {
+    try { trusted = new URL(url).origin === new URL(devUrl).origin; } catch { trusted = false; }
+  }
+  if (!trusted) throw new Error('此操作仅允许 Atlas 应用页面调用。');
+}
+
+function parseAtlasDeepLink(raw: string): AtlasDeepLink | null {
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'atlas:' || url.username || url.password || url.port || url.search || url.hash) return null;
+    const segments = url.pathname.split('/').filter(Boolean).map((segment) => decodeURIComponent(segment));
+    if (segments.length !== 1) return null;
+    if (url.hostname === 'conversation' && /^[A-Za-z0-9_-]{1,128}$/.test(segments[0])) {
+      return { id: randomUUID(), type: 'conversation', conversationId: segments[0] };
+    }
+    if (url.hostname === 'settings' && SETTINGS_SECTIONS.has(segments[0] as AtlasSettingsSection)) {
+      return { id: randomUUID(), type: 'settings', section: segments[0] as AtlasSettingsSection };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function receiveAtlasDeepLink(raw: string): boolean {
+  const route = parseAtlasDeepLink(raw);
+  if (!route) return false;
+  if (deepLinkSubscriber && !deepLinkSubscriber.isDestroyed()) {
+    deepLinkSubscriber.send('app:deep-link', route);
+  } else {
+    pendingDeepLinks.push(route);
+    if (pendingDeepLinks.length > 32) pendingDeepLinks = pendingDeepLinks.slice(-32);
+  }
+  focusAtlasWindow();
+  return true;
+}
+
+function findAtlasUrl(args: string[]): string | null {
+  return args.find((arg) => /^atlas:/i.test(arg)) ?? null;
+}
+
+function setGlobalShortcut(accelerator: string | null): GlobalShortcutState {
+  if (accelerator !== null) {
+    const invalid = validateGlobalAccelerator(accelerator);
+    if (invalid) return { accelerator, registered: false, error: invalid };
+  }
+
+  const previousAccelerator = platformPreferences.globalShortcut;
+  const wasRegistered = globalShortcutState.registered;
+  const next = { ...platformPreferences, globalShortcut: accelerator };
+  savePlatformPreferences(next);
+  if (previousAccelerator && wasRegistered) {
+    globalShortcut.unregister(previousAccelerator);
+  }
+  globalShortcutState = tryRegisterGlobalShortcut(accelerator);
+  return { ...globalShortcutState };
+}
+
+function openWorkspaceInEditor(editor: PlatformEditorId, workspacePath: string): Promise<void> {
+  if (!Object.hasOwn(IDE_COMMANDS, editor)) throw new Error('不支持的编辑器。');
+  if (typeof workspacePath !== 'string' || !path.isAbsolute(workspacePath)) {
+    throw new Error('请选择一个有效的本地工作区目录。');
+  }
+  let canonicalPath: string;
+  try {
+    canonicalPath = realpathSync(workspacePath);
+    if (!statSync(canonicalPath).isDirectory()) throw new Error('工作区路径不是目录。');
+  } catch (error) {
+    if (error instanceof Error && error.message === '工作区路径不是目录。') throw error;
+    throw new Error('工作区目录不存在或无法访问。');
+  }
+  return new Promise((resolve, reject) => {
+    const child = spawn(IDE_COMMANDS[editor], [canonicalPath], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      shell: false,
+    });
+    child.once('error', (error) => {
+      if ('code' in error && error.code === 'ENOENT') {
+        reject(new Error(`未找到 ${editor} 命令行工具。请安装该编辑器并将其命令加入 PATH。`));
+      } else {
+        reject(new Error(`无法启动 ${editor}：${error.message}`));
+      }
+    });
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
 
 /** Pages in the browser panel are ordinary web content: no preload, no Node, their own session, web URLs only. */
 function lockDownWebviews() {
@@ -61,6 +275,11 @@ function attachBackendToken() {
 }
 
 function createWindow() {
+  if (windowRef && !windowRef.isDestroyed()) {
+    windowRef.show();
+    windowRef.focus();
+    return;
+  }
   windowRef = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -80,6 +299,7 @@ function createWindow() {
       webviewTag: true,
     },
   });
+  windowRef.setAlwaysOnTop(platformPreferences.alwaysOnTop);
 
   windowRef.on('maximize', () => windowRef?.webContents.send('window:maximize-change', true));
   windowRef.on('unmaximize', () => windowRef?.webContents.send('window:maximize-change', false));
@@ -103,7 +323,8 @@ function createWindow() {
   windowRef.webContents.on('will-navigate', (event, url) => {
     if (isAppUrl(url)) return;
     event.preventDefault();
-    if (/^https?:/i.test(url)) void shell.openExternal(url);
+    if (/^atlas:/i.test(url)) receiveAtlasDeepLink(url);
+    else if (/^https?:/i.test(url)) void shell.openExternal(url);
   });
   const win = windowRef;
   const loadApp = () => {
@@ -125,8 +346,61 @@ function createWindow() {
     setTimeout(() => loadApp(), 500 * loadRetries);
   });
   win.webContents.on('did-finish-load', () => { loadRetries = 0; });
+  win.webContents.on('did-start-loading', () => {
+    if (deepLinkSubscriber === win.webContents) deepLinkSubscriber = null;
+  });
   windowRef.on('closed', () => { windowRef = null; });
 }
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const url = findAtlasUrl(argv);
+    if (url) receiveAtlasDeepLink(url);
+    else focusAtlasWindow();
+  });
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    receiveAtlasDeepLink(url);
+  });
+}
+
+ipcMain.handle('deep-link:subscribe', (event) => {
+  assertTrustedAppSender(event);
+  deepLinkSubscriber = event.sender;
+  const queued = pendingDeepLinks;
+  pendingDeepLinks = [];
+  return queued;
+});
+ipcMain.on('deep-link:unsubscribe', (event) => {
+  if (deepLinkSubscriber === event.sender) deepLinkSubscriber = null;
+});
+ipcMain.handle('platform:get-settings', (event) => {
+  assertTrustedAppSender(event);
+  return platformSettingsSnapshot();
+});
+ipcMain.handle('platform:set-always-on-top', (event, enabled: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof enabled !== 'boolean') throw new Error('置顶设置必须是布尔值。');
+  savePlatformPreferences({ ...platformPreferences, alwaysOnTop: enabled });
+  if (windowRef && !windowRef.isDestroyed()) windowRef.setAlwaysOnTop(enabled);
+  return platformSettingsSnapshot();
+});
+ipcMain.handle('platform:set-global-shortcut', (event, accelerator: unknown) => {
+  assertTrustedAppSender(event);
+  if (accelerator !== null && typeof accelerator !== 'string') throw new Error('快捷键格式无效。');
+  return setGlobalShortcut(accelerator as string | null);
+});
+ipcMain.handle('platform:open-workspace-in-editor', async (event, editor: unknown, workspacePath: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof editor !== 'string' || !Object.prototype.hasOwnProperty.call(IDE_COMMANDS, editor)) {
+    throw new Error('不支持的编辑器。');
+  }
+  if (typeof workspacePath !== 'string') throw new Error('请选择一个有效的本地工作区目录。');
+  await openWorkspaceInEditor(editor as PlatformEditorId, workspacePath);
+});
 
 ipcMain.on('window:minimize', () => windowRef?.minimize());
 ipcMain.on('window:maximize', () => {
@@ -181,6 +455,13 @@ ipcMain.handle('skill-center:token', (event) => {
 });
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return;
+  platformPreferences = loadPlatformPreferences();
+  registerPreferredGlobalShortcut();
+  if (app.isPackaged) app.setAsDefaultProtocolClient('atlas');
+  else if (process.platform === 'win32' || process.platform === 'linux') {
+    app.setAsDefaultProtocolClient('atlas', process.execPath, [path.resolve(process.argv[1] ?? '.')]);
+  }
   // Atlas draws its own title bar; the default menu's hidden accelerators (Ctrl+W closes the
   // window, Ctrl+R reloads) would fire over the app's own shortcuts.
   Menu.setApplicationMenu(null);
@@ -221,6 +502,8 @@ app.whenReady().then(async () => {
   attachBackendToken();
   lockDownWebviews();
   createWindow();
+  const initialDeepLink = findAtlasUrl(process.argv);
+  if (initialDeepLink) receiveAtlasDeepLink(initialDeepLink);
   // The window may appear after boot already finished (fast external backend): give the
   // renderer the current state once so its startup surfaces resolve immediately.
   windowRef?.webContents.send(BACKEND_STARTUP_CHANNEL, lastProgress);
@@ -234,6 +517,7 @@ app.on('before-quit', (event) => {
   event.preventDefault();
   if (shutdownStarted) return;
   shutdownStarted = true;
+  globalShortcut.unregisterAll();
   void stopManagedBackend().finally(() => {
     shutdownComplete = true;
     app.quit();
