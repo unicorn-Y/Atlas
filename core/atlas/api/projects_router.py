@@ -39,6 +39,7 @@ def _service(name: str, services: AppServices) -> Any:
 async def list_projects(
     services: Annotated[AppServices, Depends(get_app_services)],
     status: str | None = None,
+    include_conversations: bool = Query(False),
 ) -> dict[str, Any]:
     projects = services.projects
     if projects is None:
@@ -46,7 +47,13 @@ async def list_projects(
 
         projects = _atlas_server.projects
     assert projects is not None
-    return {"projects": [p.to_dict() for p in await projects.list_projects(status)]}
+    items = []
+    for project in await projects.list_projects(status):
+        item = project.to_dict()
+        if include_conversations:
+            item["conversation_ids"] = await projects.list_conversations(project.project_id)
+        items.append(item)
+    return {"projects": items}
 
 
 @router.post("/api/projects", status_code=201)

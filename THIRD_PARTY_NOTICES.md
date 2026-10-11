@@ -313,3 +313,14 @@ Additional source adapted from
 `apps/zcode-cli/packages/contracts/src/workflow/index.ts` at fixed commit
 `29628c9acdb81b703bbd4080c207a0e7ce5e276e`. Copyright 2026 Z.AI Co., Ltd.;
 Apache License 2.0 as stated above.
+
+## FEATURE-F1-A: ZCode sidebar interaction patterns
+
+Adapted interaction patterns in `frontend/src/renderer/shell/Sidebar.tsx` and
+`frontend/src/renderer/components/sidebar/ConversationDetails.tsx` from
+`TaskListItemContextMenu.tsx`, `TaskActionMenuContent.tsx`,
+`workspace-grouped-tasks/task-context-menu-content.tsx`,
+`WorkspaceGroupedTasksSection.tsx`, and `TaskListItem.tsx` at fixed commit
+`aac4755666d09fdcd70272fcf063c077a639015c`. Copyright 2026 Z.AI Co., Ltd.;
+Apache License 2.0 as stated above. Atlas-specific API calls, statistics,
+project actions, and search rendering are new implementations.

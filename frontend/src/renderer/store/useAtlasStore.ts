@@ -161,6 +161,7 @@ interface AtlasState extends PersistentSlice {
   deleteConversation: (id: string) => Promise<void>;
   togglePinned: (id: string) => void;
   toggleArchived: (id: string) => void;
+  setConversationUnread: (id: string, unread: boolean) => void;
   exportConversation: (id: string, format?: 'json' | 'md') => Promise<void>;
   setWorkspace: (conversationId: string, workspace: string | null) => void;
   editMessage: (messageId: string, content: string) => Promise<void>;
@@ -770,6 +771,11 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       patchConversation(id, patch);
       void backend.updateConversation(id, patch).catch((error) => { patchConversation(id, undo); set(errorPatch(error, '归档没有保存')); });
     },
+    setConversationUnread: (id, unread) => set((state) => ({
+      unread: unread
+        ? state.unread.includes(id) ? state.unread : [...state.unread, id]
+        : state.unread.filter((item) => item !== id),
+    })),
     exportConversation: async (id, format = 'json') => {
       const conversation = get().conversations.find((item) => item.id === id);
       try {

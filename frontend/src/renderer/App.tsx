@@ -925,6 +925,7 @@ export default function App() {
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
   const besideConversation = view === 'chat' && besideId !== store.activeConversationId ? store.conversations.find((item) => item.id === besideId) : undefined;
   const runningConversations = store.runs.filter((run) => !TERMINAL.includes(run.status)).map((run) => run.conversationId);
+  const waitingConversations = [...new Set(store.runs.filter((run) => run.status === 'waiting').map((run) => run.conversationId))];
   // One open conversation reads better as a plain title; tabs appear from the second one.
   const showTabs = view === 'chat' && tabs.length > 1 && tabs.includes(store.activeConversationId);
   const connection = !store.connected
@@ -943,7 +944,9 @@ export default function App() {
         pendingMemories={pendingCount} username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
         theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
         pinned={store.pinned} archived={store.archived} unread={store.unread}
-        running={runningConversations}
+        running={runningConversations} queued={Object.fromEntries(Object.entries(store.queue).map(([id, items]) => [id, items.length]))}
+        waiting={waitingConversations} onSetUnread={store.setConversationUnread}
+        onSetWorkspace={(id, workspace) => store.setWorkspace(id, workspace)}
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
         onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} />
 

@@ -64,20 +64,52 @@ class ConversationGoalCommandRequest(BaseModel):
 @router.get("/api/conversations")
 async def list_conversations(
     services: Annotated[AppServices, Depends(get_app_services)],
+    offset: int = Query(0, ge=0),
+    limit: int | None = Query(None, ge=1, le=500),
+    archived: bool | None = Query(None),
+    pinned: bool | None = Query(None),
+    workspace: str | None = Query(None, min_length=1),
+    q: str | None = Query(None, max_length=200),
 ) -> list[dict[str, Any]]:
-    """Return all conversation summaries."""
+    """Return conversation summaries, optionally filtered and paged.
+
+    The default is intentionally unbounded so the desktop sidebar does not
+    silently omit conversations after the first 50. ``q`` matches the summary
+    fields returned here (ID, title, workspace, and latest-message preview);
+    full-transcript search remains available from ``/api/search``.
+    """
     memory = services.memory
     if memory is None:
         from atlas import server as _atlas_server
 
         memory = _atlas_server.memory
     assert memory is not None
-    conversations = await memory.list_conversations()
+    conversations = await memory.list_conversations(limit=None)
     from atlas.config import DATA_ROOT
     from atlas.engine.session_sync import list_session_previews
 
     previews = await asyncio.to_thread(list_session_previews, DATA_ROOT / "engine")
-    return [{**item, "preview": previews.get(str(item["id"]), "")} for item in conversations]
+    summaries = [
+        {**item, "preview": previews.get(str(item["id"]), "")}
+        for item in conversations
+    ]
+    if archived is not None:
+        summaries = [item for item in summaries if item.get("archived") is archived]
+    if pinned is not None:
+        summaries = [item for item in summaries if item.get("pinned") is pinned]
+    if workspace is not None:
+        summaries = [item for item in summaries if item.get("workspace") == workspace]
+    needle = (q or "").strip().casefold()
+    if needle:
+        summaries = [
+            item for item in summaries
+            if any(needle in str(item.get(field) or "").casefold()
+                   for field in ("id", "title", "workspace", "preview"))
+        ]
+    summaries = summaries[offset:]
+    if limit is not None:
+        summaries = summaries[:limit]
+    return summaries
 
 
 @router.post("/api/conversations")
@@ -125,6 +157,113 @@ async def get_conversation_messages(
         read_session_messages, DATA_ROOT / "engine", conversation_id,
         limit=limit, before_id=before_id,
     )
+
+
+@router.get("/api/conversations/{conversation_id}/search")
+async def search_conversation_messages(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+    q: str = Query(..., min_length=1, max_length=200),
+    limit: int = Query(50, ge=1, le=100),
+) -> dict[str, Any]:
+    """Search the complete transcript for one conversation, including compacted history."""
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+
+        memory = _atlas_server.memory
+    assert memory is not None
+    if not await memory.get_conversation(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+
+    needle = q.strip().casefold()
+    if not needle:
+        return {"conversation_id": conversation_id, "results": []}
+    messages = await asyncio.to_thread(
+        read_session_all_messages, DATA_ROOT / "engine", conversation_id,
+    )
+    results = []
+    for message in reversed(messages):
+        raw = message.get("content")
+        content = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False, default=str)
+        index = content.casefold().find(needle)
+        if index < 0:
+            continue
+        start = max(0, index - 100)
+        end = min(len(content), index + len(needle) + 180)
+        results.append({
+            "id": str(message.get("id") or ""),
+            "role": str(message.get("role") or "unknown"),
+            "created_at": str(message.get("created_at") or ""),
+            "snippet": ("…" if start else "") + content[start:end] + ("…" if end < len(content) else ""),
+        })
+        if len(results) >= limit:
+            break
+    return {"conversation_id": conversation_id, "results": results}
+
+
+@router.get("/api/conversations/{conversation_id}/stats")
+async def get_conversation_stats(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+) -> dict[str, Any]:
+    """Summarize transcript turns and recorded usage without inventing missing prices."""
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+
+        memory = _atlas_server.memory
+    assert memory is not None
+    if not await memory.get_conversation(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+
+    messages = await asyncio.to_thread(
+        read_session_all_messages, DATA_ROOT / "engine", conversation_id,
+    )
+    user_turns = sum(1 for item in messages if item.get("role") == "user")
+    usage_ledger = _service("usage_ledger", services)
+    usage = None
+    if usage_ledger is not None:
+        report = await usage_ledger.query(start=None, end=None, group_by="conversation")
+        usage = next((row for row in report.get("rows", []) if row.get("key") == conversation_id), None)
+    return {
+        "conversation_id": conversation_id,
+        "message_count": len(messages),
+        "user_turns": user_turns,
+        "runs": usage.get("runs", 0) if usage else 0,
+        "input_tokens": usage.get("input_tokens", 0) if usage else 0,
+        "output_tokens": usage.get("output_tokens", 0) if usage else 0,
+        "est_cost": usage.get("est_cost") if usage else None,
+    }
+
+
+@router.get("/api/conversations/{conversation_id}/log-location")
+async def get_conversation_log_location(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+) -> dict[str, str]:
+    """Return the canonical shared transcript database path for this session."""
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+
+        memory = _atlas_server.memory
+    assert memory is not None
+    if not await memory.get_conversation(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    from atlas.config import DATA_ROOT
+
+    return {
+        "conversation_id": conversation_id,
+        "path": str(DATA_ROOT / "engine" / "state.db"),
+        "storage": "shared_session_database",
+    }
 
 
 @router.get("/api/conversations/{conversation_id}/branches")
