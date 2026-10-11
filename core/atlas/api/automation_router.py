@@ -54,6 +54,7 @@ class PayloadSpec(BaseModel):
     script: str = ""
     timeout_seconds: float = 60.0
     wake_mode: Literal["", "now", "next-heartbeat"] = ""
+    conversation_id: str = ""
 
 
 class DeliverySpec(BaseModel):

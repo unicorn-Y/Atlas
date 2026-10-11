@@ -90,17 +90,28 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
                     "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]},
                 }, "required": ["step", "status"], "additionalProperties": False}},
         }, ["plan"]),
+        _function_schema("EnterPlanMode", "Switch this run into a read-only planning phase before implementation.", {
+            "reason": {"type": "string"},
+        }),
+        _function_schema("ExitPlanMode", "Submit the current plan for user approval before implementation.", {
+            "summary": {"type": "string"},
+        }),
         _function_schema("get_context_remaining", "Report remaining context tokens when the active runtime exposes a measured budget.", {}),
+        _function_schema("read_tool_history", "Read recent tool calls and results from the current model context.", {
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+        }),
         _function_schema("new_context", "Prepare a concise handoff summary for a fresh model context.", {}),
         _function_schema("request_permissions", "Request user approval for a specific permission; approval applies only to this request.", {
             "permission": {"type": "string"}, "reason": {"type": "string"},
-            "scope": {"type": "string"},
+            "scope": {"type": "string"}, "resource": {"type": "string"},
         }, ["permission", "reason"]),
         _function_schema("request_user_input", "Ask the user one or more structured questions and wait for their answers.", {
             "questions": {"type": "array", "items": {"type": "object",
                 "properties": {
                     "id": {"type": "string"}, "header": {"type": "string"},
                     "question": {"type": "string"},
+                    "multi_select": {"type": "boolean"},
+                    "multiSelect": {"type": "boolean"},
                     "options": {"type": "array", "items": {"type": "object",
                         "properties": {"label": {"type": "string"}, "description": {"type": "string"}},
                         "required": ["label", "description"], "additionalProperties": False}},
@@ -119,6 +130,26 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
         _function_schema("send_message_to_user_async", "Send a short asynchronous message to the user in the current run.", {
             "message": {"type": "string"},
         }, ["message"]),
+        _function_schema("CronCreate", "Create a persistent local scheduled agent task (cron or one-shot ISO 8601 time).", {
+            "name": {"type": "string"}, "schedule": {"type": "string"},
+            "prompt": {"type": "string"}, "timezone": {"type": "string"},
+        }, ["name", "schedule", "prompt"]),
+        _function_schema("CronList", "List persistent local scheduled agent tasks.", {}),
+        _function_schema("CronUpdate", "Update a persistent local scheduled agent task.", {
+            "id": {"type": "string"}, "name": {"type": "string"},
+            "schedule": {"type": "string"}, "prompt": {"type": "string"},
+            "timezone": {"type": "string"}, "enabled": {"type": "boolean"},
+        }, ["id"]),
+        _function_schema("CronDelete", "Delete a persistent local scheduled agent task.", {
+            "id": {"type": "string"},
+        }, ["id"]),
+        _function_schema("ScheduleWakeup", "Schedule this conversation to resume at a future time; stop=true cancels its pending wakeup.", {
+            "at": {"type": "string", "description": "ISO 8601 timestamp with timezone."},
+            "prompt": {"type": "string"}, "stop": {"type": "boolean"},
+        }),
+        _function_schema("EndConversation", "End the current conversation with a user-visible reason.", {
+            "reason": {"type": "string"},
+        }, ["reason"]),
         _function_schema("wait_for_environment", "Wait briefly for a local workspace path to become available.", {
             "path": {"type": "string"}, "timeout_seconds": {"type": "number", "minimum": 0, "maximum": 60},
         }, ["path"]),
@@ -193,6 +224,15 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
                 "parameters": copy.deepcopy(WORKFLOW_TOOL_SPEC["parameters"]),
             },
         })
+    question_tool = next((item for item in schemas
+                          if item.get("function", {}).get("name") == "request_user_input"), None)
+    if question_tool is not None:
+        ask_user_question = copy.deepcopy(question_tool)
+        ask_user_question["function"]["name"] = "AskUserQuestion"
+        ask_user_question["function"]["description"] = (
+            "Ask structured multiple-choice questions, including optional multi-select, and wait for the user's answers."
+        )
+        schemas.append(ask_user_question)
     return schemas
 
 

@@ -604,10 +604,12 @@ async def _automation_heartbeat_tick(agent_id: str, reason: str) -> Any:
 
 
 async def _automation_dispatch_turn(payload: dict[str, Any]) -> str:
-    """Automation ``payload.kind=agent_turn`` → orchestrator turn in an isolated session."""
+    """Automation ``payload.kind=agent_turn`` → orchestrator turn in its target conversation."""
     automation_id = str(payload.get("automation_id") or "adhoc")
+    conversation_id = str(payload.get("conversation_id") or f"automation-{automation_id}")
     return await _server()._collect_orchestrator_text(
-        str(payload.get("message") or ""), f"automation-{automation_id}",
+        str(payload.get("message") or ""), conversation_id,
+        model=str(payload.get("model") or "") or None,
     )
 
 
@@ -1503,7 +1505,7 @@ async def _handle_run_start(
             profile_id = None
             profile = None
             permission_mode = "read_only"
-            run_tool_allow = ["delegate_task", "submit_findings", "local_file", "review_command",
+            run_tool_allow = ["delegate_task", "submit_findings", "ReportFindings", "local_file", "review_command",
                               "coding.repo_map", "coding.ast_grep.run", "read_office"]
             run_tool_deny = []
             log.info("review.intercepted", run_id=run_id,
@@ -1522,6 +1524,7 @@ async def _handle_run_start(
         }))
         return
     run.mode = effective_mode
+    run.dynamic_plan_mode = effective_mode == "plan"
     run.reasoning_effort = reasoning_effort
     run.permission_mode = permission_mode
     run.allowed_paths = [str(Path(item).expanduser().resolve()) for item in allowed_paths or []]
@@ -2373,7 +2376,8 @@ async def _execute_run(
         if run.executor != "atlas":
             if await check_pause_cancel():
                 run.status = "cancelled"
-                await emit("run.cancelled", {})
+                await emit("run.cancelled", {"reason": run.end_conversation_reason}
+                            if run.end_conversation_reason else {})
                 return
             await emit("run.status", {"status": "running"})
             await emit("run.phase", {"phase": "execution"})
@@ -2410,7 +2414,8 @@ async def _execute_run(
         if await check_pause_cancel():
             run.status = "cancelled"
             await cancel_local_foreground()
-            await emit("run.cancelled", {})
+            await emit("run.cancelled", {"reason": run.end_conversation_reason}
+                        if run.end_conversation_reason else {})
             return
 
         await emit("run.status", {"status": "running"})
@@ -2426,11 +2431,16 @@ async def _execute_run(
             """Emit approval.required and wait for client response."""
             approval_payload = {
                 "approval_id": approval_event_id,
-                "description": f"Agent 请求执行工具 {tool_name}，需要你的确认。",
+                "description": str(tool_args.get("_approval_reason") or tool_args.get("reason") or
+                                    f"Agent 请求执行工具 {tool_name}，需要你的确认。"),
                 "input": {key: value for key, value in tool_args.items()
-                          if key not in {"subtask_id", "_reviewer_reason"}},
+                          if key not in {"subtask_id", "_reviewer_reason", "_approval_reason", "_approval_scope", "_approval_resource"}},
                 "tool": tool_name,
             }
+            if tool_args.get("_approval_scope") or tool_args.get("scope"):
+                approval_payload["scope"] = str(tool_args.get("_approval_scope") or tool_args["scope"])
+            if tool_args.get("_approval_resource") or tool_args.get("resource"):
+                approval_payload["resource"] = str(tool_args.get("_approval_resource") or tool_args["resource"])
             if tool_args.get("_reviewer_reason"):
                 approval_payload["reviewer_reason"] = str(tool_args["_reviewer_reason"])
             if tool_args.get("subtask_id"):
@@ -2490,6 +2500,7 @@ async def _execute_run(
 
         async def input_callback(
             call_id: str, question: str, options: list[str] | None,
+            details: dict[str, Any] | None = None,
         ) -> str:
             event_id = f"input:{run.run_id}:{call_id}"
             loop = asyncio.get_running_loop()
@@ -2499,6 +2510,7 @@ async def _execute_run(
             await emit("input.required", {
                 "event_id": event_id, "question": question,
                 "options": options if isinstance(options, list) else None,
+                **(details or {}),
             })
             while not future.done():
                 if run.cancel_event.is_set():
@@ -2508,6 +2520,39 @@ async def _execute_run(
             answer = future.result()
             run.status = "running"
             return answer
+
+        async def plan_approval_callback(plan: dict[str, Any]) -> bool:
+            if run.cancel_event.is_set():
+                return False
+            future = asyncio.get_running_loop().create_future()
+            run.plan_future = future
+            run.status = "waiting"
+            await emit("run.plan.proposed", {
+                "plan": plan, "event_id": f"plan:{run.run_id}",
+            })
+            try:
+                while not future.done():
+                    if run.cancel_event.is_set():
+                        return False
+                    await asyncio.sleep(0.1)
+                return future.result().get("action") == "approve"
+            finally:
+                run.plan_future = None
+                if run.status == "waiting":
+                    run.status = "running"
+
+        run.plan_approval_callback = plan_approval_callback
+
+        def plan_mode_callback(active: bool) -> None:
+            run.dynamic_plan_mode = active
+
+        run.plan_mode_callback = plan_mode_callback
+
+        def end_conversation_callback(reason: str) -> None:
+            run.end_conversation_reason = reason
+            run.cancel_event.set()
+
+        run.end_conversation_callback = end_conversation_callback
 
         async def subtask_started(
             subtask_id: str, goal: str, backend: str,
@@ -2667,7 +2712,8 @@ async def _execute_run(
             if await check_pause_cancel():
                 run.status = "cancelled"
                 await cancel_local_foreground()
-                await emit("run.cancelled", {})
+                await emit("run.cancelled", {"reason": run.end_conversation_reason}
+                            if run.end_conversation_reason else {})
                 return
 
             # Map orchestrator events to runtime protocol
@@ -2779,7 +2825,7 @@ async def _execute_run(
                 pass
 
             elif etype == "done":
-                if mode == "plan":
+                if mode == "plan" and run.dynamic_plan_mode:
                     run.status = "waiting"
                     loop = asyncio.get_running_loop()
                     run.plan_future = loop.create_future()
@@ -2794,14 +2840,16 @@ async def _execute_run(
                     while not run.plan_future.done():
                         if run.cancel_event.is_set():
                             run.status = "cancelled"
-                            await emit("run.cancelled", {})
+                            await emit("run.cancelled", {"reason": run.end_conversation_reason}
+                                        if run.end_conversation_reason else {})
                             return
                         await asyncio.sleep(0.1)
                     approval = run.plan_future.result()
                     run.plan_future = None
                     if approval.get("action") != "approve":
                         run.status = "cancelled"
-                        await emit("run.cancelled", {})
+                        await emit("run.cancelled", {"reason": run.end_conversation_reason}
+                                    if run.end_conversation_reason else {})
                         return
                     run.status = "running"
                     edits = approval.get("edits", "").strip()
@@ -2893,7 +2941,8 @@ async def _execute_run(
 
     except asyncio.CancelledError:
         run.status = "cancelled"
-        await emit("run.cancelled", {})
+        await emit("run.cancelled", {"reason": run.end_conversation_reason}
+                    if run.end_conversation_reason else {})
     except Exception as e:
         log.exception("run.runtime_failed")
         run.status = "failed"

@@ -590,6 +590,7 @@ class AgentOrchestrator:
                     async for event in self.run(
                         prompt, conversation_id=conversation_id,
                         model=options.get("model"), cancel_event=cancel_event,
+                        reasoning_effort=options.get("reasoning_effort"),
                         pause_event=options.get("pause_event"),
                         approval_callback=approval_callback,
                         workspace=cwd, mode="act", tool_allow=options.get("tool_allow"),

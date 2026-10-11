@@ -25,7 +25,7 @@ from atlas.kernel.prompt import build_prompt
 from atlas.kernel.repair import repair_unpaired_tool_calls, started_call_ids
 from atlas.kernel.state import KernelEvent, RunPhase, RunState
 from atlas.kernel.stuck import StuckDetector
-from atlas.kernel.tools import ToolExecutionResult, ToolScheduler
+from atlas.kernel.tools import READ_ONLY_TOOLS, ToolExecutionResult, ToolScheduler
 
 log = logging.getLogger(__name__)
 
@@ -505,6 +505,16 @@ class AtlasKernel:
 
             async def dispatch_tool(call_id: str, name: str, args: dict[str, Any]) -> Any:
                 tool_args = copy.deepcopy(args)
+                if (getattr(proxy_runtime, "dynamic_plan_mode", False)
+                        and name not in {
+                            "update_plan", "EnterPlanMode", "ExitPlanMode",
+                            "get_context_remaining", "read_tool_history", "tool_search",
+                            "list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource",
+                            "request_user_input", "request_user_input_async",
+                            "AskUserQuestion",
+                        } and name not in READ_ONLY_TOOLS):
+                    return {"content": "Plan mode is read-only. Submit the plan and wait for approval before using this tool.",
+                            "is_error": True, "outcome": "denied"}
                 pre_tool = await self._run_hook(request, "PreToolUse", {
                     "tool_name": name, "tool_use_id": call_id,
                     "tool_input": copy.deepcopy(tool_args), "conversation_id": session_id,
@@ -566,7 +576,18 @@ class AtlasKernel:
                             "tool_call_id": call_id, "name": name,
                             "arguments": copy.deepcopy(tool_args),
                         })
-                        choice = approval_callback(approval_id, name, copy.deepcopy(tool_args))
+                        approval_args = {
+                            **copy.deepcopy(tool_args),
+                            "_approval_reason": str(permission_hook.get("reason")
+                                                     or pre_tool.get("reason")
+                                                     or "A permission hook requested approval."),
+                            "_approval_scope": str(permission_hook.get("scope")
+                                                   or pre_tool.get("scope")
+                                                   or "this tool call"),
+                            "_approval_resource": str(permission_hook.get("resource")
+                                                      or pre_tool.get("resource") or ""),
+                        }
+                        choice = approval_callback(approval_id, name, approval_args)
                         if hasattr(choice, "__await__"):
                             choice = await choice
                         if choice != "allow":
@@ -600,6 +621,15 @@ class AtlasKernel:
                 }
 
             proxy_runtime.context_remaining_callback = context_remaining_callback
+
+            async def new_context_window_callback() -> dict[str, Any]:
+                result = await prepare_compaction(force=True)
+                if result.error or result.method == "none":
+                    raise RuntimeError(result.error or "No safe conversation history could be compacted.")
+                return {"method": result.method, "before_tokens": result.before_tokens,
+                        "after_tokens": result.after_tokens, "budget_tokens": result.budget_tokens}
+
+            proxy_runtime.new_context_window_callback = new_context_window_callback
             stuck = StuckDetector()
             usage_budget = request.usage_budget or env_run_usage_budget()
 
@@ -1577,6 +1607,11 @@ class AtlasKernel:
                     await event_queue.put(event)
             return result
 
+        from atlas.kernel.lifecycle_tools import dispatch_lifecycle_tool
+        lifecycle_result = await dispatch_lifecycle_tool(name, arguments, runtime)
+        if lifecycle_result is not None:
+            return lifecycle_result
+
         async def request_tool_approval(reason: str) -> bool:
             approved_ids = getattr(runtime, "_preapproved_tool_call_ids", set())
             if call_id and call_id in approved_ids:
@@ -1590,7 +1625,9 @@ class AtlasKernel:
                 "tool_call_id": call_id, "name": name,
                 "arguments": dict(arguments), "reason": reason,
             })
-            decision = approval(approval_id, name, dict(arguments))
+            approval_args = {**dict(arguments), "_approval_reason": reason,
+                             "_approval_scope": "this tool call"}
+            decision = approval(approval_id, name, approval_args)
             if hasattr(decision, "__await__"):
                 decision = await decision
             return decision == "allow"
@@ -1775,6 +1812,7 @@ class AtlasKernel:
                 })
             goal = str(arguments.get("explanation") or getattr(runtime, "goal", "") or "Updated plan").strip()
             snapshot = TaskPlan.from_dict({"goal": goal, "subtasks": subtasks}).to_dict()
+            runtime.plan_state = snapshot
             callback = getattr(runtime, "plan_update_callback", None)
             if callable(callback):
                 result = callback(snapshot)
@@ -1789,6 +1827,38 @@ class AtlasKernel:
             await event_queue.put({"type": "plan_updated", "plan": snapshot})
             return {"content": json.dumps(snapshot, ensure_ascii=False),
                     "data": {"plan": snapshot}, "outcome": "completed"}
+        if name == "EnterPlanMode":
+            runtime.dynamic_plan_mode = True
+            mode_callback = getattr(runtime, "plan_mode_callback", None)
+            if callable(mode_callback):
+                mode_callback(True)
+            await event_queue.put({"type": "plan_mode_changed", "mode": "plan",
+                                  "reason": str(arguments.get("reason") or "")})
+            return {"content": "Plan mode enabled. Tool execution is now restricted to read-only operations until the user approves the plan.",
+                    "data": {"mode": "plan"}, "outcome": "completed"}
+        if name == "ExitPlanMode":
+            callback = getattr(runtime, "plan_approval_callback", None)
+            plan = getattr(runtime, "plan_state", None)
+            if not isinstance(plan, dict) or not plan:
+                return {"content": "Create a plan with update_plan before requesting approval.",
+                        "is_error": True, "outcome": "failed"}
+            if not callable(callback):
+                return {"content": "This runtime cannot request plan approval.",
+                        "is_error": True, "outcome": "failed"}
+            approved = callback(plan)
+            if hasattr(approved, "__await__"):
+                approved = await approved
+            if not approved:
+                return {"content": "The plan was not approved. Remain in plan mode and revise it or stop.",
+                        "is_error": True, "outcome": "denied"}
+            runtime.dynamic_plan_mode = False
+            mode_callback = getattr(runtime, "plan_mode_callback", None)
+            if callable(mode_callback):
+                mode_callback(False)
+            await event_queue.put({"type": "plan_mode_changed", "mode": "act"})
+            return {"content": "The user approved the plan. Plan mode is off; continue with implementation.",
+                    "data": {"mode": "act", "summary": str(arguments.get("summary") or "")},
+                    "outcome": "completed"}
         if name in {"list_available_plugins_to_install", "request_plugin_install"}:
             from atlas.tools.plugin_marketplace import plugin_runtime_for
 
@@ -1893,17 +1963,39 @@ class AtlasKernel:
             if asyncio.iscoroutine(remaining):
                 remaining = await remaining
             return {"content": json.dumps(remaining, ensure_ascii=False), "data": remaining}
+        if name == "read_tool_history":
+            limit = max(1, min(100, int(arguments.get("limit", 30) or 30)))
+            history: list[dict[str, Any]] = []
+            for message in messages:
+                calls = message.get("tool_calls") or []
+                if calls:
+                    for call in calls:
+                        fn = call.get("function") or {}
+                        history.append({"kind": "call", "id": call.get("id"),
+                                        "name": fn.get("name"), "arguments": fn.get("arguments")})
+                elif message.get("role") == "tool":
+                    history.append({"kind": "result", "id": message.get("tool_call_id"),
+                                    "content": message.get("content", "")})
+            result = history[-limit:]
+            return {"content": json.dumps(result, ensure_ascii=False), "data": {"items": result}}
         if name == "new_context":
             callback = getattr(runtime, "new_context_window_callback", None)
             hermes_agent = getattr(runtime, "hermes_agent", None)
-            if callback is None or hermes_agent is None:
+            if not callable(callback):
                 return {"content": "A fresh-context handoff is unavailable for this runtime.", "is_error": True}
-            summary = await callback()
-            hermes_agent.set_context_handoff_summary(str(summary))
+            try:
+                handoff = await callback()
+            except (RuntimeError, ValueError) as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+            if hermes_agent is not None and isinstance(handoff, str):
+                hermes_agent.set_context_handoff_summary(handoff)
             await event_queue.put({
-                "type": "context.window.switched", "data": {"summary": str(summary)},
+                "type": "context.window.switched", "data": (
+                    {"summary": handoff} if isinstance(handoff, str) else dict(handoff)
+                ),
             })
-            return {"content": "Prepared a context handoff.", "outcome": "completed"}
+            return {"content": "Compacted the current session history and prepared a fresh context.",
+                    "data": handoff, "outcome": "completed"}
         if name == "request_permissions":
             approval = getattr(runtime, "approval_callback", None)
             if not callable(approval):
@@ -1926,7 +2018,7 @@ class AtlasKernel:
                 "content": "Permission approved for this request only." if allowed else "Permission was not approved.",
                 "is_error": not allowed, "outcome": "completed" if allowed else "denied",
             }
-        if name in {"request_user_input", "request_user_input_async"}:
+        if name in {"request_user_input", "request_user_input_async", "AskUserQuestion"}:
             input_callback = getattr(runtime, "input_callback", None)
             questions = arguments.get("questions")
             if not callable(input_callback):
@@ -1943,9 +2035,21 @@ class AtlasKernel:
                            if isinstance(item, dict) and str(item.get("label") or "").strip()]
                 if not question:
                     return {"content": f"Question {index} is empty.", "is_error": True}
-                answer = input_callback(f"{call_id or 'input'}:{question_id}", question, options or None)
+                multiple = bool(question_data.get("multi_select", question_data.get("multiSelect", False)))
+                details = {
+                    "id": question_id, "header": str(question_data.get("header") or "").strip(),
+                    "multi_select": multiple,
+                    "options": question_data.get("options", []),
+                }
+                answer = input_callback(f"{call_id or 'input'}:{question_id}", question, options or None, details)
                 if hasattr(answer, "__await__"):
                     answer = await answer
+                if multiple and isinstance(answer, str):
+                    try:
+                        decoded = json.loads(answer)
+                    except json.JSONDecodeError:
+                        decoded = [answer] if answer else []
+                    answer = decoded if isinstance(decoded, list) else [str(decoded)]
                 answers[question_id] = answer
             return {"content": json.dumps(answers, ensure_ascii=False),
                     "data": {"answers": answers}, "outcome": "completed"}

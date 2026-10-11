@@ -32,6 +32,8 @@ class RunState:
         "project_id",
         "task_id",
         "telegram_user_id",
+        "dynamic_plan_mode", "plan_approval_callback", "plan_mode_callback", "end_conversation_reason",
+        "end_conversation_callback",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -80,6 +82,11 @@ class RunState:
         self.project_id: str | None = None
         self.task_id: str | None = None
         self.telegram_user_id: int | None = None
+        self.dynamic_plan_mode = False
+        self.plan_approval_callback: Any = None
+        self.plan_mode_callback: Any = None
+        self.end_conversation_reason = ""
+        self.end_conversation_callback: Any = None
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""

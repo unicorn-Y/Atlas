@@ -652,6 +652,7 @@ class AutomationEngine:
                         "model": payload.get("model", ""),
                         "skills": payload.get("skills", []),
                         "wake_mode": payload.get("wake_mode", ""),
+                        "conversation_id": payload.get("conversation_id", ""),
                     }
                 )
             elif kind == "script":

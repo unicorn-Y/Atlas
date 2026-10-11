@@ -200,6 +200,22 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
         },
     }]
     tools.extend([
+        {"type": "function", "function": {
+            "name": "ReportFindings",
+            "description": "Report structured code-review findings for the current review. An empty list means no findings.",
+            "parameters": {"type": "object", "properties": {
+                "findings": {"type": "array", "items": {"type": "object", "properties": {
+                    "file": {"type": "string"}, "line": {"type": "integer"},
+                    "range": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+                    "severity": {"type": "string", "enum": ["blocker", "major", "minor"]},
+                    "title": {"type": "string"}, "explanation": {"type": "string"},
+                    "evidence": {"type": "string"}, "suggested_fix": {"type": "string"},
+                }, "required": ["file", "severity", "title", "explanation", "evidence"],
+                    "additionalProperties": False}},
+                "scope": {"type": "string", "enum": ["working_tree", "branch", "commit"]},
+                "scope_label": {"type": "string"},
+            }, "required": ["findings"], "additionalProperties": False},
+        }},
         {"type": "function", "function": {"name": "create_checkpoint",
          "description": "Create an Atlas shadow Git snapshot for explicit workspace paths.",
          "parameters": {"type": "object", "properties": {
@@ -310,6 +326,10 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
                     "tool_profile": {"type": "array", "items": {"type": "string"}},
                     "executor": {"type": "string"},
                     "agent": {"type": "string"},
+                    "model": {"type": "string", "description": "Optional model id for this child only."},
+                    "reasoning_effort": {"type": "string", "enum": ["minimal", "low", "medium", "high"]},
+                    "max_depth": {"type": "integer", "minimum": 1, "maximum": 8,
+                                  "description": "Maximum additional delegation depth below this child."},
                     "background": {"type": "boolean"},
                     "permission_mode": {
                         "type": "string", "enum": ["full_access", "ask_writes", "read_only"],
@@ -341,6 +361,9 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
                                   "context": {"type": ["string", "null"]},
                                   "output_schema": {"type": ["object", "string", "null"]},
                                   "agent": {"type": "string"},
+                                  "model": {"type": "string"},
+                                  "reasoning_effort": {"type": "string", "enum": ["minimal", "low", "medium", "high"]},
+                                  "max_depth": {"type": "integer", "minimum": 1, "maximum": 8},
                                   "recipe": {"type": ["object", "null"], "properties": {
                                       "id": {"type": "string"}, "params": {"type": "object"},
                                   }, "required": ["id"], "additionalProperties": False},
@@ -348,6 +371,9 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
                                   "additionalProperties": False}},
                     "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 16},
                     "executor": {"type": "string"},
+                    "model": {"type": "string", "description": "Default model id for each child; a task may override it."},
+                    "reasoning_effort": {"type": "string", "enum": ["minimal", "low", "medium", "high"]},
+                    "max_depth": {"type": "integer", "minimum": 1, "maximum": 8},
                     "verify": {"type": ["object", "null"], "properties": {
                         "criteria": {"type": "string"},
                     }, "required": ["criteria"], "additionalProperties": False},
@@ -369,6 +395,41 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
                 "parameters": {"type": "object", "properties": {
                     "subtask_id": {"type": "string"}, "text": {"type": "string"},
                 }, "required": ["subtask_id", "text"], "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "subtask_wait",
+                "description": "Wait for a background child task to finish, then return its status and result.",
+                "parameters": {"type": "object", "properties": {
+                    "subtask_id": {"type": "string"},
+                }, "required": ["subtask_id"], "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "subtask_resume",
+                "description": "Resume or steer a running child task by sending a message for its next model turn.",
+                "parameters": {"type": "object", "properties": {
+                    "subtask_id": {"type": "string"}, "text": {"type": "string"},
+                }, "required": ["subtask_id", "text"], "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "subtask_cancel",
+                "description": "Cancel a running child task owned by this current run.",
+                "parameters": {"type": "object", "properties": {
+                    "subtask_id": {"type": "string"},
+                }, "required": ["subtask_id"], "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "subtask_escalate",
+                "description": "Bring a finished child task's result into the coordinator's current context.",
+                "parameters": {"type": "object", "properties": {
+                    "subtask_id": {"type": "string"},
+                }, "required": ["subtask_id"], "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "subtask_close",
+                "description": "Close a finished child task record after its result has been consumed.",
+                "parameters": {"type": "object", "properties": {
+                    "subtask_id": {"type": "string"},
+                }, "required": ["subtask_id"], "additionalProperties": False},
             }},
         ])
     tools.extend([
