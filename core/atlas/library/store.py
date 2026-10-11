@@ -40,7 +40,7 @@ Classifier = Callable[[list[dict[str, Any]], list[dict[str, Any]]], Awaitable[di
 def slugify(value: str) -> str:
     slug = _SLUG_RE.sub("-", str(value or "").lower()).strip("-")
     if slug:
-        return slug[:48]
+        return slug[:48].rstrip("-")
     digest = hashlib.sha1(str(value).encode("utf-8")).hexdigest()[:8]
     return f"c-{digest}"
 
@@ -86,6 +86,13 @@ class LibraryStore:
         self._lock = threading.RLock()
         self._state = self._load_state()
         self._catalog: dict[str, dict[str, Any]] = _read_json(self.root / "catalog.json", {})
+        broken = [key for key in self._catalog if key.endswith("-")]
+        for key in broken:
+            entry = self._catalog.pop(key)
+            entry["name"] = entry["name"].rstrip("-")
+            self._catalog.setdefault(f"{entry['type']}:{entry['name']}", entry)
+        if broken:
+            _write_json(self.root / "catalog.json", self._catalog)
         self.version = 0
 
     # -- persistence -----------------------------------------------------------
@@ -356,8 +363,8 @@ class LibraryStore:
         return scores
 
     async def organize(self, items: list[dict[str, Any]], *, classifier: Classifier | None = None,
-                       full: bool = False, batch_size: int = 30, concurrency: int = 4,
-                       batch_timeout: float = 90.0) -> dict[str, Any]:
+                       full: bool = False, batch_size: int = 20, concurrency: int = 3,
+                       batch_timeout: float = 150.0) -> dict[str, Any]:
         """Put every unorganized item (or every non-manual one when ``full``) into a category."""
         started = time.time()
         report: dict[str, Any] = {"scanned": 0, "assigned": 0, "by_declared": 0, "by_rule": 0,

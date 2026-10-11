@@ -349,9 +349,17 @@ async def fetch_skill(entry: dict[str, Any], target: Path) -> None:
                 log.info("library.skill_dir_fetch_failed", repo=repo, error=str(exc))
                 files = {}
         if "SKILL.md" not in files:
-            response = await client.get(str(entry["raw_url"]))
-            response.raise_for_status()
-            files["SKILL.md"] = response.content
+            for attempt in range(3):
+                try:
+                    response = await client.get(str(entry["raw_url"]))
+                    response.raise_for_status()
+                    files["SKILL.md"] = response.content
+                    break
+                except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+                    status = getattr(getattr(exc, "response", None), "status_code", 0)
+                    if attempt == 2 or 400 <= status < 500:
+                        raise
+                    await asyncio.sleep(1.5 * (attempt + 1))
     text = files["SKILL.md"].decode("utf-8", errors="replace")
     files["SKILL.md"] = _fix_frontmatter(text, entry["name"], entry["description"]).encode("utf-8")
     for rel, data in files.items():
