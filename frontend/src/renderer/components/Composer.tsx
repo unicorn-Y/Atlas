@@ -7,6 +7,8 @@ import { Dialog } from '../ui/Dialog';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/Menu';
 import { Tip } from '../ui/Tooltip';
 import DrawingPad from './DrawingPad';
+import { ExpertModeToggle, useExpertMode } from './settings/ExpertModePanel';
+import { backend } from '../store/useAtlasStore';
 
 type Intent = { label: string; icon: LucideIcon; note?: string };
 
@@ -147,6 +149,7 @@ interface ComposerProps {
 
 export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
+  const [expert] = useExpertMode(backend.apiBaseUrl);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(props.value);
   valueRef.current = props.value;
@@ -390,12 +393,13 @@ export default function Composer(props: ComposerProps) {
   };
   const hasFiles = (event: DragEvent<HTMLFormElement>) => Array.from(event.dataTransfer.types).includes('Files');
 
-  return <form onSubmit={submit}
+  return <form onSubmit={submit} data-expert={expert || undefined}
     onDragOver={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(true); }}
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
     onDrop={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(false); props.onPickImages(event.dataTransfer.files); }}
     className={cn('raised relative transition-shadow focus-within:shadow-[var(--shadow-raised),0_0_0_4px_var(--brand-soft)]',
       hero ? 'rounded-[20px] px-5 pt-[18px] pb-3' : 'rounded-2xl px-4 pt-3 pb-2.5',
+      expert && 'shadow-[var(--shadow-raised),0_0_0_1.5px_var(--brand-soft)]',
       dragging && 'shadow-[var(--shadow-raised),0_0_0_2px_var(--brand)]')}>
     {matches.length > 0 && <div id={suggestionListId} role="listbox" aria-label={mention && !commandMatches.length ? (mention.trigger === '@' ? '引用文件' : mention.trigger === '#' ? '引用对话' : '技能文本提及') : '命令'} className="pop anim-pop absolute right-0 bottom-[calc(100%+8px)] left-0 z-30 max-h-[300px] overflow-auto rounded-xl p-1.5">
       {matches.map((item, index) => <button id={`${suggestionListId}-${index}`} key={item.id} type="button" role="option"
@@ -493,6 +497,7 @@ export default function Composer(props: ComposerProps) {
         aria-atomic={screenReaderMode ? undefined : 'true'} className={cn('ml-1.5 min-w-0 truncate text-[12.5px]', props.listening ? 'text-brand' : 'text-fg-3')}>{hint}</span>}
       <span className="flex-1" />
 
+      <ExpertModeToggle apiBaseUrl={backend.apiBaseUrl} />
       <Menu>
         <MenuTrigger asChild disabled={!props.models.length}>
           <button type="button" aria-label={`选择模型，当前${current?.name ?? current?.id ?? '默认模型'}`} title="选择模型" className="inline-flex h-8 min-w-0 shrink items-center gap-1.5 rounded-[9px] px-2.5 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50">

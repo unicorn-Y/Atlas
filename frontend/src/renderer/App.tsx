@@ -64,7 +64,7 @@ import RunLimitsPanel from './components/settings/RunLimitsPanel';
 import PlatformSettingsPanel from './components/settings/PlatformSettingsPanel';
 import SettingsIntegrationsPanel from './components/settings/SettingsIntegrationsPanel';
 import NetworkSettingsPanel from './components/settings/NetworkSettingsPanel';
-import ExpertModePanel, { ExpertModeBadge } from './components/settings/ExpertModePanel';
+import ExpertModePanel, { ExpertModeBadge, OPEN_EXPERT_SETTINGS } from './components/settings/ExpertModePanel';
 import OutputStyleSettingsPanel from './components/settings/OutputStyleSettingsPanel';
 import McpResourcesPanel from './components/settings/McpResourcesPanel';
 import LocalModelsPanel from './components/settings/LocalModelsPanel';
@@ -323,6 +323,11 @@ export default function App() {
   };
 
   useEffect(() => { void store.initialize(); }, []);
+  useEffect(() => {
+    const open = () => setSheet('expert');
+    window.addEventListener(OPEN_EXPERT_SETTINGS, open);
+    return () => window.removeEventListener(OPEN_EXPERT_SETTINGS, open);
+  }, []);
   useEffect(() => window.atlasDesktop?.onDeepLink?.((route) => {
     if (route.type === 'settings') {
       const pane = SETTINGS_NAV.find(([candidate]) => candidate === route.section)?.[0];
@@ -1385,7 +1390,7 @@ export default function App() {
     {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}
 
     <UpdateBanner />
-    <ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} />
+    {view !== 'chat' && view !== 'home' && <ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} />}
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
 }

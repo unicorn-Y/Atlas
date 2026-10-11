@@ -78,8 +78,18 @@ export default function ExpertModePanel({ apiBaseUrl, onToast }: { apiBaseUrl: s
   </div>;
 }
 
-/** 专家模式开着时，窗口右上角一直挂着的提醒。 */
+/** 专家模式开着、又不在聊天界面时，窗口右上角挂着的提醒。 */
 export function ExpertModeBadge({ apiBaseUrl, onOpen }: { apiBaseUrl: string; onOpen: () => void }) {
+  const [enabled] = useExpertMode(apiBaseUrl);
+  if (!enabled) return null;
+  return <button onClick={onOpen} title="专家模式已开启，点这里查看或关闭"
+    className="fixed top-2 right-36 z-40 inline-flex items-center gap-1 rounded-full bg-brand px-2.5 py-0.5 text-[11.5px] font-semibold text-white shadow-md [-webkit-app-region:no-drag]">
+    <Zap size={12} className="fill-current" />专家模式
+  </button>;
+}
+
+/** 专家模式当前是否开启；各处的开关、角标共用同一个事件保持同步。 */
+export function useExpertMode(apiBaseUrl: string): [boolean, (enabled: boolean) => Promise<void>] {
   const [enabled, setEnabled] = useState(false);
   useEffect(() => {
     void call<ExpertStatus>(apiBaseUrl, '/api/expert-mode').then((s) => setEnabled(s.enabled)).catch(() => undefined);
@@ -87,9 +97,28 @@ export function ExpertModeBadge({ apiBaseUrl, onOpen }: { apiBaseUrl: string; on
     window.addEventListener(EVENT, listener);
     return () => window.removeEventListener(EVENT, listener);
   }, [apiBaseUrl]);
-  if (!enabled) return null;
-  return <button onClick={onOpen} title="专家模式已开启，点这里查看或关闭"
-    className="fixed top-2 right-36 z-40 inline-flex items-center gap-1 rounded-full bg-brand px-2.5 py-0.5 text-[11.5px] font-semibold text-white shadow-md [-webkit-app-region:no-drag]">
-    <Zap size={12} />专家模式
+  const toggle = async (next: boolean) => {
+    const status = await call<ExpertStatus>(apiBaseUrl, '/api/expert-mode/toggle', { method: 'POST', body: JSON.stringify({ enabled: next }) });
+    window.dispatchEvent(new CustomEvent(EVENT, { detail: status.enabled }));
+  };
+  return [enabled, toggle];
+}
+
+/** 打开设置里的专家模式页（App 监听）。 */
+export const OPEN_EXPERT_SETTINGS = 'atlas:open-expert-settings';
+
+/** 输入框工具栏上的专家模式开关：点一下切换，右键打开设置。 */
+export function ExpertModeToggle({ apiBaseUrl }: { apiBaseUrl: string }) {
+  const [enabled, toggle] = useExpertMode(apiBaseUrl);
+  const [busy, setBusy] = useState(false);
+  const flip = async () => { setBusy(true); try { await toggle(!enabled); } catch { /* backend offline: state unchanged */ } finally { setBusy(false); } };
+  return <button type="button" role="switch" aria-checked={enabled} aria-label={enabled ? '关闭专家模式' : '开启专家模式'} disabled={busy}
+    title={enabled ? '专家模式已开启：点击切回普通模式，右键编辑专家配置' : '切到专家模式（右键编辑专家配置）'}
+    onClick={() => void flip()}
+    onContextMenu={(event) => { event.preventDefault(); window.dispatchEvent(new Event(OPEN_EXPERT_SETTINGS)); }}
+    className={cn('inline-flex h-8 shrink-0 items-center gap-1 rounded-full text-[12px] font-medium transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-60',
+      enabled ? 'min-w-8 justify-center bg-brand-soft px-2 text-brand @[640px]:px-2.5' : 'w-8 justify-center text-fg-3 hover:bg-hover hover:text-fg')}>
+    <Zap size={15} className={cn('transition-transform', enabled && 'fill-current')} />
+    {enabled && <span className="hidden @[640px]:inline">专家</span>}
   </button>;
 }
