@@ -1999,10 +1999,10 @@ class AtlasKernel:
             command = str(arguments.get("cmd") or "")
             if not command.strip():
                 return {"content": "cmd must not be empty.", "is_error": True}
-            return await dispatch_alias("terminal", {
+            # "terminal" is a Hermes name the Atlas tool node doesn't register; local_shell
+            # is the real tool and routes through this run's ExecManager.
+            return await dispatch_alias("local_shell", {
                     "command": command, "cwd": arguments.get("workdir") or getattr(runtime, "workspace", None),
-                    "yield_time_ms": arguments.get("yield_time_ms", 1000),
-                    "max_output_tokens": arguments.get("max_output_tokens", 2000),
                 })
         if name == "powershell":
             import os
@@ -2012,22 +2012,22 @@ class AtlasKernel:
             command = str(arguments.get("command") or "")
             if not command.strip():
                 return {"content": "command must not be empty.", "is_error": True}
-            return await dispatch_alias("terminal", {
+            return await dispatch_alias("local_shell", {
                 "command": command,
                 "shell": "powershell",
                 "cwd": arguments.get("cwd") or getattr(runtime, "workspace", None),
-                "yield_time_ms": arguments.get("yield_time_ms", 1000),
-                "max_output_tokens": arguments.get("max_output_tokens", 2000),
             })
         if name == "write_stdin":
             stop = bool(arguments.get("stop"))
             chars = str(arguments.get("chars") or "")
-            action = "stop" if stop else ("write" if chars else "poll")
+            # local_process is the registered tool (process_manage is a Hermes name);
+            # its ExecManager actions are poll / write / kill keyed by execution_id.
+            action = "kill" if stop else ("write" if chars else "poll")
             mapped = {
-                "action": action, "process_id": str(arguments.get("session_id") or ""),
-                "input": chars, "yield_time_ms": arguments.get("yield_time_ms", 1000),
+                "action": action, "execution_id": str(arguments.get("session_id") or ""),
+                "data": chars,
             }
-            return await dispatch_alias("process_manage", mapped)
+            return await dispatch_alias("local_process", mapped)
         if name in {"git_pr_create", "git_pr_comment"}:
             approved_ids = getattr(runtime, "_preapproved_tool_call_ids", set())
             if call_id not in approved_ids:
