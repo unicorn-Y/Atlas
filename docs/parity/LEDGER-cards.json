@@ -1,0 +1,462 @@
+[
+  {
+    "id": "A-TC-01",
+    "zone": "A",
+    "ids": [
+      "A002",
+      "A007",
+      "A008",
+      "A025",
+      "A027",
+      "A029",
+      "A011",
+      "A018",
+      "A013",
+      "A036"
+    ],
+    "count": 10,
+    "domain": "会话侧栏状态、导航与项目动作",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "B-TC-01",
+    "zone": "B",
+    "ids": [
+      "B008",
+      "B047",
+      "B122",
+      "B130",
+      "B131",
+      "B132"
+    ],
+    "count": 6,
+    "domain": "会话子功能：反馈、分支与工作流",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "B-TC-02",
+    "zone": "B",
+    "ids": [
+      "B010",
+      "B032",
+      "B038",
+      "B048",
+      "B051",
+      "B079",
+      "B088",
+      "B089",
+      "B097"
+    ],
+    "count": 9,
+    "domain": "Composer：Slash、队列与快速输入",
+    "paths": [
+      "App.tsx",
+      "components/ConversationMessage.tsx"
+    ]
+  },
+  {
+    "id": "B-TC-03",
+    "zone": "B",
+    "ids": [
+      "B013",
+      "B014",
+      "B046",
+      "B069",
+      "B084",
+      "B085",
+      "B092",
+      "B125"
+    ],
+    "count": 8,
+    "domain": "消息阅读与文件引用",
+    "paths": [
+      "components/ConversationMessage.tsx",
+      "shell/panels/FilesPanel.tsx",
+      "FilesPanel.tsx",
+      "ConversationMessage.tsx",
+      "message-actions/CodeBlock.tsx",
+      "components/Composer.tsx",
+      "MessageThread.tsx",
+      "ThreadPresentation.tsx",
+      "components/message-actions/ImagePreview.tsx"
+    ]
+  },
+  {
+    "id": "B-TC-04",
+    "zone": "B",
+    "ids": [
+      "B025",
+      "B055",
+      "B076",
+      "B093",
+      "B102",
+      "B103",
+      "B123"
+    ],
+    "count": 7,
+    "domain": "Changes：Diff、评注与审批",
+    "paths": [
+      "shell/panels/ChangesPanel.tsx"
+    ]
+  },
+  {
+    "id": "B-TC-05",
+    "zone": "B",
+    "ids": [
+      "B027",
+      "B028",
+      "B030",
+      "B031",
+      "B034",
+      "B036",
+      "B043",
+      "B049",
+      "B070"
+    ],
+    "count": 9,
+    "domain": "Composer：模型、附件与上下文",
+    "paths": [
+      "Composer.tsx",
+      "DrawingPad.tsx",
+      "App.tsx"
+    ]
+  },
+  {
+    "id": "B-TC-06",
+    "zone": "B",
+    "ids": [
+      "B053",
+      "B082",
+      "B090",
+      "B104",
+      "B107",
+      "B108",
+      "B117",
+      "B129"
+    ],
+    "count": 8,
+    "domain": "Files：文件树、预览与编辑器",
+    "paths": [
+      "shell/panels/FilesPanel.tsx",
+      "FilesPanel.tsx",
+      "ChangesPanel.tsx",
+      "ConversationMessage.tsx",
+      "message-actions/CodeBlock.tsx"
+    ]
+  },
+  {
+    "id": "B-TC-07",
+    "zone": "B",
+    "ids": [
+      "B060",
+      "B098",
+      "B099",
+      "B100",
+      "B101",
+      "B111",
+      "B112"
+    ],
+    "count": 7,
+    "domain": "Browser：预览验证与站点权限",
+    "paths": [
+      "shell/panels/BrowserPanel.tsx"
+    ]
+  },
+  {
+    "id": "B-TC-08",
+    "zone": "B",
+    "ids": [
+      "B062",
+      "B091",
+      "B113",
+      "B114",
+      "B115"
+    ],
+    "count": 5,
+    "domain": "Git：PR、分支与历史",
+    "paths": [
+      "shell/panels/PullRequestSection.tsx",
+      "shell/panels/ChangesPanel.tsx"
+    ]
+  },
+  {
+    "id": "B-TC-09",
+    "zone": "B",
+    "ids": [
+      "B065",
+      "B066",
+      "B071",
+      "B094",
+      "B095",
+      "B096",
+      "B119",
+      "B120",
+      "B121"
+    ],
+    "count": 9,
+    "domain": "Inspector：面板、Dashboard 与插件 UI",
+    "paths": [
+      "shell/panels/SessionDashboardPanel.tsx",
+      "SessionDashboardPanel.tsx",
+      "workspace_router.py",
+      "shell/panels/FilesPanel.tsx"
+    ]
+  },
+  {
+    "id": "B-TC-10",
+    "zone": "B",
+    "ids": [
+      "B073",
+      "B075",
+      "B116",
+      "B124",
+      "B126",
+      "B127",
+      "B133",
+      "B134"
+    ],
+    "count": 8,
+    "domain": "对话轨迹、后台任务与调试",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "C-TC-01",
+    "zone": "C",
+    "ids": [
+      "C002",
+      "C003",
+      "C006",
+      "C048",
+      "C064",
+      "C069",
+      "C070",
+      "C073",
+      "C076"
+    ],
+    "count": 9,
+    "domain": "设置来源、权限与 Worktree 策略",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "C-TC-02",
+    "zone": "C",
+    "ids": [
+      "C010",
+      "C013",
+      "C008",
+      "C074",
+      "C100"
+    ],
+    "count": 5,
+    "domain": "模型、Provider、用量与网络",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "C-TC-03",
+    "zone": "C",
+    "ids": [
+      "C012",
+      "C036",
+      "C053",
+      "C054",
+      "C066",
+      "C071",
+      "C072"
+    ],
+    "count": 7,
+    "domain": "Profile、历史导入与工作流",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "C-TC-04",
+    "zone": "C",
+    "ids": [
+      "C016",
+      "C017",
+      "C019",
+      "C020",
+      "C022",
+      "C023",
+      "C027",
+      "C028",
+      "C031",
+      "C068"
+    ],
+    "count": 10,
+    "domain": "MCP、插件宿主、Hooks 与命令注册",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "C-TC-05",
+    "zone": "C",
+    "ids": [
+      "C033",
+      "C046",
+      "C079",
+      "C080",
+      "C081",
+      "C101"
+    ],
+    "count": 6,
+    "domain": "Electron 桌面、无障碍与语音",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "C-TC-06",
+    "zone": "C",
+    "ids": [
+      "C040",
+      "C044",
+      "C067",
+      "C083",
+      "C084",
+      "C089"
+    ],
+    "count": 6,
+    "domain": "渠道、Browser 和远程服务",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "D-TC-01",
+    "zone": "D",
+    "ids": [
+      "D001",
+      "D002",
+      "D003",
+      "D011",
+      "D046",
+      "D127"
+    ],
+    "count": 6,
+    "domain": "文件读写与本机进程接口",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "D-TC-02",
+    "zone": "D",
+    "ids": [
+      "D013",
+      "D014",
+      "D016",
+      "D017",
+      "D018",
+      "D042",
+      "D115",
+      "D118",
+      "D122",
+      "D125"
+    ],
+    "count": 10,
+    "domain": "Agent 委派、计划与任务生命周期",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "D-TC-03",
+    "zone": "D",
+    "ids": [
+      "D021",
+      "D022",
+      "D113",
+      "D119",
+      "D123"
+    ],
+    "count": 5,
+    "domain": "Web 检索、JS REPL、录制和事件流",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "D-TC-04",
+    "zone": "D",
+    "ids": [
+      "D029",
+      "D030",
+      "D031",
+      "D033",
+      "D097",
+      "D098",
+      "D100",
+      "D101",
+      "D104",
+      "D112"
+    ],
+    "count": 10,
+    "domain": "Browser DOM、标签与 Computer Use",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "D-TC-05",
+    "zone": "D",
+    "ids": [
+      "D032",
+      "D105",
+      "D106",
+      "D107",
+      "D108"
+    ],
+    "count": 5,
+    "domain": "Browser 文件、录制及 pane 生命周期",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "D-TC-06",
+    "zone": "D",
+    "ids": [
+      "D035",
+      "D038",
+      "D039",
+      "D040",
+      "D043",
+      "D129"
+    ],
+    "count": 6,
+    "domain": "MCP、技能工具与 Tool Registry",
+    "paths": [
+      "待定"
+    ]
+  },
+  {
+    "id": "D-TC-07",
+    "zone": "D",
+    "ids": [
+      "D044",
+      "D047",
+      "D048",
+      "D049",
+      "D052",
+      "D053"
+    ],
+    "count": 6,
+    "domain": "Workflow、Provider、应用与 Git 执行",
+    "paths": [
+      "待定"
+    ]
+  }
+]
