@@ -32,6 +32,7 @@ class RunState:
         "project_id",
         "task_id",
         "telegram_user_id",
+        "updated_at", "waiting_for", "persisted_sequence",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -39,6 +40,9 @@ class RunState:
         self.conversation_id = conversation_id
         self.model = model
         self.started_at = datetime.now(UTC).isoformat()
+        self.updated_at = self.started_at
+        self.waiting_for: str | None = None
+        self.persisted_sequence = 0
         self.sequence = 0
         self.status = "running"  # running | paused | waiting | completed | failed | cancelled
         self.events: list[dict[str, Any]] = []  # full event log for replay
@@ -94,6 +98,17 @@ class RunState:
             "data": data,
         }
         self.events.append(envelope)
+        self.updated_at = envelope["timestamp"]
+        if event == "approval.required":
+            self.waiting_for = "approval"
+        elif event == "input.required":
+            self.waiting_for = "input"
+        elif event == "run.plan.proposed":
+            self.waiting_for = "plan"
+        elif event == "rules.trust_required":
+            self.waiting_for = "trust"
+        elif event in {"run.completed", "run.failed", "run.cancelled", "run.started"}:
+            self.waiting_for = None
         return envelope
 
 class RuntimeManager:
@@ -105,6 +120,7 @@ class RuntimeManager:
         self.conn_runs: dict[str, str] = {}  # conn_id → active run_id
         self.db_path = db_path
         self._db: aiosqlite.Connection | None = None
+        self._persist_lock = asyncio.Lock()
         self.services: Any = None
 
     async def init(self, db_path: Path | None = None) -> None:
@@ -124,13 +140,36 @@ class RuntimeManager:
                 status TEXT NOT NULL,
                 sequence INTEGER NOT NULL DEFAULT 0,
                 recovery_event TEXT,
-                plan_state TEXT
+                plan_state TEXT,
+                started_at TEXT,
+                updated_at TEXT,
+                waiting_for TEXT
             )
         """)
         async with self._db.execute("PRAGMA table_info(runtime_runs)") as cursor:
             columns = {row["name"] for row in await cursor.fetchall()}
         if "plan_state" not in columns:
             await self._db.execute("ALTER TABLE runtime_runs ADD COLUMN plan_state TEXT")
+        for name in ("started_at", "updated_at", "waiting_for"):
+            if name not in columns:
+                await self._db.execute(f"ALTER TABLE runtime_runs ADD COLUMN {name} TEXT")
+        await self._db.execute("""
+            CREATE TABLE IF NOT EXISTS runtime_activity (
+                run_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                conversation_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                event TEXT NOT NULL,
+                status TEXT NOT NULL,
+                waiting_for TEXT,
+                detail TEXT,
+                PRIMARY KEY (run_id, sequence)
+            )
+        """)
+        await self._db.execute("""
+            CREATE INDEX IF NOT EXISTS runtime_activity_recent
+            ON runtime_activity(timestamp DESC)
+        """)
         await self._db.commit()
         async with self._db.execute("SELECT * FROM runtime_runs") as cursor:
             rows = await cursor.fetchall()
@@ -138,9 +177,16 @@ class RuntimeManager:
             run = RunState(row["run_id"], row["conversation_id"], row["model"])
             run.status = row["status"]
             run.sequence = row["sequence"]
+            run.persisted_sequence = row["sequence"]
+            # Older rows have no timestamp. Keep it unknown rather than making
+            # a historical run appear to have started during this boot.
+            run.started_at = row["started_at"] or ""
+            run.updated_at = row["updated_at"] or ""
+            run.waiting_for = row["waiting_for"]
             run.plan_state = json.loads(row["plan_state"]) if row["plan_state"] else None
             if run.status in ("running", "paused", "waiting"):
                 run.status = "failed"
+                run.waiting_for = None
                 recovery = run.next_envelope("run.failed", {
                     "category": "interrupted",
                     "detail": (
@@ -164,24 +210,105 @@ class RuntimeManager:
     ) -> None:
         if self._db is None:
             return
+        async with self._persist_lock:
+            await self._persist_run_locked(run, recovery_event)
+
+    async def _persist_run_locked(
+        self, run: RunState, recovery_event: dict[str, Any] | None,
+    ) -> None:
+        assert self._db is not None
+        if run.status != "waiting":
+            run.waiting_for = None
         await self._db.execute("""
             INSERT INTO runtime_runs (
-                run_id, conversation_id, model, status, sequence, recovery_event, plan_state
+                run_id, conversation_id, model, status, sequence, recovery_event,
+                plan_state, started_at, updated_at, waiting_for
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(run_id) DO UPDATE SET
                 conversation_id=excluded.conversation_id,
                 model=excluded.model,
                 status=excluded.status,
                 sequence=excluded.sequence,
                 recovery_event=COALESCE(excluded.recovery_event, runtime_runs.recovery_event),
-                plan_state=COALESCE(excluded.plan_state, runtime_runs.plan_state)
+                plan_state=COALESCE(excluded.plan_state, runtime_runs.plan_state),
+                started_at=COALESCE(runtime_runs.started_at, excluded.started_at),
+                updated_at=excluded.updated_at,
+                waiting_for=excluded.waiting_for
         """, (
             run.run_id, run.conversation_id, run.model, run.status, run.sequence,
             json.dumps(recovery_event) if recovery_event else None,
             json.dumps(run.plan_state, ensure_ascii=False) if run.plan_state else None,
+            run.started_at, run.updated_at, run.waiting_for,
         ))
+        activity_events = {
+            "run.started": "running",
+            "approval.required": "waiting", "input.required": "waiting",
+            "run.plan.proposed": "waiting", "rules.trust_required": "waiting",
+            "run.completed": "completed", "run.failed": "failed",
+            "run.cancelled": "cancelled",
+        }
+        new_events = []
+        for envelope in reversed(run.events):
+            if envelope.get("sequence", 0) <= run.persisted_sequence:
+                break
+            new_events.append(envelope)
+        for envelope in reversed(new_events):
+            sequence = envelope.get("sequence", 0)
+            event = envelope.get("event")
+            if event not in activity_events:
+                continue
+            data = envelope.get("data") or {}
+            waiting_for = {
+                "approval.required": "approval", "input.required": "input",
+                "run.plan.proposed": "plan", "rules.trust_required": "trust",
+            }.get(event)
+            detail = data.get("detail") if event == "run.failed" else None
+            await self._db.execute("""
+                INSERT OR IGNORE INTO runtime_activity
+                (run_id, sequence, conversation_id, timestamp, event, status, waiting_for, detail)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                run.run_id, sequence, run.conversation_id, envelope["timestamp"],
+                event, activity_events[event], waiting_for,
+                str(detail) if detail is not None else None,
+            ))
         await self._db.commit()
+        if new_events:
+            run.persisted_sequence = new_events[0]["sequence"]
+
+    async def conversation_activity(self, limit: int = 100) -> dict[str, Any]:
+        """Return persisted run states and recent lifecycle events for the sidebar."""
+        if self._db is None:
+            return {"items": [], "events": []}
+        async with self._persist_lock:
+            async with self._db.execute("""
+                SELECT run_id, conversation_id, status, started_at, updated_at, waiting_for
+                FROM runtime_runs ORDER BY COALESCE(updated_at, started_at) DESC, rowid DESC
+            """) as cursor:
+                runs = [dict(row) for row in await cursor.fetchall()]
+            async with self._db.execute("""
+                SELECT run_id, sequence, conversation_id, timestamp, event, status,
+                       waiting_for, detail
+                FROM runtime_activity ORDER BY timestamp DESC, run_id DESC, sequence DESC
+                LIMIT ?
+            """, (limit,)) as cursor:
+                events = [dict(row) for row in await cursor.fetchall()]
+        by_conversation: dict[str, dict[str, Any]] = {}
+        active = {"running", "waiting", "paused"}
+        for row in runs:
+            conversation_id = row["conversation_id"]
+            previous = by_conversation.get(conversation_id)
+            if previous and (previous["status"] in active or row["status"] not in active):
+                continue
+            by_conversation[conversation_id] = {
+                "conversation_id": conversation_id,
+                "run_id": row["run_id"],
+                "status": row["status"],
+                "updated_at": row["updated_at"] or row["started_at"],
+                "waiting_for": row["waiting_for"] if row["status"] == "waiting" else None,
+            }
+        return {"items": list(by_conversation.values()), "events": events}
 
     async def connect(self, ws: WebSocket, conn_id: str) -> None:
         await ws.accept()

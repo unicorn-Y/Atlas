@@ -344,3 +344,15 @@ Copyright 2023 Vercel, Inc.; Apache License 2.0 as stated above), and the
 expanded follow-the-bottom panel from
 `packages/ui/src/components/react/assistant-ui/elements/reasoning.tsx` in
 `assistant-ui/assistant-ui` (Copyright (c) assistant-ui contributors; MIT License).
+
+## A-TC-01: Sidebar session interactions
+
+`frontend/src/renderer/shell/Sidebar.tsx` adapts task context-menu, grouped-task,
+drag-and-drop, and status-row interaction patterns from `zai-org/ZCode` at commit
+`aac4755666d09fdcd70272fcf063c077a639015c`, in
+`packages/ui/src/TaskListItemContextMenu.tsx`,
+`packages/ui/src/TaskActionMenuContent.tsx`,
+`packages/ui/src/workspace-grouped-tasks/task-context-menu-content.tsx`, and
+`packages/ui/src/workspace-grouped-tasks/WorkspaceGroupedTasksSection.tsx`.
+Copyright 2026 Z.AI Co., Ltd.; Apache License 2.0 as stated above. Atlas API,
+activity view, project filters, and keyboard/touch integration are Atlas changes.

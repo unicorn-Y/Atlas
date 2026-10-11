@@ -22,6 +22,7 @@ import subprocess
 import time
 import uuid
 from contextlib import suppress
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -1918,6 +1919,9 @@ async def _execute_after_rule_trust(run: RunState, execution: Any) -> None:
         return
     run.trust_future = None
     run.status = "running"
+    run.waiting_for = None
+    run.updated_at = datetime.now(UTC).isoformat()
+    await _server().runtime_mgr.persist_run(run)
     await execution
 
 
@@ -2487,6 +2491,9 @@ async def _execute_run(
                 run.approval_futures.pop(approval_event_id, None)
                 if run.status == "waiting":
                     run.status = "running"
+                    run.waiting_for = None
+                    run.updated_at = datetime.now(UTC).isoformat()
+                    await manager.persist_run(run)
 
         async def input_callback(
             call_id: str, question: str, options: list[str] | None,
@@ -2507,6 +2514,9 @@ async def _execute_run(
                 await asyncio.sleep(0.1)
             answer = future.result()
             run.status = "running"
+            run.waiting_for = None
+            run.updated_at = datetime.now(UTC).isoformat()
+            await manager.persist_run(run)
             return answer
 
         async def subtask_started(
@@ -2804,6 +2814,9 @@ async def _execute_run(
                         await emit("run.cancelled", {})
                         return
                     run.status = "running"
+                    run.waiting_for = None
+                    run.updated_at = datetime.now(UTC).isoformat()
+                    await manager.persist_run(run)
                     edits = approval.get("edits", "").strip()
                     # The approval itself must tell the model to act: the continuation
                     # used to send an empty user message, and real models answered it

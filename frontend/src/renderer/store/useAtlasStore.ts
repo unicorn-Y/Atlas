@@ -63,6 +63,8 @@ interface AtlasState extends PersistentSlice {
   conversationsLoading: boolean;
   loadingMessagesConversationId: string | null;
   creatingConversation: boolean;
+  /** Workspace kept on the local-only blank conversation draft until its first message. */
+  draftWorkspace: string | null;
   conversationMessages: Record<string, ConversationMessage[]>;
   /** 每个会话是否还有更早的历史消息（拉到没有更早的一页后变 false）。 */
   messagesHasEarlier: Record<string, boolean>;
@@ -111,6 +113,8 @@ interface AtlasState extends PersistentSlice {
   /** 向上翻页：把当前已载入最早一条之前的一页历史拼到前面（滚动到顶部时调用）。 */
   loadEarlier: (conversationId: string) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
+  beginConversationDraft: (workspace?: string | null) => void;
+  setDraftWorkspace: (workspace: string | null) => void;
   selectModel: (model: string) => Promise<void>;
   applySkill: (name: string) => void;
   removeSkill: (name: string) => void;
@@ -247,6 +251,7 @@ const FOLLOW_UP = 'atlas.preference.follow-up';
 // Pins and archives lived in localStorage before the backend stored them; migrated once on startup.
 const LEGACY_PINNED = 'atlas.conversations.pinned';
 const LEGACY_ARCHIVED = 'atlas.conversations.archived';
+const DRAFT_WORKSPACE = 'atlas.conversations.draft-workspace';
 
 const flags = (conversations: ConversationSummary[]) => ({
   pinned: conversations.filter((item) => item.pinned && !item.archived).map((item) => item.id),
@@ -291,7 +296,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     ...createPersistentSlice(set as unknown as SetPersistent, get as () => AtlasState),
     apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, backendStarting: false, startupDetail: null, busy: false, paused: false, error: null, errorDetail: null,
-    model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '',
+    model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, draftWorkspace: storageGet(DRAFT_WORKSPACE), conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', pendingRunOverrides: null, answers: {},
     unread: [], pinned: [], archived: [], runPrompts: {},
@@ -380,17 +385,32 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       }
     },
 
+    beginConversationDraft: (workspace) => {
+      const nextWorkspace = workspace === undefined ? get().draftWorkspace : workspace;
+      storageSet(DRAFT_WORKSPACE, nextWorkspace);
+      set({ activeConversationId: '', activeRunId: null, loadingMessagesConversationId: null, paused: false, error: null, errorDetail: null, draftWorkspace: nextWorkspace });
+    },
+    setDraftWorkspace: (workspace) => {
+      storageSet(DRAFT_WORKSPACE, workspace);
+      set({ draftWorkspace: workspace });
+    },
     createConversation: async (title = '新对话') => {
       if (get().creatingConversation) return;
       set({ creatingConversation: true });
       try {
         const previousId = get().activeConversationId;
         if (previousId) await backend.summarizeConversationBranch(previousId).catch(() => undefined);
-        const conversation = await backend.createConversation(title);
+        const draftWorkspace = get().draftWorkspace;
+        let conversation = await backend.createConversation(title);
+        if (draftWorkspace) {
+          await backend.updateConversation(conversation.id, { workspace: draftWorkspace });
+          conversation = { ...conversation, workspace: draftWorkspace };
+        }
+        storageSet(DRAFT_WORKSPACE, null);
         set((state) => ({
           conversations: [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)],
           conversationMessages: { ...state.conversationMessages, [conversation.id]: [] },
-          activeConversationId: conversation.id, activeRunId: null, paused: false, error: null, errorDetail: null,
+          activeConversationId: conversation.id, activeRunId: null, paused: false, error: null, errorDetail: null, draftWorkspace: null,
         }));
       } catch (error) {
         fail(error, '无法创建新对话');
@@ -582,6 +602,9 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       });
       const run = get().getRun(event.runId);
       if (!run) return;
+      if (['run.started', 'run.paused', 'run.resumed', 'input.required', 'approval.required', 'run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) {
+        window.dispatchEvent(new Event('atlas:session-status-activity'));
+      }
       if (event.type === 'session.title' && event.data.accepted === true && typeof event.data.title === 'string') {
         patchConversation(run.conversationId, { title: event.data.title });
       }
@@ -808,7 +831,6 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       if (workspace) get().setConversationSettings(conversationId, { workspace });
       else patchConversation(conversationId, { workspace });
     },
-
     editMessage: async (messageId, content) => {
       const conversationId = get().activeConversationId;
       if (!conversationId || activeRunFor(conversationId) || !content.trim()) return;
@@ -870,6 +892,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
           });
           return { conversations, ...flags(conversations) };
         });
+        window.dispatchEvent(new Event('atlas:session-status-activity'));
       } catch { /* keep the current list */ }
     },
     duplicateConversation: async (id) => {

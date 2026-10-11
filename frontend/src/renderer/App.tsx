@@ -293,10 +293,12 @@ export default function App() {
 
   // Unsent text survives switching conversations and restarting the app.
   const draftOwnerRef = useRef(store.activeConversationId);
+  const skipDraftRestoreRef = useRef(false);
   useEffect(() => {
     if (draftOwnerRef.current === store.activeConversationId) return;
     draftOwnerRef.current = store.activeConversationId;
-    setInput(readDraft(store.activeConversationId));
+    if (skipDraftRestoreRef.current) skipDraftRestoreRef.current = false;
+    else setInput(readDraft(store.activeConversationId));
     setAttachments([]);
     setFiles([]);
     setMentions([]);
@@ -450,17 +452,14 @@ export default function App() {
   const newTask = useCallback(() => {
     if (store.creatingConversation) return;
     go('chat');
+    if (store.activeConversationId) skipDraftRestoreRef.current = true;
+    store.beginConversationDraft(defaultWorkspace || null);
     setInput('');
     setAttachments([]);
     setFiles([]);
     setMentions([]);
     setEditing(null);
     editingDraftRef.current = null;
-    void store.createConversation().then(() => {
-      // New tasks start in the usual folder chosen during setup.
-      const id = useAtlasStore.getState().activeConversationId;
-      if (id && defaultWorkspace) store.setWorkspace(id, defaultWorkspace);
-    });
   }, [go, store, defaultWorkspace]);
   // First run: once the backend answers and no model key is saved, walk through setup (only once).
   useEffect(() => {
@@ -516,7 +515,10 @@ export default function App() {
     if (fromHome) {
       go('chat');
       // Home always starts something new, unless the open conversation is still empty.
-      if (store.activeConversationId && messages.length) await store.createConversation(text.trim().slice(0, 40) || '新对话');
+      if (store.activeConversationId && messages.length) {
+        skipDraftRestoreRef.current = true;
+        store.beginConversationDraft(defaultWorkspace || null);
+      }
     }
     const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: mentions.filter((item) => item.kind === 'conversation').map((item) => item.id).slice(0, 3) };
     setMentions([]);
@@ -575,14 +577,15 @@ export default function App() {
     return true;
   };
   const chooseWorkspace = async () => {
-    const current = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : undefined;
+    const current = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : store.draftWorkspace ?? undefined;
     const picked = window.atlasDesktop?.selectDirectory
       ? await window.atlasDesktop.selectDirectory(current)
       : window.prompt('工作目录的完整路径', current ?? '')?.trim() || null;
     if (!picked) return;
-    if (!store.activeConversationId) await store.createConversation();
     const conversationId = useAtlasStore.getState().activeConversationId;
-    if (conversationId) { store.setWorkspace(conversationId, picked); setToast(`工作目录：${picked}`); }
+    if (conversationId) store.setWorkspace(conversationId, picked);
+    else store.setDraftWorkspace(picked);
+    setToast(`工作目录：${picked}`);
   };
   const toggleSpeechInput = () => {
     if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; setListening(false); return; }
@@ -633,7 +636,12 @@ export default function App() {
     go('chat');
     void store.openConversation(conversation);
   };
-  const draft = (text: string) => { go('chat'); setInput(text); void store.createConversation(); };
+  const draft = (text: string) => {
+    go('chat');
+    if (store.activeConversationId) skipDraftRestoreRef.current = true;
+    store.beginConversationDraft(defaultWorkspace || null);
+    setInput(text);
+  };
   const suggest = (suggestion: Suggestion) => { setInput(suggestion.text); setHomeMode(suggestion.mode ?? 'chat'); };
   const askSelectedText = () => {
     const selected = window.getSelection()?.toString().trim();
@@ -694,6 +702,10 @@ export default function App() {
         case 'toggleInspector': if (view === 'chat') toggleInspector(); break;
         case 'focusComposer': document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus(); break;
         case 'stopRun': if (store.busy) store.stopTask(); break;
+        case 'sidebarSearch': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.search' } })); break;
+        case 'sidebarProjectPicker': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.project-picker' } })); break;
+        case 'sidebarNextGroup': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.next-group' } })); break;
+        case 'sidebarPreviousGroup': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.previous-group' } })); break;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -840,7 +852,7 @@ export default function App() {
       return [{ id: `m-${hit.id}`, group: '消息内容', label: excerpt || conversation.title, hint: conversation.title, run: () => openConversation(conversation) }];
     });
   }, [store.apiBaseUrl, store.connected]);
-  const workspacePath = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
+  const workspacePath = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : store.draftWorkspace ?? '';
   const remoteHost = /^ssh:\/\/([^/]+)\//.exec(workspacePath)?.[1] ?? '';
   const workspaceName = workspacePath
     ? `${remoteHost ? `${remoteHost}:` : ''}${workspacePath.split(/[\\/]/).filter(Boolean).pop() ?? workspacePath}` : '';
@@ -1362,9 +1374,10 @@ export default function App() {
 
     <RemoteFolderDialog open={remoteOpen} onClose={() => setRemoteOpen(false)} current={workspacePath}
       onChoose={(workspace) => { void (async () => {
-        if (!store.activeConversationId) await store.createConversation();
         const conversationId = useAtlasStore.getState().activeConversationId;
-        if (conversationId) { store.setWorkspace(conversationId, workspace); setToast(`工作目录：${workspace}`); }
+        if (conversationId) store.setWorkspace(conversationId, workspace);
+        else store.setDraftWorkspace(workspace);
+        setToast(`工作目录：${workspace}`);
       })(); }} />
     <InitDialog onToast={notify} />
     <OnboardingDialog open={onboardingOpen} onClose={closeOnboarding} username={username}
@@ -1372,13 +1385,9 @@ export default function App() {
       defaultWorkspace={defaultWorkspace} onDefaultWorkspace={(path) => { setPref('default-workspace', path); setDefaultWorkspace(path); }}
       onTry={(text) => {
         closeOnboarding(); go('chat');
-        // Opening a conversation restores its saved draft, so the example goes in as that draft.
-        void store.createConversation().then(() => {
-          const id = useAtlasStore.getState().activeConversationId;
-          if (!id) return;
-          if (defaultWorkspace) store.setWorkspace(id, defaultWorkspace);
-          writeDraft(id, text); setInput(text);
-        });
+        if (store.activeConversationId) skipDraftRestoreRef.current = true;
+        store.beginConversationDraft(defaultWorkspace || null);
+        writeDraft('', text); setInput(text);
       }} />
     <RecipesDialog open={recipesOpen} onClose={() => setRecipesOpen(false)} recipes={store.recipes}
       onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />

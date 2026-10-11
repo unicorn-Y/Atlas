@@ -1,10 +1,8 @@
-// A-area sidebar interactions adapted from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015c (Apache-2.0):
-// packages/ui/src/TaskListItemContextMenu.tsx, TaskActionMenuContent.tsx,
-// workspace-grouped-tasks/task-context-menu-content.tsx, WorkspaceGroupedTasksSection.tsx.
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+// Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015c: packages/ui/src/TaskListItemContextMenu.tsx, packages/ui/src/TaskActionMenuContent.tsx, packages/ui/src/workspace-grouped-tasks/task-context-menu-content.tsx, packages/ui/src/workspace-grouped-tasks/WorkspaceGroupedTasksSection.tsx (Apache-2.0)
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   Archive, ArchiveRestore, ArrowUpDown, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
-  Folder, FolderOpen, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
+  Folder, FolderOpen, GitBranch, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
   Library, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, Sun, Trash2, Users, X, Wand2, type LucideIcon,
 } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
@@ -12,6 +10,7 @@ import { api } from '../services/api';
 import { backend } from '../store/useAtlasStore';
 import Mark from '../components/Mark';
 import SidebarConversationDetails from '../components/sidebar/ConversationDetails';
+import { ProjectIcon } from '../pages/ProjectIcon';
 import { Kbd } from '../ui/Kbd';
 import { Dialog } from '../ui/Dialog';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/Menu';
@@ -45,18 +44,22 @@ const LABELS = [
   { id: 'green', name: '绿', color: '#30a46c' }, { id: 'blue', name: '蓝', color: '#3e63dd' }, { id: 'purple', name: '紫', color: '#8e4ec6' },
 ] as const;
 type Arrange = 'time' | 'project' | 'workspace' | 'custom' | 'label' | 'name';
-type StatusFilter = 'all' | 'running' | 'unread' | 'waiting' | 'archived';
+type StatusFilter = 'all' | 'running' | 'waiting' | 'completed' | 'failed' | 'unread' | 'archived' | 'worktree';
 type CustomGroup = { id: string; name: string };
-type Project = { project_id: string; name: string; workspace_path?: string; status?: string; conversation_ids?: string[] };
+type Project = { project_id: string; name: string; color?: string; icon?: string; workspace_path?: string; status?: string; conversation_ids?: string[] };
 type Section = { id: string; label: string; items: ConversationSummary[]; custom?: boolean };
-type Dragged = { kind: 'conversation' | 'section'; id: string };
+type Dragged = { kind: 'conversation' | 'section'; id: string; groupId?: string };
+type ConversationActivity = { conversation_id: string; status: string; updated_at?: string; waiting_for?: string };
+type ConversationActivityEvent = { event_id: string; run_id: string; conversation_id: string; timestamp: string; event: string; status: string; waiting_for?: string; detail?: unknown };
+type SidebarShortcut = 'sidebar.search' | 'sidebar.project-picker' | 'sidebar.next-group' | 'sidebar.previous-group';
 
 const ARRANGE: Record<Arrange, string> = {
   time: '按时间分组', project: '按项目分组', workspace: '按工作区分组',
   custom: '按自定义分组', label: '按颜色分组', name: '按名称排序',
 };
 const STATUS_FILTERS: Record<StatusFilter, string> = {
-  all: '全部会话', running: '运行中', unread: '未读', waiting: '等待中', archived: '已归档',
+  all: '全部会话', running: '运行中', waiting: '等待中', completed: '已完成', failed: '失败',
+  unread: '未读', archived: '已归档', worktree: '工作树',
 };
 const STORE_KEYS = {
   labels: 'atlas.sidebar.labels', arrange: 'atlas.sidebar.arrange', manualOrder: 'atlas.sidebar.order',
@@ -139,8 +142,18 @@ export default function Sidebar(props: SidebarProps) {
   const [customMembers, setCustomMembers] = useState<Record<string, string>>(() => readJson(STORE_KEYS.members, {}));
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => readJson(STORE_KEYS.collapsed, {}));
   const [projects, setProjects] = useState<Project[]>([]);
+  const [activityById, setActivityById] = useState<Record<string, ConversationActivity>>({});
+  const [activityEvents, setActivityEvents] = useState<ConversationActivityEvent[]>([]);
+  const [activityConversation, setActivityConversation] = useState<ConversationSummary | null>(null);
   const [filterText, setFilterText] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [projectPickerQuery, setProjectPickerQuery] = useState('');
+  const [focusSearchRequested, setFocusSearchRequested] = useState(false);
+  const [focusSectionId, setFocusSectionId] = useState('');
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
+  const [groupNavigatorOpen, setGroupNavigatorOpen] = useState(false);
+  const [draggingConversation, setDraggingConversation] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -152,7 +165,11 @@ export default function Sidebar(props: SidebarProps) {
   const [contextAnchor, setContextAnchor] = useState<{ key: string; x: number; y: number } | null>(null);
   const [feedback, setFeedback] = useState('');
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const sectionRefs = useRef(new Map<string, HTMLButtonElement>());
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const dragged = useRef<Dragged | null>(null);
+  const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number; key: string } | null>(null);
+  const suppressTouchClickUntil = useRef(0);
 
   useEffect(() => writeJson(STORE_KEYS.labels, labels), [labels]);
   useEffect(() => writeJson(STORE_KEYS.unread, manualUnread), [manualUnread]);
@@ -182,6 +199,22 @@ export default function Sidebar(props: SidebarProps) {
       .catch(() => { if (!stale) setProjects([]); });
     return () => { stale = true; };
   }, []);
+  useEffect(() => {
+    let stale = false;
+    const refresh = () => {
+      void api<{ items: ConversationActivity[]; events?: ConversationActivityEvent[] }>(backend.apiBaseUrl, '/api/conversation-activity?limit=100')
+        .then((result) => {
+          if (stale || !Array.isArray(result.items)) return;
+          setActivityById(Object.fromEntries(result.items.filter((item) => item?.conversation_id).map((item) => [item.conversation_id, item])));
+          setActivityEvents(Array.isArray(result.events) ? result.events : []);
+        })
+        .catch(() => { /* status props remain available while the activity endpoint is unavailable */ });
+    };
+    refresh();
+    window.addEventListener('atlas:session-status-activity', refresh);
+    return () => { stale = true; window.removeEventListener('atlas:session-status-activity', refresh); };
+  }, []);
+  useEffect(() => () => { if (longPress.current) clearTimeout(longPress.current.timer); }, []);
 
   const setLabel = (id: string, label: string | null) => setLabels((current) => {
     const next = { ...current };
@@ -190,13 +223,17 @@ export default function Sidebar(props: SidebarProps) {
     return next;
   });
   const toggleSelected = (id: string) => setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-  const isRunning = (id: string) => props.running.includes(id);
+  const activityStatus = (id: string) => activityById[id]?.status?.toLowerCase() ?? '';
+  const isRunning = (id: string) => activityById[id]
+    ? ['running', 'queued', 'starting'].includes(activityStatus(id)) : props.running.includes(id);
   const isUnread = (id: string) => props.unread.includes(id) || manualUnread.includes(id);
-  const isWaiting = (conversation: ConversationSummary) => Boolean(props.waiting?.includes(conversation.id) || waitingConversation(conversation));
+  const isWaiting = (conversation: ConversationSummary) => activityById[conversation.id]
+    ? Boolean(activityById[conversation.id].waiting_for || ['waiting', 'waiting_for_input', 'awaiting_approval'].includes(activityStatus(conversation.id)))
+    : Boolean(props.waiting?.includes(conversation.id) || waitingConversation(conversation));
   const query = filterText.trim().toLocaleLowerCase();
   const matches = (conversation: ConversationSummary) => {
     const relatedProjects = projects.filter((project) => (project.conversation_ids ?? []).includes(conversation.id)).map((project) => project.name);
-    const text = [conversation.title, conversation.id, pathOf(conversation), ...relatedProjects].join(' ').toLocaleLowerCase();
+    const text = [conversation.title, conversation.id, pathOf(conversation), conversation.worktree_branch, conversation.base_branch, ...relatedProjects].join(' ').toLocaleLowerCase();
     if (query && !text.includes(query)) return false;
     const archived = props.archived.includes(conversation.id);
     if (statusFilter === 'archived') return archived;
@@ -204,6 +241,9 @@ export default function Sidebar(props: SidebarProps) {
     if (statusFilter === 'running') return isRunning(conversation.id);
     if (statusFilter === 'unread') return isUnread(conversation.id);
     if (statusFilter === 'waiting') return isWaiting(conversation);
+    if (statusFilter === 'completed') return ['completed', 'succeeded', 'success'].includes(activityStatus(conversation.id));
+    if (statusFilter === 'failed') return ['failed', 'error'].includes(activityStatus(conversation.id));
+    if (statusFilter === 'worktree') return Boolean(conversation.worktree_path || conversation.worktree_branch || conversation.base_branch);
     return true;
   };
   const sortedItems = (items: ConversationSummary[]) => {
@@ -220,21 +260,22 @@ export default function Sidebar(props: SidebarProps) {
   const pinnedItems = sortedItems(allMatched.filter((item) => props.pinned.includes(item.id) && !props.archived.includes(item.id)));
   const archivedItems = sortedItems(allMatched.filter((item) => props.archived.includes(item.id)));
   const activeItems = sortedItems(allMatched.filter((item) => !props.pinned.includes(item.id) && !props.archived.includes(item.id)));
-  const projectIds = new Set(projects.flatMap((project) => project.conversation_ids ?? []));
+  const activeProjects = projects.filter((project) => project.status !== 'archived');
+  const projectIds = new Set(activeProjects.flatMap((project) => project.conversation_ids ?? []));
   let groups: Section[] = [];
   if (mode === 'time') groups = groupByDay(activeItems);
   else if (mode === 'name') groups = activeItems.length ? [{ id: 'name:all', label: '全部', items: [...activeItems].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-CN')) }] : [];
   else if (mode === 'label') {
     groups = LABELS.map((label) => ({ id: 'label:' + label.id, label: label.name + '色', items: activeItems.filter((item) => labels[item.id] === label.id) }))
-      .concat([{ id: 'label:none', label: '未标记', items: activeItems.filter((item) => !labels[item.id]) }]).filter((group) => group.items.length > 0);
+      .concat([{ id: 'label:none', label: '未标记', items: activeItems.filter((item) => !labels[item.id]) }]);
   } else if (mode === 'project') {
-    groups = projects.map((project) => ({
+    groups = activeProjects.map((project) => ({
       id: 'project:' + project.project_id, label: project.name || '未命名项目',
       items: activeItems.filter((item) => (project.conversation_ids ?? []).includes(item.id)),
-    })).filter((group) => group.items.length > 0);
+    }));
     const unassigned = activeItems.filter((item) => !projectIds.has(item.id));
-    if (unassigned.length) groups.push({ id: 'project:unassigned', label: '未关联项目', items: unassigned });
-    if (!groups.length && activeItems.length) groups = [{ id: 'project:unassigned', label: projects.length ? '未关联项目' : '项目尚未加载', items: activeItems }];
+    groups.push({ id: 'project:unassigned', label: '未关联项目', items: unassigned });
+    if (!groups.length && activeItems.length) groups = [{ id: 'project:unassigned', label: activeProjects.length ? '未关联项目' : '项目尚未加载', items: activeItems }];
   } else if (mode === 'workspace') {
     const byWorkspace = new Map<string, ConversationSummary[]>();
     for (const item of activeItems) {
@@ -251,10 +292,48 @@ export default function Sidebar(props: SidebarProps) {
     }));
     const unassigned = activeItems.filter((item) => !customMembers[item.id] || !customGroups.some((group) => group.id === customMembers[item.id]));
     groups.push({ id: 'custom:unassigned', label: '未分组', custom: true, items: unassigned });
-    groups = groups.filter((group) => group.items.length > 0 || group.id !== 'custom:unassigned');
   }
   const sectionRanks = new Map(sectionOrder.map((id, index) => [id, index]));
   groups = [...groups].sort((a, b) => (sectionRanks.get(a.id) ?? sectionOrder.length) - (sectionRanks.get(b.id) ?? sectionOrder.length));
+  useEffect(() => {
+    if (mini || !focusSearchRequested) return;
+    searchInputRef.current?.focus();
+    setFocusSearchRequested(false);
+  }, [mini, focusSearchRequested]);
+  useEffect(() => {
+    if (mini || !focusSectionId) return;
+    const heading = sectionRefs.current.get(focusSectionId);
+    if (!heading) return;
+    heading.scrollIntoView({ block: 'nearest' });
+    heading.focus();
+  }, [mini, mode, focusSectionId, projects, customGroups]);
+  useEffect(() => {
+    const onShortcut = (event: Event) => {
+      const detail = (event as CustomEvent<SidebarShortcut | { action: SidebarShortcut }>).detail;
+      const action = typeof detail === 'string' ? detail : detail?.action;
+      const forcedMini = mini && window.matchMedia('(max-width: 900px)').matches;
+      if (action === 'sidebar.search') {
+        if (forcedMini) setSearchDialogOpen(true);
+        else { if (mini) props.onToggleMini(); setFocusSearchRequested(true); }
+      } else if (action === 'sidebar.project-picker') {
+        setProjectPickerQuery('');
+        setProjectPickerOpen(true);
+      } else if (action === 'sidebar.next-group' || action === 'sidebar.previous-group') {
+        if (!groups.length) { setGroupNavigatorOpen(true); return; }
+        const current = groups.findIndex((group) => group.id === focusSectionId);
+        const next = action === 'sidebar.next-group'
+          ? (current + 1) % groups.length : (current < 0 ? groups.length - 1 : (current - 1 + groups.length) % groups.length);
+        const id = groups[next].id;
+        if (forcedMini) setGroupNavigatorOpen(true);
+        else if (mini) props.onToggleMini();
+        setCollapsed((value) => ({ ...value, [id]: false }));
+        setFocusSectionId(id);
+        if (!forcedMini) requestAnimationFrame(() => { sectionRefs.current.get(id)?.scrollIntoView({ block: 'nearest' }); sectionRefs.current.get(id)?.focus(); });
+      }
+    };
+    window.addEventListener('atlas:sidebar-shortcut', onShortcut);
+    return () => window.removeEventListener('atlas:sidebar-shortcut', onShortcut);
+  });
 
   const setUnread = (id: string, unread: boolean) => {
     props.onSetUnread?.(id, unread);
@@ -338,20 +417,62 @@ export default function Sidebar(props: SidebarProps) {
     if (editing && editing.title.trim() && editing.title.trim() !== props.conversations.find((item) => item.id === editing.id)?.title) props.onRename(editing.id, editing.title.trim());
     setEditing(null);
   };
+  const openContextAt = (key: string, x: number, y: number) => {
+    setContextAnchor({ key, x: Math.max(0, Math.min(x, window.innerWidth - 220)), y: Math.max(0, Math.min(y, window.innerHeight - 48)) });
+    setMenuOpenKey(key);
+  };
   const openContext = (event: ReactMouseEvent, key: string) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setContextAnchor({ key, x: event.clientX, y: event.clientY });
-    requestAnimationFrame(() => triggerRefs.current.get(key)?.click());
+    event.preventDefault(); event.stopPropagation();
+    openContextAt(key, event.clientX, event.clientY);
+  };
+  const openContextFromKeyboard = (event: ReactKeyboardEvent, key: string) => {
+    if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return;
+    event.preventDefault(); event.stopPropagation();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    openContextAt(key, bounds.left + Math.min(bounds.width / 2, 90), bounds.bottom);
+  };
+  const clearLongPress = () => {
+    if (longPress.current) clearTimeout(longPress.current.timer);
+    longPress.current = null;
+  };
+  const startLongPress = (event: ReactPointerEvent, key: string) => {
+    clearLongPress();
+    if (event.pointerType !== 'touch') return;
+    const { clientX: x, clientY: y } = event;
+    longPress.current = { key, x, y, timer: setTimeout(() => {
+      suppressTouchClickUntil.current = Date.now() + 800;
+      openContextAt(key, x, y);
+      longPress.current = null;
+    }, 550) };
+  };
+  const moveLongPress = (event: ReactPointerEvent) => {
+    const touch = longPress.current;
+    if (touch && Math.hypot(event.clientX - touch.x, event.clientY - touch.y) > 10) clearLongPress();
+  };
+  const canDropOn = (targetGroup: string) => {
+    const source = dragged.current;
+    if (!source) return false;
+    if (source.kind === 'section') return source.id !== targetGroup && groups.some((group) => group.id === targetGroup);
+    if (targetGroup === 'pinned' || targetGroup === 'archived') return true;
+    if (mode === 'time' || mode === 'name') return source.groupId === targetGroup;
+    if (mode === 'workspace') return Boolean(props.onSetWorkspace)
+      && !props.conversations.find((item) => item.id === source.id)?.worktree_path
+      && targetGroup !== 'workspace:无工作区';
+    return targetGroup.startsWith(mode + ':');
   };
   const dropConversation = (targetGroup: string, targetId?: string) => {
     const source = dragged.current;
+    const allowed = canDropOn(targetGroup);
     dragged.current = null;
-    if (!source) return;
+    setDraggingConversation(false);
+    if (!source || !allowed) return;
     if (source.kind === 'section') {
-      setSectionOrder((current) => moveBefore(current, source.id, targetGroup));
+      setSectionOrder(moveBefore(groups.map((group) => group.id), source.id, targetGroup));
       return;
     }
+    if (source.id === targetId) return;
+    if (targetGroup !== 'pinned' && props.pinned.includes(source.id)) props.onTogglePinned(source.id);
+    if (targetGroup !== 'archived' && props.archived.includes(source.id)) props.onToggleArchived(source.id);
     if (mode === 'custom' && targetGroup.startsWith('custom:')) {
       const customId = targetGroup.slice('custom:'.length);
       setCustomMembers((current) => {
@@ -369,7 +490,20 @@ export default function Sidebar(props: SidebarProps) {
         void moveToProject(projectId, source.id);
       }
     }
-    setManualOrder((current) => moveBefore(current, source.id, targetId));
+    if (mode === 'label' && targetGroup.startsWith('label:')) setLabels((current) => {
+      const next = { ...current };
+      if (targetGroup === 'label:none') delete next[source.id];
+      else next[source.id] = targetGroup.slice('label:'.length);
+      return next;
+    });
+    if (mode === 'workspace' && targetGroup.startsWith('workspace:')) props.onSetWorkspace?.(source.id, targetGroup.slice('workspace:'.length));
+    if (targetGroup === 'pinned' && !props.pinned.includes(source.id)) props.onTogglePinned(source.id);
+    if (targetGroup === 'archived' && !props.archived.includes(source.id)) props.onToggleArchived(source.id);
+    const visible = [...new Set([...pinnedItems, ...groups.flatMap((group) => group.items), ...archivedItems].map((item) => item.id))];
+    const targetItems = groups.find((group) => group.id === targetGroup)?.items.map((item) => item.id).filter((id) => id !== source.id) ?? [];
+    const lastIndex = targetItems.length ? visible.indexOf(targetItems[targetItems.length - 1]) : -1;
+    const beforeId = targetId ?? (lastIndex >= 0 ? visible[lastIndex + 1] : undefined);
+    setManualOrder(moveBefore([...new Set([...manualOrder, ...visible])], source.id, beforeId));
   };
   const bulk = (action: 'pin' | 'unread' | 'archive' | 'delete' | 'export-md' | 'export-json') => {
     const targets = [...new Set(selectedIds.filter((id) => props.conversations.some((conversation) => conversation.id === id)))];
@@ -415,6 +549,8 @@ export default function Sidebar(props: SidebarProps) {
     const unread = isUnread(conversation.id);
     const running = isRunning(conversation.id);
     const waiting = isWaiting(conversation);
+    const completed = ['completed', 'succeeded', 'success'].includes(activityStatus(conversation.id));
+    const failed = ['failed', 'error'].includes(activityStatus(conversation.id));
     const queued = props.queued?.[conversation.id] ?? 0;
     const workspace = pathOf(conversation);
     if (editing?.id === conversation.id) {
@@ -425,30 +561,40 @@ export default function Sidebar(props: SidebarProps) {
         className="block w-full rounded-lg bg-sunken px-2.5 py-1.5 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--brand)]" />;
     }
     return <div key={key} draggable onDragStart={(event) => {
-      dragged.current = { kind: 'conversation', id: conversation.id };
+      clearLongPress();
+      dragged.current = { kind: 'conversation', id: conversation.id, groupId };
+      setDraggingConversation(true);
       event.dataTransfer.setData('text/plain', conversation.id);
       event.dataTransfer.effectAllowed = 'move';
-    }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+    }} onDragEnd={() => { dragged.current = null; setDraggingConversation(false); }} onDragOver={(event) => { if (canDropOn(groupId)) event.preventDefault(); }} onDrop={(event) => {
       event.preventDefault(); event.stopPropagation(); dropConversation(groupId, conversation.id);
-    }} onContextMenu={(event) => openContext(event, key)}
+    }} onContextMenu={(event) => openContext(event, key)} onKeyDown={(event) => openContextFromKeyboard(event, key)}
+      onPointerDown={(event) => startLongPress(event, key)} onPointerMove={moveLongPress}
+      onPointerUp={clearLongPress} onPointerCancel={clearLongPress} onPointerLeave={clearLongPress}
       className={cn('group relative flex cursor-grab items-center rounded-lg transition-colors', current ? 'bg-selected' : 'hover:bg-hover')}>
       {selectionMode && <input type="checkbox" aria-label={'选择 ' + conversation.title} checked={selectedIds.includes(conversation.id)}
         onChange={() => toggleSelected(conversation.id)} className="ml-2 accent-[var(--brand)]" />}
       <button title={conversation.title} aria-current={current ? 'page' : undefined}
-        aria-label={conversation.title + (waiting ? '，等待输入或审批' : running ? '，正在运行' : unread ? '，有新结果' : '') + (queued ? `，${queued} 条待发送` : '')}
+        aria-label={conversation.title + (waiting ? '，等待输入或审批' : running ? '，正在运行' : failed ? '，运行失败' : completed ? '，已完成' : '') + (unread ? '，有新结果' : '') + (queued ? `，${queued} 条待发送` : '')}
         disabled={props.loadingConversationId === conversation.id}
-        onClick={() => selectionMode ? toggleSelected(conversation.id) : props.onOpenConversation(conversation)}
+        onClick={(event) => { if (Date.now() < suppressTouchClickUntil.current) { event.preventDefault(); return; } selectionMode ? toggleSelected(conversation.id) : props.onOpenConversation(conversation); }}
         onDoubleClick={() => setEditing({ id: conversation.id, title: conversation.title })}
         className={cn('flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-7 pl-2.5 text-left text-[13px] disabled:opacity-60', current ? 'text-fg' : 'text-fg-2 group-hover:text-fg')}>
         {waiting
           ? <i className="size-2 shrink-0 rounded-full bg-brand ring-2 ring-brand/20" aria-label="等待输入或审批" />
           : running
             ? <i className="size-1.5 shrink-0 animate-pulse rounded-full bg-brand" aria-label="正在运行" />
-            : unread
+            : failed
+              ? <i className="size-2 shrink-0 rounded-full bg-danger" aria-label="运行失败" />
+              : completed
+                ? <Check size={12} className="shrink-0 text-ok" aria-label="已完成" />
+                : unread
               ? <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" />
               : labels[conversation.id] ? <i className="size-2 shrink-0 rounded-[3px]" style={{ background: LABELS.find((label) => label.id === labels[conversation.id])?.color }} aria-label={(LABELS.find((label) => label.id === labels[conversation.id])?.name || '') + '色标签'} />
                 : null}
         <span className="truncate">{conversation.title || '未命名会话'}</span>
+        {(conversation.worktree_path || conversation.worktree_branch) && <GitBranch size={12} className="shrink-0 text-fg-3" aria-label={'工作树' + (conversation.worktree_branch ? '：' + conversation.worktree_branch : '')} />}
+        {unread && (waiting || running || completed || failed) && <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" />}
         {queued > 0 && <span className="shrink-0 rounded bg-brand/15 px-1 text-[10px] text-brand" title={`${queued} 条消息待发送`}>{queued}</span>}
       </button>
       <Menu open={menuOpenKey === key} onOpenChange={(open) => {
@@ -466,6 +612,7 @@ export default function Sidebar(props: SidebarProps) {
         <MenuContent align="start" className="min-w-[205px]">
           <MenuLabel>{conversation.title || '会话操作'}</MenuLabel>
           <MenuItem onSelect={() => setDetails(conversation)}><Info />会话信息</MenuItem>
+          <MenuItem onSelect={() => setActivityConversation(conversation)}><Repeat />运行动态</MenuItem>
           <MenuItem disabled={!previousConversation} onSelect={() => { if (previousConversation) props.onOpenConversation(previousConversation); }}><ChevronLeft />上一个会话（更早）</MenuItem>
           <MenuItem disabled={!nextConversation} onSelect={() => { if (nextConversation) props.onOpenConversation(nextConversation); }}><ChevronRight />下一个会话（更新）</MenuItem>
           <MenuItem onSelect={() => setEditing({ id: conversation.id, title: conversation.title })}><Pencil />重命名</MenuItem>
@@ -524,16 +671,19 @@ export default function Sidebar(props: SidebarProps) {
     const archiveableProjectConversations = project
       ? props.conversations.filter((item) => (project.conversation_ids ?? []).includes(item.id) && !props.archived.includes(item.id))
       : [];
-    return <section key={section.id} onDragOver={(event) => event.preventDefault()}
+    return <section key={section.id} onDragOver={(event) => { if (canDropOn(section.id)) event.preventDefault(); }}
     onDrop={(event) => { event.preventDefault(); dropConversation(section.id); }} className="mb-2">
     <div draggable onDragStart={(event) => {
       dragged.current = { kind: 'section', id: section.id };
       event.dataTransfer.setData('text/plain', 'section:' + section.id);
       event.dataTransfer.effectAllowed = 'move';
-    }} className="group/section flex items-center gap-1 rounded-md px-1">
-      <button aria-expanded={!collapsed[section.id]} onClick={() => setCollapsed((current) => ({ ...current, [section.id]: !current[section.id] }))}
+    }} onDragEnd={() => { dragged.current = null; }}
+    className="group/section flex items-center gap-1 rounded-md px-1">
+      <button ref={(node) => { if (node) sectionRefs.current.set(section.id, node); else sectionRefs.current.delete(section.id); }}
+        aria-expanded={!collapsed[section.id]} onClick={() => setCollapsed((current) => ({ ...current, [section.id]: !current[section.id] }))}
         className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left text-[12px] text-fg-3 hover:text-fg">
         <ChevronRight size={13} className={cn('shrink-0 transition-transform', !collapsed[section.id] && 'rotate-90')} />
+        {project && <ProjectIcon icon={project.icon} color={project.color || undefined} size={13} />}
         <span title={section.label} className="truncate">{section.label}</span><span className="shrink-0">{section.items.length}</span>
       </button>
       <GripVertical size={13} className="shrink-0 text-fg-3 opacity-0 group-hover/section:opacity-100" aria-hidden="true" />
@@ -557,7 +707,7 @@ export default function Sidebar(props: SidebarProps) {
         </MenuContent>
       </Menu>}
     </div>
-    {!collapsed[section.id] && <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); dropConversation(section.id); }}>
+    {!collapsed[section.id] && <div onDragOver={(event) => { if (canDropOn(section.id)) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropConversation(section.id); }}>
       {section.items.map((item) => row(item, section.id))}
       {!section.items.length && <div className="rounded-lg px-3 py-2 text-[11px] text-fg-3">将会话拖到这里</div>}
     </div>}
@@ -565,6 +715,9 @@ export default function Sidebar(props: SidebarProps) {
   };
 
   const filteredSelectedCount = new Set(selectedIds.filter((id) => allMatched.some((item) => item.id === id))).size;
+  const visibleProjects = activeProjects.filter((project) => project.name.toLocaleLowerCase().includes(projectPickerQuery.trim().toLocaleLowerCase()));
+  const selectedActivityEvents = activityEvents.filter((item) => item.conversation_id === activityConversation?.id).reverse();
+  const selectedGroup = groups.find((group) => group.id === focusSectionId) ?? groups[0];
   return <aside aria-label="侧边栏" className={cn('flex min-h-0 flex-col pt-3 pb-3 transition-[width] duration-300', mini ? 'w-[64px] items-center px-2' : 'w-[236px] px-3')}>
     <div className={cn('drag flex items-center gap-2.5 pb-4', mini ? 'flex-col px-0' : 'px-1.5')}>
       <Mark className="size-7" />
@@ -619,7 +772,7 @@ export default function Sidebar(props: SidebarProps) {
       <div className="mb-1 flex items-center gap-1 px-1">
         <label className="relative min-w-0 flex-1">
           <Search size={13} className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-fg-3" />
-          <input type="search" aria-label="搜索会话" value={filterText} onChange={(event) => setFilterText(event.target.value)} placeholder="搜索会话…"
+          <input ref={searchInputRef} type="search" aria-label="搜索会话" value={filterText} onChange={(event) => setFilterText(event.target.value)} placeholder="搜索会话…"
             className="h-7 w-full rounded-md bg-sunken py-1 pr-2 pl-7 text-[11.5px] text-fg outline-none placeholder:text-fg-3 focus:ring-1 focus:ring-brand" />
         </label>
         <Menu>
@@ -663,17 +816,23 @@ export default function Sidebar(props: SidebarProps) {
         </div>
       </div>}
       <div className="min-h-0 flex-1 overflow-auto pr-0.5">
-        {pinnedItems.length > 0 && <section className="mb-3">
+        {(pinnedItems.length > 0 || draggingConversation) && <section className="mb-3"
+          onDragOver={(event) => { if (canDropOn('pinned')) event.preventDefault(); }}
+          onDrop={(event) => { event.preventDefault(); dropConversation('pinned'); }}>
           <h3 className="m-0 px-2.5 pb-1 text-[12px] font-normal text-fg-3">置顶 <span>{pinnedItems.length}</span></h3>
           {pinnedItems.map((item) => row(item, 'pinned'))}
+          {!pinnedItems.length && <p className="m-0 px-2.5 py-1 text-[11px] text-fg-3">拖到这里置顶</p>}
         </section>}
         {groups.map(renderSection)}
-        {archivedItems.length > 0 && <section className="mb-3">
+        {(archivedItems.length > 0 || draggingConversation) && <section className="mb-3"
+          onDragOver={(event) => { if (canDropOn('archived')) event.preventDefault(); }}
+          onDrop={(event) => { event.preventDefault(); dropConversation('archived'); }}>
           <button onClick={() => setShowArchived((value) => !value)} aria-expanded={showArchived || statusFilter === 'archived'}
             className="flex w-full items-center gap-1 px-2.5 pb-1 text-left text-[12px] text-fg-3 hover:text-fg">
             <ChevronRight size={13} className={cn('transition-transform', (showArchived || statusFilter === 'archived') && 'rotate-90')} />已归档 {archivedItems.length}
           </button>
           {(showArchived || statusFilter === 'archived') && archivedItems.map((item) => row(item, 'archived'))}
+          {!archivedItems.length && <p className="m-0 px-2.5 py-1 text-[11px] text-fg-3">拖到这里归档</p>}
         </section>}
         {!allMatched.length && <p className="px-2.5 text-[12.5px] text-fg-3">{props.conversationsLoading ? '正在加载…' : filterText || statusFilter !== 'all' ? '没有符合条件的会话。' : '还没有任务。点「新任务」开始。'}</p>}
         {feedback && <p role="status" aria-live="polite" className="px-2.5 py-1 text-[11px] text-fg-3">{feedback}</p>}
@@ -693,6 +852,68 @@ export default function Sidebar(props: SidebarProps) {
 
     <SidebarConversationDetails conversation={details} open={Boolean(details)} onOpenChange={(open) => { if (!open) setDetails(null); }}
       running={details ? isRunning(details.id) : false} unread={details ? isUnread(details.id) : false} waiting={details ? isWaiting(details) : false} />
+    <Dialog open={searchDialogOpen} onOpenChange={setSearchDialogOpen} label="搜索侧栏会话"
+      className="w-[min(440px,calc(100vw-28px))] border border-line bg-overlay p-4 shadow-2xl" align="top">
+      <h2 className="m-0 text-[16px] font-semibold text-heading">搜索会话</h2>
+      <input autoFocus type="search" aria-label="搜索侧栏会话" value={filterText} onChange={(event) => setFilterText(event.target.value)}
+        placeholder="按名称、工作区或项目搜索…" className="mt-3 h-9 w-full rounded-lg bg-sunken px-3 text-[13px] text-fg outline-none focus:ring-1 focus:ring-brand" />
+      <div className="mt-2 max-h-[min(55vh,420px)] overflow-auto">
+        {allMatched.slice(0, 30).map((conversation) => <button key={conversation.id} type="button"
+          onClick={() => { setSearchDialogOpen(false); props.onOpenConversation(conversation); }}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-fg-2 hover:bg-hover hover:text-fg">
+          <MessageSquare size={14} className="shrink-0 text-fg-3" /><span className="min-w-0 flex-1 truncate">{conversation.title || '未命名会话'}</span>
+        </button>)}
+        {!allMatched.length && <p className="px-2 text-[12px] text-fg-3">没有匹配的会话。</p>}
+      </div>
+    </Dialog>
+    <Dialog open={groupNavigatorOpen} onOpenChange={setGroupNavigatorOpen} label="切换会话组"
+      className="w-[min(440px,calc(100vw-28px))] border border-line bg-overlay p-4 shadow-2xl" align="top">
+      <h2 className="m-0 text-[16px] font-semibold text-heading">会话组</h2>
+      <div className="mt-3 flex max-h-28 flex-wrap gap-1 overflow-auto">
+        {groups.map((group) => <button key={group.id} type="button" aria-current={selectedGroup?.id === group.id ? 'true' : undefined}
+          onClick={() => setFocusSectionId(group.id)}
+          className={cn('rounded-lg px-2 py-1 text-[12px]', selectedGroup?.id === group.id ? 'bg-selected text-brand' : 'text-fg-2 hover:bg-hover')}>
+          {group.label} {group.items.length}
+        </button>)}
+      </div>
+      <div className="mt-3 max-h-[min(45vh,340px)] overflow-auto border-t border-line pt-2">
+        {selectedGroup?.items.map((conversation) => <button key={conversation.id} type="button"
+          onClick={() => { setGroupNavigatorOpen(false); props.onOpenConversation(conversation); }}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-fg-2 hover:bg-hover hover:text-fg">
+          <MessageSquare size={14} className="shrink-0 text-fg-3" /><span className="min-w-0 flex-1 truncate">{conversation.title || '未命名会话'}</span>
+        </button>)}
+        {!selectedGroup?.items.length && <p className="px-2 text-[12px] text-fg-3">这个组还没有会话。</p>}
+      </div>
+    </Dialog>
+    <Dialog open={projectPickerOpen} onOpenChange={setProjectPickerOpen} label="选择项目"
+      className="w-[min(420px,calc(100vw-28px))] border border-line bg-overlay p-4 shadow-2xl" align="top">
+      <h2 className="m-0 text-[16px] font-semibold text-heading">选择项目</h2>
+      <input autoFocus type="search" aria-label="查找项目" value={projectPickerQuery} onChange={(event) => setProjectPickerQuery(event.target.value)}
+        placeholder="查找项目…" className="mt-3 h-9 w-full rounded-lg bg-sunken px-3 text-[13px] text-fg outline-none focus:ring-1 focus:ring-brand" />
+      <div className="mt-2 max-h-[min(50vh,360px)] overflow-auto">
+        {visibleProjects.map((project) => <button key={project.project_id} type="button"
+          onClick={() => { const id = 'project:' + project.project_id; setMode('project'); setProjectPickerOpen(false); setCollapsed((value) => ({ ...value, [id]: false })); setFocusSectionId(id); if (mini) props.onToggleMini(); }}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-fg-2 hover:bg-hover hover:text-fg">
+          <ProjectIcon icon={project.icon} color={project.color || undefined} size={16} /><span className="min-w-0 flex-1 truncate">{project.name}</span>
+        </button>)}
+        {!visibleProjects.length && <p className="px-2 text-[12px] text-fg-3">{activeProjects.length ? '没有匹配的项目。' : '还没有可用项目。'}</p>}
+      </div>
+    </Dialog>
+    <Dialog open={Boolean(activityConversation)} onOpenChange={(open) => { if (!open) setActivityConversation(null); }} label="会话运行动态"
+      className="w-[min(500px,calc(100vw-28px))] border border-line bg-overlay p-4 shadow-2xl">
+      <h2 className="m-0 truncate text-[16px] font-semibold text-heading">{activityConversation?.title || '会话'} · 运行动态</h2>
+      <div className="mt-3 max-h-[min(60vh,420px)] overflow-auto">
+        {selectedActivityEvents.map((entry) => <div key={entry.event_id} className="border-b border-line px-1 py-2 last:border-0">
+          <div className="flex items-center justify-between gap-2 text-[12px] text-fg">
+            <span className="truncate">{entry.event.replace(/_/g, ' ')} · {entry.status}</span>
+            <time className="shrink-0 text-[11px] text-fg-3" dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleString()}</time>
+          </div>
+          {entry.waiting_for && <p className="m-0 mt-1 text-[11px] text-brand">等待：{entry.waiting_for}</p>}
+          {typeof entry.detail === 'string' && entry.detail && <p className="m-0 mt-1 text-[11px] text-fg-3">{entry.detail}</p>}
+        </div>)}
+        {!selectedActivityEvents.length && <p className="text-[12px] text-fg-3">还没有运行动态。</p>}
+      </div>
+    </Dialog>
     <Dialog open={Boolean(groupEditor)} onOpenChange={(open) => { if (!open) setGroupEditor(null); }} label={groupEditor?.id ? '重命名分组' : '新建分组'}
       className="w-[min(380px,calc(100vw-28px))] border border-line bg-overlay p-5 shadow-2xl">
       <form onSubmit={(event) => { event.preventDefault(); createCustomGroup(); }}>

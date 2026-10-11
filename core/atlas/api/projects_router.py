@@ -7,6 +7,8 @@ injection — never a module-level singleton — so two app instances stay isola
 from __future__ import annotations
 
 import asyncio
+import subprocess
+from pathlib import Path
 
 import httpx
 from typing import Annotated, Any
@@ -79,6 +81,53 @@ async def create_project(
     return project.to_dict()
 
 
+@router.post("/api/projects/import", status_code=201)
+async def import_project(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    req: dict[str, Any],
+) -> dict[str, Any]:
+    """Register an existing local directory without copying or changing its files."""
+    projects = _service("projects", services)
+    assert projects is not None
+    raw_path = str(req.get("workspace_path") or "").strip()
+    path = Path(raw_path)
+    if not raw_path or not path.is_absolute() or not path.is_dir():
+        raise HTTPException(status_code=400, detail="workspace_path must be an existing absolute directory")
+    path = path.resolve()
+    for existing in await projects.list_projects():
+        if existing.workspace_path and Path(existing.workspace_path).resolve() == path:
+            raise HTTPException(status_code=409, detail="workspace is already registered as a project")
+
+    def origin_url() -> str:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(path), "remote", "get-url", "origin"],
+                capture_output=True, text=True, timeout=3, check=False,
+            )
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+
+    try:
+        project = await projects.create_project(
+            str(req.get("name") or path.name),
+            workspace_path=str(path),
+            repo_url=await asyncio.to_thread(origin_url),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return project.to_dict()
+
+
+@router.get("/api/projects/recently-closed")
+async def recently_closed_projects(
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    projects = _service("projects", services)
+    assert projects is not None
+    return {"projects": [project.to_dict() for project in await projects.list_projects("archived")]}
+
+
 @router.get("/api/projects/{project_id}")
 async def get_project(
     services: Annotated[AppServices, Depends(get_app_services)],
@@ -113,6 +162,30 @@ async def update_project(
         project = await projects.update_project(project_id, **req)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project.to_dict()
+
+
+@router.post("/api/projects/{project_id}/close")
+async def close_project(
+    services: Annotated[AppServices, Depends(get_app_services)], project_id: str,
+) -> dict[str, Any]:
+    projects = _service("projects", services)
+    assert projects is not None
+    project = await projects.update_project(project_id, status="archived")
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project.to_dict()
+
+
+@router.post("/api/projects/{project_id}/reopen")
+async def reopen_project(
+    services: Annotated[AppServices, Depends(get_app_services)], project_id: str,
+) -> dict[str, Any]:
+    projects = _service("projects", services)
+    assert projects is not None
+    project = await projects.update_project(project_id, status="active")
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return project.to_dict()

@@ -16,6 +16,7 @@ from atlas.api.automation_router import automation_router
 from atlas.api.browser_router import router as browser_router
 from atlas.api.channel_router import router as channel_router
 from atlas.api.conversations_router import router as conversations_router
+from atlas.api.conversation_activity_router import router as conversation_activity_router
 from atlas.api.computer_router import router as computer_router
 from atlas.api.device_router import router as device_router
 from atlas.api.evolution_router import evolution_router
@@ -103,6 +104,7 @@ def create_app(
         local_models_router,
         agent_skills_router,
         conversations_router,
+        conversation_activity_router,
         group_router,
         health_router,
         integrations_router,

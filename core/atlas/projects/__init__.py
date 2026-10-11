@@ -17,6 +17,7 @@ from typing import Any
 import aiosqlite
 
 PROJECT_STATUSES = {"active", "paused", "archived"}
+PROJECT_ICONS = {"folder", "code", "terminal", "book", "sparkles"}
 _TEXT_SUFFIXES = {".txt", ".md", ".rst", ".csv", ".json", ".jsonl", ".py", ".js",
                   ".ts", ".tsx", ".jsx", ".html", ".css", ".scss", ".yaml", ".yml",
                   ".toml", ".xml", ".sql", ".sh", ".ps1", ".go", ".rs", ".java",
@@ -31,6 +32,8 @@ class Project:
     workspace_path: str = ""
     repo_url: str = ""
     status: str = "active"
+    color: str = ""
+    icon: str = "folder"
     current_goal: str = ""
     current_state: str = ""
     active_task_ids: list[str] = field(default_factory=list)
@@ -72,6 +75,8 @@ class ProjectStore:
                 repo_url TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'active'
                     CHECK(status IN ('active', 'paused', 'archived')),
+                color TEXT NOT NULL DEFAULT '',
+                icon TEXT NOT NULL DEFAULT 'folder',
                 current_goal TEXT NOT NULL DEFAULT '',
                 current_state TEXT NOT NULL DEFAULT '',
                 active_task_ids TEXT NOT NULL DEFAULT '[]',
@@ -108,6 +113,12 @@ class ProjectStore:
                 tokenize='unicode61'
             );
         """)
+        cursor = await self._db.execute("PRAGMA table_info(projects)")
+        columns = {row["name"] for row in await cursor.fetchall()}
+        if "color" not in columns:
+            await self._db.execute("ALTER TABLE projects ADD COLUMN color TEXT NOT NULL DEFAULT ''")
+        if "icon" not in columns:
+            await self._db.execute("ALTER TABLE projects ADD COLUMN icon TEXT NOT NULL DEFAULT 'folder'")
         await self._db.commit()
 
     async def close(self) -> None:
@@ -186,11 +197,27 @@ class ProjectStore:
         db = self._require_db()
         allowed = {
             "name", "workspace_path", "repo_url", "status", "current_goal",
-            "current_state", "active_task_ids", "memory_refs", "skill_refs",
+            "current_state", "active_task_ids", "memory_refs", "skill_refs", "color", "icon",
         }
         updates = {key: value for key, value in fields.items() if key in allowed}
+        if "name" in updates:
+            name = str(updates["name"]).strip()
+            if not name:
+                raise ValueError("project name must not be empty")
+            existing = await self.get_by_name(name)
+            if existing is not None and existing.project_id != project_id:
+                raise ValueError(f"project already exists: {name}")
+            updates["name"] = name
         if "status" in updates and updates["status"] not in PROJECT_STATUSES:
             raise ValueError(f"invalid project status: {updates['status']}")
+        if "color" in updates:
+            color = str(updates["color"] or "")
+            if color and (len(color) not in (4, 7) or color[0] != "#" or any(char not in "0123456789abcdefABCDEF" for char in color[1:])):
+                raise ValueError("project color must be a three- or six-digit hex color")
+            updates["color"] = color
+        if "icon" in updates:
+            if not isinstance(updates["icon"], str) or updates["icon"] not in PROJECT_ICONS:
+                raise ValueError("invalid project icon")
         for key in ("active_task_ids", "memory_refs", "skill_refs"):
             if key in updates:
                 updates[key] = json.dumps(list(updates[key] or []))
