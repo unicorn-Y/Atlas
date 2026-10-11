@@ -194,10 +194,14 @@ export default function Sidebar(props: SidebarProps) {
 
   useEffect(() => {
     let stale = false;
-    void api<{ projects: Project[] }>(backend.apiBaseUrl, '/api/projects?include_conversations=true')
-      .then((result) => { if (!stale) setProjects(Array.isArray(result.projects) ? result.projects : []); })
-      .catch(() => { if (!stale) setProjects([]); });
-    return () => { stale = true; };
+    const refresh = () => {
+      void api<{ projects: Project[] }>(backend.apiBaseUrl, '/api/projects?include_conversations=true')
+        .then((result) => { if (!stale) setProjects(Array.isArray(result.projects) ? result.projects : []); })
+        .catch(() => { if (!stale) setProjects([]); });
+    };
+    refresh();
+    window.addEventListener('atlas:projects-updated', refresh);
+    return () => { stale = true; window.removeEventListener('atlas:projects-updated', refresh); };
   }, []);
   useEffect(() => {
     let stale = false;

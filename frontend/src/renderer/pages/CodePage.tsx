@@ -32,6 +32,7 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
     try {
       const body = await api<{ projects: Project[] }>(apiBaseUrl, '/api/projects');
       setProjects(body.projects);
+      window.dispatchEvent(new Event('atlas:projects-updated'));
       setSelected((current) => current && body.projects.some((item) => item.project_id === current) ? current : body.projects[0]?.project_id ?? '');
       setError('');
     } catch (exc) { setError(`读取项目失败：${exc instanceof Error ? exc.message : String(exc)}`); }
