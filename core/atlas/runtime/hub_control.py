@@ -24,7 +24,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PORT = 8791
+DEFAULT_PORT = 8793
 
 
 def control_file() -> Path:
@@ -58,9 +58,14 @@ async def _request(method: str, path: str, port: int | None = None) -> dict[str,
 
 async def health(port: int | None = None) -> dict[str, Any] | None:
     try:
-        return await _request("GET", "/health", port)
+        probe = await _request("GET", "/health", port)
     except Exception:
         return None
+    # The Hub identifies itself with role="hub". A foreign service squatting on the port
+    # (e.g. an OpenAI-compatible relay that also answers {"status":"ok"} on /health) must
+    # not be mistaken for a running Hub — otherwise start() reports a phantom success and
+    # stop() fires POST /shutdown at an unrelated process.
+    return probe if probe.get("role") == "hub" else None
 
 
 async def status() -> dict[str, Any]:
