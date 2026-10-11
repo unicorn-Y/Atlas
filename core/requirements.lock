@@ -24,7 +24,7 @@ boto3==1.43.103
 botocore==1.43.103
 browser-harness==0.1.13
 browser-use-sdk==3.4.2
-browser-use==0.13.10
+browser-use==0.13.11
 bubus==1.5.6
 cdp-use==1.4.5
 certifi==2026.5.20
