@@ -130,7 +130,26 @@ ALIASES: dict[str, str] = {
     "mobile": "mobile", "ai": "ai-ml", "ml": "ai-ml", "meta": "agent-meta", "agents": "agent-meta",
     "education": "learning", "games": "games-fun", "gaming": "games-fun", "system": "system-desktop",
     "filesystem": "system-desktop", "os": "system-desktop", "database": "database", "databases": "database",
-    "writing": "writing", "marketing": "writing", "maps": "maps-life", "lifestyle": "maps-life",
+    "writing": "writing", "marketing": "business-finance", "maps": "maps-life", "lifestyle": "maps-life",
+    # Long-tail labels seen in the web GPT collection (2026-10-11, 3409 entries).
+    "ai-research": "research", "web-development": "design-frontend", "workflow-automation": "productivity",
+    "python-development": "coding", "creative-design": "design-frontend", "utilities": "system-desktop",
+    "developer-essentials": "coding", "llm-finetuning": "ai-ml", "backend-development": "coding",
+    "ui-design": "design-frontend", "cloud-infrastructure": "devops-cloud", "llm-application-dev": "ai-ml",
+    "web-data": "web-browser", "agent-teams": "agent-meta", "security-scanning": "security",
+    "document-processing": "office-docs", "pptx-deck-creation": "office-docs",
+    "startup-business-analyst": "business-finance", "javascript-typescript": "coding",
+    "framework-migration": "coding", "incident-response": "devops-cloud", "cicd-automation": "devops-cloud",
+    "observability-monitoring": "devops-cloud", "kubernetes-operations": "devops-cloud",
+    "reverse-engineering": "security", "data-engineering": "data-analysis", "payment-processing": "business-finance",
+    "frontend-mobile-development": "mobile", "documentation-generation": "writing", "shell-scripting": "system-desktop",
+    "systems-programming": "coding", "documentation-standards": "writing", "accessibility-compliance": "design-frontend",
+    "machine-learning-ops": "ai-ml", "quantitative-trading": "business-finance", "business-analytics": "business-finance",
+    "hr-legal-compliance": "business-finance", "game-development": "games-fun", "database-design": "database",
+    "file-conversion": "office-docs", "social-publishing": "communication", "api-scaffolding": "coding",
+    "dotnet-contribution": "coding", "agent-orchestration": "agent-meta", "llm": "ai-ml",
+    "ai-maestro": "agent-meta", "conductor": "agent-meta", "skill-forge-essentials": "agent-meta",
+    "dgx-spark-ops": "ai-ml", "blockchain-web3": "business-finance", "git": "git-platform",
 }
 
 

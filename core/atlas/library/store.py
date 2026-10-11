@@ -66,6 +66,10 @@ def _read_json(path: Path, default: Any) -> Any:
         return default
 
 
+def row_name(entry: dict[str, Any]) -> str:
+    return str(entry.get("_base_name") or entry["name"])
+
+
 def classify_text(item: dict[str, Any]) -> str:
     name = str(item.get("name", "")).replace("-", " ").replace("_", " ").replace(".", " ")
     return " ".join(str(part) for part in (
@@ -210,15 +214,15 @@ class LibraryStore:
         if not description:
             raise ValueError("缺少 description")
         entry = {k: v for k, v in row.items() if v not in (None, "", [], {})}
-        entry.update({"type": kind, "name": name, "description": description})
+        entry.update({"type": kind, "name": name, "_base_name": name, "description": description})
         if row.get("description") and row.get("description_zh"):
             entry["description_en"] = str(row["description"]).strip()
         if kind == "skill" and not str(row.get("raw_url") or "").startswith("https://"):
             raise ValueError("技能缺少可下载的 raw_url")
         if kind == "tool":
             entry.setdefault("kind", "mcp")
-            if not (row.get("install") or row.get("remote_url")):
-                raise ValueError("工具缺少 install 或 remote_url")
+            # Kept as a reference entry (homepage only) when no launch method is known.
+            entry["installable"] = bool(row.get("install") or row.get("remote_url"))
         # Never keep secrets even if a collector pasted one by mistake.
         install = entry.get("install")
         if isinstance(install, dict) and isinstance(install.get("env"), dict):
@@ -238,6 +242,14 @@ class LibraryStore:
                     continue
                 key = f"{entry['type']}:{entry['name']}"
                 previous = self._catalog.get(key)
+                # Same name from a different repo/path is a different skill: keep both.
+                n = 2
+                while previous is not None and not self._same_origin(previous, entry):
+                    owner = slugify(str(entry.get("repo") or "").split("/")[0]) if n == 2 else str(n)
+                    entry["name"] = f"{row_name(entry)}-{owner}"[:64]
+                    key = f"{entry['type']}:{entry['name']}"
+                    previous = self._catalog.get(key)
+                    n += 1
                 if previous is None:
                     added += 1
                 elif str(previous.get("last_updated", "")) > str(entry.get("last_updated", "")):
@@ -249,6 +261,11 @@ class LibraryStore:
             if added or updated:
                 self._save_catalog()
         return {"added": added, "updated": updated, "errors": errors, "total": len(self._catalog)}
+
+    @staticmethod
+    def _same_origin(a: dict[str, Any], b: dict[str, Any]) -> bool:
+        keys = ("repo", "skill_path") if a.get("type") == "skill" else ("repo", "package", "remote_url")
+        return all(str(a.get(k) or "") == str(b.get(k) or "") for k in keys)
 
     def import_text(self, text: str) -> dict[str, Any]:
         """Accept JSONL or a JSON array (what the web GPT taskbook produces)."""
@@ -400,6 +417,10 @@ class LibraryStore:
                         if cid:
                             results[item["key"]] = (cid, "model")
 
+        label_counts: dict[str, int] = {}
+        for _item, unknown, _scores in pending:
+            if unknown:
+                label_counts[unknown] = label_counts.get(unknown, 0) + 1
         with self._lock:
             # Tools of one MCP server usually belong together: follow the server's majority.
             by_server: dict[str, dict[str, int]] = {}
@@ -417,7 +438,7 @@ class LibraryStore:
                     continue
                 if scores and (len(scores) == 1 or scores[0][0] > scores[1][0]):
                     results[item["key"]] = (scores[0][1], "fallback")
-                elif unknown:
+                elif unknown and label_counts.get(unknown, 0) >= 3:
                     # 没有对应的分类就新建一个：沿用条目自带的分类名。
                     row = self.add_category(unknown, created_by="organize")
                     results[item["key"]] = (row["id"], "fallback")
