@@ -55,6 +55,7 @@ from atlas.api.workspace_router import router as workspace_router
 from atlas.api.workbench_router import router as workbench_router
 from atlas.api.library_router import router as library_router
 from atlas.api.expert_mode_router import router as expert_mode_router
+from atlas.api.config_editor_router import router as config_editor_router
 from atlas.api.tools_router import router as tools_router
 from atlas.config import get_config
 from atlas.models.routes import models_router
@@ -133,6 +134,7 @@ def create_app(
         workbench_router,
         library_router,
         expert_mode_router,
+        config_editor_router,
     ):
         app.include_router(router)
     # T01.3 UM01 收口：unified-memory 代理路由按配置挂载。默认 disabled →

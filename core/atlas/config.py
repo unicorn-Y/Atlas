@@ -65,8 +65,10 @@ class AtlasConfig:
     so the app can always boot even with a minimal / empty config file.
     """
 
-    def __init__(self, data: dict[str, Any] | None = None) -> None:
+    def __init__(self, data: dict[str, Any] | None = None, base: dict[str, Any] | None = None) -> None:
         self._data: dict[str, Any] = data or {}
+        # atlas.toml 本身（不含专家模式覆盖层）；往 atlas.toml 回写时必须用它。
+        self._base: dict[str, Any] = base if base is not None else self._data
 
     # -- helpers --
 
@@ -86,6 +88,11 @@ class AtlasConfig:
     @property
     def raw(self) -> dict[str, Any]:
         return self._data
+
+    @property
+    def base_raw(self) -> dict[str, Any]:
+        """atlas.toml 文件里的内容，不含专家模式覆盖层。"""
+        return self._base
 
     @property
     def gateway_default_permission_mode(self) -> str:
@@ -291,9 +298,12 @@ def load_config(path: Path | None = None) -> AtlasConfig:
 
     log.info("config.loaded", path=str(cfg_path))
     if path is None:
+        import copy
+
         from atlas.expert_mode import apply_overlay
 
-        data = apply_overlay(data)
+        base = copy.deepcopy(data)
+        return AtlasConfig(apply_overlay(data), base=base)
     return AtlasConfig(data)
 
 
@@ -309,4 +319,17 @@ def get_config() -> AtlasConfig:
     global _config
     if _config is None:
         _config = load_config()
+    return _config
+
+
+def reload_config() -> AtlasConfig:
+    """重新读 atlas.toml（和专家模式覆盖层），原地更新单例，已拿到它的地方也能看到新值。"""
+    global _config
+    fresh = load_config()
+    if _config is None:
+        _config = fresh
+    else:
+        _config._data.clear()
+        _config._data.update(fresh._data)
+        _config._base = fresh._base if fresh._base is not fresh._data else _config._data
     return _config
