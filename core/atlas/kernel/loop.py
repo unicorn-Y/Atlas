@@ -1004,7 +1004,16 @@ class AtlasKernel:
                 transition(RunPhase.STREAMING)
                 yield emit("run_status", status="running", text="Calling model")
 
+                reasoning_buffer: list[str] = []
+
+                async def flush_reasoning() -> None:
+                    if reasoning_buffer:
+                        pending = "".join(reasoning_buffer)
+                        reasoning_buffer.clear()
+                        await event_queue.put(emit("thinking", content=pending))
+
                 async def on_text(delta: str) -> None:
+                    await flush_reasoning()
                     partial_response_text.append(delta)
                     yield_event = emit("chunk", content=delta)
                     # Async callback cannot yield from its parent generator; queue it
@@ -1019,6 +1028,13 @@ class AtlasKernel:
                         state.streamed_text += delta
                     elif kind == "reasoning_delta":
                         state.streamed_reasoning += delta
+                        # Stream the model's thinking to the UI in small batches (run_phases maps
+                        # "thinking" to run.status/reasoning); per-token events would flood it.
+                        reasoning_buffer.append(delta)
+                        pending = "".join(reasoning_buffer)
+                        if len(pending) >= 80 or "\n" in delta:
+                            reasoning_buffer.clear()
+                            await event_queue.put(emit("thinking", content=pending))
                     elif kind == "refusal_delta":
                         state.streamed_refusal += delta
                     elif kind == "tool_call_delta":
@@ -1184,6 +1200,8 @@ class AtlasKernel:
                 pending_nudges.clear()
                 pending_stop_responses.clear()
                 usage = _usage_row(response, uuid.uuid4().hex)
+                await flush_reasoning()
+                turn_reasoning = state.streamed_reasoning
                 assistant_content = response.text or state.streamed_refusal
                 state.response_text = assistant_content
                 state.usage = usage
@@ -1195,7 +1213,7 @@ class AtlasKernel:
                     if len(steer_messages) > steer_count_at_model_start:
                         if final_response:
                             await persist_async("assistant", final_response, {
-                                "kernel_run_id": run_id, "finish_reason": "queued_steer",
+                                "kernel_run_id": run_id, "finish_reason": "queued_steer", "reasoning": turn_reasoning or None,
                                 "refusal_present": bool(state.streamed_refusal),
                             })
                         state.streamed_text = ""
@@ -1233,7 +1251,7 @@ class AtlasKernel:
                                stop_hook_active=True)
                     if final_response:
                         await persist_async("assistant", final_response, {
-                            "kernel_run_id": run_id, "finish_reason": "stop",
+                            "kernel_run_id": run_id, "finish_reason": "stop", "reasoning": turn_reasoning or None,
                             "refusal_present": bool(state.streamed_refusal),
                         })
                     state.streamed_text = ""
@@ -1257,7 +1275,7 @@ class AtlasKernel:
                 }
                 messages.append(assistant_message)
                 await persist_async("assistant", assistant_content, {
-                    "tool_calls": assistant_message["tool_calls"], "kernel_run_id": run_id,
+                    "tool_calls": assistant_message["tool_calls"], "kernel_run_id": run_id, "reasoning": turn_reasoning or None,
                     "refusal_present": bool(state.streamed_refusal),
                 })
                 state.streamed_text = ""

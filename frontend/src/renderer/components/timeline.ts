@@ -73,7 +73,7 @@ export type TimelineItem =
   | { kind: 'user'; id: string; content: string; steered?: boolean }
   | { kind: 'reply'; id: string; content: string; streaming: boolean; status?: string }
   /** Text explicitly delivered by the runtime as run.status with status=reasoning. */
-  | { kind: 'reasoning'; id: string; text: string; eventCount: number; truncated: boolean; source: 'run.status' }
+  | { kind: 'reasoning'; id: string; text: string; eventCount: number; truncated: boolean; source: 'run.status' | 'history'; startedAt?: string; endedAt?: string }
   | { kind: 'steps'; id: string; steps: Step[] }
   | { kind: 'approval'; id: string; event: AgentEvent }
   | { kind: 'question'; id: string; event: AgentEvent }
@@ -336,6 +336,7 @@ function parseFindings(value: unknown): ReviewFinding[] {
 
 /** 步骤详情最多保留的字符数：超长工具输出只留头尾够用的部分，避免大输出撑爆内存和 DOM。 */
 const MAX_STEP_TEXT = 4000;
+const MAX_REASONING_TEXT = 60_000;
 const cap = (value: string) => value.length > MAX_STEP_TEXT
   ? `${value.slice(0, MAX_STEP_TEXT)}\n…（已截断，完整输出共 ${value.length} 个字符）`
   : value;
@@ -375,19 +376,22 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
     const data = event.data;
     switch (event.type) {
       case 'run.status': {
-        if (data.status !== 'reasoning' || typeof data.text !== 'string' || !data.text.trim()) break;
-        closeReply(); closeBlocks();
+        if (data.status !== 'reasoning' || typeof data.text !== 'string' || !data.text) break;
         const previous = items[items.length - 1];
         const snippet = data.text;
+        // The kernel streams thinking as raw chunks, so they join without a separator.
         if (previous?.kind === 'reasoning') {
           previous.eventCount += 1;
+          previous.endedAt = event.timestamp;
           if (!previous.truncated) {
-            const combined = `${previous.text}${previous.text ? '\n' : ''}${snippet}`;
-            previous.truncated = combined.length > MAX_STEP_TEXT;
-            previous.text = combined.slice(0, MAX_STEP_TEXT);
+            const combined = previous.text + snippet;
+            previous.truncated = combined.length > MAX_REASONING_TEXT;
+            previous.text = combined.slice(0, MAX_REASONING_TEXT);
           }
         } else {
-          items.push({ kind: 'reasoning', id: event.id, text: snippet.slice(0, MAX_STEP_TEXT), eventCount: 1, truncated: snippet.length > MAX_STEP_TEXT, source: 'run.status' });
+          if (!snippet.trim()) break;
+          closeReply(); closeBlocks();
+          items.push({ kind: 'reasoning', id: event.id, text: snippet.slice(0, MAX_REASONING_TEXT), eventCount: 1, truncated: snippet.length > MAX_REASONING_TEXT, source: 'run.status', startedAt: event.timestamp, endedAt: event.timestamp });
         }
         break;
       }

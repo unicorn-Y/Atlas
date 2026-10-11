@@ -6,6 +6,7 @@ import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import ToolExecutionCard, { CATEGORY, Detail } from './tool-cards/ToolExecutionCard';
 import ConversationMessage from './ConversationMessage';
+import ReasoningBlock from './ReasoningBlock';
 import Mark from './Mark';
 import ReviewFindingsCard from './ReviewFindingsCard';
 import ForegroundConfirmCard from './x2/ForegroundConfirmCard';
@@ -42,7 +43,10 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} />;
     case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn} streaming={item.streaming}
       status={item.status ?? (item.streaming ? '正在回复' : undefined)} working={item.streaming && busy} />;
-    case 'reasoning': return <ReasoningDetails key={item.id} item={item} />;
+    case 'reasoning': return <div key={item.id}>
+      {firstInTurn && <TurnHeader working={last && busy} />}
+      <ReasoningBlock text={item.text} streaming={last && busy && item.source === 'run.status'} startedAt={item.startedAt} endedAt={item.endedAt} truncated={item.truncated} />
+    </div>;
     case 'steps': return <div key={item.id}>
       {firstInTurn && <TurnHeader working={last && busy} />}
       <StepTrack steps={item.steps} live={last && busy} runId={events[0]?.runId ?? ''} store={store} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
@@ -92,27 +96,6 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     default: return null;
   }
 });
-
-function ReasoningDetails({ item }: { item: Extract<TimelineItem, { kind: 'reasoning' }> }) {
-  const [copyStatus, setCopyStatus] = useState('');
-  return <details className="my-2 ml-10 rounded-lg border border-line/70 bg-surface/40 px-3 py-2">
-    <summary className="cursor-pointer text-[12px] text-fg-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
-      运行时提供的推理文本 · {item.eventCount} 条更新
-    </summary>
-    <div className="mt-2 grid gap-2">
-      <p className="m-0 text-[11.5px] text-fg-3">来源：Atlas <code>run.status</code> 事件的 <code>text</code> 字段（<code>status=reasoning</code>）。只显示事件实际提供的内容。</p>
-      <pre className="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] text-fg-2">{item.text}</pre>
-      {item.truncated && <p className="m-0 text-[11.5px] text-fg-3">显示内容达到 4,000 字符上限，后续文本未保留。</p>}
-      <button type="button" onClick={() => {
-        if (!navigator.clipboard) { setCopyStatus('复制失败，浏览器未提供剪贴板权限'); return; }
-        void navigator.clipboard.writeText(item.text).then(() => setCopyStatus('已复制推理文本')).catch(() => setCopyStatus('复制失败，浏览器未提供剪贴板权限'));
-      }} className="inline-flex w-fit items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-fg-2 hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
-        <ClipboardCopy size={13} aria-hidden="true" />复制文本
-      </button>
-      <span role="status" aria-live="polite" className="sr-only">{copyStatus}</span>
-    </div>
-  </details>;
-}
 
 export default function ConversationActivity({ events, store, username, setTab, onOpenBrowser }: ConversationActivityProps) {
   const items = useMemo(() => buildTimeline(events), [events]);

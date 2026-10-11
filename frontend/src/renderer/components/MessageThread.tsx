@@ -216,6 +216,14 @@ export default function MessageThread({ history, username, historyActions, empty
       }
       if (message.role === 'assistant') {
         const calls = Array.isArray(metadata.tool_calls) ? metadata.tool_calls : [];
+        const reasoning = typeof metadata.reasoning === 'string' ? metadata.reasoning
+          : typeof metadata.reasoning_content === 'string' ? metadata.reasoning_content : '';
+        if (reasoning.trim()) {
+          flushSteps();
+          const id = `hr-${message.id}`;
+          rows.push({ kind: 'timeline', id, item: { kind: 'reasoning', id, text: reasoning, eventCount: 1, truncated: false, source: 'history' }, firstInTurn: !historyHeaded, last: false });
+          historyHeaded = true;
+        }
         if (message.content.trim()) {
           flushSteps();
           rows.push({ kind: 'history', id: `h-${message.id}`, message, continued: historyHeaded });

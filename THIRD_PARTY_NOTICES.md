@@ -333,3 +333,14 @@ are adapted from `packages/app/src/session/timeline/search-controller.ts` and
 `anomalyco/opencode` at commit `7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937`.
 Copyright (c) 2024-2026 OpenCode contributors; MIT License.
 The source repository is available at https://github.com/anomalyco/opencode.
+
+## Reasoning block (thinking display)
+
+`frontend/src/renderer/components/ReasoningBlock.tsx` adapts the collapsed
+trigger (sweeping label plus rolling latest line) from
+`packages/ui/src/components/ai-elements/reasoning.tsx` in `zai-org/ZCode`
+(Copyright 2026 Z.AI Co., Ltd.; itself derived from `vercel/ai-elements`,
+Copyright 2023 Vercel, Inc.; Apache License 2.0 as stated above), and the
+expanded follow-the-bottom panel from
+`packages/ui/src/components/react/assistant-ui/elements/reasoning.tsx` in
+`assistant-ui/assistant-ui` (Copyright (c) assistant-ui contributors; MIT License).

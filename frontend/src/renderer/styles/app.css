@@ -225,6 +225,13 @@
 @keyframes shimmer { to { background-position: -200% 0; } }
 .anim-pop { animation: pop-in .16s cubic-bezier(.2,.7,.2,1); }
 .anim-fade { animation: fade-in .16s ease-out; }
+/* Live "思考中" label: a light sweep across muted text (ZCode animated-gradient-text / assistant-ui tw-shimmer). */
+@keyframes text-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.text-shimmer {
+  background: linear-gradient(90deg, var(--fg-3) 0%, var(--fg-3) 35%, var(--fg) 50%, var(--fg-3) 65%, var(--fg-3) 100%);
+  background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: text-sweep 1.6s linear infinite;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
