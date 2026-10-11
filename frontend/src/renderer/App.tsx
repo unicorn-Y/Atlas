@@ -1251,14 +1251,13 @@ export default function App() {
     {view === 'agents' && <AgentsPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} username={username} />}
     {view === 'devices' && <DevicesPage onToast={notify} />}
     {view === 'workbench' && <WorkbenchPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
-    {view === 'library' && <LibraryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
+    {(view === 'skills' || view === 'library') && <LibraryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
+      market={<SkillsMarketPage apiBaseUrl={store.apiBaseUrl} onToast={notify} onTryInConversation={(name) => { store.applySkill(name); go('chat'); }} />} />}
     {view === 'groups' && <GroupsView onToast={notify} />}
     {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} initialPrompt={createPrompt} />}
         {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'memory' && <MemoryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} onPendingChange={setPendingCount} />}
-        {view === 'skills' && <div className="screen"><SkillsMarketPage apiBaseUrl={store.apiBaseUrl} onToast={notify}
-          onTryInConversation={(name) => { store.applySkill(name); go('chat'); }} /></div>}
         {view === 'evolution' && <EvolutionPage apiBaseUrl={store.apiBaseUrl} onToast={notify} />}
       </main>
     </div>

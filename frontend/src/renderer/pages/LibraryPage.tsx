@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Download, FolderPlus, Inbox, Library, LoaderCircle, Pencil, Search, Sparkles, Trash2, Wand2, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
@@ -16,9 +16,10 @@ const readKind = (): LibraryKind => { try { return localStorage.getItem('atlas.l
  * 技能与工具库：所有技能 / 工具按分类摆放。新加进来的先进「未整理」，点「一键整理」自动归类，
  * 放不进已有分类的会新建分类；手动改过分类的条目以后整理也不会被挪动。
  */
-export default function LibraryPage({ apiBaseUrl, connected, onToast }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void }) {
+export default function LibraryPage({ apiBaseUrl, connected, onToast, market }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; market?: ReactNode }) {
   const api = useMemo(() => libraryApi(apiBaseUrl), [apiBaseUrl]);
   const [kind, setKind] = useState<LibraryKind>(readKind);
+  const [showMarket, setShowMarket] = useState(false);
   const [data, setData] = useState<LibrarySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<string>(ALL);
@@ -90,17 +91,32 @@ export default function LibraryPage({ apiBaseUrl, connected, onToast }: { apiBas
   const hidden = (data?.categories.length ?? 0) - categories.length;
   const label = kind === 'skill' ? '技能' : '工具';
 
+  const tabs = <>
+    <div className="flex items-center gap-2 px-1">
+      <Library size={17} className="text-brand" />
+      <h1 className="m-0 flex-1 text-[15px] font-semibold text-heading">技能与工具</h1>
+    </div>
+    <div className={cn('grid gap-1 rounded-xl bg-sunken p-1', market ? 'grid-cols-3' : 'grid-cols-2')}>
+      {(['skill', 'tool'] as const).map((value) => <button key={value} onClick={() => { setKind(value); setShowMarket(false); }}
+        className={cn('rounded-lg py-1.5 text-[12.5px]', !showMarket && kind === value ? 'bg-[var(--overlay)] font-medium text-fg shadow-sm' : 'text-fg-3 hover:text-fg')}>
+        {value === 'skill' ? '技能库' : '工具库'}</button>)}
+      {market && <button onClick={() => setShowMarket(true)} title="在线搜索、安装、更新技能（外部技能先过安全复核）"
+        className={cn('rounded-lg py-1.5 text-[12.5px]', showMarket ? 'bg-[var(--overlay)] font-medium text-fg shadow-sm' : 'text-fg-3 hover:text-fg')}>技能市场</button>}
+    </div>
+  </>;
+
+  if (showMarket && market) {
+    return <div className="screen page"><div className="flex h-full min-h-0 gap-4 p-4">
+      <aside className="flex w-56 shrink-0 flex-col gap-2">{tabs}
+        <p className="m-0 px-1 text-[11.5px] leading-relaxed text-fg-3">从在线市场搜索和安装技能。装好的技能会出现在「技能库」里，点「一键整理」归类。</p>
+      </aside>
+      <section className="min-w-0 flex-1 overflow-auto rounded-2xl card-surface p-4">{market}</section>
+    </div></div>;
+  }
+
   return <div className="screen page"><div className="flex h-full min-h-0 gap-4 p-4">
     <aside className="flex w-56 shrink-0 flex-col gap-2">
-      <div className="flex items-center gap-2 px-1">
-        <Library size={17} className="text-brand" />
-        <h1 className="m-0 flex-1 text-[15px] font-semibold text-heading">技能与工具库</h1>
-      </div>
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-sunken p-1">
-        {(['skill', 'tool'] as const).map((value) => <button key={value} onClick={() => setKind(value)}
-          className={cn('rounded-lg py-1.5 text-[12.5px]', kind === value ? 'bg-[var(--overlay)] font-medium text-fg shadow-sm' : 'text-fg-3 hover:text-fg')}>
-          {value === 'skill' ? '技能库' : '工具库'}</button>)}
-      </div>
+      {tabs}
       <div className="grid min-h-0 flex-1 content-start gap-0.5 overflow-auto">
         <CategoryRow active={category === ALL} name={`全部${label}`} count={data?.items.length ?? 0} onClick={() => setCategory(ALL)} />
         {(data?.unorganized ?? 0) > 0 && <CategoryRow active={category === UNSORTED} name="未整理" count={data?.unorganized ?? 0} warn onClick={() => setCategory(UNSORTED)} />}

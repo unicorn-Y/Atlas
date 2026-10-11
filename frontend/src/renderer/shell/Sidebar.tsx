@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import {
   Archive, ArchiveRestore, ArrowUpDown, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
-  Library, Pencil, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, Sparkles, Sun, Trash2, Users, X, Wand2, type LucideIcon,
+  Library, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, Sun, Trash2, Users, X, Wand2, type LucideIcon,
 } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import { api } from '../services/api';
@@ -26,8 +26,7 @@ export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
   { view: 'agents', label: 'Agents', icon: Bot },
   { view: 'workbench', label: '工作台', icon: Blocks },
   { view: 'auto', label: '自动化', icon: Repeat },
-  { view: 'skills', label: '技能', icon: Puzzle },
-  { view: 'library', label: '技能与工具库', icon: Library },
+  { view: 'skills', label: '技能与工具', icon: Library },
   { view: 'devices', label: '设备', icon: MonitorSmartphone },
   { view: 'evolution', label: '自动追新', icon: Sparkles },
 ];
