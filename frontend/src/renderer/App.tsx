@@ -142,9 +142,13 @@ export default function App() {
   const [attachments, setAttachments] = useState<string[]>([]);
   const [files, setFiles] = useState<Array<RunFile & { size: number }>>([]);
   const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
+  const editingDraftRef = useRef<{ text: string; attachments: string[]; files: Array<RunFile & { size: number }>; mentions: MentionItem[] } | null>(null);
+  const [rawText, setRawText] = useState<string | null>(null);
   const [browserUrl, setBrowserUrl] = useState('');
   const [terminalCommand, setTerminalCommand] = useState<{ id: string; text: string } | null>(null);
   const [mentions, setMentions] = useState<MentionItem[]>([]);
+  const composerSnapshotRef = useRef({ text: input, attachments, files, mentions });
+  composerSnapshotRef.current = { text: input, attachments, files, mentions };
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
   const [branches, setBranches] = useState<string[]>([]);
@@ -235,11 +239,20 @@ export default function App() {
     if (draftOwnerRef.current === store.activeConversationId) return;
     draftOwnerRef.current = store.activeConversationId;
     setInput(readDraft(store.activeConversationId));
+    setAttachments([]);
+    setFiles([]);
+    setMentions([]);
+    setEditing(null);
+    editingDraftRef.current = null;
   }, [store.activeConversationId]);
   useEffect(() => {
-    const timer = window.setTimeout(() => writeDraft(draftOwnerRef.current, input), 300);
+    const conversationId = store.activeConversationId;
+    const timer = window.setTimeout(() => {
+      if (useAtlasStore.getState().activeConversationId !== conversationId) return;
+      writeDraft(conversationId, input);
+    }, 300);
     return () => window.clearTimeout(timer);
-  }, [input]);
+  }, [input, store.activeConversationId]);
   const notify = useCallback((text: string) => setToast(text), []);
 
   useEffect(() => { void store.initialize(); }, []);
@@ -337,7 +350,9 @@ export default function App() {
     setInput('');
     setAttachments([]);
     setFiles([]);
+    setMentions([]);
     setEditing(null);
+    editingDraftRef.current = null;
     void store.createConversation().then(() => {
       // New tasks start in the usual folder chosen during setup.
       const id = useAtlasStore.getState().activeConversationId;
@@ -373,8 +388,13 @@ export default function App() {
       return;
     }
     if (editing && !fromHome) {
+      if (attachments.length || files.length || mentions.length) {
+        setToast('修改历史消息目前只支持文本，请先移除附件和引用后再发送');
+        return;
+      }
       setInput('');
       setEditing(null);
+      editingDraftRef.current = null;
       void store.editMessage(editing.id, text);
       return;
     }
@@ -389,6 +409,7 @@ export default function App() {
     writeDraft(store.activeConversationId, '');
     setAttachments([]);
     setFiles([]);
+    setMentions([]);
     if (fromHome) {
       go('chat');
       // Home always starts something new, unless the open conversation is still empty.
@@ -409,6 +430,7 @@ export default function App() {
   };
   const addDocuments = (picked: File[]) => {
     if (!picked.length) return;
+    const conversationId = store.activeConversationId;
     const tooBig = picked.find((file) => file.size > 10 * 1024 * 1024);
     if (tooBig) { setToast(`${tooBig.name} 超过 10 MB，发不了`); return; }
     if (files.reduce((sum, file) => sum + file.size, 0) + picked.reduce((sum, file) => sum + file.size, 0) > 20 * 1024 * 1024) { setToast('一条消息的文件加起来不能超过 20 MB'); return; }
@@ -419,9 +441,12 @@ export default function App() {
         : reject(new Error('无法读取文件'));
       reader.onerror = () => reject(new Error('无法读取文件'));
       reader.readAsDataURL(file);
-    }))).then((read) => setFiles((current) => [...current, ...read])).catch(() => setToast('读取文件失败'));
+    }))).then((read) => {
+      if (useAtlasStore.getState().activeConversationId === conversationId) setFiles((current) => [...current, ...read]);
+    }).catch(() => { if (useAtlasStore.getState().activeConversationId === conversationId) setToast('读取文件失败'); });
   };
   const addImages = (picked: File[]) => {
+    const conversationId = store.activeConversationId;
     const selected = picked.slice(0, 4 - attachments.length);
     if (!selected.length) { setToast('每条消息最多 4 张图片'); return; }
     if (selected.some((file) => file.size > 4 * 1024 * 1024)) { setToast('单张图片不能超过 4 MiB'); return; }
@@ -432,7 +457,19 @@ export default function App() {
       reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('无法读取图片'));
       reader.onerror = () => reject(new Error('无法读取图片'));
       reader.readAsDataURL(file);
-    }))).then((images) => setAttachments((current) => [...current, ...images].slice(0, 4))).catch(() => setToast('读取图片失败'));
+    }))).then((images) => {
+      if (useAtlasStore.getState().activeConversationId === conversationId) setAttachments((current) => [...current, ...images].slice(0, 4));
+    }).catch(() => { if (useAtlasStore.getState().activeConversationId === conversationId) setToast('读取图片失败'); });
+  };
+  const attachDrawing = (dataUrl: string): boolean => {
+    if (attachments.length >= 4) { setToast('每条消息最多 4 张图片'); return false; }
+    const bytes = Math.max(0, Math.floor((dataUrl.length - dataUrl.indexOf(',') - 1) * 3 / 4));
+    if (bytes > 4 * 1024 * 1024) { setToast('白板图片超过 4 MiB，无法附加'); return false; }
+    const queuedBytes = attachments.reduce((sum, image) => sum + Math.max(0, Math.floor((image.length - image.indexOf(',') - 1) * 3 / 4)), 0);
+    if (queuedBytes + bytes > 8 * 1024 * 1024) { setToast('单条消息的图片总大小不能超过 8 MiB'); return false; }
+    setAttachments((current) => [...current, dataUrl]);
+    setToast('白板已作为图片附加到当前消息');
+    return true;
   };
   const chooseWorkspace = async () => {
     const current = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : undefined;
@@ -482,9 +519,27 @@ export default function App() {
   const showInspectorTab = (tab: InspectorTab) => { setInspectorTab(tab); toggleInspector(true); };
   // C6R: /review「打开文件」请求 → 切到文件面板;FilesPanel 自己消费请求并定位行。
   useEffect(() => { if (storeData.fileOpenRequest) showInspectorTab('files'); }, [storeData.fileOpenRequest]);
-  const openConversation = (conversation: (typeof store.conversations)[number]) => { go('chat'); void store.openConversation(conversation); };
+  const openConversation = (conversation: (typeof store.conversations)[number]) => {
+    if (conversation.id !== store.activeConversationId) {
+      setAttachments([]);
+      setFiles([]);
+      setMentions([]);
+      setEditing(null);
+      editingDraftRef.current = null;
+    }
+    go('chat');
+    void store.openConversation(conversation);
+  };
   const draft = (text: string) => { go('chat'); setInput(text); void store.createConversation(); };
   const suggest = (suggestion: Suggestion) => { setInput(suggestion.text); setHomeMode(suggestion.mode ?? 'chat'); };
+  const askSelectedText = () => {
+    const selected = window.getSelection()?.toString().trim();
+    if (!selected) { setToast('先选中一段对话或页面文字，再使用“询问选中文本”'); return; }
+    go('chat');
+    setInput(`请基于以下选中内容回答或继续处理：\n\n${selected}`);
+    setToast('选中文本已放入消息草稿，可继续编辑后发送');
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus());
+  };
 
   // Every conversation opened in the chat view becomes a tab; tabs of deleted conversations drop out.
   useEffect(() => {
@@ -517,6 +572,11 @@ export default function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (voiceOpen || (event.target as HTMLElement | null)?.closest?.('[data-shortcut-recorder]')) return;
+      if (event.altKey && event.shiftKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        askSelectedText();
+        return;
+      }
       const action = matchShortcut(event, bindings);
       if (!action) return;
       event.preventDefault();
@@ -574,6 +634,13 @@ export default function App() {
       setToast(`命令没能运行：${error instanceof Error ? error.message : String(error)}`);
     }
   };
+  const enhancePrompt = async (text: string) => {
+    const result = await api<{ text: string; model?: string }>(store.apiBaseUrl, '/api/chat/prompt-enhance', {
+      method: 'POST',
+      json: { text, model: store.model || undefined },
+    });
+    return result.text;
+  };
   const commandGroup = (source: string) => source === 'recipe' ? '配方命令'
     : source.startsWith('claude') ? 'Claude 命令' : source.startsWith('codex') ? 'Codex 命令'
       : source.startsWith('plugin') ? '插件命令' : source === 'atlas' ? 'Atlas 命令' : source;
@@ -587,11 +654,34 @@ export default function App() {
       { id: 'fork', label: '/fork', hint: '从最近一条用户消息分叉', run: () => { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void store.forkFrom(last.id); else setToast('当前对话还没有用户消息'); } },
       { id: 'undo', label: '/undo', hint: '撤回最近一条用户消息及其之后内容', run: () => { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void rewind(last.id, false); else setToast('当前对话没有可撤回的用户消息'); } },
       { id: 'redo', label: '/redo', hint: '恢复刚刚撤回的内容', run: () => { if (rewound) void store.redoRewind(rewound.conversationId, rewound.rewindId).then((ok) => { if (ok) { setRewound(null); setToast('已重做'); } }); else setToast('当前没有可重做的撤回'); } },
+      { id: 'approve', label: '/approve', hint: '打开当前对话的审批与活动', run: () => showInspectorTab('activity') },
+      { id: 'side', label: '/side', hint: '在侧聊中追问，不打断主对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) },
+      { id: 'worktree', label: '/worktree', hint: '查看当前对话的独立工作树', run: () => showInspectorTab('context') },
+      { id: 'dashboard', label: '/dashboard', hint: '打开当前对话的持久工作面板', run: () => showInspectorTab('dashboard') },
     ] : []),
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
     { id: 'init', label: '/init', hint: '扫描工作区，生成或更新 AGENTS.md', run: () => { if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('请先选择工作目录'); return; } void store.runInit(); } },
+      { id: 'ide', label: '/ide', hint: '用系统默认程序打开当前工作目录；实际 IDE 关联由系统决定', run: () => {
+        if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('请先选择本机工作目录'); return; }
+        if (activeConversation.workspace.startsWith('ssh://')) { setToast('远程目录不能从本机外部编辑器打开'); return; }
+        if (!window.atlasDesktop?.openPath) { setToast('当前运行环境没有外部文件打开能力'); return; }
+        void window.atlasDesktop.openPath(activeConversation.workspace).then((result) => {
+          setToast(result === 'opened' || result === 'revealed' ? '已请求系统打开工作目录' : `无法打开工作目录：${result}`);
+        }).catch((error) => setToast(`无法打开工作目录：${error instanceof Error ? error.message : String(error)}`));
+      } },
+      { id: 'recap', label: '/recap', hint: '用当前对话生成压缩回顾（Atlas 通过 /compact 保存回顾）', run: () => {
+        if (!activeConversation) { setToast('先打开一个对话再生成回顾'); return; }
+        void store.compactConversation(activeConversation.id, '生成当前对话的简短回顾，保留目标、关键决策、完成进度、未解决问题和下一步。').then((text) => { if (text) setToast(`对话回顾已更新：${text}`); });
+      } },
+      { id: 'raw', label: '/raw', hint: '查看最近一条 Atlas 回复的原始文本并复制', run: () => {
+        const latest = [...messages].reverse().find((item) => item.role === 'assistant')?.content || reply;
+        if (!latest) { setToast('当前还没有可查看的回复'); return; }
+        setRawText(latest);
+      } },
+      { id: 'auto-review', label: '/auto-review', hint: '运行 Atlas 代码审查（映射到 /review，默认审查未提交改动；暂无独立自动审查开关）', run: () => { void store.sendMessage('/review'); } },
+      { id: 'ask-selection', label: '/ask-selection', hint: '把当前选中的文字放进消息草稿', run: askSelectedText },
     { id: 'review', label: '/review', hint: '代码审查：branch <名> / commit <sha>，默认审查未提交改动', takesArgument: true, run: (arg: string) => { const focus = arg.trim(); void store.sendMessage(focus ? `/review ${focus}` : '/review'); } },
     { id: 'recipe', label: '/recipe', hint: '打开配方，带参数复跑保存过的任务', run: () => setRecipesOpen(true) },
     ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
@@ -603,6 +693,7 @@ export default function App() {
     { id: 'context', label: '/context', hint: '查看上下文用量明细', run: () => showInspectorTab('context') },
     { id: 'diff', label: '/diff', hint: '查看本次运行的文件改动', run: () => showInspectorTab('changes') },
     { id: 'model', label: '/model', hint: '选择或切换模型', takesArgument: true, run: (query: string) => { const found = store.models.find((item) => item.id.toLowerCase() === query.trim().toLowerCase() || (item.name ?? '').toLowerCase() === query.trim().toLowerCase()); if (found) void store.selectModel(found.id); else setSheet('models'); } },
+    { id: 'reasoning', label: '/reasoning', hint: '打开模型选择，查看当前可用的推理强度', run: () => setSheet('models') },
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
     { id: 'status', label: '/status', hint: '显示当前模型、推理强度和权限', run: () => setToast(`${modelName} · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
     { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } setToast(`权限模式：${PERMISSION[cyclePermission()].label}`); } },
@@ -613,7 +704,7 @@ export default function App() {
     { id: 'copy', label: '/copy', hint: '复制最近一条 Atlas 回复', run: () => { const text = [...messages].reverse().find((item) => item.role === 'assistant')?.content; if (text) void navigator.clipboard.writeText(text).then(() => setToast('已复制最近回复')).catch(() => setToast('复制失败')); else setToast('还没有可复制的回复'); } },
     ...store.skills.map((skill) => ({
       id: `skill-${skill.name}`, label: `/${skill.name}`,
-      hint: store.activeSkills.includes(skill.name) ? '技能已启用，选中后停用' : skill.description || '启用这个技能',
+      hint: `${skill.description || '技能'} · $ 提及作为消息文本插入，不会切换全局技能状态`,
       run: () => {
         if (store.activeSkills.includes(skill.name)) { store.removeSkill(skill.name); setToast(`已停用技能 ${skill.name}`); }
         else { store.applySkill(skill.name); setToast(`下一次任务会用上 ${skill.name}`); }
@@ -680,6 +771,7 @@ export default function App() {
   const composerStatus = listening ? '正在听…' : store.connected ? '' : store.backendStarting ? 'Atlas 后端启动中…' : 'Atlas 后端没有连接';
   const composerBase = {
     value: input, onChange: setInput, attachments, onPickImages: addFiles, listening, onToggleMic: toggleSpeechInput,
+    onEnhancePrompt: enhancePrompt, onAttachDrawing: attachDrawing, contextKey: store.activeConversationId,
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
     files, onRemoveFile: (index: number) => setFiles((items) => items.filter((_, position) => position !== index)),
     findMentions, mentions, onAddMention: (item: MentionItem) => { if (item.id) setMentions((current) => [...current, item]); },
@@ -806,7 +898,11 @@ export default function App() {
     if (!canRewriteRef.current || !message.id) return undefined;
     return message.role === 'user'
       ? <>
-        <MessageAction label="修改后重新发送" onClick={() => { setEditing({ id: message.id, original: message.content }); setInput(message.content); }}><Pencil size={13} /></MessageAction>
+        <MessageAction label="修改后重新发送" onClick={() => {
+          editingDraftRef.current = composerSnapshotRef.current;
+          setAttachments([]); setFiles([]); setMentions([]);
+          setEditing({ id: message.id, original: message.content }); setInput(message.content);
+        }}><Pencil size={13} /></MessageAction>
         <Menu>
           <Tip label="回到这条之前"><MenuTrigger asChild>
             <button aria-label="回到这条之前" className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Undo2 size={13} /></button>
@@ -833,25 +929,40 @@ export default function App() {
   const editBanner = editing && <div className="mb-2.5 flex items-center gap-2.5 pb-2.5 text-[12.5px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
     <Pencil size={13} />修改后重新发送，这条之后的对话会被替换
     <span className="flex-1" />
-    <Button size="sm" variant="ghost" onClick={() => { setEditing(null); setInput(''); }}>取消</Button>
+    <Button size="sm" variant="ghost" aria-label="取消修改并恢复之前的草稿" onClick={() => {
+      const saved = editingDraftRef.current;
+      setEditing(null); editingDraftRef.current = null;
+      setInput(saved?.text ?? ''); setAttachments(saved?.attachments ?? []); setFiles(saved?.files ?? []); setMentions(saved?.mentions ?? []);
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus());
+    }}>取消</Button>
   </div>;
   const runHeader = activeRun && !runDone && <div className="mb-2.5 flex items-center gap-2.5 text-[12.5px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)] pb-2.5">
     <Mark className="size-[18px]" working={working} />
-    <span className={working ? 'text-fg' : undefined}>{store.paused ? '已暂停' : RUN_LABEL[activeRun.status] ?? '正在处理'}</span>
+    <span role="status" aria-live="polite" aria-atomic="true" className={working ? 'text-fg' : undefined}>{store.paused ? '已暂停' : RUN_LABEL[activeRun.status] ?? '正在处理'}</span>
     {planSteps.length > 0 && <span className="flex items-center gap-2" aria-label="当前计划进度">
       <span className="h-[3px] w-24 overflow-hidden rounded-full bg-line"><i className="block h-full rounded-full bg-brand transition-[width] duration-500" style={{ width: `${completedPlanSteps / planSteps.length * 100}%` }} /></span>
       <span className="tabular-nums">{completedPlanSteps} / {planSteps.length}</span>
     </span>}
     {contextUse !== null && <Tip label="这次对话占用的上下文窗口，快满时可以用 /compact 压缩"><span className={cn('tabular-nums', contextUse >= 80 ? 'text-danger' : 'text-fg-3')}>上下文 {contextUse}%</span></Tip>}
     <span className="flex-1" />
-    <div role="radiogroup" aria-label="运行中发的消息" className="flex gap-0.5 rounded-[8px] bg-sunken p-[2px] shadow-[inset_0_0_0_1px_var(--line)]">
-      {([['steer', '下一步', '等当前这一步结束后交给任务'], ['redirect', '立即转向', '中止正在生成的回复；工具运行时等工具结束'], ['queue', '排队', '等这次任务做完再发']] as const).map(([id, label, hint]) =>
-        <Tip key={id} label={hint}><button role="radio" aria-checked={store.followUpMode === id} onClick={() => store.setFollowUpMode(id)}
-          className={cn('h-6 rounded-[6px] px-2 text-[12px]', store.followUpMode === id ? 'raised text-fg' : 'text-fg-3 hover:text-fg')}>{label}</button></Tip>)}
+    <div role="radiogroup" aria-label="运行中发送消息的方式" className="flex gap-0.5 rounded-[8px] bg-sunken p-[2px] shadow-[inset_0_0_0_1px_var(--line)]">
+      {([['steer', '下一步', '等当前这一步结束后交给任务'], ['redirect', '立即转向', '中止正在生成的回复；工具运行时等工具结束'], ['queue', '排队', '等这次任务做完再发']] as const).map(([id, label, hint], index, all) =>
+        <Tip key={id} label={hint}><button type="button" role="radio" aria-label={`${label}：${hint}`} aria-checked={store.followUpMode === id} tabIndex={store.followUpMode === id ? 0 : -1}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            event.preventDefault();
+            const offset = event.key === 'ArrowRight' ? 1 : -1;
+            const next = (index + offset + all.length) % all.length;
+            const options = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+            options?.[next]?.focus();
+            store.setFollowUpMode(all[next][0]);
+          }}
+          onClick={() => store.setFollowUpMode(id)}
+          className={cn('h-6 rounded-[6px] px-2 text-[12px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand', store.followUpMode === id ? 'raised text-fg' : 'text-fg-3 hover:text-fg')}>{label}</button></Tip>)}
     </div>
     {store.busy && <>
-      <Button size="sm" variant="ghost" onClick={() => store.togglePaused()}>{store.paused ? <Play /> : <Pause />}{store.paused ? '继续' : '暂停'}</Button>
-      <Button size="sm" variant="ghost" onClick={() => store.stopTask()}><Square />停止</Button>
+      <Button size="sm" variant="ghost" aria-label={store.paused ? '继续当前运行' : '暂停当前运行'} onClick={() => store.togglePaused()}>{store.paused ? <Play /> : <Pause />}{store.paused ? '继续' : '暂停'}</Button>
+      <Button size="sm" variant="ghost" aria-label="停止当前生成或运行" onClick={() => store.stopTask()}><Square />停止</Button>
     </>}
   </div>;
   const goalHeader = conversationGoal && <div className="mb-2 flex items-center gap-2 rounded-lg bg-brand-soft px-2.5 py-1.5 text-[12px] text-fg-2" aria-label="当前会话目标">
@@ -915,7 +1026,7 @@ export default function App() {
     </div>)}
   </div>;
   const retryNote = activeRun?.status === 'failed' && store.runPrompts[activeRun.id] && !working && <div className="mt-3 flex items-center gap-3 text-[13px] text-fg-2">
-    这次没有完成。<Button size="sm" variant="secondary" onClick={() => store.retryRun(activeRun.id)}><RotateCcw />重试</Button>
+    这次没有完成。<Button size="sm" variant="secondary" aria-label="重试上一次失败的运行" onClick={() => store.retryRun(activeRun.id)}><RotateCcw />重试</Button>
   </div>;
 
   // Rewriting history mid-run would race the run's own writes.
@@ -1150,6 +1261,18 @@ export default function App() {
       }} />
     <RecipesDialog open={recipesOpen} onClose={() => setRecipesOpen(false)} recipes={store.recipes}
       onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />
+    <Dialog open={rawText !== null} onOpenChange={(open) => { if (!open) setRawText(null); }} label="最近回复的原始文本" className="flex max-h-[82vh] w-[min(900px,92vw)] flex-col bg-panel p-4 shadow-xl">
+      <div className="mb-3 flex items-center gap-2">
+        <h2 className="m-0 text-[15px] font-semibold text-heading">最近回复的原始文本</h2>
+        <span className="flex-1" />
+        <button type="button" aria-label="复制原始回复" onClick={() => {
+          if (!rawText) return;
+          void navigator.clipboard.writeText(rawText).then(() => setToast('已复制原始回复')).catch(() => setToast('复制失败'));
+        }} className="rounded-lg px-3 py-1.5 text-[12.5px] text-fg-2 hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">复制</button>
+        <button type="button" aria-label="关闭原始文本" onClick={() => setRawText(null)} className="grid size-8 place-items-center rounded-lg hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"><X size={16} /></button>
+      </div>
+      <pre className="m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-sunken p-3 font-mono text-[12px] leading-relaxed text-fg" tabIndex={0}>{rawText}</pre>
+    </Dialog>
     {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}
 
     <UpdateBanner />

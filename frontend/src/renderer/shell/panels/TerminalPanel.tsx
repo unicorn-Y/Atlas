@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { ChevronRight, CircleStop, MessageSquarePlus, Power, RotateCcw } from 'lucide-react';
+import { ChevronRight, CircleStop, MessageSquarePlus, Plus, Power, RotateCcw, X } from 'lucide-react';
 import type { ProcessInfo } from '@atlas/backend-adapter';
 import { backend } from '../../store/useAtlasStore';
 import { relativeTime } from '../../services/api';
@@ -14,11 +14,123 @@ const cssVar = (name: string) => getComputedStyle(document.documentElement).getP
  * A PowerShell in the conversation's working directory, next to the processes Atlas started.
  * It stays mounted while other tabs are shown, so switching away hides it without ending the shell.
  */
-export default function TerminalPanel({ cwd, active, command, onSendToAtlas }: {
-  cwd: string; active: boolean;
+export default function TerminalPanel({ conversationId, cwd, active, command, onSendToAtlas }: {
+  cwd: string; active: boolean; conversationId: string;
   /** A command typed as `!cmd` in the composer; runs once the shell is ready. */
   command?: { id: string; text: string } | null;
   onSendToAtlas: (text: string) => void;
+}) {
+  const [sessions, setSessions] = useState<Array<{ conversationId: string; cwd: string }>>(() =>
+    conversationId ? [{ conversationId, cwd }] : []);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    setSessions((current) => {
+      const existing = current.find((session) => session.conversationId === conversationId);
+      if (!existing) return [...current, { conversationId, cwd }];
+      if (existing.cwd === cwd) return current;
+      return current.map((session) => session.conversationId === conversationId ? { ...session, cwd } : session);
+    });
+  }, [conversationId, cwd]);
+
+  if (!conversationId) return <ConversationTerminals cwd={cwd} active={active} command={command} onSendToAtlas={onSendToAtlas} />;
+
+  const renderedSessions = sessions.some((session) => session.conversationId === conversationId)
+    ? sessions.map((session) => session.conversationId === conversationId ? { ...session, cwd } : session)
+    : [...sessions, { conversationId, cwd }];
+  return <div className="h-full min-h-0">
+    {renderedSessions.map((session) => <div key={session.conversationId} className="h-full min-h-0" hidden={session.conversationId !== conversationId}>
+      <ConversationTerminals cwd={session.cwd} active={active && session.conversationId === conversationId}
+        command={session.conversationId === conversationId ? command : null} onSendToAtlas={onSendToAtlas} />
+    </div>)}
+  </div>;
+}
+
+function ConversationTerminals({ cwd, active, command, onSendToAtlas }: {
+  cwd: string; active: boolean;
+  command?: { id: string; text: string } | null;
+  onSendToAtlas: (text: string) => void;
+}) {
+  const [tabs, setTabs] = useState([{ id: 'terminal-1', title: 'PowerShell 1' }]);
+  const [activeId, setActiveId] = useState('terminal-1');
+  const [commandOwner, setCommandOwner] = useState<{ id: string; tabId: string } | null>(null);
+  const nextId = useRef(2);
+  const previousCwd = useRef(cwd);
+  const seenCommand = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (previousCwd.current === cwd) return;
+    previousCwd.current = cwd;
+    const first = `terminal-${nextId.current++}`;
+    setTabs([{ id: first, title: 'PowerShell 1' }]);
+    setActiveId(first);
+    setCommandOwner(null);
+  }, [cwd]);
+
+  useEffect(() => {
+    if (!command || seenCommand.current === command.id) return;
+    seenCommand.current = command.id;
+    let targetId = activeId;
+    if (!targetId) {
+      const index = nextId.current++;
+      targetId = `terminal-${index}`;
+      setTabs([{ id: targetId, title: `PowerShell ${index}` }]);
+      setActiveId(targetId);
+    }
+    setCommandOwner({ id: command.id, tabId: targetId });
+  }, [command?.id, activeId]);
+
+  const addTerminal = () => {
+    const index = nextId.current++;
+    const id = `terminal-${index}`;
+    setTabs((current) => [...current, { id, title: `PowerShell ${index}` }]);
+    setActiveId(id);
+  };
+  const closeTerminal = (id: string) => {
+    const tab = tabs.find((item) => item.id === id);
+    if (!tab || !window.confirm(`关闭 ${tab.title} 会结束该 PowerShell 终端及其前台进程。继续吗？`)) return;
+    const index = tabs.findIndex((item) => item.id === id);
+    const next = tabs.filter((item) => item.id !== id);
+    setTabs(next);
+    if (activeId === id) setActiveId(next[Math.max(0, Math.min(index, next.length - 1))]?.id ?? '');
+    if (commandOwner?.tabId === id) setCommandOwner(null);
+  };
+
+  return <div className="flex h-full min-h-0 flex-col gap-2">
+    <div className="flex min-h-8 items-center gap-1 border-b border-line">
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist" aria-label="PowerShell 终端">
+        {tabs.map((tab) => <div key={tab.id} className={cn('flex shrink-0 items-center rounded-t-md', activeId === tab.id ? 'bg-overlay text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg')}>
+          <button type="button" role="tab" data-terminal-tab data-terminal-tab-id={tab.id} aria-selected={activeId === tab.id} onClick={() => setActiveId(tab.id)}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+              event.preventDefault();
+              const buttons = Array.from(event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLButtonElement>('[data-terminal-tab]') ?? []);
+              const index = buttons.indexOf(event.currentTarget);
+              const target = buttons[(index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length];
+              target?.focus();
+              const nextId = target?.getAttribute('data-terminal-tab-id');
+              if (nextId) setActiveId(nextId);
+            }}
+            title={tab.title} className="px-2 py-1 text-[11.5px]">{tab.title}</button>
+          <button type="button" aria-label={`关闭并结束 ${tab.title}`} title={`关闭并结束 ${tab.title}`} onClick={() => closeTerminal(tab.id)}
+            className="mr-1 grid size-5 shrink-0 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><X size={12} /></button>
+        </div>)}
+      </div>
+      <button type="button" aria-label="新建终端" title="新建 PowerShell 终端" onClick={addTerminal}
+        className="ml-auto grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><Plus size={14} /></button>
+    </div>
+    <div className="min-h-0 flex-1">
+      {tabs.map((tab) => <div key={tab.id} role="tabpanel" aria-label={tab.title} hidden={activeId !== tab.id} className="h-full min-h-0">
+        <TerminalSession cwd={cwd} active={active && activeId === tab.id} command={commandOwner?.id === command?.id && commandOwner?.tabId === tab.id ? command : null}
+          onSendToAtlas={onSendToAtlas} />
+      </div>)}
+      {!tabs.length && <div className="grid h-full place-items-center text-[13px] text-fg-3">终端已全部关闭。<button type="button" onClick={addTerminal} className="ml-1 text-brand underline">新建终端</button></div>}
+    </div>
+  </div>;
+}
+
+function TerminalSession({ cwd, active, command, onSendToAtlas }: {
+  cwd: string; active: boolean; command?: { id: string; text: string } | null; onSendToAtlas: (text: string) => void;
 }) {
   const [session, setSession] = useState(0);
   const [closed, setClosed] = useState(false);
@@ -82,7 +194,7 @@ export default function TerminalPanel({ cwd, active, command, onSendToAtlas }: {
   // A new `!command` reopens a closed terminal; closing it again afterwards must stick.
   useEffect(() => { if (command && command.id !== ranRef.current) setClosed(false); }, [command]);
 
-  useEffect(() => { if (active) fitRef.current?.(); }, [active]);
+  useEffect(() => { if (active) { fitRef.current?.(); termRef.current?.focus(); } }, [active]);
 
   return <div className="flex h-full min-h-0 flex-col gap-3">
     <div className="flex items-center gap-2 text-[12px] text-fg-3">

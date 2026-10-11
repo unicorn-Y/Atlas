@@ -17,13 +17,24 @@ export function todoEditNotice(content: string): string {
 
 export type StepState = 'running' | 'done' | 'failed' | 'cancelled';
 
+export type ToolCategory =
+  | 'file-read' | 'file-write' | 'file-edit' | 'file-patch'
+  | 'shell' | 'exec' | 'search' | 'todo' | 'plan' | 'question' | 'agent'
+  | 'browser' | 'computer' | 'git' | 'process' | 'web' | 'checks' | 'image' | 'memory' | 'other';
+
 export interface Step {
   id: string;
+  toolName: string;
+  category: ToolCategory;
   verb: string;
   target?: string;
   state: StepState;
   startedAt: string;
   endedAt?: string;
+  /** Short human-readable result, separate from the expandable raw payload. */
+  summary?: string;
+  /** Failure detail promoted from the tool response so it is visible without opening raw details. */
+  failureReason?: string;
   input?: string;
   result?: string;
   imagePreview?: string;
@@ -61,6 +72,8 @@ export interface ReviewFinding {
 export type TimelineItem =
   | { kind: 'user'; id: string; content: string; steered?: boolean }
   | { kind: 'reply'; id: string; content: string; streaming: boolean; status?: string }
+  /** Text explicitly delivered by the runtime as run.status with status=reasoning. */
+  | { kind: 'reasoning'; id: string; text: string; eventCount: number; truncated: boolean; source: 'run.status' }
   | { kind: 'steps'; id: string; steps: Step[] }
   | { kind: 'approval'; id: string; event: AgentEvent }
   | { kind: 'question'; id: string; event: AgentEvent }
@@ -139,7 +152,7 @@ export function shortPath(path: string): string {
 
 const FILE_ACTIONS: Record<string, string> = {
   read: '读取', write: '写入', append: '追加写入', mkdir: '新建文件夹', copy: '复制', move: '移动', delete: '删除',
-  list: '查看目录', glob: '查找文件', search: '搜索文件内容', stat: '查看文件信息',
+  list: '查看目录', glob: '查找文件', search: '搜索文件内容', stat: '查看文件信息', edit: '修改', patch: '应用补丁',
 };
 const PROCESS_ACTIONS: Record<string, string> = {
   start: '启动进程', status: '查看进程状态', read: '读取进程输出', wait: '等待进程结束', cancel: '停止进程', list: '查看进程列表',
@@ -148,6 +161,98 @@ const GIT_ACTIONS: Record<string, string> = {
   status: '查看 Git 状态', diff: '查看改动', log: '查看提交记录', branch: '查看分支', add: '暂存改动',
   commit: '提交改动', pull: '拉取代码', fetch: '获取远程更新', push: '推送代码',
 };
+
+const FILE_ACTION_CATEGORIES: Record<string, ToolCategory> = {
+  read: 'file-read', write: 'file-write', append: 'file-write', mkdir: 'file-write',
+  copy: 'file-write', move: 'file-write', delete: 'file-write', list: 'file-read',
+  glob: 'search', search: 'search', stat: 'file-read', patch: 'file-patch', edit: 'file-edit',
+};
+
+const toolString = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
+
+/** Classify by the public tool identity and its action when available; unknown tools stay safe and legible. */
+export function classifyTool(name: string, args: unknown): ToolCategory {
+  const input = args && typeof args === 'object' ? args as Record<string, unknown> : {};
+  const action = toolString(input.action)?.toLowerCase();
+  const key = name.toLowerCase().replace(/[\s./:-]+/g, '_');
+  if (key === 'local_file' && action) return FILE_ACTION_CATEGORIES[action] ?? 'other';
+  if (key === 'local_edit') return 'file-edit';
+  if (key === 'local_shell' || /(^|_)(shell|terminal|bash|powershell|command)(_|$)/.test(key)) return 'shell';
+  if (key === 'local_exec' || /(^|_)(exec|exec_command|execute)(_|$)/.test(key)) return 'exec';
+  if (/(ask_?user_?question|ask_?question|request_?input|input_?required)/.test(key)) return 'question';
+  if (/(exit_?plan|submit_?plan|update_?plan|plan_?mode|\bplan\b)/.test(key)) return 'plan';
+  if (/(todo|task_?list|update_?tasks|manage_?tasks)/.test(key)) return 'todo';
+  if (/(delegate|subagent|sub_?agent|spawn_?agent|agent_?task|^task$|external_)/.test(key)) return 'agent';
+  if (/(apply_?patch|patch_?file|^patch$|multi_?edit)/.test(key)) return 'file-patch';
+  if (/(edit_?file|file_?edit|replace_?file|modify_?file|^edit$)/.test(key)) return 'file-edit';
+  if (/(write_?file|file_?write|create_?file|save_?file|append_?file|^write$)/.test(key)) return 'file-write';
+  if (/(read_?file|file_?read|open_?file|view_?file|^read$)/.test(key)) return 'file-read';
+  if (/(search|grep|glob|find_?files?|query_?files?)/.test(key)) return 'search';
+  if (/(browser|playwright|webview|navigate|devtools)/.test(key)) return 'browser';
+  if (/(computer|screenshot|pywinauto|\bcua\b|click|mouse|keyboard|type_?text)/.test(key)) return 'computer';
+  if (/(^|_)git(_|$)/.test(key)) return 'git';
+  if (/(process|shell_?session|kill_?shell)/.test(key)) return 'process';
+  if (/(web_?search|fetch|http|url|page)/.test(key)) return 'web';
+  if (/(run_?checks|lint|type_?check|test_?suite)/.test(key)) return 'checks';
+  if (/(image|draw|generate_?image)/.test(key)) return 'image';
+  if (/(memory|remember|recall)/.test(key)) return 'memory';
+  return 'other';
+}
+
+const compact = (value: string, max = 220) => value.replace(/\s+/g, ' ').trim().slice(0, max);
+
+function resultRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
+}
+
+function resultMessage(value: unknown): string | undefined {
+  const record = resultRecord(value);
+  if (!record) return typeof value === 'string' && value.trim() ? compact(value) : undefined;
+  for (const key of ['summary', 'text_summary', 'message', 'description', 'error']) {
+    const text = toolString(record[key]);
+    if (text) return compact(text);
+  }
+  for (const key of ['matches', 'results', 'items', 'files']) {
+    if (Array.isArray(record[key])) return `返回 ${record[key].length} 项`;
+  }
+  const count = record.count ?? record.total;
+  return typeof count === 'number' ? `返回 ${count} 项` : undefined;
+}
+
+function summarizeToolResult(category: ToolCategory, value: unknown, execution?: Record<string, unknown>): string | undefined {
+  const record = resultRecord(value);
+  const explicit = resultMessage(value);
+  if (explicit && !(category === 'file-read' && typeof value === 'string')) return explicit;
+  if (category === 'file-read' && typeof value === 'string' && value.trim()) return `已读取 ${value.length.toLocaleString()} 个字符`;
+  if (category === 'file-read' && typeof record?.content === 'string') return `已读取 ${record.content.length.toLocaleString()} 个字符`;
+  if (category === 'search') {
+    if (Array.isArray(value)) return `找到 ${value.length} 项`;
+    const candidates = [record?.matches, record?.results, record?.items, record?.files].find(Array.isArray);
+    if (Array.isArray(candidates)) return `找到 ${candidates.length} 项`;
+  }
+  const output = toolString(execution?.stdout) ?? toolString(execution?.output);
+  if (output) return compact(output);
+  if (category.startsWith('file-')) return '文件操作已完成';
+  if (category === 'todo') return '待办清单已更新';
+  if (category === 'plan') return '计划已更新';
+  if (category === 'question') return '已发送问题';
+  if (category === 'agent') return '子任务已返回结果';
+  if (category === 'checks') return explicit ?? '检查已完成';
+  return explicit;
+}
+
+function failureMessage(value: unknown, execution: Record<string, unknown> | undefined): string | undefined {
+  const result = resultRecord(value);
+  const nested = resultRecord(result?.error);
+  for (const candidate of [
+    toolString(result?.error), toolString(nested?.message), toolString(result?.message), toolString(result?.reason), toolString(result?.detail),
+    toolString(execution?.error), toolString(execution?.stderr), typeof value === 'string' ? value : undefined,
+  ]) {
+    if (candidate) return compact(candidate, 500);
+  }
+  return undefined;
+}
 
 /** Plain-language verb + salient argument for a tool call, e.g. `local_shell {command: "npm test"}` → 运行命令 npm test. */
 export function describeTool(name: string, args: unknown): { verb: string; target?: string } {
@@ -264,6 +369,23 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
   for (const event of events) {
     const data = event.data;
     switch (event.type) {
+      case 'run.status': {
+        if (data.status !== 'reasoning' || typeof data.text !== 'string' || !data.text.trim()) break;
+        closeReply(); closeBlocks();
+        const previous = items[items.length - 1];
+        const snippet = data.text;
+        if (previous?.kind === 'reasoning') {
+          previous.eventCount += 1;
+          if (!previous.truncated) {
+            const combined = `${previous.text}${previous.text ? '\n' : ''}${snippet}`;
+            previous.truncated = combined.length > MAX_STEP_TEXT;
+            previous.text = combined.slice(0, MAX_STEP_TEXT);
+          }
+        } else {
+          items.push({ kind: 'reasoning', id: event.id, text: snippet.slice(0, MAX_STEP_TEXT), eventCount: 1, truncated: snippet.length > MAX_STEP_TEXT, source: 'run.status' });
+        }
+        break;
+      }
       case 'run.started':
         runStartedAt = event.timestamp;
         if (typeof data.content === 'string' && data.content) {
@@ -278,8 +400,10 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         break;
       case 'tool.started': {
         const key = String(data.tool_call_id || data.call_id || event.id);
-        const { verb, target } = describeTool(String(data.name ?? '工具'), data.arguments ?? data.input);
-        const step: Step = { id: event.id, verb, target, state: 'running', startedAt: event.timestamp, input: cap(text(data.arguments ?? data.input)), output: '' };
+        const toolName = String(data.name ?? '工具');
+        const args = data.arguments ?? data.input;
+        const { verb, target } = describeTool(toolName, args);
+        const step: Step = { id: event.id, toolName, category: classifyTool(toolName, args), verb, target, state: 'running', startedAt: event.timestamp, input: cap(text(args)), output: '' };
         byExecution.set(key, step);
         if (!data.tool_call_id) byExecution.set(`name:${String(data.name)}`, step);
         closeReply();
@@ -291,15 +415,22 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         const key = String(data.tool_call_id || data.call_id || '');
         let step = (key && byExecution.get(key)) || byExecution.get(`name:${String(data.name)}`);
         if (!step || step.state !== 'running') {
-          const { verb, target } = describeTool(String(data.name ?? '工具'), data.arguments ?? execution?.command);
-          step = { id: event.id, verb, target, state: 'running', startedAt: event.timestamp, input: cap(text(data.arguments)), output: '' };
+          const toolName = String(data.name ?? '工具');
+          const args = data.arguments ?? execution?.command;
+          const { verb, target } = describeTool(toolName, args);
+          step = { id: event.id, toolName, category: classifyTool(toolName, args), verb, target, state: 'running', startedAt: event.timestamp, input: cap(text(args)), output: '' };
           stepsBlock(event.id).steps.push(step);
         }
-        step.state = execution?.state === 'cancelled' ? 'cancelled' : data.is_error ? 'failed' : 'done';
+        const result = resultRecord(data.result);
+        const failed = Boolean(data.is_error) || result?.is_error === true || execution?.state === 'failed' || execution?.state === 'error'
+          || data.status === 'failed' || (typeof execution?.exit_code === 'number' && execution.exit_code !== 0);
+        step.state = execution?.state === 'cancelled' ? 'cancelled' : failed ? 'failed' : 'done';
         step.endedAt = event.timestamp;
         const image = imageToolResult(data.result);
         step.imagePreview = image.preview;
         step.result = image.summary || cap(text(data.result));
+        step.summary = step.state === 'failed' ? undefined : summarizeToolResult(step.category, data.result, execution);
+        if (step.state === 'failed') step.failureReason = failureMessage(data.result, execution) ?? '工具返回失败状态';
         if (typeof data.full_output_path === 'string') step.fullOutputPath = data.full_output_path;
         if (execution) {
           const parts = [execution.stdout, execution.stderr].map((value) => cap(text(value))).filter(Boolean);
@@ -343,7 +474,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       case 'subtask.started': {
         const id = String(data.subtask_id ?? event.id);
         const worker = typeof data.index === 'number' ? `并行 Worker ${data.index + 1}` : '';
-        const step: Step = { id: event.id, verb: worker || '子任务', target: String(data.title || data.goal || '').slice(0, 120), state: 'running', startedAt: event.timestamp, output: '', subtaskId: id,
+        const step: Step = { id: event.id, toolName: 'subtask', category: 'agent', verb: worker || '子任务', target: String(data.title || data.goal || '').slice(0, 120), state: 'running', startedAt: event.timestamp, output: '', subtaskId: id,
           input: [data.backend && `执行者：${String(data.backend)}`, data.goal && `目标：${String(data.goal)}`].filter(Boolean).join('\n') };
         byExecution.set(`subtask:${id}`, step);
         closeReply();
@@ -362,6 +493,8 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         step.state = data.status === 'failed' ? 'failed' : data.status === 'cancelled' ? 'cancelled' : 'done';
         step.endedAt = event.timestamp;
         step.result = cap(text(data.summary));
+        step.summary = step.state === 'failed' ? undefined : resultMessage(data.summary) ?? '子任务已完成';
+        if (step.state === 'failed') step.failureReason = resultMessage(data.summary) ?? '子任务执行失败';
         break;
       }
       case 'subtask.group_completed': {
@@ -435,8 +568,10 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       case 'hook.ran': {
         const failed = typeof data.exit_code === 'number' && data.exit_code !== 0;
         stepsBlock(event.id).steps.push({
-          id: event.id, verb: data.exit_code === 2 ? 'Hook 拦下了这一步' : '运行 Hook', target: `${String(data.hook_id ?? '')} · ${String(data.event ?? '')}`,
+          id: event.id, toolName: 'hook.ran', category: 'other', verb: data.exit_code === 2 ? 'Hook 拦下了这一步' : '运行 Hook', target: `${String(data.hook_id ?? '')} · ${String(data.event ?? '')}`,
           state: failed ? 'failed' : 'done', startedAt: event.timestamp, endedAt: event.timestamp,
+          summary: `退出码 ${String(data.exit_code ?? '?')}，用时 ${String(data.duration_ms ?? '?')} ms`,
+          ...(failed ? { failureReason: cap(String(data.output ?? 'Hook 执行失败')).slice(0, 500) } : {}),
           result: `退出码 ${String(data.exit_code ?? '?')}，用时 ${String(data.duration_ms ?? '?')} ms`, output: cap(String(data.output ?? '')),
         });
         break;
@@ -451,8 +586,8 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         const files = Array.isArray(data.files) ? data.files as Array<{ path?: string }> : [];
         if (!files.length) break;
         const step: Step = {
-          id: event.id, verb: '读取项目规则', target: files.map((file) => shortPath(String(file.path ?? ''))).join('、'),
-          state: 'done', startedAt: event.timestamp, endedAt: event.timestamp, output: '',
+          id: event.id, toolName: 'rules.loaded', category: 'file-read', verb: '读取项目规则', target: files.map((file) => shortPath(String(file.path ?? ''))).join('、'),
+          state: 'done', startedAt: event.timestamp, endedAt: event.timestamp, summary: `加载了 ${files.length} 个规则文件`, output: '',
         };
         if (runStartedAt) stepsBlock(event.id).steps.push(step); else earlyRules = step;
         break;

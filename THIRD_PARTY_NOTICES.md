@@ -313,3 +313,13 @@ Additional source adapted from
 `apps/zcode-cli/packages/contracts/src/workflow/index.ts` at fixed commit
 `29628c9acdb81b703bbd4080c207a0e7ce5e276e`. Copyright 2026 Z.AI Co., Ltd.;
 Apache License 2.0 as stated above.
+
+## FEATURE-F1-B: Conversation search UI
+
+The conversation search bar and match navigation in
+`frontend/src/renderer/components/conversation-search/ConversationSearch.tsx`
+are adapted from `packages/app/src/session/timeline/search-controller.ts` and
+`packages/app/src/session/timeline/search-bar.tsx` in
+`anomalyco/opencode` at commit `7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937`.
+Copyright (c) 2024-2026 OpenCode contributors; MIT License.
+The source repository is available at https://github.com/anomalyco/opencode.

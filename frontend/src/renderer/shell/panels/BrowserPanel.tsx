@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, ScrollText, ExternalLink, Globe, Monitor, RotateCw, Smartphone, Tablet, X } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, FileText, Plus, ScrollText, ExternalLink, Globe, Monitor, RotateCw, Smartphone, Tablet, X } from 'lucide-react';
 import type { AgentEvent } from '../../../types/runtime';
 import BrowserRecorderPanel from '../../components/x2/BrowserRecorderPanel';
 import { cn } from '../../ui/cn';
@@ -42,6 +42,22 @@ interface WebviewElement extends HTMLElement {
   openDevTools(): void;
   executeJavaScript<T>(code: string): Promise<T>;
   capturePage(): Promise<{ toDataURL(): string }>;
+}
+
+interface BrowserTab {
+  id: number;
+  /** Set once when the tab first loads; changing it later would reload the embedded page. */
+  initialUrl: string;
+  /** Current committed page URL, independent from the webview's immutable initial `src`. */
+  url: string;
+  /** Address-bar text is stored per tab so an unfinished edit survives tab switches. */
+  address: string;
+  title: string;
+}
+
+function tabTitle(url: string): string {
+  if (!url) return '新标签页';
+  try { return new URL(url).host || url; } catch { return url; }
 }
 
 // Runs inside the page: highlight what the pointer is over, resolve with the clicked element, Escape cancels.
@@ -92,7 +108,13 @@ async function cropElement(capture: string, rect: Rect, viewport: number): Promi
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(width));
   canvas.height = Math.max(1, Math.round(height));
-  canvas.getContext('2d')?.drawImage(image, x, y, width, height, 0, 0, canvas.width, canvas.height);
+  const context = canvas.getContext('2d');
+  context?.drawImage(image, x, y, width, height, 0, 0, canvas.width, canvas.height);
+  if (context) {
+    context.strokeStyle = '#d59a32';
+    context.lineWidth = Math.max(3, Math.round(scale * 3));
+    context.strokeRect(context.lineWidth / 2, context.lineWidth / 2, canvas.width - context.lineWidth, canvas.height - context.lineWidth);
+  }
   return canvas.toDataURL('image/png');
 }
 
@@ -135,6 +157,14 @@ const normalize = (value: string) => {
   return `https://www.bing.com/search?q=${encodeURIComponent(text)}`;
 };
 
+function localDocumentKind(file: File): 'html' | 'pdf' | 'image' | 'video' | null {
+  if (/\.html?$/i.test(file.name)) return 'html';
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) return 'pdf';
+  if (file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(file.name)) return 'image';
+  if (file.type.startsWith('video/') || /\.(mp4|webm|ogv|ogg|mov|m4v)$/i.test(file.name)) return 'video';
+  return null;
+}
+
 /**
  * A browser next to the conversation for checking what the Agent built.
  * Pages run in their own session with no access to Atlas; picking an element hands its details to the composer.
@@ -154,11 +184,93 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   runId?: string;
   events?: AgentEvent[];
 }) {
-  const viewRef = useRef<WebviewElement | null>(null);
-  const [address, setAddress] = useState(url);
-  const [loading, setLoading] = useState(false);
+  const [tabs, setTabs] = useState<BrowserTab[]>(() => [{ id: 0, initialUrl: url, url, address: url, title: tabTitle(url) }]);
+  const [activeTabId, setActiveTabId] = useState(0);
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const [loadingTabs, setLoadingTabs] = useState<Set<number>>(() => new Set());
   const [nav, setNav] = useState({ back: false, forward: false });
   const [picking, setPicking] = useState<'' | 'element' | 'region'>('');
+  const [pendingPick, setPendingPick] = useState<PickedElement | null>(null);
+  const [annotation, setAnnotation] = useState('');
+  const [localFile, setLocalFile] = useState<File | null>(null);
+  const [localFileUrl, setLocalFileUrl] = useState('');
+  const localFileInput = useRef<HTMLInputElement | null>(null);
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
+  const tabsRef = useRef(tabs);
+  const activeTabIdRef = useRef(activeTabId);
+  const onUrlRef = useRef(onUrl);
+  const onToastRef = useRef(onToast);
+  const lastReportedUrlRef = useRef(url);
+  const nextTabIdRef = useRef(1);
+  const viewRefs = useRef(new Map<number, WebviewElement>());
+  const boundViewRefs = useRef(new Map<number, { view: WebviewElement; listeners: Array<[string, EventListener]> }>());
+  const webviewRefCallbacks = useRef(new Map<number, (node: Element | null) => void>());
+  const tabButtonRefs = useRef(new Map<number, HTMLButtonElement>());
+  const tabButtonRefCallbacks = useRef(new Map<number, (node: HTMLButtonElement | null) => void>());
+  tabsRef.current = tabs;
+  activeTabIdRef.current = activeTabId;
+  onUrlRef.current = onUrl;
+  onToastRef.current = onToast;
+  const reportUrlRef = useRef<(next: string) => void>(() => undefined);
+  reportUrlRef.current = (next) => { lastReportedUrlRef.current = next; onUrlRef.current(next); };
+  const bindWebviewRef = useRef<(id: number, node: Element | null) => void>(() => undefined);
+  bindWebviewRef.current = (id, node) => {
+    const existing = boundViewRefs.current.get(id);
+    if (existing) {
+      for (const [name, listener] of existing.listeners) existing.view.removeEventListener(name, listener);
+      boundViewRefs.current.delete(id);
+    }
+    if (!node) { viewRefs.current.delete(id); return; }
+    const view = node as WebviewElement;
+    viewRefs.current.set(id, view);
+    const sync = () => {
+      const current = view.getURL();
+      if (!current) return;
+      setTabs((previous) => previous.map((tab) => tab.id === id ? { ...tab, url: current, address: current } : tab));
+      if (activeTabIdRef.current === id) {
+        setNav({ back: view.canGoBack(), forward: view.canGoForward() });
+        reportUrlRef.current(current);
+      }
+    };
+    const start = () => setLoadingTabs((previous) => new Set(previous).add(id));
+    const stop = () => {
+      setLoadingTabs((previous) => { const next = new Set(previous); next.delete(id); return next; });
+      sync();
+    };
+    const failed = (event: Event) => {
+      const detail = event as Event & { errorCode?: number; errorDescription?: string; isMainFrame?: boolean };
+      if (detail.isMainFrame && detail.errorCode !== -3) onToastRef.current(`打不开这个页面：${detail.errorDescription ?? detail.errorCode}`);
+    };
+    const title = (event: Event) => {
+      const detail = event as Event & { title?: string };
+      if (detail.title) setTabs((previous) => previous.map((tab) => tab.id === id ? { ...tab, title: detail.title! } : tab));
+    };
+    const listeners: Array<[string, EventListener]> = [
+      ['did-start-loading', start], ['did-stop-loading', stop], ['did-navigate', sync],
+      ['did-navigate-in-page', sync], ['did-fail-load', failed], ['page-title-updated', title],
+    ];
+    for (const [name, listener] of listeners) view.addEventListener(name, listener);
+    boundViewRefs.current.set(id, { view, listeners });
+  };
+  const getWebviewRef = (id: number) => {
+    let callback = webviewRefCallbacks.current.get(id);
+    if (!callback) {
+      callback = (node) => bindWebviewRef.current(id, node);
+      webviewRefCallbacks.current.set(id, callback);
+    }
+    return callback;
+  };
+  const getTabButtonRef = (id: number) => {
+    let callback = tabButtonRefCallbacks.current.get(id);
+    if (!callback) {
+      callback = (node) => {
+        if (node) tabButtonRefs.current.set(id, node);
+        else tabButtonRefs.current.delete(id);
+      };
+      tabButtonRefCallbacks.current.set(id, callback);
+    }
+    return callback;
+  };
   const [device, setDevice] = useState<Device>('fit');
   const [recorderOpen, setRecorderOpen] = useState(false);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -169,43 +281,123 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     const observer = new ResizeObserver(([entry]) => setStage({ width: entry.contentRect.width, height: entry.contentRect.height }));
     observer.observe(node);
     return () => observer.disconnect();
-  }, [url]);
+  }, []);
   const desktop = typeof window !== 'undefined' && Boolean(window.atlasDesktop);
 
-  useEffect(() => setAddress(url), [url]);
   useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-    const sync = () => { setNav({ back: view.canGoBack(), forward: view.canGoForward() }); const current = view.getURL(); setAddress(current); if (current && current !== url) onUrl(current); };
-    const start = () => setLoading(true);
-    const stop = () => { setLoading(false); sync(); };
-    const failed = (event: Event) => {
-      const detail = event as Event & { errorCode?: number; errorDescription?: string; isMainFrame?: boolean };
-      if (detail.isMainFrame && detail.errorCode !== -3) onToast(`打不开这个页面：${detail.errorDescription ?? detail.errorCode}`);
-    };
-    view.addEventListener('did-start-loading', start);
-    view.addEventListener('did-stop-loading', stop);
-    view.addEventListener('did-navigate', sync);
-    view.addEventListener('did-navigate-in-page', sync);
-    view.addEventListener('did-fail-load', failed);
-    return () => {
-      view.removeEventListener('did-start-loading', start);
-      view.removeEventListener('did-stop-loading', stop);
-      view.removeEventListener('did-navigate', sync);
-      view.removeEventListener('did-navigate-in-page', sync);
-      view.removeEventListener('did-fail-load', failed);
-    };
-  }, [url, onUrl, onToast]);
+    if (!localFile) { setLocalFileUrl(''); return; }
+    const objectUrl = URL.createObjectURL(localFile);
+    setLocalFileUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [localFile]);
+
+  const navigateTabRef = useRef<(id: number, raw: string, notify?: boolean) => void>(() => undefined);
+  navigateTabRef.current = (id, raw, notify = true) => {
+    const next = normalize(raw);
+    if (!next) return;
+    const tab = tabsRef.current.find((item) => item.id === id);
+    if (!tab) return;
+    setLocalFile(null);
+    setPendingPick(null);
+    setTabs((previous) => previous.map((item) => item.id === id ? {
+      ...item, url: next, address: next, initialUrl: item.initialUrl || next,
+      title: tabTitle(next),
+    } : item));
+    if (tab.initialUrl) void viewRefs.current.get(id)?.loadURL(next).catch(() => undefined);
+    if (notify && activeTabIdRef.current === id) reportUrlRef.current(next);
+  };
+  useEffect(() => {
+    if (url === lastReportedUrlRef.current) return;
+    lastReportedUrlRef.current = url;
+    if (url) navigateTabRef.current(activeTabIdRef.current, url, false);
+  }, [url]);
+  useEffect(() => {
+    if (activeTab) {
+      const view = viewRefs.current.get(activeTab.id);
+      setNav(view ? { back: view.canGoBack(), forward: view.canGoForward() } : { back: false, forward: false });
+    }
+  }, [activeTabId, activeTab?.id]);
 
   const go = (event?: FormEvent) => {
     event?.preventDefault();
-    const next = normalize(address);
-    if (!next) return;
-    if (viewRef.current && url) void viewRef.current.loadURL(next).catch(() => undefined);
-    onUrl(next);
+    if (activeTab) navigateTabRef.current(activeTab.id, activeTab.address);
+  };
+  const activateTab = (id: number) => {
+    const tab = tabsRef.current.find((item) => item.id === id);
+    if (!tab) return;
+    activeTabIdRef.current = id;
+    setActiveTabId(id);
+    setPendingPick(null);
+    setAnnotation('');
+    const view = viewRefs.current.get(id);
+    setNav(view ? { back: view.canGoBack(), forward: view.canGoForward() } : { back: false, forward: false });
+    reportUrlRef.current(tab.url);
+  };
+  const addTab = () => {
+    const id = nextTabIdRef.current++;
+    const tab: BrowserTab = { id, initialUrl: '', url: '', address: '', title: '新标签页' };
+    const next = [...tabsRef.current, tab];
+    tabsRef.current = next;
+    activeTabIdRef.current = id;
+    setTabs(next);
+    setActiveTabId(id);
+    setNav({ back: false, forward: false });
+    setLocalFile(null);
+    setPendingPick(null);
+    setAnnotation('');
+    reportUrlRef.current('');
+    window.requestAnimationFrame(() => tabButtonRefs.current.get(id)?.focus());
+  };
+  const closeTab = (id: number) => {
+    const current = tabsRef.current;
+    const index = current.findIndex((tab) => tab.id === id);
+    if (index < 0) return;
+    const closingActive = id === activeTabIdRef.current;
+    let next = current.filter((tab) => tab.id !== id);
+    if (!next.length) {
+      const blankId = nextTabIdRef.current++;
+      next = [{ id: blankId, initialUrl: '', url: '', address: '', title: '新标签页' }];
+    }
+    tabsRef.current = next;
+    setTabs(next);
+    viewRefs.current.delete(id);
+    webviewRefCallbacks.current.delete(id);
+    tabButtonRefCallbacks.current.delete(id);
+    setLoadingTabs((previous) => { const loading = new Set(previous); loading.delete(id); return loading; });
+    const target = next[Math.min(index, next.length - 1)];
+    if (closingActive) {
+      activeTabIdRef.current = target.id;
+      setActiveTabId(target.id);
+      setPendingPick(null);
+      setAnnotation('');
+      const view = viewRefs.current.get(target.id);
+      setNav(view ? { back: view.canGoBack(), forward: view.canGoForward() } : { back: false, forward: false });
+      reportUrlRef.current(target.url);
+      window.requestAnimationFrame(() => tabButtonRefs.current.get(target.id)?.focus());
+    }
+  };
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 't') {
+      event.preventDefault(); addTab(); return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'w') {
+      event.preventDefault(); closeTab(activeTabIdRef.current); return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'l') {
+      event.preventDefault(); addressInputRef.current?.focus(); addressInputRef.current?.select(); return;
+    }
+    const destination = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+      : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
+        : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1;
+    if (destination >= 0 && tabs[destination]) {
+      event.preventDefault();
+      const next = tabs[destination];
+      activateTab(next.id);
+      tabButtonRefs.current.get(next.id)?.focus();
+    }
   };
   const pick = async (kind: 'element' | 'region') => {
-    const view = viewRef.current;
+    const view = viewRefs.current.get(activeTabIdRef.current);
     if (!view || picking) return;
     setPicking(kind);
     try {
@@ -213,7 +405,8 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       if (!result) return;
       let screenshot: string | undefined;
       try { screenshot = await cropElement((await view.capturePage()).toDataURL(), result.rect, result.viewport); } catch { screenshot = undefined; }
-      onPick({ kind, url: view.getURL(), selector: result.selector ?? '', tag: result.tag ?? '', text: result.text, html: result.html ?? '', screenshot });
+      setPendingPick({ kind, url: view.getURL(), selector: result.selector ?? '', tag: result.tag ?? '', text: result.text, html: result.html ?? '', screenshot });
+      setAnnotation('');
     } catch {
       onToast(kind === 'element' ? '这个页面不允许点选元素' : '这个页面不允许框选');
     } finally { setPicking(''); }
@@ -224,27 +417,68 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const size = device === 'fit' ? null : DEVICES[device];
   const scale = size && stage.width && stage.height ? Math.min(1, stage.width / size.width, stage.height / size.height) : 1;
   const button = 'grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg disabled:opacity-35 disabled:hover:bg-transparent';
+  const finishPick = () => {
+    if (!pendingPick) return;
+    const note = annotation.trim();
+    onPick(note ? { ...pendingPick, text: `${pendingPick.text}${pendingPick.text ? '\n\n' : ''}用户批注：${note}` } : pendingPick);
+    setPendingPick(null);
+    setAnnotation('');
+  };
+  const localKind = localFile ? localDocumentKind(localFile) : null;
+  const activeView = activeTab ? viewRefs.current.get(activeTab.id) : undefined;
+  const loading = loadingTabs.has(activeTabId);
   return <div className="flex h-full min-h-0 flex-col gap-2">
+    <div className="flex min-w-0 items-center gap-1 border-b border-line" aria-label="浏览器标签">
+      <div role="tablist" aria-label="浏览器标签页" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
+        {tabs.map((tab, index) => {
+          const selected = tab.id === activeTabId;
+          return <div key={tab.id} role="presentation" className={cn('flex h-7 max-w-52 shrink-0 items-center rounded-lg', selected ? 'bg-selected text-fg' : 'text-fg-3 hover:bg-hover')}>
+            <button ref={getTabButtonRef(tab.id)} type="button" role="tab" id={`browser-tab-${tab.id}`} aria-selected={selected} aria-controls="browser-tabpanel" tabIndex={selected ? 0 : -1}
+              aria-label={`${tab.title}${tab.url ? `，${tab.url}` : ''}`} title={tab.url || tab.title} onClick={() => activateTab(tab.id)} onKeyDown={(event) => onTabKeyDown(event, index)}
+              className="h-full min-w-0 truncate rounded-l-lg px-2 text-left text-[11.5px] outline-none focus-visible:ring-2 focus-visible:ring-brand">
+              {loadingTabs.has(tab.id) && <span aria-label="正在加载" className="mr-1 inline-block size-1.5 animate-pulse rounded-full bg-brand align-middle" />}{tab.title}
+            </button>
+            <button type="button" aria-label={`关闭标签：${tab.title}`} title="关闭标签" onClick={() => closeTab(tab.id)} onKeyDown={(event) => onTabKeyDown(event, index)}
+              className="grid size-6 shrink-0 place-items-center rounded-r-lg text-fg-3 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"><X size={11} /></button>
+          </div>;
+        })}
+      </div>
+      <button type="button" aria-label="新建浏览器标签" title="新建标签（Ctrl/⌘+T）" onClick={addTab} onKeyDown={(event) => onTabKeyDown(event, tabs.length - 1)}
+        className="grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"><Plus size={14} /></button>
+    </div>
     <form onSubmit={go} className="flex items-center gap-1">
-      <button type="button" aria-label="后退" disabled={!nav.back} onClick={() => viewRef.current?.goBack()} className={button}><ArrowLeft size={15} /></button>
-      <button type="button" aria-label="前进" disabled={!nav.forward} onClick={() => viewRef.current?.goForward()} className={button}><ArrowRight size={15} /></button>
-      <button type="button" aria-label={loading ? '停止加载' : '刷新'} disabled={!url} onClick={() => loading ? viewRef.current?.stop() : viewRef.current?.reload()} className={button}>{loading ? <X size={15} /> : <RotateCw size={14} />}</button>
-      <input value={address} onChange={(event) => setAddress(event.target.value)} onFocus={(event) => event.target.select()} placeholder="输入网址、localhost:端口，或搜索" aria-label="地址"
+      <button type="button" aria-label="后退" disabled={!nav.back || Boolean(localFile)} onClick={() => activeView?.goBack()} className={button}><ArrowLeft size={15} /></button>
+      <button type="button" aria-label="前进" disabled={!nav.forward || Boolean(localFile)} onClick={() => activeView?.goForward()} className={button}><ArrowRight size={15} /></button>
+      <button type="button" aria-label={loading ? '停止加载' : '刷新'} disabled={!activeTab?.url || Boolean(localFile)} onClick={() => loading ? activeView?.stop() : activeView?.reload()} className={button}>{loading ? <X size={15} /> : <RotateCw size={14} />}</button>
+      <input ref={addressInputRef} value={activeTab?.address ?? ''} onChange={(event) => {
+        const value = event.target.value;
+        if (activeTab) setTabs((previous) => previous.map((tab) => tab.id === activeTab.id ? { ...tab, address: value } : tab));
+      }} onFocus={(event) => event.target.select()} placeholder="输入网址、localhost:端口，或搜索" aria-label="地址"
         className="h-8 min-w-0 flex-1 rounded-[9px] bg-sunken px-3 text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
-      <button type="button" aria-label="点选页面元素发给 Atlas" title="点选页面元素发给 Atlas（Esc 取消）" disabled={!url || Boolean(picking)} onClick={() => void pick('element')}
+      <input ref={localFileInput} type="file" accept=".html,.htm,.pdf,image/*,video/*" className="hidden" aria-label="选择本地 HTML、PDF、图片或视频" onChange={(event) => {
+        const file = event.currentTarget.files?.[0];
+        event.currentTarget.value = '';
+        if (!file) return;
+        if (!localDocumentKind(file)) {
+          onToast('请选择 HTML、PDF、图片或视频文件'); return;
+        }
+        setLocalFile(file);
+      }} />
+      <button type="button" aria-label="预览本地文档" title="预览本地 HTML、PDF、图片或视频" onClick={() => localFileInput.current?.click()} className={button}><FileText size={15} /></button>
+      <button type="button" aria-label="点选页面元素发给 Atlas" title="点选页面元素并添加批注（Esc 取消）" disabled={!activeTab?.url || Boolean(picking) || Boolean(localFile)} onClick={() => void pick('element')}
         className={cn(button, picking === 'element' && '!bg-brand-soft !text-fg')}><Crosshair size={15} /></button>
-      <button type="button" aria-label="框选页面区域发给 Atlas" title="框选一块区域发给 Atlas，可以连续框选几处再发（Esc 取消）" disabled={!url || Boolean(picking)} onClick={() => void pick('region')}
+      <button type="button" aria-label="框选页面区域发给 Atlas" title="框选一块区域并添加批注（Esc 取消）" disabled={!activeTab?.url || Boolean(picking) || Boolean(localFile)} onClick={() => void pick('region')}
         className={cn(button, picking === 'region' && '!bg-brand-soft !text-fg')}><BoxSelect size={15} /></button>
-      {onAsk && <button type="button" aria-label="让 Atlas 总结这页" title="让 Atlas 读这页正文（视频读字幕）并总结要点" disabled={!url || /^(about|file|data):/i.test(url)}
+      {onAsk && <button type="button" aria-label="让 Atlas 总结这页" title="让 Atlas 读这页正文（视频读字幕）并总结要点" disabled={!activeTab?.url || Boolean(localFile) || /^(about|file|data):/i.test(activeTab?.url ?? '')}
         onClick={() => {
-          const current = viewRef.current?.getURL() || url;
+          const current = activeView?.getURL() || activeTab?.url || '';
           const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(current);
           onAsk(`用 web_extract 读取这个${/youtube\.com|youtu\.be|bilibili\.com/i.test(current) ? '视频的字幕' : '网页的正文'}${local ? '（是我本机的开发页面，allow_local 设为 true）' : ''}，然后用中文总结要点，最后列出值得注意的细节：
 ${current}`);
         }} className={button}><ScrollText size={15} /></button>}
-      <button type="button" aria-label="开发者工具" disabled={!url} onClick={() => viewRef.current?.openDevTools()} className={button}><Code2 size={15} /></button>
+      <button type="button" aria-label="开发者工具" disabled={!activeTab?.url || Boolean(localFile)} onClick={() => activeView?.openDevTools()} className={button}><Code2 size={15} /></button>
     </form>
-    {url && <div className="flex items-center gap-0.5 text-[12px]" role="group" aria-label="预览尺寸">
+    {activeTab?.url && !localFile && <div className="flex items-center gap-0.5 text-[12px]" role="group" aria-label="预览尺寸">
       {(Object.keys(DEVICES) as Device[]).map((key) => {
         const Icon = DEVICES[key].icon;
         return <button key={key} type="button" onClick={() => setDevice(key)} aria-pressed={device === key}
@@ -253,26 +487,63 @@ ${current}`);
       })}
       {size && <span className="ml-auto tabular-nums text-fg-3">{size.width} × {size.height}{scale < 1 ? ` · ${Math.round(scale * 100)}%` : ''}</span>}
     </div>}
-    {url
-      ? <div ref={stageRef} className={cn('relative flex min-h-0 flex-1', size && 'items-start justify-center overflow-hidden')}>
+    {localFile && localFileUrl
+      ? <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-[inset_0_0_0_1px_var(--line)]" aria-label={`本地文档预览：${localFile.name}`}>
+        <div className="flex h-8 shrink-0 items-center gap-2 border-b border-line px-3 text-[12px] text-fg-2">
+          <span className="min-w-0 flex-1 truncate">本地预览 · {localFile.name}</span>
+          <button type="button" aria-label="关闭本地文档预览" onClick={() => setLocalFile(null)} className="grid size-6 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><X size={13} /></button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto">
+          {localKind === 'image' && <img src={localFileUrl} alt={localFile.name} className="mx-auto max-h-full max-w-full object-contain" />}
+          {localKind === 'video' && <video src={localFileUrl} controls className="h-full w-full" aria-label={localFile.name} />}
+          {localKind === 'pdf' && <iframe src={localFileUrl} title={`PDF 预览：${localFile.name}`} className="h-full min-h-[360px] w-full border-0" />}
+          {localKind === 'html' && <iframe src={localFileUrl} title={`HTML 预览：${localFile.name}`} sandbox="allow-scripts" className="h-full min-h-[360px] w-full border-0" />}
+        </div>
+      </section>
+      : null}
+    <div ref={stageRef} role="tabpanel" id="browser-tabpanel" aria-labelledby={`browser-tab-${activeTabId}`} className={cn('relative flex min-h-0 flex-1', localFile && 'hidden', size && 'items-start justify-center overflow-hidden')}>
         {/* Other device sizes render at full size and are scaled to fit, so the page lays out as it would there. */}
-        <div style={size ? { width: size.width * scale, height: size.height * scale } : undefined} className={cn(!size && 'flex min-h-0 flex-1', size && 'relative shrink-0')}>
-          <webview ref={(node) => { viewRef.current = node as WebviewElement | null; }} src={url} partition={PARTITION} plugins="true"
+        {tabs.filter((tab) => tab.initialUrl).map((tab) => {
+          const selected = tab.id === activeTabId;
+          return <div key={tab.id} aria-hidden={!selected} className={cn('absolute inset-0 min-h-0 flex', selected ? 'visible' : 'invisible pointer-events-none', size && 'items-start justify-center')}>
+            <div style={size ? { width: size.width * scale, height: size.height * scale } : undefined} className={cn(!size && 'flex min-h-0 flex-1', size && 'relative shrink-0')}>
+              <webview ref={getWebviewRef(tab.id)} src={tab.initialUrl} partition={PARTITION} plugins="true"
             style={size ? { width: size.width, height: size.height, transform: `scale(${scale})`, transformOrigin: 'top left', position: 'absolute', left: 0, top: 0 } : undefined}
             className={cn('overflow-hidden rounded-xl bg-white shadow-[inset_0_0_0_1px_var(--line)]', !size && 'min-h-0 flex-1')} />
-        </div>
-        {/* Floats over the page so starting a pick never shifts what the user is about to click. */}
-        {picking && <p className="pop pointer-events-none absolute top-2 left-1/2 m-0 -translate-x-1/2 rounded-lg px-3 py-1.5 text-[12px] whitespace-nowrap text-fg">{picking === 'element' ? '点一下页面上的元素' : '按住鼠标拖出一块区域'}，按 Esc 取消</p>}
-      </div>
-      : <div className="min-h-0 flex-1 overflow-auto">
-        <Empty title="打开一个页面" body="Agent 起了本地服务，或者你想对照某个网页，都可以在这里看，还能点选元素发给 Atlas。" icon={<Globe size={22} />} />
-        {suggestions.length > 0 && <div className="grid gap-1.5 px-2">
-          <p className="m-0 mb-1 text-[12px] text-fg-3">这次对话里出现的本地地址</p>
-          {suggestions.map((item) => <button key={item} onClick={() => onUrl(item)} className="flex items-center gap-2 rounded-xl card-surface px-3 py-2 text-left text-[12.5px] text-fg hover:brightness-105">
-            <ExternalLink size={13} className="shrink-0 text-brand" /><span className="truncate font-mono">{item}</span>
-          </button>)}
+            </div>
+          </div>;
+        })}
+        {!activeTab?.initialUrl && <div className="relative z-10 min-h-0 flex-1 overflow-auto">
+          <Empty title="打开一个页面" body="Agent 起了本地服务，或者你想对照某个网页，都可以在这里看，还能点选元素发给 Atlas。" icon={<Globe size={22} />} />
+          {suggestions.length > 0 && <div className="grid gap-1.5 px-2">
+            <p className="m-0 mb-1 text-[12px] text-fg-3">这次对话里出现的本地地址</p>
+            {suggestions.map((item) => <button key={item} type="button" onClick={() => activeTab && navigateTabRef.current(activeTab.id, item)} className="flex items-center gap-2 rounded-xl card-surface px-3 py-2 text-left text-[12.5px] text-fg hover:brightness-105">
+              <ExternalLink size={13} className="shrink-0 text-brand" /><span className="truncate font-mono">{item}</span>
+            </button>)}
+          </div>}
         </div>}
-      </div>}
+      {/* Floats over the selected page so starting a pick never shifts what the user is about to click. */}
+      {picking && !localFile && <p role="status" className="pop pointer-events-none absolute top-2 left-1/2 z-20 m-0 -translate-x-1/2 rounded-lg px-3 py-1.5 text-[12px] whitespace-nowrap text-fg">{picking === 'element' ? '点一下页面上的元素' : '按住鼠标拖出一块区域'}，按 Esc 取消</p>}
+    </div>
+    {pendingPick && <section aria-label="页面批注" className="shrink-0 rounded-xl border border-line bg-panel p-3 shadow-lg">
+      <div className="flex items-start gap-2">
+        {pendingPick.screenshot && <img src={pendingPick.screenshot} alt="已标记的页面区域" className="size-14 shrink-0 rounded-lg border border-line object-cover" />}
+        <div className="min-w-0 flex-1 text-[12px] text-fg-2">
+          <p className="m-0 font-medium">已标记{pendingPick.kind === 'element' ? '页面元素' : '页面区域'}</p>
+          <p className="m-0 mt-1 line-clamp-2 text-fg-3">{pendingPick.kind === 'element' ? `${pendingPick.tag} · ${pendingPick.selector}` : pendingPick.text || '区域截图已准备好'}</p>
+        </div>
+        <button type="button" aria-label="取消页面标记" onClick={() => setPendingPick(null)} className="grid size-6 shrink-0 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><X size={13} /></button>
+      </div>
+      <label className="sr-only" htmlFor="browser-page-annotation">给 Atlas 的页面批注</label>
+      <textarea id="browser-page-annotation" autoFocus value={annotation} onChange={(event) => setAnnotation(event.target.value)} rows={2} placeholder="补充想怎么修改或关注什么（可选）" className="mt-2 min-h-12 w-full resize-y rounded-lg bg-sunken px-2.5 py-2 text-[12px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" onKeyDown={(event) => {
+        if (event.key === 'Escape') { event.preventDefault(); setPendingPick(null); }
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); finishPick(); }
+      }} />
+      <div className="mt-2 flex justify-end gap-2">
+        <button type="button" onClick={() => setPendingPick(null)} className="h-7 rounded-lg px-2.5 text-[12px] text-fg-3 hover:bg-hover hover:text-fg">取消</button>
+        <button type="button" onClick={finishPick} className="primary-fill h-7 rounded-lg px-2.5 text-[12px]">添加到输入框</button>
+      </div>
+    </section>}
     {apiBaseUrl && <div className="shrink-0 border-t border-line pt-1.5">
       <button type="button" onClick={() => setRecorderOpen((value) => !value)} aria-expanded={recorderOpen}
         className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-fg-3 hover:bg-hover hover:text-fg">
