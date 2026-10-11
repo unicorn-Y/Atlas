@@ -21,9 +21,8 @@
 
 - `npm --prefix frontend run build`：通过，exit code 0。
 - 测试：未新增、未运行任何测试或测试套件。
-- 后端：设置 `ATLAS_UPSTREAM_AUTO=0` 并使用临时 `ATLAS_DATA_DIR` 启动时，曾观测到 `Application startup complete`，且 `/api/health` 返回 200；`/api/conversations` 与 `/api/tools` 也曾在该实例返回 200。之后本机反复启动会在 Hermes `run_agent.py` 的环境启动路径上以 `RelaunchExit: 1` 退出，无法保持稳定服务。
-- 源码路由检查：工作树导入的 `atlas.server` 来自 `D:\atlas-f1-a\core\atlas\server.py`；工作树 OpenAPI 路由表包含新增的 `/api/conversations/{conversation_id}/stats` 和 `/search`。
-- 界面：用本机 Chrome 打开 renderer，使用临时 API 夹具载入会话，实际打开侧栏会话菜单、会话详情、轮次与用量区和查找输入；搜索返回匹配片段，过程中无页面异常。使用短命真实后端进程时，详情端点得到通用 404，显示该进程未提供工作树新增路由；因此实时后端到新增端点的端到端调用尚未确认，夹具界面结果不作为真实后端 API 通过证据。
+- 后端：设置 `ATLAS_UPSTREAM_AUTO=0`，以全新临时 `ATLAS_DATA_DIR` 启动；观察到启动完成，`/api/health` 返回 200，OpenAPI 列出新增 `/stats` 与 `/search` 路由。创建临时空会话后，详情统计和会话搜索均返回 200；空会话统计为 0，费用为 `null`，搜索结果为空。
+- 界面：用本机 Chrome 打开 renderer 并连接上述真实临时后端；侧栏会话更多菜单可打开详情，显示轮次与用量、未知价格状态；输入查找词后显示无匹配结果。浏览器捕获的 `/stats` 和 `/search` 响应均为 200，页面错误/控制台错误为 0。
 
 ## 记录的未完成跨区或产品边界
 
