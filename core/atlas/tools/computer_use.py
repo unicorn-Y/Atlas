@@ -7,6 +7,7 @@ import base64
 import ctypes
 import json
 import os
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -21,6 +22,12 @@ from atlas.config import get_config
 def _tool(
     name: str, description: str, properties: dict[str, Any], required: list[str]
 ) -> dict[str, Any]:
+    if name in {
+        "computer_observe", "computer_window", "computer_mouse",
+        "computer_keyboard", "computer_clipboard",
+    }:
+        properties = {**properties, "grant_id": {"type": "string", "minLength": 1}}
+        description += " Every action requires the grant_id returned by an approved computer_request_access in this run."
     return {
         "type": "function",
         "function": {
@@ -37,6 +44,22 @@ def _tool(
 
 
 COMPUTER_TOOLS = [
+    _tool(
+        "computer_request_access",
+        "Request user approval for Computer Use in this run. Waits until the user approves or denies; approval is bound to this run, revoked by stop, and expires after 30 minutes.",
+        {
+            "reason": {"type": "string", "minLength": 1},
+            "scope": {"type": "string", "enum": ["desktop", "window"]},
+            "window_id": {"type": "integer", "minimum": 1},
+        },
+        ["reason", "scope"],
+    ),
+    _tool(
+        "computer_stop",
+        "Immediately stop Computer Use for this run, including pending approval and in-flight CUA I/O where the host driver supports cancellation. This stop is latched for the rest of the run.",
+        {},
+        [],
+    ),
     _tool(
         "computer_observe",
         (
@@ -249,6 +272,12 @@ class ComputerUseRuntime:
         self._artifacts: list[Path] = []
         self._cua_snapshots: dict[tuple[int, int], list[dict[str, Any]]] = {}
         self._closed = False
+        self._run_stops: dict[str, threading.Event] = {}
+        self._run_grants: dict[str, dict[str, Any]] = {}
+        self._access_requests: dict[str, dict[str, Any]] = {}
+        self._active_calls: dict[str, asyncio.Task[Any]] = {}
+        self._access_lock = threading.RLock()
+        self._thread_state = threading.local()
         self._user32: Any = None
         self._kernel32: Any = None
         if os.name == "nt":
@@ -347,32 +376,176 @@ class ComputerUseRuntime:
     def get_tools_for_llm(self) -> list[dict[str, Any]]:
         return COMPUTER_TOOLS
 
-    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any] | None = None, *, run_id: str | None = None,
+    ) -> dict[str, Any]:
+        if self._closed:
+            return self._error("Computer Use runtime is shutting down.")
+        args = arguments or {}
+        run_key = str(run_id or "").strip()
+        if name == "computer_stop":
+            if not run_key:
+                return self._error("Computer Use stop requires an active run id.")
+            return self._success(await self.stop_run(run_key))
+        if name == "computer_request_access":
+            if not run_key:
+                return self._error("Computer Use access requests require an active run id.")
+            return await self._request_access(run_key, args)
         if self.permission_mode != "full_access":
             return self._error(
                 f"Computer Use is disabled by permission_mode={self.permission_mode!r}."
             )
-        if self._closed:
-            return self._error("Computer Use runtime is shutting down.")
-        args = arguments or {}
+        if not run_key:
+            return self._error("Computer Use actions require an active run id.")
+        if self._run_stops.get(run_key) and self._run_stops[run_key].is_set():
+            return self._error("Computer Use was stopped for this run.")
+        grant_id = str(args.get("grant_id", ""))
+        grant = self._run_grants.get(run_key)
+        if grant and grant.get("expires_at", 0) <= time.time():
+            self._run_grants.pop(run_key, None)
+            grant = None
+        if not grant or grant.get("grant_id") != grant_id:
+            return self._error("Computer Use requires an approved grant_id for this run.")
+        if grant.get("scope") == "window":
+            try:
+                target_window = int(args.get("window_id") or 0)
+            except (TypeError, ValueError):
+                target_window = 0
+            if target_window != grant.get("window_id"):
+                return self._error("This Computer Use grant is limited to its approved window.")
+        action_task = asyncio.create_task(self._execute_action(run_key, name, args))
+        self._active_calls[run_key] = action_task
         try:
-            if self.cua_backend is not None and self._is_target_addressed(name, args):
-                return await self._call_targeted(name, args)
-            if os.name != "nt" or self._user32 is None:
-                return self._error("Computer Use requires the active Windows desktop session.")
-            if name == "computer_observe":
-                return await asyncio.to_thread(self._observe, args)
-            if name == "computer_window":
-                return await asyncio.to_thread(self._window, args)
-            if name == "computer_mouse":
-                return await asyncio.to_thread(self._mouse, args)
-            if name == "computer_keyboard":
-                return await asyncio.to_thread(self._keyboard, args)
-            if name == "computer_clipboard":
-                return await asyncio.to_thread(self._clipboard, args)
-            return self._error(f"Unknown Computer Use tool: {name}")
+            return await action_task
+        except asyncio.CancelledError:
+            return self._error("Computer Use action was stopped.")
         except Exception as exc:
             return self._error(f"{name} failed: {exc}")
+        finally:
+            if self._active_calls.get(run_key) is action_task:
+                self._active_calls.pop(run_key, None)
+
+    async def _execute_action(
+        self, run_id: str, name: str, args: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self._run_stops.get(run_id) and self._run_stops[run_id].is_set():
+            return self._error("Computer Use was stopped for this run.")
+        if self.cua_backend is not None and self._is_target_addressed(name, args):
+            return await self._call_targeted(name, args)
+        if os.name != "nt" or self._user32 is None:
+            return self._error("Computer Use requires the active Windows desktop session.")
+        actions = {
+            "computer_observe": self._observe,
+            "computer_window": self._window,
+            "computer_mouse": self._mouse,
+            "computer_keyboard": self._keyboard,
+            "computer_clipboard": self._clipboard,
+        }
+        action = actions.get(name)
+        if action is None:
+            return self._error(f"Unknown Computer Use tool: {name}")
+        return await asyncio.to_thread(self._run_sync, run_id, action, args)
+
+    async def _request_access(self, run_id: str, args: dict[str, Any]) -> dict[str, Any]:
+        if self.permission_mode != "full_access":
+            return self._error(f"Computer Use is disabled by permission_mode={self.permission_mode!r}.")
+        reason = str(args.get("reason", "")).strip()
+        scope = str(args.get("scope", ""))
+        try:
+            window_id = int(args.get("window_id") or 0)
+        except (TypeError, ValueError):
+            return self._error("window_id must be a positive integer.")
+        if not reason or scope not in {"desktop", "window"}:
+            return self._error("reason and a valid scope are required.")
+        if scope == "window" and window_id <= 0:
+            return self._error("window scope requires a valid window_id.")
+        stop = self._run_stops.setdefault(run_id, threading.Event())
+        if stop.is_set():
+            return self._error("Computer Use was stopped for this run.")
+        request_id = uuid.uuid4().hex
+        loop = asyncio.get_running_loop()
+        approved = asyncio.Event()
+        request = {
+            "request_id": request_id, "run_id": run_id, "reason": reason,
+            "scope": scope, "window_id": window_id or None,
+            "status": "pending", "created_at": time.time(), "_event": approved,
+            "_loop": loop,
+        }
+        with self._access_lock:
+            self._access_requests[request_id] = request
+        try:
+            await asyncio.wait_for(approved.wait(), timeout=300)
+        except asyncio.TimeoutError:
+            request["status"] = "expired"
+        if request["status"] == "approved":
+            if stop.is_set():
+                return self._error("Computer Use access was stopped before the grant became active.")
+            grant_id = uuid.uuid4().hex
+            grant = {
+                "grant_id": grant_id, "run_id": run_id, "scope": scope,
+                "window_id": window_id or None, "created_at": time.time(),
+                "expires_at": time.time() + 1800,
+            }
+            self._run_grants[run_id] = grant
+            return self._success({"status": "approved", **grant})
+        return self._error(f"Computer Use access request {request_id} {request['status']}.")
+
+    def _run_sync(self, run_id: str, action: Any, args: dict[str, Any]) -> dict[str, Any]:
+        self._thread_state.run_stop = self._run_stops[run_id]
+        try:
+            self._check_stop()
+            return action(args)
+        finally:
+            self._thread_state.run_stop = None
+
+    def _check_stop(self) -> None:
+        event = getattr(self._thread_state, "run_stop", None)
+        if event is not None and event.is_set():
+            raise InterruptedError("Computer Use was stopped for this run")
+
+    def access_requests(self, *, pending_only: bool = True) -> list[dict[str, Any]]:
+        with self._access_lock:
+            return [
+                {key: value for key, value in item.items() if not key.startswith("_")}
+                for item in self._access_requests.values()
+                if not pending_only or item.get("status") == "pending"
+            ]
+
+    def resolve_access_request(self, request_id: str, approve: bool) -> dict[str, Any] | None:
+        with self._access_lock:
+            item = self._access_requests.get(request_id)
+            if not item or item.get("status") != "pending":
+                return None
+            item["status"] = "approved" if approve else "denied"
+            item["_loop"].call_soon_threadsafe(item["_event"].set)
+            return {key: value for key, value in item.items() if not key.startswith("_")}
+
+    async def stop_run(self, run_id: str) -> dict[str, Any]:
+        stop = self._run_stops.setdefault(run_id, threading.Event())
+        stop.set()
+        with self._access_lock:
+            for item in self._access_requests.values():
+                if item.get("run_id") == run_id and item.get("status") == "pending":
+                    item["status"] = "stopped"
+                    item["_loop"].call_soon_threadsafe(item["_event"].set)
+        task = self._active_calls.get(run_id)
+        cancel_requested = False
+        driver_cancelled = False
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+            cancel_requested = True
+            stop_driver = getattr(self.cua_backend, "stop", None)
+            if callable(stop_driver):
+                try:
+                    driver_cancelled = bool(await stop_driver())
+                except Exception:
+                    driver_cancelled = False
+        self._run_grants.pop(run_id, None)
+        return {
+            "run_id": run_id, "stopped": True,
+            "inflight_call_cancel_requested": cancel_requested,
+            "driver_stop_supported": driver_cancelled,
+        }
 
     @staticmethod
     def _is_target_addressed(name: str, args: dict[str, Any]) -> bool:
@@ -692,6 +865,7 @@ class ComputerUseRuntime:
             old.unlink(missing_ok=True)
 
     def _window(self, args: dict[str, Any]) -> dict[str, Any]:
+        self._check_stop()
         action = args["action"]
         if action == "list":
             windows = self._windows()
@@ -866,6 +1040,7 @@ class ComputerUseRuntime:
     def _send_mouse_events(
         self, events: list[tuple[int, int, int] | tuple[int, int, int, int]]
     ) -> None:
+        self._check_stop()
         inputs_list = []
         for event in events:
             flags, x, y = event[:3]
@@ -894,6 +1069,7 @@ class ComputerUseRuntime:
         return (x & 0xFFFF) | ((y & 0xFFFF) << 16)
 
     def _post_mouse_button(self, x: int, y: int, button: str, state: str) -> None:
+        self._check_stop()
         hwnd, cx, cy = self._mouse_target(x, y)
         point = self._packed_point(cx, cy)
         messages = {
@@ -911,11 +1087,13 @@ class ComputerUseRuntime:
         self._user32.SendMessageW(hwnd, message, wparam, point)
 
     def _post_mouse_move(self, x: int, y: int, button: str) -> None:
+        self._check_stop()
         hwnd, cx, cy = self._mouse_target(x, y)
         mask = {"left": 0x0001, "right": 0x0002, "middle": 0x0010}[button]
         self._user32.SendMessageW(hwnd, 0x0200, mask, self._packed_point(cx, cy))
 
     def _post_mouse_wheel(self, x: int, y: int, amount: int, horizontal: bool) -> None:
+        self._check_stop()
         hwnd = int(self._user32.WindowFromPoint(_POINT(x, y)) or 0)
         if not hwnd:
             raise RuntimeError(f"No window is under mouse coordinates ({x}, {y})")
@@ -990,6 +1168,7 @@ class ComputerUseRuntime:
         self._send_key_events([(vk, flags, scan)])
 
     def _send_key_events(self, events: list[tuple[int, int, int]]) -> None:
+        self._check_stop()
         inputs = (_INPUT * len(events))(
             *[
                 _INPUT(type=1, ki=_KEYBDINPUT(vk, scan, flags, 0, None))
@@ -1020,6 +1199,7 @@ class ComputerUseRuntime:
         return int(info.hwndFocus or info.hwndActive or foreground)
 
     def _post_key(self, target: int, vk: int, *, key_up: bool) -> None:
+        self._check_stop()
         scan = self._user32.MapVirtualKeyW(vk, 0)
         lparam = 1 | (scan << 16)
         if vk in {0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2D, 0x2E, 0x5B, 0x5C}:

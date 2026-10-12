@@ -25,6 +25,16 @@ export interface ComputerDiagnostic {
   detail?: string;
 }
 
+export interface ComputerAccessRequest {
+  request_id: string;
+  run_id: string;
+  reason: string;
+  scope: 'desktop' | 'window';
+  window_id?: number | null;
+  status: 'pending' | 'approved' | 'denied' | 'stopped' | 'expired';
+  created_at: number;
+}
+
 /** GET /api/computer/runs/{run_id}/steps 的一条步骤：动作说明 + 可选截图缩略。 */
 export interface ComputerStep {
   index?: number;
@@ -42,6 +52,19 @@ export const pauseComputer = (apiBaseUrl: string, runId: string) =>
   api<{ status?: string }>(apiBaseUrl, '/api/computer/pause', { method: 'POST', json: { run_id: runId } });
 
 export const getComputerStatus = (apiBaseUrl: string) => api<ComputerStatus>(apiBaseUrl, '/api/computer/status');
+
+export const getComputerAccessRequests = (apiBaseUrl: string) =>
+  api<{ requests: ComputerAccessRequest[] }>(apiBaseUrl, '/api/computer/access-requests');
+
+export const resolveComputerAccess = (apiBaseUrl: string, requestId: string, approve: boolean) =>
+  api<ComputerAccessRequest>(apiBaseUrl, `/api/computer/access-requests/${encodeURIComponent(requestId)}/resolve`, {
+    method: 'POST', json: { approve },
+  });
+
+export const stopComputerRun = (apiBaseUrl: string, runId: string) =>
+  api<{ status: string; run_id: string; stopped: boolean; inflight_call_cancel_requested: boolean; driver_stop_supported: boolean }>(
+    apiBaseUrl, `/api/computer/runs/${encodeURIComponent(runId)}/stop`, { method: 'POST' },
+  );
 
 export const getComputerSteps = (apiBaseUrl: string, runId: string) =>
   api<{ steps?: ComputerStep[] }>(apiBaseUrl, `/api/computer/runs/${encodeURIComponent(runId)}/steps`);

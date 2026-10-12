@@ -292,6 +292,13 @@ export default function App() {
     }
     return undefined;
   }, [activeEvents]);
+  const computerRunId = useMemo(() => {
+    if (foregroundEvent?.runId) return foregroundEvent.runId;
+    if (!activeRun || activeRun.conversationId !== store.activeConversationId) return undefined;
+    const hasComputerTool = activeEvents.some((event) => event.type === 'tool.started'
+      && String(event.data.name ?? '').startsWith('computer_'));
+    return hasComputerTool ? activeRun.id : undefined;
+  }, [activeEvents, activeRun, foregroundEvent, store.activeConversationId]);
 
   const go = useCallback((next: View) => setView(next), []);
 
@@ -1249,7 +1256,7 @@ export default function App() {
             {activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 right-5 z-20 flex justify-end [&>*]:pointer-events-auto">
               <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
             </div>}
-            {foregroundEvent && <ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={foregroundEvent.runId} className="shrink-0" />}
+            {computerRunId && <ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={computerRunId} canPause={Boolean(foregroundEvent)} className="shrink-0" />}
             <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId}
               history={historyWithBranchNotes} items={timelineItems}
               hasEarlier={Boolean(store.messagesHasEarlier[store.activeConversationId])}

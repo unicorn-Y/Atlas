@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, FileText, Plus, ScrollText, ExternalLink, Globe, Monitor, RotateCw, Smartphone, Tablet, X } from 'lucide-react';
 import type { AgentEvent } from '../../../types/runtime';
+import { backend } from '../../store/useAtlasStore';
 import BrowserRecorderPanel from '../../components/x2/BrowserRecorderPanel';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
@@ -58,6 +59,14 @@ interface BrowserTab {
 function tabTitle(url: string): string {
   if (!url) return '新标签页';
   try { return new URL(url).host || url; } catch { return url; }
+}
+
+function sameWorkspace(left: string, right: string): boolean {
+  const normalizeWorkspace = (value: string) => {
+    const normalized = value.trim().replace(/\\/g, '/').replace(/\/+$/, '');
+    return /^[a-z]:\//i.test(normalized) ? normalized.toLowerCase() : normalized;
+  };
+  return normalizeWorkspace(left) === normalizeWorkspace(right);
 }
 
 // Runs inside the page: highlight what the pointer is over, resolve with the clicked element, Escape cancels.
@@ -169,7 +178,7 @@ function localDocumentKind(file: File): 'html' | 'pdf' | 'image' | 'video' | nul
  * A browser next to the conversation for checking what the Agent built.
  * Pages run in their own session with no access to Atlas; picking an element hands its details to the composer.
  */
-export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast, onAsk, apiBaseUrl, runId, events }: {
+export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast, onAsk, workspace, apiBaseUrl, runId, events }: {
   url: string;
   onUrl: (url: string) => void;
   /** Local servers the Agent mentioned, offered as one-click targets. */
@@ -178,6 +187,8 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   onToast: (text: string) => void;
   /** Hand a request to Atlas, e.g. to summarise the open page. */
   onAsk?: (text: string) => void;
+  /** Active conversation/worktree workspace; browser artifact events are accepted only for this root. */
+  workspace?: string | null;
   /** X2 操作录制：后端地址；给了才显示底部的录制区。 */
   apiBaseUrl?: string;
   /** 活动任务的 runId / 事件流；缺省时录制面板自己从全局事件流取。 */
@@ -201,6 +212,8 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const onUrlRef = useRef(onUrl);
   const onToastRef = useRef(onToast);
   const lastReportedUrlRef = useRef(url);
+  const lastPanelSyncRef = useRef({ runId: '', sequence: -1 });
+  const lastBrowserArtifactRef = useRef({ runId: '', sequence: -1 });
   const nextTabIdRef = useRef(1);
   const viewRefs = useRef(new Map<number, WebviewElement>());
   const boundViewRefs = useRef(new Map<number, { view: WebviewElement; listeners: Array<[string, EventListener]> }>());
@@ -311,6 +324,56 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     lastReportedUrlRef.current = url;
     if (url) navigateTabRef.current(activeTabIdRef.current, url, false);
   }, [url]);
+  useEffect(() => {
+    const eventRunId = runId ?? '';
+    if (lastPanelSyncRef.current.runId !== eventRunId) lastPanelSyncRef.current = { runId: eventRunId, sequence: -1 };
+    const syncs = events
+      ?.filter((event) => event.type === 'browser.panel.sync' && (!runId || event.runId === runId)
+        && event.sequence > lastPanelSyncRef.current.sequence)
+      .sort((left, right) => left.sequence - right.sequence) ?? [];
+    if (!syncs.length) return;
+
+    const latest = syncs[syncs.length - 1];
+    for (const event of syncs) lastPanelSyncRef.current.sequence = event.sequence;
+    const nextUrl = typeof latest.data.url === 'string' ? latest.data.url : '';
+    if (!nextUrl) return;
+
+    const activeId = activeTabIdRef.current;
+    const tab = tabsRef.current.find((item) => item.id === activeId);
+    const title = typeof latest.data.title === 'string' && latest.data.title ? latest.data.title : tabTitle(nextUrl);
+    setLocalFile(null);
+    setPendingPick(null);
+    setTabs((previous) => previous.map((item) => item.id === activeId
+      ? { ...item, initialUrl: item.initialUrl || nextUrl, url: nextUrl, address: nextUrl, title }
+      : item));
+    if (tab?.url !== nextUrl) void viewRefs.current.get(activeId)?.loadURL(nextUrl).catch(() => undefined);
+    setNav({ back: false, forward: false });
+    reportUrlRef.current(nextUrl);
+  }, [events, runId]);
+  useEffect(() => {
+    if (!runId || !workspace) return;
+    if (lastBrowserArtifactRef.current.runId !== runId) lastBrowserArtifactRef.current = { runId, sequence: -1 };
+    const artifacts = events
+      ?.filter((event) => event.type === 'browser.artifact' && event.runId === runId
+        && event.sequence > lastBrowserArtifactRef.current.sequence)
+      .sort((left, right) => left.sequence - right.sequence) ?? [];
+    if (!artifacts.length) return;
+
+    for (const event of artifacts) {
+      lastBrowserArtifactRef.current.sequence = event.sequence;
+      const eventWorkspace = typeof event.data.workspace === 'string' ? event.data.workspace : '';
+      const artifactPath = typeof event.data.artifact_path === 'string' ? event.data.artifact_path : '';
+      if (!eventWorkspace || !sameWorkspace(eventWorkspace, workspace)
+        || !/^artifacts\/browser\/[a-f0-9]{32}\.png$/i.test(artifactPath)) continue;
+
+      const artifactUrl = backend.rawFileUrl(workspace, artifactPath);
+      const activeId = activeTabIdRef.current;
+      navigateTabRef.current(activeId, artifactUrl);
+      setTabs((previous) => previous.map((tab) => tab.id === activeId
+        ? { ...tab, title: `截图 · ${artifactPath.slice(18)}` }
+        : tab));
+    }
+  }, [events, runId, workspace]);
   useEffect(() => {
     if (activeTab) {
       const view = viewRefs.current.get(activeTab.id);
@@ -501,7 +564,7 @@ ${current}`);
         </div>
       </section>
       : null}
-    <div ref={stageRef} role="tabpanel" id="browser-tabpanel" aria-labelledby={`browser-tab-${activeTabId}`} className={cn('relative flex min-h-0 flex-1', localFile && 'hidden', size && 'items-start justify-center overflow-hidden')}>
+    <div ref={stageRef} role="tabpanel" id="browser-tabpanel" aria-labelledby={`browser-tab-${activeTabId}`} tabIndex={0} className={cn('relative flex min-h-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand', localFile && 'hidden', size && 'items-start justify-center overflow-hidden')}>
         {/* Other device sizes render at full size and are scaled to fit, so the page lays out as it would there. */}
         {tabs.filter((tab) => tab.initialUrl).map((tab) => {
           const selected = tab.id === activeTabId;

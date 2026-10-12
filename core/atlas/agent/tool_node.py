@@ -1374,7 +1374,7 @@ async def execute_tools_node(
             elif fn_name.startswith("computer_") and agent._computer_use:
                 if getattr(ctx, "sandbox_enabled", False):
                     raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")
-                result = await agent._computer_use.call_tool(fn_name, fn_args)
+                result = await agent._computer_use.call_tool(fn_name, fn_args, run_id=ctx.run_id)
             elif fn_name == "remember" and agent._memory is not None:
                 result = await agent._remember_result(
                     str(fn_args.get("key", "")),

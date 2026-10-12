@@ -85,6 +85,20 @@ class CuaBackend:
             "structured_content": structured_content,
         }
 
+    async def stop(self) -> bool:
+        """Use a driver cancellation tool when the installed SDK exposes one."""
+        if self._driver is None:
+            return False
+        names = {"stop", "computer_stop", "cancel", "cancel_action"}
+        tool = next((item for item in await self.tools() if item.get("name") in names), None)
+        if tool is None:
+            return False
+        schema = tool.get("inputSchema", tool.get("input_schema", {}))
+        if schema.get("required"):
+            return False
+        await self._driver.call_tool(tool["name"], "{}")
+        return True
+
     async def close(self) -> None:
         if self._driver is not None:
             await self._driver.shutdown()

@@ -69,6 +69,9 @@ def build_x2_context(bound_context: Any) -> X2Context:
         emit=_make_emit(bound_context),
         approval_callback=getattr(bound_context, "approval_callback", None),
         wait_input=wait_input,
+        metadata={
+            "workspace": str(getattr(bound_context, "workspace", "") or ""),
+        },
     )
 
 

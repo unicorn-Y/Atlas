@@ -83,4 +83,38 @@ async def computer_run_steps(run_id: str) -> dict[str, Any]:
     return {"run_id": run_id, "steps": run_steps(run_id)}
 
 
+@router.get("/access-requests", dependencies=[Depends(_require_trusted_origin)])
+async def computer_access_requests(request: Request) -> dict[str, Any]:
+    """Pending Computer Use approvals for the desktop permission surface."""
+    runtime = getattr(getattr(request.app.state, "services", None), "computer_use", None)
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Computer Use runtime is unavailable")
+    return {"requests": runtime.access_requests(pending_only=True)}
+
+
+class ComputerAccessResolution(BaseModel):
+    approve: bool
+
+
+@router.post("/access-requests/{request_id}/resolve", dependencies=[Depends(_require_trusted_origin)])
+async def resolve_computer_access(request_id: str, req: ComputerAccessResolution, request: Request) -> dict[str, Any]:
+    """Resolve an explicit access prompt; grants are issued by the waiting run only."""
+    runtime = getattr(getattr(request.app.state, "services", None), "computer_use", None)
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Computer Use runtime is unavailable")
+    resolved = runtime.resolve_access_request(request_id, req.approve)
+    if resolved is None:
+        raise HTTPException(status_code=404, detail="No pending Computer Use request exists")
+    return resolved
+
+
+@router.post("/runs/{run_id}/stop", dependencies=[Depends(_require_trusted_origin)])
+async def stop_computer_run(run_id: str, request: Request) -> dict[str, Any]:
+    """Latch stop, revoke the run grant, and cancel its active Computer Use call."""
+    runtime = getattr(getattr(request.app.state, "services", None), "computer_use", None)
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Computer Use runtime is unavailable")
+    return {"status": "stopped", **await runtime.stop_run(run_id)}
+
+
 __all__ = ["router"]
