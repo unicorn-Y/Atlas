@@ -185,6 +185,9 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
         window.dispatchEvent(shortcut);
         if (!shortcut.defaultPrevented) throw new Error('selected-text command unavailable');
       } }] : []),
+      ...(range ? [{ id: 'side-chat-selection', label: '用选中文本开启侧聊', restoreFocus: false, onSelect: () => {
+        window.dispatchEvent(new CustomEvent('atlas:side-chat-selection', { detail: { text: range.toString().trim() } }));
+      } }] : []),
       ...(role === 'assistant' && content && !streaming ? [{
         id: 'markdown-source',
         label: markdownSource ? '查看渲染预览' : '查看 Markdown 源码',

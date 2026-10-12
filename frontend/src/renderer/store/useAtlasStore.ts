@@ -156,6 +156,8 @@ interface AtlasState extends PersistentSlice {
   setPendingRunOverrides: (overrides: PendingRunOverrides | null) => void;
   removeQueued: (conversationId: string, id: string) => void;
   takeQueued: (conversationId: string, id: string) => QueuedMessage | undefined;
+  moveQueued: (conversationId: string, id: string, beforeId: string | null) => void;
+  restoreQueued: (conversationId: string, item: QueuedMessage, index: number) => void;
   sendQueuedNow: (conversationId: string, id: string) => void;
   steerQueued: (conversationId: string, id: string) => void;
   /** Hands a user-edited todo list to the Agent: steered into the running task, or sent as a new message once it ended. */
@@ -656,6 +658,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const conversationId = get().activeConversationId;
       if (!conversationId) return;
       const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files, ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}), ...(profileId ? { profileId } : {}), ...(agentId ? { agentId } : {}) };
+      // Every nonterminal run (planning/running/paused/waiting/approval) follows the selected
+      // steer/redirect/queue policy; approval and input cards still use their dedicated reply actions.
       const running = activeRunFor(conversationId);
       if (running) {
         // Attachments can't join a run in flight, so those always wait for the next run.
@@ -722,6 +726,22 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       if (item) get().removeQueued(conversationId, id);
       return item;
     },
+    moveQueued: (conversationId, id, beforeId) => set((state) => {
+      const items = state.queue[conversationId] ?? [];
+      const moving = items.find((item) => item.id === id);
+      if (!moving || (beforeId !== null && beforeId === id)) return {};
+      const rest = items.filter((item) => item.id !== id);
+      const index = beforeId === null ? rest.length : rest.findIndex((item) => item.id === beforeId);
+      if (index < 0) return {};
+      const next = [...rest.slice(0, index), moving, ...rest.slice(index)];
+      return { queue: { ...state.queue, [conversationId]: next } };
+    }),
+    restoreQueued: (conversationId, item, index) => set((state) => {
+      const items = state.queue[conversationId] ?? [];
+      if (items.some((entry) => entry.id === item.id)) return {};
+      const at = Math.max(0, Math.min(items.length, index));
+      return { queue: { ...state.queue, [conversationId]: [...items.slice(0, at), item, ...items.slice(at)] } };
+    }),
     sendQueuedNow: (conversationId, id) => {
       const items = get().queue[conversationId] ?? [];
       const item = items.find((entry) => entry.id === id);
@@ -741,7 +761,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     steerQueued: (conversationId, id) => {
       const running = activeRunFor(conversationId);
       const item = get().queue[conversationId]?.find((entry) => entry.id === id);
-      if (!running || !item || item.attachments.length || item.files.length) return;
+      if (!running || !item || item.attachments.length || item.files.length || item.refs || item.profileId || item.agentId) return;
       get().removeQueued(conversationId, id);
       if (!steer(running, item)) set((state) => ({ queue: { ...state.queue, [conversationId]: [item, ...(state.queue[conversationId] ?? [])] } }));
     },
