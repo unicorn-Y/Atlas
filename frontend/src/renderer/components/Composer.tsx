@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { Accessibility, ArrowLeft, ArrowRight, ArrowUp, AtSign, ChevronDown, Code2, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, Keyboard, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, Sparkles, X, type LucideIcon } from 'lucide-react';
+import { Accessibility, ArrowLeft, ArrowRight, ArrowUp, AtSign, ChevronDown, Code2, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, Keyboard, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, Sparkles, RotateCcw, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
 import { fuzzyScore } from '../services/fuzzy';
 import { cn } from '../ui/cn';
@@ -38,8 +38,12 @@ export function mentionAt(value: string): { trigger: '@' | '#' | '$'; query: str
 /** Pastes longer than this (a log, a whole file) become an attachment. */
 const LONG_PASTE = 4000;
 const SCREEN_READER_MODE_KEY = 'atlas.composer.screen-reader-mode';
+const ENTER_TO_SEND_KEY = 'atlas.preference.enter-to-send';
 function readScreenReaderMode(): boolean {
   try { return localStorage.getItem(SCREEN_READER_MODE_KEY) === 'true'; } catch { return false; }
+}
+function readEnterToSend(): boolean {
+  try { return localStorage.getItem(ENTER_TO_SEND_KEY) !== 'false'; } catch { return true; }
 }
 
 export interface ComposerMode { id: string; label: string; icon: LucideIcon }
@@ -140,6 +144,9 @@ interface ComposerProps {
   onRemoveMention?: (item: MentionItem) => void;
   /** Called instead of inserting pasted text longer than LONG_PASTE characters. */
   onLongPaste?: (text: string) => void;
+  attachmentProgress?: string;
+  failedAttachmentCount?: number;
+  onRetryFailedAttachments?: () => void;
   /** Extra toolbar controls next to the attach button (working directory, plan mode). */
   tools?: ReactNode;
   onEnhancePrompt?: (text: string) => Promise<string>;
@@ -150,6 +157,7 @@ interface ComposerProps {
 export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
   const [expert] = useExpertMode(backend.apiBaseUrl);
+  const [enterToSend, setEnterToSend] = useState(readEnterToSend);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(props.value);
   valueRef.current = props.value;
@@ -295,9 +303,7 @@ export default function Composer(props: ComposerProps) {
   };
   const choose = (item: SlashCommand | MentionItem | SkillSuggestion) => {
     if ('skillName' in item) {
-      // ZCode's $skill is a message-level mention. Atlas has no structured
-      // message-level skill transport yet, so keep it as explicit prompt text
-      // instead of toggling the conversation-wide active skill.
+      // The typed token is resolved into a message-level run.start field on submit.
       if (mention?.trigger === '$') props.onChange(`${props.value.slice(0, mention.start)}$${item.skillName} `);
       textRef.current?.focus();
       return;
@@ -389,7 +395,8 @@ export default function Composer(props: ComposerProps) {
       if (event.key === 'ArrowUp') { recallHistory(-1); if (historyIndex !== null || !props.value) event.preventDefault(); return; }
       if (event.key === 'ArrowDown') { const browsing = historyIndex !== null; if (browsing) event.preventDefault(); recallHistory(1); return; }
     }
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); }
+    if (event.key === 'Enter' && !event.nativeEvent.isComposing
+      && ((enterToSend && !event.shiftKey) || (!enterToSend && event.ctrlKey))) { event.preventDefault(); submit(); }
   };
   const hasFiles = (event: DragEvent<HTMLFormElement>) => Array.from(event.dataTransfer.types).includes('Files');
 
@@ -468,14 +475,29 @@ export default function Composer(props: ComposerProps) {
         <button type="button" aria-label={`移除 ${file.name}`} onClick={() => props.onRemoveFile?.(index)} className="grid size-5 place-items-center rounded-md hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"><X size={12} /></button>
       </span>)}
     </div>}
+    {(props.attachmentProgress || (props.failedAttachmentCount ?? 0) > 0) && <div className="mt-2 flex items-center gap-2 text-[12px] text-fg-3" role="status" aria-live="polite">
+      {props.attachmentProgress && <span>{props.attachmentProgress}</span>}
+      {(props.failedAttachmentCount ?? 0) > 0 && <><span>{props.failedAttachmentCount} 个附件读取失败</span><button type="button" onClick={props.onRetryFailedAttachments} className="inline-flex items-center gap-1 text-brand hover:underline"><RotateCcw size={12} />重试</button></>}
+    </div>}
     <input ref={fileRef} hidden type="file" multiple onChange={(event) => { props.onPickImages(event.target.files); event.currentTarget.value = ''; }} />
 
     <div className={cn('@container flex items-center gap-1.5', hero ? 'mt-3' : 'mt-2')}>
       <Tip label="添加图片或文件，也可以直接粘贴、拖进来">
-        <button type="button" aria-label="添加附件" onClick={() => fileRef.current?.click()}
+        <Menu>
+        <MenuTrigger asChild>
+        <button type="button" aria-label="添加附件或目标" title="添加附件或目标"
           className="grid size-8 shrink-0 place-items-center rounded-[9px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
           {props.attachments.length ? <ImagePlus size={18} /> : <Paperclip size={18} />}
         </button>
+        </MenuTrigger>
+        <MenuContent align="start" side="top">
+          <MenuLabel>添加到消息</MenuLabel>
+          <MenuItem onSelect={() => fileRef.current?.click()}><Paperclip size={15} />附件</MenuItem>
+          <MenuItem onSelect={() => props.onChange(`${props.value}${props.value && !props.value.endsWith(' ') ? ' ' : ''}/goal `)}><Sparkles size={15} />目标命令</MenuItem>
+          <MenuSeparator />
+          <MenuItem checked={enterToSend} onSelect={() => setEnterToSend((current) => { const next = !current; try { localStorage.setItem(ENTER_TO_SEND_KEY, String(next)); } catch { /* storage unavailable */ } return next; })}>Enter 发送</MenuItem>
+        </MenuContent>
+        </Menu>
       </Tip>
       {/* Narrow composers (split view, wide task panel): the tool row scrolls rather than pushing send out of view. */}
       {props.tools && <div onWheel={(event) => { if (!event.deltaX && event.deltaY) event.currentTarget.scrollLeft += event.deltaY; }}

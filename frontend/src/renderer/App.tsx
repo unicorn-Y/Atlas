@@ -11,6 +11,7 @@ import TodoPanel from './components/TodoPanel';
 import ProgressCapsule from './components/ProgressCapsule';
 import { latestTodos } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
+import { resolveMessageSkillReferences } from './components/skillMentions';
 import RecipesDialog from './components/RecipesDialog';
 import SideChat from './components/SideChat';
 import RemoteFolderDialog from './components/RemoteFolderDialog';
@@ -196,6 +197,9 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]);
   const [files, setFiles] = useState<Array<RunFile & { size: number }>>([]);
+  const [attachmentProgress, setAttachmentProgress] = useState('');
+  const [failedAttachmentReads, setFailedAttachmentReads] = useState<File[]>([]);
+  const attachmentReadsRef = useRef(0);
   const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
   const editingDraftRef = useRef<{ text: string; attachments: string[]; files: Array<RunFile & { size: number }>; mentions: MentionItem[] } | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
@@ -522,7 +526,8 @@ export default function App() {
     }
     const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: mentions.filter((item) => item.kind === 'conversation').map((item) => item.id).slice(0, 3) };
     setMentions([]);
-    void store.sendMessage(text, images, documents, refs);
+    const messageSkills = resolveMessageSkillReferences(text, store.skills.map((skill) => skill.name));
+    void store.sendMessage(text, images, documents, refs, undefined, undefined, messageSkills);
   };
   /** Images go to the model as pictures; every other file rides along as a document. */
   const addFiles = (picked: FileList | null) => {
@@ -539,16 +544,26 @@ export default function App() {
     const tooBig = picked.find((file) => file.size > 10 * 1024 * 1024);
     if (tooBig) { setToast(`${tooBig.name} 超过 10 MB，发不了`); return; }
     if (files.reduce((sum, file) => sum + file.size, 0) + picked.reduce((sum, file) => sum + file.size, 0) > 20 * 1024 * 1024) { setToast('一条消息的文件加起来不能超过 20 MB'); return; }
-    Promise.all(picked.map((file) => new Promise<RunFile & { size: number }>((resolve, reject) => {
+    Promise.allSettled(picked.map((file) => new Promise<RunFile & { size: number }>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => typeof reader.result === 'string'
         ? resolve({ name: file.name, mime: file.type || 'application/octet-stream', data_base64: reader.result.slice(reader.result.indexOf(',') + 1), size: file.size })
         : reject(new Error('无法读取文件'));
+      reader.onprogress = (event) => {
+        if (event.lengthComputable) setAttachmentProgress(`正在读取 ${file.name}（${Math.round(event.loaded / event.total * 100)}%）`);
+      };
       reader.onerror = () => reject(new Error('无法读取文件'));
+      reader.onloadend = () => { attachmentReadsRef.current -= 1; if (!attachmentReadsRef.current) setAttachmentProgress(''); };
+      attachmentReadsRef.current += 1;
+      setAttachmentProgress(`正在读取 ${file.name}`);
       reader.readAsDataURL(file);
-    }))).then((read) => {
-      if (useAtlasStore.getState().activeConversationId === conversationId) setFiles((current) => [...current, ...read]);
-    }).catch(() => { if (useAtlasStore.getState().activeConversationId === conversationId) setToast('读取文件失败'); });
+    }))).then((results) => {
+      if (useAtlasStore.getState().activeConversationId !== conversationId) return;
+      const read = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+      const failed = results.flatMap((result, index) => result.status === 'rejected' ? [picked[index]] : []);
+      if (read.length) setFiles((current) => [...current, ...read]);
+      if (failed.length) { setFailedAttachmentReads((current) => [...current, ...failed]); setToast(`读取 ${failed.length} 个文件失败，可重试`); }
+    });
   };
   const addImages = (picked: File[]) => {
     const conversationId = store.activeConversationId;
@@ -557,14 +572,31 @@ export default function App() {
     if (selected.some((file) => file.size > 4 * 1024 * 1024)) { setToast('单张图片不能超过 4 MiB'); return; }
     const queuedBytes = attachments.reduce((sum, image) => sum + Math.max(0, Math.floor((image.length - image.indexOf(',') - 1) * 3 / 4)), 0);
     if (queuedBytes + selected.reduce((sum, file) => sum + file.size, 0) > 8 * 1024 * 1024) { setToast('单条消息的图片总大小不能超过 8 MiB'); return; }
-    Promise.all(selected.map((file) => new Promise<string>((resolve, reject) => {
+    Promise.allSettled(selected.map((file) => new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('无法读取图片'));
       reader.onerror = () => reject(new Error('无法读取图片'));
+      reader.onprogress = (event) => {
+        if (event.lengthComputable) setAttachmentProgress(`正在读取 ${file.name}（${Math.round(event.loaded / event.total * 100)}%）`);
+      };
+      reader.onloadend = () => { attachmentReadsRef.current -= 1; if (!attachmentReadsRef.current) setAttachmentProgress(''); };
+      attachmentReadsRef.current += 1;
+      setAttachmentProgress(`正在读取 ${file.name}`);
       reader.readAsDataURL(file);
-    }))).then((images) => {
-      if (useAtlasStore.getState().activeConversationId === conversationId) setAttachments((current) => [...current, ...images].slice(0, 4));
-    }).catch(() => { if (useAtlasStore.getState().activeConversationId === conversationId) setToast('读取图片失败'); });
+    }))).then((results) => {
+      if (useAtlasStore.getState().activeConversationId !== conversationId) return;
+      const images = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+      const failed = results.flatMap((result, index) => result.status === 'rejected' ? [selected[index]] : []);
+      if (images.length) setAttachments((current) => [...current, ...images].slice(0, 4));
+      if (failed.length) { setFailedAttachmentReads((current) => [...current, ...failed]); setToast(`读取 ${failed.length} 张图片失败，可重试`); }
+    });
+  };
+  const retryFailedAttachments = () => {
+    const retry = failedAttachmentReads;
+    setFailedAttachmentReads([]);
+    const imageTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    addDocuments(retry.filter((file) => !imageTypes.includes(file.type)));
+    addImages(retry.filter((file) => imageTypes.includes(file.type)));
   };
   const attachDrawing = (dataUrl: string): boolean => {
     if (attachments.length >= 4) { setToast('每条消息最多 4 张图片'); return false; }
@@ -886,6 +918,7 @@ export default function App() {
   const composerStatus = listening ? '正在听…' : store.connected ? '' : store.backendStarting ? 'Atlas 后端启动中…' : 'Atlas 后端没有连接';
   const composerBase = {
     value: input, onChange: setInput, attachments, onPickImages: addFiles, listening, onToggleMic: toggleSpeechInput,
+    attachmentProgress, failedAttachmentCount: failedAttachmentReads.length, onRetryFailedAttachments: retryFailedAttachments,
     onEnhancePrompt: enhancePrompt, onAttachDrawing: attachDrawing, contextKey: store.activeConversationId,
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
     files, onRemoveFile: (index: number) => setFiles((items) => items.filter((_, position) => position !== index)),
