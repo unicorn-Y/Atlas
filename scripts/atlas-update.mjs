@@ -156,12 +156,20 @@ function rebuild() {
 
 function launch() {
   const electron = path.join(root, 'node_modules', 'electron', 'dist', isWin ? 'electron.exe' : 'electron');
-  const child = spawn(electron, [path.join(root, 'frontend')], {
+  // Always expose a CDP endpoint so the app can be inspected/driven remotely.
+  // Override the port with ATLAS_DEBUG_PORT, or set it to 0 to disable.
+  const debugPort = process.env.ATLAS_DEBUG_PORT || '9335';
+  const electronArgs = [];
+  if (debugPort && debugPort !== '0') {
+    electronArgs.push(`--remote-debugging-port=${debugPort}`, '--remote-allow-origins=*');
+  }
+  electronArgs.push(path.join(root, 'frontend'));
+  const child = spawn(electron, electronArgs, {
     cwd: root, detached: true, stdio: 'ignore', windowsHide: false,
     env: { ...process.env, ATLAS_PYTHON: python, VITE_DEV_SERVER_URL: '' },
   });
   child.unref();
-  log(`launched Atlas (pid ${child.pid})`);
+  log(`launched Atlas (pid ${child.pid}) debug-port=${debugPort}`);
 }
 
 // One updater at a time: a double-clicked shortcut once started two, and the second launched
