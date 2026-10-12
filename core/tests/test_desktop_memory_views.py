@@ -65,6 +65,15 @@ def test_service_record_summary_validity_and_candidate_state_are_preserved():
     assert fact["forgetAfter"] == 1791936000000
 
 
+def test_internal_reflections_are_not_personal_facts():
+    from atlas.memory.desktop_views import facts
+
+    row = {"record_ref": "memory:reflection", "facet": "FACT", "lifecycle": "ACTIVE",
+           "content": {"memory_type": "FACT", "summary": "Missing model key",
+                       "legacy_ref": "legacy:agent_reflections:reflection-id"}}
+    assert facts([row], True)["facts"] == []
+
+
 async def test_unavailable_unified_facade_never_falls_back_to_legacy():
     class Config:
         def get(self, key, default=None):

@@ -54,6 +54,10 @@ def facts(rows: list[dict[str, Any]], history: bool) -> dict[str, Any]:
         if not history and lifecycle != "ACTIVE":
             continue
         content = row.get("content") or {}
+        # Legacy operational reflections share FACT's storage projection, but
+        # are not personal facts and must not appear in "About you".
+        if str(content.get("legacy_ref") or "").startswith("legacy:agent_reflections:"):
+            continue
         valid_time = row.get("valid_time") or {}
         result.append({
             "id": row["record_ref"],
