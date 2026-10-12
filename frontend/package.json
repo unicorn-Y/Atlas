@@ -1,6 +1,6 @@
 {
   "name": "@atlas/frontend",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Atlas AI Personal Assistant desktop application",
   "author": "Atlas",
   "private": true,
