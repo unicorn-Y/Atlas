@@ -64,10 +64,13 @@ describe('ForegroundConfirmCard', () => {
 });
 
 describe('ComputerEdgeBar', () => {
-  it('renders the always-on-top-style bar with the pause action', () => {
+  it('offers stopping on Windows and only offers pause when the driver supports it', () => {
     const html = renderToStaticMarkup(<ComputerEdgeBar apiBaseUrl="http://x" runId="run-1" />);
-    expect(html).toContain('前台操作中 — 移动鼠标即暂停');
-    expect(html).toContain('暂停操作');
+    expect(html).toContain('电脑操控进行中 — Windows 使用当前前台桌面');
+    expect(html).toContain('停止');
+    expect(html).not.toContain('暂停操作');
+    const pausable = renderToStaticMarkup(<ComputerEdgeBar apiBaseUrl="http://x" runId="run-1" canPause />);
+    expect(pausable).toContain('暂停操作');
   });
 });
 

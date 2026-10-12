@@ -86,7 +86,9 @@ class OperationalOutbox:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.path), timeout=15)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        from hermes_state_wal import apply_wal_with_fallback
+
+        apply_wal_with_fallback(self._conn, db_label="Atlas operational outbox")
         self._conn.execute("PRAGMA busy_timeout=15000")
         self._init_schema()
 

@@ -16,7 +16,10 @@ describe('ConversationMessage', () => {
     const html = renderToStaticMarkup(<ConversationMessage role="assistant" username="User" content={'- first\n- second\n\n[Atlas](https://example.com)\n\n```python\ndef read_json(path):\n    return path\n```'} />);
 
     expect(html).toContain('<ul>');
-    expect(html).toContain('<a href="https://example.com">Atlas</a>');
+    expect(html).toMatch(/<a\b[^>]*href="https:\/\/example\.com\/"[^>]*>Atlas<\/a>/);
+    expect(html).toContain('rel="noopener noreferrer"');
+    const unsafe = renderToStaticMarkup(<ConversationMessage role="assistant" username="User" content="[unsafe](javascript:alert(1))" />);
+    expect(unsafe).not.toContain('href="javascript:');
     expect(html).toContain('class="hljs language-python"');
     expect(html).toContain('hljs-keyword');
   });

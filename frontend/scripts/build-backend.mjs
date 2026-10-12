@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.resolve(scriptDir, '..');
 const repoRoot = path.resolve(frontendDir, '..');
-const venvPython = path.join(repoRoot, 'core', '.venv', 'Scripts', 'python.exe');
+const venvPython = process.env.ATLAS_BUILD_PYTHON || path.join(repoRoot, 'core', '.venv', 'Scripts', 'python.exe');
 const outputDir = path.join(frontendDir, 'backend-release');
 const workDir = path.join(frontendDir, 'backend-build');
 
@@ -37,7 +37,9 @@ if (process.platform !== 'win32') {
 process.env.LITELLM_LOCAL_MODEL_COST_MAP ??= 'true';
 
 if (!fs.existsSync(venvPython)) run('py', ['-3', '-m', 'venv', path.join(repoRoot, 'core', '.venv')]);
-run(venvPython, ['-m', 'pip', 'install', '-e', 'core[release]']);
+if (process.env.ATLAS_BUILD_SKIP_INSTALL !== '1') {
+  run(venvPython, ['-m', 'pip', 'install', '-e', 'core[release]']);
+}
 const hermesSourceRoot = resolveHermesSourceRoot();
 
 for (const target of [outputDir, workDir]) {
@@ -52,6 +54,7 @@ run(venvPython, [
   '--distpath', outputDir,
   '--workpath', workDir,
   '--specpath', workDir,
+  '--paths', path.join(repoRoot, 'core'),
   '--paths', hermesSourceRoot,
   '--collect-all', 'atlas',
   // Hermes local-runtime imports its sibling `pm` package dynamically; collect-all

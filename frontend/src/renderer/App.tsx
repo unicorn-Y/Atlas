@@ -403,10 +403,11 @@ export default function App() {
       .then((result) => setConversationGoal(result.goal))
       .catch(() => setConversationGoal(null));
   }, [activeEvents, store.activeConversationId, store.connected]);
-  // First run: the settings sheet opens once, as soon as the backend reports no API key.
+  // After onboarding, open model settings once when no gateway key is saved.
   useEffect(() => {
     if (firstRunShownRef.current || !store.connected || store.conversationsLoading || store.apiKeyConfigured) return;
     firstRunShownRef.current = true;
+    if (pref('onboarded') !== 'true') return;
     setSheet('models');
   }, [store.apiKeyConfigured, store.connected, store.conversationsLoading]);
   useEffect(() => window.atlasDesktop?.onMaximizeChange(setMaximized), []);

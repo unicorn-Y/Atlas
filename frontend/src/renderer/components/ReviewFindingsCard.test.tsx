@@ -26,7 +26,10 @@ describe('ReviewFindingsCard', () => {
     expect(html).toContain('主要');
     expect(html).toContain('次要');
     // 三个计数徽标里只有为 0 的那一个（主要 0）带弱化样式
-    expect((html.match(/opacity-40/g) ?? []).length).toBe(1);
+    const chips = html.match(/<span class="[^"]*tabular-nums[^"]*">.*?<\/span>(?:阻断|主要|次要) \d+<\/span>/g) ?? [];
+    expect(chips).toHaveLength(3);
+    expect(chips.filter((chip) => chip.includes('opacity-40'))).toHaveLength(1);
+    expect(chips.find((chip) => chip.includes('主要 0'))).toContain('opacity-40');
     expect(html).toContain('src/app.py:12');
     expect(html).toContain('空指针');
     expect(html).toContain('src/b.py');

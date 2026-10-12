@@ -18,6 +18,7 @@ import time
 import tempfile
 import uuid
 from collections.abc import AsyncIterator, Callable
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -883,8 +884,9 @@ class AgentOrchestrator:
             subtask_group_completed=subtask_group_completed,
             parent_process_event_callback=parent_process_event_callback,
         )
-        async for event in self.execute(request, callbacks):
-            yield event
+        async with aclosing(self.execute(request, callbacks)) as events:
+            async for event in events:
+                yield event
 
     def execute(
         self, request: "RunRequest", callbacks: "RunCallbacks",
@@ -905,8 +907,9 @@ class AgentOrchestrator:
             from atlas.models.router import model_usage_callback
 
             with model_usage_callback(publish_auxiliary_usage):
-                async for event in execute_run(self, request, callbacks):
-                    yield event
+                async with aclosing(execute_run(self, request, callbacks)) as events:
+                    async for event in events:
+                        yield event
 
         return scoped()
     # -- helpers -------------------------------------------------------------

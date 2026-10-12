@@ -8,6 +8,7 @@ const electronMocks = vi.hoisted(() => {
     unmaximize: vi.fn(),
     close: vi.fn(),
     isMaximized: vi.fn(() => false),
+    setAlwaysOnTop: vi.fn(),
     loadURL: vi.fn(),
     loadFile: vi.fn(),
     webContents: {
@@ -31,11 +32,15 @@ const electronMocks = vi.hoisted(() => {
     app: {
       isPackaged: false,
       getAppPath: vi.fn(() => '/atlas-frontend'),
+      getPath: vi.fn(() => '/atlas-test-user-data'),
+      requestSingleInstanceLock: vi.fn(() => true),
+      setAsDefaultProtocolClient: vi.fn(),
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
       quit: vi.fn(),
     },
     dialog: { showOpenDialog: vi.fn() },
+    globalShortcut: { register: vi.fn(() => true), unregister: vi.fn(), unregisterAll: vi.fn() },
     ipcMain: { on: vi.fn(), handle: vi.fn() },
     Menu: { setApplicationMenu: vi.fn() },
     nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => true })) },

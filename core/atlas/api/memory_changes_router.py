@@ -12,12 +12,17 @@ from __future__ import annotations
 
 import asyncio
 from urllib.parse import quote
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from atlas.config import DATA_ROOT
+from atlas.api.app_services import AppServices
+from atlas.api.dependencies import get_app_services
+from atlas.api.unified_memory_router import _http_error
+from atlas.memory import desktop_views
+from atlas.memory.unified_client import UnifiedMemoryError
 from atlas.memory import memos_changes, memos_service
 
 router = APIRouter(prefix="/api/memory", tags=["memory-changes"])
@@ -26,9 +31,21 @@ MEMOS_VIEWER = "http://127.0.0.1:18800"
 PAUSE_FLAG = DATA_ROOT / "data" / "memory_paused"  # same path HermesRuntime checks
 
 
+def _unified(services: AppServices) -> Any:
+    facade = services.unified_memory
+    if facade is not None and facade.enabled:
+        return facade
+    if services.config is not None and services.config.get("memory.unified.enabled", False):
+        raise HTTPException(503, "统一记忆尚未就绪。")
+    return None
+
+
 @router.get("/changes")
-async def get_changes(limit: int = 100, before: int | None = None, entity: str = "",
+async def get_changes(services: Annotated[AppServices, Depends(get_app_services)],
+                      limit: int = 100, before: int | None = None, entity: str = "",
                       op: str = "") -> dict[str, Any]:
+    if _unified(services) is not None:
+        raise HTTPException(501, "统一记忆变动记录尚未接入此页面；关于你和经验与技能读取统一记忆。")
     memos_changes.ensure_watcher()
     await asyncio.to_thread(memos_changes.scan)  # always show the latest state on open/refresh
     return await asyncio.to_thread(memos_changes.list_changes, limit=limit, before_id=before,
@@ -36,7 +53,9 @@ async def get_changes(limit: int = 100, before: int | None = None, entity: str =
 
 
 @router.get("/state")
-async def get_state() -> dict[str, Any]:
+async def get_state(services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    if _unified(services) is not None:
+        return {"paused": False, "viewer_url": "", "source": "unified-memory", "can_pause": False}
     return {"paused": PAUSE_FLAG.exists(), "viewer_url": MEMOS_VIEWER}
 
 
@@ -53,14 +72,32 @@ async def _memos_get(path: str) -> Any:
 
 
 @router.get("/facts")
-async def get_facts(history: bool = False, limit: int = 500) -> Any:
+async def get_facts(services: Annotated[AppServices, Depends(get_app_services)],
+                    history: bool = False, limit: int = 500) -> Any:
+    facade = _unified(services)
+    if facade is not None:
+        try:
+            return desktop_views.facts(await desktop_views.records(
+                facade, max(1, min(limit, 5000)), facets=("FACT", "PREFERENCE", "STATE", "HABIT", "RELATION")), history)
+        except UnifiedMemoryError as exc:
+            raise _http_error(exc) from exc
     return await _memos_get(f"/api/v1/facts?history={1 if history else 0}&limit={limit}")
 
 
 @router.get("/library/{kind}")
-async def get_library(kind: str, limit: int = 100) -> Any:
+async def get_library(kind: str, services: Annotated[AppServices, Depends(get_app_services)],
+                      limit: int = 100) -> Any:
     if kind not in _LIBRARY_PATHS:
         raise HTTPException(404, f"没有这类记忆：{kind}")
+    facade = _unified(services)
+    if facade is not None:
+        if kind == "policies":
+            raise HTTPException(501, "统一记忆服务尚未提供策略列表投影；此页面不会读取旧 MemOS 策略。")
+        try:
+            return desktop_views.library(await desktop_views.records(
+                facade, max(1, min(limit, 5000)), facets=("SKILL" if kind == "skills" else "KNOWLEDGE",)), kind)
+        except UnifiedMemoryError as exc:
+            raise _http_error(exc) from exc
     return await _memos_get(f"{_LIBRARY_PATHS[kind]}?limit={limit}")
 
 
@@ -69,7 +106,9 @@ class PauseBody(BaseModel):
 
 
 @router.post("/pause")
-async def set_pause(body: PauseBody) -> dict[str, Any]:
+async def set_pause(body: PauseBody, services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    if _unified(services) is not None:
+        raise HTTPException(501, "统一记忆的暂停尚未接入此页面。")
     if body.paused:
         PAUSE_FLAG.parent.mkdir(parents=True, exist_ok=True)
         PAUSE_FLAG.write_text("paused by user\n", encoding="utf-8")
@@ -93,7 +132,10 @@ _DELETE_PATHS = {"policies": "/api/v1/policies", "world_model": "/api/v1/world-m
 
 
 @router.post("/delete")
-async def delete_memory(body: DeleteBody) -> dict[str, Any]:
+async def delete_memory(body: DeleteBody, services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    facade = _unified(services)
+    if facade is not None:
+        raise HTTPException(501, "统一记忆的删除需要遗忘预览和所有者授权；此入口尚未接入该流程，不会修改旧 MemOS 数据。")
     ids = [i for i in body.ids if i]
     if not ids:
         raise HTTPException(400, "ids 不能为空")

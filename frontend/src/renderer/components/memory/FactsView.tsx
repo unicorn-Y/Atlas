@@ -13,14 +13,14 @@ export interface UserFact {
   factKey: string;
   value: string;
   text: string;
-  status: 'active' | 'superseded' | 'retracted';
+  status: string;
   evidenceQuote: string;
-  createdAt: number;
-  updatedAt: number;
+  createdAt: number | null;
+  updatedAt: number | null;
   forgetAfter: number | null;
 }
 
-const day = (ms: number) => new Date(ms).toLocaleDateString('zh-CN');
+const day = (ms: number | null) => ms === null ? '时间未知' : new Date(ms).toLocaleDateString('zh-CN');
 
 /** 当前 = 生效且没过期；其余进历史，并说明为什么不再生效。 */
 export function splitFacts(facts: UserFact[], now = Date.now()) {
@@ -31,7 +31,11 @@ export function splitFacts(facts: UserFact[], now = Date.now()) {
     else history.push({
       ...fact,
       why: fact.status === 'superseded' ? '已被新说法替代'
-        : fact.status === 'retracted' ? '已撤销' : `${day(fact.forgetAfter ?? now)} 已过期`,
+        : fact.status === 'retracted' || fact.status === 'invalidated' ? '已撤销'
+        : fact.status === 'active' ? `${day(fact.forgetAfter)} 已过期`
+        : fact.status === 'candidate' ? '尚待确认'
+        : fact.status === 'conflicted' ? '存在未解决的冲突'
+        : fact.status === 'erased' ? '已遗忘' : `当前状态：${fact.status}`,
     });
   }
   return { current, history };
@@ -45,13 +49,15 @@ export default function FactsView({ apiBaseUrl, connected, onToast }: {
   const [error, setError] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [busy, setBusy] = useState('');
+  const [canDelete, setCanDelete] = useState(false);
 
   const load = useCallback(async () => {
     if (!connected) return;
     setLoading(true);
     try {
-      const page = await api<{ facts: UserFact[] }>(apiBaseUrl, '/api/memory/facts?history=1');
+      const page = await api<{ facts: UserFact[]; can_delete?: boolean }>(apiBaseUrl, '/api/memory/facts?history=1');
       setFacts(page.facts ?? []);
+      setCanDelete(page.can_delete !== false);
       setError('');
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : String(exc));
@@ -78,10 +84,10 @@ export default function FactsView({ apiBaseUrl, connected, onToast }: {
     <div style={{ minWidth: 0 }}>
       <div>{fact.text}</div>
       <small>
-        原话「{fact.evidenceQuote}」 · {note}
+        {fact.evidenceQuote ? `原话「${fact.evidenceQuote}」 · ` : ''}{note}
       </small>
     </div>
-    <ConfirmButton label="删除" confirm="确认删除" disabled={busy === fact.id} onConfirm={() => void remove(fact)} />
+    {canDelete && <ConfirmButton label="删除" confirm="确认删除" disabled={busy === fact.id} onConfirm={() => void remove(fact)} />}
   </div>;
 
   return <section aria-label="关于你">
@@ -94,6 +100,7 @@ export default function FactsView({ apiBaseUrl, connected, onToast }: {
         <History size={14} />{showHistory ? '隐藏历史' : `历史 ${history.length || ''}`}
       </button>
     </div>
+    {!loading && !error && !canDelete && <div className="note">正在读取统一记忆。删除需经过遗忘预览和所有者授权，该操作暂未在此页面开放。</div>}
     {loading && <div className="list glass"><div className="empty"><LoaderCircle size={22} className="spin" /><b>正在读取…</b></div></div>}
     {!loading && error && <div className="error-note" role="alert"><span>读取失败：{error}</span></div>}
     {!loading && !error && current.length === 0 &&

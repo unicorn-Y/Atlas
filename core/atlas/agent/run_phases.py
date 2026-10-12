@@ -372,6 +372,15 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         state.abort = True
         return
     state.selected_config = selected_config
+    from atlas.models import ModelManager
+
+    if isinstance(agent._model_mgr, ModelManager):
+        credential_error = agent._model_mgr.missing_model_credentials(runtime.model)
+        if credential_error:
+            yield {"type": "error", "category": "model", "detail": credential_error,
+                   "code": "MODEL_CREDENTIALS_MISSING"}
+            state.abort = True
+            return
     runtime.fallback_models = list(
         selected_config.get("fallback")
         or _agent.get_config().get("models.fallback", []) or []

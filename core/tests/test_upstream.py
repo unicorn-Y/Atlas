@@ -44,6 +44,17 @@ def test_parse_header_formats(header: str, repo: str, sha: str, path: str) -> No
     assert (record.repo, record.sha, record.path) == (repo, sha, path)
 
 
+def test_profiles_do_not_share_staging_workspace(tmp_path: Path) -> None:
+    from atlas.upstream.staging import staging_root
+
+    repo = tmp_path / "Atlas"
+    first = staging_root(repo, tmp_path / "profile-one" / "upstream")
+    second = staging_root(repo, tmp_path / "profile-two" / "upstream")
+    assert first != second
+    assert first == tmp_path / "profile-one" / "upstream" / "staging"
+    assert second == tmp_path / "profile-two" / "upstream" / "staging"
+
+
 def test_parse_header_ignores_mentions_without_commit() -> None:
     assert provenance.parse_header('"""Normalized (ported from the hermes handler)."""\n') is None
     assert provenance.parse_header("import os\n") is None

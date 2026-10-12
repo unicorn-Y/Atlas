@@ -41,6 +41,25 @@ def _listening() -> bool:
         return False
 
 
+def _owned_listener() -> bool:
+    """A shared port is usable only when its process owns this data home."""
+    import psutil
+
+    expected = os.path.normcase(str(MEMOS_HOME.resolve()))
+    try:
+        for connection in psutil.net_connections(kind="tcp"):
+            if connection.status != psutil.CONN_LISTEN or not connection.laddr or connection.laddr.port != 18800:
+                continue
+            if connection.pid is None:
+                return False
+            args = psutil.Process(connection.pid).cmdline()
+            homes = [arg.removeprefix("--home=") for arg in args if arg.startswith("--home=")]
+            return any(os.path.normcase(str(Path(home).resolve())) == expected for home in homes)
+    except (OSError, psutil.Error):
+        return False
+    return False
+
+
 def _load_daemon_manager() -> ModuleType:
     global _daemon_manager
     if _daemon_manager is None:
@@ -58,10 +77,10 @@ def _load_daemon_manager() -> ModuleType:
 def ensure_running() -> bool:
     """True when MemOS answers on :18800, starting its daemon if needed."""
     if _listening():
-        return True
+        return _owned_listener()
     with _lock:
         if _listening():
-            return True
+            return _owned_listener()
         os.environ.setdefault("MEMOS_HOME", str(MEMOS_HOME))
         try:
             ok = bool(_load_daemon_manager().ensure_viewer_daemon(runtime_home=MEMOS_HOME))
@@ -69,14 +88,14 @@ def ensure_running() -> bool:
             log.warning("memos.start_failed", error=str(exc), exc_info=True)
             return False
         log.info("memos.started_on_demand", ok=ok)
-        return ok and _listening()
+        return ok and _listening() and _owned_listener()
 
 
 def request(method: str, path: str, payload: dict[str, Any] | None = None,
             timeout: float = 15) -> Any:
     """Call the MemOS HTTP API; raises ``ConnectionError`` when it cannot be started."""
     if not ensure_running():
-        raise ConnectionError("MemOS 记忆服务没有启动")
+        raise ConnectionError("MemOS 服务未启动，或端口被其他数据目录的实例占用。")
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(MEMOS_URL + path, data=data, method=method,
                                  headers={"Content-Type": "application/json"})

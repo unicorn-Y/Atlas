@@ -74,6 +74,29 @@ def _orchestrator(memory: Any | None = None) -> AgentOrchestrator:
 # -- H2.2: run() adapter packs RunRequest/RunCallbacks -----------------------
 
 
+async def test_closing_run_closes_nested_execution_in_same_task(monkeypatch) -> None:
+    from contextvars import ContextVar
+
+    marker = ContextVar("test_execution_scope", default="outside")
+    closed = []
+
+    async def fake_execute(agent, request, callbacks):
+        token = marker.set("inside")
+        try:
+            yield {"type": "error", "error": "missing credentials"}
+            await asyncio.sleep(60)
+        finally:
+            marker.reset(token)
+            closed.append(True)
+
+    monkeypatch.setattr("atlas.agent.execute_run", fake_execute)
+    events = _orchestrator().run("hello", "conversation")
+    assert (await anext(events))["type"] == "error"
+    await events.aclose()
+    assert closed == [True]
+    assert marker.get() == "outside"
+
+
 async def test_run_kwargs_pack_request_and_callbacks(monkeypatch) -> None:
     agent = _orchestrator()
     captured: dict[str, Any] = {}

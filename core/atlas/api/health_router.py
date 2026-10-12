@@ -49,6 +49,12 @@ async def health(
     """
     startup = getattr(services, "startup", None)
     components: dict[str, str] = startup.snapshot() if startup is not None else {}
+    facade = services.unified_memory
+    if facade is not None and facade.enabled:
+        if getattr(facade, "_last_unavailable", None):
+            components["memoryos"] = "failed"
+        elif facade.service_state in {"ready", "starting", "failed"}:
+            components["memoryos"] = facade.service_state
     if any(state == "starting" for state in components.values()):
         status = "starting"
     elif any(state == "failed" for state in components.values()):

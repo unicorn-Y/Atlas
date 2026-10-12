@@ -44,12 +44,21 @@ for (const required of [installerPath, unpackedExecutable, backendExecutable]) {
   }
 }
 if (!backendVersion) throw new Error('Unable to determine the Atlas backend version.');
+const actualElectronVersion = fs.readFileSync(path.join(frontendDir, 'electron-runtime', 'version'), 'utf8').trim().replace(/^v/, '');
+if (actualElectronVersion !== packageJson.devDependencies.electron) throw new Error('Release Electron version mismatch.');
+const sqliteDll = path.join(path.dirname(backendExecutable), '_internal', 'sqlite3.dll');
 
 const manifest = {
   schema_version: 1,
   app_version: packageJson.version,
   git_commit: gitCommit(),
-  electron_version: packageJson.devDependencies.electron,
+  electron_version: actualElectronVersion,
+  sqlite_runtime: {
+    version: '3.54.0',
+    source: 'https://www.sqlite.org/2026/sqlite-dll-win-x64-3540000.zip',
+    archive_sha3_256: 'f5fb500c73a3afd89976386bb8e4fdc8b5b65c052e187fb1ada1f5de034cd45b',
+    dll_sha256: sha256(sqliteDll),
+  },
   backend_build: {
     version: backendVersion,
     executable_sha256: sha256(backendExecutable),

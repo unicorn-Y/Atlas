@@ -66,7 +66,11 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def staging_root(repo: Path) -> Path:
+def staging_root(repo: Path, data_root: Path | None = None) -> Path:
+    # Profiles have separate job locks, so their mutable workspaces must also
+    # be separate. Keep the historical path only for legacy callers.
+    if data_root is not None:
+        return data_root / "staging"
     return repo.parent / STAGING_DIRNAME
 
 
@@ -991,7 +995,7 @@ def run(plan: list[str], data_root: Path | None = None, repo: Path | None = None
             log.finish("nothing")
             return log.data
         ws = Workspace(repo=repo, hermes_main=inventory.hermes_checkout(repo),
-                       root=staging_root(repo), data=data_root)
+                       root=staging_root(repo, data_root), data=data_root)
         prepare(ws, log)
         baseline(ws, set().union(*(group.gates for group in groups)), log)
         runner = Runner(ws, log, components, bool(check.load_settings(data_root).get("push")))
@@ -1010,7 +1014,7 @@ def run(plan: list[str], data_root: Path | None = None, repo: Path | None = None
         log.finish("failed")
     finally:
         try:
-            sources.kill_under(staging_root(repo))
+            sources.kill_under(staging_root(repo, data_root))
         except Exception:  # 清理失败不影响结果
             logger.warning("upstream.cleanup_failed", exc_info=True)
         if owned:

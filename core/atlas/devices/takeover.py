@@ -97,7 +97,9 @@ class TakeoverStateMachine:
         activity_capacity: int = DEFAULT_ACTIVITY_CAPACITY,
     ) -> None:
         self.device_id = device_id
-        self._clock = clock or time.monotonic
+        # Public timestamps are Unix seconds, consumed as dates by the desktop.
+        # No elapsed-time deadlines depend on this clock.
+        self._clock = clock or time.time
         self._lock = threading.RLock()
         self._state: str = FREE
         self._holder: str | None = None

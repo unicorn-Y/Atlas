@@ -15,7 +15,7 @@ const KINDS: Array<{ value: Kind; label: string; hint: string }> = [
   { value: 'world_model', label: '世界模型', hint: '对你的环境和工具的认识，比如项目结构、命令怎么用。' },
 ];
 
-const STATUS: Record<string, string> = { candidate: '候选', active: '生效', archived: '已归档' };
+const STATUS: Record<string, string> = { candidate: '候选', active: '生效', archived: '已归档', superseded: '已替代', invalidated: '已撤销', conflicted: '存在冲突', erased: '已遗忘' };
 
 export interface LibraryItem { id: string; title: string; detail: string; status: string; updatedAt: string }
 
@@ -45,6 +45,7 @@ export default function LibraryView({ apiBaseUrl, connected, onToast }: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [canDelete, setCanDelete] = useState(false);
 
   const load = useCallback(async () => {
     if (!connected) return;
@@ -52,6 +53,7 @@ export default function LibraryView({ apiBaseUrl, connected, onToast }: {
     try {
       const page = await api<Record<string, unknown>>(apiBaseUrl, `/api/memory/library/${kind}?limit=100`);
       setItems(toItems(kind, page));
+      setCanDelete(page.can_delete !== false);
       setError('');
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : String(exc));
@@ -83,6 +85,7 @@ export default function LibraryView({ apiBaseUrl, connected, onToast }: {
       </button>
     </div>
     <div className="note">{current.hint}</div>
+    {!loading && !error && !canDelete && <div className="note">正在读取统一记忆。删除和归档尚未在此页面开放。</div>}
     {loading && <div className="list glass"><div className="empty"><LoaderCircle size={22} className="spin" /><b>正在读取…</b></div></div>}
     {!loading && error && <div className="error-note" role="alert"><span>读取失败：{error}</span></div>}
     {!loading && !error && items.length === 0 &&
@@ -96,7 +99,7 @@ export default function LibraryView({ apiBaseUrl, connected, onToast }: {
             {item.detail ? ` · ${item.detail.length > 160 ? `${item.detail.slice(0, 160)}…` : item.detail}` : ''}
           </small>
         </div>
-        {item.status !== 'archived' &&
+        {canDelete && item.status !== 'archived' &&
           <ConfirmButton label={kind === 'skills' ? '归档' : '删除'} confirm={kind === 'skills' ? '确认归档' : '确认删除'}
             disabled={busy === item.id} onConfirm={() => void remove(item)} />}
       </div>)}

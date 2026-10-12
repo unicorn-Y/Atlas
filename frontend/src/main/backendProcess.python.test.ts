@@ -53,6 +53,7 @@ describe('source backend Python selection', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.useRealTimers();
@@ -71,6 +72,10 @@ describe('source backend Python selection', () => {
     const expectedCorePython = path.join(
       path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../core'),
       '.venv', 'Scripts', 'python.exe',
+    );
+    const nativeExistsSync = fs.existsSync.bind(fs);
+    vi.spyOn(fs, 'existsSync').mockImplementation((candidate) =>
+      String(candidate) === expectedCorePython || nativeExistsSync(candidate),
     );
     expect(await firstSpawnCommand()).toBe(expectedCorePython);
   });

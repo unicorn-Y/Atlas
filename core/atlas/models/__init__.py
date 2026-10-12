@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import secrets
 import time
 from datetime import datetime, timezone
@@ -209,6 +210,18 @@ class ModelManager:
         # Favorites first, then alphabetical
         result.sort(key=lambda x: (not x["favorite"], x["name"]))
         return result
+
+    def missing_model_credentials(self, model_id: str) -> str | None:
+        """Validate routes whose provider requires a key, without network I/O."""
+        model = self._find_model(model_id)
+        if model is None or model.get("local_only"):
+            return None
+        provider = _catalog.resolve_catalog_id(str(model.get("hermes_provider") or model.get("provider") or ""))
+        if provider != "anthropic":
+            return None
+        if self._api_key or self.resolve_api_key(provider) or os.environ.get("ANTHROPIC_API_KEY"):
+            return None
+        return "所选 Claude 模型尚未配置可用密钥。请在设置 → 模型中配置服务商或网关密钥，再重新发送。"
 
     def add_favorite(self, model_id: str) -> None:
         self._favorites.add(model_id)

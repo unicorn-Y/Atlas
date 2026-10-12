@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
@@ -271,6 +272,15 @@ async def get_diagnostics(
         "status": "error" if backend_state == "failed" else "warning" if backend_state == "starting" else "ok",
         "detail": {"ready": "服务已就绪。", "starting": "部分组件仍在启动。", "failed": "有组件启动失败；报告不包含原始错误或路径。"}[backend_state],
     }]
+    from hermes_cli.sqlite_runtime import is_sqlite_wal_reset_vulnerable
+
+    sqlite_unsafe = is_sqlite_wal_reset_vulnerable(sqlite3.sqlite_version_info)
+    checks.append({
+        "id": "sqlite_runtime", "label": "SQLite 运行时",
+        "status": "warning" if sqlite_unsafe else "ok",
+        "detail": f"SQLite {sqlite3.sqlite_version}；" +
+                  ("此版本受 WAL-reset 问题影响，请使用新版桌面包。" if sqlite_unsafe else "已包含 WAL-reset 修复。"),
+    })
 
     config_state = _file_state(CONFIG_PATH, _toml_parser)
     config_status, config_detail = _config_check_state(config_state)
@@ -294,11 +304,27 @@ async def get_diagnostics(
         except Exception:  # noqa: BLE001
             model_count = 0
         has_key = bool(getattr(model_mgr, "api_key_configured", False))
+        from atlas.models import ModelManager
+
+        credential_error = (model_mgr.missing_model_credentials(model_mgr.current_model)
+                            if isinstance(model_mgr, ModelManager) else None)
         checks.append({
             "id": "model_config",
             "label": "模型配置",
-            "status": "ok" if model_count else "warning",
-            "detail": f"已登记 {model_count} 个模型；网关密钥{'已配置' if has_key else '未配置（本地模型可能无需密钥）'}。不会显示模型地址或密钥。",
+            "status": "warning" if not model_count or credential_error else "ok",
+            "detail": credential_error or f"已登记 {model_count} 个模型；网关密钥{'已配置' if has_key else '未配置（本地模型或其他登录方式可能无需网关密钥）'}。不会显示模型地址或密钥。此检查不验证远端连接。",
+        })
+
+    facade = services.unified_memory
+    if facade is not None and facade.enabled:
+        memory_state = facade.service_state
+        unavailable = bool(getattr(facade, "_last_unavailable", None))
+        checks.append({
+            "id": "unified_memory_runtime", "label": "统一记忆运行状态",
+            "status": "warning" if unavailable or memory_state in {"starting", "failed"} else "ok",
+            "detail": "最近的记忆请求失败；请检查记忆服务。" if unavailable else
+                      "记忆服务尚未就绪。" if memory_state in {"starting", "failed"} else
+                      "未记录记忆服务请求失败；此检查不验证网络连接。",
         })
 
     for name, state in components.items():

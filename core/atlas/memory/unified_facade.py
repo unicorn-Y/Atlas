@@ -87,7 +87,7 @@ class UnifiedMemoryFacade:
     @property
     def timeout_seconds(self) -> float:
         try:
-            return float(self._config.get("memory.unified.timeout_seconds", 5.0))
+            return float(self._config.get("memory.unified.timeout_seconds", 15.0))
         except (TypeError, ValueError):
             return 5.0
 
@@ -127,18 +127,19 @@ class UnifiedMemoryFacade:
             raise ServiceUnavailable(
                 self._last_unavailable or "MemoryOS read circuit is open", route=route)
 
-    async def _remote_read(self, route: str, operation: Any) -> Any:
+    async def _remote_read(self, route: str, operation: Any, *, recall: bool = False) -> Any:
         """Bound service reads to a 15-second local fuse after transport failure."""
         self._require_read_ready(route)
+        timeout = self.recall_timeout_seconds if recall else self.timeout_seconds
         try:
             result = await asyncio.wait_for(
-                operation(), timeout=self.recall_timeout_seconds)
+                operation(), timeout=timeout)
         except ServiceUnavailable as exc:
             self.mark_read_unavailable(str(exc))
             raise
         except asyncio.TimeoutError as exc:
             error = ServiceUnavailable(
-                f"unified memory read exceeded {self.recall_timeout_seconds:g}s",
+                f"unified memory read exceeded {timeout:g}s",
                 route=route)
             self.mark_read_unavailable(str(error))
             raise error from exc
@@ -205,7 +206,7 @@ class UnifiedMemoryFacade:
         if budget:
             request["budget"] = budget
         response = await self._remote_read(
-            "/v1/unified/recall", lambda: self.client().recall(request))
+            "/v1/unified/recall", lambda: self.client().recall(request), recall=True)
         return {
             "enabled": True,
             "read_id": response.get("read_id"),
@@ -254,7 +255,14 @@ class UnifiedMemoryFacade:
             if not obs.get("content_hash"):
                 obs["content_hash"] = observation_content_hash(obs)
             payload["observations"].append(obs)
-        return await self.client().observe(payload)
+        try:
+            result = await self.client().observe(payload)
+        except ServiceUnavailable as exc:
+            self.mark_read_unavailable(str(exc))
+            raise
+        self._offline_until = 0.0
+        self._last_unavailable = None
+        return result
 
     async def status(self) -> dict[str, Any]:
         """接线/水位/outbox/模型 worker 状态；disabled 时如实返回禁用状态。"""

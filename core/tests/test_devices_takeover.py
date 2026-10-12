@@ -46,6 +46,17 @@ def test_initial_state_is_free(machine: TakeoverStateMachine) -> None:
     assert snap["needs_observation"] is False
 
 
+def test_public_timestamps_use_unix_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("atlas.devices.takeover.time.time", lambda: 1_791_820_800.0)
+    monkeypatch.setattr("atlas.devices.takeover.time.monotonic", lambda: 500.0)
+    machine = TakeoverStateMachine()
+    assert machine.snapshot()["since_ts"] == 1_791_820_800.0
+    machine.request("user")
+    assert machine.activity()[0]["ts"] == 1_791_820_800.0
+    card = machine.open_handoff("review", actor="user")
+    assert card["created_ts"] == 1_791_820_800.0
+
+
 def test_free_grants_user_and_agent(machine: TakeoverStateMachine) -> None:
     snap = machine.request("agent:coder")
     assert snap["state"] == AGENT

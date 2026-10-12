@@ -57,7 +57,9 @@ class DeliveryQueue:
         self.db_path = str(db_path)
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(self.db_path, check_same_thread=False)
-        self._db.execute("PRAGMA journal_mode=WAL")
+        from hermes_state_wal import apply_wal_with_fallback
+
+        apply_wal_with_fallback(self._db, db_label="Atlas channel delivery")
         self._db.execute("PRAGMA synchronous=NORMAL")
         self._init_schema()
 

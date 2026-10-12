@@ -18,11 +18,11 @@
     "test:adapter": "vitest run --root .. backend-adapter/tests/client.test.ts",
     "start": "electron .",
     "prestart": "npm run install:electron",
-    "package:backend": "node scripts/build-backend.mjs",
+    "package:backend": "node scripts/build-backend.mjs && node scripts/package-sqlite.mjs",
     "package:node": "node scripts/package-node.mjs",
     "clean:packaging": "node scripts/clean-packaging-output.mjs",
     "clean:release": "node scripts/clean-release-output.mjs",
-    "dist:win": "npm run clean:release && npm run build && npm run package:backend && npm run package:node && electron-builder --win nsis --x64 --publish never && node scripts/write-release-manifest.mjs",
+    "dist:win": "npm run clean:release && npm run build && npm run package:backend && npm run package:node && node scripts/stage-electron.mjs && electron-builder --win nsis --x64 --publish never && node scripts/write-release-manifest.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -93,7 +93,7 @@
     "directories": {
       "output": "windows-release"
     },
-    "electronDist": "../node_modules/electron/dist",
+    "electronDist": "electron-runtime",
     "files": [
       "dist/**",
       "dist-electron/**",

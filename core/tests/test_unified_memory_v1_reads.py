@@ -217,7 +217,7 @@ async def test_run_phase_context_uses_remote_ref_and_degrades_without_local_fall
     monkeypatch.setattr(session_sync, "read_session_messages", lambda *_a, **_k: [])
     monkeypatch.setattr(
         run_phases._agent, "get_config",
-        lambda: SimpleNamespace(max_context_messages=8, get=lambda *_a: True),
+        lambda: SimpleNamespace(max_context_messages=8, get=lambda key, default=None: "Asia/Shanghai" if key == "user.timezone" else default),
     )
 
     class _Memory:
@@ -255,9 +255,8 @@ async def test_run_phase_context_uses_remote_ref_and_degrades_without_local_fall
             message=request.message, runtime=SimpleNamespace(maintenance_context={}),
         )
         with structlog.testing.capture_logs() as captured:
-            async for _event in run_phases._phase_context(agent, state):
-                pass
-        assert state.abort is False
+            events = [event async for event in run_phases._phase_context(agent, state)]
+        assert state.abort is False, events
         assert memory.extract_called is False
         assert memory.recall_session_id == request.conversation_id
         if offline:

@@ -2208,6 +2208,7 @@ async def _execute_run(
     assert orchestrator is not None
     assert memory is not None
     had_tool_failure = False
+    orchestrator_events = None
 
     def kernel_owns_lifecycle_hooks() -> bool:
         if run.executor != "atlas":
@@ -2723,7 +2724,7 @@ async def _execute_run(
         async def sandbox_tool(run_id: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             return await sandbox_manager.call_tool(run_id, name, arguments)
 
-        async for event in orchestrator.run(
+        orchestrator_events = orchestrator.run(
             message=content,
             conversation_id=run.conversation_id,
             model=model_id,
@@ -2766,7 +2767,8 @@ async def _execute_run(
             subtask_group_completed=subtask_group_completed,
             force_plan=(mode == "plan"),
             test_clock=test_clock,
-        ):
+        )
+        async for event in orchestrator_events:
             if await check_pause_cancel():
                 run.status = "cancelled"
                 await cancel_local_foreground()
@@ -3014,6 +3016,9 @@ async def _execute_run(
         )
         await emit("run.failed", {"category": "runtime", "detail": str(e)})
     finally:
+        close_events = getattr(orchestrator_events, "aclose", None)
+        if close_events is not None:
+            await close_events()
         if run.sandbox:
             with suppress(Exception):
                 await sandbox_manager.stop(run.run_id)

@@ -106,12 +106,14 @@ export default function MemoryChangesView({ apiBaseUrl, connected }: { apiBaseUr
   const [paused, setPaused] = useState(false);
   const [viewerUrl, setViewerUrl] = useState('http://127.0.0.1:18800');
   const [busy, setBusy] = useState('');
+  const [canPause, setCanPause] = useState(false);
 
   const loadState = useCallback(async () => {
     if (!connected) return;
     try {
-      const state = await api<{ paused: boolean; viewer_url: string }>(apiBaseUrl, '/api/memory/state');
+      const state = await api<{ paused: boolean; viewer_url: string; can_pause?: boolean }>(apiBaseUrl, '/api/memory/state');
       setPaused(state.paused); setViewerUrl(state.viewer_url);
+      setCanPause(state.can_pause !== false);
     } catch { /* state is optional */ }
   }, [apiBaseUrl, connected]);
   useEffect(() => { void loadState(); }, [loadState]);
@@ -187,13 +189,13 @@ ${item.title}`)) return;
       <button className="btn ghost" disabled={loading} onClick={() => void load()}>
         <RefreshCw size={14} className={loading ? 'spin' : undefined} />刷新
       </button>
-      <button className="btn ghost" disabled={busy === 'pause'} onClick={() => void togglePause()}
+      {canPause && <button className="btn ghost" disabled={busy === 'pause'} onClick={() => void togglePause()}
         title={paused ? '恢复后 Atlas 会重新读取和记录记忆' : '暂停后 Atlas 不再读取也不再记录记忆（下一轮对话起生效）'}>
         {paused ? <Play size={14} /> : <Pause size={14} />}{paused ? '恢复记忆' : '暂停记忆'}
-      </button>
-      <a className="btn ghost" href={viewerUrl} target="_blank" rel="noreferrer">
+      </button>}
+      {viewerUrl && <a className="btn ghost" href={viewerUrl} target="_blank" rel="noreferrer">
         <ExternalLink size={14} />打开 MemOS 面板
-      </a>
+      </a>}
     </div>
     {paused && <div className="note">记忆已暂停：Atlas 现在既不读取也不记录记忆。点「恢复记忆」重新开启。</div>}
 
