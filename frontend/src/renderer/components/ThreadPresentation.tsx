@@ -36,7 +36,7 @@ const NONE_COLLAPSED: Record<ThreadClassId, boolean> = {
 export function settingsForMode(mode: ThreadPresentationMode): ThreadPresentationSettings {
   if (mode === 'normal') return {
     mode, show: { ...ALL_VISIBLE },
-    collapsed: { ...NONE_COLLAPSED, model: true, tools: true, checks: true, files: true, status: true },
+    collapsed: { ...NONE_COLLAPSED, tools: true, checks: true, files: true, status: true },
     groupByClass: true, announceCompletedReplies: true,
   };
   if (mode === 'thinking') return {
@@ -103,7 +103,7 @@ export function useThreadPresentationSettings() {
   return [settings, setSettings] as const;
 }
 
-export function ThreadPresentationControls({ settings, onChange, hasReasoning }: {
+export function ThreadPresentationControls({ settings, onChange }: {
   settings: ThreadPresentationSettings;
   onChange: (settings: ThreadPresentationSettings) => void;
   hasReasoning: boolean;
@@ -141,7 +141,7 @@ export function ThreadPresentationControls({ settings, onChange, hasReasoning }:
         <fieldset className="m-0 border-0 p-0">
           <legend className="mb-2 text-[12px] font-semibold text-heading">预设</legend>
           <div className="grid grid-cols-2 gap-1.5">
-            {MODES.filter(({ id }) => id !== 'thinking' || hasReasoning).map(({ id, label }) => <button key={id} type="button" aria-pressed={settings.mode === id} onClick={() => chooseMode(id)}
+            {MODES.map(({ id, label }) => <button key={id} type="button" aria-pressed={settings.mode === id} onClick={() => chooseMode(id)}
               className={cn('rounded-lg border px-2 py-1.5 text-left text-[12px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand', settings.mode === id ? 'border-brand bg-brand-soft text-heading' : 'border-line text-fg-2 hover:bg-hover')}>
               <span className="block">{label}</span>
               {id === 'normal' && <span className="mt-0.5 block text-[10.5px] font-normal text-fg-3">文本完整显示，活动摘要收起</span>}

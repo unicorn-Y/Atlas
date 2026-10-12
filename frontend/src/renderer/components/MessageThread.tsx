@@ -71,7 +71,6 @@ function pendingInteraction(row: ThreadRow, answers: Record<string, string | und
 function presentRows(rows: ThreadRow[], settings: ReturnType<typeof useThreadPresentationSettings>[0], answers: Record<string, string | undefined>): ThreadDisplayRow[] {
   const visible = rows.filter((row) => {
     if (row.kind !== 'timeline') return true;
-    if (settings.mode === 'normal' && row.item.kind === 'reasoning') return false;
     const classId = timelineClass(row.item);
     return settings.show[classId] || pendingInteraction(row, answers);
   });
@@ -257,9 +256,6 @@ export default function MessageThread({ history, username, historyActions, empty
   }, [history, loading, timelineItems, hasEarlier, truncatedCount]);
 
   const hasReasoning = rows.some((row) => row.kind === 'timeline' && row.item.kind === 'reasoning' && row.item.text.trim().length > 0);
-  useEffect(() => {
-    if (!loading && !hasReasoning && presentation.mode === 'thinking') setPresentation(settingsForMode('normal'));
-  }, [hasReasoning, loading, presentation.mode, setPresentation]);
 
   const displayRows = useMemo(() => searchOpen
     ? rows.map((row) => ({ kind: 'row' as const, id: row.id, row }))
