@@ -20,8 +20,11 @@ import httpx
 
 DEFAULT_SERVICE_DIR = Path(r"D:\MemoryOS")
 DEFAULT_SERVICE_URL = "http://127.0.0.1:8099"
-STARTUP_TIMEOUT_SECONDS = 12.0
-HEALTH_TIMEOUT_SECONDS = 0.5
+STARTUP_TIMEOUT_SECONDS = 45.0
+# 单次探测预算。实测 /v1/health 因 freshness 水印校验需 ~1.4s，
+# 旧值 0.5s 会让探针永远超时（= 记忆断链的真凶）。
+# 服务不可达时 httpx 立刻 ConnectError，不会白等这个预算。
+HEALTH_TIMEOUT_SECONDS = 10.0
 HEALTH_POLL_SECONDS = 0.2
 SHUTDOWN_TIMEOUT_SECONDS = 4.0
 CAPTURED_OUTPUT_BYTES = 12_000
@@ -42,6 +45,7 @@ class MemoryOSServiceLifecycle:
         sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
         monotonic: Callable[[], float] = time.monotonic,
         startup_timeout: float = STARTUP_TIMEOUT_SECONDS,
+        health_timeout: float = HEALTH_TIMEOUT_SECONDS,
     ) -> None:
         self._config = config
         self._health_probe = health_probe or self._probe_memoryos
@@ -49,6 +53,7 @@ class MemoryOSServiceLifecycle:
         self._sleep = sleep
         self._monotonic = monotonic
         self._startup_timeout = startup_timeout
+        self._health_timeout = health_timeout
         self._process: asyncio.subprocess.Process | None = None
         self._owns_process = False
         self._start_task: asyncio.Task[Any] | None = None
@@ -65,6 +70,63 @@ class MemoryOSServiceLifecycle:
     @property
     def service_url(self) -> str:
         return str(self._config.get("memory.unified.service_url") or DEFAULT_SERVICE_URL)
+
+    @property
+    def internal_token(self) -> str | None:
+        """Internal bearer token — config first, then the service-side env var.
+
+        The MemoryOS child inherits this value, and ``UnifiedMemoryClient`` must use
+        the same one; without it the service answers 503
+        ``INTERNAL_AUTH_NOT_CONFIGURED`` and readiness probing can never pass.
+        """
+        configured = self._config.get("memory.unified.internal_token")
+        if configured and str(configured).strip():
+            return str(configured).strip()
+        return (os.environ.get("MEMORYOS_INTERNAL_TOKEN") or "").strip() or None
+
+    @property
+    def health_timeout_seconds(self) -> float:
+        """Per-probe budget; override via ``memory.unified.health_timeout_seconds``."""
+        try:
+            return max(0.5, float(self._config.get(
+                "memory.unified.health_timeout_seconds", self._health_timeout)))
+        except (TypeError, ValueError):
+            return self._health_timeout
+
+    @property
+    def startup_timeout_seconds(self) -> float:
+        """Bounded startup budget; override via ``memory.unified.startup_timeout_seconds``."""
+        try:
+            return max(1.0, float(self._config.get(
+                "memory.unified.startup_timeout_seconds", self._startup_timeout)))
+        except (TypeError, ValueError):
+            return self._startup_timeout
+
+    @property
+    def data_root(self) -> str | None:
+        """Explicit MemoryOS data root so the child and the client cannot drift."""
+        configured = self._config.get("memory.unified.data_root")
+        if configured and str(configured).strip():
+            return str(configured).strip()
+        return (os.environ.get("MEMORYOS_DATA_ROOT") or "").strip() or None
+
+    def _child_env(self) -> dict[str, str]:
+        """Environment for the MemoryOS child process.
+
+        ``PYTHONPATH`` is dropped on purpose: the service runs its own virtualenv and a
+        foreign ``PYTHONPATH`` is prepended ahead of that venv's site-packages, so the
+        child dies on import before it can ever answer /v1/health.
+        """
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        env["MEMORYOS_SEMANTIC_RECALL_ENABLED"] = "1"
+        token = self.internal_token
+        if token:
+            env["MEMORYOS_INTERNAL_TOKEN"] = token
+        root = self.data_root
+        if root:
+            env["MEMORYOS_DATA_ROOT"] = root
+        return env
 
     @property
     def health_url(self) -> str:
@@ -92,7 +154,7 @@ class MemoryOSServiceLifecycle:
         trust_env = hostname not in {"127.0.0.1", "localhost", "::1"}
         try:
             async with httpx.AsyncClient(
-                timeout=HEALTH_TIMEOUT_SECONDS, trust_env=trust_env) as client:
+                timeout=self.health_timeout_seconds, trust_env=trust_env) as client:
                 root_response, health_response, unified_status = await asyncio.gather(
                     client.get(root_url), client.get(url),
                     client.get(root_url + "v1/unified/status"))
@@ -160,8 +222,7 @@ class MemoryOSServiceLifecycle:
 
         try:
             command, cwd = self._launch_command()
-            env = os.environ.copy()
-            env["MEMORYOS_SEMANTIC_RECALL_ENABLED"] = "1"
+            env = self._child_env()
             self._output_chunks.clear()
             self._output_size = 0
             self._process = await self._process_factory(
@@ -177,7 +238,7 @@ class MemoryOSServiceLifecycle:
             if output is not None:
                 self._output_task = asyncio.create_task(
                     self._capture_child_output(output), name="memoryos-child-output")
-            deadline = self._monotonic() + self._startup_timeout
+            deadline = self._monotonic() + self.startup_timeout_seconds
             while self._monotonic() < deadline:
                 if self._process.returncode is not None:
                     raise RuntimeError(
@@ -187,12 +248,38 @@ class MemoryOSServiceLifecycle:
                     return
                 await self._sleep(HEALTH_POLL_SECONDS)
             raise TimeoutError(
-                f"MemoryOS did not pass /v1/health within {self._startup_timeout:g}s")
+                f"MemoryOS did not pass /v1/health within "
+                f"{self.startup_timeout_seconds:g}s")
         except Exception as exc:
             self.state = "offline"
             output = self._captured_child_output()
             self.last_error = f"{exc}; child output: {output}" if output else str(exc)
+            # 失败路径必须回收本次拉起的子进程：留活口会占住 service_url 端口，
+            # 让下一次启动全部失败（且外部看不到是谁占的）。
+            await self._reap_failed_child()
             raise
+
+    async def _reap_failed_child(self) -> None:
+        """Reap the child this instance launched after a failed startup."""
+        process = self._process
+        if process is None or not self._owns_process:
+            return
+        try:
+            if process.returncode is None:
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=SHUTDOWN_TIMEOUT_SECONDS)
+                except asyncio.TimeoutError:
+                    process.kill()
+                    await process.wait()
+        except ProcessLookupError:
+            pass
+        output_task = self._output_task
+        if output_task is not None:
+            await asyncio.gather(output_task, return_exceptions=True)
+            self._output_task = None
+        self._process = None
+        self._owns_process = False
 
     async def _capture_child_output(self, stream: Any) -> None:
         while True:

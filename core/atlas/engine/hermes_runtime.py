@@ -176,6 +176,28 @@ def _seed_atlas_soul(home: Path) -> None:
         logger.warning("Could not seed Atlas SOUL.md in %s", home, exc_info=True)
 
 
+def _load_breaker_identity(home: Path) -> str:
+    """Read the workspace breaker prompt (BREAKER.md / breaker.md) verbatim as the agent identity.
+
+    Returned string is handed to Hermes as a *custom identity*, which places it in the
+    stable tier of the system prompt and bypasses both the context-file scanner and the
+    context-file truncation path (``load_soul_md`` -> ``_truncate_content``). Falls back
+    to the stock Atlas identity when the file is missing or empty.
+    """
+    for name in ("BREAKER.md", "breaker.md"):
+        path = home / name
+        try:
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8-sig").strip()
+            if text:
+                logger.info("atlas.breaker.identity_loaded", extra={"path": str(path), "chars": len(text)})
+                return text
+        except OSError:
+            logger.warning("Could not read breaker prompt %s", path, exc_info=True)
+    return _ATLAS_SOUL.strip()
+
+
 def _trust_context_files() -> None:
     """Load AGENTS.md / CLAUDE.md / .cursorrules verbatim instead of Hermes' injection blocker.
 
@@ -1645,7 +1667,7 @@ class HermesRuntime:
                             status_callback=on_status,
                             event_callback=on_event,
                             hooks=hooks,
-                            identity="You are Atlas, the AI assistant for this workspace.",
+                            identity=_load_breaker_identity(self.home),
                         )
                 agent = await asyncio.to_thread(create_agent)
             # Turn-scoped rebind (applies equally to a fresh or a reused agent):

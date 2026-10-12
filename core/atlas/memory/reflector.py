@@ -954,7 +954,7 @@ class MemoryReflector:
             raise RuntimeError("UnifiedMemoryClient is required to apply consolidation operations")
 
         payload = {
-            "context": ctx or {"memory_subject_id": subject, "owner_id": "owner-local"},
+            "context": ctx or self._default_context(subject),
             "operations": operations,
             "cue_context": {"current_timezone": timezone_name(self._config)},
         }
@@ -974,6 +974,34 @@ class MemoryReflector:
             return res if isinstance(res, dict) else {}
 
         raise TypeError(f"Unsupported client type for consolidation apply: {type(target_client)}")
+
+    def _default_context(self, subject: str) -> dict[str, Any]:
+        """consolidation:apply 的 MemoryContext。
+
+        MemoryOS 契约要求 6 个必填字段（owner_id / memory_subject_id /
+        client_id / actor_id / runtime_session_id / environment_id），只给
+        owner+subject 会被判 422「MemoryContext 字段不完整」，反射器每轮空转。
+        facade 的 default_context() 恰好造全这 9 个字段，优先借它。
+        """
+        factory = getattr(self._client, "default_context", None)
+        if callable(factory):
+            try:
+                built = factory(memory_subject_id=subject)
+                if isinstance(built, dict) and built:
+                    return built
+            except Exception:  # noqa: BLE001 - 退回本地兜底，不打断反射
+                pass
+        return {
+            "owner_id": "owner-local",
+            "memory_subject_id": subject,
+            "client_id": "atlas-desktop",
+            "actor_id": "atlas-main",
+            "runtime_session_id": "atlas-memory-reflect",
+            "task_id": None,
+            "project_id": None,
+            "environment_id": "windows",
+            "model_deployment_id": None,
+        }
 
     def _build_and_persist_receipt(
         self, result: ReflectionResult, total_candidates: int
