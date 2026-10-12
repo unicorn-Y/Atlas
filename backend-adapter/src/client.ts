@@ -248,6 +248,12 @@ export class BackendAdapter {
   async getWorkspaceFile(root: string, path: string): Promise<WorkspaceFile> {
     return this.request(`/api/workspace/file?${new URLSearchParams({ root, path })}`);
   }
+  async saveWorkspaceFile(root: string, path: string, content: string, expectedSha256: string): Promise<{ path: string; sha256: string }> {
+    return this.request(`/api/workspace/file?${new URLSearchParams({ root, path })}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, expected_sha256: expectedSha256 }),
+    });
+  }
   async getWorkspaceRules(root: string): Promise<Array<{ path: string; bytes: number }>> {
     return (await this.request<{ files: Array<{ path: string; bytes: number }> }>(`/api/workspace/rules?${new URLSearchParams({ root })}`)).files;
   }

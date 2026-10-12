@@ -210,6 +210,18 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
               <span className="shrink-0 text-[11.5px] tabular-nums"><span className="text-ok">+{file.additions}</span> <span className="text-danger">−{file.deletions}</span></span>
             </button>
             {expanded && <>
+              {openPath && window.atlasDesktop?.openFileInEditor && <div className="flex justify-end border-t border-line px-3 py-1.5">
+                <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atlas:add-context-file', { detail: { path: relativePath } }))}
+                  className="mr-2 rounded px-2 py-1 text-[11px] text-fg-2 hover:bg-hover">加入消息上下文</button>
+                <select aria-label={`在 IDE 中打开 ${relativePath}`} defaultValue="" onChange={(event) => {
+                  const editor = event.target.value as 'vscode' | 'cursor' | 'zed' | 'idea' | 'pycharm';
+                  event.currentTarget.value = '';
+                  if (!editor) return;
+                  void window.atlasDesktop!.openFileInEditor!(editor, activeWorkspace, openPath).catch((error) => onToast(error instanceof Error ? error.message : String(error)));
+                }} className="max-w-28 rounded border border-line bg-sunken px-1.5 py-1 text-[10.5px] text-fg-2">
+                  <option value="">IDE 打开…</option><option value="vscode">VS Code</option><option value="cursor">Cursor</option><option value="zed">Zed</option><option value="idea">IntelliJ IDEA</option><option value="pycharm">PyCharm</option>
+                </select>
+              </div>}
               <DiffView diff={file.diff} truncated={file.truncated} path={file.path} openPath={openPath} hunks={file.hunks}
                 busyHunkId={hunkBusyId} onReviewHunk={(hunk, action) => void reviewHunk(file, hunk, action)} comments={onAsk ? comments.filter((comment) => comment.path === file.path) : undefined}
                 onAdd={(comment) => setComments((current) => [...current, { ...comment, id: `${Date.now()}-${current.length}` }])}

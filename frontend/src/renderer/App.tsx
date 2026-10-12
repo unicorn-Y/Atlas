@@ -438,6 +438,18 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    const addContextFile = (event: Event) => {
+      const path = (event as CustomEvent<{ path?: unknown }>).detail?.path;
+      if (typeof path !== 'string' || !path.trim()) return;
+      setMentions((current) => current.some((item) => item.kind === 'file' && item.id === path)
+        ? current
+        : [...current, { kind: 'file', id: path, label: path.split(/[\\/]/).filter(Boolean).at(-1) ?? path, hint: path }]);
+    };
+    window.addEventListener('atlas:add-context-file', addContextFile);
+    return () => window.removeEventListener('atlas:add-context-file', addContextFile);
+  }, []);
+
   // 滚动定位（进入会话回到原位、流式跟底）由 MessageThread 里的虚拟列表接管。
 
   // Memories waiting for confirmation show as a badge on the navigation.

@@ -116,6 +116,28 @@ function openWorkspaceFile(href: string): boolean {
   return true;
 }
 
+function externalWorkspaceFilePath(href: string): string | null {
+  const target = workspaceFileTarget(href);
+  if (!target) return null;
+  const state = useAtlasStore.getState();
+  const conversation = state.conversations.find((item) => item.id === state.activeConversationId);
+  const workspaceRoot = conversation?.worktree_path ?? conversation?.workspace;
+  if (!workspaceRoot || workspaceRoot.startsWith('ssh://') || !/^(?:[a-z]:[\\/]|\\\\|\/)/i.test(workspaceRoot)) return null;
+  const separator = workspaceRoot.includes('\\') ? '\\' : '/';
+  return `${workspaceRoot.replace(/[\\/]+$/, '')}${separator}${target.file.replace(/[\\/]/g, separator)}`;
+}
+
+function openWorkspaceFileInEditor(href: string, editor: 'vscode' | 'cursor' | 'zed' | 'idea' | 'pycharm'): Promise<void> {
+  const full = externalWorkspaceFilePath(href);
+  const target = workspaceFileTarget(href);
+  if (!full || !target) return Promise.reject(new Error('这个文件不属于当前本地工作区。'));
+  const state = useAtlasStore.getState();
+  const conversation = state.conversations.find((item) => item.id === state.activeConversationId);
+  const workspaceRoot = conversation?.worktree_path ?? conversation?.workspace;
+  if (!workspaceRoot || !window.atlasDesktop?.openFileInEditor) return Promise.reject(new Error('当前环境不能在 IDE 中打开文件。'));
+  return window.atlasDesktop.openFileInEditor(editor, workspaceRoot, full);
+}
+
 // ```mermaid blocks become diagrams; every other code block renders as usual.
 const MARKDOWN_COMPONENTS: Components = {
   code({ className, children, node, ...rest }) {
@@ -202,8 +224,19 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
         if (!fileTarget) return;
         event.preventDefault();
         const suffix = fileTarget.line === null ? '' : `（第 ${fileTarget.line} 行）`;
+        const externalPath = externalWorkspaceFilePath(href);
+        const fileMention = fileTarget.file;
         setContextMenu({ x: event.clientX, y: event.clientY, items: [
           { id: 'open-linked-file', label: `在工作区打开文件${suffix}`, onSelect: () => { if (!openWorkspaceFile(href)) throw new Error('file target changed'); } },
+          { id: 'attach-linked-file', label: '加入消息上下文', onSelect: () => window.dispatchEvent(new CustomEvent('atlas:add-context-file', { detail: { path: fileMention } })) },
+          ...(externalPath && window.atlasDesktop?.openPath ? [{ id: 'open-linked-file-external', label: '用系统默认程序打开', onSelect: async () => {
+            const result = await window.atlasDesktop!.openPath(externalPath);
+            if (result !== 'opened' && result !== 'revealed') throw new Error(`无法打开文件：${result}`);
+          } }] : []),
+          ...(externalPath && window.atlasDesktop?.openFileInEditor ? (['vscode', 'cursor', 'zed', 'idea', 'pycharm'] as const).map((editor) => ({
+            id: `open-linked-file-${editor}`, label: `在 ${{ vscode: 'VS Code', cursor: 'Cursor', zed: 'Zed', idea: 'IntelliJ IDEA', pycharm: 'PyCharm' }[editor]} 中打开`,
+            onSelect: () => openWorkspaceFileInEditor(href, editor),
+          })) : []),
           { id: 'copy-linked-file-path', label: '复制文件路径', onSelect: () => navigator.clipboard.writeText(fileTarget.line === null ? fileTarget.file : `${fileTarget.file}:${fileTarget.line}`) },
         ] });
         return;

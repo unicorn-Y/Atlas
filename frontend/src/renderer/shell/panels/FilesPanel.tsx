@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Code2, Copy, Download, Eye, ExternalLink, Fi
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { WorkspaceEntry, WorkspaceFile } from '@atlas/backend-adapter';
+import type { PlatformEditorId } from '../../../shared/ipc';
 import { backend, useAtlasStore } from '../../store/useAtlasStore';
 import { Button } from '../../ui/Button';
 import { cn } from '../../ui/cn';
@@ -74,6 +75,12 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   const [searchError, setSearchError] = useState('');
   const [selected, setSelected] = useState('');
   const [file, setFile] = useState<WorkspaceFile | null>(null);
+  const [draft, setDraft] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveConflict, setSaveConflict] = useState(false);
+  const [wrapCode, setWrapCode] = useState(true);
+  const [codeFontSize, setCodeFontSize] = useState(11.5);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'preview' | 'code'>('preview');
   const [version, setVersion] = useState<ViewedVersion | null>(null);
@@ -116,7 +123,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     expanded.forEach((path) => void load(path));
   }, [workspace, refreshKey, load]);
   useEffect(() => {
-    setExpanded([]); setSelected(''); setFile(null); setTabs([]); setRecentlyClosed([]); setShowClosedTabs(false);
+    setExpanded([]); setSelected(''); setFile(null); setDraft(''); setEditing(false); setSaveConflict(false); setTabs([]); setRecentlyClosed([]); setShowClosedTabs(false);
     setFileQuery(''); setSearchResults([]); setSearchError('');
     setContextMenu(null); setLightbox(false); setPdfPage(1); setPdfZoom(100); setPdfError('');
   }, [workspace]);
@@ -157,6 +164,12 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
       else setError('');
     } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
   };
+  const openInEditor = async (path: string, editor: PlatformEditorId) => {
+    const full = workspace ? absoluteWorkspacePath(workspace, path) : null;
+    if (!workspace || !full || workspace.startsWith('ssh://') || !window.atlasDesktop?.openFileInEditor) return;
+    try { await window.atlasDesktop.openFileInEditor(editor, workspace, full); setError(''); }
+    catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+  };
   const copyPath = async (path: string, absolute = false) => {
     const value = absolute && workspace ? absoluteWorkspacePath(workspace, path) ?? path : path;
     try { await navigator.clipboard.writeText(value); setError(''); }
@@ -186,6 +199,37 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
       window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
     } catch (exc) { setError(`下载失败：${exc instanceof Error ? exc.message : String(exc)}`); }
   };
+  const saveDraft = async () => {
+    if (!workspace || !file?.sha256 || !editing || saving) return;
+    setSaving(true); setSaveConflict(false);
+    try {
+      await backend.saveWorkspaceFile(workspace, file.path, draft, file.sha256);
+      const saved = await backend.getWorkspaceFile(workspace, file.path);
+      setFile(saved); setDraft(saved.content); setEditing(false); setError('');
+    } catch (exc) {
+      const message = exc instanceof Error ? exc.message : String(exc);
+      if (/changed on disk|磁盘上更改/i.test(message)) setSaveConflict(true);
+      else setError(`保存失败：${message}`);
+    } finally { setSaving(false); }
+  };
+  const reloadAfterConflict = async () => {
+    if (!workspace || !file) return;
+    try {
+      const fresh = await backend.getWorkspaceFile(workspace, file.path);
+      setFile(fresh); setDraft(fresh.content); setEditing(false); setSaveConflict(false); setError('');
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+  };
+  const addFileToContext = (path: string) => {
+    window.dispatchEvent(new CustomEvent('atlas:add-context-file', { detail: { path } }));
+  };
+  const reorderTab = (source: string, target: string) => {
+    if (!source || source === target) return;
+    setTabs((current) => {
+      const from = current.indexOf(source); const to = current.indexOf(target);
+      if (from < 0 || to < 0) return current;
+      const next = [...current]; next.splice(from, 1); next.splice(to, 0, source); return next;
+    });
+  };
   // C6R: 消费内部「打开文件」请求:展开父目录、选中文件、切源码视图并定位行。
   useEffect(() => {
     if (!openRequest || !workspace) return;
@@ -209,7 +253,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   useEffect(() => {
     if (!workspace || !selected) { setFile(null); return; }
     let stale = false;
-    backend.getWorkspaceFile(workspace, selected).then((result) => { if (!stale) setFile(result); })
+    backend.getWorkspaceFile(workspace, selected).then((result) => { if (!stale) { setFile(result); setDraft(result.content); setEditing(false); setSaveConflict(false); } })
       .catch((exc) => { if (!stale) setError(exc instanceof Error ? exc.message : String(exc)); });
     return () => { stale = true; };
   }, [workspace, selected, refreshKey, reloads]);
@@ -333,7 +377,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     </div>
     {(tabs.length > 0 || recentlyClosed.length > 0) && <div className="relative flex min-h-8 items-center gap-1 border-b border-line">
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist" aria-label="已打开文件">
-        {tabs.map((path) => <div key={path} className={cn('flex shrink-0 items-center rounded-t-md', selected === path ? 'bg-overlay text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg')}
+        {tabs.map((path) => <div key={path} draggable onDragStart={(event) => { event.dataTransfer.setData('text/atlas-file-tab', path); event.dataTransfer.effectAllowed = 'move'; }}
+          onDragOver={(event) => { if (event.dataTransfer.types.includes('text/atlas-file-tab')) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }}
+          onDrop={(event) => { const source = event.dataTransfer.getData('text/atlas-file-tab'); if (source) { event.preventDefault(); reorderTab(source, path); } }}
+          className={cn('flex shrink-0 items-center rounded-t-md', selected === path ? 'bg-overlay text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg')}
           onContextMenu={(event) => openContextMenu(event, path)}>
           <button role="tab" data-file-tab={path} aria-selected={selected === path} title={path} onClick={() => selectFile(path)}
             onKeyDown={(event) => {
@@ -369,6 +416,17 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
           {(['preview', 'code'] as const).map((value) => <button key={value} onClick={() => setMode(value)} aria-pressed={mode === value} title={value === 'preview' ? '预览' : '源码'}
             className={cn('grid h-5 w-6 place-items-center rounded', mode === value ? 'bg-overlay text-fg shadow-sm' : 'text-fg-3 hover:text-fg')}>{value === 'preview' ? <Eye size={12} /> : <Code2 size={12} />}</button>)}
         </div>}
+        {mode === 'code' && !version && !file.binary && !file.truncated && !workspace.startsWith('ssh://') && (editing
+          ? <>
+            <button type="button" disabled={!file.sha256 || saving || draft === file.content} onClick={() => void saveDraft()} className="shrink-0 rounded px-2 py-1 text-[11.5px] text-brand hover:bg-hover disabled:opacity-40">{saving ? '保存中…' : '保存'}</button>
+            <button type="button" onClick={() => { setDraft(file.content); setEditing(false); setSaveConflict(false); }} className="shrink-0 rounded px-2 py-1 text-[11.5px] text-fg-3 hover:bg-hover">取消</button>
+          </>
+          : <button type="button" onClick={() => setEditing(true)} className="shrink-0 rounded px-2 py-1 text-[11.5px] text-fg-2 hover:bg-hover">编辑</button>)}
+        {mode === 'code' && <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="源码显示设置">
+          <button type="button" aria-pressed={wrapCode} title="切换自动换行" onClick={() => setWrapCode((value) => !value)} className="rounded px-1.5 py-1 text-[10.5px] text-fg-3 hover:bg-hover">换行</button>
+          <button type="button" aria-label="缩小源码字体" onClick={() => setCodeFontSize((size) => Math.max(9, size - 1))} className="rounded px-1 py-1 text-[11px] text-fg-3 hover:bg-hover">A−</button>
+          <button type="button" aria-label="放大源码字体" onClick={() => setCodeFontSize((size) => Math.min(20, size + 1))} className="rounded px-1 py-1 text-[11px] text-fg-3 hover:bg-hover">A+</button>
+        </div>}
         {PREVIEWABLE.test(file.path) && <button onClick={() => onPreview(backend.rawFileUrl(workspace, file.path))} className="shrink-0 text-fg-2 hover:text-fg">在浏览器预览</button>}
         {window.atlasDesktop?.openPath && !workspace.startsWith('ssh://') && <button title="用默认程序打开" aria-label="用默认程序打开" onClick={() => {
           void openExternal(file.path);
@@ -381,6 +439,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         <span className="min-w-0 flex-1 truncate">正在看 {version.label} 的版本</span>
         <button onClick={() => void restore()} className="inline-flex shrink-0 items-center gap-1 font-medium hover:underline"><RotateCcw size={12} />恢复这个版本</button>
         <button onClick={() => setVersion(null)} className="shrink-0 text-fg-2 hover:text-fg">回到当前</button>
+      </div>}
+      {saveConflict && <div role="alert" className="flex items-center gap-2 bg-danger-soft px-3 py-2 text-[12px] text-danger">
+        <span className="min-w-0 flex-1">文件已在磁盘上更改。你的编辑仍保留；重新加载会丢弃本地草稿。</span>
+        <button type="button" onClick={() => void reloadAfterConflict()} className="shrink-0 underline">加载磁盘版本</button>
       </div>}
       {shown && previewing
         ? MARKDOWN.test(shown.path)
@@ -435,22 +497,29 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
             // The raw endpoint already serves scriptable files sandboxed; the frame gets no same-origin access either way.
             : <iframe title={`预览 ${file.path}`} src={backend.rawFileUrl(workspace, file.path)} onError={() => setError('文件预览加载失败。')} sandbox="allow-scripts" className="min-h-0 w-full flex-1 border-0 bg-white" />
         : shown?.binary ? <p className="m-0 p-4 text-[13px] text-fg-3">{version ? '这个版本是二进制文件，看不了内容；可以恢复后再预览。' : '这是二进制文件，不能直接预览。'}</p>
-        : highlightLine && shown?.content ? <pre ref={codeRef} className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono text-[11.5px] leading-[1.6] text-fg-2">
+        : editing && !version ? <textarea aria-label={`编辑 ${file.path}`} spellCheck={false} value={draft} onChange={(event) => setDraft(event.target.value)}
+          wrap={wrapCode ? 'soft' : 'off'} style={{ fontSize: `${codeFontSize}px`, whiteSpace: wrapCode ? 'pre-wrap' : 'pre' }}
+          className="m-0 min-h-0 flex-1 resize-none overflow-auto bg-code p-3 font-mono leading-[1.6] text-fg-2 outline-none" />
+        : highlightLine && shown?.content ? <pre ref={codeRef} style={{ fontSize: `${codeFontSize}px`, whiteSpace: wrapCode ? 'pre-wrap' : 'pre' }} className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono leading-[1.6] text-fg-2">
           {shown.content.split('\n').map((text, index) => {
             const line = index + 1;
             return <span key={line} data-line={line} className={cn(line === highlightLine && 'bg-brand-soft text-fg shadow-[inset_2px_0_0_var(--brand)]')}>{`${text}\n`}</span>;
           })}
           {shown.truncated && '\n\n…文件太大，只显示了前 512 KB。'}
         </pre>
-        : <pre className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono text-[11.5px] leading-[1.6] text-fg-2">{shown?.content}{shown?.truncated && '\n\n…文件太大，只显示了前 512 KB。'}</pre>}
+        : <pre style={{ fontSize: `${codeFontSize}px`, whiteSpace: wrapCode ? 'pre-wrap' : 'pre' }} className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono leading-[1.6] text-fg-2">{shown?.content}{shown?.truncated && '\n\n…文件太大，只显示了前 512 KB。'}</pre>}
     </div>}
     {contextMenu && <div ref={contextMenuRef} data-file-context-menu role="menu" aria-label={`${contextMenu.path} 文件操作`}
       onContextMenu={(event) => event.preventDefault()} style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 80 }}
       className="min-w-52 rounded-lg border border-line bg-overlay p-1 shadow-xl">
       {!contextMenu.directory && <button type="button" role="menuitem" onClick={() => { selectFile(contextMenu.path); setContextMenu(null); }}
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">在 Atlas 中打开</button>}
+      {!contextMenu.directory && <button type="button" role="menuitem" onClick={() => { addFileToContext(contextMenu.path); setContextMenu(null); }}
+        className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">加入消息上下文</button>}
       {!contextMenu.directory && window.atlasDesktop?.openPath && !workspace.startsWith('ssh://') && <button type="button" role="menuitem" onClick={() => { void openExternal(contextMenu.path); setContextMenu(null); }}
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">在外部程序中打开</button>}
+      {!contextMenu.directory && window.atlasDesktop?.openFileInEditor && !workspace.startsWith('ssh://') && (['vscode', 'cursor', 'zed', 'idea', 'pycharm'] as const).map((editor) => <button key={editor} type="button" role="menuitem" onClick={() => { void openInEditor(contextMenu.path, editor); setContextMenu(null); }}
+        className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">在 {{ vscode: 'VS Code', cursor: 'Cursor', zed: 'Zed', idea: 'IntelliJ IDEA', pycharm: 'PyCharm' }[editor]} 中打开</button>)}
       {window.atlasDesktop?.openPath && !workspace.startsWith('ssh://') && <button type="button" role="menuitem" onClick={() => { void revealInFolder(contextMenu.path, contextMenu.directory); setContextMenu(null); }}
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">在文件管理器中显示</button>}
       <button type="button" role="menuitem" onClick={() => { void copyPath(contextMenu.path); setContextMenu(null); }}

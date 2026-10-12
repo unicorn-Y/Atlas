@@ -19,6 +19,8 @@ const desktopApi: AtlasDesktopApi = {
   setGlobalShortcut: (accelerator) => ipcRenderer.invoke('platform:set-global-shortcut', accelerator),
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
+  openFileInEditor: (editor: PlatformEditorId, workspacePath: string, filePath: string) =>
+    ipcRenderer.invoke('platform:open-file-in-editor', editor, workspacePath, filePath),
   onDeepLink: (callback: (route: AtlasDeepLink) => void) => {
     let active = true;
     const seen = new Set<string>();

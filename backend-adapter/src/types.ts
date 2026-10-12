@@ -434,6 +434,7 @@ export interface WorkspaceFile {
   content: string;
   truncated: boolean;
   binary: boolean;
+  sha256?: string;
 }
 
 export interface ProcessInfo {
