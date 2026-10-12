@@ -1,7 +1,7 @@
 # D-TC-04 Browser DOM、标签与 Computer Use
 
 分支：`card-d-tc-04`（基于任务开始时 `origin/memory-v1`）  
-实施提交号：待首个实现提交生成后回填。  
+实施提交号：`1410aec20557fc1c949d5772d57d4af8a30deeba`（本卡结果记录另有后续提交）。  
 
 ## 条目结果
 
