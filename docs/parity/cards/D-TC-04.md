@@ -27,5 +27,6 @@
 - 未新增或运行测试套件。
 - `npm --prefix frontend run build`：通过。工作树初始无依赖；从根锁文件恢复依赖后构建完成。
 - 后端启动：当前 Hermes Python 环境缺少 `tomli_w`，首次启动在 import 阶段失败。将 `tomli-w>=1.0.0` 安装到系统临时目录并通过临时 `PYTHONPATH` 提供后，以 `ATLAS_UPSTREAM_AUTO=0` 在 `core` 启动 `python -m uvicorn atlas.server:app --port 28790`；`/api/health` 返回 `status: ok`，组件均 ready，随后已关闭服务。
+- 启动同时输出 Hermes isolated-runtime dependency preparation 日志，指向机器级 Hermes home；没有审计其在该外部 runtime 中的文件变化。
 - 未进行真实浏览器 session DOM 操作、Computer Use 桌面动作或真实 CUA driver 中断验收；此卡结果标注为代码接入状态，不把未运行的交互路径写成运行验收。
 
