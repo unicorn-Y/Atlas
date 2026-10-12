@@ -923,18 +923,24 @@ class AgentOrchestrator:
         ]
 
     @classmethod
-    def _json_object(cls, raw: str) -> dict[str, Any]:
-        """Parse a JSON object out of a routed model completion's text."""
+    def _json_object(cls, raw: str, stage: str = "Model") -> dict[str, Any]:
+        """Parse a JSON object out of a routed model completion's text.
+
+        ``stage`` names the calling phase so a parse failure points at the real
+        culprit — ``_json_object`` is shared by planning, verification, goal
+        evaluation and trajectory review, and a hard-coded "Planner" label sent
+        every failure to the wrong module.
+        """
         raw = str(raw or "").strip()
         if raw.startswith("```"):
             raw = raw.strip("`")
             raw = raw.split("\n", 1)[-1].removesuffix("```").strip()
         start, end = raw.find("{"), raw.rfind("}")
         if start < 0 or end < start:
-            raise ValueError("Planner response did not contain a JSON object")
+            raise ValueError(f"{stage} response did not contain a JSON object")
         value = json.loads(raw[start:end + 1])
         if not isinstance(value, dict):
-            raise ValueError("Planner response must be a JSON object")
+            raise ValueError(f"{stage} response must be a JSON object")
         return value
 
     async def _create_plan(
@@ -966,7 +972,25 @@ class AgentOrchestrator:
         result = await self._model_router.complete_for(
             model, "planning", messages, max_tokens=1200,
         )
-        return TaskPlan.from_dict(self._json_object(result.text))
+        try:
+            return TaskPlan.from_dict(self._json_object(result.text, "Planner"))
+        except (ValueError, json.JSONDecodeError) as exc:
+            # 上游偶发秒回非 JSON（实测失败耗时 1.8s vs 正常 2.6s+，同会话重试即过）。
+            # 规划是优化项，一次抖动不该让整轮对话失败 —— 收紧提示词重试一次。
+            log.warning("agent.plan_parse_retry", error=str(exc), exc_info=True)
+            retry_messages = [
+                *messages[:-1],
+                {"role": "user", "content": (
+                    f"{message}\n\nReturn ONLY a single JSON object, no prose, no "
+                    "markdown fences. Required shape: "
+                    '{"goal": "...", "subtasks": [{"id": "...", "title": "...", '
+                    '"verification": "..."}]}'
+                )},
+            ]
+            retry = await self._model_router.complete_for(
+                model, "planning", retry_messages, max_tokens=1200,
+            )
+            return TaskPlan.from_dict(self._json_object(retry.text, "Planner"))
 
     async def _verify_plan(
         self, plan: TaskPlan, response_text: str, model: str,
@@ -991,7 +1015,7 @@ class AgentOrchestrator:
             ],
             max_tokens=1200,
         )
-        results = self._json_object(result.text).get("results")
+        results = self._json_object(result.text, "Plan verifier").get("results")
         if not isinstance(results, list):
             raise ValueError("Verifier response requires a results list")
         return results
@@ -1025,7 +1049,7 @@ class AgentOrchestrator:
             ],
             max_tokens=1200,
         )
-        value = self._json_object(result.text)
+        value = self._json_object(result.text, "Goal evaluator")
         satisfied = value.get("satisfied")
         evidence = value.get("evidence")
         reason = value.get("reason")
