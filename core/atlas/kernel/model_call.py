@@ -649,7 +649,13 @@ async def complete_stream(
                             arguments = str(_get(function, "arguments") or "")
                             if call_id and not current.call_id:
                                 current.call_id = call_id
-                            # Within one attempt these are deltas, not restarted snapshots.
+                            # Some compatible gateways repeat the full function name
+                            # alongside every argument delta. Do not concatenate it.
+                            if name and current.name:
+                                if name == current.name:
+                                    name = ""
+                                elif name.startswith(current.name):
+                                    name = name[len(current.name):]
                             current.name += name
                             current.arguments += arguments
                             if call_id or name or arguments:
