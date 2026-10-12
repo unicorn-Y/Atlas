@@ -21,7 +21,7 @@ export function sourceRoot(appPath: string): string | null {
 
 async function git(root: string, args: string[], timeout = 30_000): Promise<string> {
   const { stdout } = await run('git', ['-C', root, ...args], { timeout, windowsHide: true, encoding: 'utf8' });
-  return stdout.trim();
+  return args.includes('-z') ? stdout : stdout.trim();
 }
 
 export async function checkSourceUpdate(root: string | null): Promise<SourceUpdateStatus> {
@@ -47,7 +47,15 @@ export async function checkSourceUpdate(root: string | null): Promise<SourceUpda
     const log = behind
       ? await git(root, ['log', '--format=%h%x09%s', '-n', '20', `HEAD..${target}`])
       : '';
-    const dirty = await git(root, ['status', '--porcelain', '--untracked-files=no']);
+    const [modified, untracked, incoming] = await Promise.all([
+      git(root, ['diff', '--name-only', '--no-renames', '-z', 'HEAD']),
+      git(root, ['ls-files', '--others', '--exclude-standard', '-z']),
+      git(root, ['diff', '--name-only', '--no-renames', '-z', `HEAD...${target}`]),
+    ]);
+    const incomingFiles = incoming.split('\0').filter(Boolean);
+    const collisions = [...new Set([...modified.split('\0'), ...untracked.split('\0')])]
+      .filter((file) => file && incomingFiles.some((next) =>
+        next === file || next.startsWith(`${file}/`) || file.startsWith(`${next}/`)));
     return {
       supported: true,
       available: behind > 0,
@@ -57,7 +65,7 @@ export async function checkSourceUpdate(root: string | null): Promise<SourceUpda
         const [hash, ...rest] = line.split('\t');
         return { hash, subject: rest.join('\t') };
       }) : [],
-      ...(dirty ? { blocked: '本地有未提交的改动，更新前请先提交或撤销。' } : {}),
+      ...(collisions.length ? { blocked: `更新会覆盖本地改动：${collisions.slice(0, 5).join('、')}。请先保存或提交这些文件。` } : {}),
     };
   } catch (error) {
     return { supported: true, ...empty, error: error instanceof Error ? error.message : String(error) };

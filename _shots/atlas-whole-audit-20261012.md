@@ -87,3 +87,13 @@ Evidence: D:/Temp/atlas-four-fixes-verified-20261012.xml. New regression coverag
 No listening Atlas/CDP endpoints were found on checked ports 8765, 8099, 9335 or 9336. The repair pass did not start or restart production services, reload the renderer, or operate the foreground. No npm dependencies were upgraded and the unrelated full-suite failures have not been fixed in this bounded repair pass.
 
 Push preflight additionally verified the earlier stop-button and MemoryOS lifecycle repairs: 68 backend tests passed, adapter 18 passed, renderer store and desktop startup 33 passed, both TypeScript checks passed. A WebSocket isolation test was updated to use an explicit loopback client, consistent with the strengthened origin guard. MemoryOS companion verification passed 5 delivery-order regressions, 23 deterministic Freshness checks and an isolated readiness lifecycle check (503 before startup, ready after startup, 503 after shutdown). Unrelated configuration changes and temporary probes were excluded from the repair commits.
+
+## Update Button Follow-Up - 2026-10-13
+
+The running source desktop disabled its update button because checkSourceUpdate treated every tracked local modification as a blocker. The remaining engine/config.yaml edit did not overlap either pending dependency update. Git merge-tree preflight found the pending commit could merge cleanly without modifying the working tree.
+
+Source update checks now compare incoming paths against both tracked local modifications and untracked files. NUL-delimited Git output preserves spaces in file names; file/directory collisions are also blocked. Unrelated configuration changes no longer block the update. Conflicting paths remain explicit in the blocked message.
+
+Five new regressions first failed against the old behavior, then passed with the fix. Combined source-update and desktop-startup verification passed 14 tests; Electron TypeScript compilation passed. The compiled checker was loaded into the running Electron main process through a temporary local inspector by replacing only the update:check IPC handler. The existing renderer update state was refreshed with the real IPC response. No application restart, navigation, renderer reload or update execution was performed.
+
+CDP verified the live update button had disabled=false, pointer-events=auto, and an unobstructed hit target. Electron retained PID 11204. The temporary main inspector was scheduled to close after verification; the existing renderer CDP endpoint was left intact. This verifies that the button is enabled, not that pulling, dependency installation, rebuilding or relaunching has completed. The user's local configuration edit was preserved.
