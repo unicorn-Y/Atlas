@@ -186,3 +186,8 @@ format = "json"
 # IANA timezone for relative time and reminder interpretation. Empty follows
 # the operating system timezone, mapped to its IANA rules (including DST).
 timezone = ""
+
+[expert]
+# 专家模式的内容目录（独立 git 仓库）。不填就是 ~/.atlas-expert；目录不存在时按 repo 克隆。
+# dir = "~/.atlas-expert"
+repo = "https://github.com/unicorn-Y/atlas-expert.git"
