@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type MutableRefObject } from 'react';
 import { Virtuoso, type StateSnapshot, type VirtuosoHandle } from 'react-virtuoso';
 import { History, ListChecks } from 'lucide-react';
 import type { ConversationMessage as ConversationMessageData } from '@atlas/backend-adapter';
@@ -14,7 +14,7 @@ import { clearConversationHighlights, ConversationSearch, findConversationMatche
 import type { ConversationSearchRow } from './conversation-search/ConversationSearch';
 import type { InspectorTab } from '../shell/Inspector';
 import type { AgentEvent } from '../../types/runtime';
-import { ThreadClassGroup, ThreadPresentationControls, THREAD_CLASSES, useThreadPresentationSettings, type ThreadClassId } from './ThreadPresentation';
+import { settingsForMode, ThreadClassGroup, ThreadPresentationControls, THREAD_CLASSES, useThreadPresentationSettings, type ThreadClassId, type ThreadPresentationMode } from './ThreadPresentation';
 import ComputerUseTrail from './ComputerUseTrail';
 
 /** 每个会话最近一次的虚拟列表滚动状态，切回来时原位恢复。 */
@@ -71,6 +71,7 @@ function pendingInteraction(row: ThreadRow, answers: Record<string, string | und
 function presentRows(rows: ThreadRow[], settings: ReturnType<typeof useThreadPresentationSettings>[0], answers: Record<string, string | undefined>): ThreadDisplayRow[] {
   const visible = rows.filter((row) => {
     if (row.kind !== 'timeline') return true;
+    if (settings.mode === 'normal' && row.item.kind === 'reasoning') return false;
     const classId = timelineClass(row.item);
     return settings.show[classId] || pendingInteraction(row, answers);
   });
@@ -254,6 +255,11 @@ export default function MessageThread({ history, username, historyActions, empty
     }
     return rows;
   }, [history, loading, timelineItems, hasEarlier, truncatedCount]);
+
+  const hasReasoning = rows.some((row) => row.kind === 'timeline' && row.item.kind === 'reasoning' && row.item.text.trim().length > 0);
+  useEffect(() => {
+    if (!loading && !hasReasoning && presentation.mode === 'thinking') setPresentation(settingsForMode('normal'));
+  }, [hasReasoning, loading, presentation.mode, setPresentation]);
 
   const displayRows = useMemo(() => searchOpen
     ? rows.map((row) => ({ kind: 'row' as const, id: row.id, row }))
@@ -453,13 +459,30 @@ export default function MessageThread({ history, username, historyActions, empty
     </ThreadClassGroup>;
   }, [presentation.collapsed, renderRow]);
 
+  const onThreadKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const target = event.target;
+    const editable = target instanceof HTMLElement && (target.isContentEditable || Boolean(target.closest('input, textarea, select, button, [role="button"], [data-shortcut-recorder]')));
+    if (editable || event.defaultPrevented || event.altKey || event.shiftKey || !event.ctrlKey || event.metaKey || event.key.toLowerCase() !== 'o') return;
+    event.preventDefault();
+    const modes: ThreadPresentationMode[] = hasReasoning
+      ? ['normal', 'thinking', 'verbose']
+      : ['normal', 'verbose'];
+    const current = modes.indexOf(presentation.mode);
+    setPresentation(settingsForMode(modes[(current + 1 + modes.length) % modes.length]));
+  };
+
   return <div
     ref={(element) => { threadRef.current = element; setScrollParent(element); }}
     role="region"
     aria-label="任务活动"
-    className="min-h-0 flex-1 overflow-auto px-8 pt-2"
+    aria-describedby="thread-keyboard-help"
+    aria-keyshortcuts="Control+O"
+    tabIndex={0}
+    onKeyDown={onThreadKeyDown}
+    className="min-h-0 flex-1 overflow-auto px-8 pt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-[-2px]"
   >
-    <ThreadPresentationControls settings={presentation} onChange={setPresentation} />
+    <span id="thread-keyboard-help" className="sr-only">对话活动区域。焦点在此区域时，使用 Page Up 和 Page Down 滚动；按 Ctrl 加 O 在常规、思考和详细显示方式间切换。按 Tab 访问消息操作与活动设置。</span>
+    <ThreadPresentationControls settings={presentation} onChange={setPresentation} hasReasoning={hasReasoning} />
     <ConversationSearch
       open={searchOpen}
       query={searchQuery}

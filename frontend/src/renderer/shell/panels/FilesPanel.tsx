@@ -91,9 +91,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   const [sheetIndex, setSheetIndex] = useState(0);
   const [workbookError, setWorkbookError] = useState('');
   const [workbookLoading, setWorkbookLoading] = useState(false);
-  // C6R: 订阅内部「打开文件」请求；highlightLine 是要定位的行，codeRef 用来滚动。
+  // C6R: 订阅内部「打开文件」请求；定位行列并滚动到对应代码位置。
   const openRequest = useAtlasStore((state) => state.fileOpenRequest);
   const [highlightLine, setHighlightLine] = useState<number | null>(null);
+  const [highlightColumn, setHighlightColumn] = useState<number | null>(null);
   const codeRef = useRef<HTMLPreElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -129,7 +130,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
       setRecentlyClosed((current) => current.filter((item) => item !== path));
     }
     setFile((current) => current?.path === path ? current : null);
-    setMode('preview'); setVersion(null); setHighlightLine(null); setPdfPage(1); setPdfZoom(100); setPdfError(''); setLightbox(false); setError('');
+    setMode('preview'); setVersion(null); setHighlightLine(null); setHighlightColumn(null); setPdfPage(1); setPdfZoom(100); setPdfError(''); setLightbox(false); setError('');
   };
   const closeFileTab = (path: string) => {
     setRecentlyClosed((current) => [path, ...current.filter((item) => item !== path)].slice(0, 10));
@@ -138,7 +139,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     setTabs(next);
     if (selected === path) {
       setSelected(next[Math.min(index, next.length - 1)] ?? '');
-      setFile(null); setVersion(null); setHighlightLine(null); setMode('preview');
+      setFile(null); setVersion(null); setHighlightLine(null); setHighlightColumn(null); setMode('preview');
     }
   };
   const openContextMenu = (event: MouseEvent, path: string, directory = false) => {
@@ -199,12 +200,15 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     setVersion(null);
     setMode('code');
     setHighlightLine(openRequest.line);
+    setHighlightColumn(openRequest.column);
   }, [openRequest]);
-  // 定位请求的行:文件内容渲染后滚动到目标行(居中)。
+  // 定位请求的行列：先垂直居中，再水平滚动到目标字符。
   useEffect(() => {
     if (!highlightLine) return;
-    codeRef.current?.querySelector<HTMLElement>(`[data-line="${highlightLine}"]`)?.scrollIntoView({ block: 'center' });
-  }, [file, highlightLine]);
+    const line = codeRef.current?.querySelector<HTMLElement>(`[data-line="${highlightLine}"]`);
+    const column = codeRef.current?.querySelector<HTMLElement>('[data-column-target]');
+    (column ?? line)?.scrollIntoView({ block: 'center', inline: column ? 'center' : 'nearest' });
+  }, [file, highlightLine, highlightColumn]);
 
   useEffect(() => {
     if (!workspace || !selected) { setFile(null); return; }
@@ -438,7 +442,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         : highlightLine && shown?.content ? <pre ref={codeRef} className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono text-[11.5px] leading-[1.6] text-fg-2">
           {shown.content.split('\n').map((text, index) => {
             const line = index + 1;
-            return <span key={line} data-line={line} className={cn(line === highlightLine && 'bg-brand-soft text-fg shadow-[inset_2px_0_0_var(--brand)]')}>{`${text}\n`}</span>;
+            const targetColumn = line === highlightLine && highlightColumn ? Math.max(0, Math.min(text.length, highlightColumn - 1)) : null;
+            return <span key={line} data-line={line} className={cn(line === highlightLine && 'bg-brand-soft text-fg shadow-[inset_2px_0_0_var(--brand)]')}>
+              {targetColumn === null ? text : <>{text.slice(0, targetColumn)}<span data-column-target className="border-l-2 border-danger bg-danger-soft">{text.slice(targetColumn, targetColumn + 1) || '\u00a0'}</span>{text.slice(targetColumn + 1)}</>}{'\n'}
+            </span>;
           })}
           {shown.truncated && '\n\n…文件太大，只显示了前 512 KB。'}
         </pre>
