@@ -625,6 +625,19 @@ export default function App() {
   const toggleInspector = (open?: boolean) => setInspectorOpen((current) => { const next = open ?? !current; setPref('canvas', String(next)); return next; });
   const showInspectorTab = (tab: InspectorTab) => { setInspectorTab(tab); toggleInspector(true); };
   useEffect(() => {
+    const onSelectionToDraft = (event: Event) => {
+      const text = (event as CustomEvent<{ text?: unknown }>).detail?.text;
+      if (typeof text !== 'string' || !text.trim()) return;
+      const quote = text.trim().split(/\r?\n/).map((line) => `> ${line}`).join('\n');
+      go('chat');
+      setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}${quote}\n\n`);
+      setToast('已把选中文本加入消息草稿');
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus());
+    };
+    window.addEventListener('atlas:add-selection-to-draft', onSelectionToDraft);
+    return () => window.removeEventListener('atlas:add-selection-to-draft', onSelectionToDraft);
+  }, [go]);
+  useEffect(() => {
     const onSelectionForSideChat = (event: Event) => {
       const text = (event as CustomEvent<{ text?: unknown }>).detail?.text;
       if (typeof text === 'string' && text.trim()) setSide({ open: true, question: `请围绕这段选中文本追问：\n\n> ${text.trim()}` });
