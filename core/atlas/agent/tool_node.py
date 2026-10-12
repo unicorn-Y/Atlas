@@ -271,7 +271,7 @@ async def execute_tools_node(
         # 普通只读会话的 tool_allow 不会包含它们，行为不变。
         review_tool_explicitly_allowed = (
             read_only
-            and fn_name in {"delegate_task", "review_command", "submit_findings"}
+            and fn_name in {"delegate_task", "review_command", "submit_findings", "ReportFindings"}
             and allowed_tools is not None and fn_name in allowed_tools
             and tool_allowed(policy_tool_name, allowed_tools, denied_tools)
         )
@@ -633,8 +633,15 @@ async def execute_tools_node(
                     await ctx.event_queue.put(events[-1])
 
                 # Ask server layer for approval
+                approval_args = {
+                    **fn_args,
+                    "_approval_reason": str(hook_permission.get("reason")
+                                             or "A permission hook requested approval."),
+                    "_approval_scope": str(hook_permission.get("scope") or "this tool call"),
+                    "_approval_resource": str(hook_permission.get("resource") or ""),
+                }
                 choice = await ctx.approval_callback(
-                    approval_event_id, fn_name, fn_args
+                    approval_event_id, fn_name, approval_args
                 )
 
             if choice != "allow":
@@ -912,6 +919,17 @@ async def execute_tools_node(
                 elif agent_model == "strong":
                     agent_model = _agent.get_config().get("agents.strong_model") or ctx.model
                 agent_model = agent._resolve_subagent_model(agent_model, ctx.model)
+                if fn_args.get("model"):
+                    agent_model = agent._resolve_subagent_model(str(fn_args["model"]), ctx.model)
+                requested_effort = fn_args.get("reasoning_effort")
+                if requested_effort is not None and requested_effort not in {
+                    "minimal", "low", "medium", "high",
+                }:
+                    raise ValueError("reasoning_effort must be minimal, low, medium, or high")
+                configured_depth = int(_agent.get_config().get("delegation.max_spawn_depth", 4))
+                requested_depth = int(fn_args.get("max_depth", configured_depth))
+                if requested_depth < 1 or requested_depth > 8:
+                    raise ValueError("max_depth must be between 1 and 8")
                 from atlas.engine.tool_permissions import intersect_tool_allow
                 tool_allow = intersect_tool_allow(
                     atlas_options.get("tool_allow"), definition.get("tools"),
@@ -930,9 +948,9 @@ async def execute_tools_node(
                                  "agent_role": definition.get("role", "leaf"),
                                  "agent_type": definition["name"],
                                  "depth": ctx.agent_depth + 1, "model": agent_model,
+                                 "reasoning_effort": requested_effort or ctx.reasoning_effort,
                                  "permission_mode": child_permission,
-                                 "max_spawn_depth": int(_agent.get_config().get(
-                                     "delegation.max_spawn_depth", 4)),
+                                 "max_spawn_depth": min(configured_depth, ctx.agent_depth + requested_depth),
                                  "tool_allow": tool_allow}
                 delegated_goal = fn_args.get("goal")
                 delegated_context = fn_args.get("context")
@@ -999,6 +1017,46 @@ async def execute_tools_node(
                 result = {"data": {"subtask_id": subtask_id, "queued": True},
                           "content": [{"type": "text", "text": "补充要求已排队，将在子 Agent 下一轮送达。"}],
                           "is_error": False}
+            elif fn_name == "subtask_resume":
+                subtask_id = str(fn_args["subtask_id"])
+                text = str(fn_args["text"])
+                if not agent._delegation.steer_subtask(subtask_id, text):
+                    raise ValueError("子任务不存在、已结束，或不支持运行中恢复/引导。")
+                result = {"data": {"subtask_id": subtask_id, "queued": True},
+                          "content": [{"type": "text", "text": "恢复消息已排队，将在子 Agent 下一轮送达。"}],
+                          "is_error": False}
+            elif fn_name == "subtask_wait":
+                subtask_id = str(fn_args["subtask_id"])
+                if agent._delegation.subtask_status(subtask_id) is None:
+                    raise ValueError("找不到这个子任务。")
+                await agent._delegation.wait_background(subtask_id)
+                status = agent._delegation.subtask_status(subtask_id)
+                result = {"data": status, "content": [{
+                    "type": "text", "text": json.dumps(frame_delegate_result_data(status or {}), ensure_ascii=False),
+                }], "is_error": False}
+            elif fn_name == "subtask_cancel":
+                subtask_id = str(fn_args["subtask_id"])
+                if not agent._delegation.cancel_subtask(subtask_id):
+                    raise ValueError("子任务不存在或已经结束。")
+                result = {"data": {"subtask_id": subtask_id, "status": "cancelling"},
+                          "content": [{"type": "text", "text": "取消请求已发送。"}], "is_error": False}
+            elif fn_name == "subtask_escalate":
+                subtask_id = str(fn_args["subtask_id"])
+                status = agent._delegation.subtask_status(subtask_id)
+                if status is None:
+                    raise ValueError("找不到这个子任务。")
+                if status.get("status") == "running":
+                    raise ValueError("子任务仍在运行；请先等待它完成。")
+                result = {"data": status, "content": [{
+                    "type": "text", "text": json.dumps(frame_delegate_result_data(status), ensure_ascii=False),
+                }], "is_error": False}
+            elif fn_name == "subtask_close":
+                subtask_id = str(fn_args["subtask_id"])
+                if not agent._delegation.close_subtask(subtask_id):
+                    raise ValueError("只能关闭已经结束且仍保留的本次运行子任务。")
+                result = {"data": {"subtask_id": subtask_id, "closed": True},
+                          "content": [{"type": "text", "text": "子任务结果已消费并关闭。"}],
+                          "is_error": False}
             elif fn_name == "delegate_parallel":
                 if agent._delegation is None:
                     raise RuntimeError("No AgentBackendHost is configured for delegation")
@@ -1038,6 +1096,17 @@ async def execute_tools_node(
                     task["agent_model"] = agent._resolve_subagent_model(
                         task["agent_model"], ctx.model,
                     )
+                    requested_model = str(task.get("model") or fn_args.get("model") or "").strip()
+                    if requested_model:
+                        task["agent_model"] = agent._resolve_subagent_model(requested_model, ctx.model)
+                    task["reasoning_effort"] = task.get("reasoning_effort", fn_args.get("reasoning_effort"))
+                    if task["reasoning_effort"] is not None and task["reasoning_effort"] not in {
+                        "minimal", "low", "medium", "high",
+                    }:
+                        raise ValueError("reasoning_effort must be minimal, low, medium, or high")
+                    task["max_depth"] = int(task.get("max_depth", fn_args.get("max_depth", 4)))
+                    if not 1 <= task["max_depth"] <= 8:
+                        raise ValueError("max_depth must be between 1 and 8")
                     task["agent_tools"] = definition.get("tools")
                     task["agent_permission"] = definition.get("permission_mode")
                     parallel_tasks.append(task)
@@ -1142,9 +1211,14 @@ async def execute_tools_node(
                     )}],
                     "is_error": False,
                 }
-            elif fn_name in {"submit_findings", "review_command"}:
+            elif fn_name in {"ReportFindings", "submit_findings", "review_command"}:
                 from atlas.review import engine as review_engine
 
+                if fn_name == "ReportFindings":
+                    fn_args = {**fn_args, "findings_json": json.dumps(
+                        fn_args.get("findings", []), ensure_ascii=False,
+                    )}
+                    fn_name = "submit_findings"
                 data, text = await review_engine.handle_agent_tool(fn_name, fn_args, ctx)
                 result = {"data": data, "content": [{"type": "text", "text": text}],
                           "is_error": False}

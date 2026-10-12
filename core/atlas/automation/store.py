@@ -111,6 +111,7 @@ def normalize_payload(raw: dict[str, Any] | None) -> dict[str, Any]:
         "script": _text(raw.get("script")),
         "timeout_seconds": _number(raw.get("timeout_seconds"), DEFAULT_SCRIPT_TIMEOUT),
         "wake_mode": _text(raw.get("wake_mode")),
+        "conversation_id": _text(raw.get("conversation_id")),
     }
 
 

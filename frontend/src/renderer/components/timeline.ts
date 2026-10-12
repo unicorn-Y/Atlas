@@ -85,7 +85,7 @@ export type TimelineItem =
   | { kind: 'handoff'; id: string; event: AgentEvent }
   | { kind: 'group'; id: string; summary: string; results: Array<{ index: number; title: string; status: string; accepted?: boolean; verification_status?: string; verifier_note?: string; summary: string; changed_files: string[] }> }
   | { kind: 'checks'; id: string; results: CheckResults }
-  | { kind: 'cancelled'; id: string }
+  | { kind: 'cancelled'; id: string; reason?: string }
   /** One-line runtime notes: the model was swapped after errors, or Atlas went back to verify its edits. */
   | { kind: 'notice'; id: string; tone: 'switch' | 'verify' | 'todo'; text: string }
   /** LSP 在编辑后报的新问题：默认收成一行，可展开看明细。 */
@@ -641,7 +641,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         break;
       case 'run.cancelled':
         closeReply();
-        items.push({ kind: 'cancelled', id: event.id });
+        items.push({ kind: 'cancelled', id: event.id, reason: text(data.reason) || undefined });
         break;
       case 'run.failed':
         items.push({ kind: 'failed', id: event.id, detail: text(data.detail ?? data.code) || '未知错误' });

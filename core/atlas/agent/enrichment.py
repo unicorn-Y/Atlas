@@ -374,7 +374,30 @@ class DelegationService:
         """Wait for one background child; primarily useful to lifecycle owners and tests."""
         task = self._background_tasks.get(subtask_id)
         if task is not None:
-            await task
+            await asyncio.gather(task, return_exceptions=True)
+
+    def cancel_subtask(self, subtask_id: str) -> bool:
+        record = self._subtasks.get(subtask_id)
+        if record is None or record.get("status") != "running":
+            return False
+        cancel_event = record.get("cancel_event")
+        if cancel_event is not None and hasattr(cancel_event, "set"):
+            cancel_event.set()
+        task = self._background_tasks.get(subtask_id)
+        if task is not None and not task.done() and cancel_event is None:
+            task.cancel()
+        return True
+
+    def close_subtask(self, subtask_id: str) -> bool:
+        record = self._subtasks.get(subtask_id)
+        if record is None or record.get("status") == "running":
+            return False
+        self._subtasks.pop(subtask_id, None)
+        self._steer_queues.pop(subtask_id, None)
+        task = self._background_tasks.pop(subtask_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+        return True
 
     def steer_subtask(self, subtask_id: str, text: str) -> bool:
         """Queue a steering message for the child's next model turn."""
@@ -899,7 +922,13 @@ class DelegationService:
                                     "tool_allow": intersect_tool_allow(
                                         (atlas_options or {}).get("tool_allow"), item.get("agent_tools"),
                                         (atlas_options or {}).get("available_tools", [])),
-                                    "model": item.get("agent_model") or (atlas_options or {}).get("model")}
+                                    "model": item.get("agent_model") or (atlas_options or {}).get("model"),
+                                    "reasoning_effort": item.get("reasoning_effort")
+                                    or (atlas_options or {}).get("reasoning_effort"),
+                                    "max_spawn_depth": min(
+                                        int((atlas_options or {}).get("max_spawn_depth", 4)),
+                                        int(metadata["depth"]) + int(item.get("max_depth", 4)),
+                                    )}
                     parent_permission = str(task_options.get("permission_mode", "full_access"))
                     child_permission = item.get("agent_permission")
                     permission_rank = {"full_access": 0, "auto_file": 1, "ask_writes": 2, "ask_each": 3, "plan": 4, "read_only": 5}
