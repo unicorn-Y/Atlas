@@ -19,6 +19,14 @@ const desktopApi: AtlasDesktopApi = {
   setGlobalShortcut: (accelerator) => ipcRenderer.invoke('platform:set-global-shortcut', accelerator),
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
+  showFloatingComposer: () => ipcRenderer.invoke('floating-composer:show'),
+  hideFloatingComposer: () => ipcRenderer.send('floating-composer:hide'),
+  submitFloatingComposer: (text: string) => ipcRenderer.send('floating-composer:submit', text),
+  onFloatingComposerSubmit: (callback: (text: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, text: string) => callback(text);
+    ipcRenderer.on('floating-composer:deliver', listener);
+    return () => ipcRenderer.removeListener('floating-composer:deliver', listener);
+  },
   onDeepLink: (callback: (route: AtlasDeepLink) => void) => {
     let active = true;
     const seen = new Set<string>();

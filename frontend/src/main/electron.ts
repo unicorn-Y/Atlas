@@ -27,6 +27,7 @@ function themeIcon(theme: string): Electron.NativeImage | undefined {
   return image.isEmpty() ? undefined : image;
 }
 let windowRef: BrowserWindow | null = null;
+let floatingComposerWindow: BrowserWindow | null = null;
 type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null };
 let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null };
 let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
@@ -120,6 +121,50 @@ function focusAtlasWindow(): void {
   if (windowRef.isMinimized()) windowRef.restore();
   windowRef.show();
   windowRef.focus();
+}
+
+function showFloatingComposer(): void {
+  if (!app.isReady()) return;
+  if (!floatingComposerWindow || floatingComposerWindow.isDestroyed()) {
+    const devUrl = process.env.VITE_DEV_SERVER_URL;
+    const win = new BrowserWindow({
+      width: 620,
+      height: 190,
+      minWidth: 420,
+      minHeight: 170,
+      maxWidth: 900,
+      maxHeight: 320,
+      show: false,
+      frame: false,
+      resizable: true,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      backgroundColor: '#faf9f6',
+      webPreferences: {
+        preload: path.join(here, '../preload/index.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+    floatingComposerWindow = win;
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.on('will-navigate', (event, url) => {
+      const allowed = devUrl ? (() => { try {
+        const target = new URL(url);
+        return target.origin === new URL(devUrl).origin && target.pathname.endsWith('/floating-composer.html');
+      } catch { return false; } })()
+        : url.split('#')[0] === pathToFileURL(path.resolve(here, '../../dist/floating-composer.html')).href;
+      if (!allowed) event.preventDefault();
+    });
+    win.on('closed', () => { if (floatingComposerWindow === win) floatingComposerWindow = null; });
+    if (devUrl) void win.loadURL(`${devUrl.replace(/\/$/, '')}/floating-composer.html`);
+    else void win.loadFile(path.join(here, '../../dist/floating-composer.html'));
+    win.once('ready-to-show', () => { win.show(); win.focus(); });
+  } else {
+    floatingComposerWindow.show();
+    floatingComposerWindow.focus();
+  }
 }
 
 function tryRegisterGlobalShortcut(accelerator: string | null): GlobalShortcutState {
@@ -401,6 +446,24 @@ ipcMain.handle('platform:open-workspace-in-editor', async (event, editor: unknow
   if (typeof workspacePath !== 'string') throw new Error('请选择一个有效的本地工作区目录。');
   await openWorkspaceInEditor(editor as PlatformEditorId, workspacePath);
 });
+ipcMain.handle('floating-composer:show', (event) => {
+  assertTrustedAppSender(event);
+  showFloatingComposer();
+});
+ipcMain.on('floating-composer:hide', (event) => {
+  if (event.sender === floatingComposerWindow?.webContents && event.senderFrame === event.sender.mainFrame) {
+    floatingComposerWindow.hide();
+  }
+});
+ipcMain.on('floating-composer:submit', (event, text: unknown) => {
+  if (event.sender !== floatingComposerWindow?.webContents || event.senderFrame !== event.sender.mainFrame) return;
+  if (typeof text !== 'string' || !text.trim() || text.length > 20_000) return;
+  if (windowRef && !windowRef.isDestroyed()) {
+    windowRef.webContents.send('floating-composer:deliver', text.trim());
+    focusAtlasWindow();
+  }
+  floatingComposerWindow?.hide();
+});
 
 ipcMain.on('window:minimize', () => windowRef?.minimize());
 ipcMain.on('window:maximize', () => {
@@ -458,6 +521,9 @@ app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   platformPreferences = loadPlatformPreferences();
   registerPreferredGlobalShortcut();
+  // Dedicated system-wide shortcut for the floating composer; it does not replace the user's
+  // configurable Atlas focus shortcut. Registration failure leaves the in-app API available.
+  globalShortcut.register('Control+Alt+Space', showFloatingComposer);
   if (app.isPackaged) app.setAsDefaultProtocolClient('atlas');
   else if (process.platform === 'win32' || process.platform === 'linux') {
     app.setAsDefaultProtocolClient('atlas', process.execPath, [path.resolve(process.argv[1] ?? '.')]);

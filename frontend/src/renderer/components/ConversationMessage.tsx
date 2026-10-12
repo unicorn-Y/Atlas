@@ -1,4 +1,4 @@
-import { Children, isValidElement, memo, useCallback, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { Children, isValidElement, memo, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
@@ -169,10 +169,27 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
 }) {
   const [markdownSource, setMarkdownSource] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items?: ContextAction[] } | null>(null);
+  const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const messageRootRef = useRef<HTMLDivElement>(null);
   const pendingSelectionRangeRef = useRef<Range | null>(null);
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const showSelectionTooltip = (event: MouseEvent<HTMLElement>) => {
+    if (event.target instanceof Element && event.target.closest('button, input, textarea, [role="menu"]')) return;
+    const range = selectionRangeWithin(messageRootRef.current);
+    if (!range) { setSelectionTooltip(null); return; }
+    const rect = range.getBoundingClientRect();
+    setSelectionTooltip({ text: range.toString().trim(), x: Math.min(Math.max(rect.left + rect.width / 2, 120), window.innerWidth - 120), y: Math.max(48, rect.top - 8) });
+  };
+  useEffect(() => {
+    if (!selectionTooltip) return;
+    const dismiss = (event: globalThis.MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest('[data-selection-tooltip]')) return;
+      setSelectionTooltip(null);
+    };
+    window.addEventListener('mousedown', dismiss);
+    return () => window.removeEventListener('mousedown', dismiss);
+  }, [selectionTooltip]);
   const buildContextActions = (range = selectionRangeWithin(messageRootRef.current)): ContextAction[] => [
       ...(content ? [{ id: 'copy-message', label: '复制消息', onSelect: () => navigator.clipboard.writeText(content) }] : []),
       ...historyContextActions(actions),
@@ -184,6 +201,9 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
         const shortcut = new KeyboardEvent('keydown', { key: 'a', altKey: true, shiftKey: true, bubbles: true, cancelable: true });
         window.dispatchEvent(shortcut);
         if (!shortcut.defaultPrevented) throw new Error('selected-text command unavailable');
+      } }] : []),
+      ...(range ? [{ id: 'side-chat-selection', label: '用选中文本开启侧聊', restoreFocus: false, onSelect: () => {
+        window.dispatchEvent(new CustomEvent('atlas:side-chat-selection', { detail: { text: range.toString().trim() } }));
       } }] : []),
       ...(role === 'assistant' && content && !streaming ? [{
         id: 'markdown-source',
@@ -223,6 +243,19 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
     }
   };
   const currentContextActions = contextMenu?.items ?? contextActions;
+  const selectionActionTooltip = selectionTooltip && <div data-selection-tooltip role="toolbar" aria-label="选中文本操作"
+    onMouseDown={(event) => event.preventDefault()}
+    style={{ left: selectionTooltip.x, top: selectionTooltip.y, transform: 'translate(-50%, -100%)' }}
+    className="fixed z-[120] flex items-center gap-1 rounded-lg border border-line bg-panel p-1 shadow-xl">
+    <button type="button" onClick={() => {
+      window.dispatchEvent(new CustomEvent('atlas:add-selection-to-draft', { detail: { text: selectionTooltip.text } }));
+      setSelectionTooltip(null);
+    }} className="rounded-md px-2 py-1 text-[12px] text-fg hover:bg-hover">加入任务</button>
+    <button type="button" onClick={() => {
+      window.dispatchEvent(new CustomEvent('atlas:side-chat-selection', { detail: { text: selectionTooltip.text } }));
+      setSelectionTooltip(null);
+    }} className="rounded-md px-2 py-1 text-[12px] text-fg hover:bg-hover">开启侧聊</button>
+  </div>;
   const assistantContent = streaming
     ? <StreamingText content={content} />
     : markdownSource
@@ -239,8 +272,9 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
     </button>}
   </>;
   if (role === 'assistant' && continued) {
-    return <div ref={messageRootRef} className="group my-3 pl-10" data-message-role="assistant" onContextMenu={openContextMenu}>
+    return <div ref={messageRootRef} className="group my-3 pl-10" data-message-role="assistant" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
       {assistantContent}
+      {selectionActionTooltip}
       {content && <div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {assistantActions}
         {contextActions.length > 0 && <button ref={contextTriggerRef} type="button" aria-label="更多消息操作" title="更多消息操作"
@@ -253,9 +287,10 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
     </div>;
   }
   if (role === 'user') {
-    return <div ref={messageRootRef} className="group my-5 flex flex-col items-end gap-1" data-message-role="user" onContextMenu={openContextMenu}>
+    return <div ref={messageRootRef} className="group my-5 flex flex-col items-end gap-1" data-message-role="user" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
       {note && <span className="text-[11.5px] text-fg-3">{note}</span>}
       <div data-message-content className="max-w-[78%] whitespace-pre-wrap rounded-[16px] rounded-br-[5px] bg-sunken px-4 py-2.5 text-[14.5px] leading-[1.7] text-fg shadow-[inset_0_0_0_1px_var(--line)]" title={username}>{content}</div>
+      {selectionActionTooltip}
       {(content || actions) && <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {content && <ClipboardAction text={content} />}{actions}
         {contextActions.length > 0 && <button ref={contextTriggerRef} type="button" aria-label="更多消息操作" title="更多消息操作"
@@ -267,7 +302,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
         onClose={closeContextMenu} restoreFocus={() => contextTriggerRef.current?.focus()} />}
     </div>;
   }
-  return <div ref={messageRootRef} className="group my-5 grid grid-cols-[28px_minmax(0,1fr)] gap-3" data-message-role="assistant" onContextMenu={openContextMenu}>
+  return <div ref={messageRootRef} className="group my-5 grid grid-cols-[28px_minmax(0,1fr)] gap-3" data-message-role="assistant" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
     <Mark className="mt-[3px] size-[26px]" working={working} />
     <div className="min-w-0">
       <div className="mb-1.5 flex items-baseline gap-2.5">
@@ -275,6 +310,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
         {status && <span className="text-[12px] text-fg-3">{status}</span>}
       </div>
       {assistantContent}
+      {selectionActionTooltip}
       {(content || actions) && <div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {assistantActions}{actions}
         {contextActions.length > 0 && <button ref={contextTriggerRef} type="button" aria-label="更多消息操作" title="更多消息操作"

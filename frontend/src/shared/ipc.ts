@@ -72,6 +72,11 @@ export interface AtlasDesktopApi {
   setGlobalShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
   /** Open an existing local workspace with a fixed allowlisted IDE CLI (never through a shell). */
   openWorkspaceInEditor?(editor: PlatformEditorId, workspacePath: string): Promise<void>;
+  /** Open the small native floating composer. The desktop shell forwards submitted text to the main UI. */
+  showFloatingComposer?(): void;
+  hideFloatingComposer?(): void;
+  submitFloatingComposer?(text: string): void;
+  onFloatingComposerSubmit?(callback: (text: string) => void): () => void;
   /** Receive validated atlas://conversation/<id> or atlas://settings/<section> routes. */
   onDeepLink?(callback: (route: AtlasDeepLink) => void): () => void;
   /** Backend startup progress (H8 §10.3): fires during boot; `ready`/`failed` are terminal. */

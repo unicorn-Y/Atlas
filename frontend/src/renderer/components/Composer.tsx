@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Drag
 import { Accessibility, ArrowLeft, ArrowRight, ArrowUp, AtSign, ChevronDown, Code2, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, Keyboard, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, Sparkles, RotateCcw, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
 import { fuzzyScore } from '../services/fuzzy';
+import { matchSlashCommands, registerSlashCommands, type SlashCommand } from '../services/slashCommands';
 import { cn } from '../ui/cn';
 import { Dialog } from '../ui/Dialog';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/Menu';
@@ -49,7 +50,7 @@ function readEnterToSend(): boolean {
 export interface ComposerMode { id: string; label: string; icon: LucideIcon }
 
 /** An entry in the `/` menu. `takesArgument` commands receive the text typed after the command name. */
-export interface SlashCommand { id: string; label: string; hint?: string; group?: string; takesArgument?: boolean; run: (argument: string) => void }
+export type { SlashCommand } from '../services/slashCommands';
 
 interface SkillSuggestion {
   id: string;
@@ -57,16 +58,12 @@ interface SkillSuggestion {
   label: string;
   hint?: string;
   group: string;
+  source: string;
 }
 
 /** Commands matching a `/query` draft; only while the draft is a single command word (plus an argument for argument commands). */
 export function matchCommands(value: string, commands: SlashCommand[]): SlashCommand[] {
-  const match = /^\/(\S*)(\s[\s\S]*)?$/.exec(value);
-  if (!match) return [];
-  const [, word, rest] = match;
-  if (rest !== undefined) return commands.filter((command) => command.takesArgument && command.label === `/${word}`);
-  return commands.map((command, index) => ({ command, index, rank: fuzzyScore(word, command.label.slice(1)) }))
-    .filter((item) => item.rank >= 0).sort((a, b) => b.rank - a.rank || a.index - b.index).slice(0, 12).map((item) => item.command);
+  return matchSlashCommands(value, commands);
 }
 
 function matchSkillSuggestions(query: string, commands: readonly SlashCommand[]): SkillSuggestion[] {
@@ -90,6 +87,7 @@ function matchSkillSuggestions(query: string, commands: readonly SlashCommand[])
       label: `$${skillName}`,
       hint: command.hint,
       group: '消息提及（作为文本发送）',
+      source: command.source ?? '技能',
     }));
 }
 
@@ -213,12 +211,14 @@ export default function Composer(props: ComposerProps) {
   const [found, setFound] = useState<MentionItem[]>([]);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [shellConfirmation, setShellConfirmation] = useState<string | null>(null);
   const shortcutHelpButtonRef = useRef<HTMLButtonElement>(null);
   const shortcutHelpCloseRef = useRef<HTMLButtonElement>(null);
   const previewOpen = previewIndex !== null;
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
   const previewCloseRef = useRef<HTMLButtonElement | null>(null);
-  const commandMatches = matchCommands(props.value, props.commands ?? []);
+  const registeredCommands = useMemo(() => registerSlashCommands(props.commands ?? []), [props.commands]);
+  const commandMatches = matchCommands(props.value, registeredCommands);
   const parsedMention = mentionAt(props.value);
   const mention = parsedMention?.trigger === '$' || props.findMentions ? parsedMention : null;
   const skillMatches = useMemo(
@@ -321,10 +321,15 @@ export default function Composer(props: ComposerProps) {
     setPreviewIndex(null);
     window.requestAnimationFrame(() => previewTriggerRef.current?.focus());
   };
-  const submit = (event?: FormEvent) => {
+  const submit = (event?: FormEvent, confirmedShell = false) => {
     event?.preventDefault();
     if (matches.length) { choose(matches[Math.min(cursor, matches.length - 1)]); return; }
     if (canSend) {
+      const shellCommand = props.value.trim();
+      if (!confirmedShell && props.variant === 'dock' && shellCommand.startsWith('!') && shellCommand.length > 1) {
+        setShellConfirmation(shellCommand.slice(1).trim());
+        return;
+      }
       historyRef.current = appendHistory(props.value);
       setHistoryIndex(null);
       props.onSubmit();
@@ -416,6 +421,7 @@ export default function Composer(props: ComposerProps) {
         {'skillName' in item ? <span className="flex shrink-0 items-center gap-1.5 font-mono text-[13px] text-fg"><Sparkles size={13} className="text-brand" />{item.label}</span>
           : 'run' in item ? <span className="shrink-0 font-mono text-[13px] text-fg">{item.label}</span>
           : <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-fg">{item.kind === 'file' ? <AtSign size={13} className="text-fg-3" /> : <Hash size={13} className="text-fg-3" />}<span className="max-w-[260px] truncate">{item.label}</span></span>}
+        {('run' in item || 'skillName' in item) && item.source && <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 text-[10.5px] text-fg-3">{item.source}</span>}
         {('run' in item || 'skillName' in item) && item.group && <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 text-[10.5px] text-fg-3">{item.group}</span>}
         {item.hint && <span className="min-w-0 truncate text-[12.5px] text-fg-3">{item.hint}</span>}
       </button>)}
@@ -587,6 +593,16 @@ export default function Composer(props: ComposerProps) {
         className="absolute right-4 grid size-11 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70"><ArrowRight size={22} /></button>}
       <span className="absolute bottom-4 rounded-full bg-black/50 px-3 py-1 text-[12px] text-white">{previewIndex + 1} / {props.attachments.length}</span>
     </div>}
+    <Dialog open={shellConfirmation !== null} onOpenChange={(open) => { if (!open) setShellConfirmation(null); }} label="确认在终端运行命令"
+      className="w-[min(520px,calc(100vw-32px))] bg-panel p-5 shadow-xl">
+      <h2 className="m-0 text-[16px] font-semibold text-fg">在终端运行这条命令？</h2>
+      <p className="mb-3 mt-1.5 text-[13px] text-fg-2">确认后会在当前会话工作目录的终端执行，不会发送给 Atlas。</p>
+      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-sunken p-3 text-[12.5px] text-fg">{shellConfirmation}</pre>
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" onClick={() => setShellConfirmation(null)} className="rounded-lg px-3 py-2 text-[13px] text-fg-2 hover:bg-hover">取消</button>
+        <button type="button" onClick={() => { setShellConfirmation(null); submit(undefined, true); }} className="rounded-lg bg-brand px-3 py-2 text-[13px] font-medium text-white hover:brightness-110">运行命令</button>
+      </div>
+    </Dialog>
     <Dialog open={shortcutHelpOpen} onOpenChange={onShortcutHelpOpenChange} label="快捷键帮助"
       className="max-h-[82vh] w-[min(560px,92vw)] overflow-auto bg-panel p-4 shadow-xl">
       <div className="mb-3 flex items-center gap-2">

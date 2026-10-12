@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-  AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquarePlus, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Send, Settings,
+  AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Settings,
   SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, VolumeX, X, Gauge, Search,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
@@ -12,6 +12,7 @@ import ProgressCapsule from './components/ProgressCapsule';
 import { latestTodos } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import { resolveMessageSkillReferences } from './components/skillMentions';
+import ConversationQueuePanel from './components/ConversationQueuePanel';
 import RecipesDialog from './components/RecipesDialog';
 import SideChat from './components/SideChat';
 import RemoteFolderDialog from './components/RemoteFolderDialog';
@@ -662,6 +663,32 @@ export default function App() {
   const toggleMini = () => setSideMini((current) => { setPref('sidebar-mini', String(!current)); return !current; });
   const toggleInspector = (open?: boolean) => setInspectorOpen((current) => { const next = open ?? !current; setPref('canvas', String(next)); return next; });
   const showInspectorTab = (tab: InspectorTab) => { setInspectorTab(tab); toggleInspector(true); };
+  useEffect(() => {
+    const onSelectionToDraft = (event: Event) => {
+      const text = (event as CustomEvent<{ text?: unknown }>).detail?.text;
+      if (typeof text !== 'string' || !text.trim()) return;
+      const quote = text.trim().split(/\r?\n/).map((line) => `> ${line}`).join('\n');
+      go('chat');
+      setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}${quote}\n\n`);
+      setToast('已把选中文本加入消息草稿');
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus());
+    };
+    window.addEventListener('atlas:add-selection-to-draft', onSelectionToDraft);
+    return () => window.removeEventListener('atlas:add-selection-to-draft', onSelectionToDraft);
+  }, [go]);
+  useEffect(() => {
+    const onSelectionForSideChat = (event: Event) => {
+      const text = (event as CustomEvent<{ text?: unknown }>).detail?.text;
+      if (typeof text === 'string' && text.trim()) setSide({ open: true, question: `请围绕这段选中文本追问：\n\n> ${text.trim()}` });
+    };
+    window.addEventListener('atlas:side-chat-selection', onSelectionForSideChat);
+    return () => window.removeEventListener('atlas:side-chat-selection', onSelectionForSideChat);
+  }, []);
+  useEffect(() => window.atlasDesktop?.onFloatingComposerSubmit?.((text) => {
+    go('chat');
+    setInput(text);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus());
+  }), [go]);
   // C6R: /review「打开文件」请求 → 切到文件面板;FilesPanel 自己消费请求并定位行。
   useEffect(() => { if (storeData.fileOpenRequest) showInspectorTab('files'); }, [storeData.fileOpenRequest]);
   const openConversation = (conversation: (typeof store.conversations)[number]) => {
@@ -867,7 +894,7 @@ export default function App() {
     ...store.customCommands.map((command) => ({
       id: `command-${command.id}`, label: `/${command.name}`,
       hint: command.description || (command.argument_hint ? `参数：${command.argument_hint}` : '自定义命令'),
-      group: commandGroup(command.source), takesArgument: Boolean(command.argument_hint),
+      group: commandGroup(command.source), source: command.source || '自定义命令', takesArgument: Boolean(command.argument_hint),
       run: (argument: string) => void runCustomCommand(command, argument),
     })),
   ];
@@ -1161,25 +1188,18 @@ export default function App() {
   }, [activeEvents, activeRun?.id, store.runs, store.activeConversationId]);
   const todoStrip = todoSource && <TodoPanel key={store.activeConversationId} todos={todoSource.todos} revisionKey={`${todoSource.runId}:${todoSource.revision}`}
     running={Boolean(activeRun && !runDone)} onSubmit={(todos) => store.submitTodos(store.activeConversationId, todos)} />;
-  const queueStrip = conversationQueue.length > 0 && <div className="mb-2 grid gap-1.5" aria-label="待发送的消息">
-    {queuePaused && <div className="flex items-center gap-2 rounded-xl bg-sunken px-3 py-2 text-[12.5px] text-fg-2">
-      <Pause size={13} />任务已停止，后面的 {conversationQueue.length} 条先不发。<span className="flex-1" />
-      <Button size="sm" variant="ghost" onClick={() => store.resumeQueue(store.activeConversationId)}><Play />继续发送</Button>
-    </div>}
-    {conversationQueue.map((item, index) => <div key={item.id} className="flex items-center gap-2.5 rounded-xl bg-sunken px-3 py-2 text-[13px]">
-      <span className="shrink-0 text-[12px] text-fg-3 tabular-nums">{index === 0 ? '下一条' : `第 ${index + 1} 条`}</span>
-      <span className="min-w-0 flex-1 truncate text-fg">{item.content}</span>
-      {item.attachments.length + item.files.length > 0 && <span className="shrink-0 text-[12px] text-fg-3">{item.attachments.length + item.files.length} 个附件</span>}
-      {activeRun && !runDone && !item.attachments.length && !item.files.length && <Tip label="现在就交给正在做的任务"><button aria-label="把这条插话进当前任务" onClick={() => store.steerQueued(store.activeConversationId, item.id)}
-        className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><MessageSquarePlus size={13} /></button></Tip>}
-      <Tip label="取回来修改"><button aria-label="编辑这条待发消息" onClick={() => { const taken = store.takeQueued(store.activeConversationId, item.id); if (taken) { setInput(taken.content); setAttachments(taken.attachments); setFiles(taken.files.map((file) => ({ ...file, size: Math.floor(file.data_base64.length * 3 / 4) }))); } }}
-        className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><Pencil size={13} /></button></Tip>
-      <Tip label="停下当前这一步，马上发这条"><button aria-label="立即发送这条消息" onClick={() => store.sendQueuedNow(store.activeConversationId, item.id)}
-        className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><Send size={13} /></button></Tip>
-      <Tip label="不发了"><button aria-label="删除这条待发消息" onClick={() => store.removeQueued(store.activeConversationId, item.id)}
-        className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><X size={13} /></button></Tip>
-    </div>)}
-  </div>;
+  const queueStrip = <ConversationQueuePanel key={store.activeConversationId} conversationId={store.activeConversationId} items={conversationQueue}
+    paused={queuePaused} running={Boolean(activeRun && !runDone)} onResume={() => store.resumeQueue(store.activeConversationId)}
+    onEdit={(item) => { const taken = store.takeQueued(store.activeConversationId, item.id); if (taken) {
+      setInput(taken.content); setAttachments(taken.attachments);
+      setFiles(taken.files.map((file) => ({ ...file, size: Math.floor(file.data_base64.length * 3 / 4) })));
+      setMentions([...(taken.refs?.files ?? []).map((id) => ({ kind: 'file' as const, id, label: id })), ...(taken.refs?.conversations ?? []).map((id) => ({ kind: 'conversation' as const, id, label: id }))]);
+      setToast('队列消息已取回输入框，可编辑后重新发送');
+    } }}
+    onSendNow={(id) => store.sendQueuedNow(store.activeConversationId, id)} onRemove={(id) => store.removeQueued(store.activeConversationId, id)}
+    onRestore={(item, index) => store.restoreQueued(store.activeConversationId, item, index)}
+    onMove={(itemId, beforeId) => store.moveQueued(store.activeConversationId, itemId, beforeId)}
+    onSteer={(id) => store.steerQueued(store.activeConversationId, id)} />;
   const retryNote = activeRun?.status === 'failed' && store.runPrompts[activeRun.id] && !working && <div className="mt-3 flex items-center gap-3 text-[13px] text-fg-2">
     这次没有完成。<Button size="sm" variant="secondary" aria-label="重试上一次失败的运行" onClick={() => store.retryRun(activeRun.id)}><RotateCcw />重试</Button>
   </div>;
