@@ -339,26 +339,47 @@ function SubtaskRow({ step, live, runId, store, onCancelSubtask }: { step: Step;
 
 function Approval({ event, store }: { event: AgentEvent; store: ReturnType<typeof useAtlasStore.getState> }) {
   const [details, setDetails] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
   const data = event.data;
   const response = store.getRun(event.runId)?.events.find((item) => item.type === 'approval.responded' && (item.data.event_id === event.id || item.data.approval_id === data.approval_id));
   const choice = response?.data.choice;
+  const allowAlwaysAvailable = data.allow_always_available === true;
+  const permissionScope = data.permission_scope && typeof data.permission_scope === 'object' ? data.permission_scope as Record<string, unknown> : null;
   const toolName = String(data.tool ?? data.name ?? '未知工具');
   const args = data.input ?? data.arguments;
   const { verb, target } = describeTool(toolName, args);
-  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
+  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface" onKeyDown={(keyEvent) => {
+    if (!keyEvent.altKey || keyEvent.ctrlKey || keyEvent.metaKey || keyEvent.shiftKey || keyEvent.nativeEvent.isComposing || (keyEvent.nativeEvent as KeyboardEvent).keyCode === 229) return;
+    const target = keyEvent.target;
+    if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+    if (keyEvent.key === '1') { keyEvent.preventDefault(); if (!choice) store.respondToApproval(event.id, 'allow_once'); }
+    else if (keyEvent.key === '2' && allowAlwaysAvailable) { keyEvent.preventDefault(); if (!choice) store.respondToApproval(event.id, 'allow_always'); }
+    else if (keyEvent.key === '3') { keyEvent.preventDefault(); if (!choice) setRejecting(true); }
+  }}>
     <div className="flex gap-3.5 border-l-[3px] border-danger px-4 py-3.5">
       <ShieldAlert size={18} className="mt-0.5 shrink-0 text-danger" />
       <div className="min-w-0 flex-1">
         <p className="m-0 text-[14px] font-semibold text-heading">需要你确认：{verb}{target ? <code className="ml-1.5 rounded-[5px] bg-code px-1.5 font-mono text-[12.5px] font-normal text-fg-2">{target}</code> : null}</p>
         {typeof data.description === 'string' && data.description && <p className="mt-1 mb-0 text-[13px] text-fg-2">{data.description}</p>}
-        {Boolean(data.scope || data.resource) && <p className="mt-1 mb-0 text-[12px] text-fg-3">范围：{String(data.scope ?? '单次请求')}{data.resource ? ` · 资源：${String(data.resource)}` : ''}</p>}
+        {permissionScope && <p className="mt-1 mb-0 text-[12px] text-fg-3">始终允许范围：{String(permissionScope.workspace ?? '')} · {String(permissionScope.tool ?? toolName)}{permissionScope.resource ? ` · ${String(permissionScope.resource)}` : ' · 精确调用'}</p>}
+        {!permissionScope && Boolean(data.scope || data.resource) && <p className="mt-1 mb-0 text-[12px] text-fg-3">范围：{String(data.scope ?? '单次请求')}{data.resource ? ` · 资源：${String(data.resource)}` : ''}</p>}
         {choice
-          ? <p className="mt-2.5 mb-0 flex items-center gap-1.5 text-[13px] text-fg-2">{choice === 'allow' ? <><Check size={14} className="text-ok" />已允许</> : <><X size={14} className="text-danger" />已拒绝</>}</p>
-          : <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="primary" onClick={() => store.approve(event.id)}>允许</Button>
-            <Button onClick={() => store.reject(event.id)}>拒绝</Button>
-            {args !== undefined && <Button variant="ghost" onClick={() => setDetails((open) => !open)}>{details ? '收起详情' : '查看详情'}</Button>}
-          </div>}
+          ? <p className="mt-2.5 mb-0 flex items-center gap-1.5 text-[13px] text-fg-2">{choice === 'deny' ? <><X size={14} className="text-danger" />已拒绝{typeof response?.data.reason === 'string' && response.data.reason ? `：${response.data.reason}` : ''}</> : <><Check size={14} className="text-ok" />{choice === 'allow_always' ? response?.data.source === 'persisted_grant' ? '按已保存的始终允许规则通过' : '始终允许' : '已允许一次'}</>}</p>
+          : <>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="primary" title="快捷键 Alt+1" onClick={() => store.respondToApproval(event.id, 'allow_once')}>允许一次</Button>
+              {allowAlwaysAvailable && <Button title="快捷键 Alt+2" onClick={() => store.respondToApproval(event.id, 'allow_always')}>始终允许</Button>}
+              <Button title="快捷键 Alt+3" onClick={() => setRejecting((value) => !value)}>拒绝并说明</Button>
+              {args !== undefined && <Button variant="ghost" onClick={() => setDetails((open) => !open)}>{details ? '收起详情' : '查看详情'}</Button>}
+            </div>
+            {rejecting && <form className="mt-3 grid gap-2" onSubmit={(submitEvent) => { submitEvent.preventDefault(); if (!reason.trim()) return; store.respondToApproval(event.id, 'deny', reason); }}>
+              <label className="text-[12px] text-fg-2">拒绝理由</label>
+              <textarea autoFocus rows={2} maxLength={1000} value={reason} onChange={(changeEvent) => setReason(changeEvent.target.value)} placeholder="说明为什么拒绝这次操作" className="rounded-lg bg-overlay px-2.5 py-1.5 text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]"
+                onKeyDown={(keyEvent) => { const composing = keyEvent.nativeEvent.isComposing || (keyEvent.nativeEvent as KeyboardEvent).keyCode === 229; if (keyEvent.key === 'Enter' && (keyEvent.ctrlKey || keyEvent.metaKey) && !composing) { keyEvent.preventDefault(); if (reason.trim()) store.respondToApproval(event.id, 'deny', reason); } if (keyEvent.key === 'Escape' && !composing) setRejecting(false); }} />
+              <div className="flex items-center justify-between gap-2"><span className="text-[11px] text-fg-3">{reason.length}/1000</span><span className="flex gap-2"><Button type="button" variant="ghost" onClick={() => setRejecting(false)}>取消</Button><Button type="submit" disabled={!reason.trim()}>提交拒绝</Button></span></div>
+            </form>}
+          </>}
         {details && args !== undefined && <pre className="anim-fade mt-3 mb-0 max-h-60 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap text-fg-2">{typeof args === 'string' ? args : JSON.stringify(args, null, 2)}</pre>}
       </div>
     </div>

@@ -94,7 +94,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
   conversationId: string;
   worktree: { path: string; branch: string; base: string } | null;
   onWorktreeChanged: () => void;
-  onAsk: (text: string) => void;
+  onAsk: (text: string) => void | Promise<void>;
 }) {
   const [selected, setSelected] = useState('');
   const [raw, setRaw] = useState(false);

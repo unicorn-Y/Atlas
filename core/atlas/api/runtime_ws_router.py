@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from typing import Annotated
@@ -11,6 +12,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.api.runtime import RunState
+from atlas.approval_policy import grant as grant_approval_permission
 
 router = APIRouter()
 
@@ -138,16 +140,47 @@ async def ws_chat(
                     await services.runtime_mgr.send(conn_id, env)
 
             elif msg_type == "approval.response":
-                event_id = data.get("event_id", "")
-                choice = data.get("choice", "deny")
+                event_id = str(data.get("event_id", ""))
+                requested_choice = str(data.get("choice", "deny"))
+                reason = data.get("reason")
+                reason = str(reason).strip()[:1000] if reason is not None else ""
+                if requested_choice == "allow":  # protocol 1.2 compatibility
+                    requested_choice = "allow_once"
                 # Find the run that has this approval
                 for run in services.runtime_mgr.runs.values():
                     fut = run.approval_futures.pop(event_id, None)
                     if fut and not fut.done():
-                        fut.set_result(choice)
-                        env = run.next_envelope("approval.responded", {
+                        context = run.approval_contexts.get(event_id, {})
+                        permission = context.get("permission_scope")
+                        choice = requested_choice
+                        if choice == "allow_always":
+                            if not context.get("allow_always_available") or not permission:
+                                choice = "deny"
+                                reason = "此请求没有可安全持久化的权限范围，操作未执行。"
+                            else:
+                                try:
+                                    await asyncio.to_thread(grant_approval_permission, permission)
+                                except (OSError, ValueError):
+                                    choice = "deny"
+                                    reason = "始终允许无法安全保存，操作未执行。"
+                        if choice in {"allow_once", "allow_always"}:
+                            fut.set_result("allow")
+                        elif choice == "deny":
+                            reason = reason or "用户拒绝了此操作。"
+                            fut.set_result(f"deny:{reason}")
+                        else:
+                            # Unknown choices fail closed and preserve the reason in the execution result.
+                            choice = "deny"
+                            reason = "无法识别的审批选择，操作未执行。"
+                            fut.set_result(f"deny:{reason}")
+                        response_data: dict[str, object] = {
                             "event_id": event_id, "choice": choice,
-                        })
+                        }
+                        if reason:
+                            response_data["reason"] = reason
+                        if permission is not None:
+                            response_data["permission_scope"] = permission
+                        env = run.next_envelope("approval.responded", response_data)
                         await services.runtime_mgr.persist_run(run)
                         await services.runtime_mgr.send(conn_id, env)
                         break

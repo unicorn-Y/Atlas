@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, ChevronRight, ClipboardCheck, ClipboardCopy, FileSearch, Hammer, ListChecks, SearchCheck, ShieldCheck } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, ChevronDown, ChevronRight, ChevronUp, ClipboardCheck, ClipboardCopy, FileSearch, Hammer, ListChecks, SearchCheck, ShieldCheck } from 'lucide-react';
 import type { useAtlasStore } from '../store/useAtlasStore';
 import { cn } from '../ui/cn';
 import type { ReviewFinding, TimelineItem } from './timeline';
@@ -29,7 +29,12 @@ export const fixMessage = (finding: ReviewFinding) =>
 /** /review 的结构化结论：头部计数、逐条展开、一键发回对话修复。 */
 export default function ReviewFindingsCard({ item, store }: { item: Extract<TimelineItem, { kind: 'review' }>; store: Store }) {
   const [copied, setCopied] = useState(false);
-  const [sentAll, setSentAll] = useState(false);
+  const [dismissed, setDismissed] = useState<number[]>([]);
+  const [sent, setSent] = useState<number[]>([]);
+  const [sending, setSending] = useState<number[]>([]);
+  const [sendError, setSendError] = useState('');
+  const [activeFinding, setActiveFinding] = useState<number | null>(null);
+  const findingRefs = useRef<Record<number, HTMLLIElement | null>>({});
   if (!item.findings.length) {
     return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
       <div className="flex items-center gap-2.5 border-l-[3px] border-ok bg-ok-soft px-4 py-3 text-[13px] text-ok">
@@ -39,18 +44,52 @@ export default function ReviewFindingsCard({ item, store }: { item: Extract<Time
   }
   const counts: Record<ReviewFinding['severity'], number> = { blocker: 0, major: 0, minor: 0 };
   for (const finding of item.findings) counts[finding.severity] += 1;
-  const fixAll = () => {
-    if (sentAll) return;
-    const body = item.findings.map((finding, index) => `${index + 1}. 文件：${findingWhere(finding)}\n   标题：${finding.title}\n   说明：${finding.explanation}\n   证据：${finding.evidence}\n   建议修法：${finding.suggested_fix}`).join('\n');
-    setSentAll(true);
-    void store.sendMessage(`请修复代码审查发现的这些问题（${item.scopeLabel}）：\n\n${body}\n\n逐条修，改完说明每一处是怎么处理的。`);
+  const applyFixes = async () => {
+    const pending = item.findings.map((finding, index) => ({ finding, index })).filter(({ index }) => !dismissed.includes(index) && !sent.includes(index));
+    if (!pending.length || sending.length) return;
+    const body = pending.map(({ finding }, index) => `${index + 1}. 文件：${findingWhere(finding)}\n   标题：${finding.title}\n   说明：${finding.explanation}\n   证据：${finding.evidence}\n   建议修法：${finding.suggested_fix}`).join('\n');
+    const indexes = pending.map(({ index }) => index);
+    setSending(indexes);
+    setSendError('');
+    try {
+      await store.sendMessage(`请修复代码审查发现的这些问题（${item.scopeLabel}）：\n\n${body}\n\n逐条修，改完说明每一处是怎么处理的。`);
+      setSent((current) => [...new Set([...current, ...indexes])]);
+    } catch (error) { setSendError(error instanceof Error ? error.message : String(error)); }
+    finally { setSending([]); }
+  };
+  const fixOne = async (index: number, finding: ReviewFinding) => {
+    if (sent.includes(index) || sending.length) return;
+    setSending([index]);
+    setSendError('');
+    try { await store.sendMessage(fixMessage(finding)); setSent((current) => [...new Set([...current, index])]); }
+    catch (error) { setSendError(error instanceof Error ? error.message : String(error)); }
+    finally { setSending([]); }
+  };
+  const visibleFindingIndexes = item.findings.map((_, index) => index).filter((index) => !dismissed.includes(index));
+  const activePosition = activeFinding === null ? -1 : visibleFindingIndexes.indexOf(activeFinding);
+  const navigateFinding = (direction: -1 | 1) => {
+    const nextPosition = activePosition < 0 ? 0 : activePosition + direction;
+    const targetIndex = visibleFindingIndexes[nextPosition];
+    if (targetIndex === undefined) return;
+    setActiveFinding(targetIndex);
+    requestAnimationFrame(() => {
+      const row = findingRefs.current[targetIndex];
+      row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      row?.querySelector('button')?.focus();
+    });
   };
   const copy = () => {
     void navigator.clipboard.writeText(item.findings.map((finding, index) => formatFinding(finding, index)).join('\n\n'))
       .then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 2000); })
       .catch(() => setCopied(false));
   };
-  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
+  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface" onKeyDown={(event) => {
+    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.nativeEvent.isComposing || (event.nativeEvent as KeyboardEvent).keyCode === 229) return;
+    const target = event.target;
+    if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+    if (event.key === 'ArrowUp' && activePosition > 0) { event.preventDefault(); navigateFinding(-1); }
+    else if (event.key === 'ArrowDown' && activePosition < visibleFindingIndexes.length - 1) { event.preventDefault(); navigateFinding(1); }
+  }}>
     <div className="flex flex-wrap items-center gap-2 px-4 py-3">
       <SearchCheck size={16} className="shrink-0 text-brand" />
       <b className="text-[14px] font-semibold text-heading">代码审查 · {item.scopeLabel}</b>
@@ -60,25 +99,39 @@ export default function ReviewFindingsCard({ item, store }: { item: Extract<Time
             <span className={cn('size-[7px] rounded-full', FINDING_SEVERITY[severity].dot)} />{FINDING_SEVERITY[severity].label} {counts[severity]}
           </span>)}
       </span>
+      <span className="flex shrink-0 items-center gap-1 border-l border-line pl-2">
+        <span className="mr-1 text-[11px] text-fg-3">逐条查看 {activePosition < 0 ? '—' : `${activePosition + 1}/${visibleFindingIndexes.length}`}</span>
+        <button type="button" aria-label="上一个审查发现" title="上一个发现（Alt+↑）" disabled={!visibleFindingIndexes.length || activePosition <= 0}
+          onClick={() => navigateFinding(-1)} className="grid size-7 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:opacity-40"><ChevronUp size={14} /></button>
+        <button type="button" aria-label="下一个审查发现" title="下一个发现（Alt+↓）" disabled={!visibleFindingIndexes.length || activePosition >= visibleFindingIndexes.length - 1}
+          onClick={() => navigateFinding(1)} className="grid size-7 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:opacity-40"><ChevronDown size={14} /></button>
+      </span>
     </div>
     <ol className="m-0 grid list-none border-t border-line p-0">
-      {item.findings.map((finding, index) => <FindingRow key={`${finding.file}:${finding.line}:${index}`} finding={finding} store={store} workspace={item.workspace} />)}
+      {item.findings.map((finding, index) => dismissed.includes(index) ? null : <FindingRow key={`${finding.file}:${finding.line}:${index}`} finding={finding} store={store} workspace={item.workspace}
+        rowRef={(node) => { findingRefs.current[index] = node; }} active={activeFinding === index} onSelect={() => setActiveFinding(index)}
+        sent={sent.includes(index)} sending={sending.includes(index)} onFix={() => fixOne(index, finding)} onDismiss={() => setDismissed((current) => [...current, index])} />)}
     </ol>
+    {dismissed.length > 0 && <div className="flex items-center gap-2 border-t border-line px-4 py-2 text-[12px] text-fg-3">
+      <span className="flex-1">已忽略 {dismissed.length} 条</span>
+      <button type="button" className="text-fg-2 hover:text-fg" onClick={() => setDismissed([])}>恢复查看</button>
+    </div>}
     <div className="flex items-center gap-4 border-t border-line px-4 py-2.5 text-[12.5px]">
-      <button className={cn('inline-flex items-center gap-1.5 hover:text-fg', sentAll ? 'text-ok' : 'text-fg-2')} onClick={fixAll} disabled={sentAll}>
-        {sentAll ? <Check size={13} className="text-ok" /> : <ListChecks size={13} />}{sentAll ? '已发回对话' : '全部发回对话修复'}
+      <button className={cn('inline-flex items-center gap-1.5 hover:text-fg', sent.length && sent.length === item.findings.length - dismissed.length ? 'text-ok' : 'text-fg-2')} onClick={() => void applyFixes()} disabled={sending.length > 0 || sent.length + dismissed.length === item.findings.length}>
+        {sending.length > 0 ? <Check size={13} /> : sent.length + dismissed.length === item.findings.length ? <Check size={13} className="text-ok" /> : <ListChecks size={13} />}{sending.length > 0 ? '正在提交…' : sent.length + dismissed.length === item.findings.length ? '已提交/忽略' : `Apply fixes（${item.findings.length - dismissed.length - sent.length}）`}
       </button>
       <button className="inline-flex items-center gap-1.5 text-fg-2 hover:text-fg" onClick={copy}>
         {copied ? <ClipboardCheck size={13} className="text-ok" /> : <ClipboardCopy size={13} />}{copied ? '已复制' : '复制'}
       </button>
     </div>
+    {sendError && <p role="alert" className="m-0 border-t border-line px-4 py-2 text-[12px] text-danger">未能提交修复要求：{sendError}</p>}
   </div>;
 }
 
 /** 一条发现：默认一行（严重级 + 位置 + 标题），点开看说明、证据和建议修法。 */
-export function FindingRow({ finding, store, workspace, defaultOpen = false }: { finding: ReviewFinding; store: Store; workspace: string; defaultOpen?: boolean }) {
+export function FindingRow({ finding, store, workspace, defaultOpen = false, sent = false, sending = false, active = false, rowRef, onSelect, onFix, onDismiss }: { finding: ReviewFinding; store: Store; workspace: string; defaultOpen?: boolean; sent?: boolean; sending?: boolean; active?: boolean; rowRef?: (node: HTMLLIElement | null) => void; onSelect?: () => void; onFix?: () => void; onDismiss?: () => void }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [sent, setSent] = useState(false);
+  useEffect(() => { if (active) setOpen(true); }, [active]);
   const [note, setNote] = useState('');
   // 通过 Atlas 自己的文件面板打开;浏览器/dev 同样可用。
   const canOpen = Boolean(workspace);
@@ -86,14 +139,10 @@ export function FindingRow({ finding, store, workspace, defaultOpen = false }: {
     store.requestFileOpen(finding.file, finding.line);
     setNote(finding.line ? `已在文件面板打开，定位到第 ${finding.line} 行` : '已在文件面板打开');
   };
-  const fix = () => {
-    if (sent) return;
-    setSent(true);
-    void store.sendMessage(fixMessage(finding));
-  };
+  const fix = () => { if (!sent && !sending) onFix?.(); };
   const hasDetail = Boolean(finding.explanation || finding.evidence || finding.suggested_fix);
-  return <li className="border-b border-line last:border-b-0">
-    <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}
+  return <li ref={rowRef} className={cn('border-b border-line last:border-b-0', active && 'bg-brand-soft/30')}>
+    <button type="button" onClick={() => { onSelect?.(); setOpen((value) => !value); }} aria-expanded={open}
       className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left text-[13px] hover:bg-hover">
       <span className={cn('mt-px shrink-0 rounded-full px-2 py-0.5 text-[11px]', FINDING_SEVERITY[finding.severity].chip)}>{FINDING_SEVERITY[finding.severity].label}</span>
       <span className="min-w-0 flex-1"><code className="font-mono text-[12px] text-fg-2">{findingWhere(finding)}</code> <span className="text-fg">{finding.title}</span></span>
@@ -105,9 +154,10 @@ export function FindingRow({ finding, store, workspace, defaultOpen = false }: {
       {finding.suggested_fix && <p className="m-0 text-fg-2"><span className="text-fg-3">建议修法：</span>{finding.suggested_fix}</p>}
       <div className="flex flex-wrap items-center gap-4">
         {canOpen && <button className="inline-flex items-center gap-1.5 text-fg-2 hover:text-fg" onClick={openFile}><FileSearch size={13} />打开文件</button>}
-        <button className={cn('inline-flex items-center gap-1.5 hover:text-fg', sent ? 'text-ok' : 'text-fg-2')} onClick={fix} disabled={sent}>
-          {sent ? <Check size={13} className="text-ok" /> : <Hammer size={13} />}{sent ? '已发回对话' : '让 Atlas 修这一条'}
+        <button className={cn('inline-flex items-center gap-1.5 hover:text-fg', sent ? 'text-ok' : 'text-fg-2')} onClick={fix} disabled={sent || sending}>
+          {sent ? <Check size={13} className="text-ok" /> : <Hammer size={13} />}{sending ? '正在提交…' : sent ? '已提交对话' : 'Fix'}
         </button>
+        {!sent && <button className="inline-flex items-center gap-1.5 text-fg-2 hover:text-fg disabled:opacity-50" disabled={sending} onClick={onDismiss}>Dismiss</button>}
         {note && <span role="status" className="text-fg-3">{note}</span>}
       </div>
     </div>}
