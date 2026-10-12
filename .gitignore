@@ -92,6 +92,8 @@ atlas-frontend-v3.html
 !/skills/creative/
 !/skills/productivity/
 !/skills/automation/
+# Atlas-authored red-team skill pack (hand-written, not Cowork-injected)
+!/skills/redteam/
 # Keep the core Python package
 !core/atlas/skills/
 
@@ -117,8 +119,12 @@ desktop.ini
 # Hermes engine runtime home (X2/U0 sync writes here)
 data/engine/
 # Top-level D:\Atlas\engine is the live Hermes home (config.yaml/logs/installs/
-# auth.lock) — machine-local runtime state, never source.
-/engine/
+# auth.lock). Track only the two hand-authored Atlas artifacts: the persona
+# prompt and the approval policy; the rest (caches, logs, installs, 349MB of
+# machine-local runtime state) stays untracked.
+/engine/*
+!/engine/breaker.md
+!/engine/config.yaml
 .tmp/
 data/*.sqlite
 data/devices/
@@ -144,4 +150,11 @@ data/memory_paused
 # Machine-local clutter (never commit): construction pack + config backups
 /.construction-pack/
 data/user-settings.json.bak-*
+# 运行时产物（sqlite 队列、反思收据、上游基线缓存、技能睡眠状态）
+core/outbox/
+/outbox/
+/reflection_receipts/
+data/backups/
+data/skill-sleep/
+data/upstream/
 data/library/
