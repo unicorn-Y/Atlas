@@ -421,6 +421,26 @@ function createWindow() {
     setTimeout(() => loadApp(), 500 * loadRetries);
   });
   win.webContents.on('did-finish-load', () => { loadRetries = 0; });
+  // Electron ships no right-click menu; give inputs and selected text the usual
+  // edit menu. Pages that open their own menu call preventDefault and skip this.
+  win.webContents.on('context-menu', (_event, params) => {
+    const { editFlags, isEditable, selectionText } = params;
+    const hasSelection = selectionText.trim().length > 0;
+    if (!isEditable && !hasSelection) return;
+    const items: Electron.MenuItemConstructorOptions[] = isEditable
+      ? [
+        { label: '撤销', role: 'undo', enabled: editFlags.canUndo },
+        { label: '重做', role: 'redo', enabled: editFlags.canRedo },
+        { type: 'separator' },
+        { label: '剪切', role: 'cut', enabled: editFlags.canCut },
+        { label: '复制', role: 'copy', enabled: editFlags.canCopy },
+        { label: '粘贴', role: 'paste', enabled: editFlags.canPaste },
+        { type: 'separator' },
+        { label: '全选', role: 'selectAll', enabled: editFlags.canSelectAll },
+      ]
+      : [{ label: '复制', role: 'copy' }, { label: '全选', role: 'selectAll' }];
+    Menu.buildFromTemplate(items).popup({ window: win });
+  });
   win.webContents.on('did-start-loading', () => {
     if (deepLinkSubscriber === win.webContents) deepLinkSubscriber = null;
   });

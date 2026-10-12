@@ -30,9 +30,14 @@ export function AccessibleContextMenu({ label, items, x, y, onClose, restoreFocu
     const dismissOutside = (event: Event) => {
       if (!menuRef.current?.contains(event.target as Node)) onClose('outside');
     };
-    document.addEventListener('pointerdown', dismissOutside);
-    document.addEventListener('contextmenu', dismissOutside);
+    // React 18 flushes this effect while the opening right-click is still bubbling;
+    // listening right away would treat that same event as an outside click.
+    const timer = window.setTimeout(() => {
+      document.addEventListener('pointerdown', dismissOutside);
+      document.addEventListener('contextmenu', dismissOutside);
+    }, 0);
     return () => {
+      window.clearTimeout(timer);
       document.removeEventListener('pointerdown', dismissOutside);
       document.removeEventListener('contextmenu', dismissOutside);
     };
