@@ -473,7 +473,8 @@ export interface RuntimeEventEnvelope {
 export interface ApprovalResponse {
   type: 'approval.response';
   event_id: string;
-  choice: 'allow' | 'deny';
+  choice: 'allow' | 'allow_once' | 'allow_always' | 'deny';
+  reason?: string;
 }
 
 export interface ResumeRequest {

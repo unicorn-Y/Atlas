@@ -627,7 +627,7 @@ export class BackendAdapter {
     const pending = this.approvalResolvers.get(response.event_id);
     if (pending) {
       this.approvalResolvers.delete(response.event_id);
-      pending.resolve(response.choice);
+      pending.resolve(response.choice === 'deny' ? 'deny' : 'allow');
       return;
     }
     const socket = this.runSockets.get(runId);

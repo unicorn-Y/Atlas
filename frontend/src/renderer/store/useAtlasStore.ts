@@ -139,6 +139,7 @@ interface AtlasState extends PersistentSlice {
   removeRun: (runId: string) => void;
   approve: (eventId: string) => void;
   reject: (eventId: string) => void;
+  respondToApproval: (eventId: string, choice: 'allow_once' | 'allow_always' | 'deny', reason?: string) => void;
   answerInput: (runId: string, eventId: string, text: string) => void;
   approvePlan: (runId: string, eventId: string, edits?: string) => void;
   trustRules: (runId: string, eventId: string, trust: boolean) => void;
@@ -674,8 +675,9 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       await startRun(conversationId, item);
     },
 
-    approve: (eventId) => respondToApproval(eventId, 'allow'),
+    approve: (eventId) => respondToApproval(eventId, 'allow_once'),
     reject: (eventId) => respondToApproval(eventId, 'deny'),
+    respondToApproval: (eventId, choice, reason) => respondToApproval(eventId, choice, reason),
     answerInput: (runId, eventId, text) => {
       try {
         backend.respondToInput(runId, eventId, text);
@@ -1025,12 +1027,12 @@ async function migrateLegacyFlags(conversations: ConversationSummary[]): Promise
   return updated;
 }
 
-function respondToApproval(eventId: string, choice: 'allow' | 'deny') {
+function respondToApproval(eventId: string, choice: 'allow_once' | 'allow_always' | 'deny', reason?: string) {
   const { getState: get, setState: set } = useAtlasStore;
   const run = get().runs.find((item) => item.events.some((event) => event.id === eventId && event.type === 'approval.required'));
   if (!run) return;
-  try { backend.respondToApproval(run.id, { type: 'approval.response', event_id: eventId, choice }); }
-  catch (error) { set(errorPatch(error, choice === 'allow' ? '批准请求失败' : '拒绝请求失败')); }
+  try { backend.respondToApproval(run.id, { type: 'approval.response', event_id: eventId, choice, ...(reason?.trim() ? { reason: reason.trim() } : {}) }); }
+  catch (error) { set(errorPatch(error, choice === 'deny' ? '拒绝请求失败' : '批准请求失败')); }
 }
 
 /** Fold a message into a running run. Returns false when it can't be delivered, so the caller can queue it. */

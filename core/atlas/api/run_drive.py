@@ -31,6 +31,8 @@ from fastapi import HTTPException, Request
 
 from atlas.api.models_settings_router import _model_supports_reasoning
 from atlas.api.runtime import RunState, RuntimeManager
+from atlas.approval_policy import is_allowed as approval_always_allowed
+from atlas.approval_policy import permission_scope as approval_permission_scope
 from atlas.automation import AutomationEngine
 from atlas.channels import ChannelManager
 from atlas.config import get_config
@@ -2457,13 +2459,21 @@ async def _execute_run(
             approval_event_id: str, tool_name: str, tool_args: dict[str, Any]
         ) -> str:
             """Emit approval.required and wait for client response."""
+            public_input = {key: value for key, value in tool_args.items()
+                            if key not in {"subtask_id", "_reviewer_reason", "_approval_reason",
+                                           "_approval_scope", "_approval_resource"}}
+            resource = tool_args.get("_approval_resource") or tool_args.get("resource")
+            permission = None if run.ephemeral else approval_permission_scope(
+                run.workspace, tool_name, public_input,
+                str(resource) if resource else None,
+            )
             approval_payload = {
                 "approval_id": approval_event_id,
                 "description": str(tool_args.get("_approval_reason") or tool_args.get("reason") or
                                     f"Agent 请求执行工具 {tool_name}，需要你的确认。"),
-                "input": {key: value for key, value in tool_args.items()
-                          if key not in {"subtask_id", "_reviewer_reason", "_approval_reason", "_approval_scope", "_approval_resource"}},
+                "input": public_input,
                 "tool": tool_name,
+                "allow_always_available": permission is not None,
             }
             if tool_args.get("_approval_scope") or tool_args.get("scope"):
                 approval_payload["scope"] = str(tool_args.get("_approval_scope") or tool_args["scope"])
@@ -2473,10 +2483,23 @@ async def _execute_run(
                 approval_payload["reviewer_reason"] = str(tool_args["_reviewer_reason"])
             if tool_args.get("subtask_id"):
                 approval_payload["subtask_id"] = tool_args["subtask_id"]
+            if permission is not None:
+                approval_payload["permission_scope"] = permission
+                if approval_always_allowed(permission):
+                    await emit("approval.required", {**approval_payload, "previously_allowed": True})
+                    await emit("approval.responded", {
+                        "event_id": approval_event_id, "choice": "allow_always",
+                        "permission_scope": permission, "source": "persisted_grant",
+                    })
+                    return "allow"
             approval_future = run.approval_futures.get(approval_event_id)
             if approval_future is None:
                 approval_future = asyncio.get_running_loop().create_future()
                 run.approval_futures[approval_event_id] = approval_future
+            run.approval_contexts[approval_event_id] = {
+                "permission_scope": permission,
+                "allow_always_available": permission is not None,
+            }
             run.status = "waiting"
             await emit("approval.required", approval_payload)
 
@@ -2523,6 +2546,7 @@ async def _execute_run(
                     await asyncio.gather(cancel_waiter, return_exceptions=True)
             finally:
                 run.approval_futures.pop(approval_event_id, None)
+                run.approval_contexts.pop(approval_event_id, None)
                 if run.status == "waiting":
                     run.status = "running"
                     run.waiting_for = None

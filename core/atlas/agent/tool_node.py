@@ -54,6 +54,16 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
+
+def _approval_denial_reason(choice: Any, fallback: str) -> str:
+    """Read an optional denial reason encoded by the runtime approval bridge."""
+    value = str(choice)
+    if value.startswith("deny:"):
+        reason = value[5:].strip()
+        if reason:
+            return reason[:1000]
+    return fallback
+
 #: 被调用 Agent 工具（T02.3）：结果按 ATLAS_AGENT_TOOL_RESULT（THIRD_PARTY）
 #: 另行记录 —— 对方自己的"完成"声明不是 Atlas 的事实权威，也**不是验证**
 #: （§1.1）；Atlas 独立验证由调用方经 /api/unified-memory/verify-agent-result
@@ -447,7 +457,9 @@ async def execute_tools_node(
                 else:
                     choice = await ctx.approval_callback(f"approval:{tc_id}", fn_name, fn_args)
             if choice != "allow":
-                detail = "操作未获允许，因此已取消。需要执行的话，请在确认卡片中允许这次操作，或调整对话权限。"
+                detail = _approval_denial_reason(
+                    choice, "操作未获允许，因此已取消。需要执行的话，请在确认卡片中允许这次操作，或调整对话权限。",
+                )
                 result = {"content": [{"type": "text", "text": detail}], "is_error": True}
                 events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
                                "content": result["content"], "is_error": True})
@@ -544,7 +556,7 @@ async def execute_tools_node(
                         {**fn_args, "_reviewer_reason": reason},
                     )
                     if choice != "allow":
-                        text = f"操作未获允许：{reason}"
+                        text = _approval_denial_reason(choice, f"操作未获允许：{reason}")
                         events.append({"type": "tool_result", "id": tc_id, "name": fn_name,
                                        "content": [{"type": "text", "text": text}], "is_error": True})
                         _capture_tool_event(ctx, tool_call_id=tc_id, name=fn_name, phase="result",
@@ -646,21 +658,24 @@ async def execute_tools_node(
 
             if choice != "allow":
                 # Denied — skip this tool, return a synthetic error
+                denial_reason = _approval_denial_reason(
+                    choice, f"Tool '{fn_name}' denied by user.",
+                )
                 events.append({
                     "type": "tool_result",
                     "id": tc_id,
                     "name": fn_name,
-                    "content": [{"type": "text", "text": f"Tool '{fn_name}' denied by user."}],
+                    "content": [{"type": "text", "text": denial_reason}],
                     "is_error": True,
                 })
                 _capture_tool_event(ctx, tool_call_id=tc_id, name=fn_name, phase="result",
-                                    text=f"Tool '{fn_name}' denied by user.", is_error=True,
+                                    text=denial_reason, is_error=True,
                                     error_category="approval_denied")
                 if getattr(ctx, "event_queue", None) is not None:
                     await ctx.event_queue.put(events[-1])
                 tool_messages.append(
                     ToolMessage(
-                        content=f"Tool '{fn_name}' denied by user.",
+                        content=denial_reason,
                         tool_call_id=tc_id,
                     )
                 )

@@ -873,7 +873,7 @@ export default function App() {
         if (!latest) { setToast('当前还没有可查看的回复'); return; }
         setRawText(latest);
       } },
-      { id: 'auto-review', label: '/auto-review', hint: '运行 Atlas 代码审查（映射到 /review，默认审查未提交改动；暂无独立自动审查开关）', run: () => { void store.sendMessage('/review'); } },
+      { id: 'auto-review', label: '/auto-review', hint: '兼容入口：目前只调用 /review，默认审查未提交改动；没有独立自动审查策略或授权设置', run: () => { void store.sendMessage('/review'); } },
       { id: 'ask-selection', label: '/ask-selection', hint: '把当前选中的文字放进消息草稿', run: askSelectedText },
     { id: 'review', label: '/review', hint: '代码审查：branch <名> / commit <sha>，默认审查未提交改动', takesArgument: true, run: (arg: string) => { const focus = arg.trim(); void store.sendMessage(focus ? `/review ${focus}` : '/review'); } },
     { id: 'recipe', label: '/recipe', hint: '打开配方，带参数复跑保存过的任务', run: () => setRecipesOpen(true) },
@@ -1329,7 +1329,7 @@ export default function App() {
             onPreview={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }} conversationId={store.activeConversationId}
             worktree={activeConversation?.worktree_path ? { path: String(activeConversation.worktree_path), branch: String(activeConversation.worktree_branch ?? ''), base: String(activeConversation.base_branch ?? '') } : null}
             onWorktreeChanged={() => void store.refreshConversations()}
-            onAsk={(text) => void store.sendMessage(text)}
+            onAsk={(text) => store.sendMessage(text)}
             terminalCommand={terminalCommand} onSendToAtlas={(text) => { setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}终端输出：\n\`\`\`\n${text.trimEnd()}\n\`\`\`\n\n`); setToast('已把终端输出放进输入框'); }} />}
         </div>}
 

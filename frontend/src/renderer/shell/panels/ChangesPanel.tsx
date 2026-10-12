@@ -38,19 +38,28 @@ function samePath(left: string, right: string): boolean {
 
 /** What this run changed on disk, and the snapshots that can put it back. */
 export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, onToast, onAsk }: {
-  runId?: string; runStatus?: string; apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onAsk?: (text: string) => void;
+  runId?: string; runStatus?: string; apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onAsk?: (text: string) => void | Promise<void>;
 }) {
   const [comments, setComments] = useState<LineComment[]>([]);
+  const [sendingComments, setSendingComments] = useState(false);
+  const [commentSendError, setCommentSendError] = useState('');
   useEffect(() => setComments([]), [runId]);
-  const send = () => {
-    if (!onAsk || !comments.length) return;
+  const send = async () => {
+    if (!onAsk || !comments.length || sendingComments) return;
     const body = comments.map((comment, index) => `${index + 1}. \`${comment.path}${comment.line ? `:${comment.line}` : ''}\`${comment.side === 'old' ? '（删掉的那行）' : ''}\n   代码：\`${comment.code.trim().slice(0, 200)}\`\n   意见：${comment.text}`).join('\n');
-    onAsk(`我看了这次的改动，有 ${comments.length} 处要调整：\n\n${body}\n\n按这些意见修改，改完说明每一处怎么处理的。`);
-    setComments([]);
-    onToast('评论已发给 Atlas');
+    setSendingComments(true);
+    setCommentSendError('');
+    try {
+      await onAsk(`我看了这次的改动，有 ${comments.length} 处要调整：\n\n${body}\n\n按这些意见修改，改完说明每一处怎么处理的。`);
+      setComments([]);
+      onToast('所有评注已提交到对话');
+    } catch (error) { setCommentSendError(error instanceof Error ? error.message : String(error)); }
+    finally { setSendingComments(false); }
   };
   const [files, setFiles] = useState<RunChange[] | null>(null);
   const [open, setOpen] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState('');
+  const fileRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [error, setError] = useState('');
   const [changesReload, setChangesReload] = useState(0);
   const [restoreTargets, setRestoreTargets] = useState<Record<string, FileRestoreTarget>>({});
@@ -61,12 +70,12 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
   const [hunkBusyId, setHunkBusyId] = useState('');
   const [hunkError, setHunkError] = useState('');
   useEffect(() => {
-    if (!runId || !connected) { setFiles([]); setError(''); return; }
+    if (!runId || !connected) { setFiles([]); setError(''); setSelectedFile(''); return; }
     let stale = false;
     setFiles(null);
     setError('');
     backend.getRunChanges(runId)
-      .then((result) => { if (!stale) { setFiles(result as RunChange[]); setOpen(result.length === 1 ? [result[0].path] : []); } })
+      .then((result) => { if (!stale) { setFiles(result as RunChange[]); setOpen(result.length === 1 ? [result[0].path] : []); setSelectedFile((current) => result.some((file) => file.path === current) ? current : result[0]?.path ?? ''); } })
       .catch((exc) => { if (!stale) { setFiles([]); setError(exc instanceof Error ? exc.message : String(exc)); } });
     return () => { stale = true; };
   }, [runId, runStatus, connected, changesReload]);
@@ -141,6 +150,16 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
   const toggle = (path: string) => setOpen((current) => current.includes(path) ? current.filter((item) => item !== path) : [...current, path]);
   const additions = files?.reduce((sum, file) => sum + file.additions, 0) ?? 0;
   const deletions = files?.reduce((sum, file) => sum + file.deletions, 0) ?? 0;
+  const selectedIndex = files?.findIndex((file) => file.path === selectedFile) ?? -1;
+  const pendingHunks = files?.reduce((sum, file) => sum + (file.hunks?.filter((hunk) => hunk.status === 'pending').length ?? 0), 0) ?? 0;
+  const navigateFile = (index: number) => {
+    if (!files?.length) return;
+    const bounded = Math.max(0, Math.min(index, files.length - 1));
+    const file = files[bounded];
+    setSelectedFile(file.path);
+    setOpen((current) => current.includes(file.path) ? current : [...current, file.path]);
+    requestAnimationFrame(() => fileRefs.current[file.path]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  };
   const restoreFile = async (file: RunChange) => {
     const key = changeKey(file);
     const target = restoreTargets[key];
@@ -178,10 +197,24 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
   };
 
   return <div className="grid gap-6">
-    <section>
+    <section onKeyDown={(event) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.nativeEvent.isComposing || (event.nativeEvent as KeyboardEvent).keyCode === 229) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      if (event.key === 'ArrowUp' && selectedIndex > 0) { event.preventDefault(); navigateFile(selectedIndex - 1); }
+      else if (event.key === 'ArrowDown' && files && selectedIndex < files.length - 1) { event.preventDefault(); navigateFile(selectedIndex + 1); }
+    }}>
       <h3 className="m-0 mb-2 flex items-center gap-2 text-[12.5px] font-semibold text-fg-2">
         这次的改动{files && files.length > 0 && <span className="font-normal tabular-nums text-fg-3">{files.length} 个文件 <span className="text-ok">+{additions}</span> <span className="text-danger">−{deletions}</span></span>}
       </h3>
+      {!!files?.length && <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 text-[12px]">
+        <span className="min-w-0 flex-1 truncate text-fg-2" title={selectedFile}>{selectedIndex + 1}/{files.length} · {selectedFile || '选择一个文件查看'}</span>
+        <span className="shrink-0 text-fg-3">{pendingHunks} 个待审核差异块</span>
+        <button type="button" aria-label="上一个改动文件" title="上一个文件（Alt+↑）" disabled={selectedIndex <= 0}
+          onClick={() => navigateFile(selectedIndex - 1)} className="grid size-7 shrink-0 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:opacity-40"><ChevronUp size={14} /></button>
+        <button type="button" aria-label="下一个改动文件" title="下一个文件（Alt+↓）" disabled={selectedIndex < 0 || selectedIndex >= files.length - 1}
+          onClick={() => navigateFile(selectedIndex + 1)} className="grid size-7 shrink-0 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:opacity-40"><ChevronDown size={14} /></button>
+      </div>}
       {error && <p role="alert" className="m-0 mb-2 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">{error}</p>}
       {hunkError && <div role="alert" className="mb-2 flex items-center gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger"><span className="min-w-0 flex-1">Diff 审核未完成：{hunkError}</span><button type="button" onClick={() => setChangesReload((value) => value + 1)} className="shrink-0 underline underline-offset-2">重新载入</button></div>}
       {restoreError && <p role="alert" className="m-0 mb-2 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">逐文件恢复失败：{restoreError}</p>}
@@ -199,8 +232,8 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
           const openPath = samePath(changeRoot(file), activeWorkspace) && file.status !== 'deleted'
             ? `${activeWorkspace.replace(/[\\/]+$/, '')}${activeWorkspace.includes('\\') ? '\\' : '/'}${relativePath.replace(/[\\/]/g, activeWorkspace.includes('\\') ? '\\' : '/')}`
             : undefined;
-          return <div key={`${file.workspace}:${file.path}`} className="overflow-hidden rounded-xl card-surface">
-            <button onClick={() => toggle(file.path)} aria-expanded={expanded} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-hover">
+          return <div key={`${file.workspace}:${file.path}`} ref={(node) => { fileRefs.current[file.path] = node; }} className={cn('overflow-hidden rounded-xl card-surface', selectedFile === file.path && 'ring-1 ring-brand/50')}>
+            <button onClick={() => { setSelectedFile(file.path); toggle(file.path); }} aria-expanded={expanded} aria-current={selectedFile === file.path ? 'true' : undefined} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-hover">
               <ChevronRight size={13} className={cn('shrink-0 text-fg-3 transition-transform', expanded && 'rotate-90')} />
               <span aria-label={`文件状态：${STATUS[file.status]?.label ?? file.status}`} className={cn('shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[11px]', STATUS[file.status]?.tone)}>{STATUS[file.status]?.label ?? file.status}</span>
               <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg" title={file.path}>{shortPath(file.path)}</code>
@@ -243,10 +276,11 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
           </div>;
         })}</div>
         : <Empty title={runId ? '这次没有改文件' : '还没有开始'} body={runId ? 'Atlas 这次只读了东西、运行了命令，或者直接回答了。' : '发出一个任务后，改过的文件会列在这里。'} />}
+      {commentSendError && <p role="alert" className="m-0 mt-2 rounded-lg bg-danger-soft px-3 py-2 text-[12px] text-danger">评注未提交，内容仍保留：{commentSendError}</p>}
       {comments.length > 0 && <div className="sticky bottom-0 mt-2 flex items-center gap-2 rounded-xl bg-brand-soft px-3 py-2 text-[12.5px] text-fg">
         <MessageSquarePlus size={14} className="shrink-0 text-brand" /><span className="flex-1">{comments.length} 条评论</span>
-        <button onClick={() => setComments([])} className="text-fg-3 hover:text-fg">清空</button>
-        <button onClick={send} className="primary-fill inline-flex h-7 items-center gap-1 rounded-lg px-2.5"><Send size={12} />发给 Atlas 修改</button>
+        <button disabled={sendingComments} onClick={() => setComments([])} className="text-fg-3 hover:text-fg disabled:opacity-50">清空</button>
+        <button disabled={sendingComments} onClick={() => void send()} className="primary-fill inline-flex h-7 items-center gap-1 rounded-lg px-2.5 disabled:opacity-50"><Send size={12} />{sendingComments ? '正在提交…' : '提交全部评注'}</button>
       </div>}
     </section>
     <Checkpoints apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} runId={runId} refreshKey={`${runId}:${runStatus}`} />
@@ -290,6 +324,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
   const [activeSearchHit, setActiveSearchHit] = useState(0);
   const searchInputId = useId();
   const searchHitRefs = useRef<Array<HTMLElement | null>>([]);
+  const commentButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const commentable = Boolean(comments);
   const searchHits = useMemo<DiffSearchHit[]>(() => {
     if (!searchText) return [];
@@ -326,9 +361,11 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
   }, [searchHits.length]);
   const save = () => {
     if (!draft?.text.trim()) { setDraft(null); return; }
-    const line = lines[draft.index];
+    const index = draft.index;
+    const line = lines[index];
     onAdd({ path, line: line.newNo ?? line.oldNo, side: line.kind === 'del' ? 'old' : 'new', code: line.text.slice(1), text: draft.text.trim() });
     setDraft(null);
+    requestAnimationFrame(() => commentButtonRefs.current[index]?.focus());
   };
   return <div className="max-h-96 overflow-auto bg-code py-2 font-mono text-[11.5px] leading-[1.6] shadow-[inset_0_1px_0_var(--line)]">
     {openPath && window.atlasDesktop?.openPath && <div className="mb-1 flex justify-end px-3 font-sans">
@@ -344,7 +381,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
           onChange={(event) => { setSearchText(event.target.value); setActiveSearchHit(0); }}
           onKeyDown={(event) => {
             // Navigation is scoped to this input; comment fields keep their own Ctrl/Meta+Enter and Escape behavior.
-            if (event.key === 'Enter') { event.preventDefault(); moveSearchHit(event.shiftKey ? -1 : 1); }
+            if (event.key === 'Enter' && !event.nativeEvent.isComposing && (event.nativeEvent as KeyboardEvent).keyCode !== 229) { event.preventDefault(); moveSearchHit(event.shiftKey ? -1 : 1); }
             else if (event.key === 'Escape' && searchText) { event.preventDefault(); setSearchText(''); setActiveSearchHit(0); }
           }}
           placeholder="搜索 diff 文本"
@@ -382,7 +419,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
         <div className={cn('group flex', line.kind === 'add' ? 'bg-ok-soft text-fg' : line.kind === 'del' ? 'bg-danger-soft text-fg' : line.kind === 'hunk' ? 'text-fg-3' : 'text-fg-2')}>
           <span className="w-9 shrink-0 pr-1.5 text-right text-fg-3 select-none tabular-nums">{line.kind === 'hunk' ? '' : number}</span>
           {commentable && line.kind !== 'hunk'
-            ? <button aria-label={`评论第 ${number} 行`} onClick={() => setDraft({ index, text: '' })}
+            ? <button ref={(node) => { commentButtonRefs.current[index] = node; }} aria-label={`评论第 ${number} 行`} onClick={() => setDraft({ index, text: '' })}
               className="grid w-4 shrink-0 place-items-center text-brand opacity-0 group-hover:opacity-100 focus:opacity-100"><MessageSquarePlus size={11} /></button>
             : <span className="w-4 shrink-0" />}
           <span className="min-w-0 flex-1 pr-3 whitespace-pre">{line.kind === 'hunk' ? line.text || ' ' : <>{line.text.slice(0, 1)}{lineHitIndexes.length ? highlighted : line.text.slice(1) || ' '}</>}</span>
@@ -412,7 +449,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
         </div>)}
         {draft?.index === index && <div className="mx-3 my-1 grid gap-1.5 font-sans">
           <textarea autoFocus value={draft.text} onChange={(event) => setDraft({ index, text: event.target.value })} rows={2} placeholder="这一行要怎么改？" aria-label="评论内容"
-            onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); save(); } if (event.key === 'Escape') setDraft(null); }}
+              onKeyDown={(event) => { const composing = event.nativeEvent.isComposing || (event.nativeEvent as KeyboardEvent).keyCode === 229; if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !composing) { event.preventDefault(); save(); } if (event.key === 'Escape' && !composing) setDraft(null); }}
             className="rounded-lg bg-overlay px-2.5 py-1.5 text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--brand)]" />
           <div className="flex justify-end gap-2 text-[12px]">
             <button onClick={() => setDraft(null)} className="text-fg-3 hover:text-fg">取消</button>

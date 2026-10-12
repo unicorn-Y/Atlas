@@ -20,7 +20,7 @@ class RunState:
     __slots__ = (
         "run_id", "conversation_id", "model", "started_at", "sequence",
         "status", "events", "cancel_event", "pause_event",
-        "approval_futures", "task", "plan_state",
+        "approval_futures", "approval_contexts", "task", "plan_state",
         "event_lock", "steer_queue", "input_futures", "mode", "workspace",
         "usage", "workspace_rules", "plan_future", "plan_edits",
         "tool_allow", "tool_deny", "reasoning_effort", "reasoning_effort_applied",
@@ -52,6 +52,7 @@ class RunState:
         self.pause_event = asyncio.Event()
         self.pause_event.set()  # not paused initially
         self.approval_futures: dict[str, asyncio.Future[str]] = {}
+        self.approval_contexts: dict[str, dict[str, Any]] = {}
         self.task: asyncio.Task[None] | None = None
         self.plan_state: dict[str, Any] | None = None
         self.event_lock = asyncio.Lock()
