@@ -990,6 +990,170 @@ async def git_pr_check_log(
     return {"name": check_name, "log": raw}
 
 
+def _git_workspace(root: str) -> Path:
+    base, _ = _server()._workspace_path(root)
+    result = subprocess.run(["git", "-C", str(base), "rev-parse", "--show-toplevel"],
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
+    if result.returncode:
+        raise HTTPException(status_code=400, detail="workspace is not a git repository")
+    return base
+
+
+def _git_run(base: Path, *args: str, timeout: int = 30) -> str:
+    try:
+        result = subprocess.run(["git", "-C", str(base), *args], capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HTTPException(status_code=503, detail=f"Unable to run git: {exc}") from exc
+    if result.returncode:
+        raise HTTPException(status_code=409, detail=result.stderr.strip() or result.stdout.strip() or "git command failed")
+    return result.stdout.strip()
+
+
+def _git_status(base: Path) -> list[dict[str, str]]:
+    raw = _git_run(base, "status", "--porcelain=v1", "--untracked-files=all")
+    items = []
+    for line in raw.splitlines():
+        if len(line) < 4:
+            continue
+        code, path = line[:2], line[3:]
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1]
+        items.append({"path": path, "code": code})
+    return items
+
+
+@router.get("/api/git/workspace")
+async def get_git_workspace(services: Annotated[AppServices, Depends(get_app_services)], root: str) -> dict[str, Any]:
+    base = _git_workspace(root)
+    return {"current": _git_run(base, "branch", "--show-current"),
+            "branches": _git_run(base, "branch", "--list", "--format=%(refname:short)").splitlines(),
+            "status": _git_status(base)}
+
+
+@router.post("/api/git/branch")
+async def update_git_branch(services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any]) -> dict[str, Any]:
+    root = str(req.get("root", ""))
+    base = _git_workspace(root)
+    name = req.get("name")
+    create = req.get("create") is True
+    if not isinstance(name, str) or not name.strip():
+        raise HTTPException(status_code=422, detail="branch name is required")
+    name = name.strip()
+    _git_run(base, "check-ref-format", "--branch", name)
+    _git_run(base, "switch", *( ["-c", name] if create else [name] ), timeout=60)
+    conversation_id = req.get("conversation_id")
+    if isinstance(conversation_id, str) and conversation_id:
+        memory = _service("memory", services)
+        if memory is not None:
+            conversation = await memory.get_conversation(conversation_id)
+            workspace, _ = _server()._workspace_path(root)
+            if conversation and conversation.get("worktree_path"):
+                conversation_root, _ = _server()._workspace_path(str(conversation["worktree_path"]))
+                if os.path.normcase(str(workspace.resolve())) == os.path.normcase(str(conversation_root.resolve())):
+                    await memory.update_conversation(conversation_id, worktree_branch=name)
+    return {"current": _git_run(base, "branch", "--show-current"),
+            "branches": _git_run(base, "branch", "--list", "--format=%(refname:short)").splitlines(),
+            "status": _git_status(base)}
+
+
+@router.post("/api/git/commit")
+async def commit_git_changes(services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any]) -> dict[str, Any]:
+    base = _git_workspace(str(req.get("root", "")))
+    message = req.get("message")
+    paths = req.get("paths")
+    if not isinstance(message, str) or not message.strip():
+        raise HTTPException(status_code=422, detail="commit message is required")
+    if not isinstance(paths, list) or not paths or any(not isinstance(path, str) for path in paths):
+        raise HTTPException(status_code=422, detail="select at least one changed file")
+    selected = list(dict.fromkeys(paths))
+    available = {item["path"] for item in _git_status(base)}
+    if not set(selected).issubset(available):
+        raise HTTPException(status_code=409, detail="selected files changed; refresh Git status and try again")
+    _git_run(base, "add", "--", *selected, timeout=60)
+    _git_run(base, "commit", "-m", message.strip(), timeout=120)
+    return {"commit": _git_run(base, "rev-parse", "--short", "HEAD"), "status": _git_status(base)}
+
+
+@router.post("/api/git/push")
+async def push_git_branch(services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any]) -> dict[str, Any]:
+    base = _git_workspace(str(req.get("root", "")))
+    branch = _git_run(base, "branch", "--show-current")
+    if not branch:
+        raise HTTPException(status_code=409, detail="cannot push a detached HEAD")
+    _git_run(base, "push", "-u", "origin", "HEAD", timeout=120)
+    return {"pushed": branch, "status": _git_status(base)}
+
+
+@router.get("/api/git/history")
+async def get_git_history(
+    services: Annotated[AppServices, Depends(get_app_services)], root: str, limit: int = Query(default=80, ge=1, le=200),
+) -> dict[str, Any]:
+    base = _git_workspace(root)
+    graph = _git_run(base, "log", "--graph", "--decorate", "--all", "--date-order", "--oneline", f"-n{limit}")
+    formatted = _git_run(base, "log", "--all", "--date-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%ad", "--date=short", f"-n{limit}")
+    commits = []
+    for line in formatted.splitlines():
+        fields = line.split("\x1f", 4)
+        if len(fields) == 5:
+            commits.append({"hash": fields[0], "parents": fields[1].split(), "subject": fields[2], "author": fields[3], "date": fields[4]})
+    return {"graph": graph.splitlines(), "commits": commits}
+
+
+def _pr_timeline(base: Path) -> list[dict[str, str]]:
+    data = _gh_json(base, "pr", "view", "--json", "number")
+    repository = _gh_json(base, "repo", "view", "--json", "nameWithOwner")
+    number = data.get("number")
+    name = repository.get("nameWithOwner")
+    if not number or not isinstance(name, str) or "/" not in name:
+        raise HTTPException(status_code=502, detail="Unable to identify the current pull request repository")
+    raw_items = _gh_json(base, "api", "--paginate", "--slurp", f"repos/{name}/issues/{number}/timeline")
+    if not isinstance(raw_items, list):
+        raise HTTPException(status_code=502, detail="GitHub returned an invalid pull request timeline")
+    if raw_items and all(isinstance(page, list) for page in raw_items):
+        raw_items = [event for page in raw_items for event in page]
+    items: list[dict[str, str]] = []
+    for event in raw_items:
+        if not isinstance(event, dict):
+            continue
+        actor = event.get("actor") or event.get("user") or {}
+        commit = event.get("commit") or {}
+        commit_author = commit.get("author") or {}
+        body = event.get("body") or commit.get("message") or ""
+        if not body:
+            event_name = str(event.get("event", "activity")).replace("_", " ")
+            label = event.get("label") or {}
+            body = f"{event_name}: {label.get('name')}" if label else event_name
+        timestamp = event.get("created_at") or event.get("submitted_at") or commit_author.get("date") or ""
+        url = event.get("html_url") or event.get("url") or ""
+        item_id = event.get("id") or event.get("node_id") or event.get("commit_id") or url or f"{timestamp}-{len(items)}"
+        items.append({"id": str(item_id), "kind": str(event.get("event") or event.get("state") or "activity"),
+                      "author": str(actor.get("login") or commit_author.get("name") or "GitHub"),
+                      "body": str(body), "created_at": str(timestamp), "url": str(url)})
+    return sorted(items, key=lambda item: item["created_at"])
+
+
+@router.get("/api/git/pr/timeline")
+async def get_git_pr_timeline(services: Annotated[AppServices, Depends(get_app_services)], root: str) -> dict[str, Any]:
+    return {"items": _pr_timeline(_git_workspace(root))}
+
+
+@router.post("/api/git/pr/comment")
+async def comment_git_pr(services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any]) -> dict[str, Any]:
+    base = _git_workspace(str(req.get("root", "")))
+    body = req.get("body")
+    if not isinstance(body, str) or not body.strip():
+        raise HTTPException(status_code=422, detail="comment body is required")
+    try:
+        result = subprocess.run(["gh", "pr", "comment", "--body", body.strip()], cwd=base,
+                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HTTPException(status_code=503, detail=f"Unable to run gh: {exc}") from exc
+    if result.returncode:
+        raise HTTPException(status_code=502, detail=result.stderr.strip() or "gh pr comment failed")
+    return {"ok": True, "items": _pr_timeline(base)}
+
+
 @router.get("/api/ssh/hosts")
 async def ssh_hosts(
     services: Annotated[AppServices, Depends(get_app_services)],

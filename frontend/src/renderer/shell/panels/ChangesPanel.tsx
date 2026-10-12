@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Check, ChevronDown, ChevronRight, ChevronUp, ExternalLink, FileDiff, History, LoaderCircle, MessageSquarePlus, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronUp, ExternalLink, FileDiff, History, LoaderCircle, MessageSquarePlus, Pencil, RotateCcw, Search, Send, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import type { RunChangeFile, RunDiagnosticsFile } from '@atlas/backend-adapter';
 import { backend, useAtlasStore } from '../../store/useAtlasStore';
 import { api, relativeTime } from '../../services/api';
@@ -56,6 +56,7 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
     } catch (error) { setCommentSendError(error instanceof Error ? error.message : String(error)); }
     finally { setSendingComments(false); }
   };
+  const editComment = (id: string, text: string) => setComments((current) => current.map((comment) => comment.id === id ? { ...comment, text } : comment));
   const [files, setFiles] = useState<RunChange[] | null>(null);
   const [open, setOpen] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState('');
@@ -257,7 +258,7 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
               </div>}
               <DiffView diff={file.diff} truncated={file.truncated} path={file.path} openPath={openPath} hunks={file.hunks}
                 busyHunkId={hunkBusyId} onReviewHunk={(hunk, action) => void reviewHunk(file, hunk, action)} comments={onAsk ? comments.filter((comment) => comment.path === file.path) : undefined}
-                onAdd={(comment) => setComments((current) => [...current, { ...comment, id: `${Date.now()}-${current.length}` }])}
+                onAdd={(comment) => setComments((current) => [...current, { ...comment, id: `${Date.now()}-${current.length}` }])} onEdit={editComment}
                 onRemove={(id) => setComments((current) => current.filter((comment) => comment.id !== id))} />
               {restoreTarget && <div className="flex items-center gap-2 border-t border-line px-3 py-2">
                 <button type="button" disabled={Boolean(restoringFile)} onClick={() => void restoreFile(file)}
@@ -312,13 +313,14 @@ function numberLines(diff: string): DiffLine[] {
 }
 
 /** 统一 diff 渲染（含行号）；InitDialog 复用它来预览 AGENTS.md 的提案差异。 */
-export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, onReviewHunk, comments, onAdd, onRemove }: {
+export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, onReviewHunk, comments, onAdd, onEdit, onRemove }: {
   diff: string; truncated?: boolean; path: string; openPath?: string; hunks?: RunChangeHunk[]; busyHunkId?: string;
   onReviewHunk?: (hunk: RunChangeHunk, action: 'accept' | 'reject') => void; comments?: LineComment[];
-  onAdd: (comment: Omit<LineComment, 'id'>) => void; onRemove: (id: string) => void;
+  onAdd: (comment: Omit<LineComment, 'id'>) => void; onEdit: (id: string, text: string) => void; onRemove: (id: string) => void;
 }) {
   const lines = useMemo(() => numberLines(diff), [diff]);
   const [draft, setDraft] = useState<{ index: number; text: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [externalError, setExternalError] = useState('');
   const [searchText, setSearchText] = useState('');
   const [activeSearchHit, setActiveSearchHit] = useState(0);
@@ -444,7 +446,15 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
           </div>;
         })()}
         {notes.map((note) => <div key={note.id} className="mx-3 my-1 flex items-start gap-2 rounded-lg bg-overlay px-2.5 py-1.5 font-sans text-[12px] text-fg shadow-[inset_0_0_0_1px_var(--line)]">
-          <span className="min-w-0 flex-1 whitespace-pre-wrap">{note.text}</span>
+          {editing?.id === note.id
+            ? <div className="min-w-0 flex-1">
+              <textarea autoFocus value={editing.text} onChange={(event) => setEditing({ id: note.id, text: event.target.value })} rows={2} aria-label="编辑行评论"
+                className="w-full resize-y rounded-md bg-sunken px-2 py-1.5 text-[12px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--brand)]" />
+              <div className="mt-1 flex justify-end gap-2 text-[11.5px]"><button onClick={() => setEditing(null)} className="text-fg-3 hover:text-fg">取消</button>
+                <button disabled={!editing.text.trim()} onClick={() => { onEdit(note.id, editing.text.trim()); setEditing(null); }} className="text-brand disabled:opacity-50">保存</button></div>
+            </div>
+            : <span className="min-w-0 flex-1 whitespace-pre-wrap">{note.text}</span>}
+          {editing?.id !== note.id && <button aria-label="编辑这条评论" onClick={() => setEditing({ id: note.id, text: note.text })} className="shrink-0 text-fg-3 hover:text-fg"><Pencil size={12} /></button>}
           <button aria-label="删除这条评论" onClick={() => onRemove(note.id)} className="shrink-0 text-fg-3 hover:text-fg"><X size={12} /></button>
         </div>)}
         {draft?.index === index && <div className="mx-3 my-1 grid gap-1.5 font-sans">

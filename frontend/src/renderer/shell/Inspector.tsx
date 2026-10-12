@@ -15,6 +15,7 @@ import TerminalPanel from './panels/TerminalPanel';
 import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
 import ProcessesPanel from './panels/ProcessesPanel';
 import PullRequestSection from './panels/PullRequestSection';
+import GitWorkspacePanel from './panels/GitWorkspacePanel';
 import SessionDashboardPanel from './panels/SessionDashboardPanel';
 
 export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard';
@@ -204,6 +205,9 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
   const context = typeof latestUsage?.context_tokens === 'number' && typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0
     ? `${Math.round(latestUsage.context_tokens / latestUsage.context_limit * 100)}%（${latestUsage.context_tokens} / ${latestUsage.context_limit}）` : '—';
   const breakdown = latestUsage?.context_breakdown as { categories?: Array<{ id: string; label: string; tokens: number }>; context_max?: number; context_used?: number } | undefined;
+  const [gitRefresh, setGitRefresh] = useState(0);
+  const refreshGit = () => { setGitRefresh((current) => current + 1); onWorktreeChanged(); };
+  const gitRefreshKey = `${run?.id}:${run?.status}:${worktree?.branch}:${gitRefresh}`;
 
   // minmax(0,1fr): long unbroken paths must truncate, not widen the column past the panel.
   return <div className="grid grid-cols-[minmax(0,1fr)] gap-5 text-[13px]">
@@ -232,7 +236,9 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
       </p>}
     </section>
     {connected && (worktree?.path ?? workspace) && !String(worktree?.path ?? workspace).startsWith('ssh://') && <PullRequestSection root={String(worktree?.path ?? workspace)}
-      refreshKey={`${run?.id}:${run?.status}`} onOpenUrl={onPreview} onAsk={onAsk} />}
+      refreshKey={gitRefreshKey} onOpenUrl={onPreview} onAsk={onAsk} />}
+    {connected && (worktree?.path ?? workspace) && !String(worktree?.path ?? workspace).startsWith('ssh://') && <GitWorkspacePanel root={String(worktree?.path ?? workspace)}
+      conversationId={conversationId} refreshKey={gitRefreshKey} onChanged={refreshGit} onToast={onToast} />}
     {worktree && <WorktreeSection conversationId={conversationId} worktree={worktree} onChanged={onWorktreeChanged} onToast={onToast} refreshKey={`${run?.id}:${run?.status}`} />}
     <section>
       <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">这次任务用到的技能</h3>
