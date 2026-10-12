@@ -177,12 +177,14 @@ export default function CodeBlock({ source, language, children }: {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const markdown = /^(?:markdown|md)$/i.test(language ?? '');
+  const svg = /^(?:svg|image\/svg\+xml)$/i.test(language ?? '');
   const diff = /^(?:diff|patch)$/i.test(language ?? '');
   const contextActions: ContextAction[] = [
     ...(source ? [
       { id: 'copy', label: '复制代码', onSelect: () => navigator.clipboard.writeText(source) },
       ...(view !== 'source' ? [{ id: 'source', label: '查看源码', onSelect: () => setView('source') }] : []),
       ...(markdown && view !== 'preview' ? [{ id: 'preview', label: '查看 Markdown 预览', onSelect: () => setView('preview') }] : []),
+      ...(svg && view !== 'preview' ? [{ id: 'preview', label: '查看 SVG 预览', onSelect: () => setView('preview') }] : []),
       ...(diff && view !== 'diff' ? [{ id: 'diff', label: '查看 Diff', onSelect: () => setView('diff') }] : []),
       ...((view === 'source' || view === 'diff') ? [{ id: 'wrap', label: wrap ? '关闭自动换行' : '自动换行', onSelect: () => setWrap((current) => !current) }] : []),
       ...(fontScale > 0 ? [{ id: 'font-smaller', label: '缩小代码字体', onSelect: () => setFontScale((value) => Math.max(0, value - 1)) }] : []),
@@ -207,7 +209,7 @@ export default function CodeBlock({ source, language, children }: {
       <div className="flex shrink-0 items-center gap-1" role="group" aria-label="代码块显示选项">
         <button type="button" onClick={() => setView('source')} aria-pressed={view === 'source'} title="显示源码"
           className={`inline-flex h-7 items-center rounded-md px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand ${view === 'source' ? 'bg-hover text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg'}`}>源码</button>
-        {markdown && <button type="button" onClick={() => setView('preview')} aria-pressed={view === 'preview'} title="渲染 Markdown 预览"
+        {(markdown || svg) && <button type="button" onClick={() => setView('preview')} aria-pressed={view === 'preview'} title={svg ? '渲染 SVG 预览' : '渲染 Markdown 预览'}
           className={`inline-flex h-7 items-center rounded-md px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand ${view === 'preview' ? 'bg-hover text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg'}`}>预览</button>}
         {diff && <button type="button" onClick={() => setView('diff')} aria-pressed={view === 'diff'} title="着色显示差异行"
           className={`inline-flex h-7 items-center rounded-md px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand ${view === 'diff' ? 'bg-hover text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg'}`}>Diff</button>}
@@ -230,7 +232,12 @@ export default function CodeBlock({ source, language, children }: {
         </button>}
       </div>
     </div>
-    {view === 'preview' && markdown
+    {view === 'preview' && svg
+      ? <div className="grid max-h-[28rem] min-h-40 place-items-center overflow-auto bg-white p-4">
+        <iframe title="SVG 源码预览" sandbox="" srcDoc={`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><style>html,body{margin:0;min-width:100%;min-height:100%;display:grid;place-items:center}svg{max-width:100%;max-height:26rem}</style></head><body>${source}</body></html>`}
+          className="h-[26rem] w-full border-0" />
+      </div>
+      : view === 'preview' && markdown
       ? <div className="prose-atlas max-h-[28rem] overflow-auto px-4 py-3" style={{ fontSize: `${12 + fontScale}px` }}>
         <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={{
           img: ({ src, alt, title }) => <ImagePreview src={src} alt={alt} title={title} />,

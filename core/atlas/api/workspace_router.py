@@ -357,18 +357,34 @@ async def workspace_tree(
     git_status: dict[str, str] = {}
     try:
         result = await asyncio.to_thread(
-            subprocess.run, ["git", "-C", str(base), "status", "--porcelain"],
+            subprocess.run, ["git", "-C", str(base), "status", "--porcelain=v1", "-z", "--untracked-files=all"],
             capture_output=True, text=True, timeout=5,
         )
-        for line in result.stdout.splitlines():
-            if len(line) > 3:
-                code = line[:2].strip()
-                git_status[line[3:].strip().replace("\\", "/")] = (
-                    "?" if code == "??" else "A" if "A" in code else
-                    "D" if "D" in code else "M"
-                )
+        status_records = result.stdout.split("\0")
+        index = 0
+        while index < len(status_records):
+            record = status_records[index]
+            index += 1
+            if len(record) < 4 or record[2] != " ":
+                continue
+            code = record[:2]
+            relative = record[3:].replace("\\", "/")
+            git_status[relative] = (
+                "?" if code == "??" else "A" if "A" in code else
+                "D" if "D" in code else "M"
+            )
+            if "R" in code or "C" in code:
+                index += 1  # -z emits the old path as the next NUL-delimited field.
     except (OSError, subprocess.SubprocessError):
         pass
+    directory_git_status: dict[str, str] = {}
+    status_rank = {"?": 1, "D": 2, "A": 3, "M": 4}
+    for changed_path, status in git_status.items():
+        parts = PurePosixPath(changed_path).parts[:-1]
+        for index in range(1, len(parts) + 1):
+            parent = PurePosixPath(*parts[:index]).as_posix()
+            if status_rank.get(status, 0) > status_rank.get(directory_git_status.get(parent, ""), 0):
+                directory_git_status[parent] = status
     entries = []
     for item in sorted(directory.iterdir(), key=lambda entry: (not entry.is_dir(), entry.name.casefold())):
         if item.name in _server()._WORKSPACE_IGNORES:
@@ -377,7 +393,7 @@ async def workspace_tree(
         entries.append({"name": item.name, "path": rel,
                         "type": "dir" if item.is_dir() else "file",
                         "size": None if item.is_dir() else item.stat().st_size,
-                        "git": git_status.get(rel)})
+                        "git": git_status.get(rel) or directory_git_status.get(rel)})
     return {"root": str(base), "path": Path(path).as_posix() if path else "",
             "entries": entries}
 
@@ -416,7 +432,52 @@ async def workspace_file(
         text, binary = "", True
     return {"path": target.relative_to(base).as_posix(),
             "content": "" if binary else text,
-            "truncated": len(raw) > 512 * 1024, "binary": binary}
+            "truncated": len(raw) > 512 * 1024, "binary": binary,
+            "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+class WorkspaceFileSave(BaseModel):
+    content: str
+    expected_sha256: str
+
+
+@router.put("/api/workspace/file")
+async def save_workspace_file(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    root: str, path: str, payload: WorkspaceFileSave,
+) -> dict[str, Any]:
+    """Save a text file only when its bytes still match the version the editor loaded."""
+    if root.startswith("ssh://"):
+        raise HTTPException(status_code=501, detail="Saving SSH workspace files is not supported")
+    if len(payload.content.encode("utf-8")) > 512 * 1024:
+        raise HTTPException(status_code=413, detail="Edited files are limited to 512 KiB")
+    base, target = _server()._workspace_path(root, path)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="Workspace file not found")
+    try:
+        current = await asyncio.to_thread(target.read_bytes)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Could not read workspace file") from exc
+    if len(current) > 512 * 1024:
+        raise HTTPException(status_code=413, detail="Files over 512 KiB cannot be edited here")
+    current_hash = hashlib.sha256(current).hexdigest()
+    if current_hash != payload.expected_sha256:
+        raise HTTPException(status_code=409, detail="File changed on disk; reload it before saving")
+    text = payload.content
+    if b"\r\n" in current and "\r\n" not in text:
+        text = text.replace("\n", "\r\n")
+    encoded = text.encode("utf-8")
+    if b"\x00" in current or b"\x00" in encoded:
+        raise HTTPException(status_code=415, detail="Binary files cannot be edited here")
+    # Recheck immediately before writing so an external edit made during validation becomes a conflict.
+    latest = await asyncio.to_thread(target.read_bytes)
+    if hashlib.sha256(latest).hexdigest() != payload.expected_sha256:
+        raise HTTPException(status_code=409, detail="File changed on disk; reload it before saving")
+    try:
+        await asyncio.to_thread(target.write_bytes, encoded)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Could not save workspace file") from exc
+    return {"path": target.relative_to(base).as_posix(), "sha256": hashlib.sha256(encoded).hexdigest()}
 
 
 @router.get("/api/workspace/raw")

@@ -32,7 +32,7 @@ export type AtlasDeepLink =
   | { id: string; type: 'settings'; section: AtlasSettingsSection };
 
 export type PlatformEditorId =
-  | 'vscode' | 'idea' | 'pycharm' | 'webstorm' | 'goland' | 'rider'
+  | 'vscode' | 'cursor' | 'zed' | 'idea' | 'pycharm' | 'webstorm' | 'goland' | 'rider'
   | 'clion' | 'phpstorm' | 'rubymine' | 'datagrip';
 
 export interface GlobalShortcutState {
@@ -77,6 +77,8 @@ export interface AtlasDesktopApi {
   hideFloatingComposer?(): void;
   submitFloatingComposer?(text: string): void;
   onFloatingComposerSubmit?(callback: (text: string) => void): () => void;
+  /** Open one existing file in a fixed allowlisted IDE CLI, after validating it stays inside the workspace. */
+  openFileInEditor?(editor: PlatformEditorId, workspacePath: string, filePath: string): Promise<void>;
   /** Receive validated atlas://conversation/<id> or atlas://settings/<section> routes. */
   onDeepLink?(callback: (route: AtlasDeepLink) => void): () => void;
   /** Backend startup progress (H8 §10.3): fires during boot; `ready`/`failed` are terminal. */

@@ -56,6 +56,8 @@ const RESERVED_ACCELERATORS = new Set([
 ].map((accelerator) => accelerator.toLowerCase()));
 const IDE_COMMANDS: Record<PlatformEditorId, string> = {
   vscode: process.platform === 'win32' ? 'Code.exe' : 'code',
+  cursor: process.platform === 'win32' ? 'Cursor.exe' : 'cursor',
+  zed: process.platform === 'win32' ? 'zed.exe' : 'zed',
   idea: process.platform === 'win32' ? 'idea64.exe' : 'idea',
   pycharm: process.platform === 'win32' ? 'pycharm64.exe' : 'pycharm',
   webstorm: process.platform === 'win32' ? 'webstorm64.exe' : 'webstorm',
@@ -285,6 +287,34 @@ function openWorkspaceInEditor(editor: PlatformEditorId, workspacePath: string):
   });
 }
 
+function openFileInEditor(editor: PlatformEditorId, workspacePath: string, filePath: string): Promise<void> {
+  if (!Object.hasOwn(IDE_COMMANDS, editor)) throw new Error('不支持的编辑器。');
+  if (typeof workspacePath !== 'string' || !path.isAbsolute(workspacePath) || typeof filePath !== 'string' || !path.isAbsolute(filePath)) {
+    throw new Error('请选择一个有效的本地工作区文件。');
+  }
+  let canonicalRoot: string;
+  let canonicalFile: string;
+  try {
+    canonicalRoot = realpathSync(workspacePath);
+    canonicalFile = realpathSync(filePath);
+    if (!statSync(canonicalFile).isFile()) throw new Error('目标路径不是文件。');
+    const relative = path.relative(canonicalRoot, canonicalFile);
+    if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error('目标文件必须位于当前工作区中。');
+    }
+  } catch (error) {
+    if (error instanceof Error && ['目标路径不是文件。', '目标文件必须位于当前工作区中。'].includes(error.message)) throw error;
+    throw new Error('工作区文件不存在或无法访问。');
+  }
+  return new Promise((resolve, reject) => {
+    const child = spawn(IDE_COMMANDS[editor], [canonicalFile], { detached: true, stdio: 'ignore', windowsHide: true, shell: false });
+    child.once('error', (error) => reject('code' in error && error.code === 'ENOENT'
+      ? new Error(`未找到 ${editor} 命令行工具。请安装该编辑器并将其命令加入 PATH.`)
+      : new Error(`无法启动 ${editor}：${error.message}`)));
+    child.once('spawn', () => { child.unref(); resolve(); });
+  });
+}
+
 /** Pages in the browser panel are ordinary web content: no preload, no Node, their own session, web URLs only. */
 function lockDownWebviews() {
   app.on('web-contents-created', (_event, contents) => {
@@ -463,6 +493,13 @@ ipcMain.on('floating-composer:submit', (event, text: unknown) => {
     focusAtlasWindow();
   }
   floatingComposerWindow?.hide();
+});
+
+ipcMain.handle('platform:open-file-in-editor', async (event, editor: unknown, workspacePath: unknown, filePath: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof editor !== 'string' || !Object.prototype.hasOwnProperty.call(IDE_COMMANDS, editor)) throw new Error('不支持的编辑器。');
+  if (typeof workspacePath !== 'string' || typeof filePath !== 'string') throw new Error('请选择一个有效的本地工作区文件。');
+  await openFileInEditor(editor as PlatformEditorId, workspacePath, filePath);
 });
 
 ipcMain.on('window:minimize', () => windowRef?.minimize());

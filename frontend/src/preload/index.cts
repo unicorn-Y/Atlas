@@ -27,6 +27,8 @@ const desktopApi: AtlasDesktopApi = {
     ipcRenderer.on('floating-composer:deliver', listener);
     return () => ipcRenderer.removeListener('floating-composer:deliver', listener);
   },
+  openFileInEditor: (editor: PlatformEditorId, workspacePath: string, filePath: string) =>
+    ipcRenderer.invoke('platform:open-file-in-editor', editor, workspacePath, filePath),
   onDeepLink: (callback: (route: AtlasDeepLink) => void) => {
     let active = true;
     const seen = new Set<string>();
