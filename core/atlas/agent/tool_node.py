@@ -256,7 +256,8 @@ async def execute_tools_node(
         denied_tools = getattr(ctx, "tool_deny", [])
         read_only = getattr(ctx, "read_only", False)
         edit_tool_names = {"apply_patch", "edit", "write"}
-        policy_tool_name = "local_edit" if fn_name in edit_tool_names else fn_name
+        local_edit_tool_names = {"local_edit", "local_edit_batch"}
+        policy_tool_name = "local_edit" if fn_name in edit_tool_names | local_edit_tool_names else fn_name
         edit_targets = []
         if fn_name in edit_tool_names and getattr(ctx, "kernel_edit", None) is not None:
             try:
@@ -352,7 +353,7 @@ async def execute_tools_node(
             await ctx.pause_event.wait()
 
         await agent._emit_hook(ctx, "before_tool", name=fn_name, arguments=fn_args)
-        is_write = (fn_name in ({"local_edit", "local_shell", "local_exec", "execute_command",
+        is_write = (fn_name in ({"TaskStop", "local_edit", "local_edit_batch", "local_shell", "local_exec", "execute_command",
                                 "run_script", "create_document", "create_spreadsheet",
                                 "create_presentation",
                                 # These run project scripts or hand work to sub-agents that can change files.
@@ -459,7 +460,9 @@ async def execute_tools_node(
                 continue
         if is_write and permission_mode == "full_access" and _agent.safety_review_enabled():
             safety_args = ({**fn_args, "path": edit_targets}
-                           if fn_name in edit_tool_names else fn_args)
+                           if fn_name in edit_tool_names else
+                           {**fn_args, "path": [item.get("path") for item in fn_args.get("edits", [])]}
+                           if fn_name == "local_edit_batch" else fn_args)
             assessment = _agent.evaluate_safety_rules(
                 policy_tool_name, safety_args, workspace=workspace, allowed_paths=allowed_paths,
                 write_capable_mcp=is_mcp_write,
@@ -1327,6 +1330,25 @@ async def execute_tools_node(
                         fn_args["cwd"] = workspace
                     else:
                         fn_args.setdefault("cwd", workspace)
+                if fn_name == "local_edit_batch":
+                    for change in fn_args.get("edits", []):
+                        if not isinstance(change, dict) or not isinstance(change.get("path"), str):
+                            continue
+                        try:
+                            checkpoint = agent._checkpoint_path(
+                                change["path"], workspace, ctx.run_id, ctx.conversation_id,
+                            )
+                            await ctx.event_queue.put({
+                                "type": "checkpoint_created", "checkpoint": checkpoint,
+                                "tool": fn_name,
+                            })
+                        except Exception as exc:
+                            log.warning("agent.checkpoint_failed", tool=fn_name,
+                                        error=str(exc), exc_info=True)
+                            await ctx.event_queue.put({
+                                "type": "checkpoint_error", "tool": fn_name,
+                                "detail": str(exc),
+                            })
                 if fn_name == "local_edit" or (
                     fn_name == "local_file" and fn_args.get("action") in {
                         "write", "append", "mkdir", "copy", "move", "delete",
@@ -1365,6 +1387,8 @@ async def execute_tools_node(
                 }:
                     result = await ctx.exec_manager.execute(fn_name, fn_args)
                 else:
+                    if fn_name in {"local_file", "local_edit", "local_edit_batch"}:
+                        fn_args.setdefault("_atlas_workspace", workspace)
                     result = await agent._local_execution.call_tool(
                         fn_name, fn_args, run_id=ctx.run_id,
                         output_callback=report_process_output,
@@ -1481,6 +1505,11 @@ async def execute_tools_node(
             elif requires_verification(path_value):
                 ctx.changed_paths.add(path_value)
                 ctx.verification_passed = False
+        elif fn_name == "local_edit_batch" and not result.get("is_error"):
+            for path_value in (result.get("data") or {}).get("paths", []):
+                if isinstance(path_value, str) and requires_verification(path_value):
+                    ctx.changed_paths.add(path_value)
+                    ctx.verification_passed = False
         elif fn_name in edit_tool_names and not result.get("is_error"):
             data = result.get("data") if isinstance(result.get("data"), dict) else {}
             for path_value in data.get("changed_paths", []):

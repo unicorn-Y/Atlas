@@ -2150,6 +2150,20 @@ class AtlasKernel:
                 "data": chars,
             }
             return await dispatch_alias("local_process", mapped)
+        if name in {"TaskOutput", "TaskStop"}:
+            execution_id = str(arguments.get("task_id") or arguments.get("taskId") or "")
+            if not execution_id:
+                return {"content": f"{name} requires task_id.", "is_error": True}
+            if name == "TaskStop":
+                return await dispatch_alias("local_process", {
+                    "action": "cancel", "execution_id": execution_id,
+                })
+            return await dispatch_alias("local_process", {
+                "action": "read", "execution_id": execution_id,
+                "stream": arguments.get("stream", "stdout"),
+                "offset": arguments.get("offset", 0),
+                "limit": arguments.get("limit", 65536),
+            })
         if name in {"git_pr_create", "git_pr_comment"}:
             approved_ids = getattr(runtime, "_preapproved_tool_call_ids", set())
             if call_id not in approved_ids:

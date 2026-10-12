@@ -32,7 +32,7 @@ READ_ONLY_TOOLS = frozenset({
     "android_list_avds", "android_logs", "android_ui_status",
     "android_ui_describe", "android_ui_resolve", "ios_preflight",
     "ios_list_simulators", "ios_discover_project", "ios_logs", "ios_ui_status",
-    "ios_ui_describe", "TaskGet", "TaskList",
+    "ios_ui_describe", "TaskGet", "TaskList", "TaskOutput",
 })
 EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write", "notebook_edit"})
 
@@ -182,6 +182,15 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
             "yield_time_ms": {"type": "integer", "minimum": 0, "maximum": 30000},
             "stop": {"type": "boolean"},
         }, ["session_id"]),
+        _function_schema("TaskOutput", "Deprecated compatibility alias for reading output from an Atlas background process; use local_process read when available.", {
+            "task_id": {"type": "string"}, "taskId": {"type": "string"},
+            "stream": {"type": "string", "enum": ["stdout", "stderr"]},
+            "offset": {"type": "integer", "minimum": 0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 65536},
+        }),
+        _function_schema("TaskStop", "Stop an Atlas background process by execution ID.", {
+            "task_id": {"type": "string"}, "taskId": {"type": "string"},
+        }),
     ])
     from atlas.tools.notebook_edit import notebook_edit_tool_schema
 
@@ -316,7 +325,7 @@ class ToolScheduler:
         if name.startswith(("computer_", "browser_")) or name in {
             "terminal", "local_shell", "local_exec", "local_process", "process_manage",
             "execute_code", "exec_command", "write_stdin",
-            "write_file", "patch", "apply_patch", "edit", "write", "local_edit",
+            "write_file", "patch", "apply_patch", "edit", "write", "local_edit", "local_edit_batch",
         }:
             return False
         if name == "local_file":

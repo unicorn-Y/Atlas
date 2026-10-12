@@ -1,3 +1,7 @@
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/tool/handlers/read.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/tool/handlers/write.ts (Apache-2.0)
+# Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f: apps/zcode-cli/packages/core/src/tool/handlers/edit.ts (Apache-2.0)
+# Ported from anomalyco/opencode@03cb9b9946e0baa027d7678b690f8f352eb9a2bc: packages/core/src/tool/plugin/read.ts (MIT)
 """Atlas-owned FULL_ACCESS local shell, process, filesystem, and Git tools.
 
 Hermes process actions adapted from tools/process_registry.py@562ad75:
@@ -32,6 +36,9 @@ from atlas.config import get_config
 
 log = structlog.get_logger()
 OutputCallback = Callable[[str, str, str], Awaitable[None] | None]
+_MAX_READ_BYTES = 256 * 1024
+_MAX_READ_PAGE_BYTES = 1024 * 1024
+_MAX_READ_LINES = 2000
 
 
 def _find_git_bash() -> str | None:
@@ -181,6 +188,10 @@ LOCAL_TOOLS = [
             "cwd": {"type": "string"},
             "content": {"type": "string"},
             "encoding": {"type": "string"},
+            "offset": {"type": "integer", "minimum": 1},
+            "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_READ_LINES},
+            "byte_offset": {"type": "integer", "minimum": 0},
+            "byte_limit": {"type": "integer", "minimum": 1, "maximum": _MAX_READ_PAGE_BYTES},
             "binary": {"type": "boolean"},
             "recursive": {"type": "boolean"},
             "pattern": {"type": "string"},
@@ -204,6 +215,17 @@ LOCAL_TOOLS = [
             "cwd": {"type": "string"},
         },
         ["path", "old_string", "new_string"],
+    ),
+    _tool(
+        "local_edit_batch",
+        "Validate exact replacements in multiple workspace files, then apply them as one rollback-capable batch.",
+        {"edits": {"type": "array", "minItems": 1, "maxItems": 32, "items": {
+            "type": "object", "properties": {
+                "path": {"type": "string"}, "old_string": {"type": "string"},
+                "new_string": {"type": "string"}, "replace_all": {"type": "boolean"},
+                "encoding": {"type": "string"},
+            }, "required": ["path", "old_string", "new_string"], "additionalProperties": False,
+        }}}, ["edits"],
     ),
     _tool(
         "local_git",
@@ -375,6 +397,8 @@ class LocalExecutionRuntime:
                 data = await asyncio.to_thread(self._file_operation, args)
             elif name == "local_edit":
                 data = await asyncio.to_thread(self._edit_operation, args)
+            elif name == "local_edit_batch":
+                data = await asyncio.to_thread(self._edit_batch_operation, args)
             elif name == "local_git":
                 data = await self._git_operation(args, run_id, output_callback)
             elif name == "local_shell":
@@ -519,6 +543,7 @@ class LocalExecutionRuntime:
     def _edit_operation(self, args: dict[str, Any]) -> dict[str, Any]:
         """Precise string-replacement edit: read-before-edit + uniqueness."""
         path = self._path(args.get("path"), args.get("cwd"))
+        self._ensure_workspace_path(path, self._workspace_root(args))
         old_string = str(args.get("old_string", ""))
         new_string = str(args.get("new_string", ""))
         replace_all = bool(args.get("replace_all", False))
@@ -547,6 +572,93 @@ class LocalExecutionRuntime:
             "size": len(updated.encode(str(args.get("encoding", "utf-8")))),
         }
 
+    def _edit_batch_operation(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Validate every target and replacement before atomically replacing files."""
+        edits = args.get("edits")
+        if not isinstance(edits, list) or not 1 <= len(edits) <= 32:
+            raise ValueError("edits must contain between 1 and 32 changes")
+        workspace = self._workspace_root(args)
+        staged: list[tuple[Path, bytes, bytes, tuple[int, int, int]]] = []
+        seen: set[Path] = set()
+        for edit in edits:
+            if not isinstance(edit, dict):
+                raise ValueError("Each edit must be an object")
+            path = self._path(edit.get("path"), str(workspace) if workspace else None)
+            self._ensure_workspace_path(path, workspace)
+            if path in seen:
+                raise ValueError(f"Duplicate edit target: {path}")
+            seen.add(path)
+            if str(path) not in self._read_paths:
+                raise ValueError(f"read the file first with local_file action=read ({path})")
+            encoding = str(edit.get("encoding", "utf-8"))
+            old = str(edit.get("old_string", ""))
+            if not old:
+                raise ValueError("old_string must not be empty")
+            original = path.read_bytes()
+            if len(original) > _MAX_READ_PAGE_BYTES:
+                raise ValueError(f"Batch edit target exceeds {_MAX_READ_PAGE_BYTES} bytes: {path}")
+            text = original.decode(encoding)
+            count = text.count(old)
+            if count == 0:
+                raise ValueError(f"old_string not found in file: {path}")
+            replace_all = bool(edit.get("replace_all", False))
+            if count > 1 and not replace_all:
+                raise ValueError(f"old_string matches {count} locations in {path}; set replace_all")
+            updated = text.replace(old, str(edit.get("new_string", "")), -1 if replace_all else 1)
+            stat = path.stat()
+            staged.append((path, original, updated.encode(encoding), (stat.st_mtime_ns, stat.st_size, stat.st_ino)))
+
+        replaced: list[tuple[Path, bytes]] = []
+        temp_paths: list[Path] = []
+        try:
+            for path, original, updated, signature in staged:
+                now = path.stat()
+                if (now.st_mtime_ns, now.st_size, now.st_ino) != signature:
+                    raise RuntimeError(f"File changed during batch validation: {path}")
+                fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".atlas-tmp", dir=path.parent)
+                temp_path = Path(temp_name)
+                temp_paths.append(temp_path)
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(updated)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.chmod(temp_path, path.stat().st_mode)
+                os.replace(temp_path, path)
+                replaced.append((path, original))
+        except Exception:
+            for path, original in reversed(replaced):
+                rollback = path.with_name(f".{path.name}.{uuid.uuid4().hex}.atlas-rollback")
+                try:
+                    rollback.write_bytes(original)
+                    os.replace(rollback, path)
+                finally:
+                    rollback.unlink(missing_ok=True)
+            raise
+        finally:
+            for temp_path in temp_paths:
+                temp_path.unlink(missing_ok=True)
+        return {"committed": True, "applied": len(staged),
+                "paths": [str(item[0]) for item in staged],
+                "atomicity": "all-target-validation plus rollback-on-failure; replacements are sequential"}
+
+    @staticmethod
+    def _workspace_root(args: dict[str, Any]) -> Path | None:
+        raw = args.get("_atlas_workspace")
+        if not isinstance(raw, str) or not raw.strip() or raw.startswith("ssh://"):
+            return None
+        return Path(raw).expanduser().resolve()
+
+    @staticmethod
+    def _ensure_workspace_path(path: Path, workspace: Path | None) -> None:
+        if workspace is None:
+            raise PermissionError("Workspace write scope is unavailable; refusing local file mutation")
+        try:
+            path.relative_to(workspace)
+        except ValueError as exc:
+            raise PermissionError(f"Path is outside the active workspace: {path}") from exc
+        if path == workspace:
+            raise PermissionError("Mutating the workspace root itself is not allowed")
+
     @staticmethod
     def _path(raw: str | None, cwd: str | None = None) -> Path:
         if not raw:
@@ -560,35 +672,97 @@ class LocalExecutionRuntime:
         action = args["action"]
         path = self._path(args.get("path"), args.get("cwd"))
         encoding = str(args.get("encoding", "utf-8"))
+        workspace = self._workspace_root(args)
         if action == "read":
-            raw = path.read_bytes()
-            self._read_paths.add(str(path))
-            return {
+            total_size = path.stat().st_size if path.is_file() else 0
+            if args.get("byte_offset") is not None or args.get("byte_limit") is not None:
+                if not path.is_file():
+                    raise ValueError("Byte-range reads require a file")
+                byte_offset = int(args.get("byte_offset", 0))
+                byte_limit = min(int(args.get("byte_limit", _MAX_READ_PAGE_BYTES)), _MAX_READ_PAGE_BYTES)
+                with path.open("rb") as stream:
+                    stream.seek(byte_offset)
+                    raw = stream.read(byte_limit + 1)
+                truncated = len(raw) > byte_limit
+                raw = raw[:byte_limit]
+                next_offset = byte_offset + len(raw)
+                complete = not truncated and next_offset >= path.stat().st_size
+            elif args.get("offset") is not None or args.get("limit") is not None:
+                if not path.is_file() or args.get("binary"):
+                    raise ValueError("Line-range reads require a text file")
+                offset = max(1, int(args.get("offset", 1)))
+                limit = min(int(args.get("limit", _MAX_READ_LINES)), _MAX_READ_LINES)
+                chunks: list[str] = []
+                byte_count = 0
+                truncated = False
+                with path.open("r", encoding=encoding, newline="") as stream:
+                    for number, line in enumerate(stream, 1):
+                        if number < offset:
+                            continue
+                        encoded_size = len(line.encode(encoding))
+                        if len(chunks) >= limit or byte_count + encoded_size > _MAX_READ_PAGE_BYTES:
+                            truncated = True
+                            break
+                        chunks.append(line)
+                        byte_count += encoded_size
+                raw = "".join(chunks).encode(encoding)
+                next_offset = offset + len(chunks)
+                complete = not truncated
+            else:
+                if total_size > _MAX_READ_BYTES:
+                    raise ValueError(
+                        f"File is {total_size} bytes; default read is limited to {_MAX_READ_BYTES} bytes. "
+                        "Use offset/limit for lines or byte_offset/byte_limit for byte ranges."
+                    )
+                with path.open("rb") as stream:
+                    raw = stream.read(_MAX_READ_BYTES + 1)
+                if len(raw) > _MAX_READ_BYTES:
+                    raise ValueError(f"File grew beyond the {_MAX_READ_BYTES}-byte default read limit")
+                truncated = False
+                next_offset = None
+                complete = True
+            if complete and int(args.get("offset", 1)) == 1 and int(args.get("byte_offset", 0)) == 0:
+                self._read_paths.add(str(path))
+            result = {
                 "path": str(path),
                 "size": len(raw),
+                "total_size": total_size,
                 "content": base64.b64encode(raw).decode("ascii")
                 if args.get("binary")
                 else raw.decode(encoding),
                 "encoding": "base64" if args.get("binary") else encoding,
+                "truncated": truncated,
+                "complete": complete,
             }
+            if args.get("byte_offset") is not None or args.get("byte_limit") is not None:
+                result.update({"byte_offset": byte_offset, "next_byte_offset": next_offset})
+            elif args.get("offset") is not None or args.get("limit") is not None:
+                result.update({"offset": offset, "next_offset": next_offset})
+            return result
         if action in ("write", "append"):
+            self._ensure_workspace_path(path, workspace)
             path.parent.mkdir(parents=True, exist_ok=True)
             mode = "ab" if action == "append" else "wb"
             with path.open(mode) as stream:
                 stream.write(str(args.get("content", "")).encode(encoding))
             return {"path": str(path), "size": path.stat().st_size}
         if action == "mkdir":
+            self._ensure_workspace_path(path, workspace)
             path.mkdir(parents=True, exist_ok=True)
             return {"path": str(path), "is_dir": True}
         if action in ("copy", "move"):
             destination = self._path(args.get("destination"), args.get("cwd"))
+            self._ensure_workspace_path(path, workspace)
+            self._ensure_workspace_path(destination, workspace)
             destination.parent.mkdir(parents=True, exist_ok=True)
-            result = (
-                shutil.copy2(path, destination) if action == "copy" and path.is_file() else None
-            )
-            if action == "copy" and path.is_dir():
-                result = shutil.copytree(path, destination, dirs_exist_ok=True)
-            if action == "move":
+            if action == "copy":
+                if path.is_file():
+                    result = shutil.copy2(path, destination)
+                elif path.is_dir():
+                    result = shutil.copytree(path, destination, dirs_exist_ok=True)
+                else:
+                    raise ValueError("Copy source must be an existing file or directory")
+            else:
                 result = shutil.move(str(path), str(destination))
             return {
                 "path": str(path),
@@ -596,6 +770,7 @@ class LocalExecutionRuntime:
                 "result": str(result or destination),
             }
         if action == "delete":
+            self._ensure_workspace_path(path, workspace)
             if path.is_dir() and not path.is_symlink():
                 if args.get("recursive", True):
                     shutil.rmtree(path)

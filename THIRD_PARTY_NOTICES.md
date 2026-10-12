@@ -356,3 +356,24 @@ drag-and-drop, and status-row interaction patterns from `zai-org/ZCode` at commi
 `packages/ui/src/workspace-grouped-tasks/WorkspaceGroupedTasksSection.tsx`.
 Copyright 2026 Z.AI Co., Ltd.; Apache License 2.0 as stated above. Atlas API,
 activity view, project filters, and keyboard/touch integration are Atlas changes.
+
+## D-TC-01: Filesystem and managed process compatibility
+
+`core/atlas/tools/local_execution.py` adapts paged file reading, guarded write
+scope, and exact replacement validation from `zai-org/ZCode` at commit
+`aac4755666d09fdcd70272fcf063c077a639015f`, specifically
+`apps/zcode-cli/packages/core/src/tool/handlers/read.ts`, `write.ts`, and
+`edit.ts` (Copyright 2026 Z.AI Co., Ltd.; Apache License 2.0 as stated above).
+Paged read behavior also follows `packages/core/src/tool/plugin/read.ts` in
+`anomalyco/opencode` at commit `03cb9b9946e0baa027d7678b690f8f352eb9a2bc`
+(Copyright (c) 2024-2026 OpenCode contributors; MIT License). Atlas's path
+scope, range-byte mode, rollback-capable batch edits, and process aliases are
+independent adaptations, not copied implementation code.
+
+The next-run workspace handoff behavior in
+`core/atlas/tools/workspace_workflows.py` follows the session/workspace
+lifecycle contract in `packages/core/src/tool/plugin/opencode.ts` from
+`anomalyco/opencode` at commit `03cb9b9946e0baa027d7678b690f8f352eb9a2bc`
+(Copyright (c) 2024-2026 OpenCode contributors; MIT License). Atlas-specific
+approval, metadata persistence, and clean-worktree restrictions remain Atlas
+code.
