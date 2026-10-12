@@ -6,8 +6,9 @@
 //   node scripts/atlas-update.mjs --launch-only    build if never built, then start Atlas
 //   --wait-pid <pid>   wait for that process (the running Atlas) to exit first
 //
-// Never touches uncommitted work: with tracked local changes it refuses to pull and only
-// (re)starts Atlas. Dependencies are reinstalled only when their manifests changed; the
+// Local changes no longer block a fast-forward: files the update doesn't touch are left
+// alone, and ones it does touch are auto-stashed, pulled, then restored (kept in the stash
+// if they now conflict). Dependencies are reinstalled only when their manifests changed; the
 // frontend is rebuilt when anything under frontend/ changed or no build exists.
 // Log: data/logs/update.log   Status: data/update-status.json
 import { execFileSync, spawn } from 'node:child_process';
@@ -54,21 +55,51 @@ function changedFiles(before, after) {
   return before === after ? [] : sh('git', ['diff', '--name-only', before, after]).split('\n').filter(Boolean);
 }
 
+// Pop an auto-stash, keeping the pulled tree if the local change now conflicts
+// (e.g. upstream also touched that file): the update still lands and the local
+// change is preserved in `git stash list` for the user to reconcile.
+function restoreAutoStash() {
+  try {
+    sh('git', ['stash', 'pop', '--quiet']);
+  } catch {
+    // Conflicted pop leaves unmerged paths; the tree was clean (just pulled)
+    // before the pop, so hard-resetting to HEAD drops only the half-applied
+    // conflict and keeps the pulled version. The stash is retained on conflict,
+    // so the local change survives in `git stash list` for the user.
+    try { sh('git', ['reset', '--hard', 'HEAD']); } catch { /* best effort */ }
+    log('auto-stash pop conflicted; local changes kept in `git stash list` (stash@{0})');
+  }
+}
+
 function pull() {
   const branch = sh('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
-  if (sh('git', ['status', '--porcelain', '--untracked-files=no'])) {
-    return { pulled: false, reason: '本地有未提交的改动，已跳过更新。', changed: [] };
-  }
+  // A fast-forward only rewrites files that changed between before/after, so a
+  // dirty tree no longer blocks the update outright (the Hermes engine rewrites
+  // engine/config.yaml on every launch, which used to make updates silently
+  // skip). Only stash when the incoming change actually collides with a locally
+  // modified file.
+  const dirty = Boolean(sh('git', ['status', '--porcelain', '--untracked-files=no']));
   const before = sh('git', ['rev-parse', 'HEAD']);
+  let stashed = false;
   try {
     sh('git', ['fetch', '--quiet', 'origin', branch]);
-    sh('git', ['merge', '--ff-only', `origin/${branch}`]);
+    try {
+      sh('git', ['merge', '--ff-only', `origin/${branch}`]);
+    } catch (ffError) {
+      // A genuine non-fast-forward can't be auto-resolved; only retry when the
+      // blocker is local changes to an incoming file, which stashing clears.
+      if (!dirty) throw ffError;
+      sh('git', ['stash', 'push', '--quiet', '--message', 'atlas-update auto-stash']);
+      stashed = true;
+      sh('git', ['merge', '--ff-only', `origin/${branch}`]);
+    }
   } catch (error) {
     // Offline or a local-only branch: an upstream-tracking result can still be merged below.
-    if (!readPending()) throw error;
+    if (!readPending()) { if (stashed) restoreAutoStash(); throw error; }
     log(`fetch/ff from origin skipped: ${String(error?.message || error).split('\n')[0]}`);
   }
   mergePending();
+  if (stashed) restoreAutoStash();
   const after = sh('git', ['rev-parse', 'HEAD']);
   return { pulled: before !== after, before, after, changed: changedFiles(before, after) };
 }
