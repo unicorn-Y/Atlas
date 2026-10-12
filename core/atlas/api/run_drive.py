@@ -1353,6 +1353,30 @@ async def _handle_run_start(
             },
         }
     effective_skills = data.get("active_skills", (profile or {}).get("active_skills", []))
+    message_skills = data.get("message_skills", [])
+    if (not isinstance(message_skills, list)
+            or any(not isinstance(name, str) or not name for name in message_skills)
+            or len(message_skills) > 8):
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "message_skills must contain at most eight Skill names",
+        }))
+        return
+    if not isinstance(effective_skills, list):
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "active_skills must be a list of Skill names",
+        }))
+        return
+    # Message-level mentions join the effective set for this run only; they are
+    # never written back to the profile or conversation's global active Skills.
+    effective_skills = list(dict.fromkeys([*effective_skills, *message_skills]))
+    if len(effective_skills) > 8:
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "at most eight Skills may be active for one run",
+        }))
+        return
     if agent_profile is not None:
         # W7→W10 bridge (scenario 16): learned/approved per-agent skills join the
         # run's active set; an explicit per-agent opt-out wins over the profile.

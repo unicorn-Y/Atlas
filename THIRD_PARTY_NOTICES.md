@@ -356,3 +356,30 @@ drag-and-drop, and status-row interaction patterns from `zai-org/ZCode` at commi
 `packages/ui/src/workspace-grouped-tasks/WorkspaceGroupedTasksSection.tsx`.
 Copyright 2026 Z.AI Co., Ltd.; Apache License 2.0 as stated above. Atlas API,
 activity view, project filters, and keyboard/touch integration are Atlas changes.
+
+## ZCode message-level Skill mention reference
+
+Source: `https://github.com/zai-org/ZCode`, commit
+`aac4755666d09fdcd70272fcf063c077a639015f`,
+`packages/ui/src/mentions/mentionMarkdown.ts`. Atlas adapts the separation of
+explicit `$skill` mentions from the conversation's enabled Skills and resolves
+those names into a per-run request field. The provider-specific UI and Markdown
+serialization are not copied.
+
+```text
+Apache License
+Version 2.0, January 2004
+http://www.apache.org/licenses/
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```

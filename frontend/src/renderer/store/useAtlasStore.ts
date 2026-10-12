@@ -16,7 +16,7 @@ const desktopApiBaseUrl = typeof window === 'undefined' ? undefined : window.atl
 /** Extra context picked in the composer: @files from the workspace and #conversations. */
 export interface ContextRefs { files: string[]; conversations: string[] }
 /** What the user sends: text, images (data URLs), other files, and referenced context. */
-export interface Outgoing { content: string; attachments: string[]; files: RunFile[]; refs?: ContextRefs; /** One-off role for this message only. */ profileId?: string; /** Persistent agent that owns this run (run.start carries agent_id). */ agentId?: string }
+export interface Outgoing { content: string; attachments: string[]; files: RunFile[]; refs?: ContextRefs; /** Explicit $skill references for this message only. */ messageSkills?: string[]; /** One-off role for this message only. */ profileId?: string; /** Persistent agent that owns this run (run.start carries agent_id). */ agentId?: string }
 export interface QueuedMessage extends Outgoing { id: string }
 /** How a message typed while a run is working is delivered: folded into the run now, or run afterwards. */
 export type FollowUpMode = 'steer' | 'redirect' | 'queue';
@@ -131,7 +131,7 @@ interface AtlasState extends PersistentSlice {
   deleteCustomModel: (modelId: string) => Promise<boolean>;
   saveReasoningStages: (config: ReasoningStagesConfig) => Promise<void>;
   testModelConnection: (model?: string) => Promise<void>;
-  sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs, profileId?: string, agentId?: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs, profileId?: string, agentId?: string, messageSkills?: string[]) => Promise<void>;
   createRun: (conversationId: string, title: string) => AgentRun;
   appendEvent: (event: AgentEvent) => void;
   getRun: (runId: string) => AgentRun | undefined;
@@ -248,6 +248,10 @@ const ACTIVE_SKILLS = 'atlas.active-skills';
 const PROFILE = 'atlas.preference.profile';
 const REASONING = 'atlas.preference.reasoning';
 const FOLLOW_UP = 'atlas.preference.follow-up';
+function readFollowUpMode(): FollowUpMode {
+  const saved = storageGet(FOLLOW_UP);
+  return saved === 'queue' || saved === 'redirect' || saved === 'steer' ? saved : 'steer';
+}
 // Pins and archives lived in localStorage before the backend stored them; migrated once on startup.
 const LEGACY_PINNED = 'atlas.conversations.pinned';
 const LEGACY_ARCHIVED = 'atlas.conversations.archived';
@@ -298,7 +302,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     mode: 'mock', connected: false, backendStarting: false, startupDetail: null, busy: false, paused: false, error: null, errorDetail: null,
     model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, draftWorkspace: storageGet(DRAFT_WORKSPACE), conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '',
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
-    queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: storageGet(FOLLOW_UP) === 'queue' ? 'queue' : 'steer', nextRunMode: 'act', pendingRunOverrides: null, answers: {},
+    queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: readFollowUpMode(), nextRunMode: 'act', pendingRunOverrides: null, answers: {},
     unread: [], pinned: [], archived: [], runPrompts: {},
     profiles: [], recipes: [], customCommands: [], profileId: storageGet(PROFILE) ?? 'default',
     reasoningEffort: (['minimal', 'low', 'medium', 'high'].includes(storageGet(REASONING) ?? '') ? storageGet(REASONING) : '') as ReasoningEffort | '',
@@ -648,14 +652,14 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       return { runs, artifacts: state.artifacts.filter((artifact) => artifact.runId !== runId), activeRunId, busy: runs.some((run) => !terminal.has(run.status)), paused: active?.status === 'paused' };
     }),
 
-    sendMessage: async (content, attachments = [], files = [], refs, profileId, agentId) => {
+    sendMessage: async (content, attachments = [], files = [], refs, profileId, agentId, messageSkills) => {
       const message = content.trim() || (attachments.length || files.length ? '请查看附件。' : '');
       if (!message) return;
       if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().catch(() => undefined);
       if (!get().activeConversationId) await get().createConversation(message.slice(0, 40) || '新对话');
       const conversationId = get().activeConversationId;
       if (!conversationId) return;
-      const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files, ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}), ...(profileId ? { profileId } : {}), ...(agentId ? { agentId } : {}) };
+      const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files, ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}), ...(messageSkills?.length ? { messageSkills: [...new Set(messageSkills)] } : {}), ...(profileId ? { profileId } : {}), ...(agentId ? { agentId } : {}) };
       const running = activeRunFor(conversationId);
       if (running) {
         // Attachments can't join a run in flight, so those always wait for the next run.
@@ -1052,6 +1056,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   // W1, so the extra field is attached via an assertion at this one call site.
   const request = {
     type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: overrides?.model ?? state.model, attachments, active_skills: state.activeSkills,
+    ...(item.messageSkills?.length ? { message_skills: item.messageSkills } : {}),
     ...(files.length ? { files } : {}), ...(mode === 'plan' ? { mode } : {}), ...(workspace ? { workspace } : {}),
     ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),
     ...(item.agentId ? { agent_id: item.agentId } : {}),
