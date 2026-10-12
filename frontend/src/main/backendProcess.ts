@@ -23,7 +23,7 @@ const PROBE_INTERVAL_MS = 250;
 // wait continues while the process is alive and health makes progress; STARTUP_MAX_WAIT_MS
 // is only the total upper bound. Real failures (process exit / spawn error) surface
 // immediately with the log tail instead of waiting out a timer.
-const STARTUP_MAX_WAIT_MS = 120_000;
+const STARTUP_MAX_WAIT_MS = 300_000; // first boot after an update loads ~57 plugins and npx MCP servers; 120 s was too short
 // Real failures show the last lines of the backend log (H8 §10.3).
 const LOG_TAIL_LINES = 50;
 const PROGRESS_HEARTBEAT_MS = 1_000;
