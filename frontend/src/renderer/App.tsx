@@ -23,6 +23,7 @@ import TabStrip from './components/TabStrip';
 import OnboardingDialog from './components/OnboardingDialog';
 import SidePane from './components/SidePane';
 import ShortcutsPanel from './pages/ShortcutsPanel';
+import ShortcutHelpDialog from './components/ShortcutHelpDialog';
 import ScriptToolsPanel from './pages/ScriptToolsPanel';
 import TelegramPanel from './pages/TelegramPanel';
 import UsagePanel from './pages/UsagePanel';
@@ -189,6 +190,7 @@ export default function App() {
   const [sheet, setSheet] = useState<SheetPane | null>(null);
   const [settingsQuery, setSettingsQuery] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [input, setInput] = useState('');
   const [homeMode, setHomeMode] = useState('chat');
@@ -693,6 +695,7 @@ export default function App() {
       event.preventDefault();
       switch (action) {
         case 'palette': setPaletteOpen((value) => !value); break;
+        case 'shortcutHelp': setShortcutHelpOpen((value) => !value); break;
         case 'newTask': newTask(); break;
         case 'settings': setSheet((value) => value ? null : 'models'); break;
         case 'nextTab': cycleTab(1); break;
@@ -1405,6 +1408,7 @@ export default function App() {
     </Dialog>
     {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}
 
+    <ShortcutHelpDialog open={shortcutHelpOpen} onOpenChange={setShortcutHelpOpen} />
     <UpdateBanner />
     {view !== 'chat' && view !== 'home' && <ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} />}
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}

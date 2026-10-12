@@ -136,6 +136,7 @@ interface AtlasState extends PersistentSlice {
   appendEvent: (event: AgentEvent) => void;
   getRun: (runId: string) => AgentRun | undefined;
   setActiveRun: (runId: string | null) => void;
+  reconnectRun: (runId: string) => void;
   removeRun: (runId: string) => void;
   approve: (eventId: string) => void;
   reject: (eventId: string) => void;
@@ -640,6 +641,21 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     setActiveRun: (runId) => {
       const run = get().runs.find((item) => item.id === runId);
       set({ activeRunId: runId, activeConversationId: run?.conversationId ?? get().activeConversationId, paused: run?.status === 'paused' });
+    },
+    reconnectRun: (runId) => {
+      const run = get().getRun(runId);
+      if (!run) return;
+      get().setActiveRun(runId);
+      void backend.reconnectRun(runId, (envelope) => {
+        if (!isRuntimeEvent(envelope)) return;
+        const event = normalizeRuntimeEvent(envelope);
+        if (event) get().appendEvent(event);
+      }).catch((error) => {
+        const current = get().getRun(runId);
+        if (current && !terminal.has(current.status)) {
+          get().appendEvent({ id: `${runId}:reconnect-failure`, runId, sequence: current.lastEventSequence + 1, type: 'run.recovery.notice', timestamp: new Date().toISOString(), data: { message: errorText(error, '运行重连失败') } });
+        }
+      });
     },
     removeRun: (runId) => set((state) => {
       const runs = state.runs.filter((run) => run.id !== runId);

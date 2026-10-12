@@ -531,6 +531,58 @@ export class BackendAdapter {
     }
   }
 
+  /** Reattach to an already-running run through the existing runtime replay protocol. */
+  async reconnectRun(runId: string, onEvent: (event: RuntimeStreamEvent) => void, maxReconnectAttempts = 5): Promise<void> {
+    if (!this.live) throw new BackendError('当前后端不支持运行重连', 'Run reconnection requires the live Atlas backend');
+    if (this.runSockets.has(runId) || this.activeRuns.has(runId)) return;
+    if (!await this.supportsRuntimeProtocol()) throw new BackendError('这台电脑上的 Atlas 后端版本太旧，无法恢复运行事件', 'Backend Agent Runtime 1.2 is required for run replay');
+    this.activeRuns.add(runId);
+    const cursorKey = `atlas.runtime.cursor.${runId}`;
+    let lastSequence = Number(localStorage.getItem(cursorKey) ?? 0) || 0;
+    let retries = 0;
+    let terminal = false;
+    const connect = (): Promise<void> => new Promise((resolve, reject) => {
+      const socket = new WebSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws/chat`);
+      this.runSockets.set(runId, socket);
+      let opened = false;
+      let settled = false;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        if (this.runSockets.get(runId) === socket) this.runSockets.delete(runId);
+        if (error) reject(error); else resolve();
+      };
+      socket.addEventListener('open', () => {
+        opened = true;
+        socket.send(JSON.stringify({ type: 'resume', run_id: runId, after_sequence: lastSequence } satisfies ResumeRequest));
+      }, { once: true });
+      socket.addEventListener('message', (message) => {
+        let event: RuntimeStreamEvent;
+        try { event = JSON.parse(String(message.data)) as RuntimeStreamEvent; } catch { return; }
+        if (event.run_id !== runId || !Number.isInteger(event.sequence) || event.sequence <= lastSequence) return;
+        lastSequence = event.sequence;
+        localStorage.setItem(cursorKey, String(lastSequence));
+        onEvent(event);
+        if (['run.completed', 'run.failed', 'run.cancelled'].includes(event.event)) {
+          terminal = true;
+          socket.close(1000, 'Run complete');
+          finish();
+        }
+      });
+      socket.addEventListener('error', () => { if (!opened) finish(new BackendError('连不上后端的任务通道', 'WebSocket connection failed')); });
+      socket.addEventListener('close', () => {
+        if (this.runSockets.get(runId) === socket) this.runSockets.delete(runId);
+        if (settled) return;
+        if (terminal) { finish(); return; }
+        if (!opened) { finish(new BackendError('任务重连通道在打开前关闭', 'Run replay socket closed before opening')); return; }
+        if (retries >= maxReconnectAttempts) { finish(new BackendError('任务重连失败次数过多', 'Run replay reconnect limit reached')); return; }
+        retries += 1;
+        window.setTimeout(() => { void connect().then(() => finish(), finish); }, Math.min(1000 * 2 ** (retries - 1), 8000));
+      }, { once: true });
+    });
+    try { await connect(); } finally { this.activeRuns.delete(runId); }
+  }
+
   private async startRunInternal(request: RunStartRequest, onEvent: (event: RuntimeStreamEvent) => void, shouldPause: () => boolean, maxReconnectAttempts: number): Promise<void> {
     if (!this.live) {
       this.mockCancelled.delete(request.run_id);

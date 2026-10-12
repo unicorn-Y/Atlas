@@ -1878,7 +1878,10 @@ async def _handle_run_start(
             await manager.send(conn_id, notice)
 
     # Start the run in background so we can keep receiving messages
-    execute = _server()._execute_run(
+    from atlas.models.http_diagnostics import network_diagnostic_run
+
+    with network_diagnostic_run(run.run_id):
+        execute = _server()._execute_run(
             conn_id, run, content, model_id,
             plan_state=recovered_plan,
             image_attachments=image_attachments,
@@ -1889,15 +1892,15 @@ async def _handle_run_start(
             manager=manager,
             test_clock=test_clock,
         )
-    execution = _server()._execute_after_rule_trust(run, execute) if run.trust_future else execute
-    if agent_profile is not None:
-        # W10: project the persistent agent's runtime status around the run
-        # (working while it lives → idle/waiting_user once it settles).
-        _server()._set_agent_status_quiet(agent_key, "working")
-        run.task = asyncio.create_task(
-            _server()._project_agent_run_status(run, agent_key, execution))
-    else:
-        run.task = asyncio.create_task(execution)
+        execution = _server()._execute_after_rule_trust(run, execute) if run.trust_future else execute
+        if agent_profile is not None:
+            # W10: project the persistent agent's runtime status around the run
+            # (working while it lives → idle/waiting_user once it settles).
+            _server()._set_agent_status_quiet(agent_key, "working")
+            run.task = asyncio.create_task(
+                _server()._project_agent_run_status(run, agent_key, execution))
+        else:
+            run.task = asyncio.create_task(execution)
 
 
 async def _project_agent_run_status(run: RunState, agent_id: str, execution: Any) -> None:
@@ -2179,6 +2182,7 @@ async def _execute_run(
     sandbox_manager = getattr(services, "sandbox_manager", None) or getattr(_server(), "sandbox_manager", None)
     scheduler = getattr(services, "scheduler", None) or getattr(_server(), "scheduler", None)
     usage_ledger = getattr(services, "usage_ledger", None) or getattr(_server(), "usage_ledger", None)
+    model_trajectory = getattr(services, "model_trajectory", None)
     assert orchestrator is not None
     assert memory is not None
     had_tool_failure = False
@@ -2235,6 +2239,7 @@ async def _execute_run(
             # request counts and null the aggregated totals).
             return
         row = dict(raw_usage)
+        row.setdefault("source", "subagent" if row.get("subtask_id") else "run")
         request_id = str(row.get("request_id") or "")
         duplicate = bool(request_id and request_id in usage_positions)
         if duplicate:
@@ -2248,6 +2253,13 @@ async def _execute_run(
                 {"litellm_model": model_id or run.model}
             )
             row["reasoning_effort_applied"] = run.reasoning_effort_applied
+        if model_trajectory is not None:
+            try:
+                await model_trajectory.record(
+                    run_id=run.run_id, conversation_id=run.conversation_id, usage=row,
+                )
+            except Exception:
+                log.exception("run.model_trajectory_record_failed", run_id=run.run_id, request_id=request_id)
         if usage_ledger is not None and not duplicate:
             event_model = str(row.get("model") or model_id or run.model)
             model_config = next((item for item in model_mgr.list_models()

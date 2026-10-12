@@ -16,8 +16,11 @@ import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
 import ProcessesPanel from './panels/ProcessesPanel';
 import PullRequestSection from './panels/PullRequestSection';
 import SessionDashboardPanel from './panels/SessionDashboardPanel';
+import ModelTrajectoryPanel from './panels/ModelTrajectoryPanel';
+import { ModelCallDiagnostics, ModelThinkingTranscript, NetworkDiagnostics } from '../components/ModelCallDiagnostics';
+import BackgroundJobsPanel from './panels/BackgroundJobsPanel';
 
-export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard';
+export type InspectorTab = 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard' | 'trajectory' | 'background';
 
 const EMPTY_MESSAGES: ConversationMessage[] = [];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
@@ -31,7 +34,7 @@ function commandForConversation(command: { id: string; text: string } | null, co
   return command;
 }
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
-const WIDE: InspectorTab[] = ['changes', 'files', 'specs', 'terminal', 'browser'];
+const WIDE: InspectorTab[] = ['changes', 'files', 'specs', 'terminal', 'browser', 'trajectory'];
 const WIDTH_KEY = 'atlas.preference.inspector-width';
 const readWidth = () => { try { const value = Number(localStorage.getItem(WIDTH_KEY)); return value >= 300 ? value : null; } catch { return null; } };
 
@@ -105,6 +108,12 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
   const messages: ConversationMessage[] = useAtlasStore((state) => state.conversationMessages[conversationId]) ?? EMPTY_MESSAGES;
   const conversationRuns = useAtlasStore((state) => state.runs);
   const events: AgentEvent[] = run?.events ?? [];
+  const persistedReasoning = useMemo(() => messages.flatMap((message) => {
+    const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata as Record<string, unknown> : {};
+    const text = typeof metadata.reasoning === 'string' ? metadata.reasoning
+      : typeof metadata.reasoning_content === 'string' ? metadata.reasoning_content : '';
+    return text.trim() ? [text] : [];
+  }).join('\n\n'), [messages]);
   const steps = useMemo(() => buildTimeline(events).flatMap((item) => item.kind === 'steps' ? item.steps : []), [events]);
   const dashboardSteps = useMemo(() => conversationRuns.filter((item) => item.conversationId === conversationId)
     .flatMap((item) => buildTimeline(item.events).flatMap((entry) => entry.kind === 'steps' ? entry.steps : [])), [conversationRuns, conversationId]);
@@ -114,7 +123,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
   const resize = useResizableWidth();
   const tabs: Array<[InspectorTab, string]> = [
-    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'], ['dashboard', '看板'],
+    ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'], ['dashboard', '看板'], ['trajectory', '模型轨迹'], ['background', '后台任务'],
   ];
   return <aside aria-label="任务面板" style={resize.width ? { width: resize.width } : undefined}
     className={cn('anim-fade relative flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)]', !resize.dragging && 'transition-[width] duration-200', !resize.width && (WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]'))}>
@@ -176,6 +185,21 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
       </div>}
 
       {tab === 'processes' && <ProcessesPanel onToast={onToast} />}
+
+      {tab === 'trajectory' && <div className="grid content-start gap-3">
+        <ModelThinkingTranscript events={events} persistedReasoning={persistedReasoning} />
+        <ModelCallDiagnostics events={events} />
+        <NetworkDiagnostics apiBaseUrl={apiBaseUrl} conversationId={conversationId} />
+        <ModelTrajectoryPanel apiBaseUrl={apiBaseUrl} conversationId={conversationId} />
+      </div>}
+
+      {tab === 'background' && <BackgroundJobsPanel apiBaseUrl={apiBaseUrl} conversationId={conversationId} onToast={onToast}
+        onReconnect={(runId, targetConversationId) => {
+          const conversation = useAtlasStore.getState().conversations.find((item) => item.id === targetConversationId);
+          const reconnect = () => useAtlasStore.getState().reconnectRun(runId);
+          if (conversation) void useAtlasStore.getState().openConversation(conversation).then(reconnect);
+          else reconnect();
+        }} />}
 
       {tab === 'dashboard' && <SessionDashboardPanel apiBaseUrl={apiBaseUrl} conversationId={conversationId} messages={messages} steps={dashboardSteps} />}
 

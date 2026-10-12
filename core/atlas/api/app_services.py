@@ -49,6 +49,7 @@ class AppServices:
     custom_tools: Any = None
     telegram_service: Any = None
     usage_ledger: Any = None
+    model_trajectory: Any = None
     channel_manager: Any = None
     gateway_bridge: Any = None
     heartbeat_service: Any = None

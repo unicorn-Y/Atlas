@@ -11,13 +11,15 @@
 export type ShortcutAction =
   | 'palette' | 'newTask' | 'settings' | 'nextTab' | 'prevTab' | 'closeTab'
   | 'toggleSidebar' | 'toggleInspector' | 'focusComposer' | 'stopRun'
-  | 'sidebarSearch' | 'sidebarProjectPicker' | 'sidebarNextGroup' | 'sidebarPreviousGroup';
+  | 'sidebarSearch' | 'sidebarProjectPicker' | 'sidebarNextGroup' | 'sidebarPreviousGroup'
+  | 'shortcutHelp';
 
 export type ShortcutBindings = Record<ShortcutAction, string[]>;
 export type ShortcutBindingValue = string | readonly string[];
 
 export const SHORTCUTS: Array<{ action: ShortcutAction; label: string; hint?: string; combo: string }> = [
   { action: 'palette', label: '搜索与命令', combo: 'Ctrl+K' },
+  { action: 'shortcutHelp', label: '显示快捷键帮助', combo: 'Ctrl+/' },
   { action: 'newTask', label: '新任务', combo: 'Ctrl+N' },
   { action: 'settings', label: '打开设置', combo: 'Ctrl+,' },
   { action: 'nextTab', label: '下一个标签页', combo: 'Ctrl+Tab' },

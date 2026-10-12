@@ -99,6 +99,7 @@ from atlas.skills.registry import SkillRegistry
 from atlas.ssh import ssh_workspaces
 from atlas.telegram import TelegramService
 from atlas.usage import UsageLedger
+from atlas.model_trajectory import ModelTrajectoryStore
 
 if TYPE_CHECKING:  # H8 O1/S2: annotations are strings (PEP 563); the heavy
     # mcp/tools modules are resolved lazily (_LAZY_TOOL_EXPORTS / module
@@ -193,6 +194,7 @@ scheduler: AtlasScheduler | None = None
 external_agent_status_cache: dict[str, Any] = {}
 external_conversation_sessions: dict[tuple[str, str], str] = {}
 usage_ledger: UsageLedger | None = None
+model_trajectory: ModelTrajectoryStore | None = None
 asr_manager: ASRManager | None = None
 # W10 persistent-always-on singletons (populated by lifespan).
 channel_manager: ChannelManager | None = None
@@ -223,7 +225,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     services = app.state.services
     manager = services.runtime_mgr
     global model_mgr, memory, orchestrator, mcp_client, local_execution, computer_use
-    global skill_mgr, skill_registry, scheduler, usage_ledger
+    global skill_mgr, skill_registry, scheduler, usage_ledger, model_trajectory
     global capability_bus, cua_backend, browser_use, agent_backend_host
     global projects, durable, plugin_runtime, notifications, web_runtime, custom_tools, telegram_service
     global unified_memory
@@ -349,6 +351,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await memory.init()
         usage_ledger = UsageLedger(get_config().db_path)
         await usage_ledger.init()
+        model_trajectory = ModelTrajectoryStore(get_config().db_path.parent / "model-trajectory.db")
+        await model_trajectory.init()
         projects = ProjectStore(get_config().db_path.parent / "projects.db")
         await projects.init()
         cfg = get_config()
@@ -734,7 +738,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "computer_use", "skill_mgr", "skill_registry", "scheduler", "capability_bus",
             "cua_backend", "browser_use", "agent_backend_host", "projects", "durable",
             "plugin_runtime", "notifications", "web_runtime", "custom_tools",
-            "telegram_service", "usage_ledger", "channel_manager", "gateway_bridge",
+            "telegram_service", "usage_ledger", "model_trajectory", "channel_manager", "gateway_bridge",
             "heartbeat_service",
         ):
             setattr(services, service_name, globals().get(service_name))
@@ -841,6 +845,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 app, locals(), routes_before_lifespan_extensions,
             )
         finally:
+            if model_trajectory is not None:
+                try:
+                    await model_trajectory.close()
+                except Exception:  # noqa: BLE001 — continue service teardown
+                    log.exception("model_trajectory.shutdown_failed")
+                model_trajectory = None
+                services.model_trajectory = None
             if memoryos_lifecycle is not None:
                 try:
                     await memoryos_lifecycle.stop()

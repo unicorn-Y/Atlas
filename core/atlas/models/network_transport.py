@@ -172,7 +172,13 @@ def _new_scoped_http_client(
     if settings.proxy_url:
         kwargs["proxy"] = settings.proxy_url
     client_type = httpx.AsyncClient if async_mode else httpx.Client
-    return client_type(**kwargs)
+    return _instrument_model_client(client_type(**kwargs), "model")
+
+
+def _instrument_model_client(client: Any, provider: str) -> Any:
+    from atlas.models.http_diagnostics import instrument_httpx_client
+
+    return instrument_httpx_client(client, provider=provider)
 
 
 def build_model_httpx_client(
@@ -203,10 +209,10 @@ def _install_hermes_adapters() -> None:
         ) -> Any:
             settings = _ACTIVE_SETTINGS.get()
             if settings is None or not settings.enabled:
-                return original_builder(base_url, async_mode=async_mode, verify=verify)
+                return _instrument_model_client(original_builder(base_url, async_mode=async_mode, verify=verify), "hermes")
             effective_verify = _verify_for(settings, str(base_url or ""), verify)
             if not settings.proxy_url:
-                return original_builder(base_url, async_mode=async_mode, verify=effective_verify)
+                return _instrument_model_client(original_builder(base_url, async_mode=async_mode, verify=effective_verify), "hermes")
             return _new_scoped_http_client(
                 base_url=str(base_url or ""), settings=settings,
                 verify=effective_verify, async_mode=async_mode,
@@ -233,7 +239,15 @@ def _install_hermes_adapters() -> None:
                         verify=_verify_for(settings, str(route or kwargs.get("base_url") or "")),
                         async_mode=False,
                     )
-                return original_anthropic_factory(sdk, kwargs, headers, route=route)
+                result = original_anthropic_factory(sdk, kwargs, headers, route=route)
+                http_client = kwargs.get("http_client")
+                if http_client is not None:
+                    _instrument_model_client(http_client, "anthropic")
+                else:
+                    sdk_client = getattr(result, "_client", None)
+                    if sdk_client is not None:
+                        _instrument_model_client(sdk_client, "anthropic")
+                return result
 
             atlas_anthropic_factory.__wrapped__ = original_anthropic_factory  # type: ignore[attr-defined]
             anthropic_adapter._new_sdk_client = atlas_anthropic_factory
@@ -253,7 +267,7 @@ def _install_hermes_adapters() -> None:
                     if settings.proxy_url:
                         kwargs["proxy"] = settings.proxy_url
                     kwargs["verify"] = _verify_for(settings, "")
-                return original_bearer_factory(token_provider, **kwargs)
+                return _instrument_model_client(original_bearer_factory(token_provider, **kwargs), "azure")
 
             atlas_bearer_http_client.__wrapped__ = original_bearer_factory  # type: ignore[attr-defined]
             azure_identity_adapter.build_bearer_http_client = atlas_bearer_http_client
