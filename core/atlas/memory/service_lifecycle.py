@@ -62,6 +62,7 @@ class MemoryOSServiceLifecycle:
         self._output_size = 0
         self.state = "disabled"
         self.last_error: str | None = None
+        self._service_seen = False
 
     @property
     def enabled(self) -> bool:
@@ -118,6 +119,7 @@ class MemoryOSServiceLifecycle:
         child dies on import before it can ever answer /v1/health.
         """
         env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
         env.pop("PYTHONPATH", None)
         env["MEMORYOS_SEMANTIC_RECALL_ENABLED"] = "1"
         token = self.internal_token
@@ -155,10 +157,16 @@ class MemoryOSServiceLifecycle:
         try:
             async with httpx.AsyncClient(
                 timeout=self.health_timeout_seconds, trust_env=trust_env) as client:
-                root_response, health_response, unified_status = await asyncio.gather(
-                    client.get(root_url), client.get(url),
+                root_response = await client.get(root_url)
+                if not root_response.is_success or root_response.json().get("service") != "MemoryOS Service":
+                    return False
+                self._service_seen = True
+                health_response, unified_status = await asyncio.gather(
+                    client.get(root_url + "v1/ready"),
                     client.get(root_url + "v1/unified/status"))
-        except (httpx.HTTPError, OSError):
+                if health_response.status_code == 404:
+                    health_response = await client.get(url)
+        except (httpx.HTTPError, OSError, ValueError, AttributeError):
             return False
         if not root_response.is_success or not health_response.is_success:
             return False
@@ -171,7 +179,7 @@ class MemoryOSServiceLifecycle:
             return False
         return (
             identity.get("service") == "MemoryOS Service"
-            and str(health.get("status", "")).casefold() in {"ok", "healthy"}
+            and str(health.get("status", "")).casefold() in {"ok", "healthy", "ready"}
             and (unified_status.is_success or unified_status.status_code == 401)
         )
 
@@ -216,9 +224,21 @@ class MemoryOSServiceLifecycle:
 
         self.state = "starting"
         self.last_error = None
+        self._service_seen = False
         if await self._health_probe(self.health_url):
             self.state = "ready"
             return
+
+        if self._service_seen:
+            deadline = self._monotonic() + self.startup_timeout_seconds
+            while self._monotonic() < deadline:
+                if await self._health_probe(self.health_url):
+                    self.state = "ready"
+                    return
+                await self._sleep(HEALTH_POLL_SECONDS)
+            self.state = "offline"
+            self.last_error = "Existing MemoryOS service did not become ready"
+            raise TimeoutError(self.last_error)
 
         try:
             command, cwd = self._launch_command()
@@ -252,11 +272,11 @@ class MemoryOSServiceLifecycle:
                 f"{self.startup_timeout_seconds:g}s")
         except Exception as exc:
             self.state = "offline"
+            await self._reap_failed_child()
             output = self._captured_child_output()
             self.last_error = f"{exc}; child output: {output}" if output else str(exc)
             # 失败路径必须回收本次拉起的子进程：留活口会占住 service_url 端口，
             # 让下一次启动全部失败（且外部看不到是谁占的）。
-            await self._reap_failed_child()
             raise
 
     async def _reap_failed_child(self) -> None:

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { MessagesSquare, Send, Square } from 'lucide-react';
-import { backend } from '../store/useAtlasStore';
+import { backend, useAtlasStore } from '../store/useAtlasStore';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import ConversationMessage from './ConversationMessage';
@@ -42,7 +42,10 @@ export default function SideChat({ open, onClose, conversationId, model, initial
     if (open && initialQuestion && askedInitial.current !== initialQuestion) { askedInitial.current = initialQuestion; ask(initialQuestion); }
     if (!open) { askedInitial.current = ''; }
   }, [open, initialQuestion]);
-  const stop = () => { if (runRef.current) backend.cancelRun(runRef.current); };
+  const stop = () => {
+    try { if (runRef.current) backend.cancelRun(runRef.current); }
+    catch (error) { useAtlasStore.setState({ error: error instanceof Error ? error.message : '停止请求失败' }); }
+  };
   const submit = (event: FormEvent) => { event.preventDefault(); ask(question); };
   const running = turns.at(-1)?.state === 'running';
 

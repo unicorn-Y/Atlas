@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { backend, useAtlasStore } from './useAtlasStore';
@@ -6,6 +6,7 @@ import SettingsPage from '../pages/SettingsPage';
 
 const REASONING_STAGES = { enabled: false, planning: 'high', execution: 'medium', verification: 'high' } as const;
 
+beforeEach(() => vi.stubGlobal('window', new EventTarget()));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('conversation creation', () => {
@@ -174,6 +175,17 @@ describe('settings configuration', () => {
 describe('follow-up queue', () => {
   const running = (id: string, conversationId: string) => ({ id, conversationId, title: 'Busy', status: 'running' as const, phase: 'execution' as const, startedAt: '', updatedAt: '', lastEventSequence: 1, events: [] });
 
+  it('shows a stop delivery error and leaves the run active until confirmed', () => {
+    const cancel = vi.spyOn(backend, 'cancelRun').mockImplementation(() => { throw new Error('stop not delivered'); });
+    try {
+      useAtlasStore.setState({ runs: [running('r-stop-error', 'c-stop-error')], error: null, queue: {}, pendingSteers: {} });
+      useAtlasStore.getState().stopRun('r-stop-error');
+      expect(useAtlasStore.getState().error).toBe('停止请求失败');
+      expect(useAtlasStore.getState().errorDetail).toContain('stop not delivered');
+      expect(useAtlasStore.getState().getRun('r-stop-error')?.status).toBe('running');
+    } finally { cancel.mockRestore(); }
+  });
+
   it('queues messages sent while the conversation is running instead of starting a parallel run', async () => {
     useAtlasStore.setState({ activeConversationId: 'c-queue', conversations: [], runs: [running('r-busy', 'c-queue')], queue: {}, queuePaused: {} });
 
@@ -304,6 +316,7 @@ describe('message pagination and bounded cache', () => {
   const message = (id: string) => ({ id, conversation_id: 'c', role: 'user' as const, content: id, created_at: '' });
 
   it('defaults to the latest page and prepends an earlier one on loadEarlier', async () => {
+    useAtlasStore.setState({ configLoaded: false, activeConversationId: '', activeRunId: null });
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ models: [], current: '' }) } as Response)
@@ -362,6 +375,62 @@ describe('message pagination and bounded cache', () => {
     expect(state.conversationMessages['c-lru-0']).toBeUndefined();
     expect(state.conversationMessages['c-lru-1']).toBeUndefined();
     expect(Object.keys(state.conversationMessages)).toHaveLength(10);
+  });
+});
+
+describe('backend connection recovery', () => {
+  const histories = [{ id: 'first', title: 'First' }, { id: 'selected', title: 'Selected' }];
+  const response = (target: RequestInfo | URL) => ({
+    ok: true,
+    json: async () => {
+      const url = String(target);
+      if (url.endsWith('/api/settings/configuration')) return { models: [], current: 'm', gateway_base_url: '', api_key_configured: true };
+      if (url.endsWith('/api/conversations')) return histories;
+      if (url.endsWith('/api/tools')) return { tools: [] };
+      if (url.endsWith('/api/skills')) return { skills: [] };
+      if (url.endsWith('/api/agent/capabilities')) return { capabilities: [] };
+      if (url.endsWith('/api/profiles')) return { profiles: [] };
+      if (url.endsWith('/api/recipes')) return { recipes: [] };
+      return {};
+    },
+  } as Response);
+
+  it('coalesces connection recovery and preserves the selected conversation', async () => {
+    const fetchMock = vi.fn(async (target: RequestInfo | URL) => response(target));
+    vi.stubGlobal('fetch', fetchMock);
+    useAtlasStore.setState({ configLoaded: true, connected: false, activeConversationId: 'selected', conversations: histories });
+    const first = useAtlasStore.getState().initialize();
+    const second = useAtlasStore.getState().initialize();
+    expect(first).toBe(second);
+    await Promise.all([first, second]);
+    expect(useAtlasStore.getState().activeConversationId).toBe('selected');
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/health'))).toHaveLength(1);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/messages'))).toBe(false);
+  });
+
+  it('keeps real history and a new conversation draft when the probe fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503 } as Response)));
+    useAtlasStore.setState({ configLoaded: true, connected: true, conversations: histories, activeConversationId: '', draftWorkspace: 'D:/workspace' });
+    await useAtlasStore.getState().initialize();
+    expect(useAtlasStore.getState().conversations).toEqual(histories);
+    expect(useAtlasStore.getState().activeConversationId).toBe('');
+    expect(useAtlasStore.getState().draftWorkspace).toBe('D:/workspace');
+    expect(useAtlasStore.getState().connected).toBe(false);
+  });
+
+  it('retries a ready notification that arrives during a failed initial probe', async () => {
+    let rejectProbe!: (error: Error) => void;
+    const fetchMock = vi.fn(async (target: RequestInfo | URL) => response(target));
+    fetchMock.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectProbe = reject; }));
+    vi.stubGlobal('fetch', fetchMock);
+    useAtlasStore.setState({ configLoaded: true, connected: false, backendStarting: true, activeConversationId: 'selected', conversations: histories });
+    const initializing = useAtlasStore.getState().initialize();
+    useAtlasStore.getState().applyStartupProgress({ phase: 'ready', managed: true, elapsedMs: 10 });
+    rejectProbe(new Error('initial probe failed'));
+    await initializing;
+    await useAtlasStore.getState().initialize();
+    expect(useAtlasStore.getState().connected).toBe(true);
+    expect(useAtlasStore.getState().activeConversationId).toBe('selected');
   });
 });
 
@@ -438,17 +507,17 @@ describe('requestFileOpen', () => {
     useAtlasStore.setState({ fileOpenRequest: null });
     useAtlasStore.getState().requestFileOpen('src/app.py', 12);
     const first = useAtlasStore.getState().fileOpenRequest;
-    expect(first).toEqual({ file: 'src/app.py', line: 12, nonce: expect.any(Number) });
+    expect(first).toEqual({ file: 'src/app.py', line: 12, column: null, nonce: expect.any(Number) });
     expect(first!.nonce).toBeGreaterThan(0);
 
     useAtlasStore.getState().requestFileOpen('src/b.py');
     const second = useAtlasStore.getState().fileOpenRequest;
-    expect(second).toEqual({ file: 'src/b.py', line: null, nonce: expect.any(Number) });
+    expect(second).toEqual({ file: 'src/b.py', line: null, column: null, nonce: expect.any(Number) });
     expect(second!.nonce).toBeGreaterThan(first!.nonce);
 
     useAtlasStore.getState().requestFileOpen('src/c.py', null);
     const third = useAtlasStore.getState().fileOpenRequest;
-    expect(third).toEqual({ file: 'src/c.py', line: null, nonce: expect.any(Number) });
+    expect(third).toEqual({ file: 'src/c.py', line: null, column: null, nonce: expect.any(Number) });
     expect(third!.nonce).toBeGreaterThan(second!.nonce);
   });
 });

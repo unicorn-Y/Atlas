@@ -197,3 +197,55 @@ def test_ipv6_loopback_start_binds_the_configured_host(tmp_path: Path) -> None:
     })
     command, _cwd = lifecycle._launch_command()
     assert command[command.index("--host") + 1] == "::1"
+
+
+@pytest.mark.asyncio
+async def test_readiness_probe_does_not_run_full_freshness_audit(monkeypatch) -> None:
+    paths = []
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path == "/":
+            return httpx.Response(200, json={"service": "MemoryOS Service"})
+        if request.url.path == "/v1/ready":
+            return httpx.Response(200, json={"status": "ready"})
+        if request.url.path == "/v1/unified/status":
+            return httpx.Response(401)
+        raise AssertionError("readiness must not perform a full freshness audit")
+
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "atlas.memory.service_lifecycle.httpx.AsyncClient",
+        lambda **kwargs: original_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    lifecycle = MemoryOSServiceLifecycle({"memory.unified.enabled": True})
+    assert await lifecycle._probe_memoryos(lifecycle.health_url)
+    assert "/v1/health" not in paths
+
+
+@pytest.mark.asyncio
+async def test_existing_warming_service_is_waited_for_without_competing_child(monkeypatch) -> None:
+    probes = 0
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        nonlocal probes
+        if request.url.path == "/":
+            return httpx.Response(200, json={"service": "MemoryOS Service"})
+        if request.url.path == "/v1/ready":
+            probes += 1
+            return httpx.Response(503 if probes == 1 else 200, json={"status": "ready"})
+        return httpx.Response(401)
+
+    async def forbidden_spawn(*args, **kwargs):
+        raise AssertionError("must not start a second MemoryOS on an occupied port")
+
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "atlas.memory.service_lifecycle.httpx.AsyncClient",
+        lambda **kwargs: original_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    lifecycle = MemoryOSServiceLifecycle({"memory.unified.enabled": True}, process_factory=forbidden_spawn)
+    await lifecycle.start()
+    assert lifecycle.state == "ready"
+    assert lifecycle.owned_process is None
+    assert probes == 2

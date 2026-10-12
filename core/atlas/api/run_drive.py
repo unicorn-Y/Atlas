@@ -3002,6 +3002,7 @@ async def _execute_run(
 
     except asyncio.CancelledError:
         run.status = "cancelled"
+        await cancel_local_foreground()
         await emit("run.cancelled", {"reason": run.end_conversation_reason}
                     if run.end_conversation_reason else {})
     except Exception as e:

@@ -62,6 +62,10 @@ def _self_facts(agent: Any, model_id: str, workspace: str | None) -> tuple[str, 
     lines.append("- When asked which model you are, answer with these facts; they are authoritative.")
     if workspace:
         lines.append(f"- Working directory: {workspace}")
+    else:
+        lines.append("- No active workspace is selected. Local file mutation has no authorized "
+                     "workspace scope. Ask the user to select a workspace before writing, "
+                     "editing, moving, or deleting files; do not retry mutations or invent a root.")
     shell = "PowerShell / cmd" if os.name == "nt" else os.environ.get("SHELL", "sh")
     lines.append(f"- Host: {platform.system()} {platform.release()} ({platform.version()}), "
                  f"Python {platform.python_version()}, shell {shell}")
@@ -487,6 +491,7 @@ class AtlasKernel:
             proxy_runtime.plan_update_callback = request.plan_update_callback
             proxy_runtime.kernel_edit = edit_manager
             proxy_runtime.conversation_id = session_id
+            proxy_runtime.tool_history_callback = lambda: list(messages)
             try:
                 from atlas.config import get_config
                 from atlas.task_artifacts import WorktreeService
@@ -1965,8 +1970,14 @@ class AtlasKernel:
             return {"content": json.dumps(remaining, ensure_ascii=False), "data": remaining}
         if name == "read_tool_history":
             limit = max(1, min(100, int(arguments.get("limit", 30) or 30)))
+            callback = getattr(runtime, "tool_history_callback", None)
+            if not callable(callback):
+                return {"content": "Tool history is unavailable for this runtime.", "is_error": True}
+            history_messages = callback()
+            if asyncio.iscoroutine(history_messages):
+                history_messages = await history_messages
             history: list[dict[str, Any]] = []
-            for message in messages:
+            for message in history_messages:
                 calls = message.get("tool_calls") or []
                 if calls:
                     for call in calls:

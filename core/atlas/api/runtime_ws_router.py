@@ -64,6 +64,19 @@ async def ws_chat(
                 run = services.runtime_mgr.runs.get(run_id)
                 if run and run.status not in ("completed", "failed", "cancelled"):
                     run.cancel_event.set()
+                    if run.trust_future is not None and not run.trust_future.done():
+                        run.trust_future.set_result(False)
+                    elif run.task is not None and not run.task.done():
+                        run.task.cancel()
+                    if run.task is not None:
+                        await asyncio.gather(run.task, return_exceptions=True)
+                    if not any(event.get("event") in (
+                        "run.completed", "run.failed", "run.cancelled",
+                    ) for event in run.events):
+                        run.status = "cancelled"
+                        await services.runtime_mgr.send_run(
+                            run, run.next_envelope("run.cancelled", {}), conn_id,
+                        )
 
             elif msg_type == "run.steer":
                 run_id = str(data.get("run_id", ""))

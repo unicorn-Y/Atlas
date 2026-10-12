@@ -11,11 +11,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
 MAX_EVENTS_TO_SCAN_FOR_STUCK_DETECTION = 20
+
+
+def _error_observation(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _error_observation(item) for key, item in value.items() if key not in {
+            "execution_id", "pid", "elapsed", "elapsed_ms", "output_path", "log_path",
+        }}
+    if isinstance(value, (list, tuple)):
+        return [_error_observation(item) for item in value]
+    if isinstance(value, str):
+        # Local execution appends fresh receipt identities to otherwise identical errors.
+        return re.sub(r"(?m)^\s*(?:Full output:|Process:) [^\r\n]*(?:\r?\n|$)", "", value)
+    return value
 
 
 def _fingerprint(value: Any) -> str:
@@ -70,7 +84,8 @@ class StuckDetector:
                 pass
         if isinstance(result, dict):
             is_error = is_error or bool(result.get("error") or result.get("is_error"))
-        self._observe("tool", (_fingerprint([name, arguments]), _fingerprint(result), is_error))
+        observation = _error_observation(result) if is_error else result
+        self._observe("tool", (_fingerprint([name, arguments]), _fingerprint(observation), is_error))
 
     def observe_message(self, text: str, *, role: str = "assistant") -> None:
         if role == "user":

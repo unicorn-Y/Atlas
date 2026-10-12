@@ -616,7 +616,7 @@ async def complete_stream(
                                 "type": "text_delta", "delta": delta, "attempt": total_attempts,
                             })
                     if reasoning_delta:
-                        attempt_reasoning = _merge_delta(attempt_reasoning, reasoning_delta)
+                        attempt_reasoning += reasoning_delta
                         merged = _merge_delta(combined_reasoning, attempt_reasoning)
                         if merged.startswith(combined_reasoning) and len(merged) > len(combined_reasoning):
                             delta = merged[len(combined_reasoning):]
@@ -625,7 +625,7 @@ async def complete_stream(
                                 "type": "reasoning_delta", "delta": delta, "attempt": total_attempts,
                             })
                     if refusal_delta:
-                        attempt_refusal = _merge_delta(attempt_refusal, refusal_delta)
+                        attempt_refusal += refusal_delta
                         merged = _merge_delta(combined_refusal, attempt_refusal)
                         if merged.startswith(combined_refusal) and len(merged) > len(combined_refusal):
                             delta = merged[len(combined_refusal):]
@@ -647,9 +647,11 @@ async def complete_stream(
                             call_id = str(_get(delta, "id") or "")
                             name = str(_get(function, "name") or "")
                             arguments = str(_get(function, "arguments") or "")
-                            current.call_id = _merge_delta(current.call_id, call_id)
-                            current.name = _merge_delta(current.name, name)
-                            current.arguments = _merge_delta(current.arguments, arguments)
+                            if call_id and not current.call_id:
+                                current.call_id = call_id
+                            # Within one attempt these are deltas, not restarted snapshots.
+                            current.name += name
+                            current.arguments += arguments
                             if call_id or name or arguments:
                                 await _publish(on_event, {
                                     "type": "tool_call_delta", "attempt": total_attempts,

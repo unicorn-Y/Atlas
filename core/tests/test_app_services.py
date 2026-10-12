@@ -2,6 +2,11 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+import asyncio
+import json
+
+import pytest
+from fastapi import WebSocketDisconnect
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -9,6 +14,60 @@ from fastapi.testclient import TestClient
 from atlas.api.app_services import AppServices
 from atlas.api.application import create_app
 from atlas.api.runtime import RunState, RuntimeManager
+from atlas.api.runtime_ws_router import ws_chat
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["running", "paused", "waiting"])
+@pytest.mark.parametrize("executor_emits_terminal", [False, True])
+async def test_stop_interrupts_blocked_run_and_emits_one_terminal(
+    status: str, executor_emits_terminal: bool,
+) -> None:
+    manager = RuntimeManager()
+    run = RunState("blocked", "conversation", "model")
+    run.status = status
+    manager.runs[run.run_id] = run
+    interrupted = asyncio.Event()
+
+    async def blocked_execution() -> None:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            interrupted.set()
+            if executor_emits_terminal:
+                run.status = "cancelled"
+                await manager.send_run(run, run.next_envelope("run.cancelled", {}), "")
+            raise
+
+    class Socket:
+        calls = 0
+        sent: list[dict] = []
+
+        async def accept(self):
+            pass
+
+        async def receive_text(self):
+            await asyncio.sleep(0)
+            self.calls += 1
+            if self.calls <= 2:
+                return json.dumps({"type": "run.cancel", "run_id": run.run_id})
+            raise WebSocketDisconnect()
+
+        async def send_json(self, data):
+            self.sent.append(data)
+
+    socket = Socket()
+    run.task = asyncio.create_task(blocked_execution())
+    try:
+        await asyncio.wait_for(ws_chat(socket, AppServices(runtime_mgr=manager)), 2)
+        assert interrupted.is_set()
+        assert run.task.done()
+        assert run.cancel_event.is_set()
+        assert run.status == "cancelled"
+        assert [event["event"] for event in run.events] == ["run.cancelled"]
+    finally:
+        run.task.cancel()
+        await asyncio.gather(run.task, return_exceptions=True)
 
 
 @asynccontextmanager
@@ -49,7 +108,7 @@ def test_production_ws_chat_routes_concurrent_runs_to_each_app_services() -> Non
     second, second_manager = _make_app("second")
 
     def receive_run(app: FastAPI, marker: str) -> dict[str, object]:
-        with TestClient(app).websocket_connect("/ws/chat") as websocket:
+        with TestClient(app, client=("127.0.0.1", 50000)).websocket_connect("/ws/chat") as websocket:
             websocket.send_json({"type": "run.start", "run_id": f"run-{marker}"})
             return websocket.receive_json()
 

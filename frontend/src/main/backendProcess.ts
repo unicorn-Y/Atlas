@@ -45,7 +45,7 @@ function logTail(tail: string): string {
 }
 
 interface HealthContact {
-  /** True only when the backend reports itself fully ready (status === 'ok'). */
+  /** Settled optional failures are usable, but retain degraded health diagnostics. */
   ready: boolean;
   /** Raw JSON body; used to detect progress between polls. */
   payload: unknown;
@@ -64,7 +64,7 @@ async function probeHealth(): Promise<HealthContact | null> {
       payload = null;
     }
     const body = payload as { status?: unknown } | null;
-    return { ready: response.status === 200 && body?.status === 'ok', payload };
+    return { ready: response.status === 200 && (body?.status === 'ok' || body?.status === 'degraded'), payload };
   } catch {
     return null;
   } finally {

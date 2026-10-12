@@ -163,15 +163,25 @@ async def test_health_reports_component_states_and_flips_to_ok() -> None:
             assert "version" in final
 
 
-async def test_health_stays_starting_while_any_component_failed() -> None:
+async def test_health_reports_degraded_after_optional_components_settle() -> None:
     def setup(startup: StartupComponents) -> None:
         startup.mark("dbos", "ready")
         startup.mark("mcp", "failed", error="connection refused")
 
     body = await _health_under_lifespan(_health_app(setup))
-    assert body["status"] == "starting"
+    assert body["status"] == "degraded"
     assert body["components"] == {"dbos": "ready", "mcp": "failed"}
     assert body["component_errors"] == {"mcp": "connection refused"}
+
+
+async def test_health_keeps_waiting_when_failed_and_starting_components_coexist() -> None:
+    def setup(startup: StartupComponents) -> None:
+        startup.mark("memoryos", "failed", error="unavailable")
+        startup.mark("mcp", "starting")
+
+    body = await _health_under_lifespan(_health_app(setup))
+    assert body["status"] == "starting"
+    assert body["component_errors"] == {"memoryos": "unavailable"}
 
 
 async def test_health_without_components_stays_ok() -> None:

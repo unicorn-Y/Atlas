@@ -37,7 +37,7 @@ export class BackendAdapter {
   get mode(): 'mock' | 'backend' { return this.live ? 'backend' : 'mock'; }
   get apiBaseUrl(): string { return this.baseUrl; }
 
-  async initialize(timeoutMs = 1200): Promise<'mock' | 'backend'> {
+  async initialize(timeoutMs = 5000): Promise<'mock' | 'backend'> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -674,9 +674,8 @@ export class BackendAdapter {
       return;
     }
     const socket = this.runSockets.get(runId);
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'run.cancel', run_id: runId }));
-    }
+    if (socket?.readyState !== WebSocket.OPEN) throw new BackendError('和后端的连接已断开，停止请求没能送达', 'Agent Runtime socket is not connected');
+    socket.send(JSON.stringify({ type: 'run.cancel', run_id: runId }));
   }
 
   controlRun(runId: string, type: 'run.pause' | 'run.resume'): void {

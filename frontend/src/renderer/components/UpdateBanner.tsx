@@ -36,7 +36,7 @@ export default function UpdateBanner() {
     if (!started) setApplying(false);
   };
 
-  return <div role="status" className="pop anim-pop fixed bottom-7 right-7 z-[80] w-[340px] rounded-xl px-4 py-3 text-[13.5px] text-fg">
+  return <div role="status" className="shrink-0 border-b border-line px-5 py-2 text-[12.5px] text-fg">
     <div className="flex items-start gap-2.5">
       <ArrowUpCircle className="mt-0.5 size-4 shrink-0 text-brand" />
       <div className="min-w-0 flex-1">

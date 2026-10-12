@@ -651,7 +651,9 @@ class LocalExecutionRuntime:
     @staticmethod
     def _ensure_workspace_path(path: Path, workspace: Path | None) -> None:
         if workspace is None:
-            raise PermissionError("Workspace write scope is unavailable; refusing local file mutation")
+            raise PermissionError("Workspace write scope is unavailable; refusing local file mutation. "
+                                  "Select an active workspace before retrying this mutation; "
+                                  "a cwd argument does not authorize file writes.")
         try:
             path.relative_to(workspace)
         except ValueError as exc:

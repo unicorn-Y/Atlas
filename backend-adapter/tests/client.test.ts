@@ -33,6 +33,14 @@ afterEach(() => {
 });
 
 describe('BackendAdapter availability and recovery', () => {
+  it('reports an undelivered stop instead of silently ignoring it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true } as Response)));
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+    expect(() => adapter.cancelRun('disconnected-run')).toThrow(BackendError);
+  });
+
   it('sends subtask steering over its owning run socket with run and event ids', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

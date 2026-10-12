@@ -179,14 +179,37 @@ describe('backendProcess startup (H8 §10.3)', () => {
     await expect(promise).resolves.toEqual({ ready: true, managed: false });
   });
 
-  it('still gives up at the 120-second total cap, with the log tail', async () => {
+  it('still gives up at the 300-second total cap, with the log tail', async () => {
     stubManagedHealth(() => ({ status: 'starting' }));
     const child = makeChild();
     stubSpawn(child);
     child.stderr.emit('data', 'booting\n');
     const promise = ensureBackendRunning();
-    const expectation = expect(promise).rejects.toThrow(/did not become healthy within 120 seconds/);
-    await vi.advanceTimersByTimeAsync(121_000);
+    const expectation = expect(promise).rejects.toThrow(/did not become healthy within 300 seconds/);
+    await vi.advanceTimersByTimeAsync(301_000);
     await expectation;
+  });
+
+  it('keeps a managed backend alive after optional startup failure settles', async () => {
+    let health: unknown = { status: 'starting', components: { memoryos: 'starting' } };
+    stubManagedHealth(() => health);
+    const child = makeChild();
+    stubSpawn(child);
+    const promise = ensureBackendRunning();
+    await vi.advanceTimersByTimeAsync(1_000);
+    health = {
+      status: 'degraded', components: { memoryos: 'failed' },
+      component_errors: { memoryos: 'unavailable' },
+    };
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(promise).resolves.toEqual({ ready: true, managed: true, pid: child.pid });
+    expect(child.kill).not.toHaveBeenCalled();
+    expect(h.spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('attaches to a degraded external backend without spawning', async () => {
+    stubHealth(() => ({ status: 'degraded', components: { mcp: 'failed' } }));
+    await expect(ensureBackendRunning()).resolves.toEqual({ ready: true, managed: false });
+    expect(h.spawn).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,7 @@ The backend listens on 127.0.0.1, but any web page the user opens can still send
 requests there, and WebSockets are not covered by CORS at all. Every HTTP and
 WebSocket request therefore has to prove it comes from Atlas itself:
 
-- no ``Origin`` header: a local process (CLI, tests, Electron main) rather than a web page;
+- a loopback client without ``Origin``: a local process (CLI, Electron main);
 - an allowed development origin (the Vite dev and preview servers) or one listed in
   ``server.allowed_origins``;
 - the per-launch ``ATLAS_API_TOKEN`` in ``X-Atlas-Api-Token``, which the Electron main
@@ -16,10 +16,13 @@ Browsers leave ``Origin`` off same-origin GETs, so a page served *by the backend
 (say, a previewed workspace HTML file) would look like a local process. The backend never
 serves its own UI, so any browser request marked ``Sec-Fetch-Site: same-origin`` is refused
 unless it carries the token.
+
+Non-loopback clients always need the token, even if their Origin is allowed.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import secrets
 from collections.abc import Callable, Iterable
@@ -38,10 +41,17 @@ DEV_ORIGINS = frozenset({
 def is_trusted(
     origin: str | None, token: str | None, extra_origins: Iterable[str] = (),
     fetch_site: str | None = None,
+    client_host: str | None = None,
 ) -> bool:
     expected = os.environ.get("ATLAS_API_TOKEN", "")
     if expected and token and secrets.compare_digest(token, expected):
         return True
+    if client_host is not None:
+        try:
+            if not ipaddress.ip_address(client_host).is_loopback:
+                return False
+        except ValueError:
+            return False
     if fetch_site == "same-origin":
         return False
     if origin is None:
@@ -67,7 +77,9 @@ class OriginGuard:
                         and "access-control-request-method" in headers)
         origin, token = headers.get("origin"), headers.get(TOKEN_HEADER)
         fetch_site = headers.get("sec-fetch-site")
-        if is_preflight or is_trusted(origin, token, self.extra_origins(), fetch_site):
+        client = scope.get("client")
+        client_host = client[0] if client else None
+        if is_preflight or is_trusted(origin, token, self.extra_origins(), fetch_site, client_host):
             await self.app(scope, receive, send)
             return
         if scope["type"] == "websocket":

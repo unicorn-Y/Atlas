@@ -66,7 +66,7 @@ def test_null_origin_is_rejected_when_no_token_is_configured(monkeypatch):
 
 
 def test_http_requests_from_foreign_origins_are_refused(token):
-    client = TestClient(_guarded_app())
+    client = TestClient(_guarded_app(), client=("127.0.0.1", 50000))
     assert client.get("/ping").status_code == 200
     assert client.get("/ping", headers={"Origin": DEV}).status_code == 200
     assert client.post("/ping", headers={"Origin": EVIL}, content="x").status_code == 403
@@ -76,7 +76,7 @@ def test_http_requests_from_foreign_origins_are_refused(token):
 
 
 def test_websockets_from_foreign_origins_are_closed_before_accept(token):
-    client = TestClient(_guarded_app())
+    client = TestClient(_guarded_app(), client=("127.0.0.1", 50000))
     with client.websocket_connect("/ws", headers={"Origin": DEV}) as ws:
         assert ws.receive_text() == "hello"
     with_token = {"Origin": "null", "X-Atlas-Api-Token": token}
@@ -90,7 +90,7 @@ def test_websockets_from_foreign_origins_are_closed_before_accept(token):
 
 
 def test_configured_origins_are_allowed():
-    client = TestClient(_guarded_app(extra=["https://atlas.internal"]))
+    client = TestClient(_guarded_app(extra=["https://atlas.internal"]), client=("127.0.0.1", 50000))
     assert client.get("/ping", headers={"Origin": "https://atlas.internal"}).status_code == 200
 
 
@@ -298,7 +298,7 @@ async def _sandbox_status():
 def test_hub_control_api_refuses_web_pages():
     from atlas.runtime.hub import create_hub_app
 
-    client = TestClient(create_hub_app())
+    client = TestClient(create_hub_app(), client=("127.0.0.1", 50000))
     assert client.get("/health").status_code == 200
     assert client.post("/shutdown", headers={"Origin": EVIL}).status_code == 403
     assert client.post("/tasks/any/run", headers={"Origin": "null"}).status_code == 403

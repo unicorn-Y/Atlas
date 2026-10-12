@@ -42,14 +42,19 @@ async def health(
     """Liveness plus per-component startup state (H8 §10.2 S4).
 
     ``status`` is ``ok`` only when every registered component is ``ready``;
-    any other response means "contact, but starting" (the desktop shows
-    startup progress and never kills the backend for slowness within its cap).
+    unsettled components report ``starting``. Settled optional failures report
+    ``degraded`` so the desktop can connect without hiding component errors.
     Apps mounted without the server lifespan report no components and stay
     ``ok`` — the historical contract.
     """
     startup = getattr(services, "startup", None)
     components: dict[str, str] = startup.snapshot() if startup is not None else {}
-    status = "ok" if all(state == "ready" for state in components.values()) else "starting"
+    if any(state == "starting" for state in components.values()):
+        status = "starting"
+    elif any(state == "failed" for state in components.values()):
+        status = "degraded"
+    else:
+        status = "ok"
     errors = startup.error_snapshot() if startup is not None else {}
     return {
         "status": status,

@@ -134,7 +134,7 @@ class ExternalProcessAdapter:
         raise NotImplementedError(f"{self.name} does not expose generic process resume")
 
     async def close(self, session: AgentSession) -> None:
-        state = self._sessions.pop(session.id, None)
+        state = self._sessions.get(session.id)
         if not state:
             return
         if self.protocol == "pi-rpc" and state.process.returncode is None and state.process.stdin:
@@ -147,6 +147,7 @@ class ExternalProcessAdapter:
                 await state.process.wait()
         else:
             await self.cancel(session)
+        self._sessions.pop(session.id, None)
         for task in state.readers:
             if not task.done():
                 task.cancel()

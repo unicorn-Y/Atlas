@@ -291,6 +291,7 @@ const errorText = (error: unknown, fallback: string) => errorPatch(error, fallba
 let fileOpenNonce = 0;
 
 export const useAtlasStore = create<AtlasState>((set, get) => {
+  let initializing: Promise<void> | null = null;
   /** Record a backend failure; network errors also flip the connection state. */
   const fail = (error: unknown, fallback: string) => set({ mode: backend.mode, connected: backend.mode === 'backend', ...errorPatch(error, fallback) });
   const patchConversation = (id: string, patch: Partial<ConversationSummary>) => set((state) => {
@@ -313,10 +314,18 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     initOpen: false, initBusy: false, initApplying: false, initError: null, initProposal: null,
     fileOpenRequest: null,
 
-    initialize: async () => {
+    initialize: () => {
+      if (initializing) return initializing;
+      const firstLoad = !get().configLoaded;
+      const selectedId = get().activeConversationId;
+      initializing = (async () => {
       set({ conversationsLoading: true });
       const mode = await backend.initialize();
       set({ mode, connected: mode === 'backend', error: mode === 'mock' ? backend.availabilityError : null, errorDetail: null });
+      if (mode === 'mock') {
+        set({ conversationsLoading: false });
+        return;
+      }
       try {
         const [configuration, loaded, toolList, skills, capabilities] = await Promise.all([backend.getConfiguration(), backend.getConversations(), backend.getTools(), backend.getSkills(), backend.getAgentCapabilities()]);
         const conversations = await migrateLegacyFlags(loaded);
@@ -324,7 +333,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         const model = mode === 'backend' ? configuration.current : preferredModel || configuration.current;
         set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, compressionModel: configuration.compression_model ?? '', subagentsEnabled: configuration.subagents_enabled ?? true, subagentDefaultModel: configuration.subagent_default_model || configuration.current, configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
         const first = conversations.find((item) => !item.archived);
-        if (first) await get().openConversation(first);
+        if (firstLoad && first && !selectedId && !get().activeConversationId) await get().openConversation(first);
         // Roles and recipes are extras; the app works without them if the backend predates them.
         const [profiles, recipes] = await Promise.all([backend.getProfiles().catch(() => []), backend.getRecipes().catch(() => [])]);
         set((state) => ({ profiles, recipes, profileId: profiles.some((profile) => profile.id === state.profileId) ? state.profileId : 'default' }));
@@ -335,6 +344,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         fail(error, '无法读取后端数据');
         set({ conversationsLoading: false });
       }
+      })().finally(() => { initializing = null; });
+      return initializing;
     },
 
     /** H8 §10.3/§10.4: 主进程转发的后端启动进度。ready 时若首轮 initialize 落在了
@@ -342,7 +353,11 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     applyStartupProgress: (progress) => {
       const starting = progress.phase === 'probing' || progress.phase === 'starting';
       set({ backendStarting: starting, startupDetail: progress.detail ?? null });
-      if (progress.phase === 'ready' && !get().connected) void get().initialize();
+      if (progress.phase === 'ready' && !get().connected) {
+        void get().initialize().then(() => {
+          if (!get().connected && !get().backendStarting) void get().initialize();
+        });
+      }
     },
 
     openConversation: async (conversation) => {
@@ -716,7 +731,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       if (get().queue[run.conversationId]?.length || get().pendingSteers[run.id]?.length) {
         set((state) => ({ queuePaused: { ...state.queuePaused, [run.conversationId]: true } }));
       }
-      backend.cancelRun(run.id);
+      try { backend.cancelRun(run.id); }
+      catch (error) { set(errorPatch(error, '停止请求失败')); }
     },
     dismissError: () => set({ error: null, errorDetail: null }),
     setFollowUpMode: (followUpMode) => { storageSet(FOLLOW_UP, followUpMode); set({ followUpMode }); },
@@ -755,7 +771,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       set((state) => ({ queue: { ...state.queue, [conversationId]: [item, ...items.filter((entry) => entry.id !== id)] }, queuePaused: { ...state.queuePaused, [conversationId]: false } }));
       // Interrupt the current run; its terminal event dispatches the queue.
       const running = activeRunFor(conversationId);
-      if (running) backend.cancelRun(running.id); else dispatchQueue(conversationId);
+      try { if (running) backend.cancelRun(running.id); else dispatchQueue(conversationId); }
+      catch (error) { set({ ...errorPatch(error, '停止请求失败'), queuePaused: { ...get().queuePaused, [conversationId]: true } }); }
     },
     submitTodos: (conversationId, todos) => {
       const running = activeRunFor(conversationId);
@@ -792,8 +809,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     },
     deleteConversation: async (id) => {
       const running = activeRunFor(id);
-      if (running) backend.cancelRun(running.id);
       try {
+        if (running) backend.cancelRun(running.id);
         await backend.deleteConversation(id);
         const cacheAt = messageCacheOrder.indexOf(id);
         if (cacheAt >= 0) messageCacheOrder.splice(cacheAt, 1);

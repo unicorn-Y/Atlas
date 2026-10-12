@@ -378,6 +378,13 @@ export default function App() {
     (progress) => useAtlasStore.getState().applyStartupProgress(progress),
   ), []);
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      const current = useAtlasStore.getState();
+      if (!current.connected && !current.backendStarting && !current.conversationsLoading) void current.initialize();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
     let stale = false;
     const refresh = () => void backend.getProcesses().then((items) => { if (!stale) setProcessCount(items.filter((item) => item.status === 'running').length); }).catch(() => { if (!stale) setProcessCount(null); });
     refresh(); const timer = window.setInterval(refresh, 8000);
@@ -1277,6 +1284,7 @@ export default function App() {
             </div>}
           </div>
         </header>
+        <UpdateBanner />
 
         {view === 'home' && <HomeView username={username} notice={errorNote} recent={store.conversations.slice(0, 3)} onOpen={openConversation} onSuggest={suggest}
           composer={<Composer {...composerBase} variant="hero" onSubmit={() => void submit(true)}
@@ -1477,7 +1485,6 @@ export default function App() {
     </Dialog>
     {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}
 
-    <UpdateBanner />
     {view !== 'chat' && view !== 'home' && <ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} />}
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
