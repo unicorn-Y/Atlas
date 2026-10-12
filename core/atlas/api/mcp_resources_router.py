@@ -16,7 +16,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from mcp.types import PaginatedRequestParams
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
@@ -41,6 +41,29 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 class ResourceReadRequest(BaseModel):
     server_name: str = Field(min_length=1, max_length=256)
     uri: str = Field(min_length=1, max_length=_MAX_URI_BYTES)
+
+
+class McpServerSettingsPatch(BaseModel):
+    enabled: bool | None = None
+    allowed_tools: list[str] | None = None
+    headers: dict[str, str] | None = None
+
+    @field_validator("allowed_tools")
+    @classmethod
+    def validate_allowed_tools(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and any(not item.strip() for item in value):
+            raise ValueError("allowed_tools entries must be non-empty tool names")
+        return value
+
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        if value is not None and any(
+            not key.strip() or any(char in key + item for char in "\r\n")
+            for key, item in value.items()
+        ):
+            raise ValueError("header names and values cannot be empty or contain line breaks")
+        return value
 
 
 class ResourceLimitExceeded(ValueError):
@@ -371,4 +394,122 @@ async def read_mcp_resource(
         "server_name": req.server_name,
         "uri": req.uri,
         "contents": contents,
+    }
+
+
+def _save_mcp_settings(server_name: str, patch: dict[str, Any]) -> None:
+    """Persist a narrow MCP settings patch into the base atlas.toml."""
+    import copy
+
+    import tomli_w
+
+    from atlas import config as config_module
+    from atlas.config import get_config
+
+    data = copy.deepcopy(get_config().base_raw)
+    servers = data.setdefault("tools", {}).setdefault("servers", {})
+    config = servers.get(server_name)
+    if not isinstance(config, dict):
+        raise KeyError(server_name)
+    config.update(patch)
+    if "enabled" in patch:
+        tools = data.setdefault("tools", {})
+        auto_start = list(tools.get("auto_start", []) or [])
+        if auto_start:
+            if patch["enabled"] and server_name not in auto_start:
+                auto_start.append(server_name)
+            elif not patch["enabled"]:
+                auto_start = [name for name in auto_start if name != server_name]
+        tools["auto_start"] = auto_start
+    path = config_module.CONFIG_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(tomli_w.dumps(data), encoding="utf-8")
+    temporary.replace(path)
+    config_module.reload_config()
+
+
+def _configured_headers(server_name: str) -> dict[str, Any] | None:
+    from atlas.config import get_config
+
+    servers = get_config().get("tools.servers", {}) or {}
+    value = servers.get(server_name)
+    return value.get("headers", {}) if isinstance(value, dict) else None
+
+
+@router.get("/api/mcp/settings/servers")
+async def list_mcp_server_settings(
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    """Return configured MCP policy without returning header secret values."""
+    from atlas.config import get_config
+
+    client = _mcp_client(services)
+    rows = {str(row["name"]): row for row in _runtime_rows(client)}
+    servers = get_config().get("tools.servers", {}) or {}
+    result = []
+    for name, config in servers.items():
+        if not isinstance(config, dict):
+            continue
+        result.append({
+            **rows.get(name, {"name": name, "connected": False, "state": "not_started", "tool_count": 0}),
+            "enabled": rows.get(name, {}).get("enabled", bool(config.get("enabled", True))),
+            "transport": config.get("transport", "stdio"),
+            "allowed_tools": config.get("allowed_tools"),
+            "header_names": sorted(str(key) for key in (config.get("headers") or {})),
+        })
+    return {"servers": result}
+
+
+@router.patch("/api/mcp/settings/servers/{server_name}")
+async def update_mcp_server_settings(
+    server_name: str,
+    req: McpServerSettingsPatch,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    """Update enabled state, per-server tool allowlist, or remote request headers."""
+    from atlas.tools.mcp_client import _parse_server_configs
+
+    client = _mcp_client(services)
+    if client is None:
+        raise HTTPException(status_code=503, detail="MCP runtime is unavailable")
+    patch = req.model_dump(exclude_unset=True)
+    if not patch:
+        raise HTTPException(status_code=400, detail="No MCP settings were supplied")
+    if "headers" in patch and _configured_headers(server_name) is None:
+        raise HTTPException(status_code=404, detail=f"MCP server is not configured: {server_name}")
+    if server_name in getattr(client, "_servers", {}):
+        await client.disconnect_server(server_name)
+    try:
+        _save_mcp_settings(server_name, patch)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"MCP server is not configured: {server_name}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="MCP settings could not be saved") from exc
+
+    client._configured_configs = {config.name: config for config in _parse_server_configs()}
+    config = client._configured_configs.get(server_name)
+    if config is None:
+        raise HTTPException(status_code=404, detail=f"MCP server is not configured: {server_name}")
+    if config.enabled:
+        try:
+            await client._connect_server(config)
+        except Exception:
+            pass  # The persisted config and runtime status retain the actionable safe diagnostic.
+    else:
+        client._server_status.setdefault(server_name, {"name": server_name}).update({
+            "enabled": False, "connected": False, "state": "disabled",
+            "tool_count": 0, "blocking_reason": "server is disabled",
+        })
+    status = next(
+        (row for row in client.get_runtime_status().get("servers", []) if row.get("name") == server_name),
+        {},
+    )
+    return {
+        "name": server_name,
+        "enabled": config.enabled,
+        "connected": status.get("connected", False),
+        "state": status.get("state", "not_started"),
+        "tool_count": status.get("tool_count", 0),
+        "diagnostic": status.get("blocking_reason"),
     }

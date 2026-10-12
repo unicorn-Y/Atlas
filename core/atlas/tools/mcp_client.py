@@ -7,6 +7,7 @@ each providing a set of tools the agent can call.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import os
 import shutil
 import tempfile
@@ -97,6 +98,7 @@ class MCPServerConfig:
     cwd: str | None = None
     url: str = ""                   # for sse
     headers: dict[str, str] = field(default_factory=dict)
+    allowed_tools: list[str] | None = None
     enabled: bool = True
 
 
@@ -140,6 +142,10 @@ def _parse_server_configs() -> list[MCPServerConfig]:
                 str(key): os.path.expandvars(str(value))
                 for key, value in (data.get("headers", {}) or {}).items()
             },
+            allowed_tools=(
+                [str(item) for item in data.get("allowed_tools", [])]
+                if isinstance(data.get("allowed_tools"), list) else None
+            ),
             enabled=data.get("enabled", True),
         )
         # Only include servers that are both configured *and* in auto_start
@@ -351,7 +357,7 @@ class MCPClient:
     async def _connect_sse(self, cfg: MCPServerConfig,
                            handle: MCPServerHandle) -> None:
         """Set up SSE transport."""
-        transport_cm = sse_client(cfg.url)
+        transport_cm = sse_client(cfg.url, headers=cfg.headers or None)
         await self._start_transport_owner(handle, transport_cm)
 
     async def _connect_streamable_http(self, cfg: MCPServerConfig,
@@ -360,10 +366,19 @@ class MCPClient:
         if not cfg.url:
             raise ValueError("Streamable HTTP MCP server requires a URL")
         try:
-            from mcp.client.streamable_http import streamablehttp_client
+            from mcp.client.streamable_http import streamable_http_client
         except ImportError as exc:
             raise RuntimeError("Installed MCP SDK does not support Streamable HTTP") from exc
-        transport_cm = streamablehttp_client(cfg.url, headers=cfg.headers or None)
+
+        @asynccontextmanager
+        async def configured_transport() -> Any:
+            import httpx
+
+            async with httpx.AsyncClient(headers=cfg.headers or None) as http_client:
+                async with streamable_http_client(cfg.url, http_client=http_client) as streams:
+                    yield streams
+
+        transport_cm = configured_transport()
         await self._start_transport_owner(handle, transport_cm)
 
     async def _start_transport_owner(self, handle: MCPServerHandle, transport_cm: Any) -> None:
@@ -437,15 +452,22 @@ class MCPClient:
 
     def list_tools(self) -> list[ToolInfo]:
         """Return all discovered tools across all servers."""
-        return list(self._tool_index.values())
+        return [tool for tool in self._tool_index.values() if self._tool_allowed(tool)]
 
     def get_tools_for_llm(self) -> list[dict[str, Any]]:
         """Return tool definitions in OpenAI function-calling format."""
-        return [t.to_openai_tool() for t in self._tool_index.values()]
+        return [t.to_openai_tool() for t in self.list_tools()]
 
     def get_tool(self, qualified_name: str) -> ToolInfo | None:
         """Look up a tool by its qualified name (server__tool)."""
-        return self._tool_index.get(qualified_name)
+        tool = self._tool_index.get(qualified_name)
+        return tool if tool is not None and self._tool_allowed(tool) else None
+
+    def _tool_allowed(self, tool: ToolInfo) -> bool:
+        config = self._configured_configs.get(tool.server_name)
+        if config is None or config.allowed_tools is None:
+            return True
+        return tool.name in config.allowed_tools or tool.qualified_name in config.allowed_tools
 
     async def call_tool(
         self,
@@ -464,6 +486,11 @@ class MCPClient:
         if tool is None:
             return {"content": [{"type": "text",
                                  "text": f"Unknown tool: {qualified_name}"}],
+                    "is_error": True}
+
+        if not self._tool_allowed(tool):
+            return {"content": [{"type": "text",
+                                 "text": f"MCP tool is blocked by the server allowlist: {qualified_name}"}],
                     "is_error": True}
 
         handle = self._servers.get(tool.server_name)
@@ -570,7 +597,7 @@ class MCPClient:
     def get_server_tools(self, server_name: str) -> list[ToolInfo]:
         """Return tools for a specific server."""
         handle = self._servers.get(server_name)
-        return handle.tools if handle else []
+        return [tool for tool in handle.tools if self._tool_allowed(tool)] if handle else []
 
     async def list_resources(self, server_name: str | None = None,
                              cursor: str | None = None) -> dict[str, Any]:
@@ -757,4 +784,10 @@ def _failure_reason(exc: Exception) -> str:
         return message
     if isinstance(exc, ValueError) and message.startswith("Unknown transport:"):
         return message
+    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+    if status_code in {401, 403} or "401 Unauthorized" in message or "403 Forbidden" in message:
+        return (
+            f"MCP remote server rejected authentication (HTTP {status_code or (401 if '401' in message else 403)}). "
+            "Check configured headers; Atlas OAuth authorization is not configured."
+        )
     return f"MCP server failed during launch or initialization ({type(exc).__name__})"

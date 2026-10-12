@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { FlaskConical, Plus, RefreshCw, Search, Trash2, Webhook } from 'lucide-react';
 import type { HookConfig, HookLog } from '@atlas/backend-adapter';
 import { api } from '../services/api';
@@ -37,16 +37,19 @@ const sourceLabel = (source: string | undefined) => {
 };
 const isAtlasHook = (hook: HookConfig) => !hook.source || hook.source === 'atlas';
 type ReviewedHook = HookConfig & {
+  handler?: { type: 'command' | 'http' | 'mcp'; command?: string; url?: string; method?: string; headers?: Record<string, string>; server?: string; tool?: string; arguments?: Record<string, unknown> };
   trusted?: boolean;
   trust_state?: 'approved' | 'unreviewed' | 'revoked' | 'changed';
   trust_fingerprint?: string;
   reviewed_at?: string | null;
+  policy_source?: string;
+  trust_scope?: string;
 };
 const trustLabel = (hook: ReviewedHook) => hook.trusted
   ? '已批准'
   : hook.trust_state === 'revoked' ? '已撤销'
     : hook.trust_state === 'changed' ? '配置已变化，需重审' : '待审查';
-const blank = (): ReviewedHook => ({ id: '', event: 'run.completed', command: '', timeout_s: 30, enabled: false, trusted: false, trust_state: 'unreviewed' });
+const blank = (): ReviewedHook => ({ id: '', event: 'run.completed', command: '', handler: { type: 'command', command: '' }, timeout_s: 30, enabled: false, trusted: false, trust_state: 'unreviewed' });
 
 /** Your own commands at points in a run; they get the event as JSON on stdin. Claude Code settings and plugin hooks show up here too. */
 export default function HooksPanel() {
@@ -64,6 +67,7 @@ export default function HooksPanel() {
   const [sourceFilter, setSourceFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [failedLogsOnly, setFailedLogsOnly] = useState(false);
+  const importFile = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -86,15 +90,34 @@ export default function HooksPanel() {
     event.preventDefault();
     if (!draft) return;
     try {
-      await backend.saveHook({
-        id: draft.id.trim(), event: draft.event, command: draft.command,
-        timeout_s: draft.timeout_s, enabled: draft.enabled,
-      }, isNew);
-      setMessage({ ok: true, text: '已保存；新配置需单独批准后才会执行' });
+      const handler = draft.handler?.type === 'command'
+        ? { type: 'command', command: draft.handler.command ?? draft.command }
+        : draft.handler;
+      await api(backend.apiBaseUrl, isNew ? '/api/hooks/definitions' : `/api/hooks/${encodeURIComponent(draft.id)}/definition`, {
+        method: isNew ? 'POST' : 'PUT',
+        json: { id: draft.id.trim(), event: draft.event, handler, timeout_s: draft.timeout_s, enabled: draft.enabled },
+      });
+      setMessage({ ok: true, text: '已保存；保存后的配置变化会要求重新批准' });
       setIsNew(false);
       await load();
     }
     catch (exc) { setMessage({ ok: false, text: exc instanceof Error ? exc.message : String(exc) }); }
+  };
+  const exportHooks = async () => {
+    try {
+      const data = await api<{ format: string; hooks: unknown[] }>(backend.apiBaseUrl, '/api/hooks/export');
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a'); link.href = url; link.download = 'atlas-hooks.json'; link.click(); URL.revokeObjectURL(url);
+    } catch (exc) { setMessage({ ok: false, text: exc instanceof Error ? exc.message : String(exc) }); }
+  };
+  const importHooks = async (file?: File) => {
+    if (!file) return;
+    try {
+      const result = await api<{ imported: number }>(backend.apiBaseUrl, '/api/hooks/import', { method: 'POST', json: JSON.parse(await file.text()) });
+      setMessage({ ok: true, text: `已导入 ${result.imported} 条 Hook；全部保持关闭并等待逐条批准。` });
+      await load();
+    } catch (exc) { setMessage({ ok: false, text: exc instanceof Error ? exc.message : String(exc) }); }
+    finally { if (importFile.current) importFile.current.value = ''; }
   };
   const test = async (hook: ReviewedHook) => {
     setBusyId(hook.id);
@@ -173,6 +196,9 @@ export default function HooksPanel() {
       <Button onClick={() => void load()} disabled={refreshing} aria-label="刷新 Hook 和运行记录">
         <RefreshCw className={refreshing ? 'animate-spin' : ''} />刷新
       </Button>
+      <input ref={importFile} type="file" accept="application/json,.json" className="hidden" aria-label="导入 Atlas Hook JSON" onChange={(event) => void importHooks(event.target.files?.[0])} />
+      <Button onClick={() => importFile.current?.click()}>导入 JSON</Button>
+      <Button onClick={() => void exportHooks()}>导出 JSON</Button>
     </div>
     <div className="grid grid-cols-[190px_minmax(0,1fr)] gap-5">
       <nav className="grid content-start gap-1" aria-label="Hook 列表">
@@ -205,21 +231,23 @@ export default function HooksPanel() {
         : draft ? <form onSubmit={(event) => void save(event)} className="grid content-start gap-3.5 text-[13px] text-fg-2">
           {!isNew && <div className="flex flex-wrap items-center gap-2 rounded-lg bg-sunken px-3 py-2">
             <span className={cn('text-[12px]', draft.trusted ? 'text-ok' : 'text-danger')}>信任状态：{trustLabel(draft)}</span>
-            <span className="flex-1 text-[11.5px] text-fg-3">来源：{sourceLabel(draft.source)} · 批准与启用互相独立</span>
+            <span className="flex-1 text-[11.5px] text-fg-3">来源：{sourceLabel(draft.source)} · 策略：{draft.policy_source ?? 'user review'} · 范围：{draft.trust_scope ?? 'user'} · 批准与启用互相独立</span>
             <Button type="button" onClick={() => void review(draft, !draft.trusted)} disabled={busyId === draft.id}>{draft.trusted ? '撤销信任' : '批准执行'}</Button>
           </div>}
           <label className="grid gap-1">名称（英文、数字、短横线）<input required disabled={!isNew} value={draft.id} onChange={(event) => setDraft({ ...draft, id: event.target.value.replace(/[^\w-]/g, '-') })} className={field} placeholder="notify-done" /></label>
           <label className="grid gap-1">什么时候运行<select value={draft.event} onChange={(event) => setDraft({ ...draft, event: event.target.value })} className={field}>
             {Object.entries(EVENTS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label className="grid gap-1">命令<textarea required value={draft.command} onChange={(event) => setDraft({ ...draft, command: event.target.value })} rows={3}
-            className={cn(field, 'h-auto py-2 font-mono text-[12.5px]')} placeholder={'python D:\\scripts\\notify.py'} /></label>
-          <p className="m-0 text-[12px] leading-[1.6] text-fg-3">新 Hook 默认关闭且未批准。命令在任务的工作目录里运行，事件内容以 JSON 从标准输入传进去；批准后才能启用或试跑。</p>
+          <label className="grid gap-1">处理方式<select value={draft.handler?.type ?? 'command'} onChange={(event) => { const type = event.target.value as 'command' | 'http' | 'mcp'; setDraft({ ...draft, command: '', handler: { type } }); }} className={field}><option value="command">本地命令</option><option value="http">HTTP webhook</option><option value="mcp">已连接的 MCP 工具</option></select></label>
+          {(draft.handler?.type ?? 'command') === 'command' && <label className="grid gap-1">命令<textarea required value={draft.handler?.command ?? draft.command} onChange={(event) => setDraft({ ...draft, command: event.target.value, handler: { type: 'command', command: event.target.value } })} rows={3} className={cn(field, 'h-auto py-2 font-mono text-[12.5px]')} placeholder="python notify.py" /></label>}
+          {draft.handler?.type === 'http' && <><label className="grid gap-1">HTTP(S) URL<input required type="url" value={draft.handler.url ?? ''} onChange={(event) => setDraft({ ...draft, handler: { ...draft.handler!, url: event.target.value } })} className={field} /></label><label className="grid gap-1">方法<select value={draft.handler.method ?? 'POST'} onChange={(event) => setDraft({ ...draft, handler: { ...draft.handler!, method: event.target.value } })} className={field}><option>POST</option><option>PUT</option><option>PATCH</option></select></label><label className="grid gap-1">Headers（JSON 对象）<textarea value={JSON.stringify(draft.handler.headers ?? {}, null, 2)} onChange={(event) => { try { const headers = JSON.parse(event.target.value); if (headers && typeof headers === 'object' && !Array.isArray(headers)) setDraft({ ...draft, handler: { ...draft.handler!, headers } }); } catch { /* incomplete JSON stays in the editor until it parses */ } }} rows={3} className={cn(field, 'h-auto py-2 font-mono text-[12.5px]')} /></label></>}
+          {draft.handler?.type === 'mcp' && <><label className="grid gap-1">已连接的 MCP server<input required value={draft.handler.server ?? ''} onChange={(event) => setDraft({ ...draft, handler: { ...draft.handler!, server: event.target.value } })} className={field} /></label><label className="grid gap-1">工具名<input required value={draft.handler.tool ?? ''} onChange={(event) => setDraft({ ...draft, handler: { ...draft.handler!, tool: event.target.value } })} className={field} /></label><label className="grid gap-1">Arguments（可选 JSON；留空则传入事件数据）<textarea value={draft.handler.arguments ? JSON.stringify(draft.handler.arguments, null, 2) : ''} onChange={(event) => { try { const args = JSON.parse(event.target.value); if (args && typeof args === 'object' && !Array.isArray(args)) setDraft({ ...draft, handler: { ...draft.handler!, arguments: args } }); } catch { /* incomplete JSON stays in the editor until it parses */ } }} rows={3} className={cn(field, 'h-auto py-2 font-mono text-[12.5px]')} /></label></>}
+          <p className="m-0 text-[12px] leading-[1.6] text-fg-3">Hook 默认关闭，且每个工作区需要单独审查。HTTP 收到事件 JSON；MCP 在 Atlas 已连接的 server 上调用指定工具。试跑也会产生真实副作用。</p>
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2">超时（秒）<input type="number" min={1} max={300} value={draft.timeout_s} onChange={(event) => setDraft({ ...draft, timeout_s: Number(event.target.value) || 30 })} className={cn(field, 'w-20')} /></label>
             <label className="flex items-center gap-2"><input type="checkbox" disabled={!isNew && !draft.trusted && !draft.enabled} checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />启用</label>
           </div>
           <div className="flex items-center gap-2">
-            <Button type="submit" variant="primary" disabled={!draft.id.trim() || !draft.command.trim()}>{isNew ? '创建' : '保存'}</Button>
+            <Button type="submit" variant="primary" disabled={!draft.id.trim() || (draft.handler?.type === 'command' && !(draft.handler.command ?? draft.command).trim()) || (draft.handler?.type === 'http' && !draft.handler.url?.trim()) || (draft.handler?.type === 'mcp' && (!draft.handler.server?.trim() || !draft.handler.tool?.trim()))}>{isNew ? '创建' : '保存'}</Button>
             {!isNew && <Button type="button" onClick={() => void test(draft)} disabled={busyId === draft.id || !draft.trusted}><FlaskConical />用示例试跑</Button>}
             {!isNew && <Button variant={confirmDelete ? 'danger' : 'ghost'} onClick={() => void remove()}><Trash2 />{confirmDelete ? '确认删除' : '删除'}</Button>}
           </div>

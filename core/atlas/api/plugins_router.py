@@ -160,6 +160,36 @@ async def update_plugin_marketplace(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/api/plugin-marketplaces/{name}/validate")
+async def validate_plugin_marketplace(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+) -> dict[str, Any]:
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        return plugin_runtime.validate_marketplace(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0] if exc.args else exc)) from exc
+
+
+@router.delete("/api/plugin-marketplaces/{name}")
+async def remove_plugin_marketplace(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+) -> dict[str, Any]:
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        return plugin_runtime.remove_marketplace(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0] if exc.args else exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.get("/api/plugin-marketplaces/{name}/plugins")
 async def list_marketplace_plugins(
     services: Annotated[AppServices, Depends(get_app_services)],
@@ -202,11 +232,39 @@ async def set_plugin_enabled(
     """Enable or disable a plugin and reapply every plugin to the runtime."""
     if plugin_runtime is None:
         raise HTTPException(status_code=503, detail="Plugin runtime unavailable")
+    scope = req.get("scope", "user")
+    if scope != "user":
+        raise HTTPException(status_code=422, detail={
+            "code": "scope_unavailable",
+            "message": "Atlas loads plugins through a process-wide PluginRuntime and has no request-scoped workspace loader; only user scope can be changed.",
+        })
+    enabled = req.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=422, detail="enabled must be a boolean")
     if not any(item["name"] == name for item in plugin_runtime.discover()):
         raise HTTPException(status_code=404, detail="插件不存在")
-    plugin_runtime.set_enabled(name, bool(req.get("enabled", True)))
+    plugin_runtime.set_enabled(name, enabled)
     report = await _server()._reload_extensions()
-    return {"name": name, "enabled": bool(req.get("enabled", True)), "report": report}
+    return {"name": name, "scope": "user", "enabled": enabled, "report": report}
+
+
+@router.post("/api/plugins/reset")
+async def reset_plugin_overrides(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    req: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    scope = str((req or {}).get("scope", "user"))
+    if scope != "user":
+        raise HTTPException(status_code=422, detail={
+            "code": "scope_unavailable",
+            "message": "Atlas loads plugins through a process-wide PluginRuntime and has no request-scoped workspace loader; only user scope can be reset.",
+        })
+    result = plugin_runtime.reset_user_overrides()
+    result["report"] = await _server()._reload_extensions()
+    return result
 
 
 _EXTERNAL_IMPORT_SOURCES = {"claude", "codex"}

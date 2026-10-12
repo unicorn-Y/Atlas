@@ -16,6 +16,8 @@ import subprocess
 import threading
 import time
 import tomllib
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
@@ -369,6 +371,65 @@ def _substitute(value: str, replacements: Mapping[str, str]) -> str:
     return value
 
 
+async def _run_atlas_handler(
+    hook: Mapping[str, Any], input_data: dict[str, Any], *, cwd: str | None,
+) -> tuple[int, str, str]:
+    """Run one explicitly reviewed Atlas command, HTTP, or connected MCP handler."""
+    handler = hook.get("handler")
+    if not isinstance(handler, Mapping):
+        handler = {"type": "command", "command": hook.get("command", "")}
+    kind = str(handler.get("type") or "command").lower()
+    timeout = max(1, min(300, int(hook.get("timeout_s", 30))))
+    if kind == "command":
+        return await _run_command(
+            {"command": handler.get("command") or hook.get("command"), "timeout": timeout},
+            input_data, cwd=cwd, plugin_root=None,
+        )
+    if kind == "http":
+        url = str(handler.get("url") or "")
+        if not url.startswith(("https://", "http://")):
+            return 1, "", "HTTP Hook URL must use http:// or https://"
+        method = str(handler.get("method") or "POST").upper()
+        if method not in {"POST", "PUT", "PATCH"}:
+            return 1, "", "HTTP Hook method must be POST, PUT, or PATCH"
+        headers = handler.get("headers") if isinstance(handler.get("headers"), Mapping) else {}
+        request = urllib.request.Request(
+            url, data=json.dumps(input_data, ensure_ascii=False, default=str).encode("utf-8"),
+            headers={"Content-Type": "application/json", **{str(k): str(v) for k, v in headers.items()}},
+            method=method,
+        )
+        def send() -> tuple[int, str, str]:
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    body = response.read(4096).decode("utf-8", errors="replace")
+                    return (0 if 200 <= response.status < 300 else 1), body, "" if 200 <= response.status < 300 else f"HTTP {response.status}"
+            except urllib.error.HTTPError as exc:
+                return 1, exc.read(4096).decode("utf-8", errors="replace"), f"HTTP {exc.code}"
+            except Exception as exc:
+                return 1, "", str(exc)[:4096]
+        return await asyncio.to_thread(send)
+    if kind == "mcp":
+        server = str(handler.get("server") or "")
+        tool = str(handler.get("tool") or "")
+        if not server or not tool:
+            return 1, "", "MCP Hook requires a server and tool name"
+        try:
+            import atlas.server
+            client = getattr(atlas.server, "mcp_client", None)
+            if client is None or server not in client.get_server_names():
+                return 1, "", f"MCP server is not connected: {server}"
+            result = await asyncio.wait_for(
+                client.call_tool(f"{server}__{tool}", handler["arguments"] if "arguments" in handler else input_data),
+                timeout=timeout,
+            )
+            rendered = json.dumps(result, ensure_ascii=False, default=str)
+            failed = bool(result.get("is_error")) if isinstance(result, Mapping) else False
+            return (1 if failed else 0), rendered[:4096], "MCP tool returned an error" if failed else ""
+        except Exception as exc:
+            return 1, "", str(exc)[:4096]
+    return 1, "", f"Unsupported hook handler type: {kind}"
+
+
 async def execute_claude_hooks(
     hooks: Iterable[Mapping[str, Any]], event: str, payload: Mapping[str, Any], *,
     cwd: str | None = None, emit: Any = None,
@@ -509,7 +570,7 @@ class HookStore:
         identity = {
             key: hook.get(key) for key in (
                 "id", "event", "source", "matcher", "timeout_s",
-                "hooks", "plugin_root",
+                "hooks", "plugin_root", "handler",
             )
         }
         if not isinstance(hook.get("hooks"), list):
@@ -528,12 +589,20 @@ class HookStore:
         hooks = data.get("hooks")
         return dict(hooks) if isinstance(hooks, Mapping) else {}
 
-    def trust_status(self, hook: Mapping[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _trust_key(hook_id: str, cwd: str | None) -> str:
+        scope = str(Path(cwd).expanduser().resolve()) if cwd else "user"
+        return hashlib.sha256(f"{scope}\0{hook_id}".encode("utf-8")).hexdigest()
+
+    def trust_status(self, hook: Mapping[str, Any], cwd: str | None = None) -> dict[str, Any]:
         """Return a fail-closed review state without changing hook config."""
         hook_id = str(hook.get("id") or "")
         fingerprint = self._fingerprint(hook)
         with self._trust_lock:
-            record = self._read_trust_records().get(hook_id)
+            records = self._read_trust_records()
+            record = records.get(self._trust_key(hook_id, cwd))
+            if record is None and cwd is None:
+                record = records.get(hook_id)
         current = record if isinstance(record, Mapping) else {}
         same_config = current.get("fingerprint") == fingerprint
         trusted = same_config and current.get("trusted") is True
@@ -550,6 +619,8 @@ class HookStore:
             "trust_state": state,
             "trust_fingerprint": fingerprint,
             "reviewed_at": current.get("reviewed_at") if same_config else None,
+            "policy_source": "workspace review" if cwd else "user review",
+            "trust_scope": str(Path(cwd).expanduser().resolve()) if cwd else "user",
         }
 
     def set_hook_trust(
@@ -570,7 +641,7 @@ class HookStore:
 
         with self._trust_lock:
             records = self._read_trust_records()
-            records[hook_id] = {
+            records[self._trust_key(hook_id, cwd)] = {
                 "fingerprint": current_fingerprint,
                 "trusted": bool(trusted),
                 "reviewed_at": datetime.now(timezone.utc).isoformat(),
@@ -584,13 +655,20 @@ class HookStore:
                 encoding="utf-8",
             )
             os.replace(temp, self._trust_path)
-        return {**hook, **self.trust_status(hook)}
+        return {**hook, **self.trust_status(hook, cwd)}
 
     def _data(self) -> dict[str, Any]:
         if not self.path.exists():
             return {}
         with self.path.open("rb") as stream:
-            return tomllib.load(stream)
+            data = tomllib.load(stream)
+        for hook in data.get("hooks", []):
+            if isinstance(hook, dict) and isinstance(hook.get("handler_json"), str):
+                try:
+                    hook["handler"] = json.loads(hook.pop("handler_json"))
+                except json.JSONDecodeError:
+                    hook["handler"] = {}
+        return data
 
     def list(self) -> list[dict[str, Any]]:
         return list(self._data().get("hooks", []))
@@ -624,7 +702,7 @@ class HookStore:
         for hook in [*legacy, *claude]:
             default_source = "claude" if isinstance(hook.get("hooks"), list) else "atlas"
             normalized = {**hook, "source": hook.get("source") or default_source}
-            result.append({**normalized, **self.trust_status(normalized)})
+            result.append({**normalized, **self.trust_status(normalized, cwd)})
         return result
 
     def set_hook_enabled(self, hook_id: str, enabled: bool, cwd: str | None = None) -> dict[str, Any]:
@@ -664,6 +742,7 @@ class HookStore:
                 f"id = {json.dumps(hook['id'], ensure_ascii=False)}",
                 f"event = {json.dumps(hook['event'], ensure_ascii=False)}",
                 f"command = {json.dumps(hook['command'], ensure_ascii=False)}",
+                f"handler_json = {json.dumps(json.dumps(hook.get('handler', {'type': 'command', 'command': hook.get('command', '')}), ensure_ascii=False), ensure_ascii=False)}",
                 f"timeout_s = {int(hook.get('timeout_s', 30))}",
                 f"enabled = {str(bool(hook.get('enabled', True))).lower()}",
                 "",
@@ -716,9 +795,9 @@ class HookStore:
         # hook cannot execute after another hook has already produced side effects.
         for hook in atlas_hooks:
             atlas_hook = {**hook, "source": "atlas", "matcher": None}
-            status = self.trust_status(atlas_hook)
+            status = self.trust_status(atlas_hook, cwd)
             if not status["trusted"]:
-                return self._deny_untrusted(atlas_hook, event, "atlas")
+                return self._deny_untrusted(atlas_hook, event, "atlas", cwd=cwd)
         for group in claude_hooks_to_run:
             if group.get("event") != claude_event or not _matches(
                 group.get("matcher"), str(claude_event), claude_payload,
@@ -731,16 +810,15 @@ class HookStore:
                 for spec in group.get("hooks", [])
             )
             reviewed_group = {**group, "source": group.get("source") or "claude"}
-            if matching_command and not self.trust_status(reviewed_group)["trusted"]:
+            if matching_command and not self.trust_status(reviewed_group, cwd)["trusted"]:
                 return self._deny_untrusted(
-                    reviewed_group, str(claude_event), str(reviewed_group["source"]),
+                    reviewed_group, str(claude_event), str(reviewed_group["source"]), cwd=cwd,
                 )
 
         for hook in atlas_hooks:
             started = time.monotonic()
-            code, output, stderr = await _run_command(
-                {"command": hook["command"], "timeout": hook.get("timeout_s", 30)},
-                {"event": event, **payload}, cwd=cwd, plugin_root=None,
+            code, output, stderr = await _run_atlas_handler(
+                hook, {"event": event, **payload}, cwd=cwd,
             )
             log = {"hook_id": hook["id"], "event": event, "exit_code": code,
                    "duration_ms": round((time.monotonic() - started) * 1000),
@@ -751,7 +829,9 @@ class HookStore:
                 maybe_awaitable = emit("hook.ran", log)
                 if asyncio.iscoroutine(maybe_awaitable):
                     await maybe_awaitable
-            if event == "tool.before" and code == 2:
+            handler = hook.get("handler")
+            handler_type = str(handler.get("type") or "command") if isinstance(handler, Mapping) else "command"
+            if event == "tool.before" and (code == 2 or (handler_type in {"http", "mcp"} and code != 0)):
                 blocked.update(blocked=True, reason=stderr.strip() or output.strip() or "Blocked by hook")
                 break
 
@@ -780,14 +860,13 @@ class HookStore:
         hook = next((item for item in self.list() if item.get("id") == hook_id), None)
         if hook:
             atlas_hook = {**hook, "source": "atlas", "matcher": None}
-            if not self.trust_status(atlas_hook)["trusted"]:
-                return self._deny_untrusted_sync(atlas_hook, hook["event"], "atlas")
+            if not self.trust_status(atlas_hook, cwd)["trusted"]:
+                return self._deny_untrusted_sync(atlas_hook, hook["event"], "atlas", cwd=cwd)
             started = time.monotonic()
-            code, output, stderr = await _run_command(
-                {"command": hook["command"], "timeout": hook.get("timeout_s", 30)},
-                {"event": hook["event"], "run_id": "example-run",
+            code, output, stderr = await _run_atlas_handler(
+                hook, {"event": hook["event"], "run_id": "example-run",
                  "conversation_id": "example-conversation", "tool_name": "example",
-                 "parameters": {}, "result": None}, cwd=None, plugin_root=None,
+                 "parameters": {}, "result": None}, cwd=cwd,
             )
             log = {"hook_id": hook_id, "event": hook["event"], "exit_code": code,
                    "duration_ms": round((time.monotonic() - started) * 1000),
@@ -798,9 +877,9 @@ class HookStore:
         if not group:
             raise KeyError(hook_id)
         reviewed_group = {**group, "source": group.get("source") or "claude"}
-        if not self.trust_status(reviewed_group)["trusted"]:
+        if not self.trust_status(reviewed_group, cwd)["trusted"]:
             return self._deny_untrusted_sync(
-                reviewed_group, str(reviewed_group.get("event") or ""), str(reviewed_group["source"]),
+                reviewed_group, str(reviewed_group.get("event") or ""), str(reviewed_group["source"]), cwd=cwd,
             )
         payload = {
             "session_id": "example-session", "tool_name": "example",
@@ -814,23 +893,23 @@ class HookStore:
         return {"hook_id": hook_id, "event": group["event"], **result}
 
     def _deny_untrusted_sync(
-        self, hook: Mapping[str, Any], event: str, source: str,
+        self, hook: Mapping[str, Any], event: str, source: str, *, cwd: str | None = None,
     ) -> dict[str, Any]:
         hook_id = str(hook.get("id") or "")
         reason = f"Hook「{hook_id}」尚未通过信任审查，已阻止执行。请在 Hooks 设置页明确批准后重试。"
         log = {
             "hook_id": hook_id, "event": event, "exit_code": None,
             "duration_ms": 0, "output": "", "stderr": reason,
-            "source": source, "trust_state": self.trust_status(hook)["trust_state"],
+            "source": source, "trust_state": self.trust_status(hook, cwd)["trust_state"],
             "blocked": True, "review_required": True, "reason": reason,
         }
         self._record(log)
         return log
 
     def _deny_untrusted(
-        self, hook: Mapping[str, Any], event: str, source: str,
+        self, hook: Mapping[str, Any], event: str, source: str, *, cwd: str | None = None,
     ) -> dict[str, Any]:
-        log = self._deny_untrusted_sync(hook, event, source)
+        log = self._deny_untrusted_sync(hook, event, source, cwd=cwd)
         return {
             "blocked": True, "reason": log["reason"], "updated_input": None,
             "additional_context": "", "continue": None, "logs": [log],

@@ -14,7 +14,7 @@ export type PackageResourceKind = 'extension' | 'skill' | 'prompt' | 'theme';
 export type ExtensionPackageSource = {
   id: string;
   name: string;
-  scope: 'user' | 'project';
+  scope: 'user' | 'workspace' | 'project';
   source_type: 'local' | 'registry';
   source: string;
   resource_kinds: PackageResourceKind[];
@@ -33,8 +33,9 @@ const toDraft = (source: ExtensionPackageSource): Draft => ({ ...source, metadat
 /** Adds and validates source metadata. It never reads local files or downloads package code. */
 export default function ExtensionPackagesPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [sources, setSources] = useState<ExtensionPackageSource[]>([]);
-  const [scopeCapabilities, setScopeCapabilities] = useState<{ user: ScopeCapability; project: ScopeCapability }>({
+  const [scopeCapabilities, setScopeCapabilities] = useState<{ user: ScopeCapability; workspace: ScopeCapability; project: ScopeCapability }>({
     user: { available: true, reason: '用户级技能来源通过 Atlas Skill Market 加载。' },
+    workspace: { available: false, reason: '正在读取后端作用范围能力。' },
     project: { available: false, reason: '正在读取后端作用范围能力。' },
   });
   const [selectedId, setSelectedId] = useState('');
@@ -51,11 +52,12 @@ export default function ExtensionPackagesPanel({ apiBaseUrl }: { apiBaseUrl: str
     const result = await api<{
       sources: ExtensionPackageSource[];
       execution_supported: boolean;
-      scope_capabilities?: { user?: ScopeCapability; project?: ScopeCapability };
+      scope_capabilities?: { user?: ScopeCapability; workspace?: ScopeCapability; project?: ScopeCapability };
     }>(apiBaseUrl, '/api/extension-packages');
     setSources(result.sources ?? []);
     setScopeCapabilities({
       user: result.scope_capabilities?.user ?? { available: false, reason: '后端没有声明用户级来源能力。' },
+      workspace: result.scope_capabilities?.workspace ?? { available: false, reason: '后端没有声明工作区级来源能力。' },
       project: result.scope_capabilities?.project ?? { available: false, reason: '后端没有声明项目级来源能力。' },
     });
     if (!selectedId && result.sources?.length) setSelectedId(result.sources[0].id);
@@ -64,6 +66,7 @@ export default function ExtensionPackagesPanel({ apiBaseUrl }: { apiBaseUrl: str
     void load().catch((error) => {
       setScopeCapabilities({
         user: { available: false, reason: '无法读取后端作用范围能力。' },
+        workspace: { available: false, reason: '无法读取后端作用范围能力；工作区来源已禁用。' },
         project: { available: false, reason: '无法读取后端作用范围能力；项目来源已禁用。' },
       });
       fail(error);
@@ -90,6 +93,10 @@ export default function ExtensionPackagesPanel({ apiBaseUrl }: { apiBaseUrl: str
       resource_kinds: draft.resource_kinds, registry_metadata: registryMetadata, validation_state: 'unvalidated', diagnostics: [],
     };
     if (!payload.name || !payload.source || !payload.resource_kinds.length) { setMessage({ ok: false, text: '请填写名称、来源，并至少选择一种资源类型。' }); return; }
+    if (payload.scope === 'workspace' && !scopeCapabilities.workspace.available) {
+      setMessage({ ok: false, text: scopeCapabilities.workspace.reason || '当前后端不支持工作区级来源。' });
+      return;
+    }
     if (payload.scope === 'project' && !scopeCapabilities.project.available) {
       setMessage({ ok: false, text: scopeCapabilities.project.reason || '当前后端不支持项目级来源。' });
       return;
@@ -128,9 +135,9 @@ export default function ExtensionPackagesPanel({ apiBaseUrl }: { apiBaseUrl: str
   return <section className="grid gap-4" aria-label="扩展包来源">
     <header><h2 className="text-[15px] font-semibold text-fg">扩展包来源</h2><p className="mt-1 text-[12.5px] text-fg-3">用户级技能来源可连接到 Atlas Skill Market。扩展代码、提示词和主题目前只登记为元数据，不会安装或执行；本地技能目录检查只读取目录结构，注册表检查不会抓取远端内容。</p></header>
     <div className="rounded-xl bg-sunken px-3 py-2 text-[12px] text-fg-2" role="status">
-      <span className="font-medium">项目范围：{scopeCapabilities.project.available ? '可用' : '不可用'}</span>
-      <p className="mt-1 text-fg-3">{scopeCapabilities.project.reason || '后端未提供项目级来源能力。'}</p>
-      {!scopeCapabilities.project.available && <p className="mt-1 text-fg-3">当前运行时没有按活动 workspace 隔离的 workspace-scoped plugin loader；项目来源不可启用，也不会以项目元数据形式保存。</p>}
+      <span className="font-medium">工作区范围：{scopeCapabilities.workspace.available ? '可用' : '不可用'} · 项目范围：{scopeCapabilities.project.available ? '可用' : '不可用'}</span>
+      <p className="mt-1 text-fg-3">{scopeCapabilities.workspace.reason || '后端未提供工作区级来源能力。'} {scopeCapabilities.project.reason || '后端未提供项目级来源能力。'}</p>
+      {!scopeCapabilities.workspace.available && !scopeCapabilities.project.available && <p className="mt-1 text-fg-3">当前设置 API 未收到活动 workspace，也没有按工作区/项目隔离的加载器；这些范围不会被保存为有效覆盖。</p>}
     </div>
     <div className="grid grid-cols-[190px_minmax(0,1fr)] gap-5">
       <nav className="grid content-start gap-1" aria-label="包来源列表">
@@ -143,7 +150,7 @@ export default function ExtensionPackagesPanel({ apiBaseUrl }: { apiBaseUrl: str
       </nav>
 
       {draft ? <form onSubmit={(event) => void save(event)} className="grid content-start gap-3 text-[12.5px] text-fg-2">
-        <div className="grid grid-cols-2 gap-3"><label className="grid gap-1">显示名称<input required value={draft.name} onChange={(event) => update({ name: event.target.value })} className={field} /></label><label className="grid gap-1">作用范围<select value={draft.scope} onChange={(event) => update({ scope: event.target.value as Draft['scope'] })} className={field}><option value="user" disabled={!scopeCapabilities.user.available}>用户</option><option value="project" disabled={!scopeCapabilities.project.available}>项目{scopeCapabilities.project.available ? '' : '（不可用）'}</option></select></label></div>
+        <div className="grid grid-cols-2 gap-3"><label className="grid gap-1">显示名称<input required value={draft.name} onChange={(event) => update({ name: event.target.value })} className={field} /></label><label className="grid gap-1">作用范围<select value={draft.scope} onChange={(event) => update({ scope: event.target.value as Draft['scope'] })} className={field}><option value="user" disabled={!scopeCapabilities.user.available}>用户</option><option value="workspace" disabled={!scopeCapabilities.workspace.available}>工作区{scopeCapabilities.workspace.available ? '' : '（不可用）'}</option><option value="project" disabled={!scopeCapabilities.project.available}>项目{scopeCapabilities.project.available ? '' : '（不可用）'}</option></select></label></div>
         <div className="grid grid-cols-2 gap-3"><label className="grid gap-1">来源类型<select value={draft.source_type} onChange={(event) => update({ source_type: event.target.value as Draft['source_type'], validation_state: 'unvalidated', diagnostics: [] })} className={field}><option value="local">本地路径</option><option value="registry">注册表 URL</option></select></label><label className="grid gap-1">{draft.source_type === 'local' ? '本地路径（仅登记）' : '注册表 URL'}<input required value={draft.source} onChange={(event) => update({ source: event.target.value })} className={cn(field, 'font-mono text-[12px]')} placeholder={draft.source_type === 'local' ? 'D:\\packages\\my-extension' : 'https://example.com/catalog.json'} /></label></div>
         <fieldset className="grid gap-2"><legend>资源类型</legend><div className="flex flex-wrap gap-2">{kinds.map((kind) => <label key={kind.id} className="flex items-center gap-1.5 rounded-lg bg-sunken px-2.5 py-1.5 shadow-[inset_0_0_0_1px_var(--line)]"><input type="checkbox" checked={draft.resource_kinds.includes(kind.id)} onChange={(event) => update({ resource_kinds: event.target.checked ? [...draft.resource_kinds, kind.id] : draft.resource_kinds.filter((value) => value !== kind.id) })} />{kind.label}</label>)}</div></fieldset>
         <label className="grid gap-1">注册表元数据（JSON 对象）<small className="text-fg-3">可填写 registry、publisher、version、repository、catalog_url 等字段。</small><textarea rows={7} value={draft.metadataText} onChange={(event) => update({ metadataText: event.target.value })} className={area} /></label>

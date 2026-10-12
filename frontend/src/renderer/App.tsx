@@ -26,7 +26,7 @@ import ShortcutsPanel from './pages/ShortcutsPanel';
 import ScriptToolsPanel from './pages/ScriptToolsPanel';
 import TelegramPanel from './pages/TelegramPanel';
 import UsagePanel from './pages/UsagePanel';
-import { loadBindings, matchShortcut } from './services/shortcuts';
+import { comboFromEvent, loadBindings, matchShortcut, shortcutSignature } from './services/shortcuts';
 import type { CustomCommandInfo, PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
@@ -69,6 +69,9 @@ import MainConfigPanel from './components/settings/MainConfigPanel';
 import ExpertModePanel, { ExpertModeBadge, OPEN_EXPERT_SETTINGS } from './components/settings/ExpertModePanel';
 import OutputStyleSettingsPanel from './components/settings/OutputStyleSettingsPanel';
 import McpResourcesPanel from './components/settings/McpResourcesPanel';
+import ComputerUseSettingsPanel from './components/settings/ComputerUseSettingsPanel';
+import PluginHostPanel from './components/settings/PluginHostPanel';
+import { callPluginHostMcpAction, emptyPluginHost, loadPluginHost, type PluginHostContributions } from './services/pluginHost';
 import LocalModelsPanel from './components/settings/LocalModelsPanel';
 import LinearIntegrationPanel from './components/settings/LinearIntegrationPanel';
 import Sidebar, { MORE_NAV, NAV, type View } from './shell/Sidebar';
@@ -187,6 +190,7 @@ export default function App() {
     return () => query.removeEventListener('change', update);
   }, []);
   const [sheet, setSheet] = useState<SheetPane | null>(null);
+  const [pluginHost, setPluginHost] = useState<PluginHostContributions>(emptyPluginHost);
   const [settingsQuery, setSettingsQuery] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -216,6 +220,10 @@ export default function App() {
   const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [bindings, setBindings] = useState(loadBindings);
+  useEffect(() => {
+    if (!store.connected) { setPluginHost(emptyPluginHost); return; }
+    void loadPluginHost(store.apiBaseUrl).then(setPluginHost).catch(() => setPluginHost(emptyPluginHost));
+  }, [store.apiBaseUrl, store.connected]);
   useEffect(() => {
     const update = () => setBindings(loadBindings());
     window.addEventListener('atlas:shortcuts', update);
@@ -688,6 +696,13 @@ export default function App() {
         askSelectedText();
         return;
       }
+      const pluginBinding = pluginHost.keybinds.find((item) => item.shortcut
+        && shortcutSignature(item.shortcut) === shortcutSignature(comboFromEvent(event)));
+      if (pluginBinding) {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('atlas:plugin-host-command', { detail: { command: pluginBinding.command || pluginBinding.id } }));
+        return;
+      }
       const action = matchShortcut(event, bindings);
       if (!action) return;
       event.preventDefault();
@@ -832,12 +847,40 @@ export default function App() {
       run: (argument: string) => void runCustomCommand(command, argument),
     })),
   ];
+  for (const contribution of pluginHost.commands) {
+    const target = (contribution.command ?? '').replace(/^\/+/, '');
+    const registered = slashCommands.find((item) => item.id === target || item.label.replace(/^\/+/, '') === target);
+    if (!registered) continue;
+    slashCommands.push({ id: `plugin:${contribution.plugin}:${contribution.id}`, label: `/${contribution.id}`,
+      hint: contribution.description || `${contribution.plugin_title} 插件命令`, group: '插件',
+      run: (argument) => registered.run(argument) });
+  }
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'
       : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export'].includes(command.id) ? '会话'
         : ['goal', 'plan', 'agents', 'ps', 'stop', 'status'].includes(command.id) ? '任务'
           : ['model', 'permissions', 'usage', 'context', 'diff'].includes(command.id) ? '状态' : '工具';
   });
+  useEffect(() => {
+    const onPluginCommand = (event: Event) => {
+      const target = String((event as CustomEvent<{ command?: string }>).detail?.command ?? '').replace(/^\/+/, '');
+      const command = slashCommands.find((item) => item.id === target || item.label.replace(/^\/+/, '') === target);
+      if (command) command.run(''); else setToast(`没有注册命令：${target}`);
+    };
+    window.addEventListener('atlas:plugin-host-command', onPluginCommand);
+    return () => window.removeEventListener('atlas:plugin-host-command', onPluginCommand);
+  });
+  const registeredPaletteItems: PaletteItem[] = slashCommands.map((command) => ({
+    id: `registered:${command.id}`, group: command.group || '命令', label: command.label,
+    hint: command.hint, run: () => command.run(''),
+  }));
+  const pluginMenuPaletteItems: PaletteItem[] = pluginHost.menuItems.filter((item) => item.command || item.route).map((item) => ({
+    id: `plugin-menu:${item.plugin}:${item.id}`, group: item.plugin_title, label: item.title,
+    hint: item.description || item.shortcut, run: () => {
+      if (item.command) window.dispatchEvent(new CustomEvent('atlas:plugin-host-command', { detail: { command: item.command } }));
+      else if (item.route === 'chat' || item.route === 'code' || item.route === 'agents' || item.route === 'auto' || item.route === 'home') go(item.route);
+    },
+  }));
   const conversationsRef = useRef(store.conversations);
   conversationsRef.current = store.conversations;
   const searchMessages = useCallback(async (query: string): Promise<PaletteItem[]> => {
@@ -1335,7 +1378,7 @@ export default function App() {
         </section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
           <div className="grid gap-8"><ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /><OutputStyleSettingsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
-        {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">脚本工具</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">用一个小脚本给 Atlas 加新能力。</p><ScriptToolsPanel /></section>}
+        {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">工具与授权</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理脚本扩展和能够操作本机桌面的授权。</p><div className="grid gap-6"><ComputerUseSettingsPanel apiBaseUrl={store.apiBaseUrl} /><div><h4 className="mb-2 text-[13px] font-semibold text-fg">脚本工具</h4><ScriptToolsPanel /></div></div></section>}
         {sheet === 'telegram' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">手机远程（Telegram）</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">不在电脑前时，用手机给 Atlas 布置任务、看结果、批准操作。</p><TelegramPanel /></section>}
         {sheet === 'channels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Gateway 与渠道账号</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置当前已注册渠道的账号和密钥；消息进来后交给哪个 Agent，在 Agents → Channels 里绑定。</p><ChannelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'devices' && <div className="-mx-2 -mt-1"><DevicesPage onToast={notify} /></div>}
@@ -1349,7 +1392,7 @@ export default function App() {
         {sheet === 'mcp' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">MCP 服务</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理 Atlas 已支持的 MCP 服务，并浏览服务显式提供的资源。</p><div className="grid gap-8"><McpServersPanel apiBaseUrl={store.apiBaseUrl} /><McpResourcesPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
         {sheet === 'skills' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Skills</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">搜索、安装和审阅技能；外部技能会先进入安全复核。</p><SkillsMarketPage apiBaseUrl={store.apiBaseUrl} onToast={notify} onTryInConversation={(name) => { store.applySkill(name); go('chat'); setSheet(null); }} /></section>}
         {sheet === 'recipes' && <RecipeManagerPanel apiBaseUrl={store.apiBaseUrl} models={store.models} providers={store.providers} onLaunch={launchRecipeTemplate} />}
-        {sheet === 'extensions' && <div className="grid gap-8"><ExtensionCatalogPanel apiBaseUrl={store.apiBaseUrl} /><ExtensionPackagesPanel apiBaseUrl={store.apiBaseUrl} /></div>}
+        {sheet === 'extensions' && <div className="grid gap-8"><ExtensionCatalogPanel apiBaseUrl={store.apiBaseUrl} /><PluginHostPanel contributions={pluginHost} onRoute={(route) => go(route as View)} onCommand={(command) => window.dispatchEvent(new CustomEvent('atlas:plugin-host-command', { detail: { command } }))} onToast={notify} onMcpAction={async (plugin, page, widget) => { const result = await callPluginHostMcpAction(store.apiBaseUrl, plugin, page, widget); return result.follow_up || (result.is_error ? 'MCP 工具调用失败。' : 'MCP 工具调用已完成。'); }} /><ExtensionPackagesPanel apiBaseUrl={store.apiBaseUrl} /></div>}
         {sheet === 'transfer' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">配置导入导出</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">转移允许携带的本地偏好；密钥、地址和路径不会进入导出文件。</p><ConfigTransferPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'diagnostics' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本机诊断</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">只读检查本机 Atlas 状态；报告不会上传原始配置、日志、密钥或路径。</p><DiagnosticsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'telemetry' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">遥测隐私</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">只管理 Atlas 附带的 MemOS Local 插件 sender，不影响其他服务。</p><TelemetryPrivacyPanel apiBaseUrl={store.apiBaseUrl} /></section>}
@@ -1361,7 +1404,7 @@ export default function App() {
       </div>
     </Dialog>
 
-    <Palette items={paletteItems} open={paletteOpen} onClose={() => setPaletteOpen(false)} search={searchMessages} />
+    <Palette items={[...paletteItems, ...registeredPaletteItems, ...pluginMenuPaletteItems]} open={paletteOpen} onClose={() => setPaletteOpen(false)} search={searchMessages} />
 
     {voiceOpen && <VoiceOverlay
       onClose={(toChat) => { setVoiceOpen(false); if (toChat) go('chat'); }}

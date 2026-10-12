@@ -58,6 +58,7 @@ from atlas.api.library_router import router as library_router
 from atlas.api.expert_mode_router import router as expert_mode_router
 from atlas.api.config_editor_router import router as config_editor_router
 from atlas.api.tools_router import router as tools_router
+from atlas.api.plugin_host_router import router as plugin_host_router
 from atlas.config import get_config
 from atlas.models.routes import models_router
 from atlas.origin_guard import DEV_ORIGINS, OriginGuard
@@ -131,6 +132,7 @@ def create_app(
         runtime_ws_router,
         scheduling_router,
         tools_router,
+        plugin_host_router,
         usage_router,
         workspace_router,
         workbench_router,

@@ -383,6 +383,60 @@ class PluginRuntime:
     def list_marketplaces(self) -> list[dict[str, Any]]:
         return [dict(record) for _name, record in sorted(self._state.get("marketplaces", {}).items())]
 
+    def validate_marketplace(self, name: str) -> dict[str, Any]:
+        """Inspect a registered catalog without network access or code execution."""
+        record = self._state.get("marketplaces", {}).get(name)
+        if not isinstance(record, dict):
+            raise KeyError(name)
+        root = Path(str(record.get("path", "")))
+        diagnostics: list[str] = []
+        manifest_path = next((root / item for item in MARKETPLACE_NAMES if (root / item).is_file()), None)
+        if manifest_path is None:
+            return {"name": name, "valid": False, "diagnostics": ["marketplace.json was not found in the registered source."]}
+        try:
+            catalog = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            return {"name": name, "valid": False, "diagnostics": [f"Cannot read marketplace.json: {exc}"]}
+        if not isinstance(catalog, dict):
+            return {"name": name, "valid": False, "diagnostics": ["marketplace.json must contain a JSON object."]}
+        entries = catalog.get("plugins")
+        if not isinstance(entries, list):
+            return {"name": name, "valid": False, "diagnostics": ["marketplace.json must declare a plugins array."]}
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                diagnostics.append(f"plugins[{index}] must be an object.")
+                continue
+            if not str(entry.get("name", "")).strip():
+                diagnostics.append(f"plugins[{index}] is missing a name.")
+            if not (isinstance(entry.get("source"), (str, dict)) and entry.get("source")):
+                diagnostics.append(f"plugins[{index}] is missing a supported source declaration.")
+        if not root.is_dir():
+            diagnostics.append("Registered catalog directory is unavailable.")
+        if not diagnostics:
+            diagnostics.append(f"Catalog JSON is valid and contains {len(entries)} plugin entries. Remote plugin sources were not fetched.")
+        return {"name": name, "valid": not any("missing" in item or "must be" in item for item in diagnostics),
+                "path": str(root), "plugin_count": len(entries), "diagnostics": diagnostics}
+
+    def remove_marketplace(self, name: str) -> dict[str, Any]:
+        """Unregister a marketplace while preserving installed plugin references and files."""
+        if name not in self._state.get("marketplaces", {}):
+            raise KeyError(name)
+        references = [plugin for plugin, source in self._state.get("sources", {}).items()
+                      if isinstance(source, dict) and source.get("source") == "marketplace"
+                      and source.get("marketplace") == name]
+        if references:
+            raise ValueError("Marketplace is used by installed plugins: " + ", ".join(sorted(references)))
+        del self._state["marketplaces"][name]
+        self._save_state()
+        return {"name": name, "removed": True, "catalog_files_preserved": True}
+
+    def reset_user_overrides(self) -> dict[str, Any]:
+        """Clear explicit user enable/disable choices and restore manifest defaults."""
+        count = len(self._enabled)
+        self._enabled.clear()
+        self._save_state()
+        return {"scope": "user", "reset": True, "overrides_cleared": count}
+
     @staticmethod
     def _marketplace_root(path: Path) -> Path | None:
         if any((path / item).is_file() for item in MARKETPLACE_NAMES):

@@ -9,6 +9,7 @@ import { api } from '../../services/api';
 import { Button } from '../../ui/Button';
 import { cn } from '../../ui/cn';
 import type { ExtensionPackageSource, PackageResourceKind } from './ExtensionPackagesPanel';
+import PluginMarketplacePanel from './PluginMarketplacePanel';
 
 type CatalogKind = PackageResourceKind | 'all';
 type Resource = {
@@ -141,7 +142,7 @@ export default function ExtensionCatalogPanel({ apiBaseUrl }: { apiBaseUrl: stri
     try {
       if (item.toggle === 'plugin') {
         const name = item.id.slice('plugin:'.length);
-        await api(apiBaseUrl, `/api/plugins/${encodeURIComponent(name)}/enabled`, { method: 'POST', json: { enabled: !item.enabled } });
+        await api(apiBaseUrl, `/api/plugins/${encodeURIComponent(name)}/enabled`, { method: 'POST', json: { scope: 'user', enabled: !item.enabled } });
       } else if (item.toggle === 'skill') {
         const name = item.id.slice('skill:'.length);
         await api(apiBaseUrl, `/api/skills/market/${encodeURIComponent(name)}/enabled`, { method: 'PATCH', json: { enabled: !item.enabled } });
@@ -170,12 +171,14 @@ export default function ExtensionCatalogPanel({ apiBaseUrl }: { apiBaseUrl: stri
   };
 
   return <section className="grid gap-4" aria-label="扩展目录">
-    <header className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-[15px] font-semibold text-fg">扩展目录</h2><p className="mt-1 text-[12.5px] text-fg-3">扩展开关调用现有 PluginRuntime；技能开关与来源状态调用 Atlas Skill Market。</p></div><div className="flex gap-2"><Button size="sm" variant={resetArmed ? 'danger' : 'ghost'} disabled={busy} onClick={() => void resetDefaults()}><RotateCcw />{resetArmed ? '再次点击恢复默认来源' : '恢复默认来源'}</Button><Button size="sm" disabled={busy} onClick={() => void load()}><RefreshCw className={busy ? 'animate-spin' : ''} />刷新</Button></div></header>
+    <header className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-[15px] font-semibold text-fg">扩展目录</h2><p className="mt-1 text-[12.5px] text-fg-3">插件启停是用户级设置；工作区和项目级插件加载当前不受支持。</p></div><div className="flex gap-2"><Button size="sm" variant={resetArmed ? 'danger' : 'ghost'} disabled={busy} onClick={() => void resetDefaults()}><RotateCcw />{resetArmed ? '再次点击恢复默认来源' : '恢复默认来源'}</Button><Button size="sm" disabled={busy} onClick={() => void load()}><RefreshCw className={busy ? 'animate-spin' : ''} />刷新</Button></div></header>
 
     <section className="grid gap-2 rounded-xl bg-sunken p-3 shadow-[inset_0_0_0_1px_var(--line)]">
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><PackageSearch size={17} className="text-brand" /><div><p className="text-[12.5px] font-medium text-fg">Cline Marketplace</p><p className="text-[11px] text-fg-3">GitHub catalog reference · 不可直接作为 Atlas 插件加载源</p></div></div><a href={clineMarketplace} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[12px] text-brand hover:underline">查看目录仓库<ExternalLink size={13} /></a></div>
       <p className="text-[11.5px] leading-relaxed text-fg-3">项目作用域当前不可选。Atlas 插件加载与扩展注册表是进程级共享；若将项目开关写成有效状态，会影响其他工作区。技能市场已安装到项目目录的技能显示其实际安装范围，但现有运行时只使用配置的默认工作区。</p>
     </section>
+
+    <PluginMarketplacePanel apiBaseUrl={apiBaseUrl} onChanged={() => void load()} />
 
     <div className="flex flex-wrap gap-2"><select aria-label="资源类型筛选" value={kind} onChange={(event) => setKind(event.target.value as CatalogKind)} className={control}><option value="all">所有类型</option>{Object.entries(kindLabels).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select><input aria-label="搜索目录" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索名称、说明或来源" className={cn(control, 'min-w-60 flex-1')} /><span className="self-center text-[11px] text-fg-3">{filtered.length} 项{lastLoaded && ` · ${lastLoaded} 更新`}</span></div>
 

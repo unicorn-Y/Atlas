@@ -41,6 +41,43 @@ async def computer_status() -> dict[str, Any]:
     return await asyncio.to_thread(status_snapshot)
 
 
+@router.get("/settings")
+async def computer_settings() -> dict[str, Any]:
+    """Current host authorization for Computer Use."""
+    from atlas.config import get_config
+
+    mode = get_config().computer_use_permission_mode
+    return {"enabled": mode != "deny", "permission_mode": mode}
+
+
+class ComputerUseSettings(BaseModel):
+    enabled: bool
+
+
+@router.put("/settings", dependencies=[Depends(_require_trusted_origin)])
+async def update_computer_settings(body: ComputerUseSettings) -> dict[str, Any]:
+    """Change the single persisted Computer Use authorization switch."""
+    import tomllib
+
+    import tomli_w
+
+    from atlas import config as config_module
+    from atlas.api.config_editor_router import _write_with_backup
+
+    try:
+        current = tomllib.loads(config_module.CONFIG_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        current = {}
+    section = current.get("computer_use")
+    if not isinstance(section, dict):
+        section = {}
+        current["computer_use"] = section
+    section["permission_mode"] = "full_access" if body.enabled else "deny"
+    _write_with_backup(config_module.CONFIG_PATH, tomli_w.dumps(current))
+    config_module.reload_config()
+    return {"enabled": body.enabled, "permission_mode": "full_access" if body.enabled else "deny"}
+
+
 class ForegroundResolution(BaseModel):
     run_id: str
     approve: bool

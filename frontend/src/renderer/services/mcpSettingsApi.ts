@@ -3,7 +3,7 @@
  * zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f (Apache-2.0) and
  * anomalyco/opencode@7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937 (MIT).
  */
-export type McpTransport = 'stdio' | 'sse';
+export type McpTransport = 'stdio' | 'sse' | 'streamable_http';
 
 export interface McpServerToolListItem {
   name: string;
@@ -19,6 +19,10 @@ export interface McpRuntimeServer {
   state: string;
   tool_count: number;
   blocking_reason?: string | null;
+  diagnostic?: string | null;
+  allowed_tools?: string[] | null;
+  header_names?: string[];
+  url?: string;
 }
 
 export interface McpServerRow extends McpRuntimeServer {
@@ -33,10 +37,13 @@ export interface McpServerRequest {
   env?: Record<string, string>;
   cwd?: string;
   url?: string;
+  headers?: Record<string, string>;
 }
 
-interface DependencyCheckResponse {
-  mcp_servers?: McpRuntimeServer[];
+export interface McpServerSettingsPatch {
+  enabled?: boolean;
+  allowed_tools?: string[] | null;
+  headers?: Record<string, string>;
 }
 
 interface McpServerListResponse {
@@ -61,7 +68,7 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
 export async function loadMcpServers(baseUrl: string): Promise<McpServerRow[]> {
   const [liveResult, runtimeResult] = await Promise.allSettled([
     request<McpServerListResponse>(baseUrl, '/api/mcp/servers'),
-    request<DependencyCheckResponse>(baseUrl, '/api/runtime/dependency-check'),
+    request<{ servers?: McpRuntimeServer[] }>(baseUrl, '/api/mcp/settings/servers'),
   ]);
   if (liveResult.status === 'rejected' && runtimeResult.status === 'rejected') {
     throw liveResult.reason instanceof Error ? liveResult.reason : new Error('无法读取 MCP 服务');
@@ -71,7 +78,9 @@ export async function loadMcpServers(baseUrl: string): Promise<McpServerRow[]> {
   if (liveResult.status === 'fulfilled') {
     for (const server of liveResult.value.servers ?? []) toolsByName.set(server.name, server.tools ?? []);
   }
-  const runtimeServers = runtimeResult.status === 'fulfilled' ? runtimeResult.value.mcp_servers ?? [] : [];
+  const runtimeServers = runtimeResult.status === 'fulfilled'
+    ? runtimeResult.value.servers ?? []
+    : [];
   const rows: McpServerRow[] = runtimeServers.map((server) => ({
     ...server,
     tools: toolsByName.get(server.name) ?? [],
@@ -103,4 +112,15 @@ export function restartMcpServer(baseUrl: string, name: string): Promise<McpServ
 
 export function removeMcpServer(baseUrl: string, name: string): Promise<{ status: string }> {
   return request(baseUrl, `/api/mcp/servers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+}
+
+export function patchMcpServerSettings(
+  baseUrl: string,
+  name: string,
+  patch: McpServerSettingsPatch,
+): Promise<McpRuntimeServer> {
+  return request(baseUrl, `/api/mcp/settings/servers/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
 }

@@ -24,15 +24,17 @@ router = APIRouter(tags=["extension-packages"])
 
 ResourceKind = Literal["extension", "skill", "prompt", "theme"]
 _PROJECT_SCOPE_LIMIT = (
-    "项目级包来源暂不可启用：Atlas 的 PluginRuntime 和 Skill Market source registry "
-    "目前是进程/用户级共享状态，没有按当前会话 workspace 隔离的加载接口。"
+    "项目级扩展覆盖暂不可启用：Atlas 只在启动时使用共享 PluginRuntime，当前请求没有可验证的项目身份或项目级加载器。"
+)
+_WORKSPACE_SCOPE_LIMIT = (
+    "工作区级扩展覆盖暂不可启用：设置面板未向该 API 提供活动工作区，且 PluginRuntime 没有按工作区隔离的加载接口。"
 )
 
 
 class PackageSourcePayload(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=120)
-    scope: Literal["user", "project"] = "user"
+    scope: Literal["user", "workspace", "project"] = "user"
     source_type: Literal["local", "registry"]
     source: str = Field(min_length=1, max_length=2000)
     resource_kinds: list[ResourceKind] = Field(default_factory=lambda: ["extension"], max_length=4)
@@ -228,7 +230,11 @@ def _decorate(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _assert_user_scope(payload: PackageSourcePayload) -> None:
-    if payload.scope != "user":
+    if payload.scope == "workspace":
+        raise HTTPException(status_code=422, detail={
+            "code": "workspace_scope_unavailable", "message": _WORKSPACE_SCOPE_LIMIT,
+        })
+    if payload.scope == "project":
         raise HTTPException(status_code=422, detail={
             "code": "project_scope_unavailable", "message": _PROJECT_SCOPE_LIMIT,
         })
@@ -242,6 +248,7 @@ async def list_extension_package_sources() -> dict[str, Any]:
         "execution_supported": True,
         "scope_capabilities": {
             "user": {"available": True, "reason": "User skill sources use Atlas Skill Market."},
+            "workspace": {"available": False, "reason": _WORKSPACE_SCOPE_LIMIT},
             "project": {"available": False, "reason": _PROJECT_SCOPE_LIMIT},
         },
         "default_sources": [],
@@ -295,6 +302,10 @@ async def delete_extension_package_source(source_id: str) -> dict[str, Any]:
 @router.post("/api/extension-packages/reset")
 async def reset_extension_package_sources(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     scope = str((payload or {}).get("scope", "user"))
+    if scope == "workspace":
+        raise HTTPException(status_code=422, detail={
+            "code": "workspace_scope_unavailable", "message": _WORKSPACE_SCOPE_LIMIT,
+        })
     if scope != "user":
         raise HTTPException(status_code=422, detail={
             "code": "project_scope_unavailable", "message": _PROJECT_SCOPE_LIMIT,
