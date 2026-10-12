@@ -1,0 +1,30 @@
+F4-C first full Atlas unified-memory run — failure summary
+Timestamp: 2026-10-09 20:04:25 local
+Status: 371 passed, 2 skipped, 6 failed in 331.54s
+
+Exact command:
+$testRoot = C:\Users\25011\AppData\Local\Temp\atlas-f4-c-unified-850f812f27fe4e69bc3b9c73e7bfd935
+ATLAS_DATA_DIR=$testRoot\atlas-data
+ATLAS_UNIFIED_EVENT_CLASS=TEST
+MEMORYOS_DATA_ROOT=$testRoot\memoryos
+MEMORYOS_DB_PATH=$testRoot\memoryos\memoryos.sqlite3
+HERMES_HOME=$testRoot\hermes
+.\core\.venv\Scripts\python.exe -m pytest -q -o addopts= -p no:cacheprovider --basetemp $testRoot\pytest core/tests/unified_memory
+
+Failed nodeids and bounded observations:
+1. core/tests/unified_memory/test_behavioral_use.py::test_pre_plan_constraint_order_in_execution_flow
+   This source-inspection assertion expected phase names in execute_run itself. The implementation delegates them to _execute_run_scoped; product behavior was not shown failing. The regression was updated to verify clock scope/aclosing in execute_run and actual phase order in the scoped function.
+2. core/tests/unified_memory/test_capture_lifecycle.py::test_run_user_message_capture_swallows_capture_errors
+   Fixture mocked latest_session_message/read_session_messages and did not provide the new pre-turn UID boundary; capture correctly failed closed. Updated fixture supplies a new post-boundary SessionDB user row and checks the actual run ID.
+3. core/tests/unified_memory/test_capture_lifecycle.py::test_run_user_message_capture_prefers_matching_persisted_message
+   Fixture exercised the removed history-text fallback and supplied no baseline; updated to verify selection of the unique newly persisted original UID after the boundary.
+4. core/tests/unified_memory/test_reminder_automation.py::test_tool_update_memoryos_failure_does_not_partially_update_automation
+   FailingTransitionClient.transitions was 0, expected 1 (failure at test_reminder_automation.py:450).
+5. core/tests/unified_memory/test_reminder_automation.py::test_tool_and_observer_same_source_run_reuse_one_automation
+   Tool-created INTENT id differed from seeded observer INTENT id despite same expected source binding (assertion at line 611).
+6. core/tests/unified_memory/test_reminder_automation.py::test_cancel_and_update_intent_replays_keep_one_current_automation
+   Automation source_binding.intent_id remained old intent instead of successor (assertion at line 688).
+
+The first three failures were compatibility/source-boundary test expectations and have since passed targeted rerun (40 passed including test_test_clock_gate). The latter three are B-owned fake integration paths, not live model evidence, and were forwarded to f4_bc_map with nodeids and observed assertions. No real model request ran in this command.
+
+Evidence limitation: the pytest command did not include --junitxml and its stdout was not redirected. This file is an after-run bounded summary from the captured pytest result, not a raw stdout log or JUnit XML. The final controller-owned full run should save its own unique JUnit and stdout paths.
