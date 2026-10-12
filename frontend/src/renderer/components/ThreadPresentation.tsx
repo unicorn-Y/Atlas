@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { cn } from '../ui/cn';
 
 export type ThreadClassId = 'messages' | 'model' | 'tools' | 'approvals' | 'plans' | 'checks' | 'files' | 'status';
-export type ThreadPresentationMode = 'everything' | 'detailed' | 'compact' | 'quiet' | 'messages' | 'custom';
+export type ThreadPresentationMode = 'normal' | 'thinking' | 'verbose' | 'everything' | 'detailed' | 'compact' | 'quiet' | 'messages' | 'custom';
 
 export interface ThreadPresentationSettings {
   mode: ThreadPresentationMode;
@@ -33,7 +33,21 @@ const NONE_COLLAPSED: Record<ThreadClassId, boolean> = {
   messages: false, model: false, tools: false, approvals: false, plans: false, checks: false, files: false, status: false,
 };
 
-function settingsForMode(mode: ThreadPresentationMode): ThreadPresentationSettings {
+export function settingsForMode(mode: ThreadPresentationMode): ThreadPresentationSettings {
+  if (mode === 'normal') return {
+    mode, show: { ...ALL_VISIBLE },
+    collapsed: { ...NONE_COLLAPSED, model: true, tools: true, checks: true, files: true, status: true },
+    groupByClass: true, announceCompletedReplies: true,
+  };
+  if (mode === 'thinking') return {
+    mode, show: { ...ALL_VISIBLE },
+    collapsed: { ...NONE_COLLAPSED, tools: true, checks: true, files: true, status: true },
+    groupByClass: true, announceCompletedReplies: true,
+  };
+  if (mode === 'verbose') return {
+    mode, show: { ...ALL_VISIBLE }, collapsed: { ...NONE_COLLAPSED },
+    groupByClass: false, announceCompletedReplies: true,
+  };
   if (mode === 'compact') return {
     mode, show: { ...ALL_VISIBLE },
     collapsed: { ...NONE_COLLAPSED, model: true, tools: true, checks: true, files: true, status: true },
@@ -61,7 +75,7 @@ function readSettings(): ThreadPresentationSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return settingsForMode('everything');
     const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed) || !['everything', 'detailed', 'compact', 'quiet', 'messages', 'custom'].includes(String(parsed.mode))) {
+    if (!isRecord(parsed) || !['normal', 'thinking', 'verbose', 'everything', 'detailed', 'compact', 'quiet', 'messages', 'custom'].includes(String(parsed.mode))) {
       return settingsForMode('everything');
     }
     const fallback = settingsForMode(parsed.mode as ThreadPresentationMode);
@@ -89,9 +103,10 @@ export function useThreadPresentationSettings() {
   return [settings, setSettings] as const;
 }
 
-export function ThreadPresentationControls({ settings, onChange }: {
+export function ThreadPresentationControls({ settings, onChange, hasReasoning }: {
   settings: ThreadPresentationSettings;
   onChange: (settings: ThreadPresentationSettings) => void;
+  hasReasoning: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -126,9 +141,12 @@ export function ThreadPresentationControls({ settings, onChange }: {
         <fieldset className="m-0 border-0 p-0">
           <legend className="mb-2 text-[12px] font-semibold text-heading">预设</legend>
           <div className="grid grid-cols-2 gap-1.5">
-            {MODES.map(({ id, label }) => <button key={id} type="button" aria-pressed={settings.mode === id} onClick={() => chooseMode(id)}
+            {MODES.filter(({ id }) => id !== 'thinking' || hasReasoning).map(({ id, label }) => <button key={id} type="button" aria-pressed={settings.mode === id} onClick={() => chooseMode(id)}
               className={cn('rounded-lg border px-2 py-1.5 text-left text-[12px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand', settings.mode === id ? 'border-brand bg-brand-soft text-heading' : 'border-line text-fg-2 hover:bg-hover')}>
-              {label}
+              <span className="block">{label}</span>
+              {id === 'normal' && <span className="mt-0.5 block text-[10.5px] font-normal text-fg-3">文本完整显示，活动摘要收起</span>}
+              {id === 'thinking' && <span className="mt-0.5 block text-[10.5px] font-normal text-fg-3">显示思考，活动摘要收起</span>}
+              {id === 'verbose' && <span className="mt-0.5 block text-[10.5px] font-normal text-fg-3">展开 Atlas 已记录的全部活动</span>}
             </button>)}
           </div>
         </fieldset>
@@ -161,6 +179,9 @@ export function ThreadPresentationControls({ settings, onChange }: {
 }
 
 const MODES: Array<{ id: ThreadPresentationMode; label: string }> = [
+  { id: 'normal', label: 'Normal · 常规' },
+  { id: 'thinking', label: 'Thinking · 思考' },
+  { id: 'verbose', label: 'Verbose · 详细' },
   { id: 'everything', label: 'Everything · 全部' },
   { id: 'detailed', label: 'Detailed · 详细分组' },
   { id: 'compact', label: 'Compact · 紧凑' },

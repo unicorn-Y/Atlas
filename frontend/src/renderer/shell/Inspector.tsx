@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { FileText, FolderOpen, GitBranch, GitMerge, Trash2, X } from 'lucide-react';
+import { Download, FileText, FolderOpen, GitBranch, GitMerge, Trash2, X } from 'lucide-react';
 import type { ConversationMessage, WorktreeInfo } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
@@ -298,11 +298,36 @@ const PREVIEWABLE = /\.(html?|pdf|svg|png|jpe?g|gif|webp)$/i;
 function ArtifactActions({ path, root, onPreview }: { path: string; root: string; onPreview: (url: string) => void }) {
   const absolute = /^([a-zA-Z]:[\\/]|\\\\|\/)/.test(path);
   const base = root.replace(/[\\/]+$/, '');
-  const inside = !absolute || (base && path.toLowerCase().startsWith(base.toLowerCase()));
-  const relative = absolute ? path.slice(base.length).replace(/^[\\/]+/, '') : path;
+  const normalizedPath = path.replace(/\\/g, '/');
+  const normalizedBase = base.replace(/\\/g, '/').replace(/\/$/, '');
+  const inside = !absolute || normalizedPath.toLowerCase() === normalizedBase.toLowerCase()
+    || normalizedPath.toLowerCase().startsWith(`${normalizedBase.toLowerCase()}/`);
+  const relative = absolute ? normalizedPath.slice(normalizedBase.length).replace(/^\/+/, '') : normalizedPath.replace(/^\.\//, '');
   const full = absolute ? path : `${base}\\${path}`;
+  const safeRelative = Boolean(base && relative && !relative.split('/').some((part) => !part || part === '..') && inside);
+  const [downloadError, setDownloadError] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const download = async () => {
+    if (!safeRelative) return;
+    setDownloading(true); setDownloadError('');
+    try {
+      const response = await fetch(backend.rawFileUrl(base, relative));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = relative.split('/').at(-1) || 'artifact';
+      anchor.rel = 'noopener';
+      document.body.append(anchor); anchor.click(); anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+    } catch (error) {
+      setDownloadError(`下载失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally { setDownloading(false); }
+  };
   return <div className="flex gap-2">
-    {PREVIEWABLE.test(path) && base && inside && <button onClick={() => onPreview(backend.rawFileUrl(base, relative))} className="rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg">在浏览器预览</button>}
+    {PREVIEWABLE.test(path) && safeRelative && <button onClick={() => onPreview(backend.rawFileUrl(base, relative))} className="rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg">在浏览器预览</button>}
+    {safeRelative && <button type="button" disabled={downloading} onClick={() => void download()} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50"><Download size={13} />{downloading ? '下载中' : '下载'}</button>}
     {window.atlasDesktop?.openPath && (absolute || base) && <button onClick={() => void window.atlasDesktop!.openPath(full)} className="rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg">用默认程序打开</button>}
+    {downloadError && <span role="alert" className="self-center text-[11px] text-danger">{downloadError}</span>}
   </div>;
 }

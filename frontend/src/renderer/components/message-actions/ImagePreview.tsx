@@ -59,9 +59,17 @@ export default function ImagePreview({ src, alt = '', title }: {
 
   useEffect(() => {
     if (!open) return;
-    closeRef.current?.focus();
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus();
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
     return () => {
+      document.removeEventListener('keydown', closeOnEscape);
       if (triggerRef.current?.isConnected) triggerRef.current.focus();
       else previous?.focus();
     };
@@ -69,11 +77,6 @@ export default function ImagePreview({ src, alt = '', title }: {
 
   const close = () => setOpen(false);
   const onDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      close();
-      return;
-    }
     if (event.key !== 'Tab') return;
     const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])');
     if (!controls?.length) return;

@@ -52,23 +52,30 @@ function selectionRangeWithin(root: HTMLElement | null): Range | null {
   return range.cloneRange();
 }
 
-function localFileTarget(href: string): { file: string; line: number | null } | null {
+function localFileTarget(href: string): { file: string; line: number | null; column: number | null } | null {
   if (!href || href.startsWith('#') || /^(?:https?:|mailto:|tel:|data:|javascript:)/i.test(href)
     || (/^[a-z][a-z\d+.-]*:/i.test(href) && !/^[a-z]:[\\/]/i.test(href) && !/^file:/i.test(href))) return null;
 
   let target = href;
   let line: number | null = null;
-  const lineFragment = target.match(/#(?:L|line=)(\d+)(?:C\d+)?$/i);
-  if (lineFragment) line = Number(lineFragment[1]);
+  let column: number | null = null;
+  const lineFragment = target.match(/#(?:L|line=)(\d+)(?:C(\d+))?$/i);
+  if (lineFragment) {
+    line = Number(lineFragment[1]);
+    if (lineFragment[2]) column = Number(lineFragment[2]);
+  }
   target = target.replace(/#.*$/, '');
 
   const queryLine = target.match(/[?&](?:line|lineNumber)=(\d+)/i);
   if (line === null && queryLine) line = Number(queryLine[1]);
+  const queryColumn = target.match(/[?&](?:column|columnNumber)=(\d+)/i);
+  if (column === null && queryColumn) column = Number(queryColumn[1]);
   target = target.replace(/[?].*$/, '');
 
   if (/^file:/i.test(target)) {
     try {
       const url = new URL(target);
+      if (url.protocol !== 'file:' || (url.hostname && url.hostname !== 'localhost')) return null;
       target = decodeURIComponent(url.pathname);
       if (/^\/[a-z]:\//i.test(target)) target = target.slice(1);
     } catch { return null; }
@@ -76,16 +83,19 @@ function localFileTarget(href: string): { file: string; line: number | null } | 
     try { target = decodeURIComponent(target); } catch { return null; }
   }
 
-  const lineSuffix = target.match(/:(\d+)(?::\d+)?$/);
-  if (line === null && lineSuffix && lineSuffix.index !== 1) line = Number(lineSuffix[1]);
-  if (lineSuffix && lineSuffix.index !== 1) target = target.slice(0, lineSuffix.index);
+  const locationSuffix = target.match(/:(\d+)(?::(\d+))?$/);
+  if (line === null && locationSuffix && locationSuffix.index !== 1) {
+    line = Number(locationSuffix[1]);
+    if (locationSuffix[2]) column = Number(locationSuffix[2]);
+  }
+  if (locationSuffix && locationSuffix.index !== 1) target = target.slice(0, locationSuffix.index);
 
   target = target.replace(/\\/g, '/').replace(/^\.\//, '');
   if (!target || target.split('/').some((part) => part === '..')) return null;
-  return { file: target, line };
+  return { file: target, line, column };
 }
 
-function workspaceFileTarget(href: string): { file: string; line: number | null } | null {
+function workspaceFileTarget(href: string): { file: string; line: number | null; column: number | null } | null {
   const target = localFileTarget(href);
   if (!target) return null;
 
@@ -106,14 +116,22 @@ function workspaceFileTarget(href: string): { file: string; line: number | null 
     file = absolute.slice(normalizedRoot.length + 1);
   }
   if (!file || file.startsWith('/') || file.split('/').some((part) => part === '..')) return null;
-  return { file, line: target.line };
+  return { file, line: target.line, column: target.column };
 }
 
 function openWorkspaceFile(href: string): boolean {
   const target = workspaceFileTarget(href);
   if (!target) return false;
-  useAtlasStore.getState().requestFileOpen(target.file, target.line);
+  useAtlasStore.getState().requestFileOpen(target.file, target.line, target.column);
   return true;
+}
+
+function safeExternalHref(href: string | undefined): string | null {
+  if (!href) return null;
+  try {
+    const url = new URL(href);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password ? url.href : null;
+  } catch { return null; }
 }
 
 // ```mermaid blocks become diagrams; every other code block renders as usual.
@@ -138,10 +156,16 @@ const MARKDOWN_COMPONENTS: Components = {
   table: CsvMarkdownTable,
   a({ href, children, node, ...rest }) {
     void node;
-    return <a href={href} {...rest} onClick={(event) => {
-      if (!href || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      if (openWorkspaceFile(href)) event.preventDefault();
-    }}>{children}</a>;
+    const fileTarget = href ? workspaceFileTarget(href) : null;
+    const externalHref = safeExternalHref(href);
+    if (!fileTarget && !externalHref) return <span {...rest}>{children}</span>;
+    const safeHref = fileTarget ? href ?? undefined : externalHref ?? undefined;
+    return <a href={safeHref} {...rest} target={externalHref ? '_blank' : undefined}
+      rel={externalHref ? 'noopener noreferrer' : undefined} onClick={(event) => {
+        if (!fileTarget) return;
+        event.preventDefault();
+        openWorkspaceFile(href!);
+      }}>{children}</a>;
   },
 };
 
@@ -201,10 +225,10 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
         const fileTarget = workspaceFileTarget(href);
         if (!fileTarget) return;
         event.preventDefault();
-        const suffix = fileTarget.line === null ? '' : `（第 ${fileTarget.line} 行）`;
+        const suffix = fileTarget.line === null ? '' : `（第 ${fileTarget.line} 行${fileTarget.column === null ? '' : `，第 ${fileTarget.column} 列`}）`;
         setContextMenu({ x: event.clientX, y: event.clientY, items: [
           { id: 'open-linked-file', label: `在工作区打开文件${suffix}`, onSelect: () => { if (!openWorkspaceFile(href)) throw new Error('file target changed'); } },
-          { id: 'copy-linked-file-path', label: '复制文件路径', onSelect: () => navigator.clipboard.writeText(fileTarget.line === null ? fileTarget.file : `${fileTarget.file}:${fileTarget.line}`) },
+          { id: 'copy-linked-file-path', label: '复制文件路径', onSelect: () => navigator.clipboard.writeText(fileTarget.line === null ? fileTarget.file : `${fileTarget.file}:${fileTarget.line}${fileTarget.column === null ? '' : `:${fileTarget.column}`}`) },
         ] });
         return;
       }
