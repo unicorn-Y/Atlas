@@ -48,7 +48,7 @@ export function InitDialogBody({ busy, applying, proposal, error, onApply, onClo
     {upToDate
       ? <p className="m-0 rounded-xl bg-ok-soft px-4 py-3 text-[13px] text-ok">已是最新，无需写入。</p>
       : <div className="overflow-hidden rounded-xl shadow-[inset_0_0_0_1px_var(--line)]">
-        <DiffView diff={proposal.diff} path={proposal.path || 'AGENTS.md'} onAdd={() => undefined} onRemove={() => undefined} />
+        <DiffView diff={proposal.diff} path={proposal.path || 'AGENTS.md'} onAdd={() => undefined} onEdit={() => undefined} onRemove={() => undefined} />
       </div>}
     <div className="flex items-center justify-end gap-2">
       {upToDate

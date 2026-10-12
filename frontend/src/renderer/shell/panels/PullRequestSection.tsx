@@ -1,10 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { CircleCheck, CircleDashed, CircleX, ExternalLink, GitPullRequest, LoaderCircle, Wrench } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleX, ExternalLink, GitPullRequest, LoaderCircle, MessageSquarePlus, Send, Wrench } from 'lucide-react';
 import type { PullRequestInfo } from '@atlas/backend-adapter';
-import { backend } from '../../store/useAtlasStore';
+import { api, relativeTime } from '../../services/api';
+import { backend, useAtlasStore } from '../../store/useAtlasStore';
 import { cn } from '../../ui/cn';
 
 const failed = (conclusion: string | null) => ['FAILURE', 'failure', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED'].includes(String(conclusion));
+interface PullRequestActivity { id: string; kind: string; author: string; body: string; created_at: string; url?: string | null }
+interface PullRequestTimeline { items: PullRequestActivity[] }
 
 /** The branch's pull request and its checks, via the gh CLI; failed checks can go straight to Atlas. */
 export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk }: {
@@ -15,19 +18,39 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ title: '', body: '', draft: false });
   const [busy, setBusy] = useState('');
+  const [timeline, setTimeline] = useState<PullRequestActivity[] | null | undefined>(undefined);
+  const [timelineError, setTimelineError] = useState('');
+  const [comment, setComment] = useState('');
+  const apiBaseUrl = useAtlasStore((state) => state.apiBaseUrl);
 
   useEffect(() => {
     let stale = false;
-    setPr(undefined); setError('');
-    backend.getPullRequest(root).then((result) => { if (!stale) setPr(result); })
-      .catch((exc) => { if (!stale) { setPr(null); setError(exc instanceof Error ? exc.message : String(exc)); } });
+    setPr(undefined); setError(''); setTimeline(undefined); setTimelineError('');
+    backend.getPullRequest(root).then(async (result) => {
+      if (stale) return;
+      setPr(result);
+      if (!result) { setTimeline([]); return; }
+      try {
+        const data = await api<PullRequestTimeline>(apiBaseUrl, `/api/git/pr/timeline?root=${encodeURIComponent(root)}`);
+        if (!stale) setTimeline(Array.isArray(data.items) ? data.items : []);
+      } catch (exc) {
+        if (!stale) { setTimeline(null); setTimelineError(exc instanceof Error ? exc.message : String(exc)); }
+      }
+    }).catch((exc) => { if (!stale) { setPr(null); setError(exc instanceof Error ? exc.message : String(exc)); } });
     return () => { stale = true; };
-  }, [root, refreshKey]);
+  }, [apiBaseUrl, root, refreshKey]);
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
     setBusy('create'); setError('');
-    try { setPr(await backend.createPullRequest(root, form.title.trim(), form.body, form.draft)); setCreating(false); }
+    try {
+      setPr(await backend.createPullRequest(root, form.title.trim(), form.body, form.draft)); setCreating(false);
+      try {
+        const data = await api<PullRequestTimeline>(apiBaseUrl, `/api/git/pr/timeline?root=${encodeURIComponent(root)}`);
+        setTimeline(Array.isArray(data.items) ? data.items : []);
+        setTimelineError('');
+      } catch (exc) { setTimeline(null); setTimelineError(exc instanceof Error ? exc.message : String(exc)); }
+    }
     catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
     finally { setBusy(''); }
   };
@@ -37,6 +60,19 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
       const log = await backend.getCheckLog(root, name);
       onAsk(`CI 检查「${name}」失败了。下面是日志末尾，找出原因并修好，修完说明改了什么：\n\n\`\`\`\n${log.trim().slice(-12000)}\n\`\`\``);
     } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(''); }
+  };
+  const submitComment = async (event: FormEvent) => {
+    event.preventDefault();
+    const body = comment.trim();
+    if (!body || busy) return;
+    setBusy('comment'); setTimelineError('');
+    try {
+      await api(apiBaseUrl, '/api/git/pr/comment', { method: 'POST', json: { root, body } });
+      setComment('');
+      const data = await api<PullRequestTimeline>(apiBaseUrl, `/api/git/pr/timeline?root=${encodeURIComponent(root)}`);
+      setTimeline(Array.isArray(data.items) ? data.items : []);
+    } catch (exc) { setTimelineError(exc instanceof Error ? exc.message : String(exc)); }
     finally { setBusy(''); }
   };
 
@@ -49,7 +85,7 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
       <button type="button" aria-label={`在浏览器打开 PR #${pr.number}：${pr.title}`} onClick={() => onOpenUrl(pr.url)} className="block w-full truncate text-left font-medium text-fg hover:underline">#{pr.number} {pr.title}</button>
       <p className="m-0 mt-0.5 text-fg-3">{pr.draft ? '草稿 · ' : ''}{pr.state} · {pr.head} → {pr.base}</p>
       <button type="button" onClick={() => onOpenUrl(pr.url)} className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] text-fg-2 hover:bg-hover hover:text-fg">
-        <ExternalLink size={11} />在浏览器查看 PR 时间线与评论
+        <ExternalLink size={11} />在浏览器查看 PR
       </button>
       {pr.checks.length > 0 && <ul className="m-0 mt-2 grid list-none gap-1 p-0">
         {pr.checks.map((check) => <li key={check.name} className="flex items-center gap-1.5">
@@ -61,6 +97,28 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
             {busy === check.name ? <LoaderCircle size={12} className="spin" /> : <Wrench size={12} />}让 Atlas 修</button>}
         </li>)}
       </ul>}
+      <div className="mt-3 border-t border-line pt-2.5">
+        <h4 className="m-0 mb-2 flex items-center gap-1.5 text-[11.5px] font-semibold text-fg-2"><MessageSquarePlus size={12} />PR 活动与评论</h4>
+        {timelineError && <p role="alert" className="m-0 mb-2 rounded-lg bg-danger-soft px-2.5 py-2 text-[11.5px] text-danger">{timelineError}</p>}
+        {timeline === undefined && <p className="m-0 text-[11.5px] text-fg-3">正在加载 PR 活动…</p>}
+        {timeline && timeline.length === 0 && <p className="m-0 text-[11.5px] text-fg-3">暂无可显示的 PR 活动。</p>}
+        {timeline && timeline.length > 0 && <ol className="m-0 grid list-none gap-2 p-0">
+          {timeline.map((item) => <li key={item.id} className="rounded-lg bg-surface px-2.5 py-2 text-[11.5px]">
+            <div className="flex items-start justify-between gap-2 text-fg-3">
+              <span className="min-w-0 truncate text-fg-2">{item.author} · {item.kind}</span>
+              <span className="shrink-0">{relativeTime(item.created_at)}</span>
+            </div>
+            {item.body && <p className="mb-0 mt-1 whitespace-pre-wrap break-words text-fg-2">{item.body}</p>}
+            {item.url && <button type="button" onClick={() => onOpenUrl(item.url!)} className="mt-1 inline-flex items-center gap-1 text-fg-3 hover:text-fg"><ExternalLink size={10} />打开活动</button>}
+          </li>)}
+        </ol>}
+        <form onSubmit={(event) => void submitComment(event)} className="mt-2 grid gap-1.5">
+          <textarea value={comment} onChange={(event) => setComment(event.target.value)} rows={3} placeholder="添加 PR 评论…" aria-label="PR 评论" className={cn(field, 'py-2')} />
+          <button disabled={busy === 'comment' || !comment.trim()} className="primary-fill inline-flex h-7 w-fit items-center gap-1 rounded-lg px-2.5 text-[11.5px] disabled:opacity-50">
+            {busy === 'comment' ? <LoaderCircle size={11} className="spin" /> : <Send size={11} />}提交评论
+          </button>
+        </form>
+      </div>
     </div>}
     {pr === null && !error && !creating && <button onClick={() => setCreating(true)} className="rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg">这个分支还没有 PR，创建一个</button>}
     {creating && <form onSubmit={(event) => void create(event)} className="grid gap-2">
