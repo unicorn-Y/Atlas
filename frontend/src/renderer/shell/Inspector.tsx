@@ -172,6 +172,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
 
       {browserOpened && <div className={cn('h-full', tab !== 'browser' && 'hidden')}>
         <BrowserPanel url={browserUrl} onUrl={onBrowserUrl} suggestions={browserSuggestions} onPick={onPick} onToast={onToast} onAsk={onAsk}
+          workspace={worktree?.path ?? workspace}
           apiBaseUrl={apiBaseUrl} runId={run?.id} events={events} />
       </div>}
 

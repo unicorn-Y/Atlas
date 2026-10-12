@@ -18,7 +18,7 @@ export type AgentEventType =
   | 'run.completed' | 'run.failed' | 'run.cancelled'
   | 'lsp.diagnostics' | 'review.findings'
   | 'computer.foreground_required' | 'computer.foreground_resumed' | 'computer.foreground_denied' | 'computer.step'
-  | 'browser.handoff_required' | 'browser.handoff_resolved' | 'browser.panel.sync' | 'browser.step'
+  | 'browser.handoff_required' | 'browser.handoff_resolved' | 'browser.panel.sync' | 'browser.step' | 'browser.artifact'
   | 'browser.vault_fill_denied';
 
 export interface AgentEvent {

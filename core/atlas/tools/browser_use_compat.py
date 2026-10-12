@@ -1,3 +1,4 @@
+# Ported from anomalyco/opencode@7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937: packages/plugin-browser/src/rpc.ts (MIT)
 """Best-effort Python compatibility layer for ZCode Browser Use.
 
 Source: zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f,
@@ -19,7 +20,7 @@ import logging
 import mimetypes
 import time
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -99,6 +100,7 @@ def _descriptor(runtime: Any = None) -> dict[str, Any]:
 
     conditional = item(usable, reason)
     settings = get_browser_settings()
+    workspace_available = bool(getattr(_ctx(), "metadata", {}).get("workspace"))
     dialog_available = False
     if usable:
         try:
@@ -114,15 +116,17 @@ def _descriptor(runtime: Any = None) -> dict[str, Any]:
             dialog_available = False
     capabilities = {
         "runtime.list": item(True), "runtime.get": item(True),
-        "runtime.default": item(True), "runtime.select": item(True, "Atlas has one X2 runtime"),
+        "runtime.default": item(True),
+        "runtime.select": item(False, "Atlas has no interchangeable browser-provider registry or persisted runtime setting."),
         "tabs.list": conditional, "tabs.get": conditional, "tabs.new": conditional,
         "tabs.open": conditional,
         "tabs.finalize": item(False, "Atlas has no pane handoff/deliverable registry; tabs remain open."),
         "user.openTabs": item(False, "Atlas has no desktop IAB host registry to distinguish user tabs."),
         "user.claimTab": item(False, "Atlas cannot claim a host-owned desktop tab or verify its UI scope."),
-        "tab.goto": item(True), "tab.back": item(True), "tab.forward": conditional,
+        "tab.goto": item(True), "tab.back": item(True), "tab.stop": item(True), "tab.forward": conditional,
         "tab.reload": conditional, "tab.close": conditional, "tab.url": conditional,
         "tab.title": conditional, "tab.snapshot": item(True), "tab.locator": conditional,
+        "tab.press": conditional, "tab.selectOption": conditional, "tab.fill_form": conditional,
         "tab.frames": item(True, "CDP frame tree when a supervisor is active; otherwise same-page iframe metadata."),
         "tab.frame": conditional, "tab.evaluate": item(True, "Uses Atlas browser_console SSRF/evaluation policy."),
         "tab.waitForURL": conditional, "tab.waitForLoadState": conditional,
@@ -135,6 +139,11 @@ def _descriptor(runtime: Any = None) -> dict[str, Any]:
         "tab.dom_cua.double_click": conditional, "tab.dom_cua.scroll": conditional,
         "tab.dom_cua.keypress": item(True), "tab.dom_cua.type": item(True),
         "tab.screenshot": conditional,
+        "tab.screenshot.workspaceArtifact": item(
+            workspace_available,
+            "Saved under the active workspace artifacts/browser directory." if workspace_available else
+            "The active run has no trusted workspace root for a workspace artifact.",
+        ),
         "tab.viewportSize": item(True), "tab.setViewportSize": conditional,
         "tab.getJsDialog": item(dialog_available, "An active CDP supervisor is required."),
         "tab.respondJsDialog": item(dialog_available, "An active CDP supervisor is required."),
@@ -144,6 +153,11 @@ def _descriptor(runtime: Any = None) -> dict[str, Any]:
         "recording.status": item(True, "Atlas records replayable browser steps, not video."),
         "recording.cancel": item(True, "Cancels Atlas step recording; no WebM is produced."),
         "recording.video": item(False, "The Atlas X2 runtime records replayable steps and cannot capture WebM video."),
+        "network": item(False, "Atlas X2 exposes console evaluation but no request/response event collector."),
+        "trace": item(False, "Atlas X2 has no Chromium trace recorder or retained trace artifact store."),
+        "cpu": item(False, "Atlas X2 has no CDP CPU profiler or profile artifact store."),
+        "heap": item(False, "Atlas X2 has no CDP heap profiler or snapshot analysis pipeline."),
+        "lighthouse": item(False, "Atlas X2 does not bundle or invoke Lighthouse."),
         "capability.visibility": item(False, "Atlas does not expose an in-app browser pane visibility control."),
         "capability.headless": item(False, "Atlas settings do not expose Browser Use headless launch selection."),
     }
@@ -223,17 +237,31 @@ async def _x2_call(runtime: Any, tool_name: str, arguments: dict[str, Any]) -> d
 
 def _tab_args(args: dict[str, Any], task_id: str) -> tuple[list[str], str | None]:
     """Build one safe ``find`` command from a semantic locator description."""
-    locator = str(args.get("locator") or args.get("by") or "").strip()
-    value = str(args.get("value") or "")
+    locator = str(args.get("locator") or args.get("by") or ("ref" if args.get("ref") else "")).strip()
+    value = str(args.get("value") or args.get("ref") or "")
     if not locator or not value:
         raise ValueError("locator and value are required")
     command_args = [locator, value]
     action = str(args.get("action") or "text").strip().lower()
-    if action not in {"click", "fill", "check", "hover", "text"}:
-        raise ValueError("locator action must be click, fill, check, hover, or text")
+    if action not in {"click", "fill", "check", "uncheck", "hover", "text", "press", "select"}:
+        raise ValueError("locator action must be click, fill, check, uncheck, hover, text, press, or select")
     command_args.append(action)
     if action == "fill" and args.get("text") is not None:
         command_args.append(str(args["text"]))
+    if action == "press":
+        key = str(args.get("key") or "").strip()
+        if not key:
+            raise ValueError("locator press requires key")
+        command_args.append(key)
+    if action == "select":
+        values = args.get("values", args.get("value"))
+        if isinstance(values, list):
+            if len(values) != 1:
+                raise ValueError("the active Atlas browser command supports one select value per locator call")
+            values = values[0]
+        if not str(values or ""):
+            raise ValueError("select requires at least one option value")
+        command_args.append(str(values))
     if args.get("name") is not None:
         command_args.extend(["--name", str(args["name"])])
     if args.get("exact"):
@@ -287,9 +315,40 @@ async def _screenshot(browser_tool: Any, session_module: Any, session_id: str,
             return _error(f"Screenshot size must be between 1 byte and {_SCREENSHOT_MAX_BYTES} bytes.",
                           "output_too_large")
         content_type = mimetypes.guess_type(path.name)[0] or "image/png"
-        payload = base64.b64encode(path.read_bytes()).decode("ascii")
-        return _ok({"mime_type": content_type, "data_url": f"data:{content_type};base64,{payload}",
-                    "path": str(path), "size_bytes": size})
+        screenshot_bytes = await asyncio.to_thread(path.read_bytes)
+        payload = base64.b64encode(screenshot_bytes).decode("ascii")
+        response = {"mime_type": content_type, "data_url": f"data:{content_type};base64,{payload}",
+                    "path": str(path), "size_bytes": size}
+        workspace = str(getattr(_ctx(), "metadata", {}).get("workspace") or "").strip()
+        if workspace:
+            relative = f"artifacts/browser/{uuid.uuid4().hex}.png"
+            if workspace.startswith("ssh://"):
+                from atlas.ssh import ssh_workspaces
+
+                host, remote_root = ssh_workspaces.parse_workspace(workspace)
+                remote_path = ssh_workspaces._remote_path(remote_root, relative)
+                connection = await ssh_workspaces._connect(host)
+                async with connection.client.start_sftp_client() as sftp:
+                    await sftp.makedirs(str(PurePosixPath(remote_path).parent), exist_ok=True)
+                    async with sftp.open(remote_path, "wb") as stream:
+                        await stream.write(screenshot_bytes)
+            else:
+                import atlas.server
+
+                _, artifact_path = atlas.server._workspace_path(workspace, relative)
+                await asyncio.to_thread(artifact_path.parent.mkdir, parents=True, exist_ok=True)
+                await asyncio.to_thread(artifact_path.write_bytes, screenshot_bytes)
+            response.update({"workspace": workspace, "artifact_path": relative})
+            ctx = _ctx()
+            await ctx.emit_event("browser.artifact", {
+                "workspace": workspace,
+                "artifact_path": relative,
+                "mime_type": content_type,
+                "size_bytes": size,
+                "run_id": ctx.run_id,
+                "session_id": ctx.session_id,
+            })
+        return _ok(response)
     except Exception as exc:  # noqa: BLE001 - optional backend can fail independently
         return _error(f"Browser screenshot unavailable: {exc}", "capability_unavailable")
 
@@ -318,6 +377,17 @@ async def _browser_use_call_impl(
         "tab.getbyplaceholder": "placeholder", "tab.getbytestid": "testid",
         "tab.getbyalttext": "alt", "tab.getbytitle": "title",
     }
+    if op in {"tab.selectoption", "tab.select_option", "tab.select"}:
+        op = "tab.locator"
+        args_for_locator = dict(arguments or {})
+        args_for_locator["action"] = "select"
+        args_for_locator["values"] = args_for_locator.get("values", args_for_locator.get("value"))
+        arguments = args_for_locator
+    elif op in {"tab.press", "tab.locator.press"}:
+        op = "tab.locator"
+        args_for_locator = dict(arguments or {})
+        args_for_locator["action"] = "press"
+        arguments = args_for_locator
     if op in locator_methods:
         args_for_locator = dict(arguments or {})
         args_for_locator["locator"] = locator_methods[op]
@@ -346,8 +416,8 @@ async def _browser_use_call_impl(
         requested = str(args.get("id") or args.get("type") or _RUNTIME_ID)
         if requested not in {_RUNTIME_ID, "default", "atlas-x2-hermes", "hermes"}:
             return _error(f"Browser runtime {requested!r} is not advertised by Atlas.", "runtime_unavailable")
-        return _ok({"selected": _RUNTIME_ID, "persistent_selection": False,
-                    "note": "Atlas currently exposes one X2 runtime; no provider switch was made."})
+        return _error("Atlas has one active X2 runtime and does not persist or switch browser providers.",
+                      "capability_unsupported", selected=_RUNTIME_ID, persistent_selection=False)
     if op in {"capability.get", "capabilities.get"}:
         capability = str(args.get("name") or args.get("capability") or "")
         matrix = _descriptor(rt)["capabilities"]
@@ -379,7 +449,7 @@ async def _browser_use_call_impl(
 
     # Atlas's existing X2 surface owns operations which already have safety,
     # receipt, recording, and panel-sync behavior.
-    if op in {"tab.goto", "tab.back", "tab.snapshot", "tab.evaluate", "tab.markhandoff",
+    if op in {"tab.goto", "tab.back", "tab.stop", "tab.snapshot", "tab.evaluate", "tab.markhandoff",
               "tab.mark_handoff", "tab.cua.keypress", "tab.dom_cua.click",
               "tab.dom_cua.keypress", "tab.dom_cua.type", "recording.start",
               "recording.status", "recording.cancel"}:
@@ -403,6 +473,10 @@ async def _browser_use_call_impl(
             return {**navigated, "load_state_waited": "domcontentloaded"}
         if op == "tab.back":
             return await _x2_call(rt, "browser_back", {"task_id": task_id})
+        if op == "tab.stop":
+            return await _x2_call(rt, "browser_console", {
+                "expression": "window.stop()", "task_id": task_id,
+            })
         if op == "tab.snapshot":
             return await _x2_call(rt, "browser_snapshot", {"full": bool(args.get("full")), "task_id": task_id})
         if op == "tab.evaluate":
@@ -452,6 +526,7 @@ async def _browser_use_call_impl(
 
     if op in {"tabs.list", "tabs.get", "tabs.new", "tabs.open", "tab.url", "tab.title",
               "tab.forward", "tab.reload", "tab.close", "tab.locator", "tab.frames", "tab.frame",
+              "tab.fill_form",
               "tab.waitforurl", "tab.wait_for_url", "tab.waitforloadstate", "tab.wait_for_load_state",
               "tab.waitfortimeout", "tab.wait_for_timeout", "tab.waitforfunction", "tab.wait_for_function",
               "tab.cua.click", "tab.cua.double_click", "tab.cua.move", "tab.cua.scroll", "tab.cua.drag",
@@ -563,6 +638,52 @@ async def _browser_use_call_impl(
             if not result.get("success"):
                 return _error(str(result.get("error") or "Locator operation failed"))
             return _ok(_redact(result.get("data")))
+        if op == "tab.fill_form":
+            fields = args.get("fields")
+            if not isinstance(fields, list) or not fields or len(fields) > 100:
+                return _error("fill_form requires 1–100 fields", "invalid_arguments")
+            results: list[dict[str, Any]] = []
+            for index, field in enumerate(fields):
+                if not isinstance(field, dict) or not str(field.get("ref") or "").strip():
+                    return _error(f"fill_form field {index} requires ref", "invalid_arguments",
+                                  completed=results)
+                kind = str(field.get("type") or "text").lower()
+                operation = {"text": "fill", "select": "select", "check": "check"}.get(kind)
+                if operation is None:
+                    return _error(f"fill_form field {index} has unsupported type {kind!r}",
+                                  "invalid_arguments", completed=results)
+                field_args = {"locator": "ref", "value": field["ref"], "action": operation}
+                if kind == "text":
+                    if "value" not in field:
+                        return _error(f"fill_form field {index} requires value", "invalid_arguments",
+                                      completed=results)
+                    field_args["text"] = str(field["value"])
+                elif kind == "select":
+                    values = field.get("values")
+                    if not isinstance(values, list) or not values:
+                        return _error(f"fill_form field {index} requires non-empty values", "invalid_arguments",
+                                      completed=results)
+                    field_args["action"] = "select"
+                    field_args["values"] = values
+                elif kind == "check":
+                    if not isinstance(field.get("checked"), bool):
+                        return _error(f"fill_form field {index} requires boolean checked", "invalid_arguments",
+                                      completed=results)
+                    field_args["action"] = "check" if field["checked"] else "uncheck"
+                try:
+                    command_args, locator_action = _tab_args(field_args, task_id)
+                except ValueError as exc:
+                    return _error(str(exc), "invalid_arguments", completed=results)
+                result = await asyncio.to_thread(
+                    _cli_call, browser_tool, session_module, session_id, "find", command_args,
+                    read=False, action=locator_action,
+                )
+                if not result.get("success"):
+                    return _error(str(result.get("error") or f"fill_form field {index} failed"),
+                                  "form_fill_failed", completed=results, failed_index=index)
+                results.append({"ref": field["ref"], "type": kind,
+                                "result": _redact(result.get("data"))})
+            return _ok({"fields": results, "completed": len(results)})
         if op == "tab.frames":
             try:
                 from tools.browser_supervisor import SUPERVISOR_REGISTRY

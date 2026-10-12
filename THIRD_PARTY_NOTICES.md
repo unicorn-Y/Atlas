@@ -344,3 +344,10 @@ Copyright 2023 Vercel, Inc.; Apache License 2.0 as stated above), and the
 expanded follow-the-bottom panel from
 `packages/ui/src/components/react/assistant-ui/elements/reasoning.tsx` in
 `assistant-ui/assistant-ui` (Copyright (c) assistant-ui contributors; MIT License).
+
+## D-TC-04: Browser compatibility operations
+
+`core/atlas/tools/browser_use_compat.py` adapts Browser RPC operation behavior
+from `packages/plugin-browser/src/rpc.ts` in `anomalyco/opencode` at commit
+`7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937`. The source is MIT licensed; its
+full license text is included above under "OpenCode edit matching logic".
