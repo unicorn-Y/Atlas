@@ -1,5 +1,6 @@
 # Behavior reference: zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015f
 #   apps/zcode-cli/packages/dynamic-workflow/src/engine/engine.ts (Apache-2.0).
+# Ported from anomalyco/opencode@03cb9b9946e0baa027d7678b690f8f352eb9a2bc: packages/core/src/tool/plugin/opencode.ts (MIT)
 # Behavior reference: anomalyco/opencode@7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937
 #   packages/core/src/tool/plugin/opencode.ts (MIT).
 # Behavior reference: block/goose@3bd852002903e016ff30947e973f76e2fcfcf90f
@@ -67,7 +68,7 @@ _WORKFLOW_SCHEMA = _schema(
 )
 _SESSION_SCHEMA = _schema(
     "workspace_session_manage",
-    "Rename the current conversation. Moving a live conversation to another workspace is unsupported because the active kernel adapters remain bound to the original workspace.",
+    "Rename the current conversation or hand it off to another local workspace for its next run. Moving never rebinds adapters in the active turn.",
     {"action": {"type": "string", "enum": ["rename", "move"]},
      "title": {"type": "string", "maxLength": 200},
      "workspace": {"type": "string"}}, ["action"],
@@ -479,20 +480,43 @@ async def _workflow_manage(args: dict[str, Any], agent: Any, runtime: Any) -> di
 
 async def _session_manage(args: dict[str, Any], agent: Any, runtime: Any) -> dict[str, Any]:
     action = str(args.get("action") or "")
-    if action == "move":
-        return _unsupported(
-            "An active Atlas turn binds its edit, shell and browser adapters to the original workspace; moving the conversation mid-turn would leave those adapters inconsistent. Move it from the conversation settings before starting the next run."
-        )
-    if action != "rename":
+    if action not in {"rename", "move"}:
         return _result({}, error="Unknown session action.")
-    title = str(args.get("title") or "").strip()
-    if not title or len(title) > 200:
-        return _result({}, error="A non-empty title of at most 200 characters is required.")
     memory = getattr(agent, "_memory", None)
     conversation_id = str(_get(runtime, "conversation_id", "") or "").strip()
     if memory is None or not conversation_id:
         return _unsupported("The current run has no conversation metadata store or conversation id.")
     try:
+        if action == "move":
+            from pathlib import Path
+
+            raw_workspace = str(args.get("workspace") or "").strip()
+            if not raw_workspace or raw_workspace.startswith("ssh://"):
+                return _result({}, error="Move requires an existing local workspace directory.")
+            target = Path(raw_workspace).expanduser().resolve(strict=True)
+            if not target.is_dir():
+                return _result({}, error="Move target is not a directory.")
+            current = await memory.get_conversation(conversation_id)
+            if current is None:
+                return _result({}, error="The current conversation was not found.")
+            if current.get("worktree_path"):
+                return _result({}, error="Remove the conversation's registered worktree before moving it; this preserves its branch and avoids orphaning the worktree.")
+            if bool(_get(runtime, "read_only", False)) or _get(runtime, "mode", "act") == "plan":
+                raise PermissionError("Moving a conversation is unavailable in read-only plan mode.")
+            await _approve(runtime, "workspace_session_manage", {"action": action, "workspace": str(target)},
+                           "Move this conversation to another local workspace for its next run.")
+            if not await memory.update_conversation(
+                conversation_id, workspace=str(target), worktree_path="",
+                worktree_branch="", base_branch="",
+            ):
+                return _result({}, error="The current conversation was not found.")
+            return _result({"conversation_id": conversation_id, "workspace": str(target),
+                            "applies_from_next_run": True,
+                            "active_run_workspace": str(_get(runtime, "workspace", "") or "")})
+
+        title = str(args.get("title") or "").strip()
+        if not title or len(title) > 200:
+            return _result({}, error="A non-empty title of at most 200 characters is required.")
         await _approve(runtime, "workspace_session_manage", {"action": action, "title": title},
                        "Rename the current Atlas conversation.")
         if not await memory.update_conversation_title(conversation_id, title):

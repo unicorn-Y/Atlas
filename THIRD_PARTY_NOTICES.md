@@ -389,3 +389,23 @@ limitations under the License.
 from `packages/plugin-browser/src/rpc.ts` in `anomalyco/opencode` at commit
 `7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937`. The source is MIT licensed; its
 full license text is included above under "OpenCode edit matching logic".
+## D-TC-01: Filesystem and managed process compatibility
+
+`core/atlas/tools/local_execution.py` adapts paged file reading, guarded write
+scope, and exact replacement validation from `zai-org/ZCode` at commit
+`aac4755666d09fdcd70272fcf063c077a639015f`, specifically
+`apps/zcode-cli/packages/core/src/tool/handlers/read.ts`, `write.ts`, and
+`edit.ts` (Copyright 2026 Z.AI Co., Ltd.; Apache License 2.0 as stated above).
+Paged read behavior also follows `packages/core/src/tool/plugin/read.ts` in
+`anomalyco/opencode` at commit `03cb9b9946e0baa027d7678b690f8f352eb9a2bc`
+(Copyright (c) 2024-2026 OpenCode contributors; MIT License). Atlas's path
+scope, range-byte mode, rollback-capable batch edits, and process aliases are
+independent adaptations, not copied implementation code.
+
+The next-run workspace handoff behavior in
+`core/atlas/tools/workspace_workflows.py` follows the session/workspace
+lifecycle contract in `packages/core/src/tool/plugin/opencode.ts` from
+`anomalyco/opencode` at commit `03cb9b9946e0baa027d7678b690f8f352eb9a2bc`
+(Copyright (c) 2024-2026 OpenCode contributors; MIT License). Atlas-specific
+approval, metadata persistence, and clean-worktree restrictions remain Atlas
+code.
