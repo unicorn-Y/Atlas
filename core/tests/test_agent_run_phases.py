@@ -18,6 +18,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 from langchain_core.messages import SystemMessage
 
+import pytest
+
 from atlas.agent import AgentOrchestrator
 from atlas.agent.injection_budget import (
     InjectionBlock,
@@ -28,9 +30,11 @@ from atlas.agent.run_phases import (
     RunCallbacks,
     RunRequest,
     _phase_context,
+    _phase_plan,
     _build_messages,
     _RunState,
 )
+
 from atlas.config import AtlasConfig
 from atlas.models.router import CompletionResult
 from atlas.models.tokens import estimate_tokens
@@ -534,3 +538,66 @@ async def test_moa_summary_routes_through_router() -> None:
     assert complete_for.call_args.args[0] == "test-model"
     assert complete_for.call_args.args[1] == "moa"
     assert complete_for.call_args.kwargs == {"max_tokens": 600}
+
+
+# -- planner resilience: a plan is an optimization, never a turn killer ------
+
+
+async def test_plan_phase_degrades_instead_of_aborting_when_plan_creation_fails() -> None:
+    """A failed plan must NOT end the turn (symmetric with verify/goal-eval).
+
+    ``_verify_plan`` and ``_evaluate_goal`` log a warning and keep going; a
+    plan-creation failure used to set ``state.abort = True`` and kill the whole
+    user request. The planner is an optimization, so it degrades to "no plan".
+    """
+    agent = _orchestrator()
+    agent._model_router, _ = _router_stub(text="sorry, no json here")
+
+    # second attempt also fails -> the phase must still not abort
+    request = RunRequest(message="first do a then do b", conversation_id="conv-1")
+    state = _RunState(request=request, callbacks=RunCallbacks(), message=request.message)
+    state.litellm_model = "openai/test-model"
+    state.runtime = None
+
+    events = [event async for event in _phase_plan(agent, state)]
+
+    assert state.abort is False, "planner failure must never abort the turn"
+    assert state.plan is None
+    assert state.plan_resumed is False
+    assert all(event["type"] != "error" for event in events), (
+        "a degraded plan must not surface as a run error"
+    )
+    skipped = [e for e in events if e["type"] == "run.recovery.notice"]
+    assert len(skipped) == 1
+    assert "message" in skipped[0]["data"]
+
+
+async def test_plan_phase_retries_once_before_degrading() -> None:
+    """One bad completion is retried; the retry's JSON is used as the plan."""
+    agent = _orchestrator()
+    good = json.dumps({
+        "goal": "ship", "subtasks": [{"id": "a", "title": "t", "verification": "v"}],
+    })
+    agent._model_router = SimpleNamespace(
+        complete_for=AsyncMock(side_effect=[
+            CompletionResult(text="not a json object at all"),
+            CompletionResult(text=good),
+        ]),
+    )
+
+    plan = await agent._create_plan("do it", "openai/test-model")
+
+    assert plan.goal == "ship"
+    assert agent._model_router.complete_for.await_count == 2
+
+
+async def test_plan_parse_stages_name_the_real_culprit() -> None:
+    """``_json_object`` is shared; each caller must label its own stage."""
+    from atlas.agent import AgentOrchestrator as Orchestrator
+
+    with pytest.raises(ValueError, match="Plan verifier response"):
+        Orchestrator._json_object("no json", "Plan verifier")
+    with pytest.raises(ValueError, match="Goal evaluator response"):
+        Orchestrator._json_object("no json", "Goal evaluator")
+    with pytest.raises(ValueError, match="Planner response"):
+        Orchestrator._json_object("no json", "Planner")

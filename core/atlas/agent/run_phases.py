@@ -29,10 +29,12 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -52,6 +54,42 @@ log = structlog.get_logger()
 
 _EVENT_STREAM_DONE = object()
 _CANCEL_REQUESTED = object()
+
+
+def _breaker_prompt() -> str:
+    """Workspace breaker prompt (engine/breaker.md) as the run's identity block.
+
+    Loaded once per process and reused, so the stable-tier system message stays
+    byte-identical across turns and the provider prompt cache keeps hitting.
+    Falls back to the built-in Atlas SYSTEM_PROMPT when the file is missing or
+    empty, so a broken/moved file never leaves the agent without instructions.
+    """
+    global _BREAKER_CACHE
+    if _BREAKER_CACHE is not None:
+        return _BREAKER_CACHE
+    from atlas.engine.hermes_runtime import _load_breaker_identity
+    from atlas.config import get_config as _get_cfg
+
+    home = None
+    try:
+        data_dir = getattr(_get_cfg(), "data_dir", None)
+        if data_dir:
+            home = Path(str(data_dir)).expanduser() / "engine"
+    except Exception:  # noqa: BLE001 — identity must never break a turn
+        log.debug("agent.breaker_home_unavailable", exc_info=True)
+    if home is None:
+        env_root = os.environ.get("ATLAS_DATA_DIR", "").strip()
+        if env_root:
+            home = Path(env_root).expanduser() / "engine"
+    if home is None:
+        # Source-tree fallback: <repo>/core/atlas/agent/run_phases.py -> <repo>/engine
+        home = Path(__file__).resolve().parents[3] / "engine"
+    text = _load_breaker_identity(home).strip()
+    _BREAKER_CACHE = text or _agent.SYSTEM_PROMPT
+    return _BREAKER_CACHE
+
+
+_BREAKER_CACHE: str | None = None
 
 
 def _user_output_style_prompt() -> str:
@@ -418,16 +456,19 @@ async def _phase_goal_knowledge(agent, state: _RunState) -> AsyncIterator[dict[s
             await agent._memory.retrieve_approved_goal_knowledge(state.message, limit=3)
         )
     except Exception as exc:
+        # 知识检索是加分项：拿不到就空着，本轮照常执行。紧邻的
+        # _phase_pre_plan_constraints 同样是失败即降级，口径必须一致。
         log.warning(
             "agent.goal_knowledge_load_failed", error=str(exc), exc_info=True,
         )
+        state.consolidated_goal_knowledge = []
         yield {
-            "type": "error",
-            "category": "backend",
-            "detail": f"Unable to load approved goal knowledge: {exc}",
+            "type": "run.recovery.notice",
+            "data": {
+                "message": "历史任务知识检索失败，本轮不带该参考继续执行。",
+                "detail": str(exc),
+            },
         }
-        state.abort = True
-        return
 
 
 async def _phase_pre_plan_constraints(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
@@ -476,12 +517,21 @@ async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
         try:
             state.plan = TaskPlan.from_dict(request.plan_state)
         except (TypeError, ValueError) as exc:
+            # 恢复计划失败只意味着「这轮没有计划可用」，不是本回合的失败：
+            # 降级为无计划执行，与 _verify_plan / _evaluate_goal 的容错口径一致
+            # （见本文件 _phase_finalize）。绝不能 abort 掉整条用户请求。
+            log.warning(
+                "agent.plan_recover_failed", error=str(exc), exc_info=True,
+            )
+            state.plan = None
+            state.plan_resumed = False
             yield {
-                "type": "error",
-                "category": "backend",
-                "detail": f"Unable to recover task plan: {exc}",
+                "type": "run.recovery.notice",
+                "data": {
+                    "message": "历史任务计划无法解析，已降级为直接执行（不影响本轮回复）。",
+                    "detail": str(exc),
+                },
             }
-            state.abort = True
             return
         plan_value = state.plan.to_dict()
         if callbacks.plan_update_callback:
@@ -490,16 +540,17 @@ async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
                 if inspect.isawaitable(result):
                     await result
             except Exception as exc:
+                # 落库失败不影响本轮执行：计划已在内存里，继续用。
                 log.warning(
                     "agent.recovered_plan_persist_failed", error=str(exc), exc_info=True,
                 )
                 yield {
-                    "type": "error",
-                    "category": "backend",
-                    "detail": f"Unable to persist recovered task plan: {exc}",
+                    "type": "run.recovery.notice",
+                    "data": {
+                        "message": "历史计划持久化失败，本轮仍按该计划继续执行。",
+                        "detail": str(exc),
+                    },
                 }
-                state.abort = True
-                return
         yield {"type": "plan_updated", "plan": plan_value, "resumed": True}
     elif not request.worker and (request.force_plan or requires_plan(state.message)):
         try:
@@ -525,15 +576,21 @@ async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
                 planning_insights,
             )
         except Exception as exc:
+            # 规划只是执行优化项，不是本回合的成败判据：拿不到计划就跳过计划
+            # 直接执行，与 _phase_finalize 里 _verify_plan / _evaluate_goal 的
+            # 容错口径一致。绝不能 abort 掉整条用户请求。
             log.warning(
                 "agent.plan_create_failed", error=str(exc), exc_info=True,
             )
+            state.plan = None
+            state.plan_resumed = False
             yield {
-                "type": "error",
-                "category": "model",
-                "detail": f"Unable to create task plan: {exc}",
+                "type": "run.recovery.notice",
+                "data": {
+                    "message": "任务规划阶段不可用，已跳过计划直接执行（不影响本轮回复）。",
+                    "detail": str(exc),
+                },
             }
-            state.abort = True
             return
         plan_value = state.plan.to_dict()
         if callbacks.plan_update_callback:
@@ -542,16 +599,17 @@ async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
                 if inspect.isawaitable(result):
                     await result
             except Exception as exc:
+                # 同上：计划已在内存里，落库失败不构成中断理由。
                 log.warning(
                     "agent.plan_persist_failed", error=str(exc), exc_info=True,
                 )
                 yield {
-                    "type": "error",
-                    "category": "backend",
-                    "detail": f"Unable to persist task plan: {exc}",
+                    "type": "run.recovery.notice",
+                    "data": {
+                        "message": "计划持久化失败，本轮仍按该计划继续执行。",
+                        "detail": str(exc),
+                    },
                 }
-                state.abort = True
-                return
         yield {"type": "plan_updated", "plan": plan_value, "resumed": False}
 
 
@@ -768,7 +826,7 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
     """
     request = state.request
     initial_messages: list[BaseMessage] = [
-        SystemMessage(content=_agent.SYSTEM_PROMPT + _user_output_style_prompt())
+        SystemMessage(content=_breaker_prompt() + _user_output_style_prompt())
     ]
     from atlas.time_context import now_local, timezone_name
 

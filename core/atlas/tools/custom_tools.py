@@ -19,12 +19,18 @@ MAX_OUTPUT = 64 * 1024
 class CustomToolStore:
     def __init__(self, tools_dir: str | Path) -> None:
         self.tools_dir = Path(tools_dir).resolve()
+        # 专家模式装上的工具：各自一个 <id>/ 目录，只读加载，不经这里增删改。
+        self.extra_dirs: list[Path] = []
+
+    def _config_paths(self) -> list[Path]:
+        paths = sorted(self.tools_dir.glob("*/tool.json")) if self.tools_dir.is_dir() else []
+        own = {path.parent.name for path in paths}
+        paths += [d / "tool.json" for d in self.extra_dirs if d.name not in own and (d / "tool.json").is_file()]
+        return paths
 
     def list_tools(self) -> list[dict[str, Any]]:
         result = []
-        if not self.tools_dir.is_dir():
-            return result
-        for config_path in sorted(self.tools_dir.glob("*/tool.json")):
+        for config_path in self._config_paths():
             try:
                 data = json.loads(config_path.read_text(encoding="utf-8"))
                 if self._valid_id(data.get("id")) and data["id"] == config_path.parent.name:
@@ -145,6 +151,8 @@ class CustomToolStore:
 
     async def execute(self, tool_id: str, arguments: dict[str, Any], *, allow_disabled: bool = False) -> dict[str, Any]:
         directory = self._directory(tool_id)
+        if not (directory / "tool.json").is_file():
+            directory = next((d for d in self.extra_dirs if d.name == tool_id), directory)
         config_path = directory / "tool.json"
         if not config_path.is_file():
             raise KeyError(tool_id)

@@ -331,6 +331,14 @@ async def _start_skills_plugins(services: Any, components: StartupComponents) ->
     """
     from atlas.api.run_drive import _refresh_extension_sources
 
+    try:
+        from atlas import expert_mode
+
+        await asyncio.to_thread(expert_mode.ensure_pack)
+        expert_mode.prime_runtime(services)
+    except Exception:  # noqa: BLE001 — 专家目录出问题不能拖住启动
+        log.exception("expert_mode.prime_failed")
+
     await _component(components, "skills", lambda: _scan_and_register_skills(services))
 
     async def _load_plugins() -> None:
@@ -342,6 +350,12 @@ async def _start_skills_plugins(services: Any, components: StartupComponents) ->
         _refresh_extension_sources()
         if plugin_load_report.get("errors"):
             log.warning("plugins.load_errors", errors=plugin_load_report["errors"])
+        try:
+            from atlas import expert_mode
+
+            await expert_mode._apply_mcp(services)
+        except Exception:  # noqa: BLE001
+            log.exception("expert_mode.mcp_start_failed")
 
     await _component(components, "plugins", _load_plugins)
 

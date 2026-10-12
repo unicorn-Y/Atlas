@@ -71,6 +71,8 @@ class PluginRuntime:
 
     def __init__(self, plugin_dirs: list[Path], state_path: Path) -> None:
         self._dirs = [Path(d) for d in plugin_dirs]
+        # 专家模式装上的插件：每个是一个插件根目录，跟在普通插件后面。
+        self.extra_roots: list[Path] = []
         self._state_path = Path(state_path)
         self._state: dict[str, Any] = {}
         self._enabled: dict[str, bool] = {}
@@ -117,6 +119,10 @@ class PluginRuntime:
                 root = self._plugin_root(child)
                 if root is not None and root not in roots:
                     roots.append(root)
+        for extra in self.extra_roots:
+            root = self._plugin_root(extra) if extra.is_dir() else None
+            if root is not None and root not in roots:
+                roots.append(root)
         return roots
 
     def discover(self) -> list[dict[str, Any]]:
