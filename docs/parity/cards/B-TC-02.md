@@ -4,7 +4,7 @@
 
 ## 条目结果
 
-- **B010 选中文本加入任务或发起 side chat**：对话消息选中文字后，现有右键/更多菜单可把选区加入输入草稿；新增“用选中文本开启侧聊”，将选中文本带入当前对话的 side chat。没有实现其它应用上的全局选区浮层；那项属于 B089。
+- **B010 选中文本加入任务或发起 side chat**：对话消息选中文字后显示就地浮层，可把引用文本加入当前输入草稿，或带入当前对话的 side chat；原右键/更多菜单动作也保留。没有实现其它应用上的全局选区浮层；那项属于 B089。
 - **B032 Slash command registry、模糊搜索、来源/说明**：新增统一 SlashCommand 注册契约；校验空 ID 和重复 ID，为内建、技能、自定义命令补来源；按命令名、说明、分组、来源模糊匹配，并展示来源、分组和说明。
 - **B038 Codex `/worktree` 当前会话工作树入口**：核实原有命令已打开 Inspector 的上下文页；那里可查看已创建工作树、合并或删除。Composer 也已有下次 run 的工作树和起始分支选择。本卡没有新增跨工作树迁移对话的能力；Atlas 当前没有与 Codex handoff 对应的会话迁移契约。
 - **B048 `!` shell composer 模式/命令**：dock Composer 中提交 `!command` 时先显示终端执行确认，显示命令内容；取消保留草稿，确认后才走现有终端路由。Atlas 仍使用当前会话的终端面板，没有 OpenCode 的独立 session shell API。
@@ -19,4 +19,4 @@
 - `npm --prefix frontend run build`：通过（Electron、preload、renderer TypeScript 和 Vite production build）。
 - 在 `core` 使用 Python 3.14 启动 `uvicorn atlas.server:app --port 28792`（`ATLAS_UPSTREAM_AUTO=0`）：通过；`/api/health` 返回 `status: ok`，11 个组件均为 `ready`，随后已停止服务。
 - 按 taskbook 未编写或运行测试。
-- 功能代码提交号：`d4f39670847f2d46f7c7c7022ca0ea15ce1e72fc`；结果文档另随文档提交推送。
+- 功能代码提交号：`d4f39670847f2d46f7c7c7022ca0ea15ce1e72fc`、`0ffcc9ff9b5c81ed12d7e98c1acdc9e86145439c`；结果文档另随文档提交推送。
