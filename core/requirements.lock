@@ -209,7 +209,7 @@ tqdm==4.70.1
 trafilatura==2.3.1
 tree-sitter-c-sharp==0.23.5
 tree-sitter-embedded-template==0.25.0
-tree-sitter-language-pack==1.21.3
+tree-sitter-language-pack==1.22.1
 tree-sitter-yaml==0.7.2
 tree-sitter==0.26.0
 truststore==0.10.4

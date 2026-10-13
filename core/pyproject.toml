@@ -49,7 +49,7 @@ dependencies = [
     # Aider-style tree-sitter repository map; versions follow Aider 5dc9490bb35f.
     "grep-ast==0.9.0",
     "tree-sitter==0.26.0",
-    "tree-sitter-language-pack==1.21.3",
+    "tree-sitter-language-pack==1.22.1",
 ]
 
 [project.optional-dependencies]
