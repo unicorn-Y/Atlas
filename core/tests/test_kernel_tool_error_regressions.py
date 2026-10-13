@@ -141,3 +141,24 @@ async def test_retry_discards_incomplete_arguments_and_preserves_text(monkeypatc
     assert result.tool_calls == [{"id": "call-1", "name": "local_shell", "args": {"command": "taskkill /?"}}]
     assert result.text == "Hello world"
     assert "".join(text) == "Hello world"
+
+
+def test_overlap_merge_preserves_boundary_character_repetition():
+    from atlas.kernel.model_call import _overlap_merge
+
+    assert _overlap_merge("asci", "i") == "ascii"
+    assert _overlap_merge("fast", "train") == "fasttrain"
+    assert _overlap_merge('foo"', '"bar') == 'foo""bar'
+    assert _overlap_merge("a=", "=b") == "a==b"
+    assert _overlap_merge("Hello world from the stream", "from the stream and more") == "Hello world from the stream and more"
+
+
+def test_classify_error_extracts_http_429_from_upstream_message():
+    from atlas.kernel.model_call import classify_error
+
+    exc = RuntimeError("ModelCallError: Upstream API error (HTTP 429)")
+    category, retryable, status = classify_error(exc)
+    assert category == "rate_limit"
+    assert retryable is True
+    assert status == 429
+

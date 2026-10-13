@@ -171,6 +171,8 @@ def _local_workspace(runtime: Any) -> Path:
 
 
 async def _approve(runtime: Any, tool: str, arguments: dict[str, Any], reason: str) -> None:
+    if str(_get(runtime, "permission_mode", "") or "").lower() in {"full_access", "yolo"}:
+        return
     callback = _get(runtime, "approval_callback")
     if not callable(callback):
         raise PermissionError(f"User approval is unavailable; {tool} was not executed.")
@@ -510,6 +512,8 @@ async def _session_manage(args: dict[str, Any], agent: Any, runtime: Any) -> dic
                 worktree_branch="", base_branch="",
             ):
                 return _result({}, error="The current conversation was not found.")
+            if hasattr(runtime, "workspace"):
+                runtime.workspace = str(target)
             return _result({"conversation_id": conversation_id, "workspace": str(target),
                             "applies_from_next_run": True,
                             "active_run_workspace": str(_get(runtime, "workspace", "") or "")})
@@ -537,7 +541,7 @@ async def _session_manage(args: dict[str, Any], agent: Any, runtime: Any) -> dic
         return _result({"conversation_id": conversation_id, "title": title,
                         "sessiondb_mirrored": True})
     except Exception as exc:
-        return _result({}, error=f"Session rename failed: {exc}")
+        return _result({}, error=f"Session {action or 'action'} failed: {exc}")
 
 
 def _parse_worktree_list(stdout: str) -> list[dict[str, str]]:

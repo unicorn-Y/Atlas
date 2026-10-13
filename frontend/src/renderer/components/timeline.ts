@@ -256,7 +256,18 @@ function failureMessage(value: unknown, execution: Record<string, unknown> | und
 
 /** Plain-language verb + salient argument for a tool call, e.g. `local_shell {command: "npm test"}` → 运行命令 npm test. */
 export function describeTool(name: string, args: unknown): { verb: string; target?: string } {
-  const a = args && typeof args === 'object' ? args as Record<string, unknown> : {};
+  let a: Record<string, unknown> = {};
+  if (args && typeof args === 'object') {
+    a = args as Record<string, unknown>;
+  } else if (typeof args === 'string') {
+    try {
+      const parsed = JSON.parse(args);
+      if (parsed && typeof parsed === 'object') a = parsed as Record<string, unknown>;
+      else a = { command: args };
+    } catch {
+      a = { command: args };
+    }
+  }
   const str = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
   const action = str(a.action);
   switch (name) {
@@ -265,14 +276,20 @@ export function describeTool(name: string, args: unknown): { verb: string; targe
     case 'local_edit':
       return { verb: '修改', target: str(a.path) && shortPath(str(a.path)!) };
     case 'local_shell':
-    case 'powershell':
-      return { verb: '运行命令', target: str(a.command)?.slice(0, 120) };
-    case 'exec_command':
-      return { verb: '运行命令', target: str(a.cmd)?.slice(0, 120) };
+    case 'powershell': {
+      const cmd = str(a.command)?.replace(/[\r\n]+/g, ' ').trim();
+      return { verb: '运行命令', target: cmd?.slice(0, 120) };
+    }
+    case 'exec_command': {
+      const cmd = str(a.cmd)?.replace(/[\r\n]+/g, ' ').trim();
+      return { verb: '运行命令', target: cmd?.slice(0, 120) };
+    }
     case 'write_stdin':
       return { verb: a.stop ? '停止进程' : str(a.chars) ? '向进程输入' : '查看进程输出', target: str(a.session_id) };
-    case 'local_exec':
-      return { verb: '运行', target: [str(a.executable), ...(Array.isArray(a.args) ? a.args.map(String) : [])].filter(Boolean).join(' ').slice(0, 120) };
+    case 'local_exec': {
+      const cmd = [str(a.executable), ...(Array.isArray(a.args) ? a.args.map(String) : [])].filter(Boolean).join(' ').replace(/[\r\n]+/g, ' ').trim();
+      return { verb: '运行', target: cmd.slice(0, 120) || (str(a.stdin)?.replace(/[\r\n]+/g, ' ').slice(0, 80)) };
+    }
     case 'local_process':
       return { verb: PROCESS_ACTIONS[action ?? ''] ?? '管理进程', target: str(a.command) ?? str(a.executable) };
     case 'local_git':

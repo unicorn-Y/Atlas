@@ -89,6 +89,12 @@ function presentRows(rows: ThreadRow[], settings: ReturnType<typeof useThreadPre
       output.push({ kind: 'row', id: row.id, row });
       continue;
     }
+    const isPending = pendingInteraction(row, answers);
+    if (isPending) {
+      flush();
+      output.push({ kind: 'row', id: row.id, row });
+      continue;
+    }
     const classId = timelineClass(row.item);
     if (settings.groupByClass) {
       if (groupClass !== classId) flush();

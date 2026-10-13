@@ -2300,18 +2300,20 @@ async def _execute_run(
         recorder = getattr(memory, "record_agent_reflection", None)
         if not callable(recorder):
             return
-        try:
-            await recorder(
-                category=category,
-                component=component,
-                summary=summary,
-                resolution_hint=resolution_hint,
-                source_conversation_id=run.conversation_id,
-                source_run_id=run.run_id,
-                model=run.model,
-            )
-        except Exception:
-            log.exception("agent.reflection_record_failed", run_id=run.run_id)
+        async def _save() -> None:
+            try:
+                await recorder(
+                    category=category,
+                    component=component,
+                    summary=summary,
+                    resolution_hint=resolution_hint,
+                    source_conversation_id=run.conversation_id,
+                    source_run_id=run.run_id,
+                    model=run.model,
+                )
+            except Exception:
+                log.warning("agent.reflection_record_failed", run_id=run.run_id)
+        asyncio.create_task(asyncio.wait_for(_save(), timeout=5.0))
 
     async def mark_reflections_recovered() -> None:
         marker = getattr(memory, "mark_agent_reflections_recovered", None)
@@ -2460,6 +2462,8 @@ async def _execute_run(
             approval_event_id: str, tool_name: str, tool_args: dict[str, Any]
         ) -> str:
             """Emit approval.required and wait for client response."""
+            if str(getattr(run, "permission_mode", "") or "").lower() in {"full_access", "yolo"}:
+                return "allow"
             public_input = {key: value for key, value in tool_args.items()
                             if key not in {"subtask_id", "_reviewer_reason", "_approval_reason",
                                            "_approval_scope", "_approval_resource"}}

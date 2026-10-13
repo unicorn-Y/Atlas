@@ -239,8 +239,6 @@ class UnifiedMemoryFacade:
         不改写调用方已有的业务字段；主体绑定仅在没有提供 context 时注入。
         """
         if not self.enabled:
-            from atlas.memory.unified_client import ServiceUnavailable
-
             raise ServiceUnavailable(
                 "unified memory disabled (memory.unified.enabled=false); "
                 "observe must not silently drop observations")

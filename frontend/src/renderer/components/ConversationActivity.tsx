@@ -402,7 +402,8 @@ function Question({ event, store }: { event: AgentEvent; store: Store }) {
           description: String((option as { description?: unknown })?.description ?? '') },
   ).filter((option) => option.label) : [];
   const answer = store.answers[eventId];
-  const open = answer === undefined && store.getRun(event.runId)?.status === 'waiting';
+  const run = store.getRun(event.runId);
+  const open = answer === undefined && (!run || !['completed', 'failed', 'cancelled'].includes(run.status));
   const send = (value: string) => { if (value.trim()) store.answerInput(event.runId, eventId, value.trim()); };
   return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
     <div className="flex gap-3.5 border-l-[3px] border-brand px-4 py-3.5">
@@ -441,7 +442,8 @@ function Plan({ event, store }: { event: AgentEvent; store: Store }) {
   const plan = (event.data.plan && typeof event.data.plan === 'object' ? event.data.plan : {}) as { goal?: string; subtasks?: PlanStep[]; steps?: string };
   const steps = Array.isArray(plan.subtasks) ? plan.subtasks : [];
   const decided = store.answers[eventId];
-  const open = decided === undefined && store.getRun(event.runId)?.status === 'waiting';
+  const run = store.getRun(event.runId);
+  const open = decided === undefined && (!run || !['completed', 'failed', 'cancelled'].includes(run.status));
   return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
     <div className="border-l-[3px] border-brand px-4 py-3.5">
       <p className="m-0 flex items-center gap-2 text-[14px] font-semibold text-heading"><ListChecks size={17} className="text-brand" />计划：{plan.goal ?? '待确认'}</p>

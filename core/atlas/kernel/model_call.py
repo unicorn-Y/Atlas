@@ -124,7 +124,9 @@ def _overlap_merge(old: str, new: str) -> str:
     if new.startswith(old):
         return new
     limit = min(len(old), len(new))
-    for size in range(limit, 0, -1):
+    if limit < 8:
+        return old + new
+    for size in range(limit, 7, -1):
         if old.endswith(new[:size]):
             return old + new[size:]
     return old + new
@@ -148,6 +150,12 @@ def _status(exc: BaseException) -> int | None:
             except (TypeError, ValueError):
                 continue
         current = _get(current, "__cause__") or _get(current, "__context__")
+    match = re.search(r"\b(?:http|status|code|error)[-_\s:]*([45]\d{2})\b", str(exc).lower())
+    if match:
+        try:
+            return int(match.group(1))
+        except (TypeError, ValueError):
+            pass
     return None
 
 
@@ -215,9 +223,9 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
         return "model_not_found", False, status
     if status == 429 or any(marker in text for marker in (
         "rate_limit_error", "rate_limit_exceeded", "rate limit", "too many requests",
-        "slow_down",
+        "slow_down", "http 429", "(429)", "429",
     )):
-        return "rate_limit", True, status
+        return "rate_limit", True, status or 429
     if status == 529 or "overload" in text or "server_is_overloaded" in text:
         return "overloaded", True, status
     if status in {408, 425, 504} or "timeout" in name or "timed out" in text:

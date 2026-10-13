@@ -1024,12 +1024,21 @@ class LocalExecutionRuntime:
             asyncio.create_task(self._pump(record, "stdout", proc.stdout, callback)),
             asyncio.create_task(self._pump(record, "stderr", proc.stderr, callback)),
         ]
-        if stdin is not None and proc.stdin is not None:
-            proc.stdin.write(stdin.encode("utf-8"))
-            await proc.stdin.drain()
-        if proc.stdin and not keep_stdin:
-            proc.stdin.close()
-            await proc.stdin.wait_closed()
+        async def _feed_stdin() -> None:
+            if stdin is not None and proc.stdin is not None:
+                try:
+                    proc.stdin.write(stdin.encode("utf-8"))
+                    await proc.stdin.drain()
+                except Exception:
+                    pass
+            if proc.stdin and not keep_stdin:
+                try:
+                    proc.stdin.close()
+                    await proc.stdin.wait_closed()
+                except Exception:
+                    pass
+        if stdin is not None or (proc.stdin and not keep_stdin):
+            asyncio.create_task(_feed_stdin())
         record.wait_task = asyncio.create_task(self._watch(record))
         log.info(
             "local_execution.started",
@@ -1168,7 +1177,8 @@ class LocalExecutionRuntime:
                 "content": [{"type": "text", "text": str(data)}],
                 "is_error": False,
             }
-        return await self._wait_result(record, args.get("timeout"))
+        timeout = args.get("timeout") if args.get("timeout") is not None else 180.0
+        return await self._wait_result(record, timeout)
 
     async def _process_operation(
         self, args: dict[str, Any], run_id: str | None, callback: OutputCallback | None,

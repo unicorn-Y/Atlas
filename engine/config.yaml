@@ -50,3 +50,14 @@ tool_loop_guardrails:
   non_interactive_hard_stop_enabled: false
 # 上下文文件（AGENTS.md 等）截断上限，默认动态 20K；放开到 120K。
 context_file_max_chars: 120000
+mcp_servers:
+  rea:
+    command: C:\Program Files\nodejs\node.exe
+    args:
+      - C:\Users\25011\AppData\Roaming\npm\node_modules\rea-agents\scripts\rea.mjs
+      - mcp
+    env:
+      GHIDRA_INSTALL_DIR: C:\Users\25011\.atlas-expert\tools\ghidra
+      JAVA_HOME: C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot
+      REA_JADX_MCP_JAR: C:\Users\25011\.atlas-expert\tools\jadx-mcp\jadx-headless-mcp-0.7.1-all.jar
+    enabled: true
