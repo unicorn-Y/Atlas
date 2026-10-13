@@ -400,10 +400,24 @@ class ModelRouter:
         return CompletionResult(text=text, usage=usage, raw=response)
 
     async def complete_for(
-        self, model_id: str, purpose: str, messages: list[dict[str, Any]], **kwargs: Any,
+        self, model_id: str, purpose: str, messages: list[dict[str, Any]],
+        fallbacks: list[str] | None = None, **kwargs: Any,
     ) -> CompletionResult:
-        route = await self.resolve(model_id, purpose)
-        return await self.complete(route, messages, **kwargs)
+        candidates = [model_id, *(fallbacks or [])]
+        for alt in ("deepseek-v4.1-flash", "deepseek-v3"):
+            if alt not in candidates:
+                candidates.append(alt)
+        last_error = None
+        for candidate in candidates:
+            try:
+                route = await self.resolve(candidate, purpose)
+                return await self.complete(route, messages, **kwargs)
+            except Exception as exc:
+                last_error = exc
+                continue
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("No model candidates available")
 
     @staticmethod
     def hermes_agent_kwargs(route: RouteSpec) -> dict[str, Any]:
