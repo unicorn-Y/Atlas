@@ -1,7 +1,7 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { setImmediate } from 'node:timers';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -18,6 +18,9 @@ import {
 } from '../shared/ipc.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+if (process.env.ATLAS_DESKTOP_USER_DATA_DIR) {
+  app.setPath('userData', path.resolve(process.env.ATLAS_DESKTOP_USER_DATA_DIR));
+}
 
 /** Window/taskbar icon per UI theme (assets/icon/icon-<theme>.png); the exe icon stays 夜航. */
 const THEME_ICONS = new Set(['light', 'aurora', 'dark']);
@@ -28,15 +31,20 @@ function themeIcon(theme: string): Electron.NativeImage | undefined {
 }
 let windowRef: BrowserWindow | null = null;
 let floatingComposerWindow: BrowserWindow | null = null;
-type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null };
-let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null };
+type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; openAtLogin: boolean };
+let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, openAtLogin: true };
 let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
 let pendingDeepLinks: AtlasDeepLink[] = [];
 let deepLinkSubscriber: Electron.WebContents | null = null;
 process.env.ATLAS_SKILL_CENTER_TOKEN ??= randomBytes(32).toString('base64url');
-// Proves to the backend that a request comes from this app rather than some web page.
-// Only the main process ever sees it: it is attached below, outside the renderer.
-process.env.ATLAS_API_TOKEN ??= randomBytes(32).toString('base64url');
+let trayRef: Tray | null = null;
+let backendAttempt = 0;
+let pendingRetry: NodeJS.Timeout | null = null;
+let trayRefreshTimer: NodeJS.Timeout | null = null;
+let explicitQuit = false;
+let lastProgress: BackendStartupProgress = { phase: 'probing', managed: false, elapsedMs: 0 };
+let componentStatuses: Record<string, string> = {};
+let consecutiveBackendHealthFailures = 0;
 
 /** Session for pages shown in the browser panel. Separate from the app's, so they never get the backend token. */
 export const BROWSER_PARTITION = 'persist:atlas-browser';
@@ -79,9 +87,10 @@ function loadPlatformPreferences(): PlatformPreferences {
     return {
       alwaysOnTop: data.alwaysOnTop === true,
       globalShortcut: typeof data.globalShortcut === 'string' ? data.globalShortcut : null,
+      openAtLogin: data.openAtLogin !== false,
     };
   } catch {
-    return { alwaysOnTop: false, globalShortcut: null };
+    return { alwaysOnTop: false, globalShortcut: null, openAtLogin: true };
   }
 }
 
@@ -93,8 +102,122 @@ function savePlatformPreferences(next: PlatformPreferences): void {
 }
 
 function platformSettingsSnapshot(): PlatformSettingsState {
-  return { alwaysOnTop: platformPreferences.alwaysOnTop, globalShortcut: { ...globalShortcutState } };
+  return { alwaysOnTop: platformPreferences.alwaysOnTop, openAtLogin: platformPreferences.openAtLogin, globalShortcut: { ...globalShortcutState } };
 }
+
+function runtimeDir(): string {
+  const dataDir = process.env.ATLAS_DATA_DIR
+    ? path.join(path.resolve(process.env.ATLAS_DATA_DIR), 'data')
+    : app.isPackaged ? app.getPath('userData') : path.resolve(app.getAppPath(), '..', 'data');
+  return path.join(dataDir, 'runtime');
+}
+
+function prepareSharedApiToken(): void {
+  const dir = runtimeDir();
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'api-token');
+  let token = '';
+  try { token = readFileSync(file, 'utf8').trim(); } catch { /* create below */ }
+  if (!token) {
+    token = randomBytes(32).toString('base64url');
+    writeFileSync(file, `${token}\n`, { mode: 0o600 });
+  }
+  try { chmodSync(file, 0o600); } catch { /* Windows ACL is handled below */ }
+  if (process.platform === 'win32') {
+    const account = `${process.env.USERDOMAIN ?? ''}\\${process.env.USERNAME ?? ''}`;
+    const acl = spawnSync('icacls', [file, '/inheritance:r', '/grant:r', `${account}:(R)`], { windowsHide: true, stdio: 'ignore' });
+    if (acl.error || acl.status !== 0) throw new Error(`无法为共享 API 令牌限制读取权限：${acl.error?.message ?? `icacls exit ${acl.status}`}`);
+  }
+  process.env.ATLAS_API_TOKEN = token;
+}
+
+function setOpenAtLogin(enabled: boolean): void {
+  platformPreferences = { ...platformPreferences, openAtLogin: enabled };
+  savePlatformPreferences(platformPreferences);
+  app.setLoginItemSettings({ openAtLogin: enabled, args: enabled ? ['--background'] : [] });
+}
+
+function buildTrayMenu(): void {
+  if (!trayRef) return;
+  const statusText = lastProgress.phase === 'ready' ? '后台：可用'
+    : lastProgress.phase === 'failed' ? `后台：启动失败${lastProgress.detail ? `（${lastProgress.detail.slice(0, 60)}）` : ''}`
+      : `后台：${lastProgress.detail || '正在启动'}`;
+  trayRef.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开 Atlas', click: focusAtlasWindow },
+    { label: statusText, enabled: false },
+    { label: '后台组件', submenu: Object.entries(componentStatuses).length
+      ? Object.entries(componentStatuses).map(([name, state]) => ({ label: `${name}：${state}`, enabled: false }))
+      : [{ label: '等待状态', enabled: false }] },
+    { label: '重启后台', click: () => { void stopManagedBackend().then(() => startBackend(true)); } },
+    { label: '查看日志', click: () => { void shell.openPath(backendLogPath()); } },
+    { type: 'separator' },
+    { label: '开机自启', type: 'checkbox', checked: platformPreferences.openAtLogin, click: (item) => setOpenAtLogin(item.checked) },
+    { type: 'separator' },
+    { label: '退出 Atlas', click: () => { explicitQuit = true; app.quit(); } },
+  ]));
+}
+
+function createTray(): void {
+  if (trayRef) return;
+  const image = nativeImage.createFromPath(path.join(app.getAppPath(), 'assets', 'icon', 'icon-dark.png'));
+  trayRef = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
+  trayRef.setToolTip('Atlas');
+  trayRef.on('double-click', focusAtlasWindow);
+  buildTrayMenu();
+}
+
+function backendLogPath(): string {
+  if (process.env.ATLAS_DATA_DIR) return path.join(path.resolve(process.env.ATLAS_DATA_DIR), 'data', 'logs', 'backend-stdio.log');
+  if (app.isPackaged) return path.join(app.getPath('userData'), 'data', 'logs', 'backend-stdio.log');
+  return path.resolve(app.getAppPath(), '..', 'data', 'logs', 'backend-stdio.log');
+}
+
+async function refreshTrayBackendStatus(): Promise<void> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/health`, { signal: AbortSignal.timeout(1_500) });
+    if (!response.ok) { componentStatuses = {}; recordBackendHealthFailure(); buildTrayMenu(); return; }
+    consecutiveBackendHealthFailures = 0;
+    const body = await response.json() as { components?: Record<string, string | { status?: string }> };
+    componentStatuses = Object.fromEntries(Object.entries(body.components ?? {}).map(([name, item]) => [
+      name, typeof item === 'string' ? item : item?.status ?? 'unknown',
+    ]));
+    buildTrayMenu();
+  } catch { componentStatuses = {}; recordBackendHealthFailure(); buildTrayMenu(); }
+}
+
+function recordBackendHealthFailure(): void {
+  consecutiveBackendHealthFailures += 1;
+  if (lastProgress.phase === 'ready' && consecutiveBackendHealthFailures >= 2 && !pendingRetry) {
+    publishProgress({ phase: 'failed', managed: false, elapsedMs: lastProgress.elapsedMs, detail: '后台连接中断，正在重新启动', message: '后台连接中断，正在重新启动', logPath: backendLogPath() });
+    startBackend();
+  }
+}
+
+function publishProgress(progress: BackendStartupProgress): void {
+  lastProgress = progress;
+  windowRef?.webContents.send(BACKEND_STARTUP_CHANNEL, progress);
+  buildTrayMenu();
+}
+
+function startBackend(manual = false): void {
+  if (pendingRetry) { clearTimeout(pendingRetry); pendingRetry = null; }
+  const attempt = ++backendAttempt;
+  if (manual) retryCount = 0;
+  void ensureBackendRunning({ onProgress: publishProgress }).then(() => {
+    if (attempt !== backendAttempt) return;
+    retryCount = 0;
+  }).catch((error: unknown) => {
+    if (attempt !== backendAttempt || explicitQuit) return;
+    const message = error instanceof Error ? error.message : String(error);
+    const detail = message.slice(-6000);
+    publishProgress({ phase: 'failed', managed: false, elapsedMs: lastProgress.elapsedMs, detail, message: detail, logPath: backendLogPath() });
+    if (retryCount < 3) {
+      const delay = [1_000, 3_000, 10_000][retryCount++];
+      pendingRetry = setTimeout(() => { pendingRetry = null; startBackend(); }, delay);
+    }
+  });
+}
+let retryCount = 0;
 
 function validateGlobalAccelerator(value: string): string | null {
   const accelerator = value.trim();
@@ -364,6 +487,7 @@ function createWindow() {
     title: 'Atlas · Agent Workspace',
     icon: themeIcon('dark'),
     titleBarStyle: 'hidden',
+    show: false,
     trafficLightPosition: { x: 14, y: 13 },
     webPreferences: {
       preload: path.join(here, '../preload/index.cjs'),
@@ -374,6 +498,7 @@ function createWindow() {
       webviewTag: true,
     },
   });
+  windowRef.once('ready-to-show', () => { if (!explicitQuit && !process.argv.includes('--background')) windowRef?.show(); });
   windowRef.setAlwaysOnTop(platformPreferences.alwaysOnTop);
 
   windowRef.on('maximize', () => windowRef?.webContents.send('window:maximize-change', true));
@@ -444,6 +569,12 @@ function createWindow() {
   win.webContents.on('did-start-loading', () => {
     if (deepLinkSubscriber === win.webContents) deepLinkSubscriber = null;
   });
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.send(BACKEND_STARTUP_CHANNEL, lastProgress);
+  });
+  windowRef.on('close', (event) => {
+    if (!explicitQuit) { event.preventDefault(); windowRef?.hide(); }
+  });
   windowRef.on('closed', () => { windowRef = null; });
 }
 
@@ -482,6 +613,21 @@ ipcMain.handle('platform:set-always-on-top', (event, enabled: unknown) => {
   savePlatformPreferences({ ...platformPreferences, alwaysOnTop: enabled });
   if (windowRef && !windowRef.isDestroyed()) windowRef.setAlwaysOnTop(enabled);
   return platformSettingsSnapshot();
+});
+ipcMain.handle('platform:set-open-at-login', (event, enabled: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof enabled !== 'boolean') throw new Error('开机自启设置必须是布尔值。');
+  setOpenAtLogin(enabled);
+  return platformSettingsSnapshot();
+});
+ipcMain.handle('backend:retry', (event) => {
+  assertTrustedAppSender(event);
+  startBackend(true);
+});
+ipcMain.handle('backend:open-log', async (event) => {
+  assertTrustedAppSender(event);
+  const error = await shell.openPath(backendLogPath());
+  if (error) throw new Error(error);
 });
 ipcMain.handle('platform:set-global-shortcut', (event, accelerator: unknown) => {
   assertTrustedAppSender(event);
@@ -533,11 +679,12 @@ ipcMain.on('window:close', () => windowRef?.close());
 // pulled and rebuilt by scripts/atlas-update.mjs instead of reinstalling a package.
 const updateRoot = () => (!app.isPackaged && !process.env.VITE_DEV_SERVER_URL ? sourceRoot(app.getAppPath()) : null);
 ipcMain.handle('update:check', () => checkSourceUpdate(updateRoot()));
-ipcMain.handle('update:apply', () => {
+ipcMain.handle('update:apply', async () => {
   const root = updateRoot();
   if (!root) return false;
+  await stopManagedBackend();
   launchSourceUpdater(root);
-  setImmediate(() => app.quit());
+  setImmediate(() => { explicitQuit = true; app.quit(); });
   return true;
 });
 ipcMain.on('window:theme', (_event, theme: unknown) => {
@@ -577,6 +724,7 @@ ipcMain.handle('skill-center:token', (event) => {
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   platformPreferences = loadPlatformPreferences();
+  app.setLoginItemSettings({ openAtLogin: platformPreferences.openAtLogin, args: platformPreferences.openAtLogin ? ['--background'] : [] });
   registerPreferredGlobalShortcut();
   // Dedicated system-wide shortcut for the floating composer; it does not replace the user's
   // configurable Atlas focus shortcut. Registration failure leaves the in-app API available.
@@ -607,24 +755,14 @@ app.whenReady().then(async () => {
       Object.fromEntries(selectedPackages.map((name) => [name, packageJson.dependencies?.[name]])),
     );
   }
-  // H8 §10.3: the backend boots in parallel with the window instead of blocking it for
-  // up to two minutes. Startup progress is broadcast to the renderer (backend:startup-progress),
-  // which keeps its "启动中" surfaces until the backend reports ready. A real failure
-  // (process exit / cap exceeded) still surfaces the backend log tail and quits.
-  let lastProgress: BackendStartupProgress = { phase: 'probing', managed: false, elapsedMs: 0 };
-  const forwardProgress = (progress: BackendStartupProgress) => {
-    lastProgress = progress;
-    windowRef?.webContents.send(BACKEND_STARTUP_CHANNEL, progress);
-  };
-  const backendReady = ensureBackendRunning({ onProgress: forwardProgress });
-  void backendReady.catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    dialog.showErrorBox('Atlas backend startup failed', `Atlas could not start its backend.\n\n${message}`);
-    app.quit();
-  });
+  prepareSharedApiToken();
   attachBackendToken();
   lockDownWebviews();
+  createTray();
   createWindow();
+  startBackend();
+  void refreshTrayBackendStatus();
+  trayRefreshTimer = setInterval(() => { void refreshTrayBackendStatus(); }, 5_000);
   const initialDeepLink = findAtlasUrl(process.argv);
   if (initialDeepLink) receiveAtlasDeepLink(initialDeepLink);
   // The window may appear after boot already finished (fast external backend): give the
@@ -640,6 +778,8 @@ app.on('before-quit', (event) => {
   event.preventDefault();
   if (shutdownStarted) return;
   shutdownStarted = true;
+  if (pendingRetry) { clearTimeout(pendingRetry); pendingRetry = null; }
+  if (trayRefreshTimer) { clearInterval(trayRefreshTimer); trayRefreshTimer = null; }
   globalShortcut.unregisterAll();
   void stopManagedBackend().finally(() => {
     shutdownComplete = true;
@@ -647,4 +787,4 @@ app.on('before-quit', (event) => {
   });
 });
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { /* Atlas stays available from the tray. */ });

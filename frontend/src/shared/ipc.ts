@@ -7,6 +7,8 @@ export interface BackendStartupProgress {
   elapsedMs: number;
   /** Short human-readable status for the UI, e.g. which health components are still starting. */
   detail?: string;
+  message?: string;
+  logPath?: string;
 }
 /** IPC channel the main process sends {@link BackendStartupProgress} events on. */
 export const BACKEND_STARTUP_CHANNEL = 'backend:startup-progress';
@@ -43,6 +45,7 @@ export interface GlobalShortcutState {
 
 export interface PlatformSettingsState {
   alwaysOnTop: boolean;
+  openAtLogin: boolean;
   globalShortcut: GlobalShortcutState;
 }
 
@@ -52,6 +55,8 @@ export interface AtlasDesktopApi {
   minimize(): void;
   maximize(): void;
   close(): void;
+  retryBackend?(): Promise<void>;
+  openBackendLog?(): Promise<void>;
   getSkillCenterToken(): Promise<string | undefined>;
   /** Native folder picker; resolves to the chosen absolute path, or null when cancelled. */
   selectDirectory(defaultPath?: string): Promise<string | null>;
@@ -66,6 +71,7 @@ export interface AtlasDesktopApi {
   applyUpdate?(): Promise<boolean>;
   /** Read native platform preferences and global shortcut registration state. */
   getPlatformSettings?(): Promise<PlatformSettingsState>;
+  setOpenAtLogin?(enabled: boolean): Promise<PlatformSettingsState>;
   /** Persist and apply the native window's always-on-top state. */
   setAlwaysOnTop?(enabled: boolean): Promise<PlatformSettingsState>;
   /** Register a single OS-wide show/focus shortcut, or clear it with null. */

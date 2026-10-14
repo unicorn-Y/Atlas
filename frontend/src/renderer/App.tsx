@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Settings,
@@ -6,80 +6,91 @@ import {
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
-import MessageThread from './components/MessageThread';
-import TodoPanel from './components/TodoPanel';
-import ProgressCapsule from './components/ProgressCapsule';
+import type { BackendStartupProgress } from '../shared/ipc';
 import { latestTodos } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import { resolveMessageSkillReferences } from './components/skillMentions';
-import ConversationQueuePanel from './components/ConversationQueuePanel';
-import RecipesDialog from './components/RecipesDialog';
-import SideChat from './components/SideChat';
-import RemoteFolderDialog from './components/RemoteFolderDialog';
-import InitDialog from './components/InitDialog';
-import LspStatusSection from './components/LspStatusSection';
-import TimelineNav from './components/TimelineNav';
-import ForkTree from './components/ForkTree';
-import RunSetupMenu from './components/RunSetupMenu';
-import TabStrip from './components/TabStrip';
-import OnboardingDialog from './components/OnboardingDialog';
-import SidePane from './components/SidePane';
-import ShortcutsPanel from './pages/ShortcutsPanel';
-import ScriptToolsPanel from './pages/ScriptToolsPanel';
-import TelegramPanel from './pages/TelegramPanel';
-import UsagePanel from './pages/UsagePanel';
+const MessageThread = lazy(() => import('./components/MessageThread'));
+const TodoPanel = lazy(() => import('./components/TodoPanel'));
+const ProgressCapsule = lazy(() => import('./components/ProgressCapsule'));
+const ConversationQueuePanel = lazy(() => import('./components/ConversationQueuePanel'));
+const RecipesDialog = lazy(() => import('./components/RecipesDialog'));
+const SideChat = lazy(() => import('./components/SideChat'));
+const RemoteFolderDialog = lazy(() => import('./components/RemoteFolderDialog'));
+const InitDialog = lazy(() => import('./components/InitDialog'));
+const LspStatusSection = lazy(() => import('./components/LspStatusSection'));
+const TimelineNav = lazy(() => import('./components/TimelineNav'));
+const ForkTree = lazy(() => import('./components/ForkTree'));
+const RunSetupMenu = lazy(() => import('./components/RunSetupMenu'));
+const TabStrip = lazy(() => import('./components/TabStrip'));
+const OnboardingDialog = lazy(() => import('./components/OnboardingDialog'));
+const SidePane = lazy(() => import('./components/SidePane'));
 import { loadBindings, matchShortcut } from './services/shortcuts';
 import type { CustomCommandInfo, PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
-import Palette, { type PaletteItem } from './components/Palette';
-import VoiceOverlay, { getSpeechRecognition, type SpeechRecognitionLike } from './components/VoiceOverlay';
-import SettingsPage, { STATUS_BAR_ITEMS, type StatusBarPreferences } from './pages/SettingsPage';
-import SkillsMarketPage from './pages/SkillsMarketPage';
-import LibraryPage from './pages/LibraryPage';
-import EvolutionPage from './pages/EvolutionPage';
-import MemoryPage from './pages/MemoryPage';
-import AutomationPage from './pages/AutomationPage';
-import CodePage from './pages/CodePage';
-import CreatePage from './pages/CreatePage';
-import BoardPage from './pages/BoardPage';
-import ProfilesPanel from './pages/ProfilesPanel';
-import HooksPanel from './pages/HooksPanel';
-import AgentsPage from './pages/agents/AgentsPage';
-import DevicesPage from './pages/DevicesPage';
-import WorkbenchPage from './pages/WorkbenchPage';
-import GroupsView from './pages/GroupsView';
-import ChannelsSettings from './pages/settings/ChannelsSettings';
-import LocalModelsSettings from './pages/settings/LocalModelsSettings';
-import ImportPanel from './components/ImportPanel';
-import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
-import McpServersPanel from './components/settings/McpServersPanel';
-import ConfigTransferPanel from './components/settings/ConfigTransferPanel';
-import DiagnosticsPanel from './components/settings/DiagnosticsPanel';
-import RecipeManagerPanel, { type RecipeLaunchRequest } from './components/settings/RecipeManagerPanel';
-import ExtensionPackagesPanel from './components/settings/ExtensionPackagesPanel';
-import ExtensionCatalogPanel from './components/settings/ExtensionCatalogPanel';
-import AppearanceNotificationsPanel from './components/settings/AppearanceNotificationsPanel';
-import WorkspaceSecurityPanel from './components/settings/WorkspaceSecurityPanel';
-import CustomCommandsPanel from './components/settings/CustomCommandsPanel';
-import RunLimitsPanel from './components/settings/RunLimitsPanel';
-import PlatformSettingsPanel from './components/settings/PlatformSettingsPanel';
-import SettingsIntegrationsPanel from './components/settings/SettingsIntegrationsPanel';
-import NetworkSettingsPanel from './components/settings/NetworkSettingsPanel';
-import MainConfigPanel from './components/settings/MainConfigPanel';
-import ExpertModePanel, { ExpertModeBadge, OPEN_EXPERT_SETTINGS } from './components/settings/ExpertModePanel';
-import OutputStyleSettingsPanel from './components/settings/OutputStyleSettingsPanel';
-import McpResourcesPanel from './components/settings/McpResourcesPanel';
-import LocalModelsPanel from './components/settings/LocalModelsPanel';
-import LinearIntegrationPanel from './components/settings/LinearIntegrationPanel';
+import type { PaletteItem } from './components/Palette';
+import type { SpeechRecognitionLike } from './components/VoiceOverlay';
+import type { StatusBarPreferences } from './pages/SettingsPage';
+import type { RecipeLaunchRequest } from './components/settings/RecipeManagerPanel';
+// Each navigation destination is its own renderer chunk. The initial conversation
+// surface therefore does not parse the settings, automation, and workbench pages.
+const ShortcutsPanel = lazy(() => import('./pages/ShortcutsPanel'));
+const ScriptToolsPanel = lazy(() => import('./pages/ScriptToolsPanel'));
+const TelegramPanel = lazy(() => import('./pages/TelegramPanel'));
+const UsagePanel = lazy(() => import('./pages/UsagePanel'));
+const SkillsMarketPage = lazy(() => import('./pages/SkillsMarketPage'));
+const LibraryPage = lazy(() => import('./pages/LibraryPage'));
+const EvolutionPage = lazy(() => import('./pages/EvolutionPage'));
+const MemoryPage = lazy(() => import('./pages/MemoryPage'));
+const AutomationPage = lazy(() => import('./pages/AutomationPage'));
+const CodePage = lazy(() => import('./pages/CodePage'));
+const CreatePage = lazy(() => import('./pages/CreatePage'));
+const BoardPage = lazy(() => import('./pages/BoardPage'));
+const ProfilesPanel = lazy(() => import('./pages/ProfilesPanel'));
+const HooksPanel = lazy(() => import('./pages/HooksPanel'));
+const AgentsPage = lazy(() => import('./pages/agents/AgentsPage'));
+const DevicesPage = lazy(() => import('./pages/DevicesPage'));
+const WorkbenchPage = lazy(() => import('./pages/WorkbenchPage'));
+const GroupsView = lazy(() => import('./pages/GroupsView'));
+const ChannelsSettings = lazy(() => import('./pages/settings/ChannelsSettings'));
+const LocalModelsSettings = lazy(() => import('./pages/settings/LocalModelsSettings'));
+const NotificationsPanel = lazy(() => import('./pages/ConsolePage').then((module) => ({ default: module.NotificationsPanel })));
+const PluginsPanel = lazy(() => import('./pages/ConsolePage').then((module) => ({ default: module.PluginsPanel })));
+const Palette = lazy(() => import('./components/Palette'));
+const Inspector = lazy(() => import('./shell/Inspector'));
+const VoiceOverlay = lazy(() => import('./components/VoiceOverlay'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const ImportPanel = lazy(() => import('./components/ImportPanel'));
+const McpServersPanel = lazy(() => import('./components/settings/McpServersPanel'));
+const ConfigTransferPanel = lazy(() => import('./components/settings/ConfigTransferPanel'));
+const DiagnosticsPanel = lazy(() => import('./components/settings/DiagnosticsPanel'));
+const RecipeManagerPanel = lazy(() => import('./components/settings/RecipeManagerPanel'));
+const ExtensionPackagesPanel = lazy(() => import('./components/settings/ExtensionPackagesPanel'));
+const ExtensionCatalogPanel = lazy(() => import('./components/settings/ExtensionCatalogPanel'));
+const AppearanceNotificationsPanel = lazy(() => import('./components/settings/AppearanceNotificationsPanel'));
+const WorkspaceSecurityPanel = lazy(() => import('./components/settings/WorkspaceSecurityPanel'));
+const CustomCommandsPanel = lazy(() => import('./components/settings/CustomCommandsPanel'));
+const RunLimitsPanel = lazy(() => import('./components/settings/RunLimitsPanel'));
+const PlatformSettingsPanel = lazy(() => import('./components/settings/PlatformSettingsPanel'));
+const SettingsIntegrationsPanel = lazy(() => import('./components/settings/SettingsIntegrationsPanel'));
+const NetworkSettingsPanel = lazy(() => import('./components/settings/NetworkSettingsPanel'));
+const MainConfigPanel = lazy(() => import('./components/settings/MainConfigPanel'));
+const ExpertModePanel = lazy(() => import('./components/settings/ExpertModePanel'));
+const ExpertModeBadge = lazy(() => import('./components/settings/ExpertModePanel').then((module) => ({ default: module.ExpertModeBadge })));
+const OutputStyleSettingsPanel = lazy(() => import('./components/settings/OutputStyleSettingsPanel'));
+const McpResourcesPanel = lazy(() => import('./components/settings/McpResourcesPanel'));
+const LocalModelsPanel = lazy(() => import('./components/settings/LocalModelsPanel'));
+const LinearIntegrationPanel = lazy(() => import('./components/settings/LinearIntegrationPanel'));
+const OPEN_EXPERT_SETTINGS = 'atlas:open-expert-settings';
 import Sidebar, { MORE_NAV, NAV, type View } from './shell/Sidebar';
 import HomeView, { type Suggestion } from './shell/HomeView';
-import Inspector, { type InspectorTab } from './shell/Inspector';
+import type { InspectorTab } from './shell/Inspector';
 import type { PickedElement } from './shell/panels/BrowserPanel';
 import { THEMES, applyStoredTheme, clearCustomTheme, initialTheme, nextTheme, themeInfo, type Theme } from './shell/themes';
 import { api, relativeTime } from './services/api';
 import { buildTimeline } from './components/timeline';
-import { ComputerEdgeBar } from './components/x2';
+const ComputerEdgeBar = lazy(() => import('./components/x2').then((module) => ({ default: module.ComputerEdgeBar })));
 import UpdateBanner from './components/UpdateBanner';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
@@ -144,10 +155,11 @@ const writeDraft = (conversationId: string, text: string) => {
 };
 const pref = (key: string) => { try { return localStorage.getItem(`atlas.preference.${key}`); } catch { return null; } };
 const setPref = (key: string, value: string) => { try { localStorage.setItem(`atlas.preference.${key}`, value); } catch { /* storage unavailable */ } };
+const STATUS_BAR_KEYS: Array<keyof StatusBarPreferences> = ['model', 'reasoning', 'context', 'tokens', 'cost', 'git', 'permission', 'processes'];
 const readStatusBarPreferences = (): StatusBarPreferences => {
   let saved: Partial<StatusBarPreferences> = {};
   try { saved = JSON.parse(pref('statusbar') ?? '{}') as Partial<StatusBarPreferences>; } catch { /* use defaults */ }
-  return Object.fromEntries(STATUS_BAR_ITEMS.map(([key]) => [key, typeof saved[key] === 'boolean' ? saved[key] : true])) as StatusBarPreferences;
+  return Object.fromEntries(STATUS_BAR_KEYS.map((key) => [key, typeof saved[key] === 'boolean' ? saved[key] : true])) as StatusBarPreferences;
 };
 
 export default function App() {
@@ -155,6 +167,7 @@ export default function App() {
   // conversationMessages 仍在列（朗读/撤回/复制要用），但重列表的渲染已交给 MessageThread 自己的窄订阅。
   const storeData = useAtlasStore(useShallow((state) => ({
     apiBaseUrl: state.apiBaseUrl, providerBaseUrl: state.providerBaseUrl, apiKeyConfigured: state.apiKeyConfigured,
+    initOpen: state.initOpen,
     compressionModel: state.compressionModel, configLoaded: state.configLoaded, settingsBusy: state.settingsBusy,
     connectionTest: state.connectionTest, mode: state.mode, connected: state.connected, busy: state.busy, paused: state.paused,
     backendStarting: state.backendStarting, startupDetail: state.startupDetail,
@@ -172,6 +185,8 @@ export default function App() {
   const store = useMemo(() => ({ ...useAtlasStore.getState(), ...storeData }), [storeData]);
   const storeRef = useRef(store);
   storeRef.current = store;
+  const [startupProgress, setStartupProgress] = useState<BackendStartupProgress | null>(null);
+  const [pendingComponents, setPendingComponents] = useState<string[]>([]);
   const [view, setView] = useState<View>('home');
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
@@ -297,7 +312,7 @@ export default function App() {
     return hasComputerTool ? activeRun.id : undefined;
   }, [activeEvents, activeRun, foregroundEvent, store.activeConversationId]);
 
-  const go = useCallback((next: View) => setView(next), []);
+  const go = useCallback((next: View) => startTransition(() => setView(next)), []);
 
   // Unsent text survives switching conversations and restarting the app.
   const draftOwnerRef = useRef(store.activeConversationId);
@@ -370,9 +385,33 @@ export default function App() {
   }), [go]);
   // H8 §10.3/§10.4: the backend boots in parallel with the window; startup progress
   // drives the「启动中」surfaces and re-reads real data once the backend is ready.
-  useEffect(() => window.atlasDesktop?.onBackendStartupProgress(
-    (progress) => useAtlasStore.getState().applyStartupProgress(progress),
-  ), []);
+  useEffect(() => window.atlasDesktop?.onBackendStartupProgress((progress) => {
+    setStartupProgress(progress);
+    useAtlasStore.getState().applyStartupProgress(progress);
+  }), []);
+  useEffect(() => {
+    let stale = false;
+    const refreshHealth = async () => {
+      try {
+        const response = await fetch(`${store.apiBaseUrl.replace(/\/$/, '')}/api/health`, { signal: AbortSignal.timeout(2500) });
+        if (!response.ok) return;
+        const health = await response.json() as { components?: Record<string, unknown> };
+        const components = Object.entries(health.components ?? {})
+          .filter(([, value]) => {
+            if (value && typeof value === 'object') {
+              const status = String((value as { status?: unknown }).status ?? '').toLowerCase();
+              return status && !['ok', 'ready', 'loaded', 'healthy', 'disabled'].includes(status);
+            }
+            return !['ok', 'ready', 'loaded', 'healthy', 'disabled'].includes(String(value).toLowerCase());
+          })
+          .map(([name]) => name);
+        if (!stale) setPendingComponents(components);
+      } catch { /* the startup banner handles connection failures */ }
+    };
+    void refreshHealth();
+    const timer = window.setInterval(() => void refreshHealth(), 2500);
+    return () => { stale = true; window.clearInterval(timer); };
+  }, [store.apiBaseUrl]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       const current = useAtlasStore.getState();
@@ -486,7 +525,8 @@ export default function App() {
   }, [store.connected, store.configLoaded, store.apiKeyConfigured]);
   const closeOnboarding = () => { setOnboardingOpen(false); setPref('onboarded', 'true'); };
 
-  const startVoice = () => {
+  const startVoice = async () => {
+    const { getSpeechRecognition } = await import('./components/VoiceOverlay');
     if (!getSpeechRecognition()) { setToast('这台设备不支持语音识别，暂时无法通话'); return; }
     recognitionRef.current?.stop();
     window.speechSynthesis?.cancel();
@@ -634,8 +674,9 @@ export default function App() {
     else store.setDraftWorkspace(picked);
     setToast(`工作目录：${picked}`);
   };
-  const toggleSpeechInput = () => {
+  const toggleSpeechInput = async () => {
     if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; setListening(false); return; }
+    const { getSpeechRecognition } = await import('./components/VoiceOverlay');
     const Constructor = getSpeechRecognition();
     if (!Constructor) { setToast('这台设备不支持语音识别'); return; }
     const recognition = new Constructor();
@@ -1273,7 +1314,22 @@ export default function App() {
           </div>
         </header>
         <UpdateBanner />
+        {startupProgress?.phase === 'failed' && !store.connected && <div role="alert" className="mx-4 mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/25 bg-danger-soft px-4 py-3 text-[12.5px] text-danger">
+          <div className="min-w-0"><p className="m-0 font-medium">Atlas 后端启动失败</p><p className="mb-0 mt-1 break-words opacity-85">{startupProgress.message ?? startupProgress.detail ?? '启动遇到问题，Atlas 会在稍后自动重试。'}</p></div>
+          <div className="flex shrink-0 gap-2">
+            <Button size="sm" variant="secondary" onClick={() => {
+              if (window.atlasDesktop?.retryBackend) window.atlasDesktop.retryBackend();
+              else void useAtlasStore.getState().initialize();
+            }}><RotateCcw size={14} />立即重试</Button>
+            <Button size="sm" variant="secondary" onClick={() => { void window.atlasDesktop?.openBackendLog?.(); }}>打开日志</Button>
+          </div>
+        </div>}
+        {!!pendingComponents.length && <div role="status" aria-live="polite" className="mx-4 mt-2 flex items-center gap-2 rounded-lg bg-sunken px-3 py-2 text-[11.5px] text-fg-3">
+          <i className="size-1.5 animate-pulse rounded-full bg-brand" />
+          正在加载{pendingComponents.map((name) => ({ mcp: 'MCP', plugins: '插件', plugin: '插件', memory: '记忆', lsp: '代码服务', scheduler: '计划任务' }[name.toLowerCase()] ?? name)).join('、')}；可以先发送消息。
+        </div>}
 
+        <Suspense fallback={<div aria-label="正在加载页面" className="flex flex-1 flex-col gap-3 p-6" aria-busy="true"><div className="h-5 w-36 animate-pulse rounded bg-hover" /><div className="h-24 animate-pulse rounded-xl bg-sunken" /><div className="h-10 animate-pulse rounded-lg bg-sunken" /></div>}>
         {view === 'home' && <HomeView username={username} notice={errorNote} recent={store.conversations.slice(0, 3)} onOpen={openConversation} onSuggest={suggest}
           composer={<Composer {...composerBase} variant="hero" onSubmit={() => void submit(true)}
             placeholder={homeMode === 'image' ? '描述你想要的画面，Atlas 会带你去图像工作台' : '描述一件事，Atlas 会把它做完'}
@@ -1342,9 +1398,11 @@ export default function App() {
         {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'memory' && <MemoryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'evolution' && <EvolutionPage apiBaseUrl={store.apiBaseUrl} onToast={notify} />}
+        </Suspense>
       </main>
     </div>
 
+    <Suspense fallback={<div aria-label="正在加载设置" className="fixed inset-0 z-50 grid place-items-center bg-black/20 text-[12px] text-fg-3" aria-busy="true">正在加载设置…</div>}>
     <Dialog open={Boolean(sheet)} onOpenChange={(open) => { if (!open) setSheet(null); }} label="设置"
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="overflow-y-auto bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
@@ -1427,27 +1485,28 @@ export default function App() {
         {sheet === 'integrations' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">任务与集成入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用已接通的 GitHub PR、Linear、Slack 和本机自动化功能；云端任务服务未提供。</p><div className="grid gap-8"><SettingsIntegrationsPanel onOpenCode={() => { setSheet(null); go('code'); }} onOpenChannels={() => setSheet('channels')} onOpenAutomation={() => { setSheet(null); go('auto'); }} /><LinearIntegrationPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
       </div>
     </Dialog>
+    </Suspense>
 
-    <Palette items={paletteItems} open={paletteOpen} onClose={() => setPaletteOpen(false)} search={searchMessages} />
+    {paletteOpen && <Suspense fallback={null}><Palette items={paletteItems} open onClose={() => setPaletteOpen(false)} search={searchMessages} /></Suspense>}
 
-    {voiceOpen && <VoiceOverlay
+    {voiceOpen && <Suspense fallback={null}><VoiceOverlay
       onClose={(toChat) => { setVoiceOpen(false); if (toChat) go('chat'); }}
-      onSend={(text) => { if (view !== 'chat') setView('chat'); void store.sendMessage(text); }}
+      onSend={(text) => { if (view !== 'chat') go('chat'); void store.sendMessage(text); }}
       runId={store.activeRunId ?? null}
       reply={reply}
       runDone={runDone}
       modelName={modelName}
-    />}
+    /></Suspense>}
 
-    <RemoteFolderDialog open={remoteOpen} onClose={() => setRemoteOpen(false)} current={workspacePath}
+    {remoteOpen && <RemoteFolderDialog open onClose={() => setRemoteOpen(false)} current={workspacePath}
       onChoose={(workspace) => { void (async () => {
         const conversationId = useAtlasStore.getState().activeConversationId;
         if (conversationId) store.setWorkspace(conversationId, workspace);
         else store.setDraftWorkspace(workspace);
         setToast(`工作目录：${workspace}`);
-      })(); }} />
-    <InitDialog onToast={notify} />
-    <OnboardingDialog open={onboardingOpen} onClose={closeOnboarding} username={username}
+      })(); }} />}
+    {store.initOpen && <Suspense fallback={null}><InitDialog onToast={notify} /></Suspense>}
+    {onboardingOpen && <Suspense fallback={null}><OnboardingDialog open onClose={closeOnboarding} username={username}
       onUsername={(value) => { setPref('username', value); setUsername(value); }}
       defaultWorkspace={defaultWorkspace} onDefaultWorkspace={(path) => { setPref('default-workspace', path); setDefaultWorkspace(path); }}
       onTry={(text) => {
@@ -1455,9 +1514,9 @@ export default function App() {
         if (store.activeConversationId) skipDraftRestoreRef.current = true;
         store.beginConversationDraft(defaultWorkspace || null);
         writeDraft('', text); setInput(text);
-      }} />
-    <RecipesDialog open={recipesOpen} onClose={() => setRecipesOpen(false)} recipes={store.recipes}
-      onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />
+      }} /></Suspense>}
+    {recipesOpen && <RecipesDialog open onClose={() => setRecipesOpen(false)} recipes={store.recipes}
+      onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />}
     <Dialog open={rawText !== null} onOpenChange={(open) => { if (!open) setRawText(null); }} label="最近回复的原始文本" className="flex max-h-[82vh] w-[min(900px,92vw)] flex-col bg-panel p-4 shadow-xl">
       <div className="mb-3 flex items-center gap-2">
         <h2 className="m-0 text-[15px] font-semibold text-heading">最近回复的原始文本</h2>
@@ -1470,9 +1529,9 @@ export default function App() {
       </div>
       <pre className="m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-sunken p-3 font-mono text-[12px] leading-relaxed text-fg" tabIndex={0}>{rawText}</pre>
     </Dialog>
-    {activeConversation && <SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} />}
+    {activeConversation && <Suspense fallback={null}><SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} /></Suspense>}
 
-    {view !== 'chat' && view !== 'home' && <ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} />}
+    {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
 }
