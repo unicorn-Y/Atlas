@@ -57,7 +57,63 @@ def _prepare_runtime_files() -> None:
     atexit.register(remove_pid)
 
 
+def _guard_loopback_socketpair() -> None:
+    """Bound the loopback handshake asyncio needs to create its event loop.
+
+    On Windows ``socket.socketpair`` is a fallback that connects to a listener on
+    127.0.0.1 and blocks in ``accept()`` with no timeout. On the 主机 a network filter
+    (火绒 / Clash TUN, not pinned down) occasionally never delivers that connect, and
+    the backend hung forever right after ``config.loaded`` (2026-10-14/15). Retry on a
+    fresh port instead, and leave a line in backend-stdio.log when it happens.
+    """
+    import socket
+
+    if socket.socketpair is not getattr(socket, "_fallback_socketpair", None):
+        return
+
+    def socketpair(family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0):
+        host = "::1" if family == socket.AF_INET6 else "127.0.0.1"
+        for attempt in range(1, 6):
+            lsock = socket.socket(family, type, proto)
+            try:
+                lsock.bind((host, 0))
+                lsock.listen()
+                addr, port = lsock.getsockname()[:2]
+                csock = socket.socket(family, type, proto)
+                try:
+                    csock.setblocking(False)
+                    try:
+                        csock.connect((addr, port))
+                    except (BlockingIOError, InterruptedError):
+                        pass
+                    csock.setblocking(True)
+                    lsock.settimeout(3.0)
+                    try:
+                        ssock, _ = lsock.accept()
+                    except TimeoutError:
+                        csock.close()
+                        sys.stderr.write(f"atlas: loopback socketpair attempt {attempt} timed out, retrying\n")
+                        sys.stderr.flush()
+                        continue
+                    ssock.setblocking(True)
+                    if (ssock.getsockname() != csock.getpeername()
+                            or csock.getsockname() != ssock.getpeername()):
+                        ssock.close()
+                        csock.close()
+                        raise ConnectionError("Unexpected peer connection")
+                    return ssock, csock
+                except BaseException:
+                    csock.close()
+                    raise
+            finally:
+                lsock.close()
+        raise OSError("loopback socketpair failed 5 times; a firewall may be blocking 127.0.0.1")
+
+    socket.socketpair = socketpair
+
+
 def main() -> None:
+    _guard_loopback_socketpair()
     if sys.argv[1:] == ["--atlas-mcp-bridge"]:
         import asyncio
 
