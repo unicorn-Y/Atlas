@@ -212,9 +212,14 @@ export default function MessageThread({ history, username, historyActions, empty
       historyHeaded = true;
       pending = [];
     };
+    // History keeps no thinking timestamps; the gap since the previous message (the model call that
+    // produced this reply) stands in for "思考 · 持续了 N 秒".
+    let previousAt = '';
     for (const message of history) {
       const metadata = (message.metadata && typeof message.metadata === 'object' ? message.metadata : {}) as Record<string, unknown>;
       const createdAt = message.created_at ?? '';
+      const startedAt = previousAt;
+      previousAt = createdAt || previousAt;
       if (message.role === 'tool') {
         const step = stepsById.get(String(metadata.tool_call_id ?? ''));
         if (step) attachHistoryResult(step, message.content, metadata, createdAt);
@@ -227,7 +232,8 @@ export default function MessageThread({ history, username, historyActions, empty
         if (reasoning.trim()) {
           flushSteps();
           const id = `hr-${message.id}`;
-          rows.push({ kind: 'timeline', id, item: { kind: 'reasoning', id, text: reasoning, eventCount: 1, truncated: false, source: 'history' }, firstInTurn: !historyHeaded, last: false });
+          rows.push({ kind: 'timeline', id, item: { kind: 'reasoning', id, text: reasoning, eventCount: 1, truncated: false, source: 'history',
+            ...(startedAt && createdAt ? { startedAt, endedAt: createdAt } : {}) }, firstInTurn: !historyHeaded, last: false });
           historyHeaded = true;
         }
         if (message.content.trim()) {
