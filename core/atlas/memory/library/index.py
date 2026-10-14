@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .store import DIARY, SRC_EDITED, SRC_SAID, SRC_SELF, MemoryStore, Page
+from .store import DIARY, SRC_EDITED, SRC_SAID, SRC_SELF, MemoryStore, Page, is_expired
 
 _CJK = r"぀-ゟ゠-ヿ㐀-䶿一-鿿가-힯"
 _CJK_RUN = re.compile(f"[{_CJK}]+")
@@ -195,7 +195,8 @@ class MemoryIndex:
         return idf
 
     def search(self, query: str, *, limit: int = 8, kinds: tuple[str, ...] = ("fact", "diary"),
-               include_history: bool = False, now: datetime | None = None) -> list[dict[str, Any]]:
+               include_history: bool = False, now: datetime | None = None,
+               exclude_paths: tuple[str, ...] = ()) -> list[dict[str, Any]]:
         q_tokens = tokenize(query)
         if not q_tokens:
             return []
@@ -221,10 +222,15 @@ class MemoryIndex:
             marks = ",".join("?" * len(rowids))
             rows = [dict(r) for r in db.execute(f"SELECT * FROM items WHERE rowid IN ({marks})", list(rowids))]
         now = now or datetime.now().astimezone()
+        excluded = set(exclude_paths)
         q_weight = sum(idf[t] for t in useful) or 1.0
         results = []
         for row in rows:
-            if row["kind"] not in kinds or (row["bucket"] == "history" and not include_history):
+            if (row["kind"] not in kinds or row["path"] in excluded or
+                    (row["bucket"] == "history" and not include_history)):
+                continue
+            expired = is_expired(row["until"], now)
+            if expired and not include_history:
                 continue
             item_tokens = set(row["tokens"].split())
             hit = useful & item_tokens
@@ -245,6 +251,8 @@ class MemoryIndex:
             importance = 1.0 + (int(row["importance"] or 5) - 5) / 10.0
             row["score"] = round(relevance * decay * importance, 4)
             row["matched"] = sorted(hit)
+            if expired:
+                row["expired"] = True
             row.pop("tokens", None)
             results.append(row)
         results.sort(key=lambda r: r["score"], reverse=True)

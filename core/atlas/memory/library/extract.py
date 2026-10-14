@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from .store import (
-    SRC_SAID, Entry, MemoryStore, Page, new_id, page_for_key, safe_name, tombstone_hashes,
+    SRC_EDITED, SRC_SAID, Entry, MemoryStore, Page, new_id, page_for_key, safe_name, tombstone_hashes,
 )
 
 MAX_USER_CHARS = 4000
@@ -71,12 +71,13 @@ OUTPUT
 - quote: the exact span of the user's message that states the fact, copied character for character (no paraphrase, no translation). Proposals whose quote is not in the message are discarded.
 - forget_after: ISO 8601 date-time with offset for temporary facts, otherwise null.
 - triggers: 0-3 short words that should bring this fact to mind later (names, places, topics), in the user's language.
+- stance: "said" when the user states it as true about their own life; "hypothetical" for if/假如/假设; "question" when it only appears inside a question; "quoted" when it is someone else's words, pasted text or role-play. Only "said" facts are kept.
 - importance: 1-10, how much this matters for helping the user later (allergy, family, deadlines high; passing likes low).
 - Return {"facts": []} when the message states no fact about the user. Most messages state none; do not invent."""
 
 SCHEMA_HINT = (
     '{"facts":[{"op":"set|retract|forget|alias","key":"user.home_city","value":"杭州",'
-    '"text":"住在杭州","quote":"我住在杭州","forget_after":null,"triggers":["杭州"],"importance":6}]}'
+    '"text":"住在杭州","quote":"我住在杭州","stance":"said","forget_after":null,"triggers":["杭州"],"importance":6}]}'
 )
 
 
@@ -90,6 +91,7 @@ class Proposal:
     forget_after: str = ""
     triggers: list[str] = field(default_factory=list)
     importance: int = 5
+    stance: str = "said"
 
 
 @dataclass
@@ -98,6 +100,7 @@ class ApplyResult:
     changed: list[str] = field(default_factory=list)
     ended: list[str] = field(default_factory=list)
     forgotten: list[str] = field(default_factory=list)
+    forgotten_texts: list[str] = field(default_factory=list)
     rejected: int = 0
 
     @property
@@ -126,7 +129,7 @@ def known_facts(store: MemoryStore) -> list[tuple[str, str]]:
     for rel in store.pages():
         for entry in store.read(rel).current:
             if entry.key:
-                known.append((entry.key, entry.value or entry.text))
+                known.append((entry.key, entry.text if entry.src == SRC_EDITED else entry.value or entry.text))
     return known[-MAX_KNOWN:]
 
 
@@ -178,6 +181,7 @@ def parse_output(raw: str) -> list[Proposal]:
             triggers=[str(t).strip() for t in triggers if str(t).strip()][:3]
             if isinstance(triggers, list) else [],
             importance=importance,
+            stance=str(item.get("stance") or "said").strip(),
         ))
     return out
 
@@ -203,6 +207,9 @@ def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, sess
     stamp = now.isoformat(timespec="seconds")
     today = now.date().isoformat()
     for p in proposals:
+        if p.op in {"set", "alias"} and p.stance != "said":
+            result.rejected += 1
+            continue
         if not _quote_ok(p.quote, user_text) or contains_secret(p.quote + p.text + p.value):
             result.rejected += 1
             continue
@@ -225,8 +232,9 @@ def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, sess
             old = page.current.pop(i)
             if p.op == "forget":
                 store.add_tombstones(tombstone_hashes(old.key, old.value, old.text), "用户要求忘掉")
-                store.redact_diary([old.quote, old.text])
+                store.redact_diary([old.quote, old.text, old.value])
                 result.forgotten.append(old.id)
+                result.forgotten_texts.extend([old.text, old.quote, old.value])
             else:
                 old.ended, old.why = today, "你说不再成立"
                 page.history.insert(0, old)

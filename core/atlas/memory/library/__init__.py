@@ -17,14 +17,17 @@ import structlog
 
 from . import extract
 from .index import MemoryIndex
+from .forget import purge_history
+from .queue import TurnQueue
 from .store import (
     DIARY, ME, NOW, PEOPLE, RESIDENT_PAGES, SELF, SRC_EDITED, THINGS, Entry, MemoryStore, Page,
-    new_id, safe_name, tombstone_hashes,
+    is_expired, new_id, safe_name, tombstone_hashes,
 )
 
 log = structlog.get_logger(__name__)
 
 RESIDENT_BUDGET_CHARS = 1500
+RESIDENT_FLOOR_CHARS = 400
 MAX_CUE_PAGES = 3
 MAX_CUE_LINES = 6
 MAX_SEARCH_FACTS = 3
@@ -60,6 +63,7 @@ class MemoryLibrary:
     def __init__(self, root: Path, config: Any = None) -> None:
         self.store = MemoryStore(root)
         self.index = MemoryIndex(self.store)
+        self.queue = TurnQueue(root)
         self.config = config
         self._turn_lock = asyncio.Lock()
         self._ready = False
@@ -92,27 +96,44 @@ class MemoryLibrary:
         }
 
     def _resident_block(self) -> str:
-        sections = []
+        now = _now(self.config)
+        prepared: list[tuple[str, list[str]]] = []
+        selected: list[list[str]] = []
         used = 0
         for rel, title in ((ME, "关于你"), (NOW, "现状 / 进行中"), (SELF, "Atlas 自己")):
-            entries = sorted(self.store.read(rel).current, key=lambda e: e.at, reverse=True)
+            entries = [e for e in self.store.read(rel).current if not is_expired(e, now)]
+            entries.sort(key=lambda e: e.at, reverse=True)
             entries.sort(key=lambda e: -int(e.importance or 5))
-            lines = []
+            if rel == NOW:
+                entries.sort(key=lambda e: e.until or "~")
+            all_lines = []
             for entry in entries:
                 line = f"- {entry.text}{_label(entry.src, entry.at)}"
                 if entry.until:
                     line += f"（到 {entry.until[:16].replace('T', ' ')} 为止）"
-                if used + len(line) > RESIDENT_BUDGET_CHARS:
-                    break
-                lines.append(line)
+                all_lines.append(line)
+            prepared.append((title, all_lines))
+            selected.append([])
+        for i, (_title, lines) in enumerate(prepared):
+            for line in lines:
+                if sum(map(len, selected[i])) + len(line) > RESIDENT_FLOOR_CHARS:
+                    continue
+                selected[i].append(line)
                 used += len(line)
-            if lines:
-                sections.append(f"## {title}\n" + "\n".join(lines))
+        for i, (_title, lines) in enumerate(prepared):
+            for line in lines:
+                if line in selected[i] or used + len(line) > RESIDENT_BUDGET_CHARS:
+                    continue
+                selected[i].append(line)
+                used += len(line)
+        sections = [f"## {title}\n" + "\n".join(lines)
+                    for (title, _), lines in zip(prepared, selected) if lines]
         return "\n\n".join(sections)
 
     def _relevant_block(self, message: str) -> tuple[str, list[str]]:
         parts: list[str] = []
         refs: list[str] = []
+        now = _now(self.config)
         lowered = message.casefold()
         cue_pages = []
         for rel, names in self.index.entities():
@@ -120,20 +141,23 @@ class MemoryLibrary:
                 cue_pages.append(rel)
         for rel in cue_pages[:MAX_CUE_PAGES]:
             page = self.store.read(rel)
-            lines = [f"- {e.text}{_label(e.src, e.at)}" for e in page.current[-MAX_CUE_LINES:]]
+            current = [e for e in page.current if not is_expired(e, now)]
+            lines = [f"- {e.text}{_label(e.src, e.at)}" for e in current[-MAX_CUE_LINES:]]
             if lines:
                 alias = f"（也叫 {'、'.join(page.aliases)}）" if page.aliases else ""
                 parts.append(f"## {page.title}{alias}\n" + "\n".join(lines))
-                refs.extend(e.id for e in page.current[-MAX_CUE_LINES:])
+                refs.extend(e.id for e in current[-MAX_CUE_LINES:])
         skip = set(RESIDENT_PAGES) | set(cue_pages)
-        hits = [h for h in self.index.search(message, limit=12, kinds=("fact",))
-                if h["path"] not in skip and h["score"] >= SEARCH_MIN_SCORE][:MAX_SEARCH_FACTS]
+        hits = [h for h in self.index.search(message, limit=MAX_SEARCH_FACTS * 2,
+                                             kinds=("fact",), exclude_paths=tuple(skip), now=now)
+                if h["score"] >= SEARCH_MIN_SCORE][:MAX_SEARCH_FACTS]
         if hits:
             parts.append("## 可能相关\n" + "\n".join(
                 f"- {h['text']}{_label(h['src'], h['at'])}" for h in hits))
             refs.extend(h["id"] for h in hits)
         if _RECALL_INTENT.search(message):
-            diary = [h for h in self.index.search(message, limit=3, kinds=("diary",)) if h["score"] > 0.05]
+            diary = [h for h in self.index.search(message, limit=3, kinds=("diary",), now=now)
+                     if h["score"] > 0.05]
             if diary:
                 parts.append("## 以前的对话记录（原文节选）\n" + "\n".join(
                     f"- [{h['at'][:16].replace('T', ' ')}] {' '.join(h['text'].split())[:240]}" for h in diary))
@@ -146,37 +170,52 @@ class MemoryLibrary:
     def search(self, query: str, limit: int = 8, include_history: bool = False) -> list[dict[str, Any]]:
         self.ready()
         self.index.sync()
-        keep = ("id", "path", "kind", "bucket", "text", "src", "at", "until", "quote", "score")
+        keep = ("id", "path", "kind", "bucket", "text", "src", "at", "until", "quote", "score", "expired")
         return [{k: h.get(k) for k in keep}
-                for h in self.index.search(query, limit=limit, include_history=include_history)]
+                for h in self.index.search(query, limit=limit, include_history=include_history,
+                                           now=_now(self.config))]
 
     # ---------- write (after the reply, in the background) ----------
     def schedule_turn(self, **kwargs: Any) -> None:
-        task = asyncio.create_task(self.observe_turn(**kwargs))
+        user_text = (kwargs.get("user_text") or "").strip()
+        if not user_text:
+            return
+        self.ready()
+        self.queue.insert(created=_now(self.config).isoformat(timespec="seconds"),
+                          session=kwargs.get("session", ""), mode=kwargs.get("mode", ""),
+                          user_text=user_text, assistant_text=kwargs.get("assistant_text") or "")
+        task = asyncio.create_task(self._drain(kwargs.get("model_mgr")))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
-    async def observe_turn(self, *, user_text: str, assistant_text: str, session: str,
-                           mode: str, model_mgr: Any) -> None:
-        user_text = (user_text or "").strip()
-        if not user_text:
-            return
+    async def _drain(self, model_mgr: Any) -> None:
+        self.ready()
         async with self._turn_lock:
-            try:
-                now = _now(self.config)
-                await asyncio.to_thread(self._write_diary, now, user_text, assistant_text, session, mode)
-                proposals: list[extract.Proposal] = []
-                if len(user_text) >= 2 and model_mgr is not None:
-                    proposals = await self._extract(user_text, assistant_text, model_mgr, now)
-                result = await asyncio.to_thread(self._apply, proposals, user_text, session, mode, now)
-                log.info("memory.library.turn", session=session, proposals=len(proposals),
-                         added=len(result.added), changed=len(result.changed),
-                         ended=len(result.ended), forgotten=len(result.forgotten),
-                         rejected=result.rejected)
-            except Exception as exc:
-                # Memory must never break the conversation (Mastra #21849).
-                log.warning("memory.library.turn_failed", session=session,
-                            error=str(exc), error_type=type(exc).__name__)
+            for row in self.queue.pending():
+                try:
+                    now = datetime.fromisoformat(row["created"])
+                    if row["stage"] == "new":
+                        await asyncio.to_thread(self._write_diary, now, row["user_text"],
+                                                row["assistant_text"], row["session"], row["mode"])
+                        self.queue.stage_diary_done(row["id"])
+                    result = await self.observe_turn(row, model_mgr, now)
+                    self.queue.remove(row["id"])
+                    log.info("memory.library.turn", session=row["session"], added=len(result.added),
+                             changed=len(result.changed), ended=len(result.ended),
+                             forgotten=len(result.forgotten), rejected=result.rejected)
+                except Exception as exc:
+                    self.queue.fail(row["id"], str(exc))
+                    log.warning("memory.library.turn_failed", session=row["session"],
+                                error=str(exc), error_type=type(exc).__name__)
+
+    async def observe_turn(self, row: dict[str, Any], model_mgr: Any,
+                           now: datetime) -> extract.ApplyResult:
+        user_text, assistant_text = row["user_text"], row["assistant_text"]
+        proposals: list[extract.Proposal] = []
+        if len(user_text) >= 2 and model_mgr is not None:
+            proposals = await self._extract(user_text, assistant_text, model_mgr, now)
+        return await asyncio.to_thread(self._apply, proposals, user_text,
+                                       row["session"], row["mode"], now)
 
     def _write_diary(self, now: datetime, user_text: str, assistant_text: str,
                      session: str, mode: str) -> None:
@@ -237,6 +276,8 @@ class MemoryLibrary:
             result.ended.extend(ended)
             message = result.message() if not result.empty else "日记"
             self.store.commit(message)
+            if result.forgotten_texts:
+                purge_history(self.store, result.forgotten_texts)
         self.index.sync()
         return result
 
@@ -254,6 +295,8 @@ class MemoryLibrary:
             page, entry, _bucket = found
             before = entry.text
             entry.text, entry.src = text, SRC_EDITED
+            if entry.key:
+                entry.value = text
             entry.at = _now(self.config).isoformat(timespec="seconds")
             self.store.write(page)
             self.store.commit(f"你改了：{before} → {text}"[:400])
@@ -275,7 +318,8 @@ class MemoryLibrary:
         self.index.sync()
         return {"id": entry.id, "path": rel}
 
-    def forget_entry(self, entry_id: str) -> None:
+    def forget_entry(self, entry_id: str) -> dict[str, Any]:
+        self.ready()
         with self.store.lock:
             found = self.store.find_entry(entry_id)
             if found is None:
@@ -284,9 +328,12 @@ class MemoryLibrary:
             getattr(page, bucket).remove(entry)
             self.store.add_tombstones(tombstone_hashes(entry.key, entry.value, entry.text), "用户要求忘掉")
             self.store.write(page)
-            self.store.redact_diary([entry.quote, entry.text])
+            diary_pages = self.store.redact_diary([entry.quote, entry.text, entry.value])
             self.store.commit("按你的要求忘掉了一条记忆")
+            history = purge_history(self.store, [entry.text, entry.quote, entry.value])
         self.index.sync()
+        return {"ok": True, "pages": [page.path], "diary_pages": diary_pages, "history": history,
+                "not_covered": ["Atlas 的原始聊天记录（engine 会话库）", "你自己做的备份或同步副本"]}
 
     def set_aliases(self, rel: str, aliases: list[str]) -> None:
         rel = self._safe_rel(rel)
@@ -351,6 +398,7 @@ class MemoryLibrary:
             "changes": changes,
             "now": _page_dict(self.store.read(NOW)),
             "turns": diary_turns,
+            "pending_failed": self.queue.failed_count(),
         }
 
 

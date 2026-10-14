@@ -104,8 +104,7 @@ async def add_entry(body: EntryAdd) -> dict[str, Any]:
 
 @router.post("/forget")
 async def forget(body: EntryRef) -> dict[str, Any]:
-    await _run(_lib().forget_entry, body.id)
-    return {"ok": True}
+    return await _run(_lib().forget_entry, body.id)
 
 
 @router.post("/aliases")

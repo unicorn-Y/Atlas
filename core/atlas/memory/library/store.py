@@ -197,6 +197,19 @@ def tombstone_hashes(key: str, value: str, text: str) -> set[str]:
     return hashes
 
 
+def is_expired(entry_or_until: Entry | str, now: datetime) -> bool:
+    until = entry_or_until.until if isinstance(entry_or_until, Entry) else entry_or_until
+    if not until:
+        return False
+    try:
+        expiry = datetime.fromisoformat(until)
+        if expiry.tzinfo is None and now.tzinfo is not None:
+            expiry = expiry.replace(tzinfo=now.tzinfo)
+        return expiry <= now
+    except (TypeError, ValueError):
+        return False
+
+
 class MemoryStore:
     """File + git access. One process-wide lock serialises every write."""
 
@@ -217,11 +230,21 @@ class MemoryStore:
             ignore = self.root / ".gitignore"
             if not ignore.exists():
                 ignore.write_text(".index.sqlite*\n", encoding="utf-8")
+            ignore_text = ignore.read_text(encoding="utf-8")
+            for pattern in (".queue.sqlite", ".git-before-forget-*", ".git-rewrite-tmp"):
+                if pattern not in ignore_text.splitlines():
+                    with ignore.open("a", encoding="utf-8") as handle:
+                        if ignore_text and not ignore_text.endswith(("\n", "\r")):
+                            handle.write("\n")
+                        handle.write(pattern + "\n")
+                    ignore_text += pattern + "\n"
             if self._git_available() and not self._git_healthy():
                 # Missing, or left half-written by a killed process: `git init` is safe
                 # on an existing directory and keeps whatever objects survived.
                 self._git("init", "-q")
                 self.commit("记忆库建立")
+            if self._git_available() and self._git_healthy():
+                self._git("config", "core.autocrlf", "false")
 
     def _git_healthy(self) -> bool:
         if not (self.root / ".git" / "HEAD").exists():
@@ -277,7 +300,8 @@ class MemoryStore:
 
     def redact_diary(self, needles: list[str]) -> int:
         """Blank out forgotten text in the raw diary so search cannot bring it back."""
-        needles = [n for n in {n.strip() for n in needles if n} if len(n) >= 2]
+        needles = sorted({n.strip() for n in needles if n and len(n.strip()) >= 2},
+                         key=len, reverse=True)
         changed = 0
         for rel in self.diary_pages():
             path = self.root / rel
@@ -334,7 +358,7 @@ class MemoryStore:
         if not self._git_available():
             return None
         with self.lock:
-            self._git("add", "-A")
+            self._git("-c", "core.autocrlf=false", "add", "-A")
             if not self._git("status", "--porcelain").strip():
                 return None
             self._git("commit", "-q", "-m", message)
@@ -369,6 +393,8 @@ class MemoryStore:
                 text = entry.text if entry else raw[1:].strip()
                 if not text or text.startswith(("#", "<!--")):
                     continue
+                if text == "（已按你的要求忘掉）" or self.tombstoned(tombstone_hashes("", "", text)):
+                    continue
                 if raw[0] == "+" and entry is not None and entry.ended:
                     current.setdefault("ended", []).append(text)
                 else:
@@ -385,5 +411,18 @@ class MemoryStore:
         if not re.fullmatch(r"[0-9a-f]{7,40}", sha):
             raise ValueError("bad commit id")
         with self.lock:
+            message = "这次变动里有你要求忘掉的内容，不能撤销"
+            if not self._git("rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", check=False).strip():
+                raise ValueError(message)
+            for file in self.show(sha):
+                if any(self.tombstoned(tombstone_hashes("", "", text))
+                       for text in file.get("removed", [])):
+                    raise ValueError(message)
             self._git("revert", "--no-edit", sha)
+            for rel in self.pages():
+                if any(entry.text == "（已按你的要求忘掉）" or
+                       self.tombstoned(tombstone_hashes(entry.key, entry.value, entry.text))
+                       for entry in self.read(rel).current):
+                    self._git("reset", "--hard", "HEAD~1")
+                    raise ValueError(message)
             return self._git("rev-parse", "HEAD").strip()
