@@ -167,6 +167,8 @@ const plainComponents = Object.fromEntries(PLAIN_TAGS.map((tag) => [tag, ({ node
   return createElement(tag, props);
 }])) as Components;
 
+const codeLanguage = (className?: string) => className?.match(/(?:^|\s)language-([^\s]+)/)?.[1];
+
 // ```mermaid blocks become diagrams once the reply settles; every other code block renders as usual.
 function markdownComponents(streaming: boolean): Components {
   return {
@@ -175,15 +177,14 @@ function markdownComponents(streaming: boolean): Components {
       void node;
       // 流式中的 mermaid 源码多半没写完，先当普通代码显示，落定后再画图。
       if (!streaming && className?.includes('language-mermaid')) return <MermaidBlock source={String(children ?? '').trimEnd()} />;
-      const language = className?.match(/(?:^|\s)language-([^\s]+)/)?.[1];
-      return <code className={className} data-code-language={language} {...rest}>{children}</code>;
+      return <code className={className} data-code-language={codeLanguage(className)} {...rest}>{children}</code>;
     },
     pre({ children, node }) {
       void node;
       const child = Children.toArray(children).find((item) => isValidElement<CodeElementProps>(item));
       if (!child || !isValidElement<CodeElementProps>(child)) return <pre>{children}</pre>;
       if (child.type === MermaidBlock) return <>{children}</>;
-      const language = child.props['data-code-language'];
+      const language = child.props['data-code-language'] ?? codeLanguage(child.props.className);
       return <CodeBlock source={plainText(child.props.children).replace(/\n$/, '')} language={language}>{children}</CodeBlock>;
     },
     img({ src, alt, title }) {
