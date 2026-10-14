@@ -29,11 +29,14 @@ def exc_type(reason) -> str:
 
 
 runs = {}
+arg_diag = Counter()  # (event, endpoint, error_kind, tail, finish_reason)
+arg_lengths = defaultdict(list)
 for path in sorted(ROOT.glob("*/*.jsonl")):
     r = {"date": path.parent.name, "id": path.stem[:8], "model": "?", "kernel": "?",
          "status": "unfinished", "dur": None, "calls": 0, "model_err": Counter(),
          "tools": [], "tool_err": Counter(), "stuck": Counter(), "compact": 0,
-         "repair": 0, "fail": "", "in_tok": 0, "out_tok": 0, "ws": None}
+         "repair": 0, "fail": "", "in_tok": 0, "out_tok": 0, "ws": None,
+         "args_repaired": 0, "args_invalid": 0, "args_truncated": 0}
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
@@ -66,6 +69,18 @@ for path in sorted(ROOT.glob("*/*.jsonl")):
             r["compact"] += 1
         elif ev == "repair":
             r["repair"] += 1
+        elif ev == "tool_args_repaired":
+            r["args_repaired"] += 1
+        elif ev == "tool_args_invalid":
+            r["args_invalid"] += 1
+            r["args_truncated"] += bool(e.get("truncated"))
+        if ev in ("tool_args_invalid", "tool_args_repaired"):
+            kind = re.sub(r"[^A-Za-z ',:]", "", str(e.get("error_kind") or ""))[:40]
+            key = (ev.replace("tool_args_", ""), str(e.get("endpoint") or "?")[:30], kind,
+                   str(e.get("tail") or "?")[:12], str(e.get("finish_reason") or "?")[:12])
+            arg_diag[key] += 1
+            if isinstance(e.get("length"), int):
+                arg_lengths[key[0]].append(e["length"])
         elif ev == "run_end":
             r["status"] = str(e.get("status") or "?")[:12]
             r["dur"] = e.get("duration_ms")
@@ -158,6 +173,14 @@ print()
 
 print("== stuck detector fired:", dict(sum((r["stuck"] for r in R), Counter())))
 print("== compactions:", sum(r["compact"] for r in R), " repairs:", sum(r["repair"] for r in R))
+print("== tool args (FEEL-1): repaired", sum(r["args_repaired"] for r in R),
+      " invalid", sum(r["args_invalid"] for r in R),
+      " of which truncated", sum(r["args_truncated"] for r in R))
+for (kind, endpoint, error_kind, tail, finish), n in arg_diag.most_common(15):
+    print(f"   {n:>4}  {kind:9} {endpoint:22} {finish:11} tail={tail:11} {error_kind}")
+for kind, lengths in arg_lengths.items():
+    lengths.sort()
+    print(f"   {kind} arg length: median {lengths[len(lengths) // 2]}, max {lengths[-1]}")
 print()
 
 print("== slowest 10 completed runs")

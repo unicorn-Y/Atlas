@@ -526,3 +526,42 @@ async def test_process_handoff_detaches_from_child_run(tmp_path: Path) -> None:
     assert handed["data"]["detached"] is True
     assert handed["data"]["handoff_note"] == "Parent should poll this process."
     assert any(item["execution_id"] == execution_id for item in listed["data"]["processes"])
+
+
+@pytest.mark.asyncio
+async def test_file_reads_show_numbered_lines_and_batch_paths(tmp_path):
+    """FEEL-1: reads are numbered text, not a Python dict repr; paths reads many files."""
+    first = tmp_path / "a.py"
+    first.write_text('x = "q"\r\ny = 2\n', encoding="utf-8")
+    second = tmp_path / "b.txt"
+    second.write_text("only line", encoding="utf-8")
+    runtime = LocalExecutionRuntime()
+    try:
+        single = await runtime.call_tool("local_file", {"action": "read", "path": str(first)})
+        text = single["content"][0]["text"]
+        assert '1\tx = "q"\n2\ty = 2' in text and "\r" not in text
+        assert "'content':" not in text  # no Python dict repr
+        batch = await runtime.call_tool("local_file", {
+            "action": "read", "paths": [str(first), str(second), str(tmp_path / "missing")],
+        })
+        assert not batch["is_error"]
+        assert [("error" in item) for item in batch["data"]["files"]] == [False, False, True]
+        assert "1\tonly line" in batch["content"][0]["text"]
+    finally:
+        await runtime.shutdown()
+
+
+@pytest.mark.parametrize(("command", "refused"), [
+    ('python -c "import os\nprint(os.getcwd())"', True),
+    ("python -X utf8 -c 'a = 1\nprint(a)'", True),
+    ('python -c "print(1)"', False),
+    ("python -m pytest -c setup.cfg\necho ok", False),
+    ("python - <<'EOF'\nprint(1)\nEOF", False),
+])
+def test_inline_multiline_code_is_refused_before_running(command, refused):
+    try:
+        LocalExecutionRuntime._validate_execution_args("local_shell", {"shell": "bash", "command": command})
+    except ValueError as exc:
+        assert refused and "Inline multi-line code is refused" in str(exc)
+    else:
+        assert not refused

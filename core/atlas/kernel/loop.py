@@ -1322,12 +1322,14 @@ class AtlasKernel:
 
                 calls = response.tool_calls
                 for call in calls:
+                    diag = call.get("arg_diag") if isinstance(call.get("arg_diag"), dict) else {}
                     if call.get("arg_error"):
                         bad_tool_args[str(call["id"])] = str(call["arg_error"])
                         record("tool_args_invalid", tool_call_id=call["id"], name=call["name"],
-                               truncated="output length limit" in str(call["arg_error"]))
+                               truncated="output length limit" in str(call["arg_error"]), **diag)
                     elif call.get("args_repaired"):
-                        record("tool_args_repaired", tool_call_id=call["id"], name=call["name"])
+                        record("tool_args_repaired", tool_call_id=call["id"], name=call["name"],
+                               **diag)
                 state.tool_calls.extend(calls)
                 open_call_ids.update(str(call["id"]) for call in calls)
                 assistant_message = {

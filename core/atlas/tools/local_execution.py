@@ -18,6 +18,7 @@ import glob as glob_module
 import json
 import math
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -39,6 +40,50 @@ OutputCallback = Callable[[str, str, str], Awaitable[None] | None]
 _MAX_READ_BYTES = 256 * 1024
 _MAX_READ_PAGE_BYTES = 1024 * 1024
 _MAX_READ_LINES = 2000
+_MAX_BATCH_READ = 20
+# An interpreter invoked with inline code: python -c, py -3 -c, node -e/-p, ruby -e ...
+_INLINE_CODE = re.compile(
+    r"(?:^|[\s;&|(\"'])(?:python[0-9.]*|py|node|deno|ruby|perl|php)(?:\.exe)?"
+    r"(?:\s+(?:-[XW]\s*\S+|-[0-9A-Za-z]+))*?\s+-(?:c|e|p)\b",
+    re.IGNORECASE,
+)
+
+
+def _read_text(item: dict[str, Any]) -> str:
+    """One file read as the model should see it: a header line, then numbered lines.
+
+    The old ``str(data)`` repr squeezed a file into one escaped Python string, so
+    models copied ``\\n`` and escaped quotes into edit old_strings. Numbers use the
+    ``N<TAB>`` form that the kernel editor strips from old_string automatically.
+    """
+    path = item.get("path", "")
+    if "error" in item:
+        return f"== {path}\nerror: {item['error']}"
+    size = f"{item.get('total_size', item.get('size', 0))} bytes"
+    if item.get("encoding") == "base64":
+        return f"== {path} (binary, {size}, base64)\n{item.get('content', '')}"
+    notes = [size]
+    if "byte_offset" in item:
+        notes.append(f"bytes from {item['byte_offset']}")
+        if item.get("truncated"):
+            notes.append(f"more from byte_offset={item.get('next_byte_offset')}")
+        return f"== {path} ({', '.join(notes)})\n{item.get('content', '')}"
+    start = int(item.get("offset") or 1)
+    if item.get("truncated"):
+        notes.append(f"more from offset={item.get('next_offset')}")
+    lines = str(item.get("content", "")).split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    body = "\n".join(f"{start + index}\t{line.rstrip(chr(13))}" for index, line in enumerate(lines))
+    return f"== {path} ({', '.join(notes)})\n{body}" if body else f"== {path} ({', '.join(notes)}, empty)"
+
+
+def _file_result_text(args: dict[str, Any], data: dict[str, Any]) -> str:
+    if args.get("action") == "read":
+        if isinstance(data.get("files"), list):
+            return "\n\n".join(_read_text(item) for item in data["files"])
+        return _read_text(data)
+    return json.dumps(data, ensure_ascii=False, indent=1, default=str)
 
 
 def _trim_partial_char(raw: bytes, encoding: str) -> bytes:
@@ -193,8 +238,9 @@ LOCAL_TOOLS = [
             "stat, mkdir, copy, move, delete, plus write/append.\n"
             "- To change a text file, read it here first, then use edit (targeted replacement) or "
             "write (whole file). Use write/append here only when edit and write are not offered.\n"
-            "- read/list/glob/search/stat are read-only and run in parallel: when you need several "
-            "files, request all of them in the same response instead of one per turn.\n"
+            "- Need several files? Pass them all in paths (up to 20) in one read call instead of "
+            "reading one file per turn. Reads show numbered lines (N<TAB>text); don't copy the "
+            "numbers into edits.\n"
             "- Large files: read a range with offset/limit instead of the whole file."
         ),
         {
@@ -215,6 +261,8 @@ LOCAL_TOOLS = [
                 ],
             },
             "path": {"type": "string"},
+            "paths": {"type": "array", "items": {"type": "string"}, "maxItems": _MAX_BATCH_READ,
+                      "description": "read only: several whole files in one call (instead of path)."},
             "destination": {"type": "string"},
             "cwd": {"type": "string"},
             "content": {"type": "string"},
@@ -228,7 +276,7 @@ LOCAL_TOOLS = [
             "pattern": {"type": "string"},
             "query": {"type": "string"},
         },
-        ["action", "path"],
+        ["action"],
     ),
     _tool(
         "local_edit",
@@ -424,8 +472,20 @@ class LocalExecutionRuntime:
             return self._error("Local execution runtime is shutting down.")
         try:
             self._validate_execution_args(name, args)
+            if name == "local_file" and args.get("action") == "read" and args.get("paths"):
+                data = await asyncio.to_thread(self._read_many, args)
+                return {
+                    "data": data,
+                    "content": [{"type": "text", "text": _file_result_text(args, data)}],
+                    "is_error": all("error" in item for item in data["files"]),
+                }
             if name == "local_file":
                 data = await asyncio.to_thread(self._file_operation, args)
+                return {
+                    "data": data,
+                    "content": [{"type": "text", "text": _file_result_text(args, data)}],
+                    "is_error": False,
+                }
             elif name == "local_edit":
                 data = await asyncio.to_thread(self._edit_operation, args)
             elif name == "local_edit_batch":
@@ -485,6 +545,17 @@ class LocalExecutionRuntime:
             # 这样异常工具走 execute_tools_node 的 error result 路径（UM02/T02.2
             # "异常和取消也记录"判据的场景载体），而不是伪造一次成功执行。
             raise ValueError("local_shell requires a non-empty command")
+        command = str(args.get("command") or "")
+        inline = _INLINE_CODE.search(command)
+        if name in {"local_shell", "local_process"} and inline and "\n" in command[inline.end():]:
+            # FEEL-1: multi-line code inside python -c / node -e was the biggest source of
+            # shell syntax and quoting failures. Refuse it with the fix instead of running it.
+            raise ValueError(
+                "Inline multi-line code is refused (python -c / node -e with several lines breaks "
+                "on shell quoting). Write the code to a file with the write tool, e.g. "
+                f"{Path(tempfile.gettempdir()) / 'atlas-scripts' / 'task.py'}, then run that file "
+                "(or use local_exec with the file path)."
+            )
         patterns = args.get("watch_patterns", [])
         if patterns is not None and (
             not isinstance(patterns, list) or not all(isinstance(item, str) for item in patterns)
@@ -696,8 +767,28 @@ class LocalExecutionRuntime:
             expanded = Path(cwd or os.getcwd()) / expanded
         return expanded.resolve()
 
+    def _read_many(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Read several whole files in one call; one bad path doesn't fail the others."""
+        paths = args.get("paths")
+        if not isinstance(paths, list) or not all(isinstance(item, str) for item in paths):
+            raise ValueError("paths must be a list of file paths")
+        if len(paths) > _MAX_BATCH_READ:
+            raise ValueError(f"paths is limited to {_MAX_BATCH_READ} files per call")
+        files: list[dict[str, Any]] = []
+        for raw in paths:
+            single = {key: value for key, value in args.items()
+                      if key not in {"paths", "offset", "limit", "byte_offset", "byte_limit"}}
+            single["path"] = raw
+            try:
+                files.append(self._file_operation(single))
+            except Exception as exc:  # noqa: BLE001 — reported per file
+                files.append({"path": raw, "error": f"{type(exc).__name__}: {exc}"})
+        return {"files": files}
+
     def _file_operation(self, args: dict[str, Any]) -> dict[str, Any]:
         action = args["action"]
+        if not str(args.get("path") or "").strip():
+            raise ValueError("local_file requires path (or paths for a multi-file read)")
         path = self._path(args.get("path"), args.get("cwd"))
         encoding = str(args.get("encoding", "utf-8"))
         workspace = self._workspace_root(args)

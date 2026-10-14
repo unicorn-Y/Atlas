@@ -452,13 +452,48 @@ def _repair_arguments(raw: str) -> dict[str, Any] | None:
     return repaired if isinstance(repaired, dict) and repaired else None
 
 
-def _tool_calls(values: dict[int, _ToolDelta], *, truncated: bool = False) -> list[dict[str, Any]]:
+def _endpoint(base_url: Any) -> str:
+    """host:port of a provider URL (no path, query or credentials)."""
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(str(base_url or ""))
+        host = parts.hostname or ""
+        return f"{host}:{parts.port}" if parts.port else host
+    except ValueError:
+        return ""
+
+
+def _arg_diagnostics(raw: str, exc: Exception, finish_reason: str | None,
+                     endpoint: str) -> dict[str, Any]:
+    """Structure-only facts about broken arguments, for finding the cause in run logs.
+
+    Never includes argument text: only sizes, the json module's fixed error wording,
+    the class of the final character, the finish reason and the endpoint host:port.
+    """
+    stripped = raw.rstrip()
+    last = stripped[-1:] if stripped else ""
+    tail = ("close_brace" if last == "}" else "quote" if last == '"' else
+            "backslash" if last == "\\" else "comma" if last == "," else
+            "empty" if not last else "other")
+    return {
+        "length": len(raw),
+        "error_kind": str(getattr(exc, "msg", type(exc).__name__))[:60],
+        "error_pos": getattr(exc, "pos", None),
+        "tail": tail,
+        "finish_reason": finish_reason or "",
+        "endpoint": endpoint,
+    }
+
+
+def _tool_calls(values: dict[int, _ToolDelta], *, truncated: bool = False,
+                finish_reason: str | None = None, endpoint: str = "") -> list[dict[str, Any]]:
     """Parse streamed tool calls without discarding the whole response for one bad call.
 
     Broken arguments are repaired when possible (``args_repaired``). A call that cannot
     be repaired, or whose arguments were cut off by the output limit, comes back with
     ``arg_error`` so the kernel answers it with a tool error and the model resends just
-    that call.
+    that call. Both carry ``arg_diag`` (structure only) for the run log.
     """
     result: list[dict[str, Any]] = []
     ordered = [index for index in sorted(values) if values[index].name]
@@ -471,6 +506,7 @@ def _tool_calls(values: dict[int, _ToolDelta], *, truncated: bool = False) -> li
         try:
             arguments = json.loads(raw)
         except (TypeError, ValueError) as exc:
+            call["arg_diag"] = _arg_diagnostics(raw, exc, finish_reason, endpoint)
             arguments = None if cut_off else _repair_arguments(raw)
             if arguments is None:
                 call["arg_error"] = (
@@ -729,7 +765,8 @@ async def complete_stream(
                 duration_ms = int((time.monotonic() - overall_started) * 1000)
                 result = ModelCallResult(
                     combined_text,
-                    _tool_calls(attempt_tools, truncated=finish_reason in {"length", "max_tokens"}),
+                    _tool_calls(attempt_tools, truncated=finish_reason in {"length", "max_tokens"},
+                                finish_reason=finish_reason, endpoint=_endpoint(route.base_url)),
                     last_usage, total_attempts, duration_ms, route.model_id or candidate,
                     route.provider,
                 )

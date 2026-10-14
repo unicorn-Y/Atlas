@@ -311,6 +311,9 @@ async def execute_tools_node(
             candidates = [value for key, value in fn_args.items()
                           if key in {"path", "destination", "cwd", "workspace", "root", "repo"}
                           and isinstance(value, str)]
+            batch_paths = fn_args.get("paths")  # local_file multi-file read
+            if isinstance(batch_paths, list):
+                candidates += [item for item in batch_paths if isinstance(item, str)]
             denied = not _agent._ssh_paths_allowed(workspace, allowed_paths, candidates)
             if denied:
                 detail = "这条路径超出了当前允许访问的目录范围。请改用允许目录内的路径，或调整对话的目录访问设置。"
@@ -327,6 +330,9 @@ async def execute_tools_node(
             candidates = [value for key, value in fn_args.items()
                           if key in {"path", "destination", "cwd", "workspace", "root"}
                           and isinstance(value, str)]
+            batch_paths = fn_args.get("paths")  # local_file multi-file read
+            if isinstance(batch_paths, list):
+                candidates += [item for item in batch_paths if isinstance(item, str)]
             for candidate in candidates:
                 if candidate == workspace and candidate.startswith("ssh://"):
                     continue
@@ -1475,17 +1481,24 @@ async def execute_tools_node(
             }
 
         if (fn_name == "local_file" and fn_args.get("action") == "read"
-                and not fn_args.get("binary") and not result.get("is_error")
-                and isinstance(result.get("data"), dict)
-                and isinstance(result["data"].get("content"), str)
+                and not fn_args.get("binary") and isinstance(result.get("data"), dict)
                 and getattr(ctx, "kernel_edit", None) is not None):
-            try:
-                ctx.kernel_edit.note_read(
-                    result["data"].get("path") or fn_args.get("path"),
-                    result["data"]["content"], encoding=fn_args.get("encoding"),
-                )
-            except (OSError, UnicodeError, ValueError, PermissionError) as exc:
-                log.info("agent.kernel_edit_read_snapshot_skipped", error=str(exc))
+            read_items = result["data"].get("files")
+            if not isinstance(read_items, list):
+                read_items = [] if result.get("is_error") else [result["data"]]
+            for item in read_items:
+                # Only whole-file reads count as "read before edit"; a partial read must
+                # not replace an earlier complete snapshot of the same file.
+                if (not isinstance(item, dict) or not isinstance(item.get("content"), str)
+                        or item.get("complete") is False):
+                    continue
+                try:
+                    ctx.kernel_edit.note_read(
+                        item.get("path") or fn_args.get("path"),
+                        item["content"], encoding=fn_args.get("encoding"),
+                    )
+                except (OSError, UnicodeError, ValueError, PermissionError) as exc:
+                    log.info("agent.kernel_edit_read_snapshot_skipped", error=str(exc))
 
         if ((workspace or "").startswith("ssh://")
                 and (fn_name == "local_process" or fn_name.startswith("computer_"))):
