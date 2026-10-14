@@ -18,36 +18,6 @@ _MAX_EVENT_DIAGNOSTICS = 20
 _EVENT_PUT_TIMEOUT = 5.0
 
 _loop_for_events: Optional[asyncio.AbstractEventLoop] = None
-_hermes_neutralized = False
-
-
-def _hermes_lsp_disabled() -> None:
-    """Replacement for ``agent.lsp.get_service`` inside Atlas processes (see below)."""
-    return None
-
-
-def _neutralize_hermes_lsp() -> None:
-    """Pin Hermes' own LSP tier off for this process.
-
-    The venv's hermes-agent (editable install) ships ``agent.lsp`` wired into its native
-    ``write_file``/``patch`` handlers (``tools/file_operations_lint.py``), and its config
-    default is ``lsp.enabled = True`` (``hermes_cli/config_defaults.py``) — on a local
-    backend inside a git workspace it would spawn a SECOND set of language servers and
-    append its own diagnostics block on every Atlas write. No upstream env gate exists;
-    ``file_operations_lint`` imports ``get_service`` at call time, so patching the module
-    attribute keeps its whole tier dormant while Atlas diagnostics come from ``atlas.lsp``.
-    """
-    global _hermes_neutralized
-    if _hermes_neutralized:
-        return
-    _hermes_neutralized = True
-    try:
-        import agent.lsp as hermes_lsp
-
-        if getattr(hermes_lsp, "get_service", None) is not _hermes_lsp_disabled:
-            hermes_lsp.get_service = _hermes_lsp_disabled
-    except Exception as e:  # noqa: BLE001
-        logger.debug("Hermes LSP neutralization skipped: %s", e, exc_info=e)
 
 
 def set_event_loop(loop: Optional[asyncio.AbstractEventLoop]) -> None:
@@ -63,7 +33,6 @@ def lsp_applicable(workspace: str) -> bool:
 
 def snapshot_before_write(path: str) -> None:
     """Capture the pre-write diagnostics baseline.  Never raises."""
-    _neutralize_hermes_lsp()
     try:
         import atlas.lsp as lsp_facade
 
@@ -83,7 +52,6 @@ def report_after_edit(
     from ONE delta query because the query rolls the baseline forward — a second query
     would always return empty.  Any exception is swallowed and yields ``""``.
     """
-    _neutralize_hermes_lsp()
     try:
         import atlas.lsp as lsp_facade
 

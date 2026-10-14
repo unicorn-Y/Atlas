@@ -1,8 +1,8 @@
-"""Atlas in-process policy hooks for Hermes tool execution.
+"""Atlas in-process policy checks for tool execution.
 
-Hermes hook API source: ``hermes_cli/plugins.py::PluginContext.register_hook`` and
-``agent/agent_runtime_helpers.py::_dispatch_pre_tool_call_hooks`` at
-unicorn-Y/hermes-agent@562ad75baec0c8360f6ce2d48b7d9de56506956c (MIT).
+The chat loop can call :func:`pre_tool_call`, :func:`post_tool_call`, and
+:func:`wait_before_model_request` directly. This module does not register with
+or import a third-party plugin manager.
 """
 
 from __future__ import annotations
@@ -18,8 +18,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_installed: set[int] = set()
-_install_lock = threading.Lock()
 _checkpoint_lock = threading.Lock()
 _ATLAS_WRITE_TOOLS = {
     "project_note", "create_checkpoint", "restore_checkpoint",
@@ -33,20 +31,20 @@ _ATLAS_WRITE_TOOLS = {
 
 
 def install_atlas_policy_plugin() -> None:
-    """Register Atlas' pre/post tool hooks through Hermes' supported PluginContext API."""
-    from hermes_cli.plugins import PluginContext, get_plugin_manager
-    from hermes_cli.plugins_manifest import PluginManifest
+    """Compatibility no-op; Atlas calls policy hooks directly from its engine loop."""
+    return None
 
-    manager = get_plugin_manager()
-    identity = id(manager)
-    with _install_lock:
-        if identity in _installed:
-            return
-        context = PluginContext(PluginManifest(name="atlas-workspace-policy"), manager)
-        context.register_hook("pre_tool_call", _pre_tool_call)
-        context.register_hook("post_tool_call", _post_tool_call)
-        context.register_hook("pre_verify", _pre_verify)
-        _installed.add(identity)
+
+def pre_tool_call(tool_name: str = "", args: dict[str, Any] | None = None, **kwargs: Any):
+    return _pre_tool_call(tool_name, args, **kwargs)
+
+
+def post_tool_call(tool_name: str = "", result: str = "", **kwargs: Any):
+    return _post_tool_call(tool_name, result, **kwargs)
+
+
+def pre_verify(**kwargs: Any):
+    return _pre_verify(**kwargs)
 
 
 def _active(session_id: str = "") -> tuple[Any, Any, Any] | None:

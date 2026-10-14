@@ -25,6 +25,7 @@ _active_contexts: dict[str, tuple[Any, Any, asyncio.AbstractEventLoop]] = {}
 _hermes_fallback_handlers: dict[str, Any] = {}
 _hermes_entries: dict[str, Any] = {}
 _inline_wrapped: set[str] = set()
+_TOOLSETS: dict[str, dict[str, Any]] = {}
 NATIVE_FILE_TOOLS = {"read_file", "write_file", "patch", "search_files"}
 _LSP_WRITE_TOOLS = {"write_file", "patch"}
 _LSP_SKIP = object()  # sentinel: the LSP write seam did not apply to this call
@@ -107,7 +108,7 @@ def _v4a_touched_paths(args: dict[str, Any], runtime: Any) -> list[str]:
     if str(args.get("mode") or "") != "patch" or not str(args.get("patch") or ""):
         return []
     try:
-        from tools.file_tools import _collect_v4a_header_paths
+        from atlas.engine_core.tools.file_tools import _collect_v4a_header_paths
 
         collected = _collect_v4a_header_paths(str(args["patch"]))
     except Exception:  # noqa: BLE001
@@ -261,7 +262,7 @@ def _read_file_result(agent: Any, arguments: dict[str, Any], result: str) -> str
         return result
     supports_vision = getattr(agent, "_model_supports_vision", None)
     if callable(supports_vision) and supports_vision():
-        from tools.vision_tools import _resize_image_for_vision
+        from atlas.engine_core.tools.vision_tools import _resize_image_for_vision
 
         if not image_path.is_absolute():
             image_path = Path(getattr(agent, "cwd", None) or Path.cwd()) / image_path
@@ -274,13 +275,13 @@ def _read_file_result(agent: Any, arguments: dict[str, Any], result: str) -> str
             ),
             path,
         )
-    from tools.registry import registry
+    from atlas.engine_core.tools.registry import registry
 
     vision_entry = registry.get_entry("vision_analyze")
     if vision_entry is not None and vision_entry.check_fn is not None and vision_entry.check_fn():
-        from model_tools import _run_async
+        from atlas.engine_core.utils import run_async
 
-        return _run_async(vision_entry.handler(
+        return run_async(vision_entry.handler(
             {"image_url": path, "question": "请详细描述图片内容及其中可见的文字。"},
             session_id=str(getattr(agent, "session_id", "") or ""),
         ))
@@ -289,8 +290,7 @@ def _read_file_result(agent: Any, arguments: dict[str, Any], result: str) -> str
 
 def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) -> None:
     """Expose Atlas tool schemas and bind sync Hermes handlers to this async Atlas run."""
-    from tools.registry import registry
-    from toolsets import TOOLSETS
+    from atlas.engine_core.tools.registry import registry
     from atlas.repomap import REPOMAP_TOOL_SPEC
 
     if registry.get_entry("new_context_window") is None:
@@ -551,7 +551,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 lambda session_id: _active_contexts.get(session_id),
             ):
                 pass
-        TOOLSETS[atlas_toolset] = {
+        _TOOLSETS[atlas_toolset] = {
             "description": "Atlas 工作区、项目和运行工具",
             "tools": sorted(registered),
             "includes": [],
@@ -562,7 +562,7 @@ def unregister_atlas_mcp_tools(names: set[str], scopes: set[str | None]) -> None
     """Remove only Atlas registry copies of the specified MCP tools and scopes."""
     if not names or not scopes:
         return
-    from tools.registry import registry
+    from atlas.engine_core.tools.registry import registry
 
     with _lock:
         scopes = set(scopes)
@@ -588,30 +588,8 @@ def unregister_atlas_mcp_tools(names: set[str], scopes: set[str | None]) -> None
 
 
 def _bind_inline_atlas_tools() -> None:
-    """Hermes' inline tools dispatch before the registry; bridge that real path."""
-    from agent.inline_tool_executors import INLINE_TOOL_EXECUTORS
-    from tools.registry import registry
-
-    for name in ("todo_list", "session_search"):
-        if name in _inline_wrapped:
-            continue
-        native = INLINE_TOOL_EXECUTORS[name]
-
-        def inline(agent: Any, args: dict[str, Any], ctx: Any, *, _name=name, _native=native) -> Any:
-            active = _active_contexts.get(str(getattr(agent, "session_id", "")))
-            if active is None:
-                return _native(agent, args, ctx)
-            _, runtime, loop = active
-            native_result = _native(agent, args, ctx)
-            if _name == "todo_list":
-                snapshot = runtime.todo_store.write(agent._todo_store.read())
-                asyncio.run_coroutine_threadsafe(runtime.event_queue.put({"type": "run_todos", **snapshot}), loop).result()
-                return native_result
-            atlas_result = registry.get_entry(_name).handler(args, session_id=agent.session_id)
-            return json.dumps({"hermes": native_result, "atlas": atlas_result}, ensure_ascii=False)
-
-        INLINE_TOOL_EXECUTORS[name] = inline
-        _inline_wrapped.add(name)
+    """Compatibility no-op: Atlas native tools are dispatched by its registry."""
+    return None
 
 def activate_atlas_tool_context(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) -> None:
     _context.agent = agent

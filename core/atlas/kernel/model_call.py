@@ -567,8 +567,7 @@ async def complete_stream(
     overloaded_retry_base_delay_s: float | None = None,
     usage_budget: Any = None,
 ) -> ModelCallResult:
-    """Stream one model response through Atlas ModelRouter and Hermes transport."""
-    from agent.auxiliary_client import call_llm
+    """Stream one model response through Atlas ModelRouter and HTTPX transport."""
     from atlas.agent.fallback_cooldown import cool, is_cooling
     from atlas.models.tokens import estimate_tokens
 
@@ -632,24 +631,18 @@ async def complete_stream(
             attempt_usage: dict[str, Any] = {}
             finish_reason: str | None = None
             attempt_started = time.monotonic()
-            main_runtime = {
-                "provider": route.provider, "model": wire_model,
-                "base_url": route.base_url, "api_key": route.key,
-                "api_mode": route.api_mode, "disable_provider_retries": usage_budget is not None,
-            }
             try:
                 kwargs: dict[str, Any] = {
-                    "task": "conversation", "provider": route.provider, "model": wire_model,
-                    "base_url": route.base_url, "api_key": route.key,
-                    "api_mode": route.api_mode, "main_runtime": main_runtime,
-                    "messages": _wire_messages(request_messages), "tools": tools or None, "stream": True,
+                    "tools": tools or None, "stream": True,
                     "stream_options": {"include_usage": True},
                 }
                 if max_output_tokens:
                     kwargs["max_tokens"] = max_output_tokens
                 if reasoning_effort:
                     kwargs["reasoning_config"] = {"effort": reasoning_effort}
-                stream = await asyncio.to_thread(call_llm, **kwargs)
+                stream = await asyncio.to_thread(
+                    router.stream, route, _wire_messages(request_messages), **kwargs,
+                )
                 if hasattr(stream, "choices"):
                     chunks = iter((stream,))
                 else:

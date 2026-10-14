@@ -1,16 +1,8 @@
 """Atlas-scoped proxy and CA settings for model HTTP transports.
 
 The settings are stored locally; proxy credentials live in the OS credential
-store. Transport overrides are carried by a ContextVar and applied only while
-Atlas constructs or runs a model agent/call. The Hermes builders are wrapped
-at runtime so plugins, updates, and other ordinary network traffic keep their
-own transport policy.
-
-The adapters wrap Hermes' model-client construction seams
-(``agent.process_bootstrap.build_keepalive_http_client`` and
-``agent.anthropic_adapter._new_sdk_client``). HTTPX accepts explicit ``proxy``
-and ``verify`` options (https://www.python-httpx.org/advanced/proxies/); Python
-SSL contexts load the configured PEM bundle for certificate verification.
+store. Atlas applies them only to model HTTPX requests. Explicit ``proxy`` and
+``verify`` options carry the configured proxy and PEM trust bundle.
 """
 
 from __future__ import annotations
@@ -18,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 import ssl
-import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -32,8 +23,6 @@ _PROXY_CREDENTIAL_KEY = "atlas.model_network.proxy_url"
 _ACTIVE_SETTINGS: ContextVar["ModelNetworkSettings | None"] = ContextVar(
     "atlas_model_network_settings", default=None,
 )
-_PATCH_LOCK = threading.Lock()
-_PATCHED = False
 
 
 class ModelNetworkSettingsError(ValueError):
@@ -152,7 +141,7 @@ def assert_transport_supported(
 def _verify_for(settings: ModelNetworkSettings, base_url: str, fallback: Any = True) -> Any:
     if not settings.ca_bundle_path:
         return fallback
-    from agent.ssl_verify import resolve_httpx_verify
+    from atlas.engine_core.agent.ssl_verify import resolve_httpx_verify
 
     return resolve_httpx_verify(ca_bundle=settings.ca_bundle_path, base_url=base_url)
 
@@ -163,11 +152,13 @@ def _new_scoped_http_client(
 ) -> Any:
     import httpx
 
+    from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
+
     kwargs: dict[str, Any] = {
         "verify": verify,
         "timeout": timeout or httpx.Timeout(connect=15.0, read=None, write=15.0, pool=10.0),
         "limits": httpx.Limits(max_keepalive_connections=20, max_connections=100, keepalive_expiry=20.0),
-        "trust_env": True,
+        "trust_env": not loopback_request_kwargs(base_url).get("trust_env") is False,
     }
     if settings.proxy_url:
         kwargs["proxy"] = settings.proxy_url
@@ -187,86 +178,9 @@ def build_model_httpx_client(
     )
 
 
-def _install_hermes_adapters() -> None:
-    global _PATCHED
-    if _PATCHED:
-        return
-    with _PATCH_LOCK:
-        if _PATCHED:
-            return
-        from agent import process_bootstrap
-
-        original_builder = process_bootstrap.build_keepalive_http_client
-
-        def atlas_keepalive_http_client(
-            base_url: str = "", *, async_mode: bool = False, verify: Any = True,
-        ) -> Any:
-            settings = _ACTIVE_SETTINGS.get()
-            if settings is None or not settings.enabled:
-                return original_builder(base_url, async_mode=async_mode, verify=verify)
-            effective_verify = _verify_for(settings, str(base_url or ""), verify)
-            if not settings.proxy_url:
-                return original_builder(base_url, async_mode=async_mode, verify=effective_verify)
-            return _new_scoped_http_client(
-                base_url=str(base_url or ""), settings=settings,
-                verify=effective_verify, async_mode=async_mode,
-            )
-
-        atlas_keepalive_http_client.__wrapped__ = original_builder  # type: ignore[attr-defined]
-        process_bootstrap.build_keepalive_http_client = atlas_keepalive_http_client
-
-        # Standard Anthropic clients do not use Hermes' OpenAI keepalive builder.
-        # Entra clients already provide a bearer-hook httpx.Client; patch that
-        # factory separately so auth refresh hooks are preserved.
-        try:
-            from agent import anthropic_adapter
-
-            original_anthropic_factory = anthropic_adapter._new_sdk_client
-
-            def atlas_anthropic_factory(sdk: Any, kwargs: dict[str, Any], headers: dict[str, str], route: str = None) -> Any:
-                settings = _ACTIVE_SETTINGS.get()
-                if settings is not None and settings.enabled and "http_client" not in kwargs:
-                    kwargs = dict(kwargs)
-                    kwargs["http_client"] = _new_scoped_http_client(
-                        base_url=str(route or kwargs.get("base_url") or ""),
-                        settings=settings,
-                        verify=_verify_for(settings, str(route or kwargs.get("base_url") or "")),
-                        async_mode=False,
-                    )
-                return original_anthropic_factory(sdk, kwargs, headers, route=route)
-
-            atlas_anthropic_factory.__wrapped__ = original_anthropic_factory  # type: ignore[attr-defined]
-            anthropic_adapter._new_sdk_client = atlas_anthropic_factory
-        except ImportError:
-            # The adapter is only needed when native Anthropic is configured.
-            pass
-
-        try:
-            from agent import azure_identity_adapter
-
-            original_bearer_factory = azure_identity_adapter.build_bearer_http_client
-
-            def atlas_bearer_http_client(token_provider: Any, **kwargs: Any) -> Any:
-                settings = _ACTIVE_SETTINGS.get()
-                if settings is not None and settings.enabled:
-                    kwargs = dict(kwargs)
-                    if settings.proxy_url:
-                        kwargs["proxy"] = settings.proxy_url
-                    kwargs["verify"] = _verify_for(settings, "")
-                return original_bearer_factory(token_provider, **kwargs)
-
-            atlas_bearer_http_client.__wrapped__ = original_bearer_factory  # type: ignore[attr-defined]
-            azure_identity_adapter.build_bearer_http_client = atlas_bearer_http_client
-        except ImportError:
-            pass
-        _PATCHED = True
-
-
 @contextmanager
 def model_network_scope(settings: ModelNetworkSettings) -> Iterator[None]:
     """Apply model-only transport overrides in this context and propagated worker threads."""
-    if settings.enabled:
-        _install_hermes_adapters()
     token = _ACTIVE_SETTINGS.set(settings)
     try:
         yield

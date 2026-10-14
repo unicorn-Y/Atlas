@@ -738,22 +738,13 @@ def _make_registry_handler(name: str):
 
 
 def register_review_tools() -> None:
-    """Register review_command + submit_findings in the Hermes tool registry (idempotent).
+    """Register review_command + submit_findings in the Atlas tool registry (idempotent).
 
     Mirrors how bind_atlas_tools registers new_context_window; a later live run
     rebinds dispatch through bind_atlas_tools with override=True, so re-running
     this must never clobber that binding (hence the get_entry guard).
     """
-    # 审查工具必须常驻（ambient）：tool_search 的可延迟规则会把不在 hermes
-    # toolsets._HERMES_CORE_TOOLS 里的工具换成桥接桩，审查员直接调用会被
-    # "Tool '...' does not exist" 拒绝——与 clarify 刻意不延迟是同一个理由。
-    import toolsets as hermes_toolsets
-
-    for _ambient in ("submit_findings", "review_command"):
-        if _ambient not in hermes_toolsets._HERMES_CORE_TOOLS:
-            hermes_toolsets._HERMES_CORE_TOOLS.append(_ambient)
-
-    from tools.registry import registry
+    from atlas.engine_core.tools.registry import registry
 
     for name, schema in _REVIEW_TOOL_SCHEMAS:
         if registry.get_entry(name) is not None:

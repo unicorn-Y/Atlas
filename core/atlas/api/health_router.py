@@ -39,22 +39,27 @@ def _service(name: str, services: AppServices) -> Any:
 async def health(
     services: Annotated[AppServices, Depends(get_app_services)],
 ) -> dict[str, Any]:
-    """Liveness plus per-component startup state (H8 §10.2 S4).
+    """Report chat readiness separately from optional startup progress.
 
-    ``status`` is ``ok`` only when every registered component is ``ready``;
-    unsettled components report ``starting``. Settled optional failures report
-    ``degraded`` so the desktop can connect without hiding component errors.
-    Apps mounted without the server lifespan report no components and stay
-    ``ok`` — the historical contract.
+    The core API and model service are usable before background integrations
+    finish. Keep ``status`` ready for the desktop as soon as this endpoint can
+    answer; ``components`` preserves each integration's actual progress and
+    failures without blocking chat readiness.
     """
     startup = getattr(services, "startup", None)
     components: dict[str, str] = startup.snapshot() if startup is not None else {}
-    if any(state == "starting" for state in components.values()):
-        status = "starting"
-    elif any(state == "failed" for state in components.values()):
-        status = "degraded"
+    core_ready = getattr(startup, "core_ready", None)
+    if core_ready is None:
+        # Keep the standalone app-factory/test harness contract when no server
+        # lifespan has declared its chat-critical readiness boundary.
+        if any(state == "starting" for state in components.values()):
+            status = "starting"
+        elif any(state == "failed" for state in components.values()):
+            status = "degraded"
+        else:
+            status = "ok"
     else:
-        status = "ok"
+        status = "ok" if core_ready else "starting"
     errors = startup.error_snapshot() if startup is not None else {}
     return {
         "status": status,

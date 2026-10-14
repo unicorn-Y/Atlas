@@ -1,11 +1,7 @@
-"""Sync Atlas settings into the Hermes engine home config.yaml.
+"""Compatibility shim retained for existing X2 call sites.
 
-The pinned ``hermes-agent`` package reads its settings from
-``$HERMES_HOME/config.yaml`` (HermesRuntime sets HERMES_HOME to
-``<Atlas data>/engine``).  X2 bridges translate Atlas config sections
-(``[computer_use]``, ``[browser]``) into that file so Hermes tooling picks them
-up without forking its internals.  Existing keys are preserved; only the X2
-managed sections are rewritten.
+Atlas settings are read directly from Atlas configuration; no Hermes config
+file is created or synchronized.
 """
 from __future__ import annotations
 
@@ -20,16 +16,15 @@ MANAGED_SECTIONS = ("computer_use", "browser", "auxiliary")
 
 
 def hermes_home() -> Path:
-    home = os.environ.get("HERMES_HOME")
-    if home:
-        return Path(home).expanduser().resolve()
-    from atlas.config import get_config
+    from atlas.engine_core.hermes_constants import get_hermes_home
 
-    return (get_config().db_path.parent / "engine").resolve()
+    return get_hermes_home()
 
 
 def config_file() -> Path:
-    return hermes_home() / "config.yaml"
+    from atlas.config import CONFIG_PATH
+
+    return Path(CONFIG_PATH)
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -58,7 +53,7 @@ def _write_yaml(path: Path, data: dict[str, Any]) -> None:
 
 def _invalidate_hermes_config_cache() -> None:
     try:
-        from hermes_cli import config as hc
+        from atlas.engine_core import config as hc
 
         for cache_name in ("_LOAD_CONFIG_CACHE", "_RAW_CONFIG_CACHE",
                            "_LAST_EXPANDED_CONFIG_BY_PATH"):
@@ -99,46 +94,6 @@ def _aux_vision_section() -> dict[str, Any]:
 
 
 def sync_x2_config(extra: dict[str, Any] | None = None) -> Path:
-    """Write Atlas X2 settings into the Hermes engine config.
-
-    ``extra`` merges additional top-level sections (used by tests).  Returns
-    the config path that now reflects the settings.
-    """
-    from atlas.config import get_config
-
-    cfg = get_config()
-    data = _load_yaml(config_file())
-
-    data["computer_use"] = {
-        "permission_mode": cfg.get("computer_use.permission_mode", "standard"),
-        "no_overlay": bool(cfg.get("computer_use.no_overlay", True)),
-        "cua_telemetry": bool(cfg.get("computer_use.cua_telemetry", False)),
-        "ax_max_elements": cfg.get("computer_use.ax_max_elements", 200),
-        "max_image_dimension": cfg.get("computer_use.max_image_dimension", 1456),
-    }
-    browser_mode = str(cfg.get("browser.mode", "builtin"))
-    data["browser"] = {
-        "mode": browser_mode,
-        "use_real_profile": browser_mode == "real_profile",
-        "cdp_url": cfg.get("browser.cdp_url", "") or "",
-        "headed": bool(cfg.get("browser.headed", False)),
-        "engine": cfg.get("browser.engine", "auto"),
-        "inactivity_timeout": cfg.get("browser.inactivity_timeout", 600),
-        "snapshot_threshold": cfg.get("browser.snapshot_threshold", 15000),
-        "dialog_policy": cfg.get("browser.dialog_policy", "must_respond"),
-        "extension_control": {
-            "enabled": browser_mode == "extension",
-        },
-    }
-    data["auxiliary"] = {"vision": _aux_vision_section()}
-
-    if extra:
-        for key, value in extra.items():
-            if isinstance(value, dict) and isinstance(data.get(key), dict):
-                data[key].update(value)
-            else:
-                data[key] = value
-
-    _write_yaml(config_file(), data)
-    _invalidate_hermes_config_cache()
+    """Return the Atlas config path; kept for callers during the engine cutover."""
+    del extra
     return config_file()

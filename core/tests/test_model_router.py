@@ -157,7 +157,6 @@ async def test_native_anthropic_route_completes_over_fake_http_endpoint(purpose)
 
 
 async def test_native_anthropic_route_preserves_cache_thinking_signature_and_tool_blocks(
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Round 1 returns a signed thinking block + tool_use; round 2 replays both verbatim.
 
@@ -168,10 +167,6 @@ async def test_native_anthropic_route_preserves_cache_thinking_signature_and_too
     the thinking policy is pinned to ``native`` exactly like a direct Anthropic
     route.
     """
-    monkeypatch.setattr(
-        "agent.anthropic_message_convert.anthropic_thinking_route",
-        lambda _base_url, _model: "native",
-    )
     manager = FakeModelManager("native_only")
     round_one_messages = [
         {"role": "system", "content": "You are Atlas."},

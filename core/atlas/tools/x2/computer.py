@@ -302,43 +302,27 @@ class X2ComputerRuntime:
             sync_x2_config()
         except Exception as exc:  # noqa: BLE001 - config sync must not break tool calls
             log.warning("x2.computer_config_sync_failed", extra={"error": str(exc)}, exc_info=True)
-        try:
-            from tools.computer_use.cua_backend_driver import resolve_cua_driver_cmd
-
-            self.driver_binary = resolve_cua_driver_cmd(None)
-            if self.driver_binary:
-                # Backend = cua driver when available; Hermes defaults to it anyway.
-                os.environ.setdefault("HERMES_COMPUTER_USE_BACKEND", "cua")
-            else:
-                self.backend_name = "cua(unavailable)"
-        except Exception as exc:  # noqa: BLE001
-            log.debug("x2.cua_driver_probe_failed", extra={"error": str(exc)}, exc_info=True)
+        self.backend_name = "atlas-native" if os.name == "nt" else "unavailable"
+        self.driver_binary = None
 
     def _hermes_tool(self) -> Any:
         if self._injected_hermes_tool is not None:
             return self._injected_hermes_tool or None
-        if self._hermes_tool_failed:
-            return None
-        try:
-            from tools.computer_use import tool as hermes_tool
-
-            return hermes_tool
-        except Exception as exc:  # noqa: BLE001 - pinned dependency may be absent
-            log.warning("x2.hermes_computer_tool_missing", extra={"error": str(exc)}, exc_info=True)
-            self._hermes_tool_failed = True
-            return None
+        # Atlas owns the active desktop runtime. The injected tool remains as a test seam;
+        # production uses ComputerUseRuntime below and never imports the former Hermes tool.
+        return None
 
     def _acquire_backend(self, hermes_tool: Any) -> Any:
         if self._backend_injected:
             return self._injected_backend  # may be None: caller falls back to legacy
-        if not self.driver_binary and not os.environ.get("HERMES_COMPUTER_USE_BACKEND"):
-            # No resolvable cua-driver: never let Hermes lazily bootstrap/install
-            # (it would download a toolchain mid tool-call). Legacy stays in charge.
+        # Production computer control is provided by Atlas' native runtime. Keep
+        # the injected Hermes seam only for focused compatibility tests.
+        if hermes_tool is None:
             return None
         try:
             return hermes_tool._get_backend("")
-        except Exception as exc:  # noqa: BLE001 - fallback to legacy below
-            log.warning("x2.hermes_backend_unavailable", extra={"error": str(exc)}, exc_info=True)
+        except Exception as exc:  # noqa: BLE001 - fallback to Atlas native runtime
+            log.debug("x2.injected_computer_backend_unavailable", extra={"error": str(exc)})
             return None
 
     def _ensure_legacy(self) -> Any:
@@ -477,10 +461,9 @@ class X2ComputerRuntime:
         runtime = self._ensure_legacy()
         if runtime is None:
             return _error(
-                "当前没有可用的桌面控制后端：cua-driver 不可用，且本机没有 Windows 桌面回退运行时。"
-                "可运行 `hermes computer-use install` 安装 cua-driver。"
+                "当前没有可用的桌面控制后端：cua-driver 不可用，且本机没有 Windows 桌面运行时。"
             )
-        result = await runtime.call_tool(name, args)
+        result = await runtime.call_tool(name, args, run_id=ctx.run_id or ctx.session_id)
         await self._emit_step(ctx, name, result)
         return result
 
@@ -646,36 +629,16 @@ def register_computer_tools(register: Register) -> list[str]:
 # Status / doctor
 # ---------------------------------------------------------------------------
 def collect_doctor_report() -> dict[str, Any]:
-    """Mirror ``tools.computer_use.doctor`` — cua-driver health_report, never raising."""
+    """Report Atlas native computer-control availability."""
     platform = sys.platform
-    try:
-        from tools.computer_use import doctor as hermes_doctor
-        from tools.computer_use.cua_backend_driver import resolve_cua_driver_cmd
-
-        binary = resolve_cua_driver_cmd(None)
-        if not binary:
-            return {
-                "schema_version": "1", "platform": platform, "overall": "failed",
-                "driver_version": None, "checks": [{
-                    "name": "binary_version", "status": "fail",
-                    "message": "cua-driver 未安装（可运行 `hermes computer-use install`）",
-                }],
-            }
-        try:
-            return dict(hermes_doctor._drive_health_report(binary, timeout=8.0))
-        except Exception as exc:  # noqa: BLE001 - degraded beats a 500
-            log.debug("computer.collect_doctor_report_failed", error=str(exc), exc_info=True)
-            return {
-                "schema_version": "1", "platform": platform, "overall": "degraded",
-                "driver_version": None, "checks": [{
-                    "name": "health_report", "status": "fail",
-                    "message": f"health_report 不可用：{exc}",
-                }],
-            }
-    except Exception as exc:  # noqa: BLE001
-        log.debug("computer.collect_doctor_report_failed", error=str(exc), exc_info=True)
-        return {"schema_version": "1", "platform": platform, "overall": "failed",
-                "driver_version": None, "checks": [], "error": str(exc)}
+    ready = os.name == "nt"
+    return {
+        "schema_version": "1", "platform": platform,
+        "overall": "ok" if ready else "failed", "driver_version": None,
+        "checks": [{"name": "atlas_native_runtime", "status": "ok" if ready else "fail",
+                    "message": "Atlas native computer runtime is available." if ready else
+                    "Atlas native computer runtime requires Windows."}],
+    }
 
 
 def status_snapshot() -> dict[str, Any]:

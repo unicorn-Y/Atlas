@@ -18,7 +18,9 @@ Atlas 运行时每 24 小时自动跑一次（service.auto_loop）。额外项�
 
 from __future__ import annotations
 
+import difflib
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -39,6 +41,8 @@ MAX_COMMITS_LISTED = 40
 FIRST_RUN_DAYS = 7
 MAX_FILES_LISTED = 60
 RELEASE_BODY_CHARS = 1500
+PORTED_TABLE = Path("core/atlas/engine_core/PORTED.md")
+MAX_DIFF_CHARS = 20_000
 
 
 @dataclass
@@ -49,6 +53,7 @@ class Watched:
     focus: list[str] = field(default_factory=list)
     changelog: str = ""  # 闭源项目只看 CHANGELOG 的新增
     ported: set[str] = field(default_factory=set)
+    ported_refs: list[dict[str, str]] = field(default_factory=list)
 
 
 # 一流三家优先；其余是 ENGINE 计划书里用到或值得持续看的。路径是前缀匹配。
@@ -183,13 +188,65 @@ def watch_list(repo_root: Path | None = None) -> list[Watched]:
         from atlas.config import PROJECT_ROOT
 
         repo_root = PROJECT_ROOT
+    hermes = by_repo.get("nousresearch/hermes-agent")
+    if hermes:
+        hermes.ported_refs = read_ported_manifest(repo_root)
+        hermes.ported = {row["source"] for row in hermes.ported_refs}
     for record in provenance.scan(repo_root):
         if not record.repo:
             continue
         item = by_repo.setdefault(record.repo.lower(), Watched(record.repo, record.repo, "已移植"))
-        if record.path:
+        if record.path and item.repo.lower() != "nousresearch/hermes-agent":
             item.ported.add(record.path)
     return list(by_repo.values())
+
+
+def read_ported_manifest(repo_root: Path) -> list[dict[str, str]]:
+    """Read the authoritative Hermes source map from its Markdown table."""
+    path = repo_root / PORTED_TABLE
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    rows: list[dict[str, str]] = []
+    for line in lines:
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
+        if len(cells) < 3 or cells[0].lower() == "source" or re.fullmatch(r"[-: ]+", "".join(cells)):
+            continue
+        source, destination, commit = cells[:3]
+        commit = commit.split()[0].strip("`()")
+        commit = commit.rsplit("@", 1)[-1]
+        if source and destination and re.fullmatch(r"[0-9a-fA-F]{7,40}", commit):
+            rows.append({"source": source, "destination": destination, "commit": commit.lower()})
+    return rows
+
+
+def _ported_diffs(repo: str, head: str, rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Fetch only manifest-listed files and produce reviewable unified diffs."""
+    diffs = []
+    for row in rows:
+        old = _file_at(repo, row["commit"], row["source"])
+        new = _file_at(repo, head, row["source"])
+        if old == new:
+            continue
+        if old is None and new is None:
+            diffs.append({**row, "head": head, "status": "source path missing at both commits",
+                          "diff": ""})
+            continue
+        patch = "\n".join(difflib.unified_diff(
+            (old or "").splitlines(), (new or "").splitlines(),
+            fromfile=f"{row['source']}@{row['commit']}",
+            tofile=f"{row['source']}@{head}", lineterm="",
+        ))
+        truncated = len(patch) > MAX_DIFF_CHARS
+        status = "changed" if old is not None and new is not None else (
+            "missing at source commit" if old is None else "removed upstream"
+        )
+        diffs.append({**row, "head": head, "status": status,
+                      "diff": patch[:MAX_DIFF_CHARS], "truncated": truncated})
+    return diffs
 
 
 def _api(path: str) -> Any:
@@ -217,12 +274,12 @@ def _by_path(item: Watched, branch: str, since_date: str, done: set[str]) -> tup
     return ported, focus
 
 
-def _file_at(repo: str, ref: str, path: str) -> str:
-    return sources.github_file(repo, ref, path) or ""
+def _file_at(repo: str, ref: str, path: str) -> str | None:
+    return sources.github_file(repo, ref, path)
 
 
 def _changelog_added(repo: str, path: str, old: str, new: str) -> str:
-    before, after = _file_at(repo, old, path), _file_at(repo, new, path)
+    before, after = _file_at(repo, old, path) or "", _file_at(repo, new, path) or ""
     if not after or before == after:
         return ""
     # CHANGELOG 新内容都在顶部：取新文件里旧文件开头之前的部分。
@@ -288,6 +345,8 @@ def check_repo(item: Watched, state: dict[str, Any]) -> dict[str, Any]:
     releases_rows = _api(f"{item.repo}/releases?per_page=1")
     newest_tag = releases_rows[0].get("tag_name", "") if releases_rows else ""
     result["latest_release"] = newest_tag
+    if item.repo.lower() == "nousresearch/hermes-agent" and item.ported_refs:
+        result["ported_diffs"] = _ported_diffs(item.repo, head, item.ported_refs)
     since = state.get("sha", "")
     if not since:
         # 第一次：回看最近 FIRST_RUN_DAYS 天，而不是只记个基线。
@@ -375,7 +434,9 @@ def _quote(text: str) -> str:
 
 
 def _changed(row: dict[str, Any]) -> bool:
-    return bool(row.get("commits") or row.get("releases") or row.get("changelog"))
+    return bool(
+        row.get("commits") or row.get("releases") or row.get("changelog") or row.get("ported_diffs")
+    )
 
 
 def render(report: dict[str, Any]) -> str:
@@ -425,13 +486,26 @@ def render(report: dict[str, Any]) -> str:
             lines.append("")
         if r.get("changelog"):
             lines += ["### CHANGELOG 新增", "", _quote(r["changelog"]), ""]
+        if r.get("ported_diffs"):
+            lines += ["**PORTED.md 来源文件 diff（只读报告；请人工审查并决定是否修改）：**"]
+            for entry in r["ported_diffs"]:
+                lines += [
+                    "",
+                    f"#### `{entry['source']}` → `{entry['destination']}`",
+                    f"来源 `{entry['commit']}` → 上游 `{entry.get('head', r.get('head', ''))}` · "
+                    f"{entry['status']}" + (" · diff 已截断" if entry.get("truncated") else ""),
+                    "",
+                    "```diff",
+                    entry.get("diff", ""),
+                    "```",
+                ]
         if r.get("commits"):
             lines.append(
                 f"{r['commit_count']} 个新提交（[完整对比]({r.get('compare_url')})）"
                 + ("；文件列表已截断" if r.get("files_truncated") else "")
             )
             if r.get("ported"):
-                lines.append("\n**命中我们移植过的文件（组件追新会提示合并）：**")
+                lines.append("\n**本轮提交命中的移植来源路径：**")
                 lines += [_file_line(f) for f in r["ported"]]
             if r.get("focus"):
                 lines.append("\n**关注目录的改动：**")

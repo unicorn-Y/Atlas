@@ -25,7 +25,7 @@ def _usage_input_tokens(usage: Any) -> int | None:
 # first time an encoding is used. That used to happen synchronously inside the first
 # plan/compaction on the event loop and could stall the backend for as long as the
 # download took (forever offline). Encodings now load on a background thread; until one
-# is ready, estimates use Hermes' CJK-aware estimator.
+# is ready, estimates use Atlas's CJK-aware estimator.
 _ENCODINGS: dict[str, Any] = {}
 _UNAVAILABLE: set[str] = set()
 _LOADING: set[str] = set()
@@ -87,7 +87,7 @@ def estimate_tokens(
     system_prompt: str = "",
     tools: list[dict[str, Any]] | None = None,
 ) -> int:
-    """Estimate tokens with tiktoken once loaded; Hermes' CJK-aware estimator until then."""
+    """Estimate tokens with tiktoken once loaded; use the CJK-aware estimator until then."""
     encoding = _ready_encoding(_encoding_name(model))
     if encoding is not None:
         if isinstance(value, str):
@@ -100,7 +100,7 @@ def estimate_tokens(
             material += "\n" + json.dumps(tools, ensure_ascii=False, separators=(",", ":"))
         return len(encoding.encode(material))
 
-    from agent.model_metadata import estimate_request_tokens_rough
+    from atlas.engine_core.agent.model_metadata import estimate_request_tokens_rough
 
     if isinstance(value, str):
         messages = [{"role": "user", "content": value}]

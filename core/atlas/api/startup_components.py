@@ -34,6 +34,13 @@ class StartupComponents:
         self._states: dict[str, str] = {}
         self._events: dict[str, asyncio.Event] = {}
         self._errors: dict[str, str] = {}
+        # Server lifespan owns this separate core readiness signal. Background
+        # integrations remain visible in ``snapshot`` but cannot gate chat.
+        self.core_ready: bool | None = None
+
+    def mark_core_ready(self, ready: bool) -> None:
+        """Set readiness for the chat-critical API/model/agent path."""
+        self.core_ready = ready
 
     def mark(self, name: str, state: str, *, error: str | None = None) -> None:
         if state not in VALID_STATES:

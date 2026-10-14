@@ -318,18 +318,16 @@ class HermesBrowserBackend:
     """
 
     _FUNCTIONS = {
-        "navigate": ("tools.browser_tool", "browser_navigate"),
-        "snapshot": ("tools.browser_tool", "browser_snapshot"),
-        "click": ("tools.browser_tool", "browser_click"),
-        "type": ("tools.browser_tool", "browser_type"),
-        "scroll": ("tools.browser_tool", "browser_scroll"),
-        "back": ("tools.browser_tool", "browser_back"),
-        "press": ("tools.browser_tool", "browser_press"),
-        "vision": ("tools.browser_tool", "browser_vision"),
-        "console": ("tools.browser_tool", "browser_console"),
-        "get_images": ("tools.browser_tool", "browser_get_images"),
-        "vault_list": ("tools.browser_vault_tool", "browser_vault_list"),
-        "vault_fill": ("tools.browser_vault_tool", "browser_vault_fill"),
+        "navigate": ("atlas.engine_core.tools.browser_tool", "browser_navigate"),
+        "snapshot": ("atlas.engine_core.tools.browser_tool", "browser_snapshot"),
+        "click": ("atlas.engine_core.tools.browser_tool", "browser_click"),
+        "type": ("atlas.engine_core.tools.browser_tool", "browser_type"),
+        "scroll": ("atlas.engine_core.tools.browser_tool", "browser_scroll"),
+        "back": ("atlas.engine_core.tools.browser_tool", "browser_back"),
+        "press": ("atlas.engine_core.tools.browser_tool", "browser_press"),
+        "vision": ("atlas.engine_core.tools.browser_tool", "browser_vision"),
+        "console": ("atlas.engine_core.tools.browser_tool", "browser_console"),
+        "get_images": ("atlas.engine_core.tools.browser_tool", "browser_get_images"),
     }
 
     async def call(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -547,7 +545,7 @@ class X2BrowserRuntime:
         if self._backend_injected or self._backend_factory is not None:
             return  # injected test / direct-mode runtime owns no Hermes sessions
         try:
-            from tools.browser_tool_lifecycle import cleanup_all_browsers
+            from atlas.engine_core.tools.browser_tool_lifecycle import cleanup_all_browsers
         except Exception as exc:  # noqa: BLE001 - stack absent offline
             log.debug("x2.browser_cleanup_import_failed", extra={"error": str(exc)}, exc_info=True)
             return

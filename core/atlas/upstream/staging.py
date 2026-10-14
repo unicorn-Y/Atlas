@@ -3,7 +3,6 @@
 正在用的 Atlas 不受影响：所有改动发生在仓库旁的 ``atlas-upstream-staging/`` 里——
 
 - ``atlas/``  Atlas 仓库的 git 工作树（从当前提交分出）
-- ``hermes/`` Hermes 源码的 git 工作树（从当前锁定的提交分出）
 - ``venv/``   正在用的虚拟环境的镜像副本，装包、跑测试都在这里
 
 步骤：准备副本 → 跑一遍测试当基线 → 按组更新（内核 → 记忆 → Python → 前端 → 运行时 →
@@ -46,7 +45,6 @@ NPM_TIMEOUT = 1200
 
 #: 组的执行顺序：(组名, 中文名, 组件 kind 集合)
 GROUPS: list[tuple[str, str, set[str]]] = [
-    ("hermes", "Agent 内核（Hermes）", {"fork"}),
     ("pip", "Python 依赖", {"pip", "git-pin"}),
     ("pip-transitive", "Python 间接依赖", {"pip-transitive"}),
     ("npm", "前端依赖", {"npm", "mcp-npx"}),
@@ -242,21 +240,16 @@ def relink_junctions(src_repo: Path, dst_repo: Path, rel: str) -> None:
 @dataclass
 class Workspace:
     repo: Path                 # 正在用的 Atlas 仓库
-    hermes_main: Path          # 正在用的 Hermes 源码目录
     root: Path                 # 预演根目录
     data: Path                 # <data>/upstream
+    hermes_main: Path | None = None  # 旧调用方兼容字段；不再克隆或安装 Hermes
     base: str = ""             # 预演起点（Atlas 当前提交）
     branch: str = ""           # Atlas 当前分支
-    pin: str = ""              # Hermes 锁定提交
     baseline: dict[str, Any] = field(default_factory=dict)
 
     @property
     def atlas(self) -> Path:
         return self.root / "atlas"
-
-    @property
-    def hermes(self) -> Path:
-        return self.root / "hermes"
 
     @property
     def venv(self) -> Path:
@@ -287,12 +280,9 @@ def _worktree(main: Path, path: Path, commit: str) -> None:
 def prepare(ws: Workspace, log: RunLog) -> None:
     ws.base = sources.git("rev-parse", "HEAD", cwd=ws.repo)
     ws.branch = sources.git("rev-parse", "--abbrev-ref", "HEAD", cwd=ws.repo)
-    ws.pin = inventory.hermes_settings(ws.repo / "core" / "pyproject.toml")["commit"]
     ws.root.mkdir(parents=True, exist_ok=True)
-    log.step(f"准备预演副本 {ws.root}（Atlas {ws.base[:8]}，Hermes {ws.pin[:8]}）", "准备")
+    log.step(f"准备预演副本 {ws.root}（Atlas {ws.base[:8]}）", "准备")
     _worktree(ws.repo, ws.atlas, ws.base)
-    if (ws.hermes_main / ".git").exists():
-        _worktree(ws.hermes_main, ws.hermes, ws.pin)
     log.step("复制 Python 环境与 node_modules（增量）")
     mirror(ws.repo / "core" / ".venv", ws.venv)
     venv_link = ws.atlas / "core" / ".venv"
@@ -305,8 +295,6 @@ def prepare(ws: Workspace, log: RunLog) -> None:
     for rel in ("node_modules", "frontend/node_modules"):
         mirror_node_modules(ws.repo, ws.atlas, rel)
     editables = ["-e", str(ws.atlas / "core")]
-    if ws.hermes.exists():
-        editables += ["-e", str(ws.hermes)]
     sources.run([ws.python, "-m", "pip", "install", "-q", "--no-deps", *editables],
                 timeout=900, check=True)
 
@@ -449,15 +437,6 @@ def set_git_pin(pyproject: Path, old_sha: str, new_sha: str) -> None:
     _write(pyproject, text.replace(old_sha, new_sha))
 
 
-def set_hermes_pin(pyproject: Path, new_sha: str) -> None:
-    text = _read(pyproject)
-    new, count = re.subn(r'(\[tool\.atlas\.hermes\][^\[]*?commit\s*=\s*")[0-9a-f]{40}(")',
-                         lambda m: m.group(1) + new_sha + m.group(2), text, flags=re.DOTALL)
-    if not count:
-        raise ItemFailed("pyproject 里找不到 [tool.atlas.hermes] commit")
-    _write(pyproject, new)
-
-
 def write_lock(ws: Workspace) -> None:
     """``core/requirements.lock``：预演环境里所有第三方包的确切版本（不含 editable）。
 
@@ -490,8 +469,6 @@ def restore_python(ws: Workspace) -> None:
     else:
         mirror(ws.repo / "core" / ".venv", ws.venv)
     editables = ["-e", str(ws.atlas / "core")]
-    if ws.hermes.exists():
-        editables += ["-e", str(ws.hermes)]
     sources.run([ws.python, "-m", "pip", "install", "-q", "--no-deps", *editables], timeout=900)
 
 
@@ -586,40 +563,6 @@ def _identity(directory: Path) -> list[str]:
     return ["-c", "user.name=Atlas 追新", "-c", "user.email=atlas-upstream@localhost"]
 
 
-def apply_hermes(ws: Workspace, item: dict[str, Any], log: RunLog) -> str:
-    settings = inventory.hermes_settings(ws.atlas / "core" / "pyproject.toml")
-    target = f"upstream/{settings['upstream_ref']}"
-    if not ws.hermes.exists():
-        raise ItemFailed("找不到 Hermes 源码目录")
-    sources.git("fetch", "--quiet", "upstream", settings["upstream_ref"], cwd=ws.hermes,
-                timeout=600)
-    behind = sources.git("rev-list", "--count", f"{ws.pin}..{target}", cwd=ws.hermes)
-    log.step(f"合并 Hermes 上游 {behind} 个提交")
-    describe = sources.git("describe", "--tags", "--always", target, cwd=ws.hermes, check=False)
-    merge = sources.run([*sources.GIT, *_identity(ws.hermes), "merge", "--no-edit", "-m",
-                         f"merge: upstream {settings['upstream_ref']} ({describe}) into atlas",
-                         target], cwd=ws.hermes, timeout=900)
-    if merge.returncode != 0:
-        conflicts = sources.git("diff", "--name-only", "--diff-filter=U", cwd=ws.hermes,
-                                check=False).splitlines()
-        sources.git("merge", "--abort", cwd=ws.hermes, check=False)
-        raise ItemFailed("合并有冲突，需要人工（或交给 Agent）处理：" + "、".join(conflicts[:20]))
-    new_sha = sources.git("rev-parse", "HEAD", cwd=ws.hermes)
-    log.step("装上合并后的 Hermes（含它新增的依赖）")
-    pip_install(ws, ["-e", str(ws.hermes)])
-    tests = [path for path in ("tests/agent/test_atlas_hooks.py",
-                               "tests/agent/test_atlas_context_handoff.py")
-             if (ws.hermes / path).exists()]
-    if tests:
-        result = sources.run([ws.python, "-m", "pytest", "-q", "-p", "no:cacheprovider", *tests],
-                             cwd=ws.hermes, timeout=900, env=_clean_env())
-        if result.returncode != 0:
-            raise ItemFailed("Atlas 在 Hermes 里的补丁测试失败：" + result.stdout[-1500:])
-    set_hermes_pin(ws.atlas / "core" / "pyproject.toml", new_sha)
-    item["_push"] = (ws.hermes, f"{new_sha}:refs/heads/{settings['branch']}")
-    return f"{ws.pin[:10]} → {new_sha[:10]}（{describe}）"
-
-
 def apply_borrowed(ws: Workspace, item: dict[str, Any], ctx: inventory.Context) -> str:
     detail = item.get("detail") or {}
     repo, path = detail.get("repo"), detail.get("path")
@@ -686,8 +629,7 @@ class Runner:
         self.components = {item["id"]: item for item in components}
         self.push_enabled = push_enabled
         self.ctx = inventory.Context(repo=ws.repo, python=sys.executable,
-                                     hermes_dir=ws.hermes_main, fetch=False)
-        self.pending_pushes: list[tuple[Path, str]] = []
+                                     hermes_dir=ws.repo, fetch=False)
 
     # -- 单组 ---------------------------------------------------------------
 
@@ -695,10 +637,7 @@ class Runner:
         """应用一批同组的项，返回 id → 说明。任一项失败抛 ItemFailed（带 id）。"""
         notes: dict[str, str] = {}
         ws = self.ws
-        if group.key == "hermes":
-            for item in items:
-                notes[item["id"]] = apply_hermes(ws, item, self.log)
-        elif group.key == "pip":
+        if group.key == "pip":
             specs = []
             pyproject = ws.atlas / "core" / "pyproject.toml"
             for item in items:
@@ -766,10 +705,7 @@ class Runner:
         ws = self.ws
         ws.git("reset", "--hard", "HEAD")
         ws.git("clean", "-fd")
-        if group.key in {"hermes", "pip", "pip-transitive"}:
-            if group.key == "hermes" and ws.hermes.exists():
-                head_pin = inventory.hermes_settings(ws.atlas / "core" / "pyproject.toml")["commit"]
-                sources.git("reset", "--hard", head_pin, cwd=ws.hermes, check=False)
+        if group.key in {"pip", "pip-transitive"}:
             restore_python(ws)
         if group.key in {"npm", "npm-transitive"}:
             self.restore_node()
@@ -809,9 +745,6 @@ class Runner:
         if problems:
             self.rollback(group)
             return False, "\n".join(problems)
-        for item in items:
-            if "_push" in item:
-                self.pending_pushes.append(item.pop("_push"))
         self.commit(group, notes)
         for cid, note in notes.items():
             self.log.result(cid, "applied", note=note, version=self.components[cid].get("latest"))
@@ -884,10 +817,6 @@ class Runner:
         ws.git("branch", "-f", "upstream/latest", head)
         log.data["restart_required"] = True
         if self.push_enabled:
-            for directory, refspec in self.pending_pushes:
-                log.step("推送 Hermes fork")
-                if not push(directory, refspec):
-                    log.warn("Hermes fork 没推送成功：另一台电脑拉不到新内核，本机不受影响")
             log.step(f"推送 Atlas 到远端分支 {ws.branch}")
             if push(ws.atlas, f"{head}:refs/heads/{ws.branch}"):
                 log.data["pushed"] = True
@@ -953,8 +882,7 @@ def run(plan: list[str], data_root: Path | None = None, repo: Path | None = None
             log.step("没有需要在预演里更新的项")
             log.finish("nothing")
             return log.data
-        ws = Workspace(repo=repo, hermes_main=inventory.hermes_checkout(repo),
-                       root=staging_root(repo, data_root), data=data_root)
+        ws = Workspace(repo=repo, root=staging_root(repo, data_root), data=data_root)
         prepare(ws, log)
         baseline(ws, set().union(*(group.gates for group in groups)), log)
         runner = Runner(ws, log, components, bool(check.load_settings(data_root).get("push")))

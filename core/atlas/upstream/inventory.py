@@ -26,7 +26,6 @@ from atlas.upstream.model import (
     HOT,
     LATEST,
     MANUAL,
-    MERGE,
     OUTDATED,
     REVIEW,
     UNKNOWN,
@@ -35,9 +34,6 @@ from atlas.upstream.model import (
 from atlas.upstream.sources import LookupFailed
 
 log = structlog.get_logger()
-
-HERMES_UPSTREAM = "https://github.com/NousResearch/hermes-agent.git"
-
 
 @dataclass
 class Context:
@@ -59,33 +55,8 @@ def default_context(fetch: bool = True) -> Context:
     from atlas.config import CONFIG_PATH, PROJECT_ROOT
 
     return Context(repo=PROJECT_ROOT, python=sys.executable,
-                   hermes_dir=hermes_checkout(PROJECT_ROOT),
+                   hermes_dir=PROJECT_ROOT,
                    config_path=CONFIG_PATH, fetch=fetch)
-
-
-def hermes_checkout(repo: Path) -> Path:
-    """正在用的 Hermes 源码目录：优先已安装的那份，其次 setup_hermes.py 的默认位置。"""
-    try:
-        from atlas.hermes_pin import installed_hermes_root
-
-        root = installed_hermes_root()
-        if root is not None and (root / ".git").exists():
-            return root
-    except Exception:  # 没装 Hermes 时退回默认位置
-        log.debug("upstream.hermes_root_unknown", exc_info=True)
-    return repo.parent / "hermes-agent"
-
-
-def hermes_settings(pyproject: Path) -> dict[str, str]:
-    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    hermes = data["tool"]["atlas"]["hermes"]
-    return {
-        "repository": str(hermes["repository"]),
-        "commit": str(hermes["commit"]),
-        "upstream": str(hermes.get("upstream", HERMES_UPSTREAM)),
-        "upstream_ref": str(hermes.get("upstream_ref", "main")),
-        "branch": str(hermes.get("branch", "atlas")),
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -105,26 +76,6 @@ def _requirements(pyproject: Path) -> list[tuple[Requirement, str]]:
             except InvalidRequirement:
                 log.warning("upstream.bad_requirement", spec=spec)
     return rows
-
-
-def _hermes_pins(hermes_dir: Path) -> set[str]:
-    """Hermes 自己用 ``==`` 锁死的包：这些跟着 Hermes 上游走，不单独追。"""
-    pyproject = hermes_dir / "pyproject.toml"
-    if not pyproject.exists():
-        return set()
-    try:
-        deps = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["dependencies"]
-    except (KeyError, tomllib.TOMLDecodeError):
-        return set()
-    pinned = set()
-    for spec in deps:
-        try:
-            req = Requirement(spec)
-        except InvalidRequirement:
-            continue
-        if any(s.operator == "==" for s in req.specifier):
-            pinned.add(normalize_pip(req.name))
-    return pinned
 
 
 def scan_pip(ctx: Context) -> list[Component]:
@@ -150,20 +101,17 @@ def scan_pip(ctx: Context) -> list[Component]:
         )
         component.resolve_status()
         items.append(component)
-    hermes_pinned = _hermes_pins(ctx.hermes_dir)
     rest = [
         {"name": name, "current": installed.get(name, ""), "latest": latest}
         for name, latest in sorted(outdated.items())
-        if name not in direct and name not in hermes_pinned
+        if name not in direct
     ]
-    held = sorted(name for name in outdated if name in hermes_pinned and name not in direct)
     items.append(Component(
         id="pip:*transitive", name="Python 间接依赖", category="transitive", kind="pip-transitive",
         current=f"{len(rest)} 个可更新" if rest else "全部最新",
         latest="", status=(OUTDATED if rest else LATEST) if ctx.fetch else UNKNOWN,
         source="PyPI", locations=["core/requirements.lock"],
-        note=(f"另有 {len(held)} 个由 Hermes 锁定版本，随内核更新" if held else ""),
-        detail={"packages": rest, "hermes_pinned": held},
+        detail={"packages": rest},
     ))
     return items
 
@@ -292,56 +240,6 @@ def scan_npm(ctx: Context) -> list[Component]:
 
 
 # ---------------------------------------------------------------------------
-# fork
-# ---------------------------------------------------------------------------
-
-
-def _ensure_remote(directory: Path, name: str, url: str) -> None:
-    remotes = sources.git("remote", cwd=directory).split()
-    if name not in remotes:
-        sources.git("remote", "add", name, url, cwd=directory)
-
-
-def scan_hermes(ctx: Context) -> list[Component]:
-    settings = hermes_settings(ctx.pyproject)
-    pin = settings["commit"]
-    upstream_ref = settings["upstream_ref"]
-    component = Component(
-        id="fork:hermes", name="Hermes Agent", category="kernel", kind="fork", strategy=MERGE,
-        current=pin[:10], source="NousResearch/hermes-agent",
-        url="https://github.com/NousResearch/hermes-agent",
-        locations=["core/pyproject.toml [tool.atlas.hermes]"],
-        detail={"pin": pin, "fork": settings["repository"], "checkout": str(ctx.hermes_dir)},
-    )
-    directory = ctx.hermes_dir
-    if not (directory / ".git").exists():
-        component.status, component.note = UNKNOWN, f"找不到 Hermes 源码目录 {directory}"
-        return [component]
-    if ctx.fetch:
-        _ensure_remote(directory, "upstream", settings["upstream"])
-        sources.git("fetch", "--quiet", "upstream", upstream_ref, cwd=directory, timeout=300)
-    target = f"upstream/{upstream_ref}"
-    behind = int(sources.git("rev-list", "--count", f"{pin}..{target}", cwd=directory) or 0)
-    describe = sources.git("describe", "--tags", "--always", target, cwd=directory, check=False)
-    pinned_describe = sources.git("describe", "--tags", "--always", pin, cwd=directory, check=False)
-    component.current = pinned_describe or pin[:10]
-    component.latest = describe or sources.git("rev-parse", "--short", target, cwd=directory)
-    component.status = OUTDATED if behind else LATEST
-    if behind:
-        subjects = sources.git(
-            "log", "--no-merges", "--format=%h%x09%s", "-n", "30", f"{pin}..{target}",
-            cwd=directory, check=False,
-        )
-        component.note = f"上游领先 {behind} 个提交"
-        component.detail.update(
-            behind=behind,
-            commits=[dict(zip(("hash", "subject"), line.split("\t", 1), strict=False))
-                     for line in subjects.splitlines() if "\t" in line],
-        )
-    return [component]
-
-
-# ---------------------------------------------------------------------------
 # MCP / 运行时
 # ---------------------------------------------------------------------------
 
@@ -448,15 +346,8 @@ def scan_runtime(ctx: Context) -> list[Component]:
 # ---------------------------------------------------------------------------
 
 
-def _hermes_blob(ctx: Context, ref: str, path: str) -> str | None:
-    result = sources.run([*sources.GIT, "show", f"{ref}:{path}"], cwd=ctx.hermes_dir, timeout=30)
-    return result.stdout if result.returncode == 0 else None
-
-
 def upstream_file(ctx: Context, repo: str, ref: str, path: str) -> str | None:
-    """上游某提交下的文件内容（Hermes 走本地源码目录，其它走 GitHub）；不存在返回 None。"""
-    if repo == "NousResearch/hermes-agent" and (ctx.hermes_dir / ".git").exists():
-        return _hermes_blob(ctx, ref, path)
+    """上游某提交下的文件内容；不存在返回 None。"""
     return sources.github_file(repo, ref, path)
 
 
@@ -467,20 +358,13 @@ def scan_borrowed(ctx: Context) -> list[Component]:
 
     def head_of(repo: str) -> str:
         if repo not in heads:
-            if repo == "NousResearch/hermes-agent" and (ctx.hermes_dir / ".git").exists():
-                ref = f"upstream/{hermes_settings(ctx.pyproject)['upstream_ref']}"
-                heads[repo] = sources.git("rev-parse", ref, cwd=ctx.hermes_dir)
-            else:
-                heads[repo] = sources.github_head(repo)
+            heads[repo] = sources.github_head(repo)
         return heads[repo]
 
     def resolve(repo: str, sha: str) -> str:
         key = (repo, sha)
         if key not in full_shas:
-            if repo == "NousResearch/hermes-agent" and (ctx.hermes_dir / ".git").exists():
-                full_shas[key] = sources.git("rev-parse", f"{sha}^{{commit}}", cwd=ctx.hermes_dir)
-            else:
-                full_shas[key] = sources.github_resolve(repo, sha)
+            full_shas[key] = sources.github_resolve(repo, sha)
         return full_shas[key]
 
     def one(record: provenance.Provenance) -> Component:
@@ -573,17 +457,14 @@ def scan_all(ctx: Context) -> list[Component]:
                               kind="scan", status=ERROR, strategy=MANUAL, note=str(exc)[:500])]
 
     scanners: dict[str, Scanner] = {
-        "pip": scan_pip, "git": scan_git_pins, "npm": scan_npm, "hermes": scan_hermes,
-        "runtime": scan_runtime,
+        "pip": scan_pip, "git": scan_git_pins, "npm": scan_npm, "runtime": scan_runtime,
     }
     with ThreadPoolExecutor(max_workers=len(scanners) + 1) as pool:
         futures = {name: pool.submit(guarded, name, fn) for name, fn in scanners.items()}
-        # 借鉴代码要用 Hermes 扫描器刚 fetch 下来的上游引用，等它先完成。
-        futures["hermes"].result()
         futures["borrowed"] = pool.submit(guarded, "borrowed", scan_borrowed)
         results = {name: future.result() for name, future in futures.items()}
     npm_items = {item.id: item for item in results["npm"]}
     mcp = guarded("mcp", lambda c: scan_mcp(c, npm_items))
-    ordered = ["hermes", "pip", "git", "npm", "runtime", "borrowed"]
+    ordered = ["pip", "git", "npm", "runtime", "borrowed"]
     items = [item for name in ordered for item in results[name]] + mcp
     return items

@@ -90,7 +90,7 @@ async def get_diagnostics(
         "status": "error" if backend_state == "failed" else "warning" if backend_state == "starting" else "ok",
         "detail": {"ready": "服务已就绪。", "starting": "部分组件仍在启动。", "failed": "有组件启动失败；报告不包含原始错误或路径。"}[backend_state],
     }]
-    from hermes_cli.sqlite_runtime import is_sqlite_wal_reset_vulnerable
+    from atlas.engine_core.state.hermes_state_wal import is_sqlite_wal_reset_vulnerable
 
     sqlite_unsafe = is_sqlite_wal_reset_vulnerable(sqlite3.sqlite_version_info)
     checks.append({
