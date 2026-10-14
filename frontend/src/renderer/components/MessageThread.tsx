@@ -191,7 +191,10 @@ export default function MessageThread({ history, username, historyActions, empty
   const previousHistory = useRef({ conversationId: '', length: 0 });
 
   const timelineItems = useMemo(() => buildTimeline(events), [events]);
-  const thinking = working && !events.some((event) => event.type === 'message.delta' || event.type === 'tool.started');
+  // The placeholder only covers the gap before anything streams; once thinking text arrives the
+  // reasoning row takes over (keeping both stacked them on top of each other).
+  const thinking = working && !events.some((event) => event.type === 'message.delta' || event.type === 'tool.started'
+    || (event.type === 'run.status' && event.data.status === 'reasoning' && typeof event.data.text === 'string' && event.data.text.trim().length > 0));
 
   // TimelineRow 需要的 store：动作函数恒定，响应式字段（answers/profiles）单独订阅后合入。
   const activityStore = useMemo(() => ({ ...useAtlasStore.getState(), answers, profiles }), [answers, profiles]);

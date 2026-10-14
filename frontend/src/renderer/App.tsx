@@ -1294,7 +1294,7 @@ export default function App() {
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
-            {activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 right-5 z-20 flex justify-end [&>*]:pointer-events-auto">
+            {activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 left-1/2 z-20 flex -translate-x-1/2 justify-center [&>*]:pointer-events-auto">
               <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
             </div>}
             {computerRunId && <ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={computerRunId} canPause={Boolean(foregroundEvent)} className="shrink-0" />}
