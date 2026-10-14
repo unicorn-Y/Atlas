@@ -39,25 +39,6 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
         tools = [*tools, *agent._computer_use.get_tools_for_llm()]
     if agent._web is not None:
         tools = [*tools, *_WEB_TOOLS, _WEB_EXTRACT_TOOL]
-    if agent._memory is not None:
-        tools = [*tools, {
-            "type": "function",
-            "function": {
-                "name": "remember",
-                "description": (
-                    "Persist a durable memory about the user or project without "
-                    "asking. Use for stable preferences, project conventions, and "
-                    "corrective feedback (kind: preference|convention|feedback|fact)."
-                ),
-                "parameters": {"type": "object", "properties": {
-                    "key": {"type": "string"},
-                    "value": {"type": "string"},
-                    "kind": {"type": "string", "enum": [
-                        "preference", "convention", "feedback", "fact",
-                    ]},
-                }, "required": ["key", "value"], "additionalProperties": False},
-            },
-        }]
     tools.append({"type": "function", "function": {
         "name": "automation_manage",
         "description": (

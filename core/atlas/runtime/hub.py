@@ -126,7 +126,6 @@ async def hub_main() -> None:
     from atlas.capabilities.durable.dbos_backend import DurableBackend
     from atlas.config import get_config
     from atlas.memory import MemoryStore
-    from atlas.memory.unified_facade import UnifiedMemoryFacade
     from atlas.models import ModelManager
     from atlas.scheduler import AtlasScheduler
     from atlas.notifications import NotificationBus
@@ -134,13 +133,7 @@ async def hub_main() -> None:
     from atlas.telegram import TelegramService
 
     cfg = get_config()
-    # T01.3 全入口组成：与 server lifespan / cli chat 相同的 composition ——
-    # enabled 才构造 facade；disabled（默认）保持旧行为。
-    unified = (
-        UnifiedMemoryFacade.from_config(cfg)
-        if cfg.get("memory.unified.enabled") else None
-    )
-    memory = MemoryStore(unified=unified)
+    memory = MemoryStore()
     await memory.init()
     from atlas.config import DATA_ROOT
     from atlas.engine.session_migration import migrate_legacy_sessions
@@ -159,11 +152,7 @@ async def hub_main() -> None:
 
     async def agent_callback(task_id: str, message: str) -> None:
         run_id = uuid.uuid4().hex[:8]
-        # T06.2 换 chat 入口不换任务主体：conversation_id（hub-{task_id}-{run_id}）
-        # 是每次运行的聊天入口，任务本体是调度任务的 task_id —— 经
-        # orchestrator.run(task_id=...) 进入焦点接续链路（atlas.memory.focus_flow），
-        # 同一任务跨 hub/桌面重启共享同一焦点投影（unified_focus 的
-        # (subject, task_id) 唯一行），运行权威版本由服务端回读后递增。
+        # Each run gets its own chat entry (hub-{task_id}-{run_id}); task_id names the job.
         conversation_id = f"hub-{task_id}-{run_id}"
         print(f"[hub] task {task_id} run {run_id}: {message}", flush=True)
         events = orchestrator.run(message, conversation_id, task_id=task_id)
@@ -299,8 +288,6 @@ async def hub_main() -> None:
     durable.stop()
     await local.shutdown()
     await memory.close()
-    if unified is not None:
-        await unified.aclose()
     print("[hub] stopped", flush=True)
 
 

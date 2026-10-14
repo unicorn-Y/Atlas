@@ -8,7 +8,6 @@ from typing import Any
 #: 分类（顺序即界面顺序）：id → (名称, 一句话说明)。
 CATEGORIES: dict[str, tuple[str, str]] = {
     "kernel": ("Agent 内核", "Hermes fork：对话循环、工具、上下文压缩"),
-    "memory": ("记忆", "MemOS fork：记忆、事实、技能学习"),
     "agents": ("外部 Agent 与协议", "Claude Code / Codex / Pi 等外部 Agent 与 ACP"),
     "automation": ("浏览器与电脑操作", "browser-use、cua、Playwright、Chrome DevTools"),
     "mcp": ("MCP 服务", "配置里启动的 MCP 服务器"),

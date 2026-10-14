@@ -10,7 +10,6 @@ the contract (httpx's ASGITransport alone never runs lifespans).
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -176,12 +175,12 @@ async def test_health_reports_degraded_after_optional_components_settle() -> Non
 
 async def test_health_keeps_waiting_when_failed_and_starting_components_coexist() -> None:
     def setup(startup: StartupComponents) -> None:
-        startup.mark("memoryos", "failed", error="unavailable")
+        startup.mark("dbos", "failed", error="unavailable")
         startup.mark("mcp", "starting")
 
     body = await _health_under_lifespan(_health_app(setup))
     assert body["status"] == "starting"
-    assert body["component_errors"] == {"memoryos": "unavailable"}
+    assert body["component_errors"] == {"dbos": "unavailable"}
 
 
 async def test_health_without_components_stays_ok() -> None:

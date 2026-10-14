@@ -22,7 +22,7 @@ _installed: set[int] = set()
 _install_lock = threading.Lock()
 _checkpoint_lock = threading.Lock()
 _ATLAS_WRITE_TOOLS = {
-    "remember", "project_note", "create_checkpoint", "restore_checkpoint",
+    "project_note", "create_checkpoint", "restore_checkpoint",
     "kanban_create_board", "kanban_create_task", "kanban_update_task",
     "create_document", "create_spreadsheet", "create_presentation", "run_checks",
     "delegate_task", "delegate_parallel", "subtask_message",

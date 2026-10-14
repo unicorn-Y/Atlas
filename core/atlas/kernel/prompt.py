@@ -90,24 +90,6 @@ def _catalog(skills: Sequence[Any]) -> str:
     return "Available skills (read the selected skill only when needed):\n" + "\n".join(entries) if entries else ""
 
 
-def _recalls(recalls: Sequence[Any] | Mapping[str, Any]) -> str:
-    # The existing MemOS context loader owns retrieval, relevancy and budget policy.
-    values = recalls.get("items", []) if isinstance(recalls, Mapping) else recalls
-    entries = []
-    for value in values:
-        if isinstance(value, str):
-            if value.strip():
-                entries.append(value.strip())
-            continue
-        if not isinstance(value, Mapping) or value.get("relevant") is False or value.get("dropped"):
-            continue
-        content = value.get("text") or value.get("content") or value.get("summary")
-        if content:
-            reference = value.get("ref") or value.get("memory_ref") or value.get("id")
-            entries.append((f"[{reference}] " if reference else "") + str(content))
-    return "Relevant MemOS recalls:\n" + "\n".join(entries) if entries else ""
-
-
 def _environment(workspace: str | Path | None, env_info: Mapping[str, Any] | None,
                  model: str) -> str:
     """Render executor-provided environment facts as a dynamic prompt section."""
@@ -169,7 +151,6 @@ def _environment(workspace: str | Path | None, env_info: Mapping[str, Any] | Non
 
 def build_prompt(identity: str = "", tool_policy: str = "", workspace: str | Path | None = None,
                  goal: str = "", skills: Sequence[Any] = (),
-                 recalls: Sequence[Any] | Mapping[str, Any] = (),
                  history: Sequence[Mapping[str, Any]] = (), *, model: str = "",
                  workspace_trusted: bool = True, rules: str | None = None,
                  max_rule_bytes: int = 32_768, assembled_system_prompt: str | None = None,
@@ -177,8 +158,8 @@ def build_prompt(identity: str = "", tool_policy: str = "", workspace: str | Pat
     """Identity, policy, and rules form the stable prefix; runtime context follows.
 
     Pass the already assembled identity from the existing runtime to retain its
-    model guidance and user instruction injection. Recalls are prefiltered by
-    Atlas's existing MemOS facade; this builder never performs a second recall.
+    model guidance and user instruction injection. Memory recall is assembled
+    upstream (run_phases); this builder never recalls on its own.
     ``env_info`` is an executor snapshot; missing platform details are omitted
     instead of being guessed from the host running Atlas.
     """
@@ -189,7 +170,7 @@ def build_prompt(identity: str = "", tool_policy: str = "", workspace: str | Pat
         additions = "\n\n".join(part for part in (
             identity, tool_policy, rules or "", _environment(workspace, env_info, model),
             "Current goal:\n" + goal if goal else "",
-            _catalog(skills), _recalls(recalls),
+            _catalog(skills),
         ) if part)
         prompt = stable + ("\n\n" if stable and additions else "") + additions
         register_stable_prefix(stable)
@@ -204,7 +185,7 @@ def build_prompt(identity: str = "", tool_policy: str = "", workspace: str | Pat
     stable = "\n\n".join(part.strip() for part in (identity, tool_policy, rules_text) if part.strip())
     dynamic = "\n\n".join(part for part in (
         _environment(workspace, env_info, model), "Current goal:\n" + goal if goal else "",
-        _catalog(skills), _recalls(recalls),
+        _catalog(skills),
     ) if part)
     prompt = stable + ("\n\n" if stable and dynamic else "") + dynamic
     register_stable_prefix(stable)

@@ -173,11 +173,9 @@ function rebuild() {
     sh(npm, ['--prefix', 'frontend', 'run', 'build']);
     steps.push('frontend');
   }
-  // Machine-local follow-ups of an upstream update: MCP versions in config/atlas.toml, MemOS rebuild.
-  const memos = changed !== null && touched('vendor/memos-local-plugin/');
+  // Machine-local follow-up of an upstream update: MCP versions in config/atlas.toml.
   try {
-    sh(python, ['-m', 'atlas.upstream', 'post-merge', ...(memos ? ['--memos'] : [])], { cwd: path.join(root, 'core') });
-    if (memos) steps.push('memos');
+    sh(python, ['-m', 'atlas.upstream', 'post-merge'], { cwd: path.join(root, 'core') });
   } catch (error) {
     log(`post-merge failed: ${String(error?.stderr || error?.message || error).trim().split('\n').slice(-5).join(' | ')}`);
   }

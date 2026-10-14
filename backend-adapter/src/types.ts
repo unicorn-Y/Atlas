@@ -485,13 +485,6 @@ export interface ResumeRequest {
 
 export type RuntimeStreamEvent = RuntimeEventEnvelope;
 
-export interface Fact {
-  key: string;
-  value: string;
-  category: string;
-  [key: string]: unknown;
-}
-
 export interface KnowledgeEntry {
   id: string;
   content: string;

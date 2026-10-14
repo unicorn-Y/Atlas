@@ -37,7 +37,6 @@ from atlas.upstream.sources import LookupFailed
 log = structlog.get_logger()
 
 HERMES_UPSTREAM = "https://github.com/NousResearch/hermes-agent.git"
-MEMOS_MANIFEST = Path("vendor") / "memos-local-plugin" / ".atlas-upstream.json"
 
 
 @dataclass
@@ -342,26 +341,6 @@ def scan_hermes(ctx: Context) -> list[Component]:
     return [component]
 
 
-def scan_memos(ctx: Context) -> list[Component]:
-    manifest_path = ctx.repo / MEMOS_MANIFEST
-    if not manifest_path.exists():
-        return []
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    package = str(manifest["npm"])
-    component = Component(
-        id="fork:memos", name="MemOS 本地插件", category="memory", kind="fork-npm",
-        strategy=MERGE, current=str(manifest["version"]), source=package,
-        url=f"https://www.npmjs.com/package/{package}",
-        locations=[MEMOS_MANIFEST.parent.as_posix()],
-        note="Atlas 改过的 fork：更新时把上游新版三方合并进来",
-        detail={"repo": manifest.get("repo", "")},
-    )
-    if ctx.fetch:
-        component.latest = sources.npm_latest(package)
-    component.resolve_status()
-    return [component]
-
-
 # ---------------------------------------------------------------------------
 # MCP / 运行时
 # ---------------------------------------------------------------------------
@@ -595,7 +574,7 @@ def scan_all(ctx: Context) -> list[Component]:
 
     scanners: dict[str, Scanner] = {
         "pip": scan_pip, "git": scan_git_pins, "npm": scan_npm, "hermes": scan_hermes,
-        "memos": scan_memos, "runtime": scan_runtime,
+        "runtime": scan_runtime,
     }
     with ThreadPoolExecutor(max_workers=len(scanners) + 1) as pool:
         futures = {name: pool.submit(guarded, name, fn) for name, fn in scanners.items()}
@@ -605,6 +584,6 @@ def scan_all(ctx: Context) -> list[Component]:
         results = {name: future.result() for name, future in futures.items()}
     npm_items = {item.id: item for item in results["npm"]}
     mcp = guarded("mcp", lambda c: scan_mcp(c, npm_items))
-    ordered = ["hermes", "memos", "pip", "git", "npm", "runtime", "borrowed"]
+    ordered = ["hermes", "pip", "git", "npm", "runtime", "borrowed"]
     items = [item for name in ordered for item in results[name]] + mcp
     return items

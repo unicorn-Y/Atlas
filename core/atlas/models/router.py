@@ -33,7 +33,7 @@ from atlas.models.network_transport import (
 )
 
 _MEMORY_AUXILIARY_TIMEOUT_SECONDS = 120.0
-_MEMORY_AUXILIARY_PURPOSES = frozenset({"memory_observe", "memory_reflect"})
+_MEMORY_AUXILIARY_PURPOSES = frozenset({"memory_library"})
 _MEMORY_LOW_REASONING_MODELS = frozenset({"gemini-3.8-flash"})
 _OLLAMA_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1"
 

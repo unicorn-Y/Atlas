@@ -7,9 +7,7 @@ shared current-time seam.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -20,17 +18,9 @@ __all__ = [
     "attach_user_timezone",
     "now_local",
     "now_utc",
-    "resolve_gated_test_clock",
-    "resolve_source_event_test_clock",
     "resolve_user_timezone",
-    "test_clock_context",
     "timezone_name",
 ]
-
-
-_TEST_CLOCK_UTC: ContextVar[datetime | None] = ContextVar(
-    "atlas_test_clock_utc", default=None,
-)
 
 
 def _effective_config(config: Any = None) -> Any:
@@ -77,89 +67,8 @@ def timezone_name(config: Any = None) -> str:
 
 
 def now_utc() -> datetime:
-    """Current aware UTC instant, or this request's gated test instant."""
-    return _TEST_CLOCK_UTC.get() or datetime.now(UTC)
-
-
-def resolve_gated_test_clock(value: Any, config: Any = None, *,
-                             event_class: str | None = None) -> datetime | None:
-    """Normalize a permitted test clock as an aware user-local datetime.
-
-    ``resolve_test_clock`` remains the gate authority (TEST event class plus an
-    isolated Atlas data root). ``event_class`` lets durable background work also
-    prove that the specific source event was TEST. Naive values are interpreted
-    as user-local wall times, matching reminder and observation semantics.
-    """
-    if event_class is not None and str(event_class).upper() != "TEST":
-        return None
-    from atlas.memory.test_clock import resolve_test_clock
-
-    accepted = resolve_test_clock(value)
-    if accepted is None:
-        return None
-    try:
-        parsed = datetime.fromisoformat(accepted)
-    except (TypeError, ValueError):
-        return None
-    try:
-        return attach_user_timezone(parsed, config)
-    except ValueError:
-        # Invalid local wall times (for example a DST gap) are not effective
-        # test clocks. They must not abort an otherwise valid run.
-        return None
-
-
-@contextmanager
-def test_clock_context(value: Any, config: Any = None, *,
-                       event_class: str | None = None) -> Iterator[datetime | None]:
-    """Scope a gated test instant and always restore the caller's clock.
-
-    An invalid or production scope explicitly masks any inherited test clock;
-    this prevents a nested production operation from accidentally reusing an
-    outer test context.
-    """
-    local = resolve_gated_test_clock(value, config, event_class=event_class)
-    token = _TEST_CLOCK_UTC.set(local.astimezone(UTC) if local is not None else None)
-    try:
-        yield local
-    finally:
-        _TEST_CLOCK_UTC.reset(token)
-
-
-def resolve_source_event_test_clock(events: list[dict[str, Any]],
-                                    config: Any = None) -> datetime | None:
-    """Pick the latest backed source time only when every source is TEST.
-
-    This is for durable background work whose request ContextVar was not
-    inherited. Mixed, incomplete, conflicting, or invalid source metadata
-    deliberately falls back to the real clock.
-    """
-    if not events:
-        return None
-    unique: dict[str, tuple[datetime, str, str]] = {}
-    for event in events:
-        if not isinstance(event, dict) or str(event.get("event_class") or "").upper() != "TEST":
-            return None
-        source_id = str(event.get("source_event_id") or "").strip()
-        occurred_at = str(event.get("occurred_at") or "").strip()
-        source_timezone = str(event.get("source_timezone") or "").strip()
-        if not source_id or not occurred_at or not source_timezone:
-            return None
-        try:
-            ZoneInfo(source_timezone)
-            parsed = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                return None
-            local = attach_user_timezone(parsed, config)
-        except (TypeError, ValueError, ZoneInfoNotFoundError):
-            return None
-        value = (local, source_timezone, occurred_at)
-        previous = unique.get(source_id)
-        if previous is not None and previous != value:
-            return None
-        unique[source_id] = value
-    latest = max(unique.values(), key=lambda item: item[0].astimezone(UTC))[0]
-    return resolve_gated_test_clock(latest.isoformat(), config, event_class="TEST")
+    """Current aware UTC instant."""
+    return datetime.now(UTC)
 
 
 def attach_user_timezone(value: datetime, config: Any = None) -> datetime:

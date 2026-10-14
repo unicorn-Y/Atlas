@@ -9,7 +9,7 @@ tasks (SkillOpt's validation gate) → adopt it into
 SkillOpt ships harvesters for Claude Code / Codex / Cursor / Pi / OpenCode
 transcripts only; ``harvest_atlas`` adds Atlas as a source and is swapped in for
 the run. Models go through SkillOpt's OpenAI-compatible backend using the same
-endpoint and model MemOS is configured with (``data/memos-home/config.yaml``).
+gateway Atlas chats through, with the memory model (or the selected model).
 
 Usage: python -m atlas.evolution.skill_sleep [--dry-run]
 """
@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-import yaml
 
 from atlas.config import DATA_ROOT
 from atlas.skills import SKILLS_DIR
@@ -33,7 +32,6 @@ from atlas.skills import SKILLS_DIR
 log = structlog.get_logger(__name__)
 
 STATE_DB = DATA_ROOT / "engine" / "state.db"
-MEMOS_CONFIG = DATA_ROOT / "data" / "memos-home" / "config.yaml"
 WORK_DIR = DATA_ROOT / "data" / "skill-sleep"
 SKILL_NAME = "atlas-learned"
 SKILL_PATH = SKILLS_DIR / "learned" / SKILL_NAME / "SKILL.md"
@@ -93,16 +91,20 @@ def _iso(ts: Any) -> str:
 
 
 def _model_env() -> dict[str, str]:
-    """SkillOpt's OpenAI-compatible backend settings, taken from MemOS' LLM config."""
-    llm = (yaml.safe_load(MEMOS_CONFIG.read_text(encoding="utf-8")) or {}).get("llm") or {}
-    endpoint = str(llm.get("endpoint") or "").removesuffix("/")
-    if not endpoint:
-        raise RuntimeError(f"no llm.endpoint in {MEMOS_CONFIG}")
+    """SkillOpt's OpenAI-compatible backend settings, taken from Atlas' own gateway."""
+    from atlas.config import get_config, load_user_settings
+
+    cfg, settings = get_config(), load_user_settings() or {}
+    endpoint = str(settings.get("gateway_base_url") or cfg.gateway_base_url).removesuffix("/")
+    chosen = str(settings.get("memory_model") or settings.get("selected_model")
+                 or cfg.default_model)
+    model = next((str(m.get("litellm_model") or chosen) for m in cfg.get("models.custom", []) or []
+                  if isinstance(m, dict) and m.get("id") == chosen), chosen)
     return {
         "AZURE_OPENAI_AUTH_MODE": "openai_compatible",
         "AZURE_OPENAI_ENDPOINT": endpoint,
-        "AZURE_OPENAI_API_KEY": str(llm.get("apiKey") or "none"),
-        "model": str(llm.get("model") or ""),
+        "AZURE_OPENAI_API_KEY": str(settings.get("api_key") or cfg.gateway_api_key or "none"),
+        "model": model.split("/", 1)[1] if model.startswith("openai/") else model,
     }
 
 
@@ -120,7 +122,7 @@ def run(*, dry_run: bool = False) -> dict[str, Any]:
         backend="azure_openai", model=model,
         invoked_project=str(WORK_DIR), projects="invoked", state_dir=str(WORK_DIR / "state"),
         target_skill_path=str(SKILL_PATH), managed_skill_name=SKILL_NAME,
-        evolve_memory=False,      # memory belongs to MemOS; SkillOpt only trains the skill
+        evolve_memory=False,      # memory belongs to the memory library; SkillOpt only trains the skill
         auto_adopt=True,          # adopted only when the held-out gate accepts the edit
         gate_mode="on", gate_no_regression=True,
         lookback_hours=24 * 14, max_tasks_per_night=12,

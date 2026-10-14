@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 # Tests under ``core/tests`` import the repo-level ``scripts`` namespace package
-# (e.g. ``scripts.unified_memory.cutover``, ``scripts.f2_observer_smoke``), which
+# (e.g. ``scripts.research``), which
 # lives one directory above ``core/``. pytest roots at ``core/`` (its
 # pyproject.toml holds the ini options), so the repo root is not importable and
 # those modules error out at collection. Append — never prepend — the repo root

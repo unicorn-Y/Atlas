@@ -141,11 +141,6 @@ data/devices/
 data/logs/
 data/update-status.json
 data/build-stamp.json
-# MemOS memory engine (local data, config with API key, plugin install) and Atlas memory change log
-data/memos-home/
-data/memos-plugin/
-data/memory_changes.sqlite3
-data/memory_paused
 
 # Machine-local clutter (never commit): construction pack + config backups
 /.construction-pack/

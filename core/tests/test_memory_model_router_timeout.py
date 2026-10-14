@@ -10,14 +10,14 @@ from atlas.models.router import ModelRouter, RouteSpec
 @pytest.mark.parametrize(
     ("purpose", "wire_model", "kwargs", "expected_timeout", "expected_extra_body"),
     [
-        ("memory_observe", "gemini-3.8-flash", {}, 120.0, {"reasoning_effort": "low"}),
-        ("memory_reflect", "gemini-3.8-flash", {}, 120.0, {"reasoning_effort": "low"}),
+        ("memory_library", "gemini-3.8-flash", {}, 120.0, {"reasoning_effort": "low"}),
+        ("memory_library", "gemini-3.8-flash", {}, 120.0, {"reasoning_effort": "low"}),
         (
-            "memory_observe", "gemini-3.8-flash", {"timeout": 17.0}, 17.0,
+            "memory_library", "gemini-3.8-flash", {"timeout": 17.0}, 17.0,
             {"reasoning_effort": "low"},
         ),
         (
-            "memory_observe",
+            "memory_library",
             "gemini-3.8-flash",
             {"extra_body": {"trace_id": "keep", "reasoning_effort": "medium"}},
             120.0,
@@ -25,9 +25,9 @@ from atlas.models.router import ModelRouter, RouteSpec
         ),
         ("model_test", "test-model", {}, None, None),
         ("model_test", "test-model", {"extra_body": {"trace_id": "keep"}}, None, {"trace_id": "keep"}),
-        ("memory_observe", "other-model", {}, 120.0, None),
+        ("memory_library", "other-model", {}, 120.0, None),
         (
-            "memory_reflect", "other-model", {"extra_body": {"trace_id": "keep"}},
+            "memory_library", "other-model", {"extra_body": {"trace_id": "keep"}},
             120.0, {"trace_id": "keep"},
         ),
     ],

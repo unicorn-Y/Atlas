@@ -1,8 +1,7 @@
 """Turn one conversation turn into memory-library changes.
 
-The extraction prompt is ported from the Atlas MemOS fork
-(``vendor/memos-local-plugin/core/facts/observe.ts``), whose rules came from MEMORY-V1
-``observer_prompt.py`` and scored 30/30 with no misremembered facts in F3-A. Changes for
+The extraction prompt is ported from Atlas' former MemOS fork
+(``core/facts/observe.ts``, removed with the old memory systems), whose rules scored 30/30 with no misremembered facts in F3-A. Changes for
 the library: keys may name people and projects in the user's own words so each lands on
 its own page, and an ``alias`` op links names for the same person.
 

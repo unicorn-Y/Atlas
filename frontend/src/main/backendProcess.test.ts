@@ -191,15 +191,15 @@ describe('backendProcess startup (H8 §10.3)', () => {
   });
 
   it('keeps a managed backend alive after optional startup failure settles', async () => {
-    let health: unknown = { status: 'starting', components: { memoryos: 'starting' } };
+    let health: unknown = { status: 'starting', components: { scheduler: 'starting' } };
     stubManagedHealth(() => health);
     const child = makeChild();
     stubSpawn(child);
     const promise = ensureBackendRunning();
     await vi.advanceTimersByTimeAsync(1_000);
     health = {
-      status: 'degraded', components: { memoryos: 'failed' },
-      component_errors: { memoryos: 'unavailable' },
+      status: 'degraded', components: { scheduler: 'failed' },
+      component_errors: { scheduler: 'unavailable' },
     };
     await vi.advanceTimersByTimeAsync(1_000);
     await expect(promise).resolves.toEqual({ ready: true, managed: true, pid: child.pid });

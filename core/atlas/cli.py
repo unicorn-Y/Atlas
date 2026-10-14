@@ -66,9 +66,7 @@ def serve(port: int | None, reload: bool) -> None:
 def chat(model: str | None) -> None:
     """Start an interactive chat session in the terminal."""
     from atlas.agent import AgentOrchestrator
-    from atlas.config import get_config
     from atlas.memory import MemoryStore
-    from atlas.memory.unified_facade import UnifiedMemoryFacade
     from atlas.models import ModelManager
 
     async def _chat() -> None:
@@ -76,15 +74,7 @@ def chat(model: str | None) -> None:
         if model:
             model_mgr.select(model)
 
-        # T01.3 全入口组成：与 server lifespan / hub 完全相同的 composition ——
-        # enabled 才构造 facade 并传给 MemoryStore（写方法委托统一记忆）；
-        # disabled（默认）保持旧行为。
-        cfg = get_config()
-        unified = (
-            UnifiedMemoryFacade.from_config(cfg)
-            if cfg.get("memory.unified.enabled") else None
-        )
-        memory = MemoryStore(unified=unified)
+        memory = MemoryStore()
         await memory.init()
         from atlas.config import DATA_ROOT
         from atlas.engine.session_migration import migrate_legacy_sessions
@@ -148,8 +138,6 @@ def chat(model: str | None) -> None:
             print()  # blank line between turns
 
         await memory.close()
-        if unified is not None:
-            await unified.aclose()
 
     asyncio.run(_chat())
 
@@ -176,9 +164,8 @@ def exec_command(
 ) -> None:
     """Run one non-interactive agent turn; PROMPT may also come from stdin."""
     from atlas.agent import AgentOrchestrator
-    from atlas.config import DATA_ROOT, get_config
+    from atlas.config import DATA_ROOT
     from atlas.memory import MemoryStore
-    from atlas.memory.unified_facade import UnifiedMemoryFacade
     from atlas.models import ModelManager
 
     user_prompt = prompt if prompt is not None else sys.stdin.read()
@@ -190,12 +177,10 @@ def exec_command(
         raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
 
     async def _run_once() -> bool:
-        cfg = get_config()
         model_mgr = ModelManager()
         if model:
             model_mgr.select(model)
-        unified = UnifiedMemoryFacade.from_config(cfg) if cfg.get("memory.unified.enabled") else None
-        memory = MemoryStore(unified=unified)
+        memory = MemoryStore()
         await memory.init()
         try:
             from atlas.engine.session_migration import migrate_legacy_sessions
@@ -227,8 +212,6 @@ def exec_command(
             return failed
         finally:
             await memory.close()
-            if unified is not None:
-                await unified.aclose()
 
     try:
         failed = asyncio.run(_run_once())

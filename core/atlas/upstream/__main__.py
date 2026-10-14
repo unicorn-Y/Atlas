@@ -3,7 +3,7 @@
     python -m atlas.upstream check              检查一遍并打印汇总
     python -m atlas.upstream run --plan FILE    执行追新（后台任务进程用）
     python -m atlas.upstream run --all          把所有可处理的项追到最新
-    python -m atlas.upstream post-merge [--memos]
+    python -m atlas.upstream post-merge
         更新器合并追新提交之后跑：把本机配置里 MCP 的版本号对齐到示例配置，必要时重建 MemOS
     python -m atlas.upstream watch              参考项目动态：一流 Agent 项目最近改了什么
         报告在 data/upstream/watch/latest.md
@@ -37,8 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--plan", type=Path)
     run.add_argument("--all", action="store_true")
     run.add_argument("--ids", nargs="*", default=[])
-    post = sub.add_parser("post-merge")
-    post.add_argument("--memos", action="store_true")
+    sub.add_parser("post-merge")
     sub.add_parser("watch")
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
@@ -74,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "post-merge":
         from atlas.upstream import postmerge
 
-        return postmerge.main(memos=args.memos)
+        return postmerge.main()
     return 2
 
 

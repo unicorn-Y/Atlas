@@ -155,44 +155,6 @@ class AtlasConfig:
     def max_context_messages(self) -> int:
         return int(self.get("memory.max_context_messages", 50))
 
-    # -- memory.unified (UM02/T02.1: durable observation outbox defaults) --
-
-    @property
-    def unified_outbox_path(self) -> str:
-        """Atlas operational outbox 的独立 sqlite 文件路径（§3：内容不可作事实召回）。
-
-        默认 ``<ATLAS_DATA_DIR>/outbox/unified_outbox.sqlite3``；显式配置
-        ``memory.unified.outbox_path`` 时相对路径仍锚定 DATA_ROOT。
-        """
-        raw = str(self.get("memory.unified.outbox_path", "") or "").strip()
-        if raw:
-            p = Path(raw)
-            return str(p if p.is_absolute() else DATA_ROOT / p)
-        return str(DATA_ROOT / "outbox" / "unified_outbox.sqlite3")
-
-    @property
-    def unified_outbox_flush_limit(self) -> int:
-        return max(1, int(self.get("memory.unified.outbox_flush_limit", 50)))
-
-    @property
-    def unified_outbox_backoff_seconds(self) -> float:
-        return max(0.0, float(self.get("memory.unified.outbox_backoff_seconds", 5.0)))
-
-    @property
-    def unified_service_dir(self) -> str:
-        """MemoryOS checkout used by the opt-in service lifecycle."""
-        return str(self.get("memory.unified.service_dir", r"D:\MemoryOS"))
-
-    @property
-    def memory_v1_recall_timeout_seconds(self) -> float:
-        """Short isolated recall deadline used by the MEMORY-V1 adapter."""
-        return float(self.get("memory.v1.recall_timeout_seconds", 1.0))
-
-    @property
-    def memory_v1_observer_daily_token_budget(self) -> int:
-        """Daily token cap shared with the asynchronous memory observer."""
-        return int(self.get("memory.v1.observer_daily_token_budget", 50_000))
-
     @property
     def context_maintenance_message_limit(self) -> int:
         return int(self.get("agent.context_maintenance.message_limit", 80))

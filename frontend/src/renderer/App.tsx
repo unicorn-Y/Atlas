@@ -56,7 +56,6 @@ import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
 import McpServersPanel from './components/settings/McpServersPanel';
 import ConfigTransferPanel from './components/settings/ConfigTransferPanel';
 import DiagnosticsPanel from './components/settings/DiagnosticsPanel';
-import TelemetryPrivacyPanel from './pages/TelemetryPrivacyPanel';
 import RecipeManagerPanel, { type RecipeLaunchRequest } from './components/settings/RecipeManagerPanel';
 import ExtensionPackagesPanel from './components/settings/ExtensionPackagesPanel';
 import ExtensionCatalogPanel from './components/settings/ExtensionCatalogPanel';
@@ -87,7 +86,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'telemetry' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig';
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
@@ -116,14 +115,12 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['extensions', '扩展目录与来源', Puzzle, 'extension package registry catalog 扩展 包 目录 来源'],
   ['transfer', '配置导入导出', Download, 'settings config export import backup 配置 导入 导出 备份'],
   ['diagnostics', '诊断', ShieldCheck, 'diagnostics health config errors 诊断 健康 配置 错误'],
-  ['telemetry', '遥测隐私', ShieldCheck, 'telemetry privacy memos ARMS 遥测 隐私'],
   ['platform', '平台集成', Laptop, 'desktop platform global shortcut hotkey always on top VS Code JetBrains deep link'],
   ['integrations', '任务与集成', GitBranchPlus, 'github pull request Slack Linear cloud tasks automation'],
 ];
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
-const HIDDEN_CANDIDATES = 'atlas.memory.hidden-candidates';
 const HOME_MODES: ComposerMode[] = [
   { id: 'chat', label: '对话', icon: MessageCircle },
   { id: 'image', label: '图像', icon: ImageIcon },
@@ -231,7 +228,6 @@ export default function App() {
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
   const [statusBar, setStatusBar] = useState(readStatusBarPreferences);
   const [maximized, setMaximized] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
   const [conversationGoal, setConversationGoal] = useState<{ text: string; status: string; turns_used: number; max_turns: number; subgoals: unknown[] } | null>(null);
   const updateStatusBar = (key: keyof StatusBarPreferences, visible: boolean) => setStatusBar((current) => {
     const next = { ...current, [key]: visible };
@@ -471,15 +467,6 @@ export default function App() {
   }, []);
 
   // 滚动定位（进入会话回到原位、流式跟底）由 MessageThread 里的虚拟列表接管。
-
-  // Memories waiting for confirmation show as a badge on the navigation.
-  useEffect(() => {
-    if (!store.connected) return;
-    let hidden: string[] = [];
-    try { hidden = JSON.parse(localStorage.getItem(HIDDEN_CANDIDATES) ?? '[]'); } catch { hidden = []; }
-    api<Array<{ id: string }>>(store.apiBaseUrl, '/api/memory/candidates?status=pending')
-      .then((items) => setPendingCount(items.filter((item) => !hidden.includes(item.id)).length)).catch(() => undefined);
-  }, [view, store.connected, store.apiBaseUrl]);
 
   const newTask = useCallback(() => {
     if (store.creatingConversation) return;
@@ -1247,7 +1234,7 @@ export default function App() {
         conversations={store.conversations} conversationsLoading={store.conversationsLoading}
         activeConversationId={store.activeConversationId} loadingConversationId={store.loadingMessagesConversationId}
         onOpenConversation={openConversation} onNewTask={newTask} creating={store.creatingConversation} onSearch={() => setPaletteOpen(true)}
-        pendingMemories={pendingCount} username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
+        username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
         theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
         pinned={store.pinned} archived={store.archived} unread={store.unread}
         running={runningConversations} queued={Object.fromEntries(Object.entries(store.queue).map(([id, items]) => [id, items.length]))}
@@ -1353,7 +1340,7 @@ export default function App() {
     {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} initialPrompt={createPrompt} />}
         {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
-        {view === 'memory' && <MemoryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} onPendingChange={setPendingCount} />}
+        {view === 'memory' && <MemoryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'evolution' && <EvolutionPage apiBaseUrl={store.apiBaseUrl} onToast={notify} />}
       </main>
     </div>
@@ -1433,7 +1420,6 @@ export default function App() {
         {sheet === 'extensions' && <div className="grid gap-8"><ExtensionCatalogPanel apiBaseUrl={store.apiBaseUrl} /><ExtensionPackagesPanel apiBaseUrl={store.apiBaseUrl} /></div>}
         {sheet === 'transfer' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">配置导入导出</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">转移允许携带的本地偏好；密钥、地址和路径不会进入导出文件。</p><ConfigTransferPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'diagnostics' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本机诊断</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">只读检查本机 Atlas 状态；报告不会上传原始配置、日志、密钥或路径。</p><DiagnosticsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
-        {sheet === 'telemetry' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">遥测隐私</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">只管理 Atlas 附带的 MemOS Local 插件 sender，不影响其他服务。</p><TelemetryPrivacyPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'security' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">工作区安全</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理当前对话后续运行的权限与 Docker 隔离。工作区规则仍在首次读取时由你确认。</p>{activeConversation ? <WorkspaceSecurityPanel apiBaseUrl={store.apiBaseUrl} conversation={activeConversation} onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)} /> : <div className="rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再配置该对话的工作区权限和沙箱。</div>}</section>}
         {sheet === 'commands' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">自定义斜杠命令</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看所有已发现命令；这里只能新建和编辑 Atlas 用户级命令，项目、Claude 与插件命令保持只读。</p><CustomCommandsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'limits' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">运行限制</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">控制新运行的主循环轮数上限，并查看当前可用的 token/费用预算边界。</p><RunLimitsPanel apiBaseUrl={store.apiBaseUrl} /></section>}

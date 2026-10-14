@@ -17,8 +17,8 @@ MODES = ("acp", "terminal", "command")
 PERMISSIONS = ("ask", "allow")
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
-# 子进程不能继承的主体变量：后端口令、数据目录、Hermes/MemOS、Python 虚拟环境。
-_STRIP_PREFIXES = ("ATLAS_", "HERMES_", "MEMOS", "AGENT_BROWSER_")
+# 子进程不能继承的主体变量：后端口令、数据目录、Hermes、Python 虚拟环境。
+_STRIP_PREFIXES = ("ATLAS_", "HERMES_", "AGENT_BROWSER_")
 _STRIP_KEYS = {"PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "PYTHONSAFEPATH"}
 
 # isolate_config 打开时，把常见 agent 的配置目录指到挂件自己的 home/。

@@ -94,11 +94,6 @@ async def shutdown_lifespan_components(app: Any, state: dict[str, Any], route_co
         service = resource(name)
         if service:
             await service.close()
-    # T01.3：unified-memory facade 的 httpx 客户端随 lifespan 释放（惰性创建，
-    # disabled 时为 None，无副作用）。
-    unified_facade = resource("unified_memory")
-    if unified_facade is not None:
-        await unified_facade.aclose()
     restore_lifespan_routes(app, route_count)
 
 
@@ -181,13 +176,6 @@ async def run_deferred_startup(app: Any, services: Any, components: StartupCompo
             name="startup-session-migration",
         ),
     ]
-    unified_memory = getattr(services, "unified_memory", None)
-    memoryos_lifecycle = getattr(unified_memory, "service_lifecycle", None)
-    if memoryos_lifecycle is not None:
-        branches.append(asyncio.create_task(
-            _component(components, "memoryos", memoryos_lifecycle.start),
-            name="startup-memoryos",
-        ))
     if getattr(app, "state", None) is not None:  # test doubles pass a bare object
         _schedule_background(app, "upstream-auto", _upstream_auto_loop())
     results = await asyncio.gather(*branches, return_exceptions=True)

@@ -34,15 +34,12 @@ async def _wait_with_cancel(future: asyncio.Future[Any], cancel: asyncio.Event) 
 async def serve_stdio(*, workspace: str | None = None) -> None:
     """Serve newline-delimited JSON-RPC requests and streamed run notifications."""
     from atlas.agent import AgentOrchestrator
-    from atlas.config import DATA_ROOT, get_config
+    from atlas.config import DATA_ROOT
     from atlas.kernel.tools import kernel_tool_schemas
     from atlas.memory import MemoryStore
-    from atlas.memory.unified_facade import UnifiedMemoryFacade
     from atlas.models import ModelManager
 
-    cfg = get_config()
-    unified = UnifiedMemoryFacade.from_config(cfg) if cfg.get("memory.unified.enabled") else None
-    memory = MemoryStore(unified=unified)
+    memory = MemoryStore()
     await memory.init()
     try:
         from atlas.engine.session_migration import migrate_legacy_sessions
@@ -379,5 +376,3 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
         await writer
     finally:
         await memory.close()
-        if unified is not None:
-            await unified.aclose()

@@ -372,7 +372,7 @@ def test_scan_all_turns_scanner_errors_into_rows(tmp_path: Path,
     def boom(_ctx: inventory.Context) -> list[Component]:
         raise RuntimeError("网络断了")
 
-    for name in ("scan_pip", "scan_git_pins", "scan_npm", "scan_hermes", "scan_memos",
+    for name in ("scan_pip", "scan_git_pins", "scan_npm", "scan_hermes",
                  "scan_runtime", "scan_borrowed"):
         monkeypatch.setattr(inventory, name, boom)
     ctx = inventory.Context(repo=tmp_path, python="python", hermes_dir=tmp_path, fetch=False)

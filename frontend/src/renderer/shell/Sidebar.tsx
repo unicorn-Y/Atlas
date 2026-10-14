@@ -115,7 +115,7 @@ interface SidebarProps {
   conversations: ConversationSummary[]; conversationsLoading: boolean;
   activeConversationId: string; loadingConversationId: string | null;
   onOpenConversation: (conversation: ConversationSummary) => void; onNewTask: () => void; creating: boolean; onSearch: () => void;
-  pendingMemories: number; username: string; subtitle: string; theme: Theme; onToggleTheme: () => void; onSettings: () => void;
+  username: string; subtitle: string; theme: Theme; onToggleTheme: () => void; onSettings: () => void;
   pinned: string[]; archived: string[]; unread: string[]; running: string[];
   queued?: Record<string, number>;
   onRename: (id: string, title: string) => void; onDelete: (id: string) => void;
@@ -750,9 +750,6 @@ export default function Sidebar(props: SidebarProps) {
             className={cn('relative flex h-[34px] items-center gap-2.5 rounded-[9px] text-[13.5px] transition-colors', mini ? 'w-10 justify-center' : 'px-2.5', current ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={17} className={current ? 'text-brand' : undefined} />
             {!mini && <span>{label}</span>}
-            {view === 'memory' && props.pendingMemories > 0 && (mini
-              ? <span className="absolute top-1 right-1 size-2 rounded-full bg-brand" />
-              : <span className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-on-primary">{props.pendingMemories}</span>)}
           </button>
         </Tip>;
       })}
@@ -762,8 +759,6 @@ export default function Sidebar(props: SidebarProps) {
             MORE_NAV.some(({ view }) => view === props.view) ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
           <MoreHorizontal size={17} className={MORE_NAV.some(({ view }) => view === props.view) ? 'text-brand' : undefined} />
           {!mini && <span>更多</span>}
-          {props.view === 'memory' && props.pendingMemories > 0 && (mini ? <span className="absolute top-1 right-1 size-2 rounded-full bg-brand" />
-            : <span className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-on-primary">{props.pendingMemories}</span>)}
         </button></MenuTrigger>
         <MenuContent align="start" className="min-w-[150px]">
           <MenuLabel>所有页面</MenuLabel>

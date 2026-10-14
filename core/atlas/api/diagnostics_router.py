@@ -1,13 +1,10 @@
-"""Local diagnostics and the bundled MemOS bridge's telemetry privacy control."""
+"""Local diagnostics."""
 
 from __future__ import annotations
 
 import json
-import os
-import re
 import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Annotated, Any
 
 try:
@@ -15,192 +12,13 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
     import tomli as tomllib  # type: ignore[no-redef]
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
-from atlas.config import CONFIG_PATH, DATA_ROOT, USER_SETTINGS_PATH
+from atlas.config import CONFIG_PATH, USER_SETTINGS_PATH
 
 router = APIRouter()
-
-
-def _memos_config_path() -> Path:
-    """Resolve the same MemOS config path that its Hermes bridge consumes."""
-    configured_home = os.environ.get("MEMOS_HOME", "").strip()
-    if configured_home:
-        return Path(configured_home).expanduser().resolve() / "config.yaml"
-    configured_file = os.environ.get("MEMOS_CONFIG_FILE", "").strip()
-    if configured_file:
-        return Path(configured_file).expanduser().resolve()
-    return DATA_ROOT / "data" / "memos-home" / "config.yaml"
-
-
-def _set_memos_telemetry_enabled(text: str, enabled: bool) -> str:
-    """Change only the top-level telemetry.enabled YAML scalar, retaining comments."""
-    lines = text.splitlines(keepends=True)
-    sections: list[tuple[int, int, int]] = []
-    for index, line in enumerate(lines):
-        match = re.match(r"^telemetry\s*:\s*(?:#.*)?(?:\r?\n)?$", line)
-        if match:
-            indent = 0
-            end = len(lines)
-            for next_index in range(index + 1, len(lines)):
-                candidate = lines[next_index]
-                if candidate.strip() and not candidate.lstrip().startswith("#"):
-                    next_indent = len(candidate) - len(candidate.lstrip(" "))
-                    if next_indent <= indent:
-                        end = next_index
-                        break
-            sections.append((index, end, indent))
-
-    if len(sections) > 1:
-        raise ValueError("配置包含重复的 telemetry 区块，无法安全更新。")
-    scalar = "true" if enabled else "false"
-    if not sections:
-        suffix = "" if not text or text.endswith(("\n", "\r")) else "\n"
-        return f"{text}{suffix}\ntelemetry:\n  enabled: {scalar}\n"
-
-    section_start, section_end, section_indent = sections[0]
-    section_line = lines[section_start]
-    if section_line.partition(":")[2].strip() and not section_line.partition(":")[2].lstrip().startswith("#"):
-        raise ValueError("telemetry 区块使用内联 YAML，无法安全更新。")
-    if not section_line.endswith(("\n", "\r")):
-        newline = "\r\n" if "\r\n" in text else "\n"
-        lines[section_start] = f"{section_line}{newline}"
-
-    child_indent: int | None = None
-    enabled_pattern = re.compile(r"^( +)enabled\s*:\s*([^#\r\n]*?)(\s*(?:#.*)?)(\r?\n)?$")
-    for index in range(section_start + 1, section_end):
-        line = lines[index]
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        indent = len(line) - len(line.lstrip(" "))
-        if indent <= section_indent:
-            continue
-        child_indent = indent if child_indent is None else min(child_indent, indent)
-
-    enabled_line: int | None = None
-    for index in range(section_start + 1, section_end):
-        match = enabled_pattern.match(lines[index])
-        if match and len(match.group(1)) == child_indent:
-            enabled_line = index
-            lines[index] = f"{match.group(1)}enabled: {scalar}{match.group(3)}{match.group(4) or ''}"
-            break
-
-    if enabled_line is None:
-        indent = child_indent if child_indent is not None else section_indent + 2
-        newline = "\r\n" if "\r\n" in text else "\n"
-        lines.insert(section_start + 1, f"{' ' * indent}enabled: {scalar}{newline}")
-    return "".join(lines)
-
-
-def _read_memos_telemetry_enabled() -> bool:
-    import yaml
-
-    path = _memos_config_path()
-    try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return True
-    except (OSError, UnicodeError, yaml.YAMLError) as exc:
-        raise HTTPException(status_code=409, detail="MemOS 配置无法读取或 YAML 格式无效。") from exc
-    if raw is None:
-        raw = {}
-    if not isinstance(raw, dict):
-        raise HTTPException(status_code=409, detail="MemOS 配置根节点不是对象，无法读取遥测设置。")
-    telemetry = raw.get("telemetry", {})
-    if not isinstance(telemetry, dict):
-        raise HTTPException(status_code=409, detail="MemOS telemetry 配置格式无效。")
-    value = telemetry.get("enabled", True)
-    if not isinstance(value, bool):
-        raise HTTPException(status_code=409, detail="MemOS telemetry.enabled 必须是布尔值。")
-    return value
-
-
-@router.get("/api/diagnostics/telemetry-privacy")
-async def get_telemetry_privacy() -> dict[str, Any]:
-    """Read the setting consumed by the bundled MemOS Local Hermes bridge."""
-    return {
-        "enabled": _read_memos_telemetry_enabled(),
-        "scope": "memos-local-plugin",
-        "applies_to": "next_bridge_start",
-    }
-
-
-@router.put("/api/diagnostics/telemetry-privacy")
-async def set_telemetry_privacy(request: dict[str, Any]) -> dict[str, Any]:
-    """Persist the sender's opt-out and restart any bridge using the old value."""
-    enabled = request.get("enabled")
-    if not isinstance(enabled, bool):
-        raise HTTPException(status_code=422, detail="enabled 必须是布尔值。")
-
-    import yaml
-
-    path = _memos_config_path()
-    try:
-        original = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        original = ""
-    except (OSError, UnicodeError) as exc:
-        raise HTTPException(status_code=500, detail="MemOS 配置无法读取。") from exc
-
-    try:
-        parsed = yaml.safe_load(original)
-    except yaml.YAMLError as exc:
-        raise HTTPException(status_code=409, detail="MemOS YAML 格式无效，未修改配置。") from exc
-    if parsed is None:
-        parsed = {}
-    if not isinstance(parsed, dict):
-        raise HTTPException(status_code=409, detail="MemOS 配置根节点不是对象，未修改配置。")
-
-    try:
-        updated = _set_memos_telemetry_enabled(original, enabled)
-        validated = yaml.safe_load(updated)
-    except (ValueError, yaml.YAMLError) as exc:
-        raise HTTPException(status_code=409, detail=f"无法安全更新 MemOS 遥测设置：{exc}") from exc
-    telemetry = validated.get("telemetry") if isinstance(validated, dict) else None
-    if not isinstance(telemetry, dict) or telemetry.get("enabled") is not enabled:
-        raise HTTPException(status_code=409, detail="遥测设置更新校验失败，未写入配置。")
-
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-        temporary.write_text(updated, encoding="utf-8")
-        temporary.replace(path)
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail="MemOS 遥测设置无法持久化。") from exc
-
-    # The bundled adapter owns one process-scoped Node bridge. The bridge's
-    # graceful shutdown flushes buffered telemetry, so opt-out must terminate
-    # its Node clients before closing the registry. This also interrupts any
-    # in-flight MemOS bridge operation; later providers start a fresh bridge
-    # that reads the persisted setting.
-    import sys
-
-    bridge_module = sys.modules.get("shared_bridge_runtime")
-    registry = getattr(bridge_module, "SHARED_BRIDGE_REGISTRY", None)
-    if registry is not None:
-        try:
-            lock = getattr(registry, "_lock", None)
-            if lock is None:
-                raise RuntimeError("MemOS bridge registry lock is unavailable")
-            with lock:
-                runtimes = list(getattr(registry, "_runtimes", {}).values())
-                clients = [getattr(runtime, "_client", None) for runtime in runtimes]
-            if not enabled:
-                for client in clients:
-                    process = getattr(client, "_proc", None)
-                    if process is not None and process.poll() is None:
-                        process.kill()
-                        process.wait(timeout=5)
-            registry.close_all()
-        except Exception as exc:  # noqa: BLE001 — report the incomplete runtime change
-            raise HTTPException(
-                status_code=503,
-                detail="设置已持久化，但当前 MemOS bridge 未能停止；请重启 Atlas 使设置生效。",
-            ) from exc
-
-    return {"enabled": enabled, "scope": "memos-local-plugin", "applied": True}
 
 
 def _model_mgr(services: AppServices) -> Any:
@@ -313,18 +131,6 @@ async def get_diagnostics(
             "label": "模型配置",
             "status": "warning" if not model_count or credential_error else "ok",
             "detail": credential_error or f"已登记 {model_count} 个模型；网关密钥{'已配置' if has_key else '未配置（本地模型或其他登录方式可能无需网关密钥）'}。不会显示模型地址或密钥。此检查不验证远端连接。",
-        })
-
-    facade = services.unified_memory
-    if facade is not None and facade.enabled:
-        memory_state = facade.service_state
-        unavailable = bool(getattr(facade, "_last_unavailable", None))
-        checks.append({
-            "id": "unified_memory_runtime", "label": "统一记忆运行状态",
-            "status": "warning" if unavailable or memory_state in {"starting", "failed"} else "ok",
-            "detail": "最近的记忆请求失败；请检查记忆服务。" if unavailable else
-                      "记忆服务尚未就绪。" if memory_state in {"starting", "failed"} else
-                      "未记录记忆服务请求失败；此检查不验证网络连接。",
         })
 
     for name, state in components.items():

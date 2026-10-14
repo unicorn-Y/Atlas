@@ -6,7 +6,6 @@ injection — never a module-level singleton — so two app instances stay isola
 
 from __future__ import annotations
 
-import hashlib
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -168,70 +167,16 @@ async def prompt_agent_backend(
     if agent_backend_host is None:
         raise HTTPException(status_code=503, detail="Agent backend host is unavailable")
     try:
-        backend_name, _session = agent_backend_host.sessions.get(session_id, (None, None))
         await agent_backend_host.send(session_id, req.prompt)
     except KeyError:
         raise HTTPException(status_code=404, detail="Agent session not found") from None
 
-    # UM02/T02.3：一次 prompt 即一次被调 Agent 调用。API 面没有 LLM tool_call
-    # ID，用会话+prompt 摘要派生**稳定**调用 ID（同会话重发同一 prompt 幂等，
-    # 重试不产生重复观察）；后端会话 ID 与后端名进 log_refs —— 这条记录只记
-    # 对方进入 Atlas 的经历，不替对方安装任何记忆插件。
-    prompt_digest = hashlib.sha256(str(req.prompt).encode("utf-8")).hexdigest()[:12]
-    agent_call_id = f"agentprompt-{session_id}-{prompt_digest}"
-
     async def stream_events() -> AsyncIterator[str]:
-        claim_parts: list[str] = []
-        stream_error: str | None = None
-        try:
-            async for event in agent_backend_host.events(session_id):
-                payload = {"type": event.type, **event.data}
-                if event.type in {"done", "agent_end"}:
-                    text = next((str(event.data.get(key)) for key in
-                                 ("text", "content", "message")
-                                 if isinstance(event.data, dict)
-                                 and event.data.get(key)), "")
-                    if text:
-                        claim_parts.append(text)
-                elif event.type == "error":
-                    stream_error = json.dumps(payload, ensure_ascii=False)[:2000]
-                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-        finally:
-            _record_backend_agent_result(
-                backend_name=backend_name, session_id=session_id,
-                tool_call_id=agent_call_id,
-                claim="".join(claim_parts), error=stream_error)
+        async for event in agent_backend_host.events(session_id):
+            payload = {"type": event.type, **event.data}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(stream_events(), media_type="text/event-stream")
-
-
-def _record_backend_agent_result(*, backend_name: str | None,
-                                 session_id: str, tool_call_id: str,
-                                 claim: str, error: str | None) -> None:
-    """UM02/T02.3：外部后端会话的返回声明 → ATLAS_AGENT_TOOL_RESULT 观察。
-
-    对方（zcode/codex/...）的完成声明按 THIRD_PARTY 自报记录，**不是验证**；
-    Atlas 独立验证走 POST /api/unified-memory/verify-agent-result。记录失败只
-    记日志（流已经结束，不再影响响应）。
-    """
-    try:
-        from atlas.memory.windows_sources import get_windows_source_service
-
-        service = get_windows_source_service()
-        if service is None:
-            return
-        actor = f"tool-{backend_name}" if backend_name else "tool-external-agent"
-        service.record_agent_tool_result(
-            tool_name="agent_backend_prompt", actor_id=actor,
-            tool_call_id=tool_call_id,
-            result_payload={"status": "failed" if error else "completed",
-                            "backend": backend_name},
-            log_refs={"backend_session_id": session_id,
-                      **({"error": error} if error else {})},
-            session_id=None, text=claim, is_error=bool(error))
-    except Exception as exc:  # noqa: BLE001 — 记录失败不影响已完成的流
-        log.debug("memory.capture_backend_agent_result_failed", error=str(exc),
-                  exc_info=True)
 
 
 @router.post("/api/agent/sessions/{session_id}/cancel")

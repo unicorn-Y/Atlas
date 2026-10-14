@@ -288,19 +288,6 @@ class HermesRuntime:
         # mutating os.environ on every turn.
         self._ensure_hermes_home()
 
-    def _memory_provider_enabled(self) -> bool:
-        """True when the engine home config selects a Hermes memory provider (memory.provider)."""
-        try:
-            import yaml
-            cfg = yaml.safe_load((self.home / "config.yaml").read_text(encoding="utf-8")) or {}
-            if (self.home.parent / "data" / "memory_paused").exists():  # 用户在记忆页暂停了记忆
-                return False
-            return bool(str((cfg.get("memory") or {}).get("provider") or "").strip())
-        except Exception as exc:  # missing/invalid config: keep Hermes memory off
-            logger.debug("hermes.memory_provider_config_unreadable", error=str(exc),
-                         exc_info=True)
-            return False
-
     def _ensure_hermes_home(self) -> None:
         """Point HERMES_HOME at this runtime's engine home without per-turn rewrites.
 
@@ -312,8 +299,6 @@ class HermesRuntime:
             return
         self.home.mkdir(parents=True, exist_ok=True)
         os.environ["HERMES_HOME"] = str(self.home)
-        # Long-term memory provider (e.g. MemOS "memtensor"): its data lives next to the engine home.
-        os.environ.setdefault("MEMOS_HOME", str(self.home.parent / "data" / "memos-home"))
         _use_system_browser()
         _seed_atlas_soul(self.home)
         _trust_context_files()
@@ -1566,8 +1551,7 @@ class HermesRuntime:
             ] + mcp_toolsets
             resolved_max_tokens = max_output_tokens or model_config.get("max_output_tokens")
             resolved_fallback = model_config.get("fallback")
-            memory_on = self._memory_provider_enabled()
-            agent_fingerprint = ("mem1|" if memory_on else "mem0|") + self._agent_cache_fingerprint(
+            agent_fingerprint = self._agent_cache_fingerprint(
                 self._fingerprint_route(route_kwargs), hermes_cwd, resolved_toolsets,
                 resolved_fallback, resolved_max_tokens,
             ) + "|network:" + network_settings_fingerprint(network_settings)
@@ -1642,7 +1626,7 @@ class HermesRuntime:
                             **route_kwargs,
                             session_id=conversation_id,
                             cwd=hermes_cwd,
-                            skip_memory=not memory_on,
+                            skip_memory=True,
                             checkpoints_enabled=False,
                             enabled_toolsets=resolved_toolsets,
                             fallback_model=resolved_fallback,

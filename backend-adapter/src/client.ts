@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockProviders, mockReasoningStages, mockTools, streamMockRun } from './mock';
-import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomModelUpdateRequest, CustomTool, CustomCommandInfo, CommandRenderResult, ExternalAgentInfo, ExternalImportScan, ExternalImportResult, Fact, InitApplyResult, InitProposal, KeySlotInfo, LspStatus, ModelInfo, ModelTestResponse, ProjectSource, ProjectSources, ProviderState, ReasoningStagesConfig, RewindResult, RunDiagnostics, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, HookLog, MarketplaceInfo, MarketplacePluginEntry, PluginActionResult, PluginInfo, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomModelUpdateRequest, CustomTool, CustomCommandInfo, CommandRenderResult, ExternalAgentInfo, ExternalImportScan, ExternalImportResult, InitApplyResult, InitProposal, KeySlotInfo, LspStatus, ModelInfo, ModelTestResponse, ProjectSource, ProjectSources, ProviderState, ReasoningStagesConfig, RewindResult, RunDiagnostics, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, HookLog, MarketplaceInfo, MarketplacePluginEntry, PluginActionResult, PluginInfo, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -470,13 +470,6 @@ export class BackendAdapter {
   async getTools(): Promise<ToolListResponse> { return this.live ? this.request('/api/tools') : mockTools; }
   async getSkills(): Promise<SkillInfo[]> { return this.live ? (await this.request<{ skills: SkillInfo[] }>('/api/skills')).skills : []; }
   async getAgentCapabilities(): Promise<AgentCapabilityInfo[]> { return this.live ? (await this.request<{ capabilities: AgentCapabilityInfo[] }>('/api/agent/capabilities')).capabilities : []; }
-  async getFacts(): Promise<Fact[]> { return this.live ? this.request('/api/facts') : []; }
-  async saveFact(fact: Pick<Fact, 'key' | 'value' | 'category'>): Promise<void> {
-    if (this.live) await this.request('/api/facts', { method: 'POST', body: JSON.stringify(fact) });
-  }
-  async deleteFact(key: string): Promise<void> {
-    if (this.live) await this.request(`/api/facts/${encodeURIComponent(key)}`, { method: 'DELETE' });
-  }
   async search(query: string): Promise<unknown[]> {
     return this.live ? this.request(`/api/search?q=${encodeURIComponent(query)}`) : [];
   }

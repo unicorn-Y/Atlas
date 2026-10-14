@@ -25,7 +25,6 @@ from atlas.agent.enrichment import (
     AtlasToolBridge,
     CodeActRuntime,
     DelegationService,
-    MemoryReflectionBridge,
 )
 from atlas.agent.orchestrator import AgentOrchestrator
 from atlas.api.app_services import AppServices
@@ -45,7 +44,6 @@ from atlas.asr import ASRManager
 from atlas.automation import (
     AutomationEngine,
     AutomationStore,
-    get_automation_engine,
     set_automation_engine,
 )
 from atlas.capabilities.browser.browser_use import BrowserUseAdapter
@@ -69,7 +67,6 @@ from atlas.groups import GroupOrchestrator
 from atlas.groups.store import GroupService, GroupStore
 from atlas.heartbeat import HeartbeatService
 from atlas.memory.store import MemoryStore
-from atlas.memory.unified_facade import UnifiedMemoryFacade
 from atlas.models.manager import ModelManager
 from atlas.notifications import NotificationBus
 from atlas.persistent_agents import PersistentAgentService
@@ -164,8 +161,6 @@ log = structlog.get_logger()
 
 model_mgr: ModelManager | None = None
 memory: MemoryStore | None = None
-# T01.3：unified-memory facade（enabled=true 时由 lifespan 装配并挂到 services）。
-unified_memory: UnifiedMemoryFacade | None = None
 projects: ProjectStore | None = None
 durable: DurableBackend | None = None
 plugin_runtime: PluginRuntime | None = None
@@ -226,7 +221,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global skill_mgr, skill_registry, scheduler, usage_ledger
     global capability_bus, cua_backend, browser_use, agent_backend_host
     global projects, durable, plugin_runtime, notifications, web_runtime, custom_tools, telegram_service
-    global unified_memory
     # W10 persistent-always-on singletons (module-level, reset per lifespan).
     global channel_manager, gateway_bridge, heartbeat_service
 
@@ -238,7 +232,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         startup.mark(component_name, "starting")
 
     for resource_name in (
-        "model_mgr", "memory", "unified_memory", "projects", "durable", "plugin_runtime", "notifications",
+        "model_mgr", "memory", "projects", "durable", "plugin_runtime", "notifications",
         "orchestrator", "mcp_client", "local_execution", "computer_use", "capability_bus",
         "cua_backend", "browser_use", "agent_backend_host", "web_runtime", "custom_tools",
         "telegram_service", "skill_mgr", "skill_registry", "scheduler", "usage_ledger",
@@ -246,106 +240,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ):
         globals()[resource_name] = None
     deferred_startup: asyncio.Task[None] | None = None
-    capture_flush_task: asyncio.Task[None] | None = None
-    capture_service = None
-    observer_drain_task: asyncio.Task[None] | None = None
-    observer_drain_requested = False
-    memory_observer = None
-    observer_drain = None
-    memory_reflector = None
-    reflector_idle_task: asyncio.Task[None] | None = None
-    memoryos_lifecycle = None
     routes_before_lifespan_extensions = len(app.routes)
     startup_aborted = False
     cancelled = False
     try:
         model_mgr = ModelManager()
-        # T01.3 全入口组成：unified-memory 开关（默认 false → facade=None，
-        # MemoryStore 保持完整旧本地行为，全部旧测试不受影响）。
-        unified_memory = (
-            UnifiedMemoryFacade.from_config()
-            if get_config().get("memory.unified.enabled") else None
-        )
-        if unified_memory is not None:
-            from atlas.memory.service_lifecycle import MemoryOSServiceLifecycle
-
-            memoryos_lifecycle = MemoryOSServiceLifecycle(get_config())
-            unified_memory.bind_service_lifecycle(memoryos_lifecycle)
-            startup.mark("memoryos", "starting")
-        # T02.2：统一记忆真实捕获（对话/工具事件 → ObservationBuilder →
-        # OperationalOutbox → 周期 flush）。capture_mode 缺省 enabled、可配置
-        # 关闭；disabled（含 unified.enabled=false）时不建服务、不起循环，
-        # 聊天/工具主流程零影响。
-        if unified_memory is not None:
-            from atlas.memory.capture import (
-                capture_flush_loop,
-                configure_capture_service,
-            )
-
-            capture_service = configure_capture_service(facade=unified_memory)
-            if capture_service is not None:
-                from atlas.memory.capture import register_observer_session_callback
-                from atlas.memory.intent_bridge import IntentBridge
-                from atlas.memory.observer import MemoryObserver
-                from atlas.memory.observer_drain import MemoryObserverDrain
-
-                memory_observer = MemoryObserver(
-                    model_mgr, get_config(), outbox=capture_service._ensure_outbox(),
-                )
-                observer_drain = MemoryObserverDrain(
-                    memory_observer, unified_memory,
-                    # F3-B2：观察者产出带时间条件的 INTENT → 既有 AutomationEngine
-                    # 真实建任务（桥未注入时 drain 行为与从前一致）。
-                    intent_bridge=IntentBridge(
-                        facade=unified_memory, config=get_config(),
-                    ),
-                    automation_engine=get_automation_engine(),
-                )
-                register_observer_session_callback(observer_drain.note_session_started)
-
-                async def drain_observer_batches() -> None:
-                    nonlocal observer_drain_requested
-                    while True:
-                        observer_drain_requested = False
-                        await asyncio.sleep(0)
-                        await observer_drain.drain_once()
-                        if not observer_drain_requested:
-                            return
-
-                def schedule_observer_drain() -> None:
-                    nonlocal observer_drain_task, observer_drain_requested
-                    observer_drain_requested = True
-                    if observer_drain_task is None or observer_drain_task.done():
-                        observer_drain_task = asyncio.create_task(
-                            drain_observer_batches(), name="unified-memory-observer-drain",
-                        )
-
-                capture_flush_task = asyncio.create_task(
-                    capture_flush_loop(
-                        capture_service, after_flush_tick=schedule_observer_drain,
-                    ),
-                    name="unified-capture-flush",
-                )
-                # F3-C：把 drain 与它的调度踢点登记给控制面，供
-                # POST /api/unified-memory/session/close 触发「会话结束」批量冲刷。
-                from atlas.memory.observer_drain import register_observer_drain
-
-                register_observer_drain(observer_drain, schedule_observer_drain)
-                from atlas.memory.reflector import (
-                    MemoryReflector,
-                    reflector_idle_loop,
-                    set_memory_reflector,
-                )
-
-                memory_reflector = MemoryReflector(
-                    model_mgr, get_config(), client=unified_memory,
-                )
-                set_memory_reflector(memory_reflector)
-                reflector_idle_task = asyncio.create_task(
-                    reflector_idle_loop(memory_reflector),
-                    name="unified-memory-reflector-idle",
-                )
-        memory = MemoryStore(unified=unified_memory)
+        memory = MemoryStore()
         await memory.init()
         usage_ledger = UsageLedger(get_config().db_path)
         await usage_ledger.init()
@@ -531,16 +431,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 ),
             },
             source="Codex/OpenCode context maintenance",
-        )
-        capabilities.register(
-            "agent.memory.reflect",
-            description="Propose task learning through the governed MemoryOS candidate path.",
-            handler=lambda inputs: MemoryReflectionBridge(memory).reflect(
-                conversation_id=str(inputs.get("conversation_id", "")),
-                goal=str(inputs["goal"]), task_result=str(inputs["task_result"]),
-                reviewer_evidence=list(inputs.get("reviewer_evidence", [])),
-            ),
-            source="Letta/Hermes reflection pattern",
         )
         capabilities.register(
             "workspace.checkpoint.create",
@@ -730,7 +620,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Keep request and WebSocket dependencies bound to this lifespan's service root.
         services.config = get_config()
         for service_name in (
-            "model_mgr", "memory", "unified_memory", "orchestrator", "mcp_client", "local_execution",
+            "model_mgr", "memory", "orchestrator", "mcp_client", "local_execution",
             "computer_use", "skill_mgr", "skill_registry", "scheduler", "capability_bus",
             "cua_backend", "browser_use", "agent_backend_host", "projects", "durable",
             "plugin_runtime", "notifications", "web_runtime", "custom_tools",
@@ -758,58 +648,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         startup_aborted = True
         raise
     finally:
-        if observer_drain is not None:
-            try:
-                observer_drain.end_active_session()
-            except Exception as exc:  # noqa: BLE001 — report, then continue teardown
-                log.exception("memory.observer_end_signal_failed", error=str(exc))
-        try:
-            from atlas.memory.capture import register_observer_session_callback
-
-            register_observer_session_callback(None)
-            from atlas.memory.observer_drain import register_observer_drain
-
-            register_observer_drain(None)
-        except Exception as exc:  # noqa: BLE001 — startup may have ended before capture setup
-            log.debug("memory.observer_session_callbacks_reset_failed", error=str(exc),
-                      exc_info=True)
-        # T02.2：先停捕获 flush 循环并复位单例，避免跨 lifespan 残留旧服务。
-        if capture_flush_task is not None:
-            capture_flush_task.cancel()
-            await asyncio.gather(capture_flush_task, return_exceptions=True)
-        if capture_service is not None:
-            try:
-                await capture_service.flush()
-            except Exception as exc:  # noqa: BLE001 — preserve outbox for next lifespan
-                log.exception("memory.capture_shutdown_flush_failed", error=str(exc))
-        if observer_drain is not None and observer_drain.end_sessions:
-            try:
-                # Session end is persisted before asking the model, so an offline
-                # MemoryOS or a slow model leaves the source and flush request recoverable.
-                schedule_observer_drain()
-            except Exception as exc:  # noqa: BLE001 — no teardown is skipped
-                log.exception("memory.observer_shutdown_schedule_failed", error=str(exc))
-        if observer_drain_task is not None and not observer_drain_task.done():
-            try:
-                await asyncio.wait_for(asyncio.shield(observer_drain_task), timeout=15.0)
-            except TimeoutError:
-                observer_drain_task.cancel()
-                await asyncio.gather(observer_drain_task, return_exceptions=True)
-                log.warning("memory.observer_shutdown_drain_timeout")
-        if reflector_idle_task is not None:
-            reflector_idle_task.cancel()
-            await asyncio.gather(reflector_idle_task, return_exceptions=True)
-        try:
-            from atlas.memory.reflector import set_memory_reflector
-            set_memory_reflector(None)
-        except Exception as exc:
-            log.debug("memory.reflector_reset_failed", error=str(exc), exc_info=True)
-        try:
-            from atlas.memory.capture import reset_capture_service
-
-            reset_capture_service()
-        except Exception:  # noqa: BLE001 — 关停清理不阻塞其余 teardown
-            log.exception("unified.capture_reset_failed")
         if deferred_startup is not None:
             # Let deferred startup settle before reverse teardown; a stuck step is bounded.
             try:
@@ -841,11 +679,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 app, locals(), routes_before_lifespan_extensions,
             )
         finally:
-            if memoryos_lifecycle is not None:
-                try:
-                    await memoryos_lifecycle.stop()
-                except Exception:  # noqa: BLE001 — process cleanup must not skip service teardown
-                    log.exception("memoryos.child_shutdown_failed")
             # Teardown hygiene: a stopped runtime must not keep advertising its
             # services. Leaving ``manager.services`` pointing at the closed stores
             # let late readers (and later TestClient lifespans in-process) consume
@@ -891,11 +724,11 @@ from atlas.api.run_drive import (  # noqa: E402, I001 — packed to keep this mo
     _execute_run, _goal_session_id, _handle_resume, _handle_rules_trust,
     _handle_run_start, _heartbeat_automation_current, _hook_store, _kanban_store,
     _map_tool_runtime_event, _merge_agent_collection_skills, _owns_scheduler_lease,
-    _persist_hermes_goal_outcome, _plan_mode_tools, _plugin_agent_dirs,
+    _plan_mode_tools, _plugin_agent_dirs,
     _plugin_command_sources, _plugin_contributions, _plugin_hooks,
     _plugin_skill_sources, _profile_store, _project_agent_run_status,
     _queue_run_steer, _read_conversation_answer, _reconcile_agent_heartbeats,
-    _record_goal_failure, _refresh_extension_sources, _register_local_skills,
+    _refresh_extension_sources, _register_local_skills,
     _reload_extensions, _require_skill_center_authority,
     _resolve_active_skill_instructions, _resolve_agent_for_run,
     _resolve_group_member_conversation, _run_change_summary, _run_changes,
@@ -920,11 +753,11 @@ __all__ = [
     "_heartbeat_automation_current", "_hook_store", "_kanban_store",
     "_map_tool_runtime_event", "_merge_agent_collection_skills",
     "_model_supports_reasoning", "_owns_scheduler_lease",
-    "_persist_hermes_goal_outcome", "_plan_mode_tools", "_plugin_agent_dirs",
+    "_plan_mode_tools", "_plugin_agent_dirs",
     "_plugin_command_sources", "_plugin_contributions", "_plugin_hooks",
     "_plugin_skill_sources", "_profile_store", "_project_agent_run_status",
     "_queue_run_steer", "_read_conversation_answer", "_reconcile_agent_heartbeats",
-    "_record_goal_failure", "_refresh_extension_sources", "_register_local_skills",
+    "_refresh_extension_sources", "_register_local_skills",
     "_reload_extensions", "_require_skill_center_authority",
     "_resolve_active_skill_instructions", "_resolve_agent_for_run",
     "_resolve_group_member_conversation", "_run_change_summary", "_run_changes",

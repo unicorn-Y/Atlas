@@ -12,13 +12,8 @@ the ordinal themselves with :func:`atlas_turn_ordinal` and pass it to
 Hermes source: ``hermes_state.py::SessionDB``, ``hermes_state_rewind.py`` and
 ``hermes_state_portability.py`` at unicorn-Y/hermes-agent@562ad75 (MIT).
 
-任务主体与会话绑定（T06.2）：SessionDB 以 ``conversation_id`` 为会话身份 ——
-“换 chat 入口”只是新建会话，不改变任务主体。任务本体绑定 ``task_id``
-（调度/durable 任务 ID 或请求显式携带），经 focus 投影（MemoryOS
-``unified_focus`` 的 ``(subject, task_id)`` 唯一行）跨重启、跨会话续接；
-本模块**不**持有 task_id 映射 —— 会话记录保持纯转录权威（H2.1 单一所有者
-不变），任务→焦点映射由 Atlas 运行侧（``atlas.memory.focus_flow``）与
-MemoryOS 焦点投影承担。
+SessionDB 以 ``conversation_id`` 为会话身份；本模块不持有 task_id 映射，
+会话记录保持纯转录权威（H2.1 单一所有者）。
 """
 
 from __future__ import annotations

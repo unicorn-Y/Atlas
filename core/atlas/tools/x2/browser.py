@@ -303,16 +303,6 @@ def _summary_from(result: dict[str, Any]) -> str:
     return ""
 
 
-def _receipt_service() -> Any:
-    """WindowsSourceService（capture disabled / 未装配 → None，收据静默跳过）。"""
-    try:
-        from atlas.memory.windows_sources import get_windows_source_service
-
-        return get_windows_source_service()
-    except Exception as exc:  # noqa: BLE001 - capture plumbing must never raise
-        log.debug("x2.browser_receipt_service_unavailable", extra={"error": str(exc)}, exc_info=True)
-        return None
-
 
 # ---------------------------------------------------------------------------
 # Default backend: lazy Hermes browser stack
@@ -645,41 +635,7 @@ class X2BrowserRuntime:
             "run_id": ctx.run_id,
             "session_id": ctx.session_id,
         })
-        await self._capture_receipt(ctx, name, action, args, result)
 
-    async def _capture_receipt(self, ctx: X2Context, name: str, action: str,
-                               args: dict[str, Any], result: dict[str, Any]) -> None:
-        """T05.3：浏览器 URL/DOM/动作收据 → 统一记忆（§1.1 ATLAS_TOOL_OBSERVATION）。
-
-        与 T02.2 的 dispatch/result 观察（tool_call_id 对象）互补：这里记录工具
-        已经产生的证据 —— 页面观察（URL/标题/DOM 快照哈希+节选）/ 点击请求
-        （ref+参数）/ 实际结果三类分开。快照正文只入库节选与全文哈希，媒体
-        （如有）经 T05.1 受控资产引用 asset_id。被动采集 RUNNING 且会话在用户
-        选择范围内时同时推进被动水位（§6.1）。失败只记日志，绝不影响工具。
-        """
-        try:
-            service = _receipt_service()
-            if service is None:
-                return
-            data = result.get("data") or {}
-            snapshot = data.get("snapshot") if isinstance(data, dict) else None
-            await service.capture_tool_receipt(
-                tool=name,
-                action=action,
-                session_id=str(ctx.session_id or ""),
-                summary=_summary_from(result),
-                url=self.last_url,
-                title=self.last_title,
-                snapshot=snapshot if isinstance(snapshot, str) else "",
-                request_args=args,
-                result_ok=not bool(result.get("is_error")),
-                x2_kind="page_receipt" if action in ("navigate", "snapshot")
-                        else "action_receipt",
-            )
-        except Exception as exc:  # noqa: BLE001 - capture must never break the tool
-            log.debug("x2.browser_receipt_capture_failed", extra={"tool": name, "error": str(exc)}, exc_info=True)
-
-    # -- handoff -----------------------------------------------------------
     async def _handle_handoff(self, ctx: X2Context, args: dict[str, Any]) -> dict[str, Any]:
         reason = str(args.get("reason") or "页面需要人工处理")
         url = str(args.get("url") or self.last_url or "")

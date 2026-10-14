@@ -44,7 +44,7 @@ export const BROWSER_PARTITION = 'persist:atlas-browser';
 const SETTINGS_SECTIONS = new Set<AtlasSettingsSection>([
   'models', 'advanced', 'usage', 'limits', 'profiles', 'hooks', 'tools', 'telegram', 'channels',
   'devices', 'localModels', 'shortcuts', 'appearance', 'plugins', 'notifications', 'mcp',
-  'skills', 'recipes', 'extensions', 'transfer', 'diagnostics', 'telemetry', 'security', 'commands', 'platform', 'integrations', 'network',
+  'skills', 'recipes', 'extensions', 'transfer', 'diagnostics', 'security', 'commands', 'platform', 'integrations', 'network',
 ]);
 const ACCELERATOR_KEYS = new Set([
   'Space', 'Escape', 'Tab', 'Return', 'Backspace', 'Delete', 'Insert', 'Home', 'End',

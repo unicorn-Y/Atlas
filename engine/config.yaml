@@ -21,7 +21,7 @@ auxiliary:
     model: ''
     base_url: ''
 memory:
-  provider: memtensor
+  provider: ''
   memory_enabled: false
   user_profile_enabled: false
 # ── 全放行（2026-10-12，Atlas 定制）───────────────────────────────────

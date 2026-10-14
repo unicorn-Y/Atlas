@@ -92,24 +92,21 @@ def test_doctor_check_reports_pin_mismatch(monkeypatch, tmp_path: Path) -> None:
     assert hermes_pin.check()["ok"] is True
 
 
-def test_memos_plugin_link_points_at_the_fork_and_stays_out_of_git_status(tmp_path: Path) -> None:
+def test_leftover_memos_plugin_link_is_removed(tmp_path: Path) -> None:
     origin, first, _ = _origin_with_two_commits(tmp_path)
     checkout = tmp_path / "hermes-agent"
     setup_hermes.ensure_checkout(checkout, str(origin), first)
     (checkout / "plugins" / "memory").mkdir(parents=True)
-    fork = tmp_path / "fork" / "memos_provider"
-    fork.mkdir(parents=True)
     old = tmp_path / "old" / "memos_provider"
     old.mkdir(parents=True)
     link = checkout / "plugins" / "memory" / "memtensor"
-    # an install pointing somewhere else (junction on Windows: symlinks need admin)
+    # junction on Windows: symlinks need admin
     if os.name == "nt":
         subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(old)], capture_output=True, check=True)
     else:
         link.symlink_to(old, target_is_directory=True)
 
-    setup_hermes.link_memos_plugin(checkout, target=fork)
-    assert link.resolve() == fork.resolve()
-    # The link is untracked; the next launch must not see a dirty checkout.
-    assert setup_hermes.ensure_checkout(checkout, str(origin), first) is False
-    assert _git("status", "--porcelain", cwd=checkout) == ""
+    setup_hermes.remove_memos_link(checkout)
+    assert not link.exists() and not link.is_symlink()
+    assert old.is_dir()
+    setup_hermes.remove_memos_link(checkout)  # nothing left: a no-op

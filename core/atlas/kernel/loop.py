@@ -72,6 +72,12 @@ def _self_facts(agent: Any, model_id: str, workspace: str | None) -> tuple[str, 
     lines.append(f"- Atlas source checkout (your own code, editable): {PROJECT_ROOT}")
     lines.append(f"- Atlas config: {CONFIG_PATH}; user settings (models, providers): "
                  f"{USER_SETTINGS_PATH}; data dir: {DATA_ROOT / 'data'}")
+    from atlas.memory.library import get_library
+
+    library = get_library()
+    if library is not None:
+        lines.append(f"- Long-term memory: the memory library at {library.store.root} "
+                     "(Markdown + git; search it with memory_search). It is the only memory system.")
     return "\n".join(lines), wire
 
 

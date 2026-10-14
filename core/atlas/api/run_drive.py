@@ -247,42 +247,6 @@ def _goal_session_id(task_id: str) -> str:
     return f"scheduled-goal-{task_id}"
 
 
-async def _persist_hermes_goal_outcome(task_id: str, session_id: str, run_id: str) -> None:
-    if _server().memory is None:
-        return
-    from atlas.config import DATA_ROOT
-    from atlas.engine.session_sync import goal_state
-
-    state = await asyncio.to_thread(goal_state, DATA_ROOT / "engine", session_id)
-    if not state:
-        return
-    if state.get("status") not in {"done", "paused"}:
-        return
-    verdict = state.get("last_verdict")
-    done = state.get("status") == "done" and verdict == "done"
-    if state.get("status") == "done":
-        status = "completed"
-    elif verdict == "blocked" or (
-        state.get("status") == "paused" and state.get("paused_reason") != "user-paused"
-    ):
-        status = "blocked"
-    else:
-        status = str(state.get("status") or "paused")
-    evaluation = {
-        "satisfied": done,
-        "evidence": str(state.get("last_reason") or "") if done else "",
-        "reason": str(state.get("last_reason") or state.get("paused_reason") or ""),
-    }
-    try:
-        await _server().memory.record_goal_outcome(
-            goal_id=task_id, goal=str(state.get("goal") or ""), status=status,
-            evaluation=evaluation, steps=[], source_conversation_id=session_id,
-            source_run_id=run_id,
-        )
-    except Exception:
-        log.exception("goal.outcome_persist_failed", task_id=task_id)
-
-
 async def _ensure_goal_migrated(task: ScheduledTask) -> None:
     """Import a pre-C3R schedule objective into Hermes once, then discard its copy."""
     if not task.legacy_goal:
@@ -341,8 +305,6 @@ async def _run_scheduled_goal(task_id: str, message: str = "") -> None:
         detail = "Agent orchestrator is unavailable."
         await asyncio.to_thread(record_goal_event, home, session_id, "execution.error", {"detail": detail})
         await asyncio.to_thread(mutate_goal, home, session_id, "pause", detail)
-        await _server()._record_goal_failure(task_id, uuid.uuid4().hex, str((state or {}).get("goal", "")),
-                                  "runtime", detail)
         return
     lock = _goal_run_locks.setdefault(session_id, asyncio.Lock())
     async with lock:
@@ -398,11 +360,9 @@ async def _run_scheduled_goal(task_id: str, message: str = "") -> None:
                 await asyncio.to_thread(record_goal_event, home, session_id, "execution.error", {
                     "detail": failure_detail,
                 }, run_id)
-                await _server()._record_goal_failure(task_id, run_id, objective, "runtime", failure_detail)
                 await asyncio.to_thread(
                     mutate_goal, home, session_id, "pause", failure_detail,
                 )
-                await _server()._persist_hermes_goal_outcome(task_id, session_id, run_id)
                 return
 
             # Reload before evaluating: pause, clear, or replace may have happened while the
@@ -427,32 +387,10 @@ async def _run_scheduled_goal(task_id: str, message: str = "") -> None:
                 "status": decision.get("status"),
             }, run_id)
             if decision.get("verdict") == "blocked":
-                await _server()._persist_hermes_goal_outcome(task_id, session_id, run_id)
                 return
             if not decision.get("should_continue"):
-                await _server()._persist_hermes_goal_outcome(task_id, session_id, run_id)
                 return
             prompt = decision.get("continuation_prompt") or objective
-
-
-async def _record_goal_failure(
-    task_id: str, run_id: str, message: str, category: str, detail: str,
-) -> None:
-    """Store goal failures in the P10B advisory reflection store."""
-    if _server().memory is None:
-        return
-    try:
-        await _server().memory.record_agent_reflection(
-            category=category,
-            component="goal_scheduler",
-            summary=f"Goal {task_id} failed: {detail}",
-            resolution_hint="Review the failure and validate a retry before continuing.",
-            source_conversation_id=f"scheduled-goal-{task_id}",
-            source_run_id=run_id,
-            model=getattr(getattr(_server().orchestrator, "_model_mgr", None), "current_model", None),
-        )
-    except Exception:
-        log.exception("goal.failure_reflection_unavailable", task_id=task_id)
 
 
 def _agent_service() -> PersistentAgentService:
@@ -1264,15 +1202,6 @@ async def _handle_run_start(
     content = data.get("content", "")
     if not isinstance(content, str):
         content = str(content)
-    # F4-C: accept only a gated clock, normalized once in the user's timezone.
-    # A naive value means user-local wall time; production always receives None.
-    from atlas.config import get_config
-    from atlas.time_context import resolve_gated_test_clock
-
-    effective_test_clock = resolve_gated_test_clock(
-        data.get("test_clock"), config=get_config(),
-    )
-    test_clock = effective_test_clock.isoformat() if effective_test_clock else None
     requested_workspace = data.get("workspace")
     # W10: resolve the persistent agent first — an empty workspace falls back to
     # the agent's workspace, and its profile merges in at the profile_id block
@@ -1913,7 +1842,6 @@ async def _handle_run_start(
             workspace_rules=run.workspace_rules,
             mode=run.mode,
             manager=manager,
-            test_clock=test_clock,
         )
     execution = _server()._execute_after_rule_trust(run, execute) if run.trust_future else execute
     if agent_profile is not None:
@@ -2189,13 +2117,8 @@ async def _execute_run(
     mode: str = "act",
     continuation: bool = False,
     manager: RuntimeManager | None = None,
-    test_clock: str | None = None,
 ) -> None:
-    """Execute agent run, emitting Runtime Event envelopes.
-
-    ``test_clock``（F3-B3）：评测虚拟时间，经 ``resolve_test_clock`` 闸门后
-    才进 RunRequest —— 生产调用方不传（真实时间）。
-    """
+    """Execute agent run, emitting Runtime Event envelopes."""
     manager = manager or _server().runtime_mgr
     services = manager.services
     model_mgr = getattr(services, "model_mgr", None) or getattr(_server(), "model_mgr", None)
@@ -2207,7 +2130,6 @@ async def _execute_run(
     usage_ledger = getattr(services, "usage_ledger", None) or getattr(_server(), "usage_ledger", None)
     assert orchestrator is not None
     assert memory is not None
-    had_tool_failure = False
     orchestrator_events = None
 
     def kernel_owns_lifecycle_hooks() -> bool:
@@ -2294,36 +2216,6 @@ async def _execute_run(
                 )
         await emit("run.usage", row)
 
-    async def record_reflection(
-        category: str, component: str, summary: str, resolution_hint: str,
-    ) -> None:
-        recorder = getattr(memory, "record_agent_reflection", None)
-        if not callable(recorder):
-            return
-        async def _save() -> None:
-            try:
-                await recorder(
-                    category=category,
-                    component=component,
-                    summary=summary,
-                    resolution_hint=resolution_hint,
-                    source_conversation_id=run.conversation_id,
-                    source_run_id=run.run_id,
-                    model=run.model,
-                )
-            except Exception:
-                log.warning("agent.reflection_record_failed", run_id=run.run_id)
-        asyncio.create_task(asyncio.wait_for(_save(), timeout=5.0))
-
-    async def mark_reflections_recovered() -> None:
-        marker = getattr(memory, "mark_agent_reflections_recovered", None)
-        if not callable(marker):
-            return
-        try:
-            await marker(run.run_id)
-        except Exception:
-            log.exception("agent.reflection_recovery_failed", run_id=run.run_id)
-
     async def cancel_local_foreground() -> None:
         if local_execution is not None:
             await local_execution.cancel_run(run.run_id)
@@ -2358,8 +2250,6 @@ async def _execute_run(
             started_data = {
                 "status": "running", "phase": "planning", "content": content,
             }
-            if test_clock:
-                started_data["effective_test_clock"] = test_clock
             await emit("run.started", started_data)
 
         # Keep only Atlas metadata; Hermes SessionDB owns the transcript.
@@ -2770,7 +2660,6 @@ async def _execute_run(
             subtask_completed=subtask_completed,
             subtask_group_completed=subtask_group_completed,
             force_plan=(mode == "plan"),
-            test_clock=test_clock,
         )
         async for event in orchestrator_events:
             if await check_pause_cancel():
@@ -2802,19 +2691,6 @@ async def _execute_run(
                 mapped = _server()._map_tool_runtime_event(event)
                 if mapped is not None:
                     await emit(*mapped)
-                if etype == "tool_result" and event.get("error_category") == "tool":
-                    had_tool_failure = True
-                    detail = "\n".join(
-                        str(block.get("text", block))
-                        if isinstance(block, dict) else str(block)
-                        for block in event.get("content", [])
-                    )
-                    await record_reflection(
-                        "tool",
-                        str(event.get("name", "unknown")),
-                        detail,
-                        "Review the tool error and validate a corrected request before retrying.",
-                    )
 
             elif etype == "run_steered":
                 await emit("run.steered", {
@@ -2946,13 +2822,6 @@ async def _execute_run(
             elif etype == "error":
                 run.status = "failed"
                 category = event.get("category", "runtime")
-                if category in {"tool", "model", "runtime"}:
-                    await record_reflection(
-                        category,
-                        run.model if category == "model" else category,
-                        str(event.get("detail", "Unknown error")),
-                        "Review failure evidence and validate a proposed resolution before reuse.",
-                    )
                 await emit("run.failed", {
                     "category": category,
                     "detail": event.get("detail", "Unknown error"),
@@ -2961,8 +2830,6 @@ async def _execute_run(
 
         # Run completed successfully
         run.status = "completed"
-        if had_tool_failure:
-            await mark_reflections_recovered()
         if full_response.strip() and run.conversation_id:
             try:
                 from atlas.config import DATA_ROOT
@@ -3014,10 +2881,6 @@ async def _execute_run(
     except Exception as e:
         log.exception("run.runtime_failed")
         run.status = "failed"
-        await record_reflection(
-            "runtime", "runtime", str(e),
-            "Review the runtime failure evidence and validate a proposed resolution before reuse.",
-        )
         await emit("run.failed", {"category": "runtime", "detail": str(e)})
     finally:
         close_events = getattr(orchestrator_events, "aclose", None)

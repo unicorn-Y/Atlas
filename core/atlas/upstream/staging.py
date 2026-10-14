@@ -21,7 +21,6 @@ import re
 import shutil
 import signal
 import sys
-import tempfile
 import time
 import traceback
 from collections.abc import Callable
@@ -48,7 +47,6 @@ NPM_TIMEOUT = 1200
 #: 组的执行顺序：(组名, 中文名, 组件 kind 集合)
 GROUPS: list[tuple[str, str, set[str]]] = [
     ("hermes", "Agent 内核（Hermes）", {"fork"}),
-    ("memos", "记忆（MemOS）", {"fork-npm"}),
     ("pip", "Python 依赖", {"pip", "git-pin"}),
     ("pip-transitive", "Python 间接依赖", {"pip-transitive"}),
     ("npm", "前端依赖", {"npm", "mcp-npx"}),
@@ -304,10 +302,8 @@ def prepare(ws: Workspace, log: RunLog) -> None:
             sources.run(["cmd", "/c", "mklink", "/J", str(venv_link), str(ws.venv)], timeout=30)
         else:
             venv_link.symlink_to(ws.venv, target_is_directory=True)
-    for rel in ("node_modules", "frontend/node_modules", "vendor/memos-local-plugin/node_modules"):
+    for rel in ("node_modules", "frontend/node_modules"):
         mirror_node_modules(ws.repo, ws.atlas, rel)
-    for rel in ("vendor/memos-local-plugin/dist", "vendor/memos-local-plugin/viewer/dist"):
-        mirror(ws.repo / rel, ws.atlas / rel)
     editables = ["-e", str(ws.atlas / "core")]
     if ws.hermes.exists():
         editables += ["-e", str(ws.hermes)]
@@ -624,36 +620,6 @@ def apply_hermes(ws: Workspace, item: dict[str, Any], log: RunLog) -> str:
     return f"{ws.pin[:10]} → {new_sha[:10]}（{describe}）"
 
 
-def apply_memos(ws: Workspace, item: dict[str, Any], log: RunLog) -> str:
-    fork_dir = ws.atlas / inventory.MEMOS_MANIFEST.parent
-    manifest_path = ws.atlas / inventory.MEMOS_MANIFEST
-    manifest = json.loads(_read(manifest_path))
-    base, latest = str(manifest["version"]), item["latest"]
-    log.step(f"三方合并 MemOS {base} → {latest}")
-    with tempfile.TemporaryDirectory(prefix="atlas-memos-") as tmp:
-        result = forks.merge_npm_fork(fork_dir, str(manifest["npm"]), base, latest, Path(tmp))
-        if not result.clean:
-            raise ItemFailed("MemOS 合并有冲突：" + "、".join(result.conflicts[:20]))
-        new_root = Path(tmp) / "new" / latest / "package"
-        viewer = new_root / "viewer" / "dist"
-        if viewer.exists():
-            mirror(viewer, fork_dir / "viewer" / "dist")
-    manifest["version"] = latest
-    _write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
-    build_memos(fork_dir, manifest)
-    counts = f"改 {len(result.changed)}、增 {len(result.added)}、删 {len(result.removed)}"
-    return f"{base} → {latest}（{counts}）"
-
-
-def build_memos(fork_dir: Path, manifest: dict[str, Any]) -> None:
-    for command in manifest.get("build") or []:
-        args = [sources.npm_cmd() if command[0] == "npm" else command[0], *command[1:]]
-        result = sources.run(args, cwd=fork_dir, timeout=NPM_TIMEOUT, env=_clean_env())
-        if result.returncode != 0:
-            raise ItemFailed(f"MemOS 构建失败（{' '.join(command)}）："
-                             + (result.stderr or result.stdout)[-1500:])
-
-
 def apply_borrowed(ws: Workspace, item: dict[str, Any], ctx: inventory.Context) -> str:
     detail = item.get("detail") or {}
     repo, path = detail.get("repo"), detail.get("path")
@@ -732,9 +698,6 @@ class Runner:
         if group.key == "hermes":
             for item in items:
                 notes[item["id"]] = apply_hermes(ws, item, self.log)
-        elif group.key == "memos":
-            for item in items:
-                notes[item["id"]] = apply_memos(ws, item, self.log)
         elif group.key == "pip":
             specs = []
             pyproject = ws.atlas / "core" / "pyproject.toml"
@@ -810,10 +773,6 @@ class Runner:
             restore_python(ws)
         if group.key in {"npm", "npm-transitive"}:
             self.restore_node()
-        if group.key == "memos":
-            fork_dir = ws.atlas / inventory.MEMOS_MANIFEST.parent
-            mirror(ws.repo / "vendor/memos-local-plugin/node_modules", fork_dir / "node_modules")
-            mirror(ws.repo / "vendor/memos-local-plugin/dist", fork_dir / "dist")
 
     def verify(self, group: Group) -> list[str]:
         problems = []

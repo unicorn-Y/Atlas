@@ -21,9 +21,6 @@ class AppServices:
     model_mgr: Any = None
     asr_manager: Any = None
     memory: Any = None
-    # T01.3：UnifiedMemoryFacade（memory.unified.enabled=true 时由 lifespan 装配；
-    # disabled（默认）保持 None —— /api/unified-memory/* 代理路由也不会挂载）。
-    unified_memory: Any = None
     orchestrator: Any = None
     mcp_client: Any = None
     local_execution: Any = None

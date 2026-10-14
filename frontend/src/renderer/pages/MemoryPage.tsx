@@ -48,12 +48,10 @@ export default function MemoryPage({
   apiBaseUrl,
   connected,
   onToast,
-  onPendingChange,
 }: {
   apiBaseUrl: string;
   connected: boolean;
   onToast: (text: string) => void;
-  onPendingChange?: (count: number) => void;
 }) {
   const [tab, setTab] = useState<Tab>('today');
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
@@ -62,9 +60,6 @@ export default function MemoryPage({
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
   const [docForm, setDocForm] = useState({ content: '', source: '', category: 'general' });
-
-  // The old "待确认" queue belonged to the retired local memory; nothing is pending anymore.
-  useEffect(() => { onPendingChange?.(0); }, [onPendingChange]);
 
   const loadKnowledge = useCallback(async () => {
     if (!connected) return;

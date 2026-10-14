@@ -8,9 +8,8 @@ the Atlas repository), moves it to the pinned commit and runs ``pip install -e``
 It refuses to touch a checkout with uncommitted changes. When the checkout is already at
 the pin and importable it does nothing, so it is cheap to run on every launch.
 
-It also links Hermes' ``memtensor`` memory plugin to Atlas' MemOS fork
-(``vendor/memos-local-plugin``), in the checkout and in Atlas' engine home, and keeps
-that link out of the checkout's ``git status`` via ``.git/info/exclude``.
+It also removes the ``memtensor`` memory-plugin link older Atlas versions placed in the
+checkout and in Atlas' engine home (the MemOS fork is gone; memory lives in data/memory).
 
 Usage: python core/scripts/setup_hermes.py [--dir PATH] [--python EXE] [--no-install]
 """
@@ -25,7 +24,6 @@ from pathlib import Path
 
 CORE = Path(__file__).resolve().parents[1]
 REPO = CORE.parent
-MEMOS_PROVIDER = REPO / "vendor" / "memos-local-plugin" / "adapters" / "hermes" / "memos_provider"
 MEMTENSOR = Path("plugins") / "memory" / "memtensor"
 # Hermes ships deeply nested docs; without long paths Windows checkouts fail.
 GIT = ["git", "-c", "core.longpaths=true"]
@@ -67,27 +65,16 @@ def _exclude_memtensor(directory: Path) -> None:
         exclude.write_text("\n".join([*lines, entry]) + "\n", encoding="utf-8")
 
 
-def link_memos_plugin(root: Path, target: Path = MEMOS_PROVIDER) -> None:
-    """Point ``<root>/plugins/memory/memtensor`` at Atlas' MemOS fork."""
-    if not target.is_dir() or not (root / MEMTENSOR.parent).is_dir():
-        return
+def remove_memos_link(root: Path) -> None:
+    """Drop the ``<root>/plugins/memory/memtensor`` link to the retired MemOS fork."""
     link = root / MEMTENSOR
-    if link.is_junction() or link.is_symlink():
-        if link.resolve() == target.resolve():
-            return
-        if link.is_junction():
-            link.rmdir()
-        else:
-            link.unlink()
-    elif link.exists():
-        print(f"[hermes] {link} is a real directory, not linking the MemOS fork")
-        return
-    if sys.platform == "win32":
-        subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
-                       capture_output=True, check=True)
+    if link.is_junction():
+        link.rmdir()
+    elif link.is_symlink():
+        link.unlink()
     else:
-        link.symlink_to(target, target_is_directory=True)
-    print(f"[hermes] linked {link} -> {target}")
+        return
+    print(f"[hermes] removed {link}")
 
 
 def ensure_checkout(directory: Path, repository: str, commit: str) -> bool:
@@ -127,8 +114,8 @@ def main(argv: list[str] | None = None) -> int:
     repository, commit = read_pin(args.pyproject)
     directory = args.dir.resolve()
     changed = ensure_checkout(directory, repository, commit)
-    link_memos_plugin(directory)
-    link_memos_plugin(REPO / "engine")
+    remove_memos_link(directory)
+    remove_memos_link(REPO / "engine")
     if args.no_install:
         return 0
     if not changed and _installed_from(args.python) == directory:
