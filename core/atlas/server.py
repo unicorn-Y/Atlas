@@ -44,6 +44,7 @@ from atlas.asr import ASRManager
 from atlas.automation import (
     AutomationEngine,
     AutomationStore,
+    get_automation_engine,  # noqa: F401 — deferred shutdown imports this compatibility export
     set_automation_engine,
 )
 from atlas.capabilities.browser.browser_use import BrowserUseAdapter

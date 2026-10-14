@@ -4,15 +4,14 @@ Scenario (the closeout plan's "qualitative change" acceptance):
 
     create a Project
     -> start a long-running durable agent task in a background process
-    -> the task uses a local plugin and records project/memory state
+    -> the process creates a project conversation
     -> kill the process mid-task
     -> "restart": a fresh process recovers the workflow via DBOS
-    -> the task completes and writes back state
+    -> the task completes and writes a resumed conversation
     -> a brand-new conversation recovers "where we were" from
-       Project + MemoryOS adapter + session_search
+       Project + session_search
 
-Everything runs against the real components (ProjectStore, PluginRuntime,
-MemoryOSAdapter, DurableBackend) with a real cross-process crash.
+The test exercises ProjectStore, MemoryStore session_search, and DurableBackend across a process crash.
 """
 
 from __future__ import annotations
@@ -28,7 +27,6 @@ import pytest
 
 from atlas.capabilities.durable.dbos_backend import DurableBackend
 from atlas.memory import MemoryStore
-from atlas.memory.memoryos_adapter import MemoryOSAdapter
 from atlas.projects import ProjectStore
 
 CORE_DIR = Path(__file__).resolve().parents[1]
@@ -40,8 +38,6 @@ from pathlib import Path
 
 from atlas.capabilities.durable.dbos_backend import DurableBackend
 from atlas.memory import MemoryStore
-from atlas.memory.memoryos_adapter import MemoryOSAdapter
-from atlas.plugins import PluginRuntime
 from atlas.projects import ProjectStore
 
 
@@ -51,7 +47,6 @@ async def main() -> None:
 
     memory = MemoryStore(db_path=Path(config["data_dir"]) / "atlas.db")
     await memory.init()
-    adapter = MemoryOSAdapter(memory)
     projects = ProjectStore(Path(config["data_dir"]) / "projects.db")
     await projects.init()
 
@@ -64,37 +59,7 @@ async def main() -> None:
     await memory.save_message(
         conversation, "user", "hybrid router 已经合并，下一步是 hub 后台任务",
     )
-    await adapter.set_project_state(
-        project.project_id, "closeout merged; starting hub wave",
-    )
-
-    # use a local plugin for real: install, load, invoke a command
-    runtime = PluginRuntime(
-        [Path(config["plugin_source"]), Path(config["data_dir"]) / "plugins"],
-        Path(config["data_dir"]) / "plugins" / "state.json",
-    )
-    runtime.install_local(Path(config["plugin_source"]))
-    report = await runtime.load_all()
-    command_prompt = "plugin-missing"
-    for plugin in runtime.discover():
-        if plugin["loaded"]:
-            from atlas.agent.capabilities import AgentCapabilityRegistry
-
-            registry = AgentCapabilityRegistry()
-            await runtime.load_all(
-                hook_bus=None, mcp_client=None, capabilities=registry,
-            )
-            invoked = await registry.invoke(
-                "plugin.demo.command.standup",
-            )
-            command_prompt = str(invoked.get("prompt", ""))
-    await adapter.record_decision(
-        "run hub wave on durable",
-        rationale=command_prompt,
-        project_id=project.project_id,
-        source_conversation_id=conversation,
-    )
-
+    # start the long-running durable task, then die mid-run
     # start the long-running durable task, then die mid-run
     durable = DurableBackend(Path(config["data_dir"]) / "dbos.sqlite")
 
@@ -121,24 +86,15 @@ async def test_long_lived_agent_survives_crash_and_recovers_context(
     data_dir.mkdir()
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    plugin_source = tmp_path / "downloaded-plugins" / "demo-plugin"
-    (plugin_source / "commands").mkdir(parents=True)
-    (plugin_source / "plugin.json").write_text(
-        json.dumps({"name": "demo", "version": "1.0.0"}), encoding="utf-8",
-    )
-    (plugin_source / "commands" / "standup.md").write_text(
-        "昨天的进展：closeout 合并；今天的计划：hub 上线。", encoding="utf-8",
-    )
     started_marker = tmp_path / "child-started.marker"
     child_config = tmp_path / "child-config.json"
     child_config.write_text(json.dumps({
         "data_dir": str(data_dir),
         "workspace": str(workspace),
-        "plugin_source": str(plugin_source),
         "started_marker": str(started_marker),
     }), encoding="utf-8")
 
-    # Phase A: the "Atlas process" builds state, uses a plugin, and crashes.
+    # Phase A: the "Atlas process" creates a project and crashes.
     child = subprocess.Popen(
         [sys.executable, "-c", CHILD_SCRIPT, str(child_config)],
         cwd=str(CORE_DIR),
@@ -156,7 +112,6 @@ async def test_long_lived_agent_survives_crash_and_recovers_context(
     # Phase B: the restarted process recovers the task and finishes it.
     memory = MemoryStore(db_path=data_dir / "atlas.db")
     await memory.init()
-    adapter = MemoryOSAdapter(memory)
     projects = ProjectStore(data_dir / "projects.db")
     await projects.init()
     project = await projects.get_by_name("Atlas")
@@ -171,9 +126,6 @@ async def test_long_lived_agent_survives_crash_and_recovers_context(
         await memory.save_message(
             conversation, "user",
             "hub 后台任务从崩溃中恢复完成，hub wave 可以继续",
-        )
-        await adapter.set_project_state(
-            str(project.project_id), "hub resumed after crash; wave continues",
         )
         return {"status": "completed", "payload": payload}
 
@@ -190,20 +142,11 @@ async def test_long_lived_agent_survives_crash_and_recovers_context(
 
         # A brand-new conversation recovers "where we were".
         conversation_ids = await projects.list_conversations(str(project.project_id))
-        recall = await adapter.session_search("hub", conversation_ids=conversation_ids)
+        recall = await memory.session_search("hub", conversation_ids=conversation_ids)
         assert recall, "project-scoped recall found nothing"
         assert any(
             "hub 后台任务" in hit["content"] for hit in recall
         ), f"recall missed the resumed session: {recall}"
-        decisions = await adapter.project_decisions(str(project.project_id))
-        assert any(
-            "hub wave" in decision["summary"] and "closeout" in decision["rationale"]
-            for decision in decisions
-        ), f"plugin-informed decision missing: {decisions}"
-        assert (
-            await adapter.get_project_state(str(project.project_id))
-            == "hub resumed after crash; wave continues"
-        )
     finally:
         durable.stop()
         await projects.close()

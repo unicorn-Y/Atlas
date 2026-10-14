@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 from atlas.agent import AgentOrchestrator
 from atlas.agent.planning import PlanSubtask, TaskPlan, requires_plan
@@ -35,10 +33,6 @@ def _orchestrator():
     memory.get_agent_context_with_trace.return_value = {
         "memories": [], "knowledge_trace": {"decisions": [], "query_terms": []},
     }
-    memory.retrieve_agent_reflections.return_value = []
-    memory.retrieve_approved_goal_experiences.return_value = []
-    memory.retrieve_approved_goal_knowledge.return_value = []
-    memory.apply_knowledge_consolidated_insights.return_value = []
     mcp = MagicMock()
     mcp.get_tools_for_llm.return_value = []
     return AgentOrchestrator(model, memory, mcp)

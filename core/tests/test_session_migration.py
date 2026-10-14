@@ -171,7 +171,7 @@ def test_migration_imports_full_atlas_shape_idempotently_and_doctor_stays_clean(
     asyncio.run(memory.close())
 
 
-def test_memory_evidence_uses_sessiondb_when_legacy_messages_are_empty(
+def test_session_search_reads_sessiondb_when_legacy_messages_are_empty(
     tmp_path: Path, monkeypatch,
 ) -> None:
     atlas_db = _configure(tmp_path, monkeypatch)
@@ -180,42 +180,26 @@ def test_memory_evidence_uses_sessiondb_when_legacy_messages_are_empty(
 
     async def seed_and_verify():
         await memory.init()
-        conversation_id = await memory.create_conversation("canonical-only")
-        import hermes_state
+        try:
+            conversation_id = await memory.create_conversation("canonical-only")
+            import hermes_state
 
-        with hermes_state.SessionDB(db_path=home / "state.db") as db:
-            db.ensure_session(conversation_id, "api_server")
-            db.append_message(conversation_id, "user", content="I prefer short answers.")
-            message = db.get_messages(conversation_id)[-1]
-            message_id = str(message["message_uid"])
-        assert await memory.get_messages_with_rowid(conversation_id) == []
-        candidates = await memory.extract_conversation_candidates(conversation_id)
-        assert len(candidates) == 1
-        assert await memory.promote_memory_candidate(candidates[0]["id"])
-        hits = await memory.session_search("short answers", conversation_ids=[conversation_id])
-        assert len(hits) == 1 and hits[0]["id"] == message_id
-        assert hits[0]["context"][0]["id"] == message_id
-        cursor = await memory._db.execute(
-            "SELECT key, value, source_conversation_id, source_message_id FROM facts "
-            "WHERE key='user_preference'"
-        )
-        fact_row = await cursor.fetchone()
-        assert fact_row is not None
-        assert await memory._has_approved_user_evidence(dict(fact_row), "fact")
-        assert await memory.record_memory_correction("user_preference", message_id)
-        await memory.set_fact(
-            "test_commitment", "finish canonical migration", memory_type="commitment",
-            source_conversation_id=conversation_id, source_message_id=message_id,
-        )
-        assert await memory.set_commitment_status(
-            "test_commitment", "fulfilled", message_id,
-        )
-        await memory.close()
-        return message_id
+            with hermes_state.SessionDB(db_path=home / "state.db") as db:
+                db.ensure_session(conversation_id, "api_server")
+                db.append_message(
+                    conversation_id, "user", content="I prefer short answers.",
+                )
+                message_id = str(db.get_messages(conversation_id)[-1]["message_uid"])
+            hits = await memory.session_search(
+                "short answers", conversation_ids=[conversation_id],
+            )
+            assert len(hits) == 1
+            assert hits[0]["id"] == message_id
+            assert hits[0]["context"][0]["id"] == message_id
+        finally:
+            await memory.close()
 
-    assert asyncio.run(seed_and_verify())
-
-
+    asyncio.run(seed_and_verify())
 def test_existing_sessiondb_history_is_authoritative_and_counted_as_ignored(
     tmp_path: Path, monkeypatch,
 ) -> None:

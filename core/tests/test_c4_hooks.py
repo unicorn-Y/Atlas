@@ -271,8 +271,6 @@ async def test_agent_userpromptsubmit_deny_returns_assistant_message(
 
     store = MemoryStore(tmp_path / "memory.db")
     await store.init()
-    extract_memories = AsyncMock(wraps=store.extract_memories)
-    monkeypatch.setattr(store, "extract_memories", extract_memories)
     agent = AgentOrchestrator(_run_model_mgr(), store)
     conversation_id = f"c4-deny-{tmp_path.name}"
     session_home = DATA_ROOT / "engine"
@@ -295,7 +293,6 @@ async def test_agent_userpromptsubmit_deny_returns_assistant_message(
         assert persisted[0]["role"] == "assistant"
         assert persisted[0]["content"] == events[0]["content"]
         assert events[1]["message_id"] == persisted[0]["id"]
-        extract_memories.assert_not_awaited()
         assert store._db is not None
         rows = await (await store._db.execute(
             "SELECT id FROM messages WHERE conversation_id = ?", (conversation_id,),
@@ -305,30 +302,6 @@ async def test_agent_userpromptsubmit_deny_returns_assistant_message(
         await store.close()
         delete_session(session_home, conversation_id)
 
-
-@pytest.mark.asyncio
-async def test_agent_userpromptsubmit_context_enriches_the_round() -> None:
-    memory = AsyncMock()
-    memory.retrieve_approved_goal_knowledge.return_value = []
-    memory.get_conversation_messages.side_effect = RuntimeError("stop test run")
-    agent = AgentOrchestrator(_run_model_mgr(), memory)
-
-    def hook(event: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return {"additional_context": "injected facts"}
-
-    events = [
-        event async for event in agent.run(
-            "hello", "conv-ctx", user_hook_callback=hook,
-        )
-    ]
-    assert events[-1]["type"] == "error"
-    enriched = memory.retrieve_approved_goal_knowledge.await_args.args[0]
-    assert enriched == "hello\n\ninjected facts"
-
-
-# ---------------------------------------------------------------------------
-# Lifecycle hooks: PreCompact, SubagentStart / SubagentStop
-# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_precompact_hook_blocks_manual_compaction(tmp_path: Path) -> None:

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from atlas.agent import AgentOrchestrator, ToolExecutionState
 from atlas.tools.computer_use import COMPUTER_TOOLS
@@ -45,17 +44,12 @@ def memory():
     mem = AsyncMock()
     mem.get_conversation_messages.return_value = []
     mem.save_message.return_value = "msg-123"
-    mem.extract_memories.return_value = []
     mem.get_active_context.return_value = []
     mem.get_agent_context.return_value = []
     mem.get_agent_context_with_trace.return_value = {
         "memories": [],
         "knowledge_trace": {"query_terms": [], "results": [], "decisions": []},
     }
-    mem.retrieve_agent_reflections.return_value = []
-    mem.retrieve_approved_goal_experiences.return_value = []
-    mem.retrieve_approved_goal_knowledge.return_value = []
-    mem.apply_knowledge_consolidated_insights.return_value = []
     return mem
 
 
@@ -114,7 +108,10 @@ class TestExecuteTools:
                 "name": "computer_observe", "args": {"target": "desktop"}, "id": "screen-1"
             }])],
             "pending_events": [],
-            "runtime": SimpleNamespace(cancel_event=None, pause_event=None, approval_callback=None),
+            "runtime": SimpleNamespace(
+                run_id="run-screen-1", cancel_event=None, pause_event=None,
+                approval_callback=None,
+            ),
         }
 
         result = await agent._execute_tools_node(state)
@@ -390,66 +387,3 @@ class TestUseSkill:
 
         empty = await orchestrator._use_skill_result("   ")
         assert empty["is_error"] is True
-
-
-# ---------------------------------------------------------------------------
-# remember: direct durable memory writes
-# ---------------------------------------------------------------------------
-
-
-class TestRemember:
-    async def test_remember_persists_kind_namespaced_fact(self, tmp_path) -> None:
-        from unittest.mock import MagicMock
-
-        from atlas.agent import AgentOrchestrator
-        from atlas.memory import MemoryStore
-
-        memory = MemoryStore(db_path=tmp_path / "remember.db")
-        await memory.init()
-        try:
-            orchestrator = AgentOrchestrator(
-                model_mgr=MagicMock(), memory=memory, mcp_client=None,
-            )
-            names = {
-                tool["function"]["name"] for tool in orchestrator._model_facing_tools()
-            }
-            assert "remember" in names
-
-            result = await orchestrator._remember_result(
-                "editor", "用户偏好 VS Code", "preference",
-            )
-            assert result["is_error"] is False
-            stored = await memory.get_fact("agent-preference:editor")
-            assert stored == "用户偏好 VS Code"
-            facts = await memory.list_facts(category="agent-preference")
-            assert facts[0]["memory_type"] == "identity"
-
-            result = await orchestrator._remember_result(
-                "deploy", "先跑 tests 再 push", "convention",
-            )
-            assert result["is_error"] is False
-            assert await memory.get_fact("agent-convention:deploy") == "先跑 tests 再 push"
-
-        finally:
-            await memory.close()
-
-    async def test_remember_rejects_empty_and_bad_kind(self, tmp_path) -> None:
-        from unittest.mock import MagicMock
-
-        from atlas.agent import AgentOrchestrator
-        from atlas.memory import MemoryStore
-
-        memory = MemoryStore(db_path=tmp_path / "remember2.db")
-        await memory.init()
-        try:
-            orchestrator = AgentOrchestrator(
-                model_mgr=MagicMock(), memory=memory, mcp_client=None,
-            )
-            empty = await orchestrator._remember_result("", "x")
-            assert empty["is_error"] is True
-
-            result = await orchestrator._remember_result("k", "v", "bogus-kind")
-            assert result["is_error"] is False  # falls back to kind=fact
-            assert result["data"]["kind"] == "fact"
-        finally:
-            await memory.close()

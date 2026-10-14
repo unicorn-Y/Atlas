@@ -5,11 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage
 
 from atlas.agent import AgentOrchestrator, AgentRunContext
 from atlas.agent.checkpoints import ShadowGitCheckpointStore
@@ -19,14 +18,11 @@ from atlas.agent.enrichment import (
     ContextMaintenance,
     DelegationService,
     HookBus,
-    MemoryReflectionBridge,
     ReminderPolicy,
     SystemReminders,
     TrajectoryReviewer,
 )
 from atlas.config import AtlasConfig
-from atlas.memory import MemoryStore
-from tests.fakes.session_store import save_memory_fixture_message
 from atlas.runtime.backends import AgentEvent, AgentSession
 from atlas.skills.bundles import PluginBundleDiscovery, parse_plugin_bundle
 from atlas.tools.local_execution import LocalExecutionRuntime
@@ -50,11 +46,6 @@ def memory():
     store.get_agent_context_with_trace.return_value = {
         "memories": [], "knowledge_trace": {"query_terms": [], "decisions": []},
     }
-    store.retrieve_agent_reflections.return_value = []
-    store.retrieve_approved_goal_experiences.return_value = []
-    store.retrieve_approved_goal_knowledge.return_value = []
-    store.apply_knowledge_consolidated_insights.return_value = []
-    store.extract_conversation_candidates.return_value = []
     store.save_message.return_value = "message-1"
     return store
 
@@ -290,82 +281,6 @@ async def test_delegation_uses_disposable_backend_and_returns_tool_evidence() ->
     assert result["evidence"][0]["data"]["tool"] == "local_file"
     assert observed == ["start", "end"]
     assert host.sessions == {}
-
-
-async def test_reflection_proposes_without_promotion_through_memoryos_path() -> None:
-    memory = MagicMock()
-    memory.extract_conversation_candidates = AsyncMock(return_value=[{"id": "candidate-1"}])
-    bridge = MemoryReflectionBridge(memory)
-    result = await bridge.reflect(
-        conversation_id="conversation-1", goal="finish task",
-        task_result=(
-            "Fact memory: use UTC\nProject state: server migrated\n"
-            "Decision: use SQLite\nPreference: concise replies\nThe parser handles YAML."
-        ),
-        reviewer_evidence=[{"decision": "corrective_guidance"}],
-    )
-    assert [item["type"] for item in result["candidates"]] == [
-        "experience", "fact", "project_state", "decision", "preference",
-    ]
-    assert all(item["advisory_only"] for item in result["candidates"])
-    assert result["promoted"] is False
-    assert result["candidates"][0]["memory_candidates"] == [{"id": "candidate-1"}]
-    memory.extract_conversation_candidates.assert_awaited_once_with("conversation-1")
-
-
-async def test_reflection_reaches_real_memoryos_candidate_governance(tmp_path: Path) -> None:
-    memory = MemoryStore(tmp_path / "reflection.db")
-    await memory.init()
-    conversation_id = await memory.create_conversation("Synthetic completed task")
-    await save_memory_fixture_message(
-        memory, conversation_id, "user", "I prefer concise answers.",
-    )
-    await save_memory_fixture_message(
-        memory, conversation_id, "assistant", "Task completed with evidence.",
-    )
-    task_result = (
-        "Reusable experience: verify the result\nProject state: migration complete\n"
-        "Decision: retain SQLite\nPreference: concise answers\nFact memory: UTC"
-    )
-    result = await MemoryReflectionBridge(memory).reflect(
-        conversation_id=conversation_id, goal="complete a small task",
-        task_result=task_result,
-        source_run_id="run-reflection-1",
-        reviewer_evidence=[{"decision": "continue"}],
-    )
-    candidates = result["candidates"]
-    assert {candidate["type"] for candidate in candidates} == {
-        "experience", "project_state", "decision", "preference", "fact",
-    }
-    assert all(candidate.get("proposal_id") for candidate in candidates)
-    [memory_candidate] = result["candidates"][0]["memory_candidates"]
-    assert memory_candidate["key"] == "user_preference"
-    assert memory_candidate["status"] == "pending"
-    assert await memory.get_fact("user_preference") is None
-    proposals = await memory.list_knowledge_consolidation_proposals(status="pending")
-    assert len(proposals) == 5
-    assert all(item["source_run_id"] == "run-reflection-1" for item in proposals)
-    repeated = await MemoryReflectionBridge(memory).reflect(
-        conversation_id=conversation_id, goal="complete a small task",
-        task_result=task_result, source_run_id="run-reflection-1",
-        reviewer_evidence=[{"decision": "continue"}],
-    )
-    assert [item["proposal_id"] for item in repeated["candidates"]] == [
-        item["proposal_id"] for item in candidates
-    ]
-    assert len(await memory.list_knowledge_consolidation_proposals(status="pending")) == 5
-    await memory.close()
-
-    reopened = MemoryStore(tmp_path / "reflection.db")
-    await reopened.init()
-    try:
-        persisted = await reopened.list_knowledge_consolidation_proposals(status="pending")
-        assert {item["type"] for item in persisted} == {
-            "experience", "project_state", "decision", "preference", "fact",
-        }
-        assert await reopened.get_fact("user_preference") is None
-    finally:
-        await reopened.close()
 
 
 def test_shadow_git_checkpoint_restores_scoped_file_without_repo_mutation(tmp_path: Path) -> None:

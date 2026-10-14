@@ -12,7 +12,7 @@ from tests.fakes.fake_llm_provider import AnthropicReply, FakeLLMServer, Text
 
 PURPOSES = (
     "conversation", "compression", "handoff_summary", "moa", "title", "planning",
-    "reflection", "goal_knowledge", "sub_agent", "heartbeat", "group_chat",
+    "reflection", "memory_library", "sub_agent", "heartbeat", "group_chat",
     "skill_workshop", "safety_review", "model_test",
 )
 

@@ -10,7 +10,6 @@ from hermes_cli import goals as hermes_goals
 from atlas import config, server
 from atlas.engine.session_sync import (
     evaluate_goal_after_turn,
-    goal_state,
     mutate_goal,
     record_goal_event,
     set_goal,
@@ -139,49 +138,3 @@ async def test_goal_trace_endpoint_filters_and_orders_persisted_audit_events(
         "scheduled-goal-review:0", "scheduled-goal-review:1",
     ]
     assert trace["events"][1]["data"]["step_ids"] == ["inspect"]
-
-
-async def test_runtime_observability_reports_degraded_components_and_goal_failure(
-    tmp_path: Path, monkeypatch,
-) -> None:
-    home = _hermes_home(tmp_path, monkeypatch)
-
-    class FailingOrchestrator:
-        async def run(self, **kwargs):
-            yield {"type": "error", "category": "model", "detail": "provider unavailable"}
-
-    class ReflectionMemory:
-        async def record_agent_reflection(self, **kwargs):
-            return None
-
-        async def record_goal_outcome(self, **kwargs):
-            return None
-
-    scheduler = AtlasScheduler(schedules_path=tmp_path / "schedules.toml")
-    task = _goal_task()
-    await scheduler.add_task(task)
-    set_goal(home, _goal_session_id(task.id), "Review the project.")
-    monkeypatch.setattr(server, "scheduler", scheduler)
-    monkeypatch.setattr(server, "orchestrator", FailingOrchestrator())
-    monkeypatch.setattr(server, "memory", ReflectionMemory())
-
-    await server._run_scheduled_goal(task.id)
-
-    transport = httpx.ASGITransport(app=server.app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://atlas") as client:
-        response = await client.get("/api/runtime/observability")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "degraded"
-    assert body["components"] == {
-        "scheduler": {"available": True, "running": False},
-        "orchestrator": {"available": True},
-        "memory": {"available": True},
-    }
-    assert goal_state(home, _goal_session_id(task.id))["status"] == "paused"
-    assert body["autonomous"]["goal_event_counts"] == {
-        "execution.error": 1,
-        "goal.triggered": 1,
-    }
-    assert body["autonomous"]["goals"][0]["goal_id"] == "review"

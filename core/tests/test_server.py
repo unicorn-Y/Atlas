@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,7 +10,6 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from atlas import server
-from atlas.memory import MemoryStore
 from atlas.server import app
 
 
@@ -657,522 +655,6 @@ class TestSearch:
 # Facts
 # ---------------------------------------------------------------------------
 
-class TestFacts:
-    async def test_list_facts_empty(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/facts")
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
-
-    async def test_create_and_list_fact(self, client: AsyncClient) -> None:
-        # Create
-        resp = await client.post(
-            "/api/facts",
-            json={"key": "test_key", "value": "test_value", "category": "test"},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["key"] == "test_key"
-
-        # List
-        resp = await client.get("/api/facts", params={"category": "test"})
-        assert resp.status_code == 200
-        facts = resp.json()
-        assert len(facts) >= 1
-        assert any(f["key"] == "test_key" for f in facts)
-
-    async def test_delete_fact(self, client: AsyncClient) -> None:
-        # Create first
-        await client.post(
-            "/api/facts",
-            json={"key": "to_delete", "value": "temp"},
-        )
-        # Delete
-        resp = await client.delete("/api/facts/to_delete")
-        assert resp.status_code == 200
-
-        # Delete again should 404
-        resp = await client.delete("/api/facts/to_delete")
-        assert resp.status_code == 404
-
-    async def test_memory_candidate_requires_api_approval(
-        self, client: AsyncClient, tmp_path
-    ) -> None:
-        original_memory = server.memory
-        await original_memory.close()
-        isolated_memory = MemoryStore(db_path=tmp_path / "candidate-review.db")
-        await isolated_memory.init()
-        server.memory = app.state.services.memory = isolated_memory
-        try:
-            from atlas.config import DATA_ROOT
-            from atlas.engine.session_sync import append_session_message
-
-            conversation_id = await isolated_memory.create_conversation()
-            # SessionDB is the authoritative transcript; promotion verifies the
-            # candidate against it as source evidence.
-            append_session_message(
-                DATA_ROOT / "engine", conversation_id, "user",
-                "I prefer concise answers.",
-            )
-            [candidate] = await isolated_memory.extract_conversation_candidates(
-                conversation_id
-            )
-
-            listed = await client.get(
-                "/api/memory/candidates", params={"status": "pending"}
-            )
-            assert listed.status_code == 200
-            assert listed.json()[0]["id"] == candidate["id"]
-            assert await isolated_memory.get_fact("user_preference") is None
-
-            approved = await client.post(
-                f"/api/memory/candidates/{candidate['id']}/approve"
-            )
-            assert approved.status_code == 200
-            assert await isolated_memory.get_fact("user_preference") == "concise answers"
-        finally:
-            await isolated_memory.close()
-            server.memory = app.state.services.memory = original_memory
-
-    async def test_memory_maturity_reports_are_readable_through_api(
-        self, client: AsyncClient, tmp_path
-    ) -> None:
-        original_memory = server.memory
-        await original_memory.close()
-        isolated_memory = MemoryStore(db_path=tmp_path / "maturity-reports.db")
-        await isolated_memory.init()
-        server.memory = app.state.services.memory = isolated_memory
-        try:
-            await isolated_memory.set_fact("user_preference", "concise answers")
-
-            created = await client.post("/api/memory/maturity-reports")
-            listed = await client.get("/api/memory/maturity-reports")
-
-            assert created.status_code == 200
-            assert created.json()["report"]["memory_count"] == 1
-            assert created.json()["report"]["recommendations"][0]["evidence_refs"]
-            assert listed.status_code == 200
-            assert listed.json()[0]["report"] == created.json()["report"]
-            assert await isolated_memory.get_fact("user_preference") == "concise answers"
-        finally:
-            await isolated_memory.close()
-            server.memory = app.state.services.memory = original_memory
-
-    async def test_memory_self_steering_reports_are_readable_through_api(
-        self, client: AsyncClient, tmp_path
-    ) -> None:
-        original_memory = server.memory
-        await original_memory.close()
-        isolated_memory = MemoryStore(db_path=tmp_path / "self-steering-reports.db")
-        await isolated_memory.init()
-        server.memory = app.state.services.memory = isolated_memory
-        try:
-            await isolated_memory.set_fact("user_preference", "concise answers")
-
-            created = await client.post("/api/memory/self-steering-reports")
-            listed = await client.get("/api/memory/self-steering-reports")
-
-            assert created.status_code == 200
-            report = created.json()["report"]
-            assert report["fact_count"] == 1
-            assert report["suggestion_count"] == 1
-            assert report["suggestions"][0]["evidence_refs"]
-            assert report["maturity_report_id"]
-            assert listed.status_code == 200
-            assert listed.json()[0]["report"] == report
-            assert await isolated_memory.get_fact("user_preference") == "concise answers"
-        finally:
-            await isolated_memory.close()
-            server.memory = app.state.services.memory = original_memory
-
-    async def test_memory_optimization_candidates_require_api_approval(
-        self, client: AsyncClient, tmp_path,
-    ) -> None:
-        original_memory = server.memory
-        await original_memory.close()
-        isolated_memory = MemoryStore(db_path=tmp_path / "optimization-candidates.db")
-        await isolated_memory.init()
-        server.memory = app.state.services.memory = isolated_memory
-        try:
-            await isolated_memory.set_fact("user_preference", "concise answers")
-            report = await client.post("/api/memory/self-steering-reports")
-            assert report.status_code == 200
-            report_id = report.json()["id"]
-
-            before_approval = await client.post("/api/memory/optimization-candidates")
-            assert before_approval.status_code == 200
-            assert before_approval.json() == []
-
-            approved = await client.post(
-                f"/api/memory/self-steering-reports/{report_id}/approve"
-            )
-            assert approved.status_code == 200
-            generated = await client.post("/api/memory/optimization-candidates")
-            assert generated.status_code == 200
-            assert generated.json()
-            candidate = generated.json()[0]
-            assert candidate["source_report_id"] == report_id
-            assert candidate["risk"] == "low"
-            assert candidate["advisory_only"] is True
-            assert candidate["evidence_refs"]
-
-            reviewed = await client.post(
-                f"/api/memory/optimization-candidates/{candidate['id']}/approve"
-            )
-            listed = await client.get(
-                "/api/memory/optimization-candidates", params={"status": "approved"}
-            )
-            assert reviewed.status_code == 200
-            assert listed.status_code == 200
-            assert listed.json()[0]["review_history"][0]["decision"] == "approved"
-        finally:
-            await isolated_memory.close()
-            server.memory = app.state.services.memory = original_memory
-
-    async def test_memory_consolidation_proposals_require_approved_candidates(
-        self, client: AsyncClient, tmp_path,
-    ) -> None:
-        original_memory = server.memory
-        await original_memory.close()
-        isolated_memory = MemoryStore(db_path=tmp_path / "consolidation-proposals.db")
-        await isolated_memory.init()
-        server.memory = app.state.services.memory = isolated_memory
-        try:
-            await isolated_memory.set_fact("user_preference", "concise answers")
-            original_fact = await isolated_memory.get_fact("user_preference")
-            report = await client.post("/api/memory/self-steering-reports")
-            assert report.status_code == 200
-            report_id = report.json()["id"]
-
-            no_approved_candidates = await client.post(
-                "/api/memory/consolidation-proposals"
-            )
-            assert no_approved_candidates.status_code == 200
-            assert no_approved_candidates.json() == []
-
-            approved_report = await client.post(
-                f"/api/memory/self-steering-reports/{report_id}/approve"
-            )
-            assert approved_report.status_code == 200
-            candidates = await client.post("/api/memory/optimization-candidates")
-            assert candidates.status_code == 200
-            for candidate in candidates.json():
-                reviewed = await client.post(
-                    f"/api/memory/optimization-candidates/{candidate['id']}/approve"
-                )
-                assert reviewed.status_code == 200
-
-            created = await client.post("/api/memory/consolidation-proposals")
-            repeated = await client.post("/api/memory/consolidation-proposals")
-            assert created.status_code == repeated.status_code == 200
-            assert created.json()
-            assert [item["id"] for item in created.json()] == [
-                item["id"] for item in repeated.json()
-            ]
-            for proposal in created.json():
-                assert proposal["advisory_only"] is True
-                assert proposal["source_report_ids"] == [report_id]
-                assert proposal["source_candidate_ids"]
-                assert proposal["evidence_refs"]
-                assert proposal["status"] == "pending"
-
-            proposal = created.json()[0]
-            rejected_proposal = {**proposal, "id": "rejected-activation-proposal"}
-            await isolated_memory._db.execute(
-                "INSERT INTO memory_consolidation_proposals "
-                "(id, proposal_json, created_at) VALUES (?, ?, ?)",
-                (
-                    rejected_proposal["id"],
-                    json.dumps(rejected_proposal, sort_keys=True),
-                    proposal["created_at"],
-                ),
-            )
-            await isolated_memory._db.commit()
-
-            pending_activation = await client.post(
-                f"/api/memory/consolidation-proposals/{proposal['id']}/activate"
-            )
-            rejected = await client.post(
-                f"/api/memory/consolidation-proposals/{rejected_proposal['id']}/reject"
-            )
-            rejected_activation = await client.post(
-                f"/api/memory/consolidation-proposals/{rejected_proposal['id']}/activate"
-            )
-            reviewed = await client.post(
-                f"/api/memory/consolidation-proposals/{proposal['id']}/approve"
-            )
-            activated = await client.post(
-                f"/api/memory/consolidation-proposals/{proposal['id']}/activate"
-            )
-            repeated_activation = await client.post(
-                f"/api/memory/consolidation-proposals/{proposal['id']}/activate"
-            )
-            activation_list = await client.get("/api/memory/knowledge-activations")
-            [candidate_id] = proposal["source_candidate_ids"]
-            verification = await client.post(
-                f"/api/memory/knowledge-activations/{activated.json()['id']}/verify",
-                json={
-                    "candidate_id": candidate_id,
-                    "evidence_refs": proposal["candidate_snapshots"][0]["evidence_refs"],
-                    "usage_id": "run-verification-1",
-                },
-            )
-            unsupported_verification = await client.post(
-                f"/api/memory/knowledge-activations/{activated.json()['id']}/verify",
-                json={
-                    "candidate_id": candidate_id,
-                    "evidence_refs": ["evidence:unsupported"],
-                },
-            )
-            verification_list = await client.get(
-                "/api/memory/knowledge-verifications",
-                params={"activation_id": activated.json()["id"]},
-            )
-            approved = await client.get(
-                "/api/memory/consolidation-proposals",
-                params={"status": "approved"},
-            )
-            duplicate_review = await client.post(
-                f"/api/memory/consolidation-proposals/{proposal['id']}/reject"
-            )
-            assert pending_activation.status_code == 404
-            assert rejected.status_code == 200
-            assert rejected_activation.status_code == 404
-            assert reviewed.status_code == 200
-            assert activated.status_code == repeated_activation.status_code == 200
-            assert activated.json() == repeated_activation.json()
-            activation = activated.json()
-            assert activation["advisory_only"] is True
-            assert activation["activation_status"] == "active"
-            assert activation["proposal"]["id"] == proposal["id"]
-            assert activation["proposal"]["source_candidate_ids"] == proposal[
-                "source_candidate_ids"
-            ]
-            assert activation["proposal"]["source_report_ids"] == [report_id]
-            assert activation["proposal"]["evidence_refs"] == proposal["evidence_refs"]
-            assert activation["approval_history"] == [{
-                "decision": "approved", "reviewed_at": activation["proposal"]["reviewed_at"],
-            }]
-            assert activation["history"] == [{
-                "event": "activated", "created_at": activation["created_at"],
-            }]
-            assert activation_list.status_code == 200
-            assert activation_list.json() == [activation]
-            assert verification.status_code == 200
-            assert verification.json()["status"] == "verified"
-            assert verification.json()["advisory_only"] is True
-            assert verification.json()["checks"]["candidate_in_provenance"] is True
-            assert unsupported_verification.json()["status"] == "unverified"
-            assert unsupported_verification.json()["checks"]["evidence_supported"] is False
-            assert verification_list.status_code == 200
-            assert [item["id"] for item in verification_list.json()] == [
-                unsupported_verification.json()["id"], verification.json()["id"],
-            ]
-            assert approved.status_code == 200
-            assert approved.json()[0]["review_history"][0]["decision"] == "approved"
-            assert duplicate_review.status_code == 404
-            assert await isolated_memory.get_fact("user_preference") == original_fact
-        finally:
-            await isolated_memory.close()
-            server.memory = app.state.services.memory = original_memory
-
-    async def test_goal_experience_requires_explicit_api_approval(
-        self, client: AsyncClient, tmp_path,
-    ) -> None:
-        original_memory = server.memory
-        await original_memory.close()
-        isolated_memory = MemoryStore(db_path=tmp_path / "goal-outcomes.db")
-        await isolated_memory.init()
-        server.memory = app.state.services.memory = isolated_memory
-        try:
-            outcome_id = await isolated_memory.record_goal_outcome(
-                goal_id="weekly-review",
-                goal="Review filesystem migration risks",
-                status="completed",
-                evaluation={"satisfied": True, "evidence": "Risks listed."},
-                steps=[{
-                    "id": "inspect", "title": "Inspect filesystem",
-                    "status": "completed", "evidence": "Manifest reviewed.",
-                }],
-                source_conversation_id="scheduled-goal-weekly-review",
-                source_run_id="run-1",
-            )
-
-            listed = await client.get(
-                "/api/memory/goal-outcomes", params={"status": "pending"},
-            )
-            assert listed.status_code == 200
-            assert listed.json()[0]["id"] == outcome_id
-            assert await isolated_memory.retrieve_approved_goal_experiences(
-                "filesystem migration",
-            ) == []
-            assert await isolated_memory.retrieve_approved_goal_knowledge(
-                "filesystem migration",
-            ) == []
-
-            approved = await client.post(
-                f"/api/memory/goal-outcomes/{outcome_id}/approve",
-            )
-            assert approved.status_code == 200
-            [experience] = await isolated_memory.retrieve_approved_goal_experiences(
-                "filesystem migration",
-            )
-            assert experience["id"] == outcome_id
-            [knowledge] = await isolated_memory.retrieve_approved_goal_knowledge(
-                "filesystem migration",
-            )
-            assert knowledge["source_outcome_id"] == outcome_id
-            assert knowledge["approval_status"] == "approved"
-        finally:
-            await isolated_memory.close()
-            server.memory = app.state.services.memory = original_memory
-
-    async def test_goal_knowledge_proposal_api_requires_explicit_approval(
-        self, client: AsyncClient, tmp_path,
-    ) -> None:
-        original_memory = server.memory
-        await original_memory.close()
-        isolated_memory = MemoryStore(db_path=tmp_path / "goal-knowledge-proposals.db")
-        await isolated_memory.init()
-        server.memory = app.state.services.memory = isolated_memory
-        try:
-            source_outcome_id = await isolated_memory.record_goal_outcome(
-                goal_id="migration-review",
-                goal="Review filesystem migration risks",
-                status="completed",
-                evaluation={"satisfied": True, "evidence": "Risks listed."},
-                steps=[{"id": "inspect", "title": "Inspect", "evidence": "Reviewed."}],
-                source_conversation_id="source-conversation",
-                source_run_id="source-run",
-            )
-            assert await isolated_memory.review_goal_experience(source_outcome_id, True)
-            [knowledge] = await isolated_memory.retrieve_approved_goal_knowledge(
-                "filesystem migration",
-            )
-            await isolated_memory.record_goal_knowledge_usage(
-                knowledge["id"], "execution", "execution-conversation", "execution-run",
-            )
-            await isolated_memory.record_goal_outcome(
-                goal_id="migration-review",
-                goal="Review filesystem migration risks",
-                status="blocked",
-                evaluation={"satisfied": False, "reason": "The manifest was unavailable."},
-                steps=[],
-                source_conversation_id="execution-conversation",
-                source_run_id="execution-run",
-            )
-
-            listed = await client.get(
-                "/api/memory/goal-knowledge/proposals", params={"status": "pending"},
-            )
-            assert listed.status_code == 200
-            [proposal] = listed.json()
-            assert proposal["status"] == "pending"
-            assert proposal["execution_outcome_id"]
-            governance = await client.get(
-                "/api/memory/goal-knowledge/governance/evaluate",
-                params={"entity_type": "proposal", "entity_id": proposal["id"]},
-            )
-            assert governance.status_code == 200
-            [governance_decision] = governance.json()
-            assert governance_decision["eligible"] is True
-
-            approved = await client.post(
-                f"/api/memory/goal-knowledge/proposals/{proposal['id']}/approve",
-            )
-            assert approved.status_code == 200
-            assert approved.json()["status"] == "approved"
-
-            await isolated_memory.record_goal_knowledge_usage(
-                knowledge["id"], "execution", "execution-conversation-2", "execution-run-2",
-            )
-            await isolated_memory.record_goal_outcome(
-                goal_id="migration-review",
-                goal="Review filesystem migration risks",
-                status="blocked",
-                evaluation={"satisfied": False, "reason": "The target path was unavailable."},
-                steps=[],
-                source_conversation_id="execution-conversation-2",
-                source_run_id="execution-run-2",
-            )
-            [second_proposal] = [
-                item for item in await isolated_memory.list_goal_knowledge_proposals()
-                if item["conversation_id"] == "execution-conversation-2"
-            ]
-            assert await isolated_memory.review_goal_knowledge_proposal(
-                second_proposal["id"], approved=True,
-            )
-            evaluated = await client.post(
-                "/api/memory/goal-knowledge/refinements/evaluate",
-                params={"knowledge_id": knowledge["id"]},
-            )
-            assert evaluated.status_code == 200
-            [evaluation] = evaluated.json()
-            assert evaluation["eligible"] is True
-            evaluation_history = await client.get(
-                "/api/memory/goal-knowledge/refinement-evaluations",
-                params={"knowledge_id": knowledge["id"]},
-            )
-            assert evaluation_history.status_code == 200
-            [stored_evaluation] = evaluation_history.json()
-            assert stored_evaluation["decision_reason"] == "repeated_approved_improvements"
-            assert stored_evaluation["proposal_ids"] == evaluation["proposal_ids"]
-            listed_refinements = await client.get(
-                "/api/memory/goal-knowledge/refinements", params={"status": "pending"},
-            )
-            assert listed_refinements.status_code == 200
-            [refinement] = listed_refinements.json()
-            refined = await client.post(
-                f"/api/memory/goal-knowledge/refinements/{refinement['id']}/approve",
-            )
-            assert refined.status_code == 200
-            assert refined.json()["status"] == "approved"
-            history = await client.get(
-                "/api/memory/goal-knowledge/governance/history",
-                params={"knowledge_id": knowledge["id"]},
-            )
-            assert history.status_code == 200
-            assert [item["entity_type"] for item in history.json()] == [
-                "proposal", "proposal", "refinement",
-            ]
-            feedback = await client.get(
-                "/api/memory/goal-knowledge/feedback",
-                params={"knowledge_id": knowledge["id"]},
-            )
-            assert feedback.status_code == 200
-            assert len(feedback.json()) == 2
-            assert all(item["signal"] == "failed" for item in feedback.json())
-            evolution = await client.post(
-                "/api/memory/goal-knowledge/evolution/evaluate",
-                params={"knowledge_id": knowledge["id"]},
-            )
-            assert evolution.status_code == 200
-            [evolution_decision] = evolution.json()
-            assert evolution_decision["decision"] == (
-                "review_recommended_after_repeated_failures"
-            )
-            assert len(evolution_decision["evidence"]) == 2
-            evolution_history = await client.get(
-                "/api/memory/goal-knowledge/evolution/evaluations",
-                params={"knowledge_id": knowledge["id"]},
-            )
-            assert evolution_history.status_code == 200
-            [stored_evolution] = evolution_history.json()
-            assert stored_evolution["evidence"] == evolution_decision["evidence"]
-            recommendations = await client.get(
-                "/api/memory/goal-knowledge/evolution/recommendations",
-                params={"knowledge_id": knowledge["id"]},
-            )
-            assert recommendations.status_code == 200
-            [recommendation] = recommendations.json()
-            assert recommendation["id"] == evolution_decision["recommendation_id"]
-        finally:
-            await isolated_memory.close()
-            server.memory = app.state.services.memory = original_memory
-
-
-# ---------------------------------------------------------------------------
-# MCP Server Management
-# ---------------------------------------------------------------------------
-
 class TestMCPServerManagement:
     async def test_list_mcp_servers_empty(self, client: AsyncClient) -> None:
         resp = await client.get("/api/mcp/servers")
@@ -1439,8 +921,6 @@ class TestWebSocketProtocol:
         run = server.RunState("tool-failure-run", "conv-2", "test-model")
         memory_mock = SimpleNamespace(
             save_conversation_metadata=AsyncMock(),
-            record_agent_reflection=AsyncMock(),
-            mark_agent_reflections_recovered=AsyncMock(),
         )
         monkeypatch.setattr(server, "memory", memory_mock)
         server.app.state.services.memory = memory_mock
@@ -1458,22 +938,8 @@ class TestWebSocketProtocol:
         assert tool_event["data"]["error_category"] == "tool"
         assert any(event["event"] == "run.completed" for event in socket.events)
         assert run.status == "completed"
-        memory_mock.record_agent_reflection.assert_awaited_once_with(
-            category="tool",
-            component="fs__read",
-            summary="Tool call failed: tool timed out",
-            resolution_hint=(
-                "Review the tool error and validate a corrected request before retrying."
-            ),
-            source_conversation_id="conv-2",
-            source_run_id="tool-failure-run",
-            model="test-model",
-        )
-        memory_mock.mark_agent_reflections_recovered.assert_awaited_once_with(
-            "tool-failure-run"
-        )
 
-    async def test_success_without_tool_failures_does_not_write_recovery_state(
+    async def test_success_without_tool_failures_completes(
         self, monkeypatch
     ) -> None:
         from types import SimpleNamespace
@@ -1486,8 +952,6 @@ class TestWebSocketProtocol:
 
         memory_mock = SimpleNamespace(
             save_conversation_metadata=AsyncMock(),
-            record_agent_reflection=AsyncMock(),
-            mark_agent_reflections_recovered=AsyncMock(),
         )
         run = server.RunState("clean-run", "conv-clean", "test-model")
         monkeypatch.setattr(server, "memory", memory_mock)
@@ -1497,9 +961,8 @@ class TestWebSocketProtocol:
 
         await server._execute_run("clean-connection", run, "hello", None)
 
-        memory_mock.mark_agent_reflections_recovered.assert_not_awaited()
 
-    async def test_model_and_runtime_failures_are_reflected_with_provenance(
+    async def test_model_and_runtime_failures_emit_failure_events(
         self, monkeypatch
     ) -> None:
         from types import SimpleNamespace
@@ -1516,8 +979,6 @@ class TestWebSocketProtocol:
 
         memory_mock = SimpleNamespace(
             save_conversation_metadata=AsyncMock(),
-            record_agent_reflection=AsyncMock(),
-            mark_agent_reflections_recovered=AsyncMock(),
         )
         monkeypatch.setattr(server, "memory", memory_mock)
         server.app.state.services.memory = memory_mock
@@ -1543,13 +1004,9 @@ class TestWebSocketProtocol:
                 await server._execute_run(conn_id, run, "perform work", None)
             finally:
                 server.runtime_mgr.connections.pop(conn_id, None)
-
-        calls = memory_mock.record_agent_reflection.await_args_list
-        assert [(call.kwargs["category"], call.kwargs["source_run_id"])
-                for call in calls] == [
-            ("model", "model-failure-run"),
-            ("runtime", "runtime-failure-run"),
-        ]
+            assert run.status == "failed"
+            failed = next(event for event in socket.events if event["event"] == "run.failed")
+            assert failed["data"]["category"] == category
 
     async def test_run_start_emits_agent_events(self, monkeypatch) -> None:
         """A run.start message should produce agent_event envelopes."""
@@ -1695,8 +1152,7 @@ class TestBackendParityWave1:
         socket = Socket()
         run = server.RunState("ask-user-run", "ask-user-conv", "model")
         memory_mock = SimpleNamespace(
-            save_conversation_metadata=AsyncMock(), record_agent_reflection=AsyncMock(),
-            mark_agent_reflections_recovered=AsyncMock(),
+            save_conversation_metadata=AsyncMock(),
         )
         monkeypatch.setattr(server, "memory", memory_mock)
         server.app.state.services.memory = memory_mock
@@ -1748,7 +1204,7 @@ class TestBackendParityWave1:
         store = server.orchestrator.checkpoints
         # Keep test snapshots out of the user's real %LOCALAPPDATA%\Atlas\checkpoints.
         monkeypatch.setattr(store, "storage_dir", (tmp_path / "checkpoints").resolve())
-        baseline = store.create_checkpoint(
+        store.create_checkpoint(
             workspace, ["note.txt"], run_id="diff-run", conversation_id="diff-conv",
         )
         file.write_text("after\n", encoding="utf-8")
@@ -1896,7 +1352,7 @@ class TestBackendParityWave1:
         # and cut on user-turn boundaries (a fork through a turn keeps the
         # whole turn, including its assistant reply).
         first = append_session_message(DATA_ROOT / "engine", conv_id, "user", "first")
-        second = append_session_message(DATA_ROOT / "engine", conv_id, "assistant", "second")
+        append_session_message(DATA_ROOT / "engine", conv_id, "assistant", "second")
         third = append_session_message(DATA_ROOT / "engine", conv_id, "user", "third")
         fork = await client.post(f"/api/conversations/{conv_id}/fork", json={
             "through_message_id": first,
@@ -1994,51 +1450,3 @@ class TestBackendParityWave1:
         assert socket.events[0]["sequence"] == 5
         assert socket.events[0]["event"] == "run.failed"
         assert socket.events[0]["data"]["category"] == "interrupted"
-
-
-async def test_knowledge_health_approval_and_consolidated_insights_api(
-    client: AsyncClient,
-) -> None:
-    created = await client.post("/api/memory/knowledge-health-reports")
-    assert created.status_code == 200
-    health_id = created.json()["id"]
-    assert created.json()["status"] == "pending"
-
-    rejected = await client.post(
-        f"/api/memory/knowledge-health-reports/{health_id}/reject"
-    )
-    assert rejected.status_code == 200
-    assert rejected.json()["status"] == "rejected"
-    assert (await client.post(
-        f"/api/memory/knowledge-health-reports/{health_id}/approve"
-    )).status_code == 404
-
-    approved_created = await client.post("/api/memory/knowledge-health-reports")
-    assert approved_created.status_code == 200
-    approved_id = approved_created.json()["id"]
-    approved = await client.post(
-        f"/api/memory/knowledge-health-reports/{approved_id}/approve"
-    )
-    assert approved.status_code == 200
-    assert approved.json()["status"] == "approved"
-    assert (await client.post(
-        f"/api/memory/knowledge-health-reports/{approved_id}/reject"
-    )).status_code == 404
-
-    listed = await client.get("/api/memory/knowledge-health-reports")
-    assert listed.status_code == 200
-    listed_by_id = {item["id"]: item for item in listed.json()}
-    assert listed_by_id[health_id]["status"] == "rejected"
-    assert listed_by_id[health_id]["review_history"][0]["decision"] == "rejected"
-    assert listed_by_id[approved_id]["status"] == "approved"
-    assert listed_by_id[approved_id]["review_history"][0]["decision"] == "approved"
-
-    insights = await client.post("/api/memory/consolidated-insights")
-    assert insights.status_code == 200
-    assert insights.json() == []
-    listed_insights = await client.get("/api/memory/consolidated-insights")
-    assert listed_insights.status_code == 200
-    assert listed_insights.json() == []
-    applications = await client.get("/api/memory/insight-applications")
-    assert applications.status_code == 200
-    assert applications.json() == []
