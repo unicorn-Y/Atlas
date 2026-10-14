@@ -51,4 +51,4 @@ Not run: Atlas has not yet loaded this branch on the host. The two requested que
 
 ## Push state
 
-At the time of this record, the purge branch changes have not yet been committed or pushed to `memory-v1`. The remote will be fetched again immediately before the push; its last observed `origin/memory-v1` tip was the starting base above.
+The remote was fetched immediately before the push; `origin/memory-v1` was still at the starting base above, so the update was a fast-forward. Commit `024321f33c8a6aa0f8f2e97f6ec25e633ed39334` was pushed to both `memory-purge` and `memory-v1`. A subsequent fetch confirmed both remote tips and the local `HEAD` are `024321f33c8a6aa0f8f2e97f6ec25e633ed39334`.
