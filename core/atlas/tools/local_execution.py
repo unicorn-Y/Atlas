@@ -41,6 +41,18 @@ _MAX_READ_PAGE_BYTES = 1024 * 1024
 _MAX_READ_LINES = 2000
 
 
+def _trim_partial_char(raw: bytes, encoding: str) -> bytes:
+    """Drop a multi-byte character cut in half at the end of a byte page."""
+    if encoding.lower().replace("-", "").replace("_", "") not in ("utf8", "utf8sig"):
+        return raw
+    for back in range(1, min(4, len(raw)) + 1):
+        lead = raw[-back]
+        if lead & 0xC0 != 0x80:  # found the start byte of the last character
+            width = 1 if lead < 0x80 else 2 if lead >> 5 == 0b110 else 3 if lead >> 4 == 0b1110 else 4
+            return raw[:-back] if width > back else raw
+    return raw
+
+
 def _find_git_bash() -> str | None:
     """Find MSYS/Git Bash, preferring the installation paired with Git on PATH."""
     candidates: list[Path] = []
@@ -650,15 +662,10 @@ class LocalExecutionRuntime:
 
     @staticmethod
     def _ensure_workspace_path(path: Path, workspace: Path | None) -> None:
-        if workspace is None:
-            raise PermissionError("Workspace write scope is unavailable; refusing local file mutation. "
-                                  "Select an active workspace before retrying this mutation; "
-                                  "a cwd argument does not authorize file writes.")
-        try:
-            path.relative_to(workspace)
-        except ValueError as exc:
-            raise PermissionError(f"Path is outside the active workspace: {path}") from exc
-        if path == workspace:
+        # Atlas runs unsandboxed like a CLI agent: approval is the permission
+        # layer's job, so a missing or different workspace no longer blocks
+        # writes (it forced the model into base64-through-shell workarounds).
+        if workspace is not None and path == workspace:
             raise PermissionError("Mutating the workspace root itself is not allowed")
 
     @staticmethod
@@ -687,6 +694,8 @@ class LocalExecutionRuntime:
                     raw = stream.read(byte_limit + 1)
                 truncated = len(raw) > byte_limit
                 raw = raw[:byte_limit]
+                if truncated and not args.get("binary"):
+                    raw = _trim_partial_char(raw, encoding)
                 next_offset = byte_offset + len(raw)
                 complete = not truncated and next_offset >= path.stat().st_size
             elif args.get("offset") is not None or args.get("limit") is not None:
@@ -731,7 +740,7 @@ class LocalExecutionRuntime:
                 "total_size": total_size,
                 "content": base64.b64encode(raw).decode("ascii")
                 if args.get("binary")
-                else raw.decode(encoding),
+                else raw.decode(encoding, errors="replace"),
                 "encoding": "base64" if args.get("binary") else encoding,
                 "truncated": truncated,
                 "complete": complete,

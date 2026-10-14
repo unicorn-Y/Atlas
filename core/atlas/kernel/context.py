@@ -25,6 +25,8 @@ COMPACTABLE_TOOLS = frozenset({
     "Read", "Bash", "Grep", "Glob", "WebFetch", "WebSearch", "Edit", "Write", "ApplyPatch",
     "read_file", "search_files", "terminal", "local_shell", "local_file", "local_edit",
     "write_file", "patch", "apply_patch", "edit", "exec_command", "web_fetch", "web_search",
+    "local_exec", "local_process", "local_git", "local_edit_batch", "powershell", "execute_code",
+    "session_search", "filesystem__read_text_file",
 })
 SUMMARY_PROMPT = (
     "Summarize this conversation for another agent to continue the same task. "
@@ -98,13 +100,17 @@ class ContextManager:
                 pass
         return str(path.resolve())
 
+    @staticmethod
+    def _micro_threshold(budget_tokens: int) -> int:
+        return max(0, min(int(budget_tokens * 0.9), budget_tokens - 2000))
+
     def microcompact(self, history: Sequence[Mapping[str, Any]], *, budget_tokens: int,
                      prefix_tokens: int = 0) -> list[dict[str, Any]]:
         messages = copy.deepcopy(list(history))
         cfg = self.config.get("microcompact", {})
         if cfg.get("enabled") is False:
             return messages
-        threshold = max(0, min(int(budget_tokens * 0.9), budget_tokens - 2000))
+        threshold = self._micro_threshold(budget_tokens)
         idle = (self.last_assistant_completed_at is not None and
                 time.time() - self.last_assistant_completed_at > float(cfg.get("idle_minutes", 60)) * 60)
         if not idle and estimate_tokens(messages) + prefix_tokens < threshold:
@@ -172,7 +178,11 @@ class ContextManager:
         result = CompactionResult(messages, method, before, after, budget)
         if before_compact is not None and (method != "none" or after > budget or manual or force):
             await before_compact(result)
-        if after <= budget and not manual and not force:
+        # Hysteresis: if trimming old tool outputs could not bring the context back
+        # under the microcompact threshold, summarize now. Otherwise every later
+        # request nibbles one more tool result (each nibble busts the prompt cache)
+        # until the hard budget is finally hit.
+        if after <= self._micro_threshold(budget) and not manual and not force:
             return result
         if summarize is None:
             result.error = "context_over_budget: no summarizer available"
