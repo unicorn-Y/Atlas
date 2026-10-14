@@ -50,6 +50,27 @@ tool_loop_guardrails:
   non_interactive_hard_stop_enabled: false
 # 上下文文件（AGENTS.md 等）截断上限，默认动态 20K；放开到 120K。
 context_file_max_chars: 120000
+engine:
+  prune_trigger_ratio: 0.55
+  summary_trigger_ratio: 0.70
+  prune:
+    enabled: true
+    trigger_ratio: 0.55
+    protect_tokens: 40000
+    minimum_tokens: 20000
+    protected_tools: [skill, use_skill]
+  keep_recent_tokens: 20000
+  tool_serialize_max_chars: 2000
+  summary_model: null
+  summary_max_tokens: 4096
+  summary_retry_count: 1
+  compaction_ineffective_limit: 2
+  max_compaction_failures: 3
+  restore_max_files: 5
+  restore_file_tokens: 5000
+  restore_total_file_tokens: 50000
+  restore_skill_tokens: 5000
+  restore_total_skill_tokens: 25000
 mcp_servers:
   rea:
     command: C:\Program Files\nodejs\node.exe

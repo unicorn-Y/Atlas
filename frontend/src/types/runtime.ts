@@ -15,6 +15,8 @@ export type AgentEventType =
   | 'run.model_switched' | 'run.verify_nudge'
   | 'session.title'
   | 'process.completed' | 'process.notification' | 'run.compaction.progress' | 'run.recovery.notice' | 'context.window.switched'
+  | 'handoff.proposed'
+  | 'handoff.suggested'
   | 'run.completed' | 'run.failed' | 'run.cancelled'
   | 'lsp.diagnostics' | 'review.findings'
   | 'computer.foreground_required' | 'computer.foreground_resumed' | 'computer.foreground_denied' | 'computer.step'

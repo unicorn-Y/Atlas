@@ -83,6 +83,8 @@ export type TimelineItem =
   | { kind: 'foreground'; id: string; event: AgentEvent }
   /** X2：浏览器代理卡住要把这一步交还给人（browser.handoff_required）。 */
   | { kind: 'handoff'; id: string; event: AgentEvent }
+  | { kind: 'handoff-proposal'; id: string; event: AgentEvent }
+  | { kind: 'handoff-suggestion'; id: string; event: AgentEvent }
   | { kind: 'group'; id: string; summary: string; results: Array<{ index: number; title: string; status: string; accepted?: boolean; verification_status?: string; verifier_note?: string; summary: string; changed_files: string[] }> }
   | { kind: 'checks'; id: string; results: CheckResults }
   | { kind: 'cancelled'; id: string; reason?: string }
@@ -484,6 +486,14 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       case 'browser.handoff_required':
         closeReply(); closeBlocks();
         items.push({ kind: 'handoff', id: event.id, event });
+        break;
+      case 'handoff.proposed':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'handoff-proposal', id: event.id, event });
+        break;
+      case 'handoff.suggested':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'handoff-suggestion', id: event.id, event });
         break;
       case 'message.delta':
         if (!reply) { reply = { kind: 'reply', id: event.id, content: '', streaming: true }; items.push(reply); closeBlocks(); }

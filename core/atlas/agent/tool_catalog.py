@@ -165,6 +165,7 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
                     "query": {"type": "string"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 25},
                     "context": {"type": "integer", "minimum": 0, "maximum": 6},
+                    "conversation_id": {"type": "string", "description": "Optional conversation ID to restrict lookup, including a parent session linked by handoff."},
                 }, "required": ["query"], "additionalProperties": False},
             },
         }]
@@ -218,10 +219,27 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
         "type": "function", "function": {
             "name": "new_context_window",
             "description": (
-                "Create a concise handoff summary of this task, then continue with a clean "
-                "model context while preserving the conversation history."
+                "Compact the current Atlas conversation with the context engine and continue in a clean model context. "
+                "Call only at a natural task boundary: after a subtask or phase is complete, a plan is settled, "
+                "tests have just passed, or work is moving from planning into implementation. Do not call while "
+                "investigating, calculating, or implementing in the middle of a task."
             ),
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    })
+    tools.append({
+        "type": "function", "function": {
+            "name": "propose_handoff",
+            "description": (
+                "Propose a user-approved handoff into a new conversation. Call only when a phase is complete, "
+                "a plan is settled, tests have just passed, or work is moving from planning into implementation. "
+                "Do not call while debugging, calculating, or implementing in the middle of a task. The user must "
+                "accept the proposal; otherwise keep working in this conversation."
+            ),
+            "parameters": {"type": "object", "properties": {
+                "goal": {"type": "string", "minLength": 1, "maxLength": 4000},
+                "context": {"type": "string", "maxLength": 12000},
+            }, "required": ["goal"], "additionalProperties": False},
         },
     })
     tools.append({

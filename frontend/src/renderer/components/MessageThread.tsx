@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type MutableRefObject } from 'react';
 import { Virtuoso, type StateSnapshot, type VirtuosoHandle } from 'react-virtuoso';
-import { History, ListChecks } from 'lucide-react';
+import { ChevronDown, History, ListChecks } from 'lucide-react';
 import type { ConversationMessage as ConversationMessageData } from '@atlas/backend-adapter';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { TimelineRow } from './ConversationActivity';
@@ -24,11 +24,40 @@ const firstItemIndexByConversation = new Map<string, number>();
 
 const EMPTY_EVENTS: AgentEvent[] = [];
 
+function isCompactionSummary(message: ConversationMessageData): boolean {
+  const metadata = message.metadata && typeof message.metadata === 'object'
+    ? message.metadata as Record<string, unknown> : {};
+  return metadata._compressed_summary === true
+    || (message.role === 'user' && message.content.startsWith('[Conversation continuation summary]'));
+}
+
+export function CompactionNotice({ message }: { message: ConversationMessageData }) {
+  const [open, setOpen] = useState(false);
+  const metadata = message.metadata && typeof message.metadata === 'object'
+    ? message.metadata as Record<string, unknown> : {};
+  const before = metadata.compaction_before_tokens;
+  const after = metadata.compaction_after_tokens;
+  const label = typeof before === 'number' && typeof after === 'number'
+    ? `已压缩上下文（${before.toLocaleString()}→${after.toLocaleString()} token）`
+    : '已压缩上下文（token 数量不可用）';
+  const summary = message.content.replace(/^\[Conversation continuation summary\]\s*/u, '');
+  return <div className="my-3 flex justify-center">
+    <div className="w-full max-w-3xl rounded-xl border border-line bg-sunken/50 px-3.5 py-2.5 text-[12px] text-fg-3">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 text-left hover:text-fg">
+        <span>{label}</span><ChevronDown size={13} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
+      </button>
+      {open && <pre className="mb-0 mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words border-t border-line pt-2 font-sans leading-relaxed text-fg-2">{summary}</pre>}
+    </div>
+  </div>;
+}
+
 /** 合并后的列表行：历史消息 + 实时时间线 + 头尾占位，交给一个 Virtuoso 实例统一虚拟化。 */
 type ThreadRow =
   | { kind: 'load-earlier'; id: string }
   | { kind: 'truncated'; id: string; count: number }
   | { kind: 'history'; id: string; message: ConversationMessageData; continued?: boolean }
+  | { kind: 'compaction'; id: string; message: ConversationMessageData }
   | { kind: 'empty'; id: string }
   | { kind: 'timeline'; id: string; item: TimelineItem; firstInTurn: boolean; last: boolean };
 
@@ -41,7 +70,7 @@ function timelineClass(item: TimelineItem): ThreadClassId {
     case 'user': case 'reply': return 'messages';
     case 'reasoning': return 'model';
     case 'steps': case 'group': return 'tools';
-    case 'approval': case 'question': case 'trust': case 'foreground': case 'handoff': return 'approvals';
+    case 'approval': case 'question': case 'trust': case 'foreground': case 'handoff': case 'handoff-proposal': case 'handoff-suggestion': return 'approvals';
     case 'plan': return 'plans';
     case 'checks': case 'review': case 'lsp': return 'checks';
     case 'artifact': case 'done': return 'files';
@@ -55,6 +84,7 @@ function pendingInteraction(row: ThreadRow, answers: Record<string, string | und
   switch (item.kind) {
     case 'foreground':
     case 'handoff':
+    case 'handoff-proposal':
     case 'approval':
       return true;
     case 'question':
@@ -130,7 +160,7 @@ function collectSearchText(value: unknown, output: string[], key = '') {
 }
 
 function searchTextForRow(row: ThreadRow): string {
-  if (row.kind === 'history') return row.message.content;
+  if (row.kind === 'history' || row.kind === 'compaction') return row.message.content;
   if (row.kind !== 'timeline') return '';
   const values: string[] = [];
   collectSearchText(row.item, values);
@@ -223,6 +253,12 @@ export default function MessageThread({ history, username, historyActions, empty
       const createdAt = message.created_at ?? '';
       const startedAt = previousAt;
       previousAt = createdAt || previousAt;
+      if (isCompactionSummary(message)) {
+        flushSteps();
+        rows.push({ kind: 'compaction', id: `compaction-${message.id}`, message });
+        historyHeaded = true;
+        continue;
+      }
       if (message.role === 'tool') {
         const step = stepsById.get(String(metadata.tool_call_id ?? ''));
         if (step) attachHistoryResult(step, message.content, metadata, createdAt);
@@ -452,6 +488,7 @@ export default function MessageThread({ history, username, historyActions, empty
           <ListChecks size={13} className="shrink-0 text-brand" /><span>{todoEditNotice(row.message.content)}</span>
         </div>;
         return <ConversationMessage role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} />;
+      case 'compaction': return <CompactionNotice message={row.message} />;
       case 'empty':
         return emptyState;
       case 'timeline':

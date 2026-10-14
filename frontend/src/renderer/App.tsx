@@ -190,6 +190,10 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [input, setInput] = useState('');
+  const [handoffOpen, setHandoffOpen] = useState(false);
+  const [handoffGoal, setHandoffGoal] = useState('');
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffError, setHandoffError] = useState('');
   const [homeMode, setHomeMode] = useState('chat');
   const [createPrompt, setCreatePrompt] = useState('');
   const [toast, setToast] = useState('');
@@ -206,6 +210,28 @@ export default function App() {
   const [mentions, setMentions] = useState<MentionItem[]>([]);
   const composerSnapshotRef = useRef({ text: input, attachments, files, mentions });
   composerSnapshotRef.current = { text: input, attachments, files, mentions };
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ goal?: string }>).detail;
+      setHandoffGoal(typeof detail?.goal === 'string' ? detail.goal : '');
+      setHandoffError(''); setHandoffOpen(true);
+    };
+    const draft = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversation?: { id: string }; prompt_draft?: string }>).detail;
+      if (!detail?.conversation?.id || typeof detail.prompt_draft !== 'string') return;
+      writeDraft(detail.conversation.id, detail.prompt_draft);
+      setInput(detail.prompt_draft);
+      setHandoffOpen(false);
+      setHandoffError('');
+      setToast('接力提示已放入新会话草稿');
+    };
+    window.addEventListener('atlas:handoff-open', open);
+    window.addEventListener('atlas:handoff-draft', draft);
+    return () => {
+      window.removeEventListener('atlas:handoff-open', open);
+      window.removeEventListener('atlas:handoff-draft', draft);
+    };
+  }, []);
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
   const [branches, setBranches] = useState<string[]>([]);
@@ -709,6 +735,23 @@ export default function App() {
     go('chat');
     void store.openConversation(conversation);
   };
+  const submitHandoff = async () => {
+    const sourceId = useAtlasStore.getState().activeConversationId;
+    const goal = handoffGoal.trim();
+    if (!sourceId || !goal) { setHandoffError('请写明接下来要做什么'); return; }
+    setHandoffBusy(true); setHandoffError('');
+    try {
+      const result = await store.createHandoff(sourceId, {
+        goal, source: 'user', run_id: useAtlasStore.getState().activeRunId ?? undefined,
+      });
+      writeDraft(result.conversation.id, result.prompt_draft);
+      setInput(result.prompt_draft);
+      setHandoffOpen(false);
+      setToast('接力提示已放入新会话草稿');
+    } catch (error) {
+      setHandoffError(error instanceof Error ? error.message : String(error));
+    } finally { setHandoffBusy(false); }
+  };
   const draft = (text: string) => {
     go('chat');
     if (store.activeConversationId) skipDraftRestoreRef.current = true;
@@ -875,6 +918,7 @@ export default function App() {
     ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
     ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩上下文，可附说明让摘要优先保留相关事项', takesArgument: true, run: (note: string) => void store.compactConversation(activeConversation.id, note).then((text) => { if (text) setToast(text); }) }] : []),
+    ...(activeConversation ? [{ id: 'handoff', label: '/handoff', hint: '把下一阶段接力到新会话；提示会作为草稿', takesArgument: true, run: (goal: string) => { setHandoffGoal(goal.trim()); setHandoffError(''); setHandoffOpen(true); } }] : []),
     { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
     { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
     { id: 'memory', label: '/memory', hint: '打开记忆', run: () => go('memory') },
@@ -1216,6 +1260,8 @@ export default function App() {
   canRewriteRef.current = canRewrite;
 
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
+  const handoffParent = activeConversation?.handoff_from
+    ? store.conversations.find((item) => item.id === activeConversation.handoff_from) : undefined;
   const besideConversation = view === 'chat' && besideId !== store.activeConversationId ? store.conversations.find((item) => item.id === besideId) : undefined;
   const runningConversations = store.runs.filter((run) => !TERMINAL.includes(run.status)).map((run) => run.conversationId);
   const waitingConversations = [...new Set(store.runs.filter((run) => run.status === 'waiting').map((run) => run.conversationId))];
@@ -1250,6 +1296,10 @@ export default function App() {
               ? <TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} />
               : pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
             {view === 'chat' && <ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} />}
+            {handoffParent && <button type="button" onClick={() => openConversation(handoffParent)}
+              className="truncate text-[11.5px] text-brand hover:underline" title={`接力目标：${activeConversation?.handoff_goal ?? ''}`}>
+              接力自：{handoffParent.title}
+            </button>}
             {connection}
           </div>
           {/* With tabs the left group already fills the bar; its empty part still drags the window. */}
@@ -1429,6 +1479,22 @@ export default function App() {
     </Dialog>
 
     <Palette items={paletteItems} open={paletteOpen} onClose={() => setPaletteOpen(false)} search={searchMessages} />
+
+    <Dialog open={handoffOpen} onOpenChange={(open) => { if (!handoffBusy) setHandoffOpen(open); }} label="接力到新会话" className="w-[min(560px,92vw)] bg-panel p-5 shadow-xl">
+      <h2 className="m-0 text-[16px] font-semibold text-heading">接力到新会话</h2>
+      <p className="mb-3 mt-1 text-[12.5px] text-fg-3">当前模型会整理必要上下文和文件线索，结果只会放进新会话草稿，不会自动发送。</p>
+      <label className="block text-[12.5px] text-fg-2">接下来要做什么？
+        <textarea autoFocus value={handoffGoal} onChange={(event) => setHandoffGoal(event.target.value)} rows={3}
+          className="mt-1.5 block w-full resize-y rounded-xl border border-line bg-sunken px-3 py-2 text-[13px] text-fg outline-none focus:border-brand" />
+      </label>
+      {handoffError && <p role="alert" className="mb-0 mt-2 text-[12px] text-danger">{handoffError}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setHandoffOpen(false)} disabled={handoffBusy}>取消</Button>
+        <Button size="sm" onClick={() => void submitHandoff()} disabled={handoffBusy || !handoffGoal.trim()}>
+          {handoffBusy ? '正在整理…' : '创建接力草稿'}
+        </Button>
+      </div>
+    </Dialog>
 
     {voiceOpen && <VoiceOverlay
       onClose={(toChat) => { setVoiceOpen(false); if (toChat) go('chat'); }}

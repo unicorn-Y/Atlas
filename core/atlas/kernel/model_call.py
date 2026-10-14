@@ -851,6 +851,8 @@ async def complete_stream(
                              "model": route.model_id or candidate,
                              "provider": route.provider, "category": error.category,
                              "status": error.status,
+                             "status_code": error.status,
+                             "error": f"{type(exc).__name__}: {exc}"[:500],
                              "duration_ms": int((time.monotonic() - attempt_started) * 1000),
                              "retry": will_retry,
                              "retry_kind": retry_kind,

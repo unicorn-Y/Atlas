@@ -142,6 +142,7 @@ def _session_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _compaction_payload(
     messages: list[dict[str, Any]], held: list[dict[str, Any]], *,
     synthetic_system_prompt: str, method: str,
+    before_tokens: int | None = None, after_tokens: int | None = None,
 ) -> tuple[list[dict[str, Any]], int, list[dict[str, Any]]]:
     """Strip the per-request prefix and identify durable rows carried verbatim."""
     compacted = copy.deepcopy(messages)
@@ -160,6 +161,12 @@ def _compaction_payload(
         if (item.get("role") == "user" and isinstance(item.get("content"), str)
                 and item["content"].startswith("[Conversation continuation summary]")):
             item["_compressed_summary"] = True
+            metadata = dict(item.get("display_metadata") or {})
+            if before_tokens is not None:
+                metadata["compaction_before_tokens"] = int(before_tokens)
+            if after_tokens is not None:
+                metadata["compaction_after_tokens"] = int(after_tokens)
+            item["display_metadata"] = metadata
 
     tail_count = 0
     carried: list[dict[str, Any]] = []
@@ -642,7 +649,7 @@ class AtlasKernel:
             proxy_runtime.context_remaining_callback = context_remaining_callback
 
             async def new_context_window_callback() -> dict[str, Any]:
-                result = await prepare_compaction(force=True)
+                result = await prepare_compaction(force=True, trigger="model_tool")
                 if result.error or result.method == "none":
                     raise RuntimeError(result.error or "No safe conversation history could be compacted.")
                 return {"method": result.method, "before_tokens": result.before_tokens,
@@ -716,7 +723,9 @@ class AtlasKernel:
                             state.streamed_tool_calls.pop(key, None)
                     record("model_error", purpose=purpose, model=event.get("model"),
                            provider=event.get("provider"), category=event.get("category"),
-                           status=event.get("status"), retry=event.get("retry"),
+                           status=event.get("status"), status_code=event.get("status_code", event.get("status")),
+                           error=str(event.get("error") or "")[:500], retry=event.get("retry"),
+                           duration_ms=event.get("duration_ms"),
                            attempt=event.get("attempt"),
                            retry_delay_s=event.get("retry_delay_s"),
                            retry_after_s=event.get("retry_after_s"),
@@ -844,13 +853,19 @@ class AtlasKernel:
                                      if item.get("id") == turn_model), {})
                 model_window = int(model_config.get("context_window") or 200_000)
 
-                async def summarize(old: list[dict[str, Any]], summary_prompt: str) -> str:
+                primary_summary_model = turn_model
+                configured_summary_model = engine_config.get("summary_model")
+                summary_route_model = str(configured_summary_model or primary_summary_model)
+
+                async def summarize_with_model(
+                    model_id: str, old: list[dict[str, Any]], summary_prompt: str,
+                ) -> str:
                     from atlas.models.reasoning_stages import effort_for_phase, load_stage_config
 
                     stage_config = load_stage_config()
                     summary_effort = effort_for_phase(stage_config, "planning")
                     result = await complete_stream(
-                        agent, turn_model,
+                        agent, model_id,
                         [*old, {"role": "user", "content": summary_prompt}], [],
                         reasoning_effort=summary_effort or turn_effort,
                         max_output_tokens=min(int(engine_config.get("summary_max_tokens", 4096)), 8192),
@@ -864,6 +879,16 @@ class AtlasKernel:
                         usage_budget=usage_budget,
                     )
                     return result.text
+
+                async def summarize(old: list[dict[str, Any]], summary_prompt: str) -> str:
+                    return await summarize_with_model(summary_route_model, old, summary_prompt)
+
+                async def summarize_primary(old: list[dict[str, Any]], summary_prompt: str) -> str:
+                    return await summarize_with_model(primary_summary_model, old, summary_prompt)
+
+                context_manager.set_summary_fallback(
+                    summarize_primary if summary_route_model != primary_summary_model else None,
+                )
 
                 compaction_lease: dict[str, Any] = {"holder": None, "watermark": None}
                 held_messages = copy.deepcopy(durable_history)
@@ -891,12 +916,17 @@ class AtlasKernel:
                         )
                         compaction_lease.update({"holder": holder, "watermark": watermark})
 
-                async def prepare_compaction(*, force: bool = False) -> Any:
+                async def prepare_compaction(*, force: bool = False, trigger: str | None = None) -> Any:
                     nonlocal durable_history, held_messages, history, messages, prompt
                     nonlocal compaction_trigger
-                    compaction_trigger = (
-                        "provider_context_window_exceeded" if force else "automatic"
-                    )
+                    compaction_started = time.monotonic()
+                    latest_provider_input = next((
+                        row.get("input_tokens") for row in reversed(usage_rows)
+                        if row.get("purpose") == "conversation" and row.get("usage_available")
+                        and isinstance(row.get("input_tokens"), int)
+                    ), None)
+                    context_manager.set_provider_usage(latest_provider_input)
+                    compaction_trigger = trigger or ("provider_overflow" if force else "automatic")
                     try:
                         result = await context_manager.prepare(
                             messages, model_window=model_window, summarize=summarize,
@@ -919,6 +949,12 @@ class AtlasKernel:
                                     compaction_lease["holder"],
                                 )
                             compaction_lease["holder"] = None
+                        record("compaction", trigger=compaction_trigger, method="skipped",
+                               before_tokens=estimate_tokens(messages), after_tokens=estimate_tokens(messages),
+                               pruned_results=0, deduped=0, restored_files=[], summary_model=None,
+                               guard_missing=[], ineffective_streak=getattr(context_manager, "ineffective_streak", 0),
+                               duration_ms=int((time.monotonic() - compaction_started) * 1000),
+                               error=f"{type(exc).__name__}: {exc}"[:500])
                         if (isinstance(exc, ModelCallError)
                                 and exc.category == "hook_blocked"):
                             size = estimate_tokens(messages)
@@ -936,6 +972,8 @@ class AtlasKernel:
                             result.messages, held_messages,
                             synthetic_system_prompt=prompt.system_prompt,
                             method=result.method,
+                            before_tokens=result.before_tokens,
+                            after_tokens=result.after_tokens,
                         )
                         try:
                             from atlas.engine.session_sync import compact_session_messages
@@ -952,10 +990,12 @@ class AtlasKernel:
                                 category="context_budget",
                             ) from exc
                         compaction_lease["holder"] = None
+                        invalidated_ids = getattr(result, "invalidated_read_tool_call_ids", None) or []
+                        if invalidated_ids:
+                            from atlas.engine.read_dedupe import invalidate_read_dedupe
+
+                            invalidate_read_dedupe(proxy_runtime, invalidated_ids)
                         transition(RunPhase.COMPACTING)
-                        record("compaction", method=result.method,
-                               before_tokens=result.before_tokens, after_tokens=result.after_tokens,
-                               budget_tokens=result.budget_tokens, forced=force)
                         if request.lifecycle_hook_callback is not None:
                             await self._run_hook(request, "PostCompact", {
                                 "trigger": compaction_trigger, "conversation_id": session_id,
@@ -983,6 +1023,81 @@ class AtlasKernel:
                             messages.extend(copy.deepcopy(pending_nudges))
                         else:
                             messages = result.messages
+                        from atlas.engine.compact_restore import restore_post_compaction_context
+
+                        plan_todo_messages: list[dict[str, Any]] = []
+                        current_plan = getattr(proxy_runtime, "plan_state", None) or request.plan_state
+                        if current_plan:
+                            plan_todo_messages.append({
+                                "role": "system",
+                                "content": "当前执行计划（原样保留）：\n" + json.dumps(
+                                    current_plan, ensure_ascii=False, default=str,
+                                ),
+                            })
+                        todo_store = getattr(proxy_runtime, "todo_store", None)
+                        if todo_store is not None:
+                            todo_snapshot = todo_store.snapshot()
+                            if todo_snapshot:
+                                plan_todo_messages.append({
+                                    "role": "system",
+                                    "content": "当前 Todo（原样保留）：\n" + json.dumps(
+                                        todo_snapshot, ensure_ascii=False, default=str,
+                                    ),
+                                })
+                        restored = restore_post_compaction_context(
+                            proxy_runtime,
+                            modified_files=getattr(result, "modified_files", []) or [],
+                            plan_todo_messages=plan_todo_messages,
+                            active_skills=[
+                                skill for skill in request.active_skill_instructions or []
+                                if skill.get("version")
+                            ],
+                            max_files=int(engine_config.get("restore_max_files", 5)),
+                            max_tokens_per_file=int(engine_config.get("restore_file_tokens", 5000)),
+                            total_file_tokens=int(engine_config.get("restore_total_file_tokens", 50000)),
+                            max_tokens_per_skill=int(engine_config.get("restore_skill_tokens", 5000)),
+                            total_skill_tokens=int(engine_config.get("restore_total_skill_tokens", 25000)),
+                            token_counter=lambda text: estimate_tokens([{"content": text}]),
+                        )
+                        messages.extend(restored)
+                        result.restored_files = [
+                            str(item["restored_file"]) for item in restored
+                            if item.get("restored_file")
+                        ]
+                        summary_count = sum(
+                            1 for item in messages
+                            if item.get("role") == "user"
+                            and isinstance(item.get("content"), str)
+                            and item["content"].startswith("[Conversation continuation summary]")
+                        )
+                        suggestion_sent = bool(getattr(proxy_runtime, "_handoff_suggestion_sent", False))
+                        suggestion_trigger = None
+                        if getattr(result, "error", None) == "compaction_circuit_breaker":
+                            suggestion_trigger = "guard_circuit_breaker"
+                        elif summary_count >= 2:
+                            suggestion_trigger = "compression_limit"
+                        if suggestion_trigger and not suggestion_sent:
+                            await event_queue.put(emit(
+                                "handoff.suggested",
+                                reason=("上下文连续两次摘要压缩，建议将当前阶段接力到新会话。"
+                                        if suggestion_trigger == "compression_limit"
+                                        else "上下文压缩已触发熔断，建议接力到新会话。"),
+                                suggested_goal=request.message,
+                                compression_count=summary_count,
+                                trigger=suggestion_trigger,
+                            ))
+                            proxy_runtime._handoff_suggestion_sent = True
+                        record("compaction", trigger=compaction_trigger, method=result.method,
+                               before_tokens=result.before_tokens, after_tokens=result.after_tokens,
+                               budget_tokens=result.budget_tokens, forced=force,
+                               pruned_results=getattr(result, "pruned_results", 0),
+                               deduped=getattr(result, "deduped", 0),
+                               restored_files=getattr(result, "restored_files", []),
+                               summary_model=getattr(result, "summary_model", None),
+                               guard_missing=getattr(result, "guard_missing", []) or [],
+                               ineffective_streak=getattr(result, "ineffective_streak", 0),
+                               duration_ms=int((time.monotonic() - compaction_started) * 1000),
+                               error=getattr(result, "error", None))
                     elif compaction_lease["holder"]:
                         from atlas.engine.session_sync import abort_session_compaction
 
@@ -993,6 +1108,18 @@ class AtlasKernel:
                         compaction_lease["holder"] = None
                     if result.error and result.after_tokens > result.budget_tokens:
                         raise ModelCallError(result.error, category="context_budget")
+                    if result.method == "none":
+                        record("compaction", trigger=compaction_trigger,
+                               method="guard_rejected" if getattr(result, "guard_missing", None) else "skipped",
+                               before_tokens=result.before_tokens, after_tokens=result.after_tokens,
+                               pruned_results=getattr(result, "pruned_results", 0),
+                               deduped=getattr(result, "deduped", 0),
+                               restored_files=getattr(result, "restored_files", []),
+                               summary_model=getattr(result, "summary_model", None),
+                               guard_missing=getattr(result, "guard_missing", []) or [],
+                               ineffective_streak=getattr(result, "ineffective_streak", 0),
+                               duration_ms=int((time.monotonic() - compaction_started) * 1000),
+                               error=getattr(result, "error", None))
                     return result
 
                 compaction = await prepare_compaction()

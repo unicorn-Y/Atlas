@@ -1242,6 +1242,10 @@ async def execute_tools_node(
                     str(fn_args.get("query", "")),
                     limit=int(fn_args.get("limit", 8)),
                     context=int(fn_args.get("context", 2)),
+                    conversation_ids=(
+                        [str(fn_args["conversation_id"])]
+                        if fn_args.get("conversation_id") else None
+                    ),
                 )
                 result = {
                     "data": {"results": results},

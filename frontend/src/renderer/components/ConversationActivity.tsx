@@ -11,6 +11,8 @@ import Mark from './Mark';
 import ReviewFindingsCard from './ReviewFindingsCard';
 import ForegroundConfirmCard from './x2/ForegroundConfirmCard';
 import BrowserHandoffCard from './x2/BrowserHandoffCard';
+import HandoffProposalCard from './HandoffProposalCard';
+import HandoffSuggestion from './HandoffSuggestion';
 import { DiagnosticsList } from './diagnostics';
 import { buildTimeline, cacheShare, describeTool, duration, tokenCount, type Step, type TimelineItem } from './timeline';
 import type { InspectorTab } from '../shell/Inspector';
@@ -78,6 +80,8 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
           onOpenPanel={() => { if (url && onOpenBrowser) onOpenBrowser(url); else setTab('browser'); }} />
       </div>;
     }
+    case 'handoff-proposal': return <HandoffProposalCard key={item.id} event={item.event} />;
+    case 'handoff-suggestion': return <HandoffSuggestion key={item.id} event={item.event} />;
     case 'group': return <WorkerGroup key={item.id} item={item} />;
     case 'checks': return <Checks key={item.id} item={item} />;
     case 'notice': return <div key={item.id} className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">

@@ -1,5 +1,5 @@
 import * as Popover from '@radix-ui/react-popover';
-import { ChevronDown } from 'lucide-react';
+import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '../ui/cn';
 import { formatCost, formatTokens, type UsageSummary } from './runInsights';
@@ -125,11 +125,17 @@ export function InsightPopover({ trigger, children, align = 'start', side = 'top
 export function TokenUsageToggle({ usage, open, onToggle }: { usage: UsageSummary; open: boolean; onToggle: () => void }) {
   const total = usage.input + usage.output;
   const hit = usage.input ? Math.round(usage.cached / usage.input * 100) : 0;
-  return <button type="button" onClick={onToggle} aria-expanded={open} aria-label="查看 token 用量明细"
-    className="inline-flex items-center gap-1 tabular-nums text-fg-3 hover:text-fg">
-    · {formatTokens(total)} tokens{hit > 0 ? ` · 缓存 ${hit}%` : ''}{usage.cost !== null ? ` · ${formatCost(usage.cost)}` : ''}
-    <ChevronDown size={12} className={cn('transition-transform', open && 'rotate-180')} />
-  </button>;
+  return <span className="inline-flex items-center gap-2">
+    <button type="button" onClick={onToggle} aria-expanded={open} aria-label="查看 token 用量明细"
+      className="inline-flex items-center gap-1 tabular-nums text-fg-3 hover:text-fg">
+      · {formatTokens(total)} tokens{hit > 0 ? ` · 缓存 ${hit}%` : ''}{usage.cost !== null ? ` · ${formatCost(usage.cost)}` : ''}
+      <ChevronDown size={12} className={cn('transition-transform', open && 'rotate-180')} />
+    </button>
+    <button type="button" onClick={() => window.dispatchEvent(new Event('atlas:handoff-open'))}
+      aria-label="接力到新会话" className="inline-flex items-center gap-1 text-fg-3 hover:text-fg">
+      <ArrowRight size={12} />接力到新会话
+    </button>
+  </span>;
 }
 
 /** The unfolded breakdown card, sitting under the finished-turn line. */

@@ -298,7 +298,12 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
             name="new_context_window", toolset="atlas",
             schema={
                 "name": "new_context_window",
-                "description": "Summarize the current task and continue it in a clean model context while preserving the conversation history.",
+                "description": (
+                    "Compact the current Atlas conversation with the context engine and continue in a clean model context. "
+                    "Call only at a natural task boundary: after a subtask or phase is complete, a plan is settled, "
+                    "tests have just passed, or work is moving from planning into implementation. Do not call while "
+                    "investigating, calculating, or implementing in the middle of a task."
+                ),
                 "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
             },
             handler=lambda _args, **_kwargs: "Context handoff is only available during an Atlas run.",
@@ -417,6 +422,42 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     except (TypeError, ValueError):
                         accepted = {}
                     return fallback(args, **accepted)
+                if _name == "propose_handoff":
+                    goal = str(args.get("goal") or "").strip()
+                    if not goal:
+                        return json.dumps({"error": "接力目标不能为空。"}, ensure_ascii=False)
+                    proposal_id = uuid.uuid4().hex
+                    call_id = str(_kwargs.get("tool_call_id") or f"atlas:{uuid.uuid4().hex}")
+                    event_queue = getattr(bound_runtime, "event_queue", None)
+                    if event_queue is not None:
+                        asyncio.run_coroutine_threadsafe(event_queue.put({
+                            "type": "tool_call", "id": call_id, "name": _name,
+                            "arguments": args,
+                        }), bound_loop).result()
+                        asyncio.run_coroutine_threadsafe(event_queue.put({
+                            "type": "handoff.proposed",
+                            "data": {
+                                "proposal_id": proposal_id,
+                                "goal": goal,
+                                "context": str(args.get("context") or ""),
+                                "run_id": str(getattr(bound_runtime, "run_id", "") or ""),
+                                "from_conversation": str(getattr(bound_runtime, "conversation_id", "") or ""),
+                            },
+                        }), bound_loop).result()
+                    result = json.dumps({
+                        "proposal_id": proposal_id,
+                        "status": "awaiting_user",
+                        "goal": goal,
+                        "instruction": "已向用户展示接力草稿；等待用户选择。若用户继续当前会话，请接着当前任务工作。",
+                    }, ensure_ascii=False)
+                    if event_queue is not None:
+                        asyncio.run_coroutine_threadsafe(event_queue.put({
+                            "type": "tool_result", "id": call_id, "name": _name,
+                            "content": [{"type": "text", "text": result}],
+                            "data": {"status": "awaiting_user", "proposal_id": proposal_id},
+                            "is_error": False,
+                        }), bound_loop).result()
+                    return result
                 if _name == "new_context_window":
                     callback = getattr(bound_runtime, "new_context_window_callback", None)
                     if callback is None:
@@ -472,16 +513,37 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     # stale-write guards, fuzzy/V4A patching and document readers.
                     lsp_pre = _lsp_pre_write(args, bound_runtime) if _name in _LSP_WRITE_TOOLS else _LSP_SKIP
                     native = _hermes_fallback_handlers[_name]
+                    if _name == "read_file":
+                        from atlas.engine.read_dedupe import unchanged_read_result
+
+                        duplicate = unchanged_read_result(
+                            bound_runtime, args, str(_kwargs.get("tool_call_id") or ""),
+                        )
+                        if duplicate is not None:
+                            return duplicate
                     result = native(args, **_kwargs)
                     if _name == "read_file":
                         result = _read_file_result(
                             getattr(bound_runtime, "hermes_agent", None) or bound_agent,
                             args, str(result),
                         )
+                        from atlas.engine.read_dedupe import record_file_read
+
+                        record_file_read(
+                            bound_runtime, args, str(_kwargs.get("tool_call_id") or ""), result,
+                        )
                     if lsp_pre is not _LSP_SKIP:
                         result = _lsp_attach_report(bound_runtime, bound_loop, args, lsp_pre, result)
                     return _append_repetition_reminder(bound_runtime, _name, args, str(result)) if isinstance(result, str) else result
                 tool_name, tool_args = _translate(_name, args, bound_runtime)
+                if tool_name == "local_file" and tool_args.get("action") == "read":
+                    from atlas.engine.read_dedupe import unchanged_read_result
+
+                    duplicate = unchanged_read_result(
+                        bound_runtime, tool_args, str(_kwargs.get("tool_call_id") or ""),
+                    )
+                    if duplicate is not None:
+                        return duplicate
                 if tool_name in {"local_shell", "local_exec", "local_process"}:
                     starts_process = (
                         tool_name != "local_process"
@@ -523,6 +585,13 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                         for item in bound_runtime.todo_store.snapshot()["todos"]
                     ])
                 result = str(messages[-1].content) if messages else "工具没有返回内容。"
+                if tool_name == "local_file" and tool_args.get("action") == "read":
+                    from atlas.engine.read_dedupe import record_file_read
+
+                    record_file_read(
+                        bound_runtime, tool_args,
+                        str(_kwargs.get("tool_call_id") or call_id), result,
+                    )
                 return _append_repetition_reminder(bound_runtime, _name, args, result)
 
             native_entry = _hermes_entries.get(name)
