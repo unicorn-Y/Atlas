@@ -160,16 +160,30 @@ class DurableBackend:
         result = await handle.get_result()
         return dict(result)
 
-    def stop(self) -> None:
+    def stop(self, *, timeout: float = 1.5) -> None:
         if not self._started:
             return
-        try:
-            from dbos import DBOS
-
-            DBOS.destroy(destroy_registry=True)
-        except Exception:
-            log.exception("dbos.destroy_failed")
         self._started = False
+        finished = threading.Event()
+
+        def destroy() -> None:
+            try:
+                from dbos import DBOS
+
+                DBOS.destroy(destroy_registry=True)
+            except Exception:
+                log.exception("dbos.destroy_failed")
+            finally:
+                finished.set()
+
+        # DBOS.destroy joins scheduler and worker threads. Keep lifespan shutdown
+        # bounded even if one of those threads is stuck in user/provider code.
+        threading.Thread(
+            target=destroy, name="atlas-dbos-shutdown", daemon=True,
+        ).start()
+        if not finished.wait(max(0.0, timeout)):
+            log.warning("dbos.destroy_timeout", timeout_seconds=timeout)
+            return
         # DBOS replaces the loop's default executor with its own and shuts it
         # down on destroy; restore a plain one so the same process (tests,
         # graceful restarts) keeps a working default executor.

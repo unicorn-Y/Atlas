@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Sequence
 
 from atlas.engine_core.hermes_constants import get_hermes_home
 from atlas.engine_core.state.startup_watchdog import report_startup_progress
-from utils import safe_json_loads
+from atlas.engine_core.utils import safe_json_loads
 from atlas.engine_core.state.hermes_state_common import (
     DEFERRED_INDEX_SQL, FTS_CJK_STALE_KEY, FTS_REBUILD_DEFERRAL_KEY, FTS_STALE_KEY, FTS_SQL,
     FTS_STORAGE_VERSION, FTS_TOOL_CONTENT_PREFIX_CHARS, FTS_TRIGRAM_SQL, LEGACY_FTS_SQL,

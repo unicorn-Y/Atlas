@@ -14,7 +14,7 @@ from datetime import datetime, timezone, UTC
 from typing import Any, Dict, List, Optional
 
 from atlas.engine_core.agent.skill_commands import AUTO_LOAD_SCAFFOLD_SQL_LIKE, SKILL_SCAFFOLD_SQL_LIKE
-from utils import safe_json_loads
+from atlas.engine_core.utils import safe_json_loads
 from atlas.engine_core.state.timefmt import coerce_epoch
 from atlas.engine_core.state.hermes_state_ids import new_session_id
 from atlas.engine_core.state.hermes_state_common import SCHEMA_SQL, _shape_preview, _sql_preview_raw, _sql_session_last_active

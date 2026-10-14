@@ -387,11 +387,11 @@ async def _upstream_auto_loop() -> None:
     await auto_loop()
 
 
-# Modules the first turn needs. Importing them here, on a worker thread, keeps the
-# multi-second Hermes import off the event loop (it used to run inside the first
-# user turn and stall every WebSocket long enough to trip keepalive).
+# Atlas-owned modules the first turn needs. Import them on a worker thread so
+# optional engine setup never delays the API-ready signal.
 _ENGINE_WARM_IMPORTS = (
-    "run_agent", "agent.agent_hooks", "agent.plan_prompt", "tools.registry",
+    "atlas.engine_core.agent.agent_hooks", "atlas.engine_core.agent.plan_prompt",
+    "atlas.engine_core.tools.registry",
     "atlas.engine.tool_registry", "atlas.engine.hermes_policy",
 )
 
@@ -487,6 +487,13 @@ async def _register_extensions(app: Any) -> None:
     """S2.10: /init 与 /review 的路由和工具注册。这些模块由独立子模块提供，
     注册失败只降级告警，绝不能拖垮 Atlas 本体启动。"""
     errors: list[str] = []
+    try:
+        # MCP's SDK import graph is large; load its resource routes after the
+        # core API has started answering requests.
+        from atlas.api import mcp_resources_router as _mcp_resources_router  # noqa: F401
+    except Exception:  # noqa: BLE001 — an optional integration must not gate chat
+        log.exception("startup.mcp_resource_routes_failed")
+        errors.append("MCP resource route implementation failed")
     try:
         from atlas.commands.init import register_init_routes
 

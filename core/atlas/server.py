@@ -228,6 +228,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # S1: fresh per-lifespan component registry (restarts must not inherit a
     # previous run's states); created before anything can mark.
     startup = StartupComponents()
+    startup.mark_core_ready(False)
     services.startup = startup
     for component_name in COMPONENT_NAMES:
         startup.mark(component_name, "starting")
@@ -637,6 +638,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         services.group_service = group_service
         services.group_orchestrator = group_orchestrator
         manager.services = services
+
+        # At this point config/model managers, the orchestrator, and built-in
+        # tool capabilities are wired. Optional integrations continue in the
+        # deferred task and do not gate chat readiness.
+        startup.mark_core_ready(True)
 
         # S2: everything deferred starts from here — after uvicorn binds, so
         # /api/health answers while the components come up.

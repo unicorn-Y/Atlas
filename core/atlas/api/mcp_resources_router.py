@@ -16,10 +16,9 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from mcp.types import PaginatedRequestParams
-from pydantic import BaseModel, Field
-
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
+from atlas.api.mcp_resource_contract import ResourceReadRequest
 
 router = APIRouter()
 _RESOURCE_TIMEOUT_SECONDS = 20.0
@@ -36,11 +35,6 @@ _MAX_DESCRIPTION_BYTES = 2048
 _MAX_MIME_TYPE_BYTES = 256
 _METHOD_NOT_FOUND = -32601
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-
-
-class ResourceReadRequest(BaseModel):
-    server_name: str = Field(min_length=1, max_length=256)
-    uri: str = Field(min_length=1, max_length=_MAX_URI_BYTES)
 
 
 class ResourceLimitExceeded(ValueError):

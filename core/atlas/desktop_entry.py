@@ -20,13 +20,6 @@ def main() -> None:
         run_stdio()
         return
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "true")
-    # Hermes removes stale top-level modules while initializing its config. If
-    # another thread is importing ``utils`` at that moment, the frozen importer
-    # can lose its in-progress sys.modules entry. Complete this shared import
-    # before Uvicorn starts serving concurrent requests.
-    import importlib
-
-    importlib.import_module("utils")
     import uvicorn
 
     from atlas.server import app
