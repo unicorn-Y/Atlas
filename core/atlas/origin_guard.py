@@ -25,6 +25,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import secrets
+from pathlib import Path
 from collections.abc import Callable, Iterable
 
 from starlette.datastructures import Headers
@@ -44,6 +45,12 @@ def is_trusted(
     client_host: str | None = None,
 ) -> bool:
     expected = os.environ.get("ATLAS_API_TOKEN", "")
+    if not expected:
+        data_dir = Path(os.environ.get("ATLAS_DATA_DIR")) / "data" if os.environ.get("ATLAS_DATA_DIR") else Path(__file__).resolve().parents[2] / "data"
+        try:
+            expected = (data_dir / "runtime" / "api-token").read_text(encoding="utf-8").strip()
+        except OSError:
+            expected = ""
     if expected and token and secrets.compare_digest(token, expected):
         return True
     if client_host is not None:
