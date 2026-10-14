@@ -24,18 +24,17 @@ describe('ConversationMessage', () => {
     expect(html).toContain('hljs-keyword');
   });
 
-  it('renders a still-streaming reply as plain text that keeps newlines, then full markdown once settled', () => {
-    const content = 'Hello **there**\n第二行';
-    const streaming = renderToStaticMarkup(<ConversationMessage role="assistant" content={content} username="User" streaming />);
-    // 流式中不做 Markdown 解析（省掉每个 delta 的重复解析），但保留换行和消息结构。
+  it('renders a still-streaming reply as markdown, closing unfinished syntax, and math once settled', () => {
+    const streaming = renderToStaticMarkup(<ConversationMessage role="assistant" content={'## 标题\n\nHello **there'} username="User" streaming />);
+    // 流式中也走 Markdown（Streamdown 补全未闭合的 **），不再满屏 ## 和 **。
     expect(streaming).toContain('data-message-role="assistant"');
-    expect(streaming).toContain('whitespace-pre-wrap');
-    expect(streaming).toContain('Hello **there**');
-    expect(streaming).toContain('第二行');
-    expect(streaming).not.toContain('<strong>');
+    expect(streaming).toContain('<h2>标题</h2>');
+    expect(streaming).toContain('<strong>there</strong>');
 
-    const settled = renderToStaticMarkup(<ConversationMessage role="assistant" content={content} username="User" />);
-    expect(settled).toContain('<strong>there</strong>');
+    const settled = renderToStaticMarkup(<ConversationMessage role="assistant" content={'公式 $E=mc^2$ 和 1~2 天，路径 `./src/**/*`'} username="User" />);
+    expect(settled).toContain('class="katex"');
+    expect(settled).not.toContain('<del>');
+    expect(settled).toContain('<code>./src/**/*</code>');
   });
 
   it('is memoized and keeps identical output for identical props', () => {

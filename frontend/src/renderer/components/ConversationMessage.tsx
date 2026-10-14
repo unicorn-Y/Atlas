@@ -1,7 +1,11 @@
-import { Children, isValidElement, memo, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import { Children, createElement, isValidElement, memo, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { defaultRehypePlugins, defaultRemarkPlugins, Streamdown, type Components } from 'streamdown';
+import { cjk } from '@streamdown/cjk';
+import { createMathPlugin } from '@streamdown/math';
+import remarkCjkFriendlyGfmStrikethrough from 'remark-cjk-friendly-gfm-strikethrough';
 import rehypeHighlight from 'rehype-highlight';
-import remarkGfm from 'remark-gfm';
+import type { Pluggable } from 'unified';
+import 'katex/dist/katex.min.css';
 import { MoreHorizontal } from 'lucide-react';
 import Mark from './Mark';
 import MermaidBlock from './MermaidBlock';
@@ -156,46 +160,84 @@ function openWorkspaceFileInEditor(href: string, editor: 'vscode' | 'cursor' | '
   return window.atlasDesktop.openFileInEditor(editor, workspaceRoot, full);
 }
 
-// ```mermaid blocks become diagrams; every other code block renders as usual.
-const MARKDOWN_COMPONENTS: Components = {
-  code({ className, children, node, ...rest }) {
-    void node;
-    if (className?.includes('language-mermaid')) return <MermaidBlock source={String(children ?? '').trimEnd()} />;
-    const language = className?.match(/(?:^|\s)language-([^\s]+)/)?.[1];
-    return <code className={className} data-code-language={language} {...rest}>{children}</code>;
-  },
-  pre({ children, node }) {
-    void node;
-    const child = Children.toArray(children).find((item) => isValidElement<CodeElementProps>(item));
-    if (!child || !isValidElement<CodeElementProps>(child)) return <pre>{children}</pre>;
-    if (child.type === MermaidBlock) return <>{children}</>;
-    const language = child.props['data-code-language'];
-    return <CodeBlock source={plainText(child.props.children).replace(/\n$/, '')} language={language}>{children}</CodeBlock>;
-  },
-  img({ src, alt, title }) {
-    return <ImagePreview src={src} alt={alt} title={title} />;
-  },
-  table: CsvMarkdownTable,
-  a({ href, children, node, ...rest }) {
-    void node;
-    const fileTarget = href ? workspaceFileTarget(href) : null;
-    const externalHref = safeExternalHref(href);
-    if (!fileTarget && !externalHref) return <span {...rest}>{children}</span>;
-    const safeHref = fileTarget ? href ?? undefined : externalHref ?? undefined;
-    return <a href={safeHref} {...rest} target={externalHref ? '_blank' : undefined}
-      rel={externalHref ? 'noopener noreferrer' : undefined} onClick={(event) => {
-        if (!fileTarget) return;
-        event.preventDefault();
-        openWorkspaceFile(href!);
-      }}>{children}</a>;
-  },
+// 不让 Streamdown 自带的 tailwind 类名混进 .prose-atlas 排版：这些标签按原生元素输出，和以前 ReactMarkdown 的 DOM 一致。
+const PLAIN_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'strong', 'blockquote', 'hr', 'thead', 'tbody', 'tr', 'th', 'td', 'sup', 'sub'] as const;
+const plainComponents = Object.fromEntries(PLAIN_TAGS.map((tag) => [tag, ({ node, ...props }: { node?: unknown } & Record<string, unknown>) => {
+  void node;
+  return createElement(tag, props);
+}])) as Components;
+
+// ```mermaid blocks become diagrams once the reply settles; every other code block renders as usual.
+function markdownComponents(streaming: boolean): Components {
+  return {
+    ...plainComponents,
+    code({ className, children, node, ...rest }) {
+      void node;
+      // 流式中的 mermaid 源码多半没写完，先当普通代码显示，落定后再画图。
+      if (!streaming && className?.includes('language-mermaid')) return <MermaidBlock source={String(children ?? '').trimEnd()} />;
+      const language = className?.match(/(?:^|\s)language-([^\s]+)/)?.[1];
+      return <code className={className} data-code-language={language} {...rest}>{children}</code>;
+    },
+    pre({ children, node }) {
+      void node;
+      const child = Children.toArray(children).find((item) => isValidElement<CodeElementProps>(item));
+      if (!child || !isValidElement<CodeElementProps>(child)) return <pre>{children}</pre>;
+      if (child.type === MermaidBlock) return <>{children}</>;
+      const language = child.props['data-code-language'];
+      return <CodeBlock source={plainText(child.props.children).replace(/\n$/, '')} language={language}>{children}</CodeBlock>;
+    },
+    img({ src, alt, title }) {
+      return <ImagePreview src={typeof src === 'string' ? src : undefined} alt={alt} title={title} />;
+    },
+    table: ({ children }) => <CsvMarkdownTable>{children}</CsvMarkdownTable>,
+    a({ href, children, node, ...rest }) {
+      void node;
+      const fileTarget = href ? workspaceFileTarget(href) : null;
+      const externalHref = safeExternalHref(href);
+      if (!fileTarget && !externalHref) return <span {...rest}>{children}</span>;
+      const safeHref = fileTarget ? href ?? undefined : externalHref ?? undefined;
+      return <a href={safeHref} {...rest} target={externalHref ? '_blank' : undefined}
+        rel={externalHref ? 'noopener noreferrer' : undefined} onClick={(event) => {
+          if (!fileTarget) return;
+          event.preventDefault();
+          openWorkspaceFile(href!);
+        }}>{children}</a>;
+    },
+  };
+}
+const STATIC_COMPONENTS = markdownComponents(false);
+const STREAMING_COMPONENTS = markdownComponents(true);
+
+// 照 ZCode message.tsx：`1~2` 这类中文常见写法别被当成删除线（GFM 与 CJK 删除线扩展默认都开 singleTilde）。
+function disableSingleTilde(plugin: Pluggable): Pluggable {
+  if (!Array.isArray(plugin)) return typeof plugin === 'function' ? [plugin, { singleTilde: false }] : plugin;
+  const [attacher, options] = plugin;
+  return [attacher, { ...(typeof options === 'object' && options !== null ? options : {}), singleTilde: false }];
+}
+const cjkRemarkPluginsAfter = cjk.remarkPluginsAfter.map((plugin) =>
+  (Array.isArray(plugin) ? plugin[0] : plugin) === remarkCjkFriendlyGfmStrikethrough ? disableSingleTilde(plugin) : plugin);
+const STREAMDOWN_PLUGINS = {
+  cjk: { ...cjk, remarkPlugins: [...cjk.remarkPluginsBefore, ...cjkRemarkPluginsAfter], remarkPluginsAfter: cjkRemarkPluginsAfter },
+  // @streamdown/math 默认不认 `$...$` 行内公式。
+  math: createMathPlugin({ singleDollarTextMath: true }),
 };
+const REMARK_PLUGINS = Object.entries(defaultRemarkPlugins).map(([name, plugin]) => name === 'gfm' ? disableSingleTilde(plugin) : plugin);
+const REHYPE_PLUGINS = [...Object.values(defaultRehypePlugins), rehypeHighlight];
+// 链接由上面的 a 渲染器自己判安全；表格、代码块有 Atlas 自己的操作按钮。
+const LINK_SAFETY = { enabled: false } as const;
 
-const MARKDOWN_PLUGINS = { remarkPlugins: [remarkGfm], rehypePlugins: [rehypeHighlight], components: MARKDOWN_COMPONENTS };
-
-/** 还在流式输出的回复：先按纯文本渲染（保留换行），message.completed 后再换完整 Markdown 渲染。 */
-function StreamingText({ content }: { content: string }) {
-  return <div data-message-content className="prose-atlas whitespace-pre-wrap break-words">{content}</div>;
+/**
+ * 正文 Markdown：流式和落定走同一个渲染器，避免完成时整体跳一下。
+ * 照 ZCode：只有真正在流式时才用 streaming 模式 + 补全未闭合语法（remend）；
+ * 已结束消息一律 static，否则 remend 会把 `./src/**\/*` 误补出 `**`。
+ */
+function MarkdownBody({ content, streaming }: { content: string; streaming: boolean }) {
+  return <div data-message-content className="prose-atlas">
+    <Streamdown mode={streaming ? 'streaming' : 'static'} parseIncompleteMarkdown={streaming}
+      components={streaming ? STREAMING_COMPONENTS : STATIC_COMPONENTS} plugins={STREAMDOWN_PLUGINS}
+      remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} linkSafety={LINK_SAFETY}
+      controls={false} animated={false} isAnimating={false}>{content}</Streamdown>
+  </div>;
 }
 
 /**
@@ -210,7 +252,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
   actions?: ReactNode;
   /** Part of an Atlas turn that already showed its header; renders just the text, aligned under it. */
   continued?: boolean;
-  /** 仍在生成中：用轻量纯文本渲染，落定后再切回完整 Markdown。 */
+  /** 仍在生成中：Streamdown 流式模式（补全未闭合语法），落定后切 static。 */
   streaming?: boolean;
 }) {
   const [markdownSource, setMarkdownSource] = useState(false);
@@ -313,11 +355,9 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
       setSelectionTooltip(null);
     }} className="rounded-md px-2 py-1 text-[12px] text-fg hover:bg-hover">开启侧聊</button>
   </div>;
-  const assistantContent = streaming
-    ? <StreamingText content={content} />
-    : markdownSource
-      ? <pre data-message-content className="my-2 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] text-fg-2">{content}</pre>
-      : <div data-message-content className="prose-atlas"><ReactMarkdown {...MARKDOWN_PLUGINS}>{content}</ReactMarkdown></div>;
+  const assistantContent = markdownSource && !streaming
+    ? <pre data-message-content className="my-2 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6] text-fg-2">{content}</pre>
+    : <MarkdownBody content={content} streaming={streaming} />;
   const assistantActions = <>
     {content && <ClipboardAction text={content} />}
     {content && !streaming && <button type="button" aria-pressed={markdownSource}
