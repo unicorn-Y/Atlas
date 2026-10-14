@@ -3,7 +3,7 @@
 //
 //   node scripts/atlas-update.mjs                  pull + rebuild what changed
 //   node scripts/atlas-update.mjs --relaunch       ...then start Atlas
-//   node scripts/atlas-update.mjs --launch-only    build if never built, then start Atlas
+//   node scripts/atlas-update.mjs --launch-only    start Atlas, then check for updates in background
 //   --wait-pid <pid>   wait for that process (the running Atlas) to exit first
 //
 // Local changes no longer block a fast-forward: files the update doesn't touch are left
@@ -142,7 +142,6 @@ function rebuild() {
   }
   const touched = (prefix) => changed === null || changed.some((file) => file === prefix || file.startsWith(prefix));
   const steps = [];
-  sh(python, ['core/scripts/setup_hermes.py']); // no-op when already at the pin
   if (touched('core/pyproject.toml') || !fs.existsSync(python)) {
     sh(python, ['-m', 'pip', 'install', '-q', '--no-cache-dir', '-e', 'core']);
     steps.push('python');
@@ -173,14 +172,17 @@ function rebuild() {
     sh(npm, ['--prefix', 'frontend', 'run', 'build']);
     steps.push('frontend');
   }
+  fs.writeFileSync(stampFile, JSON.stringify({ commit: head, at: new Date().toISOString(), steps }, null, 2), 'utf8');
+  return steps;
+}
+
+function postMerge() {
   // Machine-local follow-up of an upstream update: MCP versions in config/atlas.toml.
   try {
     sh(python, ['-m', 'atlas.upstream', 'post-merge'], { cwd: path.join(root, 'core') });
   } catch (error) {
     log(`post-merge failed: ${String(error?.stderr || error?.message || error).trim().split('\n').slice(-5).join(' | ')}`);
   }
-  fs.writeFileSync(stampFile, JSON.stringify({ commit: head, at: new Date().toISOString(), steps }, null, 2), 'utf8');
-  return steps;
 }
 
 function launch() {
@@ -199,6 +201,13 @@ function launch() {
   });
   child.unref();
   log(`launched Atlas (pid ${child.pid}) debug-port=${debugPort}`);
+}
+
+// The desktop must become visible before any git, dependency, or build work starts.
+// UpdateBanner performs the background check after Electron is running.
+if (flag('--launch-only')) {
+  launch();
+  process.exit(0);
 }
 
 // One updater at a time: a double-clicked shortcut once started two, and the second launched
@@ -229,15 +238,12 @@ process.on('exit', () => {
 const waitPid = Number(option('--wait-pid'));
 try {
   if (waitPid) await waitForExit(waitPid);
-  if (flag('--launch-only')) {
-    rebuild();
-  } else {
-    const result = pull();
-    log(result.pulled ? `pulled ${result.before?.slice(0, 7)}..${result.after?.slice(0, 7)} (${result.changed.length} files)`
-      : (result.reason ?? 'already up to date'));
-    const steps = rebuild();
-    status({ ok: true, pulled: result.pulled, reason: result.reason, steps, head: sh('git', ['rev-parse', '--short', 'HEAD']) });
-  }
+  const result = pull();
+  log(result.pulled ? `pulled ${result.before?.slice(0, 7)}..${result.after?.slice(0, 7)} (${result.changed.length} files)`
+    : (result.reason ?? 'already up to date'));
+  const steps = rebuild();
+  if (result.pulled) postMerge();
+  status({ ok: true, pulled: result.pulled, reason: result.reason, steps, head: sh('git', ['rev-parse', '--short', 'HEAD']) });
 } catch (error) {
   const detail = String(error?.stderr || error?.message || error).trim().split('\n').slice(-20).join('\n');
   log(`FAILED: ${detail}`);
@@ -245,4 +251,4 @@ try {
   process.exitCode = 1;
 }
 // Relaunch even after a failed update: the previous build is still in place.
-if (flag('--relaunch') || flag('--launch-only')) launch();
+if (flag('--relaunch')) launch();

@@ -8,6 +8,8 @@ const desktopApi: AtlasDesktopApi = {
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
+  retryBackend: () => ipcRenderer.invoke('backend:retry') as Promise<void>,
+  openBackendLog: () => ipcRenderer.invoke('backend:open-log') as Promise<void>,
   setTheme: (theme) => ipcRenderer.send('window:theme', theme),
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
   applyUpdate: () => ipcRenderer.invoke('update:apply') as Promise<boolean>,
@@ -16,6 +18,7 @@ const desktopApi: AtlasDesktopApi = {
   openPath: (target) => ipcRenderer.invoke('shell:open-path', target) as Promise<string>,
   getPlatformSettings: () => ipcRenderer.invoke('platform:get-settings'),
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('platform:set-always-on-top', enabled),
+  setOpenAtLogin: (enabled) => ipcRenderer.invoke('platform:set-open-at-login', enabled),
   setGlobalShortcut: (accelerator) => ipcRenderer.invoke('platform:set-global-shortcut', accelerator),
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),

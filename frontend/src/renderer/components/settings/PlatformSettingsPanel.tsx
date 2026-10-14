@@ -21,6 +21,7 @@ const EDITORS: Array<[PlatformEditorId, string]> = [
 
 const initialState: PlatformSettingsState = {
   alwaysOnTop: false,
+  openAtLogin: true,
   globalShortcut: { accelerator: null, registered: false },
 };
 
@@ -65,6 +66,17 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
     finally { setBusy(false); }
   };
 
+  const toggleOpenAtLogin = async (enabled: boolean) => {
+    if (!desktop?.setOpenAtLogin) return;
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      setSettings(await desktop.setOpenAtLogin(enabled));
+      setMessage(enabled ? '已启用登录时启动 Atlas。' : '已关闭登录时启动 Atlas。');
+    }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  };
+
   const saveShortcut = async (value: string | null) => {
     if (!desktop?.setGlobalShortcut) return;
     setBusy(true); setError(null); setMessage(null);
@@ -99,6 +111,14 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
     </div>
 
     {!available && <p role="status" className="m-0 rounded-xl border border-line p-3 text-[12px] text-fg-3">这些平台功能需要在 Atlas 桌面应用中使用。</p>}
+
+    <section className="grid gap-3 rounded-xl border border-line p-4">
+      <h4 className="m-0 text-[13.5px] font-medium text-heading">登录时启动</h4>
+      <label className="flex items-center gap-2.5 text-[12.5px] text-fg-2">
+        <input type="checkbox" checked={settings.openAtLogin} disabled={!available || !desktop?.setOpenAtLogin || busy} onChange={(event) => void toggleOpenAtLogin(event.target.checked)} />
+        登录时启动 Atlas
+      </label>
+    </section>
 
     <section className="grid gap-3 rounded-xl border border-line p-4">
       <h4 className="m-0 flex items-center gap-2 text-[13.5px] font-medium text-heading"><MonitorUp size={16} />窗口置顶</h4>

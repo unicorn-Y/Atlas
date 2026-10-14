@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,10 +29,37 @@ const LOG_TAIL_LINES = 50;
 const PROGRESS_HEARTBEAT_MS = 1_000;
 const STDERR_TAIL_LIMIT = 8_192;
 const shutdownToken = randomBytes(32).toString('hex');
+const PORT = Number(process.env.ATLAS_PORT ?? '8765');
 
 let managedChild: ChildProcess | null = null;
 let stopPromise: Promise<void> | null = null;
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
+function dataRootDir(): string {
+  return process.env.ATLAS_DATA_DIR
+    ? path.resolve(process.env.ATLAS_DATA_DIR)
+    : process.env.ATLAS_ROOT
+      ? path.resolve(process.env.ATLAS_ROOT)
+      : path.resolve(moduleDir, '../../..');
+}
+
+function runtimeDir(): string {
+  return path.join(dataRootDir(), 'data', 'runtime');
+}
+
+export function getBackendLogPath(): string {
+  return path.join(dataRootDir(), 'data', 'logs', 'backend-stdio.log');
+}
+
+function loadSharedApiToken(): void {
+  const tokenPath = path.join(runtimeDir(), 'api-token');
+  try {
+    const token = fs.readFileSync(tokenPath, 'utf8').trim();
+    if (token) process.env.ATLAS_API_TOKEN = token;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -147,16 +174,11 @@ async function startCandidate(
   args: string[],
   cwd: string,
 ): Promise<{ child: ChildProcess; stderr: () => string; outcome: Promise<ProcessOutcome> }> {
-  const dataRoot = process.env.ATLAS_DATA_DIR
-    ? path.resolve(process.env.ATLAS_DATA_DIR)
-    : process.env.ATLAS_ROOT
-      ? path.resolve(process.env.ATLAS_ROOT)
-      : path.resolve(moduleDir, '../../..');
-  const logDir = path.join(dataRoot, 'data', 'logs');
+  const logDir = path.dirname(getBackendLogPath());
   fs.mkdirSync(logDir, { recursive: true });
   // Share one append-only descriptor for both pipes. Synchronous writes finish
   // before processing an exit event, so a crash cannot strand buffered traceback.
-  const logFd = fs.openSync(path.join(logDir, 'backend-stdio.log'), 'a');
+  const logFd = fs.openSync(getBackendLogPath(), 'a');
   let logClosed = false;
   const closeLog = () => {
     if (logClosed) return;
@@ -241,22 +263,22 @@ async function waitUntilReady(
       continue;
     }
     if (result?.kind === 'error') {
-      emit('failed', result.error.message);
+      emit('failed', `${result.error.message}${stderr() ? `\n${logTail(stderr())}` : ''}\n日志文件：${getBackendLogPath()}`);
       if (result.error.code === 'ENOENT') throw result.error;
-      throw new Error(`Atlas backend process failed: ${result.error.message}${stderr() ? `\n${logTail(stderr())}` : ''}`);
+      throw new Error(`Atlas backend process failed: ${result.error.message}${stderr() ? `\n${logTail(stderr())}` : ''}\n日志文件：${getBackendLogPath()}`);
     }
     if (result?.kind === 'exit') {
-      emit('failed', `exit ${result.code ?? 'unknown'}`);
+      emit('failed', `exit ${result.code ?? 'unknown'}${stderr() ? `\n${logTail(stderr())}` : ''}\n日志文件：${getBackendLogPath()}`);
       throw new Error(
         `Atlas backend exited before becoming healthy (code ${result.code ?? 'unknown'}, signal ${result.signal ?? 'none'}).` +
-        `${stderr() ? `\n${logTail(stderr())}` : ''}`,
+        `${stderr() ? `\n${logTail(stderr())}` : ''}\n日志文件：${getBackendLogPath()}`,
       );
     }
   }
-  emit('failed', `no healthy backend within ${STARTUP_MAX_WAIT_MS / 1000}s`);
+  emit('failed', `no healthy backend within ${STARTUP_MAX_WAIT_MS / 1000}s${stderr() ? `\n${logTail(stderr())}` : ''}\n日志文件：${getBackendLogPath()}`);
   throw new Error(
     `Atlas backend did not become healthy within ${STARTUP_MAX_WAIT_MS / 1000} seconds.` +
-    `${stderr() ? `\n${logTail(stderr())}` : ''}`,
+    `${stderr() ? `\n${logTail(stderr())}` : ''}\n日志文件：${getBackendLogPath()}`,
   );
 }
 
@@ -298,6 +320,134 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
   ]);
 }
 
+function readBackendPid(): number | null {
+  try {
+    const value = fs.readFileSync(path.join(runtimeDir(), 'backend.pid'), 'utf8').trim();
+    const parsed = Number(value.startsWith('{') ? (JSON.parse(value) as { pid?: unknown }).pid : value);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function processCommandLine(pid: number): string {
+  try {
+    if (process.platform === 'win32') {
+      return execFileSync('powershell.exe', [
+        '-NoProfile', '-NonInteractive', '-Command',
+        `(Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}').CommandLine`,
+      ], { encoding: 'utf8', windowsHide: true, timeout: 3_000 }).trim();
+    }
+    return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ').trim();
+  } catch {
+    return '';
+  }
+}
+
+function isAtlasBackendProcess(pid: number): boolean {
+  const commandLine = processCommandLine(pid).toLowerCase();
+  const packagedExecutable = process.env.ATLAS_BACKEND_EXECUTABLE?.toLowerCase();
+  return commandLine.includes('atlas.desktop_entry')
+    || commandLine.includes('atlasbackend')
+    || Boolean(packagedExecutable && commandLine.includes(packagedExecutable.toLowerCase()));
+}
+
+function findListeningPid(): number | null {
+  try {
+    if (process.platform === 'win32') {
+      const output = execFileSync('netstat.exe', ['-ano', '-p', 'tcp'], {
+        encoding: 'utf8', windowsHide: true, timeout: 3_000,
+      });
+      const match = output.match(new RegExp(`^\\s*TCP\\s+\\S+:${PORT}\\s+\\S+\\s+LISTENING\\s+(\\d+)\\s*$`, 'im'));
+      return match ? Number(match[1]) : null;
+    }
+    const output = execFileSync('sh', ['-lc', `lsof -nP -iTCP:${PORT} -sTCP:LISTEN -t 2>/dev/null | head -1`], {
+      encoding: 'utf8', timeout: 3_000,
+    }).trim();
+    const parsed = Number(output);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function processName(pid: number): string {
+  try {
+    if (process.platform === 'win32') {
+      const output = execFileSync('tasklist.exe', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
+        encoding: 'utf8', windowsHide: true, timeout: 3_000,
+      }).trim();
+      return output.split(',')[0]?.replace(/^"|"$/g, '') || '未知进程';
+    }
+    return path.basename(processCommandLine(pid).split(/\s+/)[0] || '') || '未知进程';
+  } catch {
+    return '未知进程';
+  }
+}
+
+function pidIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+async function stopPreviousBackend(pid: number): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline && pidIsRunning(pid)) await sleep(250);
+  if (!pidIsRunning(pid)) return;
+  if (!isAtlasBackendProcess(pid)) {
+    throw new Error(`data/runtime/backend.pid 指向 PID ${pid}，但无法确认它是 Atlas 后端；为避免结束无关进程，未执行 taskkill。`);
+  }
+  if (process.platform === 'win32') {
+    await new Promise<void>((resolve) => {
+      const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+        windowsHide: true, stdio: 'ignore',
+      });
+      killer.once('error', () => resolve());
+      killer.once('close', () => resolve());
+    });
+    const killedDeadline = Date.now() + 5_000;
+    while (Date.now() < killedDeadline && pidIsRunning(pid)) await sleep(100);
+  } else {
+    try { process.kill(pid, 'SIGKILL'); } catch { /* The process may have exited between checks. */ }
+  }
+}
+
+async function preparePreviousBackend(onProgress?: (progress: BackendStartupProgress) => void): Promise<boolean> {
+  const pid = readBackendPid();
+  const ownerPid = findListeningPid();
+  if (ownerPid !== null && ownerPid !== pid) {
+    // An Atlas health response without our pid file is still eligible for the
+    // legacy attach path below; any other listener is a hard, named conflict.
+    const contact = await probeHealth();
+    if (!(contact && isAtlasHealthPayload(contact.payload))) {
+      throw new Error(`端口 ${PORT} 已被 ${processName(ownerPid)} (PID ${ownerPid}) 占用。请关闭该程序后重试。`);
+    }
+  }
+  if (pid === null || !pidIsRunning(pid)) return false;
+  if (!isAtlasBackendProcess(pid)) {
+    if (ownerPid === pid) {
+      throw new Error(`端口 ${PORT} 由 ${processName(pid)} (PID ${pid}) 占用，backend.pid 指向的进程无法确认为 Atlas 后端。`);
+    }
+    return false;
+  }
+
+  if (ownerPid === pid && await externalAcceptsSessionToken()) {
+    const contact = await probeHealth();
+    if (contact?.ready) {
+      return true;
+    }
+  }
+
+  onProgress?.({ phase: 'starting', managed: false, elapsedMs: 0, detail: '等待上次启动的后端退出' });
+  await stopPreviousBackend(pid);
+  if (pidIsRunning(pid)) throw new Error(`Atlas 后端 (PID ${pid}) 在等待及强制结束后仍未退出。`);
+  return false;
+}
+
 /**
  * An external backend is only usable if it accepts this session's API token: the
  * renderer's requests carry ``Origin: null`` plus the token Electron injects. A stale
@@ -332,12 +482,24 @@ async function attachExternal(): Promise<BackendLaunchResult> {
 
 export { BACKEND_STARTUP_CHANNEL };
 
-export async function ensureBackendRunning(options?: EnsureBackendOptions): Promise<BackendLaunchResult> {
+async function ensureBackendRunningImpl(options?: EnsureBackendOptions): Promise<BackendLaunchResult> {
   const onProgress = options?.onProgress;
   const startedAt = Date.now();
   const emit = (phase: BackendStartupProgress['phase'], managed: boolean, detail?: string) => {
     onProgress?.({ phase, managed, elapsedMs: Date.now() - startedAt, detail });
   };
+
+  try {
+    loadSharedApiToken();
+    if (await preparePreviousBackend(onProgress)) {
+      emit('ready', false, '复用已运行的 Atlas 后端');
+      return { ready: true, managed: false, pid: readBackendPid() ?? undefined };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit('failed', false, `${message}\n日志文件：${getBackendLogPath()}`);
+    throw new Error(`${message}\n日志文件：${getBackendLogPath()}`);
+  }
 
   emit('probing', false);
   // A busy backend (mid model-switch engine rebuild, heartbeat/automation tick
@@ -376,7 +538,7 @@ export async function ensureBackendRunning(options?: EnsureBackendOptions): Prom
       emit('starting', false, contact ? progressDetail(contact.payload) : '等待已运行的后端响应');
       await sleep(PROBE_INTERVAL_MS);
     }
-    emit('failed', false, `external backend not healthy within ${STARTUP_MAX_WAIT_MS / 1000}s`);
+    emit('failed', false, `external backend not healthy within ${STARTUP_MAX_WAIT_MS / 1000}s\n日志文件：${getBackendLogPath()}`);
     throw new Error(
       `An Atlas backend is already running but did not become healthy within ${STARTUP_MAX_WAIT_MS / 1000} seconds.`,
     );
@@ -413,7 +575,35 @@ export async function ensureBackendRunning(options?: EnsureBackendOptions): Prom
       throw error;
     }
   }
-  throw new Error(`Could not start the Atlas backend.${lastNotFound ? ` ${lastNotFound.message}` : ''}`);
+  const message = `Could not start the Atlas backend.${lastNotFound ? ` ${lastNotFound.message}` : ''}`;
+  emit('failed', false, `${message}\n日志文件：${getBackendLogPath()}`);
+  throw new Error(`${message}\n日志文件：${getBackendLogPath()}`);
+}
+
+/** Start or attach to the backend. Calling again after rejection is the retry API. */
+export async function ensureBackendRunning(options?: EnsureBackendOptions): Promise<BackendLaunchResult> {
+  const startedAt = Date.now();
+  let lastPhase: BackendStartupProgress['phase'] | undefined;
+  try {
+    return await ensureBackendRunningImpl({
+      ...options,
+      onProgress: (progress) => {
+        lastPhase = progress.phase;
+        options?.onProgress?.(progress);
+      },
+    });
+  } catch (error) {
+    if (lastPhase !== 'failed') {
+      const message = error instanceof Error ? error.message : String(error);
+      options?.onProgress?.({
+        phase: 'failed',
+        managed: false,
+        elapsedMs: Date.now() - startedAt,
+        detail: `${message}\n日志文件：${getBackendLogPath()}`,
+      });
+    }
+    throw error;
+  }
 }
 
 export function stopManagedBackend(): Promise<void> {
