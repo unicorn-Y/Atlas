@@ -49,8 +49,6 @@ class SubagentManager:
     ) -> dict[str, Any]:
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", subtask_id):
             raise ValueError("Invalid subtask_id")
-        if str(get_config().get("engine.kernel", "atlas")).strip().lower() != "atlas":
-            raise RuntimeError("Native subagents require engine.kernel=atlas")
         started = time.monotonic()
         options = dict(atlas_options)
         parent_hook = options.get("user_hook_callback")

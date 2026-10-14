@@ -50,7 +50,7 @@ def set_vault_store_factory(factory: Callable[[], Any] | None) -> None:
 def _vault_store() -> Any:
     if _vault_store_factory is not None:
         return _vault_store_factory()
-    from agent.vault_store import get_vault_store
+    from atlas.engine_core.agent.vault_store import get_vault_store
 
     return get_vault_store()
 

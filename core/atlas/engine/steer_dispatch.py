@@ -55,7 +55,7 @@ def apply_send_now(agent: Any, text: str) -> dict[str, Any]:
         tracker_lock = getattr(agent, "_tool_worker_threads_lock", None)
         if (getattr(agent, "_executing_tools", False)
                 and tracker is not None and tracker_lock is not None):
-            from tools.interrupt import request_yield
+            from atlas.engine_core.tools.interrupt import request_yield
 
             with tracker_lock:
                 worker_tids = list(tracker)

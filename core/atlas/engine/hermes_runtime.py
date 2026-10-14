@@ -1,4 +1,4 @@
-"""Run Atlas turns on the Hermes synchronous conversation loop.
+"""Compatibility facade for the Atlas-owned conversation kernel.
 
 Hermes source: unicorn-Y/hermes-agent@562ad75baec0c8360f6ce2d48b7d9de56506956c
 (upstream NousResearch/hermes-agent, MIT): run_agent.py::AIAgent,
@@ -6,7 +6,8 @@ agent/system_prompt.py::build_system_prompt, agent/turn_context.py::begin_turn_c
 agent/turn_iteration_prep.py::_maybe_inject_run_budget_warning,
 agent/compression_facade.py::_compress_context,
 agent/plan_prompt.py::build_plan_prompt, tools/mcp_tool_discovery.py::register_mcp_servers.
-Atlas-specific model, session, callback, and event adaptation lives here.
+The historical module name is retained for call-site compatibility; all turns
+are executed by ``atlas.kernel.loop.AtlasKernel``.
 """
 
 from __future__ import annotations
@@ -199,20 +200,8 @@ def _load_breaker_identity(home: Path) -> str:
 
 
 def _trust_context_files() -> None:
-    """Load AGENTS.md / CLAUDE.md / .cursorrules verbatim instead of Hermes' injection blocker.
-
-    The user decided Atlas runs without automatic safety review (2026-10-01); Hermes
-    otherwise replaces a whole rules file with a [BLOCKED] marker on a pattern hit.
-    """
-    try:
-        from agent import prompt_builder
-    except ImportError:
-        return
-
-    def passthrough(content: str, filename: str, *, user_authored: bool = False) -> str:
-        return content.removeprefix("﻿")
-
-    prompt_builder._scan_context_content = passthrough
+    """Compatibility no-op; Atlas prompt assembly owns workspace instructions."""
+    return None
 
 
 def _model_family_guidance(model: str) -> str:
@@ -238,25 +227,8 @@ def system_browser_candidates() -> list[Path]:
 
 
 def _use_system_browser() -> None:
-    """Point Hermes' browser tool at an installed Edge/Chrome when it has no Chromium.
-
-    Without it the browser tool tries to download its own pinned Chromium, which failed in
-    the packaged app ("Chromium browser is missing"), so every browser_* call errored. An
-    explicit AGENT_BROWSER_EXECUTABLE_PATH, or a Chromium Hermes already installed, wins.
-    """
-    if os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH"):
-        return
-    try:
-        from hermes_cli.browser_runtime import chromium_executable
-
-        if chromium_executable(allow_override=False):
-            return
-    except Exception:
-        logger.debug("hermes_runtime.browser_runtime_unavailable", exc_info=True)
-    found = next((path for path in system_browser_candidates() if path.is_file()), None)
-    if found is not None:
-        os.environ["AGENT_BROWSER_EXECUTABLE_PATH"] = str(found)
-        logger.info("Atlas browser tool uses the installed browser %s", found)
+    """Compatibility no-op; Atlas browser selection is owned by its adapter."""
+    return None
 
 
 class HermesRuntime:
@@ -284,24 +256,12 @@ class HermesRuntime:
         # conversation keep the legacy fresh-agent behavior instead of sharing an agent.
         self._active_sessions: set[str] = set()
         self._hermes_home_ready = False
-        # HERMES_HOME is a process-level setting (H3): stamp it once here instead of
-        # mutating os.environ on every turn.
-        self._ensure_hermes_home()
 
     def _ensure_hermes_home(self) -> None:
-        """Point HERMES_HOME at this runtime's engine home without per-turn rewrites.
-
-        The variable is written once per runtime instance; afterwards it is only
-        re-stamped when something else moved it (multi-runtime test processes),
-        never as a routine per-turn side effect.
-        """
-        if self._hermes_home_ready and os.environ.get("HERMES_HOME") == str(self.home):
+        """Ensure Atlas' own engine data directory exists."""
+        if self._hermes_home_ready:
             return
         self.home.mkdir(parents=True, exist_ok=True)
-        os.environ["HERMES_HOME"] = str(self.home)
-        _use_system_browser()
-        _seed_atlas_soul(self.home)
-        _trust_context_files()
         self._hermes_home_ready = True
 
     def _cache_limits(self) -> tuple[int, float]:
@@ -550,12 +510,7 @@ class HermesRuntime:
     def _agent_factory(self) -> Callable[..., Any]:
         if self.agent_factory is not None:
             return self.agent_factory
-        # HERMES_HOME was stamped once at construction (__init__), before this
-        # first import of modules that resolve its state root (H3: no per-turn
-        # os.environ mutation).
-        from run_agent import AIAgent
-
-        return AIAgent
+        raise RuntimeError("Hermes AIAgent was removed; AtlasKernel owns conversation turns")
 
     @staticmethod
     def _ssh_workspace_terminal_policy(
@@ -652,49 +607,12 @@ class HermesRuntime:
 
     @staticmethod
     def _register_atlas_mcp() -> list[str]:
-        """Adapt Atlas [tools.servers] to Hermes MCP registrations for the active process."""
-        from atlas.config import get_config
-
-        config = get_config()
-        servers = HermesRuntime._adapt_atlas_mcp_servers(
-            config.get("tools.servers", {}) or {}, config.get("tools.auto_start", []) or [],
-        )
-        enabled_names = [name for name, value in servers.items() if value.get("enabled")]
-        if not enabled_names:
-            return []
-        from tools.mcp_tool_discovery import register_mcp_servers
-
-        register_mcp_servers(servers)
-        toolsets = {f"mcp-{name}" for name in enabled_names}
-        return sorted(toolsets)
+        """MCP servers are owned by Atlas' deferred MCPClient startup."""
+        return []
 
     def _ensure_atlas_mcp_registered(self) -> list[str]:
-        """Register MCP servers once per configuration; refresh incrementally on change.
-
-        Hermes' ``register_mcp_servers`` is idempotent for connected names and only
-        connects servers that are new (H3: registration moves off the per-turn path;
-        a changed [tools.servers]/[tools.auto_start] fingerprint re-runs it, letting
-        the fork reconnect just the differences).
-        """
-        from atlas.config import get_config
-
-        config = get_config()
-        fingerprint = json.dumps(
-            {
-                "servers": config.get("tools.servers", {}) or {},
-                "auto_start": sorted(str(item) for item in (config.get("tools.auto_start", []) or [])),
-            },
-            sort_keys=True, default=str,
-        )
-        global _MCP_STATE
-        with _MCP_STATE_LOCK:
-            state = _MCP_STATE
-            if state is not None and state[0] == fingerprint:
-                return list(state[1])
-        toolsets = tuple(self._register_atlas_mcp())
-        with _MCP_STATE_LOCK:
-            _MCP_STATE = (fingerprint, toolsets)
-        return list(toolsets)
+        """Compatibility seam; the Atlas MCP client owns registration and readiness."""
+        return []
 
     def startup_registrations(self) -> list[str]:
         """Run the once-per-process registrations (server startup seam, H3/H5/H8).
@@ -702,40 +620,15 @@ class HermesRuntime:
         Installs the Atlas policy plugin and registers MCP servers a single time so
         the first user turn does not pay for them. Safe to call repeatedly.
         """
-        from atlas.engine.hermes_policy import install_atlas_policy_plugin
-
         self._ensure_hermes_home()
-        install_atlas_policy_plugin()
-        return self._ensure_atlas_mcp_registered()
+        return []
 
     @staticmethod
     def unregister_atlas_mcp_server(server_name: str, api_tool_names: set[str] | None = None) -> None:
         """Remove every Hermes MCP registry scope owned by one Atlas-configured server."""
-        from tools.mcp_tool_common import _core
-        from tools.mcp_tool_lifecycle import shutdown_mcp_servers
-
-        with _core._lock:
-            keys = (set(_core._servers) | set(_core._server_scope_keys)
-                    | set(_core._server_tool_scopes) | set(_core._lazy_server_configs)
-                    | set(_core._lazy_server_tool_names))
-            matching = [key for key in keys
-                        if (key[1] if isinstance(key, tuple) else key) == server_name]
-            scopes = {
-                _core._server_scope_keys.get(key, key[0] if isinstance(key, tuple) else None)
-                for key in matching
-            }
-            tool_names: set[str] = set(api_tool_names or ())
-            for key in matching:
-                tool_names.update(_core._lazy_server_tool_names.get(key, ()) or ())
-                server = _core._servers.get(key)
-                tool_names.update(getattr(server, "_registered_tool_names", ()) or ())
-        if not scopes:
-            scopes = {None}
-        for scope in scopes:
-            shutdown_mcp_servers(scope=scope, names={server_name})
         from atlas.engine.tool_registry import unregister_atlas_mcp_tools
 
-        unregister_atlas_mcp_tools(tool_names, scopes)
+        unregister_atlas_mcp_tools(set(api_tool_names or ()), {None})
 
     @staticmethod
     async def _apply_compression_model_setting(
@@ -825,79 +718,88 @@ class HermesRuntime:
     def _compact_session_sync(
         self, conversation_id: str, workspace: str | None, focus_topic: str | None,
     ) -> dict[str, Any]:
-        """Run the blocking Hermes compressor off the event loop.
+        """Compact the canonical transcript through Atlas ContextManager and ModelCall."""
+        async def compact() -> dict[str, Any]:
+            from types import SimpleNamespace
 
-        Hermes source: unicorn-Y/hermes-agent@562ad75baec0c8360f6ce2d48b7d9de56506956c
-        compression_facade.py::_compress_context.
-        """
-        self._ensure_hermes_home()
-        settings = self.model_manager
-        current = settings.current_model
-        model_config = next(
-            (item for item in settings.list_models() if item.get("id") == current), {},
-        )
-        router = getattr(settings, "model_router", None)
-        route = asyncio.run(router.resolve(current, "compression")) if router is not None else None
-        wire_model = (
-            str(route.wire_model or route.model) if route is not None else
-            _wire_model_from_config(model_config, fallback=settings.current_litellm_model)
-        )
-        route_kwargs = {}
-        if route is not None:
-            from atlas.models.router import ModelRouter
+            from atlas.config import get_config
+            from atlas.engine.session_sync import (
+                abort_session_compaction, begin_session_compaction,
+                compact_session_messages,
+            )
+            from atlas.engine_core.state.hermes_state import SessionDB
+            from atlas.kernel.context import ContextManager
+            from atlas.kernel.loop import _compaction_payload
+            from atlas.kernel.model_call import complete_stream
+            from atlas.models.tokens import estimate_tokens
 
-            route_kwargs = ModelRouter.hermes_agent_kwargs(route)
-        else:
-            route_kwargs = {
-                "provider": "openai", "api_mode": "openai",
-                "base_url": getattr(settings, "gateway_base_url", None),
-                "api_key": getattr(settings, "_api_key", None),
-            }
-        route_kwargs["model"] = wire_model
-        agent = self._agent_factory()(
-            # The compaction agent's transport sends ``model`` verbatim on the
-            # wire: pin the bare wire id, not the litellm-style routing label
-            # (H10.2-DEFECT-1 residual, same fix as the conversation agent).
-            **route_kwargs, session_id=conversation_id,
-            cwd=workspace, skip_memory=True, checkpoints_enabled=False,
-            enabled_toolsets=["file", "terminal", "todo", "clarify", "code_execution",
-                              "session_search", "delegation", "atlas"],
-            fallback_model=model_config.get("fallback"),
-            max_tokens=model_config.get("max_output_tokens"),
-        )
-        asyncio.run(self._apply_compression_model_setting(agent, settings, route_kwargs))
-        try:
-            open_session_db = getattr(agent, "_get_session_db_for_recall", None)
-            if callable(open_session_db) and getattr(agent, "_session_db", None) is None:
-                open_session_db()
-            db = getattr(agent, "_session_db", None)
-            if db is None:
-                raise RuntimeError("Hermes SessionDB is unavailable")
-            history = db.get_messages_as_conversation(conversation_id, include_ancestors=True)
+            router = getattr(self.model_manager, "model_router", None)
+            if router is None:
+                raise RuntimeError("Atlas model router is unavailable for compaction")
+            model_id = str(self.model_manager.current_model)
+            models = self.model_manager.list_models()
+            model_config = next((item for item in models if item.get("id") == model_id), {})
+            with SessionDB(db_path=self.home / "state.db") as db:
+                history = db.get_messages_as_conversation(
+                    conversation_id, include_ancestors=True,
+                )
+                session = db.get_session(conversation_id) or {}
             if not history:
                 return {"compressed": False, "reason": "empty_session", "summary": ""}
-            session = db.get_session(conversation_id) or {}
-            prompt = str(session.get("system_prompt") or agent._build_system_prompt(None))
-            estimate_model = str(model_config.get("litellm_model") or current)
-            before = _history_tokens(history, model=estimate_model)
-            compressed, _ = agent._compress_context(
-                history, prompt, focus_topic=focus_topic or None, force=True, trigger="manual",
+
+            holder = f"atlas:manual-compact:{uuid.uuid4().hex}"
+            watermark = await asyncio.to_thread(
+                begin_session_compaction, self.home, conversation_id, holder,
             )
-            after_history = db.get_messages_as_conversation(
-                conversation_id, include_ancestors=True,
-            )
-            after = _history_tokens(after_history, model=estimate_model)
-            summary = "\n".join(
-                str(item.get("content", "")) for item in after_history[-4:]
-                if item.get("role") in {"system", "assistant"}
-                and isinstance(item.get("content"), str)
-            )
-            return {"compressed": len(compressed) < len(history) or after < before,
-                    "before_tokens": before, "after_tokens": after, "summary": summary}
-        finally:
-            close = getattr(agent, "close", None)
-            if callable(close):
-                close()
+            model_agent = SimpleNamespace(_model_router=router, _model_mgr=self.model_manager)
+
+            async def summarize(old: list[dict[str, Any]], prompt: str) -> str:
+                result = await complete_stream(
+                    model_agent, model_id,
+                    [*old, {"role": "user", "content": prompt}], [],
+                    max_output_tokens=min(int(model_config.get("max_output_tokens") or 4096), 8192),
+                    unbounded_connection_retries=False,
+                )
+                return result.text
+
+            try:
+                context = ContextManager(get_config().raw)
+                result = await context.prepare(
+                    history,
+                    model_window=int(model_config.get("context_window") or 200_000),
+                    summarize=summarize,
+                    preserved={"conversation_id": conversation_id},
+                    focus=focus_topic or "",
+                    manual=True, force=True,
+                )
+                if result.method == "none":
+                    await asyncio.to_thread(abort_session_compaction, self.home, conversation_id, holder)
+                    return {"compressed": False, "reason": result.error or "no_safe_compaction",
+                            "summary": "", "before_tokens": result.before_tokens,
+                            "after_tokens": result.after_tokens}
+                if result.error:
+                    raise RuntimeError(result.error)
+                compacted, tail_count, carried = _compaction_payload(
+                    result.messages, history,
+                    synthetic_system_prompt=str(session.get("system_prompt") or ""),
+                    method=result.method,
+                )
+                await asyncio.to_thread(
+                    compact_session_messages, self.home, conversation_id, holder, watermark,
+                    history, compacted, tail_count=tail_count, carried_messages=carried,
+                )
+                summary = next((str(item.get("content") or "") for item in reversed(compacted)
+                                if item.get("role") == "user"
+                                and str(item.get("content") or "").startswith(
+                                    "[Conversation continuation summary]")), "")
+                return {"compressed": True, "before_tokens": result.before_tokens,
+                        "after_tokens": result.after_tokens, "summary": summary,
+                        "estimated_after_tokens": estimate_tokens(compacted)}
+            except BaseException:
+                await asyncio.to_thread(abort_session_compaction, self.home, conversation_id, holder)
+                raise
+
+        return asyncio.run(compact())
 
     @staticmethod
     def _session_workspace(hermes_cwd: Any) -> str:
@@ -973,10 +875,9 @@ class HermesRuntime:
 
         if expert_text := expert_instructions():
             system_message = "\n\n".join(filter(None, (system_message, expert_text)))
-        kernel_name = str(atlas_config.get("engine.kernel", "atlas")).strip().lower()
-        if kernel_name not in {"atlas", "hermes"}:
-            raise ValueError(f"Unknown engine.kernel selection: {kernel_name}")
-        if kernel_name == "atlas" and atlas_agent is not None and atlas_context is not None:
+        if atlas_agent is None or atlas_context is None:
+            raise RuntimeError("AtlasKernel requires an Atlas agent and runtime context")
+        if atlas_agent is not None and atlas_context is not None:
             from atlas.kernel.loop import AtlasKernel, KernelRequest
 
             active_steer_queue = steer_queue or asyncio.Queue()
@@ -1127,22 +1028,27 @@ class HermesRuntime:
                             logger.warning("Atlas kernel title callback failed", exc_info=True)
 
                     def generate_title() -> None:
-                        from hermes_state import SessionDB
-                        from agent.title_generator import (
+                        from atlas.engine_core.agent.title_generator import (
                             _auto_title_enabled, _model_title_upgrade_enabled,
                             apply_instant_title, auto_title_session, is_titleable_user_message,
                         )
+                        from atlas.engine_core.state.hermes_state import SessionDB
 
                         if not _auto_title_enabled() or not is_titleable_user_message(message):
                             return
                         with SessionDB(db_path=self.home / "state.db") as db:
                             apply_instant_title(db, conversation_id, message, publish_title)
                             if _model_title_upgrade_enabled():
-                                import agent.auxiliary_client as auxiliary_client
+                                async def model_call(prompt: str) -> str:
+                                    result = await self.model_manager.model_router.complete_for(
+                                        self.model_manager.current_model, "title",
+                                        [{"role": "user", "content": prompt}], max_tokens=128,
+                                    )
+                                    return result.text
 
-                                _adapt_hermes_anthropic_output_config(auxiliary_client)
                                 auto_title_session(db, conversation_id, message,
-                                                   title_callback=publish_title)
+                                                   title_callback=publish_title,
+                                                   model_call=model_call)
 
                     title_task = asyncio.create_task(asyncio.to_thread(generate_title))
                     _ATLAS_TITLE_TASKS.add(title_task)
@@ -1182,14 +1088,7 @@ class HermesRuntime:
                     unsubscribe_notifications(conversation_id, notification_handle)
             return
 
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[Any] = asyncio.Queue()
-
-        def emit(event: dict[str, Any]) -> None:
-            loop.call_soon_threadsafe(queue.put_nowait, event)
-
-        usage_budget = configured_run_usage_budget()
-        budget_stopped = {"v": False}
+        raise AssertionError("unreachable: AtlasKernel inputs were validated above")
 
         def on_stream_delta(text: Any) -> None:
             # Hermes sends None to clear its temporary pre-tool display buffer;

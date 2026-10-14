@@ -7,7 +7,7 @@ from typing import Any
 
 #: 分类（顺序即界面顺序）：id → (名称, 一句话说明)。
 CATEGORIES: dict[str, tuple[str, str]] = {
-    "kernel": ("Agent 内核", "Hermes fork：对话循环、工具、上下文压缩"),
+    "kernel": ("Agent 内核", "Atlas engine_core 与移植来源"),
     "agents": ("外部 Agent 与协议", "Claude Code / Codex / Pi 等外部 Agent 与 ACP"),
     "automation": ("浏览器与电脑操作", "browser-use、cua、Playwright、Chrome DevTools"),
     "mcp": ("MCP 服务", "配置里启动的 MCP 服务器"),
@@ -32,13 +32,12 @@ HELD = "held"              # 用户锁定，不参与一键追新
 
 #: 更新方式。
 AUTO = "auto"        # 预演副本里直接改版本号、装包、跑测试
-MERGE = "merge"      # fork 合并上游；冲突时需要人（或 Agent）处理
 REVIEW = "review"    # 借鉴代码：三方合并上游改动，冲突时生成待办
 HOT = "hot"          # 不用重启，直接在运行中的 Atlas 里更新（技能、MCP 版本号）
 MANUAL = "manual"    # 只提示，不自动做（如 Python 大版本）
 
 STRATEGY_LABELS = {
-    AUTO: "自动更新", MERGE: "合并上游", REVIEW: "合并改动", HOT: "即时更新", MANUAL: "需手动",
+    AUTO: "自动更新", REVIEW: "合并改动", HOT: "即时更新", MANUAL: "需手动",
 }
 
 

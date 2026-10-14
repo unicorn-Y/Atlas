@@ -20,13 +20,7 @@ if not exist "core\.venv\Scripts\python.exe" (
   echo [setup] Creating the Atlas Python environment...
   py -3.14 -m venv "core\.venv"
   if errorlevel 1 goto :failed
-  "core\.venv\Scripts\python.exe" core\scripts\setup_hermes.py
-  if errorlevel 1 goto :failed
   "core\.venv\Scripts\python.exe" -m pip install -e "core"
-  if errorlevel 1 goto :failed
-) else (
-  rem Keep the Hermes checkout at the commit pinned in core\pyproject.toml.
-  "core\.venv\Scripts\python.exe" core\scripts\setup_hermes.py
   if errorlevel 1 goto :failed
 )
 

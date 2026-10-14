@@ -45,7 +45,7 @@ def _open_db(home: str | Path):
     _require_migration_settled(home)
     root = Path(home).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
-    from hermes_state import SessionDB
+    from atlas.engine_core.state.hermes_state import SessionDB
 
     return SessionDB(db_path=root / "state.db")
 
@@ -117,7 +117,7 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
                     "codex_reasoning_items", "codex_message_items", "_compressed_summary"):
             if key in metadata and key not in message:
                 message[key] = metadata[key]
-    from agent.agent_runtime_helpers import repair_message_sequence
+    from atlas.engine_core.agent.agent_runtime_helpers import repair_message_sequence
 
     repair_message_sequence(None, model_history)
     return model_history
@@ -145,8 +145,8 @@ def compact_session_messages(
     tail_count: int = 0, carried_messages: list[dict[str, Any]] | None = None,
 ) -> int:
     """Publish model compaction atomically through the existing SessionDB authority."""
-    from agent.conversation_compression_archive import coverage_for_commit
-    from agent.context_compressor import stamp_db_persisted_markers
+    from atlas.engine_core.agent.conversation_compression_archive import coverage_for_commit
+    from atlas.engine_core.agent.context_compressor import stamp_db_persisted_markers
 
     with _open_db(home) as db:
         try:
@@ -508,7 +508,7 @@ async def migrate_legacy_sessions(home: str | Path, memory_store: Any, *,
         _copy_sqlite_backup(hermes_path, stage_db)
         phase = "import"
         conversations = await memory_store.list_conversations(limit=None)
-        from hermes_state import SessionDB
+        from atlas.engine_core.state.hermes_state import SessionDB
 
         with SessionDB(db_path=stage_db) as db:
             existing_rows = db._read_all("SELECT id, title FROM sessions")
@@ -781,12 +781,11 @@ def list_branch_tree(home: str | Path, conversation_id: str) -> list[dict[str, A
 
 
 def goal_command(home: str | Path, conversation_id: str, command: str) -> dict[str, Any]:
-    """Apply Hermes' canonical per-session /goal command and return its continuation prompt."""
-    os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
-    from hermes_cli.goal_command import dispatch_goal_command, is_goal_control
-    from hermes_cli.goals import GoalManager
+    """Apply Atlas per-session /goal command and return its continuation prompt."""
+    from atlas.engine_core.goal_command import dispatch_goal_command, is_goal_control
+    from atlas.engine_core.goals import GoalManager
 
-    manager = GoalManager(conversation_id)
+    manager = GoalManager(conversation_id, home=home)
     previous = manager.state
     result = dispatch_goal_command(
         manager, command, authorize_gate=lambda: "Goal gates require explicit approval.")
@@ -814,35 +813,32 @@ def goal_command(home: str | Path, conversation_id: str, command: str) -> dict[s
 
 
 def evaluate_goal_after_turn(
-    home: str | Path, conversation_id: str, response: str,
+    home: str | Path, conversation_id: str, response: str, judge=None,
 ) -> dict[str, Any]:
-    """Use Hermes' per-session GoalManager as the authority after an assistant turn."""
-    os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
-    from hermes_cli.goals import GoalManager
+    """Evaluate the persisted per-session goal after an assistant turn."""
+    from atlas.engine_core.goals import GoalManager
 
-    manager = GoalManager(conversation_id)
+    manager = GoalManager(conversation_id, home=home)
     if not manager.is_active():
         return {"status": manager.state.status if manager.state else None,
                 "should_continue": False, "continuation_prompt": None,
                 "verdict": "inactive", "message": ""}
-    return manager.evaluate_after_turn(response or "")
+    return manager.evaluate_after_turn(response or "", judge=judge)
 
 
 def goal_state(home: str | Path, conversation_id: str) -> dict[str, Any] | None:
-    """Return the canonical Hermes GoalState for a conversation or automation session."""
-    os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
-    from hermes_cli.goals import GoalManager
+    """Return the persisted goal state for a conversation or automation session."""
+    from atlas.engine_core.goals import GoalManager
 
-    state = GoalManager(conversation_id).state
+    state = GoalManager(conversation_id, home=home).state
     return json.loads(state.to_json()) if state is not None else None
 
 
 def set_goal(home: str | Path, conversation_id: str, goal: str) -> dict[str, Any]:
-    """Create or replace a goal through Hermes' per-session manager."""
-    os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
-    from hermes_cli.goals import GoalManager
+    """Create or replace a goal in the per-session state store."""
+    from atlas.engine_core.goals import GoalManager
 
-    manager = GoalManager(conversation_id)
+    manager = GoalManager(conversation_id, home=home)
     state = manager.set(goal)
     return json.loads(state.to_json())
 
@@ -850,11 +846,10 @@ def set_goal(home: str | Path, conversation_id: str, goal: str) -> dict[str, Any
 def mutate_goal(
     home: str | Path, conversation_id: str, action: str, reason: str = "user-paused",
 ) -> dict[str, Any] | None:
-    """Apply a canonical Hermes done, pause, resume, or clear action."""
-    os.environ["HERMES_HOME"] = str(Path(home).expanduser().resolve())
-    from hermes_cli.goals import GoalManager
+    """Apply a per-session done, pause, resume, or clear action."""
+    from atlas.engine_core.goals import GoalManager
 
-    manager = GoalManager(conversation_id)
+    manager = GoalManager(conversation_id, home=home)
     if action == "pause":
         state = manager.pause(reason)
     elif action == "resume":
@@ -874,7 +869,7 @@ def record_goal_event(
     home: str | Path, conversation_id: str, event: str,
     data: dict[str, Any] | None = None, run_id: str | None = None,
 ) -> dict[str, Any]:
-    """Append audit-only goal history in Hermes SessionDB state metadata."""
+    """Append audit-only goal history in SessionDB state metadata."""
     with _open_db(home) as db:
         key = f"goal-events:{conversation_id}"
         events = json.loads(db.get_meta(key) or "[]")
@@ -901,7 +896,7 @@ def record_goal_event(
 def goal_events(
     home: str | Path, conversation_id: str, run_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Read audit-only goal events from the same Hermes SessionDB as GoalManager."""
+    """Read audit-only goal events from SessionDB state metadata."""
     with _open_db(home) as db:
         events = json.loads(db.get_meta(f"goal-events:{conversation_id}") or "[]")
     if not isinstance(events, list):

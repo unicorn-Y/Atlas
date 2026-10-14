@@ -79,7 +79,7 @@ class IngressQueue:
         self.db_path = str(db_path)
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(self.db_path, check_same_thread=False)
-        from hermes_state_wal import apply_wal_with_fallback
+        from atlas.engine_core.state.hermes_state_wal import apply_wal_with_fallback
 
         apply_wal_with_fallback(self._db, db_label="Atlas channel ingress")
         self._db.execute("PRAGMA synchronous=NORMAL")

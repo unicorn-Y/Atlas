@@ -400,7 +400,7 @@ class AtlasKernel:
 
             system_prompt = request.system_message or ""
             if getattr(runtime, "mode", "act") == "plan":
-                from agent.plan_prompt import build_plan_prompt
+                from atlas.engine_core.agent.plan_prompt import build_plan_prompt
 
                 system_prompt = "\n\n".join(filter(None, (
                     system_prompt, build_plan_prompt(request.message),

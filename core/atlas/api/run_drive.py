@@ -380,6 +380,7 @@ async def _run_scheduled_goal(task_id: str, message: str = "") -> None:
                 continue
             decision = await asyncio.to_thread(
                 evaluate_goal_after_turn, home, session_id, "".join(response),
+                _atlas_goal_judge(_server().model_mgr),
             )
             await asyncio.to_thread(record_goal_event, home, session_id, "goal.evaluated", {
                 "verdict": decision.get("verdict"),
@@ -398,6 +399,38 @@ def _agent_service() -> PersistentAgentService:
     from atlas.api.agent_router import get_agent_service
 
     return get_agent_service()
+
+
+def _atlas_goal_judge(model_manager: Any):
+    """Return a conservative goal judge backed by Atlas' routed model API."""
+    def judge(goal: str, response: str, state: Any) -> tuple[str, str]:
+        contract = state.contract.render_block() if state.has_contract() else "(no completion contract)"
+        prompt = (
+            "Determine whether the user's goal is fully complete based only on the assistant's "
+            "latest turn and the completion contract. Return one JSON object with keys verdict "
+            "(done, continue, or blocked) and reason. Use done only when the requested outcome "
+            "is demonstrably achieved; use blocked only for a real blocker; otherwise use continue.\n\n"
+            f"GOAL:\n{goal[:4000]}\n\nCONTRACT:\n{contract[:4000]}\n\n"
+            f"LATEST TURN:\n{response[-10000:]}"
+        )
+        result = asyncio.run(model_manager.model_router.complete_for(
+            model_manager.current_model, "goal_judge",
+            [{"role": "user", "content": prompt}], max_tokens=300,
+        ))
+        text = str(result.text or "")
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end <= start:
+            return "continue", "Goal judge returned no valid JSON verdict."
+        try:
+            verdict_data = json.loads(text[start:end + 1])
+        except (TypeError, ValueError):
+            return "continue", "Goal judge returned malformed JSON."
+        verdict = str(verdict_data.get("verdict") or "").strip().lower()
+        if verdict not in {"done", "continue", "blocked"}:
+            return "continue", "Goal judge returned an unknown verdict."
+        return verdict, str(verdict_data.get("reason") or "")[:1000]
+
+    return judge
 
 
 def _resolve_agent_for_run(agent_id: str) -> dict[str, Any] | None:
@@ -2133,15 +2166,7 @@ async def _execute_run(
     orchestrator_events = None
 
     def kernel_owns_lifecycle_hooks() -> bool:
-        if run.executor != "atlas":
-            return False
-        try:
-            from atlas.config import get_config
-
-            return str(get_config().get("engine.kernel", "atlas")).strip().lower() == "atlas"
-        except Exception:
-            # HermesRuntime defaults to the Atlas kernel when this setting is absent.
-            return True
+        return run.executor == "atlas"
 
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
@@ -2838,6 +2863,7 @@ async def _execute_run(
                 goal_decision = await asyncio.to_thread(
                     evaluate_goal_after_turn, DATA_ROOT / "engine",
                     run.conversation_id, full_response,
+                    _atlas_goal_judge(_server().model_mgr),
                 )
             except Exception:
                 log.exception("conversation.goal_evaluation_failed",
