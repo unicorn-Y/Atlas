@@ -513,7 +513,7 @@ class AtlasKernel:
                 if (getattr(proxy_runtime, "dynamic_plan_mode", False)
                         and name not in {
                             "update_plan", "EnterPlanMode", "ExitPlanMode",
-                            "get_context_remaining", "read_tool_history", "tool_search",
+                            "get_context_remaining", "read_tool_history", "tool_search", "memory_search",
                             "list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource",
                             "request_user_input", "request_user_input_async",
                             "AskUserQuestion",
@@ -1947,6 +1947,19 @@ class AtlasKernel:
                 "is_error": bool(result.get("is_error")) if isinstance(result, dict) else False,
                 "outcome": "failed" if isinstance(result, dict) and result.get("is_error") else "completed",
             }
+        if name == "memory_search":
+            from atlas.memory.library import get_library
+
+            library = get_library()
+            if library is None:
+                return {"content": "The memory library is turned off.", "is_error": True}
+            found = await asyncio.to_thread(
+                library.search, str(arguments.get("query") or ""),
+                max(1, min(20, int(arguments.get("limit", 8) or 8))),
+                bool(arguments.get("include_history")),
+            )
+            return {"content": json.dumps(found, ensure_ascii=False) if found else "No matching memories.",
+                    "data": found, "outcome": "completed"}
         if name == "tool_search":
             from atlas.kernel.tools import kernel_tool_schemas
 

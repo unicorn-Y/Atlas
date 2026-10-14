@@ -1,17 +1,15 @@
 /**
- * MemoryPage —— 记忆与资料。Atlas 只有一个记忆引擎：MemOS 的 Atlas fork（vendor/memos-local-plugin）。
- *   - 关于你：FactsView，你说过的关于自己的事（当前 / 历史 / 到期），每轮对话自动带上
- *   - 记忆变动：MemoryChangesView，每一次新增 / 修改 / 删除 / 淡忘，附改动前后内容；暂停 / 恢复
- *   - 经验与技能：LibraryView，MemOS 提炼出的技能、策略、世界模型
+ * MemoryPage —— 记忆与资料。记忆是 data/memory 下的透明记忆库（Markdown + git，docs/memory/PLAN-V1.md）。
+ *   - 今天：今日变动、进行中的事、关于你、它自己（这些每轮都自动带进对话）
+ *   - 人和事：每人 / 每件事一页，带别名，可以直接改
+ *   - 变动记录：每次变动一条 git 提交，可撤销
  *   - 提醒：RemindersView，聊天里建的提醒，可取消
  *   - 资料：用户交给 Atlas 的笔记和说明（/api/knowledge）
  */
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { BellRing, BookMarked, GitCompare, LoaderCircle, Plus, RefreshCw, Search, Sparkles, UserRound, X } from 'lucide-react';
+import { BellRing, BookMarked, BookUser, CalendarDays, GitCompare, LoaderCircle, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { api, relativeTime } from '../services/api';
-import FactsView from '../components/memory/FactsView';
-import LibraryView from '../components/memory/LibraryView';
-import MemoryChangesView from '../components/memory/MemoryChangesView';
+import { LibChangesView, PeopleView, TodayView } from '../components/memory/LibraryPages';
 import RemindersView from '../components/memory/RemindersView';
 import { ConfirmButton } from '../components/memory/common';
 
@@ -23,12 +21,12 @@ interface Knowledge {
   created_at?: string;
 }
 
-type Tab = 'facts' | 'changes' | 'library' | 'reminders' | 'knowledge';
+type Tab = 'today' | 'people' | 'changes' | 'reminders' | 'knowledge';
 
-const TABS: Array<{ value: Tab; label: string; icon: typeof UserRound }> = [
-  { value: 'facts', label: '关于你', icon: UserRound },
-  { value: 'changes', label: '记忆变动', icon: GitCompare },
-  { value: 'library', label: '经验与技能', icon: Sparkles },
+const TABS: Array<{ value: Tab; label: string; icon: typeof CalendarDays }> = [
+  { value: 'today', label: '今天', icon: CalendarDays },
+  { value: 'people', label: '人和事', icon: BookUser },
+  { value: 'changes', label: '变动记录', icon: GitCompare },
   { value: 'reminders', label: '提醒', icon: BellRing },
   { value: 'knowledge', label: '资料', icon: BookMarked },
 ];
@@ -57,7 +55,7 @@ export default function MemoryPage({
   onToast: (text: string) => void;
   onPendingChange?: (count: number) => void;
 }) {
-  const [tab, setTab] = useState<Tab>('facts');
+  const [tab, setTab] = useState<Tab>('today');
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
@@ -116,7 +114,7 @@ export default function MemoryPage({
       <header className="page-head">
         <div>
           <h1>记忆与资料</h1>
-          <p>Atlas 记住的关于你的事、学到的经验，以及你交给它的资料。每一条都能看到出处，都可以删除。</p>
+          <p>Atlas 记住的关于你、关于身边的人和事。每一条都标了来源，能改、能忘掉、能撤销。</p>
         </div>
         {tab === 'knowledge' && <div className="btns">
           <button className="btn ghost" onClick={() => void loadKnowledge()} disabled={busy || !connected}>
@@ -147,9 +145,9 @@ export default function MemoryPage({
         <button className="iconbtn" aria-label="关闭错误提示" onClick={() => setError('')}><X size={15} /></button>
       </div>}
 
-      {tab === 'facts' && <FactsView apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
-      {tab === 'changes' && <MemoryChangesView apiBaseUrl={apiBaseUrl} connected={connected} />}
-      {tab === 'library' && <LibraryView apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
+      {tab === 'today' && <TodayView apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
+      {tab === 'people' && <PeopleView apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
+      {tab === 'changes' && <LibChangesView apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
       {tab === 'reminders' && <RemindersView apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
 
       {tab === 'knowledge' && adding && <form className="card glass form" onSubmit={saveDoc}>

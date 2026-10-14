@@ -159,3 +159,6 @@ data/skill-sleep/
 data/upstream/
 data/library/
 frontend/electron-runtime/
+
+# Memory library: personal data, its own git repo (docs/memory/PLAN-V1.md)
+/data/memory/

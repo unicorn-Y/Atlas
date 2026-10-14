@@ -33,6 +33,7 @@ READ_ONLY_TOOLS = frozenset({
     "android_ui_describe", "android_ui_resolve", "ios_preflight",
     "ios_list_simulators", "ios_discover_project", "ios_logs", "ios_ui_status",
     "ios_ui_describe", "TaskGet", "TaskList", "TaskOutput",
+    "memory_search",
 })
 EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write", "notebook_edit"})
 
@@ -73,6 +74,16 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
         }, ["server", "uri"]),
         _function_schema("tool_search", "Search currently registered Atlas, MCP, and browser tools by name or description.", {
             "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+        }, ["query"]),
+        _function_schema("memory_search", (
+            "Search Atlas' long-term memory library: facts about the user, people, projects, "
+            "and the raw log of earlier conversations. Use it when the user refers to something "
+            "from before that is not already in context. Results carry their source and date; "
+            "if nothing relevant comes back, say you do not remember instead of guessing."
+        ), {
+            "query": {"type": "string", "description": "Names, topics or words to look for."},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+            "include_history": {"type": "boolean", "description": "Also return facts that are no longer true."},
         }, ["query"]),
         _function_schema("clock.curr_time", "Return the current UTC time.", {}),
         _function_schema("clock.sleep", "Wait for a bounded number of seconds before continuing.", {

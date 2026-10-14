@@ -622,6 +622,55 @@ async def _phase_plan(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
         yield {"type": "plan_updated", "plan": plan_value, "resumed": False}
 
 
+async def _merge_library_recall(context: Any, message: str) -> Any:
+    """Memory library slot (docs/memory/PLAN-V1.md): resident + cued memories go first.
+
+    Runs alongside the older unified memory until the library replaces it.
+    """
+    try:
+        from atlas.memory.library import get_library
+
+        library = get_library()
+        if library is None:
+            return context
+        recall = await asyncio.to_thread(library.recall, message)
+    except Exception as exc:
+        log.warning("memory.library.recall_failed", error=str(exc), error_type=type(exc).__name__)
+        return context
+    block = "\n\n".join(part for part in (recall["system_block"], recall["relevant"]) if part)
+    if not block or not isinstance(context, dict):
+        return context
+    existing = context.get("system_prompt_prefix") or ""
+    if not existing and context.get("profile_block"):
+        from atlas.memory.recall_context import PROVENANCE_SYSTEM_INSTRUCTION
+
+        existing = f"{PROVENANCE_SYSTEM_INSTRUCTION}\n\n{context['profile_block']}"
+    merged = dict(context)
+    merged["system_prompt_prefix"] = f"{block}\n\n{existing}" if existing else block
+    merged["library_refs"] = recall["refs"]
+    return merged
+
+
+def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) -> None:
+    """Hand the finished turn to the memory library; it writes in the background."""
+    try:
+        from atlas import expert_mode
+        from atlas.memory.library import get_library
+
+        library = get_library()
+        if library is None:
+            return
+        library.schedule_turn(
+            user_text=str(state.message or ""),
+            assistant_text=full_response if isinstance(full_response, str) else str(full_response or ""),
+            session=str(state.request.conversation_id or ""),
+            mode="expert" if expert_mode.is_enabled() else "",
+            model_mgr=getattr(agent, "_model_mgr", None),
+        )
+    except Exception as exc:
+        log.warning("memory.library.schedule_failed", error=str(exc), error_type=type(exc).__name__)
+
+
 async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
     """Load memory context, history and reflections; record knowledge usage."""
     request, runtime = state.request, state.runtime
@@ -687,6 +736,7 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
                     )
             else:
                 state.context = await agent._memory.get_agent_context_with_trace(state.message)
+            state.context = await _merge_library_recall(state.context, state.message)
             context_memories = state.context.get("memories", []) if isinstance(state.context, dict) else None
             if inspect.iscoroutine(context_memories):
                 context_memories.close()
@@ -1494,6 +1544,9 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
         runtime, "before_response", conversation_id=request.conversation_id,
         goal=state.message, response=full_response,
     )
+
+    if not request.worker:
+        _schedule_library_write(agent, state, full_response)
 
     if request.evaluate_goal and state.plan and all(
         item.status == "completed" for item in state.plan.subtasks

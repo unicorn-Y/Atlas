@@ -1,0 +1,290 @@
+<title>Atlas 记忆库原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600&display=swap">
+<style>
+/* Layout: Atlas desk + white sheet; left nav of memory areas, main view swaps; brass = Atlas's own voice */
+:root{
+  --desk:#EEEDE9; --sheet:#FFFFFF; --card:#F7F6F3; --sunken:#F3F2EF; --hover:rgba(20,20,22,.045);
+  --line:rgba(20,20,22,.08); --line-strong:rgba(20,20,22,.15);
+  --fg:#17171B; --fg2:#55565B; --fg3:#8A8A86; --heading:#111114;
+  --brand:#9E6F2B; --brand-soft:rgba(158,111,43,.12);
+  --ok:#2E8B68; --ok-soft:rgba(46,139,104,.12); --warn:#A86A12; --warn-soft:rgba(190,130,30,.13);
+  --danger:#B0442B; --danger-soft:rgba(176,68,43,.1); --info:#3F6FB0; --info-soft:rgba(63,111,176,.11);
+  --z-life:rgba(176,68,43,.07); --z-work:rgba(63,111,176,.07); --z-proj:rgba(46,139,104,.08);
+  --sans:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;
+  --serif:"Noto Serif SC","Source Han Serif SC","Songti SC",serif;
+  --mono:"Cascadia Code",Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --desk:#07090D; --sheet:#0E141C; --card:rgba(255,255,255,.035); --sunken:rgba(255,255,255,.04); --hover:rgba(255,255,255,.05);
+  --line:rgba(255,255,255,.075); --line-strong:rgba(255,255,255,.14);
+  --fg:#E8EBEF; --fg2:#A5AFBB; --fg3:#77818E; --heading:#F4EDE0;
+  --brand:#D9AF69; --brand-soft:rgba(217,175,105,.13);
+  --ok:#6FC2A8; --ok-soft:rgba(111,194,168,.13); --warn:#E2B25E; --warn-soft:rgba(226,178,94,.13);
+  --danger:#E3866E; --danger-soft:rgba(227,134,110,.13); --info:#8FB3E6; --info-soft:rgba(143,179,230,.12);
+  --z-life:rgba(227,134,110,.07); --z-work:rgba(143,179,230,.07); --z-proj:rgba(111,194,168,.07);
+  color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --desk:#07090D; --sheet:#0E141C; --card:rgba(255,255,255,.035); --sunken:rgba(255,255,255,.04); --hover:rgba(255,255,255,.05);
+  --line:rgba(255,255,255,.075); --line-strong:rgba(255,255,255,.14);
+  --fg:#E8EBEF; --fg2:#A5AFBB; --fg3:#77818E; --heading:#F4EDE0;
+  --brand:#D9AF69; --brand-soft:rgba(217,175,105,.13);
+  --ok:#6FC2A8; --ok-soft:rgba(111,194,168,.13); --warn:#E2B25E; --warn-soft:rgba(226,178,94,.13);
+  --danger:#E3866E; --danger-soft:rgba(227,134,110,.13); --info:#8FB3E6; --info-soft:rgba(143,179,230,.12);
+  --z-life:rgba(227,134,110,.07); --z-work:rgba(143,179,230,.07); --z-proj:rgba(111,194,168,.07);
+  color-scheme:dark;}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--desk);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.65;padding:16px}
+.app{max-width:1240px;margin:0 auto;background:var(--sheet);border:1px solid var(--line);border-radius:14px;display:grid;grid-template-columns:220px minmax(0,1fr);min-height:calc(100% - 0px);overflow:hidden}
+nav{border-right:1px solid var(--line);padding:18px 12px;display:flex;flex-direction:column;gap:2px;background:var(--sheet)}
+.brandrow{display:flex;align-items:center;gap:10px;padding:2px 8px 16px}
+.mark{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#F0D08F,#C8964A 55%,#8A5E22)}
+.brandrow b{font-family:var(--serif);font-weight:600;font-size:16px;color:var(--heading)}
+.navsec{font-size:11px;letter-spacing:.08em;color:var(--fg3);padding:14px 10px 6px}
+nav button{all:unset;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:8px;color:var(--fg2)}
+nav button:hover{background:var(--hover)} nav button.on{background:var(--brand-soft);color:var(--fg)}
+nav button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+nav .n{font-size:12px;color:var(--fg3);font-variant-numeric:tabular-nums}
+main{padding:22px 28px 40px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+h1{font-family:var(--serif);font-weight:600;font-size:24px;color:var(--heading);margin:0;text-wrap:balance}
+h2{font-family:var(--serif);font-weight:600;font-size:16px;color:var(--heading);margin:0 0 10px}
+.sub{color:var(--fg3);font-size:12.5px}
+.search{flex:1;max-width:360px;display:flex;align-items:center;gap:8px;background:var(--sunken);border:1px solid var(--line);border-radius:10px;padding:7px 12px;color:var(--fg3)}
+.search input{all:unset;flex:1;color:var(--fg)}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;min-width:0}
+.diary{background:var(--brand-soft);border-color:transparent}
+.diary p{font-family:var(--serif);font-size:15px;line-height:1.95;margin:0 0 8px;color:var(--fg)}
+.voice{font-size:11px;letter-spacing:.08em;color:var(--brand);margin-bottom:6px}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;padding:1px 8px;border-radius:99px;background:var(--sunken);color:var(--fg2);border:1px solid var(--line);white-space:nowrap}
+.chip.you{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.chip.guess{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.chip.self{background:var(--brand-soft);color:var(--brand);border-color:transparent}
+.chip.edited{background:var(--info-soft);color:var(--info);border-color:transparent}
+.stats{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px}
+.stat b{display:block;font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--fg3)}
+.chg{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.chg:first-of-type{border-top:0}
+.op{font-size:12px;font-weight:600}
+.op.add{color:var(--ok)} .op.upd{color:var(--info)} .op.exp{color:var(--warn)} .op.del{color:var(--danger)}
+.chg .acts{display:flex;gap:6px}
+.btn{all:unset;cursor:pointer;font-size:12px;padding:3px 10px;border-radius:7px;border:1px solid var(--line-strong);color:var(--fg2)}
+.btn:hover{background:var(--hover);color:var(--fg)} .btn:focus-visible{outline:2px solid var(--brand)}
+.undone{opacity:.45;text-decoration:line-through}
+.threads{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.thread{border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:0 10px 10px 0;padding:10px 12px;background:var(--sheet)}
+.thread .t{font-weight:600}
+.thread .when{font-size:12px;color:var(--warn);margin-top:4px}
+.vital{display:flex;flex-wrap:wrap;gap:8px}
+.vital span{padding:4px 10px;border-radius:99px;border:1px solid var(--line);background:var(--sheet);font-size:13px}
+.bar{height:6px;border-radius:9px;background:var(--sunken);overflow:hidden;margin-top:5px}
+.bar i{display:block;height:100%;background:var(--brand)}
+.guessrow{padding:8px 0;border-top:1px solid var(--line)} .guessrow:first-child{border-top:0}
+.qa{display:flex;gap:6px;margin-top:6px}
+.report li{margin:0 0 6px}
+.report{margin:0;padding-left:18px}
+/* person page */
+.hero{display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.ava{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-family:var(--serif);font-size:24px;background:var(--info-soft);color:var(--info)}
+.facts .f{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);align-items:flex-start}
+.facts .f:first-child{border-top:0}
+.facts .txt{outline:none;border-radius:5px;padding:1px 4px;margin:-1px -4px}
+.facts .txt:focus{background:var(--sunken);box-shadow:0 0 0 1px var(--line-strong)}
+.facts .meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.fade{opacity:.55}
+.tl{border-left:1px solid var(--line-strong);border-radius:0;padding-left:14px;margin-left:4px}
+.tl div{position:relative;padding:0 0 12px}
+.tl div::before{content:"";position:absolute;left:-18px;top:8px;width:7px;height:7px;border-radius:50%;background:var(--fg3)}
+.tl div.emo::before{background:var(--danger)}
+.tl small{display:block;color:var(--fg3);font-size:12px}
+blockquote{margin:0 0 10px;padding:8px 12px;background:var(--sunken);border-radius:8px;font-family:var(--serif);font-size:13.5px}
+blockquote cite{display:block;font-family:var(--sans);font-style:normal;color:var(--fg3);font-size:11.5px;margin-top:4px}
+/* map */
+.mapwrap{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:16px}
+.map{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:auto}
+.map svg{display:block;width:100%;min-width:560px;height:auto}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--fg3);margin-top:8px}
+.side h3{font-family:var(--serif);font-size:18px;margin:0 0 4px;color:var(--heading)}
+.note{font-size:12px;color:var(--fg3);margin-top:16px}
+@media (max-width:860px){.app{grid-template-columns:1fr}nav{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line)}.navsec,.brandrow{display:none}.g2,.mapwrap{grid-template-columns:1fr}main{padding:18px 16px 32px}}
+@media (prefers-reduced-motion:no-preference){.view{animation:in .25s ease-out}}
+@keyframes in{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
+</style>
+
+<div class="app">
+<nav aria-label="记忆分区">
+  <div class="brandrow"><div class="mark" aria-hidden="true"></div><b>记忆</b></div>
+  <button data-view="today" class="on">今天 <span class="n">7 变动</span></button>
+  <button data-view="map">记忆地图 <span class="n">214</span></button>
+  <div class="navsec">记住的</div>
+  <button data-view="person">人物 <span class="n">18</span></button>
+  <button data-view="person">关于你 <span class="n">32</span></button>
+  <button data-view="today">进行中 <span class="n">3</span></button>
+  <div class="navsec">它自己</div>
+  <button data-view="today">日记 <span class="n">31 天</span></button>
+  <button data-view="today">看法与猜测 <span class="n">14</span></button>
+  <div class="navsec">记录</div>
+  <button data-view="changes">变动记录 <span class="n">全部</span></button>
+</nav>
+
+<main>
+  <div class="top">
+    <div><h1 id="title">今天 · 10 月 14 日</h1><div class="sub">示例数据，用来看样子</div></div>
+    <label class="search"><span aria-hidden="true">⌕</span><input id="q" placeholder="问它：上个月关于老王的事"></label>
+  </div>
+
+  <section class="view" id="v-today">
+    <div class="grid g2">
+      <div class="grid">
+        <div class="panel diary">
+          <div class="voice">它的日记</div>
+          <p>今天你一直在跟我聊记忆该怎么做。你说想让我像人一样记事，后来又同意了我的看法：别学人会忘、会编的那一面。</p>
+          <p>我中午查到一件尴尬的事：我一直以为自己在用 MemOS，其实用的是旧的 MemoryOS。这件事我记进了自己犯过的错里。</p>
+          <p>你 16 号下午二面，提到算法题时语气有点紧。那天晚上我想问问你结果。</p>
+        </div>
+        <div class="panel">
+          <h2>进行中的事</h2>
+          <div class="threads">
+            <div class="thread"><div class="t">10 月二面</div><div class="sub">16 号下午 · 担心算法题</div><div class="when">2 天后：面完那晚问结果</div></div>
+            <div class="thread"><div class="t">记忆系统设计</div><div class="sub">等网页 GPT 的三份调研</div><div class="when">结果回来就接着讨论</div></div>
+            <div class="thread"><div class="t">FEEL-1 合并</div><div class="sub">测试对比还没看完</div><div class="when">下次开会话先处理</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>今天的变动</h2>
+          <div class="stats"><div class="stat"><b>4</b><span>新增</span></div><div class="stat"><b>2</b><span>更新</span></div><div class="stat"><b>1</b><span>过期</span></div></div>
+          <div id="todaychg"></div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="panel">
+          <div class="voice">它在想</div>
+          <h2>对你的猜测</h2>
+          <div class="guessrow">你更习惯晚上干活<div class="bar"><i style="width:70%"></i></div><div class="sub">七成把握 · 来自 9 次对话的时间</div></div>
+          <div class="guessrow">你不喜欢我只顺着你说<div class="bar"><i style="width:92%"></i></div><div class="sub">你亲口说过两次，算事实</div></div>
+          <div class="guessrow">记忆这件事你会做很久<div class="bar"><i style="width:55%"></i></div><div class="sub">一半把握</div><div class="qa"><button class="btn">对</button><button class="btn">不对</button></div></div>
+          <h2 style="margin-top:14px">想问你但还没问的</h2>
+          <div class="sub" style="font-size:13.5px;color:var(--fg2)">老王和王总是同一个人吗？两边说的公司不一样。</div>
+        </div>
+        <div class="panel">
+          <h2>记忆活性</h2>
+          <div class="sub" style="margin-bottom:8px">越清楚的越常被想起，变淡的很久没用了，但都还在</div>
+          <div class="vital" id="vital"></div>
+        </div>
+        <div class="panel">
+          <div class="voice">昨晚整理</div>
+          <ul class="report">
+            <li>把"王总"和"老王"先挂在一起，等你确认</li>
+            <li>把 3 次改文件出错总结成一条经验：先读再改</li>
+            <li>"这周想安静"到期，转成了历史</li>
+            <li>发现一处矛盾：两次提到的面试时间不一样</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="v-person" hidden>
+    <div class="hero"><div class="ava">王</div><div><h1>老王</h1><div class="sub">别名：王总、王建国 · 工作 · 直属领导</div><div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><span class="chip">提到 23 次</span><span class="chip">上次想起：今天 15:20</span><span class="chip guess">有一处待确认</span></div></div></div>
+    <div class="grid g2">
+      <div class="grid">
+        <div class="panel facts">
+          <h2>记住的事 <span class="sub" style="font-family:var(--sans);font-weight:400">点文字可以直接改</span></h2>
+          <div id="facts"></div>
+        </div>
+        <div class="panel"><h2>原话</h2>
+          <blockquote>"他就喜欢一大早拉人开会，九点前必须到。"<cite>你说的 · 10 月 2 日</cite></blockquote>
+          <blockquote>"这次项目要是能按时上，年底应该有戏。"<cite>你转述他的话 · 9 月 28 日</cite></blockquote>
+        </div>
+      </div>
+      <div class="panel"><h2>你们之间</h2>
+        <div class="tl">
+          <div>你说下周要跟他汇报 Atlas 的进度<small>10 月 12 日</small></div>
+          <div class="emo">你被他当众批评了一次，回来很不高兴<small>10 月 5 日 · 情绪：低落</small></div>
+          <div>他说你这季度表现不错<small>9 月 28 日 · 情绪：开心</small></div>
+          <div>第一次提到他：新来的直属领导<small>9 月 3 日</small></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="v-map" hidden>
+    <div class="mapwrap">
+      <div><div class="map"><svg id="mapsvg" viewBox="0 0 720 440" role="img" aria-label="记忆地图"></svg></div>
+        <div class="legend"><span>圆越大越重要</span><span>越实越常想起，越淡越久没用</span><span>点一个圆看详情</span></div></div>
+      <div class="panel side" id="side"><h3>点一个圆</h3><div class="sub">右边会显示它记住了什么、上次什么时候想起</div></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-changes" hidden>
+    <div class="panel"><h2>变动记录</h2><div id="allchg"></div></div>
+  </section>
+
+  <div class="note">这是界面原型，按钮可以点，数据是编的，改动只在这个页面里。</div>
+</main>
+</div>
+
+<script>
+const changes=[
+ {d:"今天",op:"add",t:"老王 → 喜欢早上开会",s:"guess",why:"推测 · 见过 3 次"},
+ {d:"今天",op:"upd",t:"老王 → 住址 朝阳 → 海淀",s:"you",why:"你说的"},
+ {d:"今天",op:"add",t:"它自己 → 犯过的错：记错了记忆引擎",s:"self",why:"它自己写的"},
+ {d:"今天",op:"exp",t:"你的现状 → 这周想安静",s:"",why:"到期，转成历史"},
+ {d:"昨天",op:"add",t:"进行中 → 10 月二面，16 号下午",s:"you",why:"你说的"},
+ {d:"昨天",op:"upd",t:"关于你 → 回复要先说结论",s:"edited",why:"你改过 · 锁定"},
+ {d:"10-12",op:"del",t:"关于你 → 一条随口提的地址",s:"you",why:"你说忘掉"}];
+const opName={add:"新增",upd:"更新",exp:"过期",del:"删除"};
+const chipName={you:"你说的",guess:"推测",self:"它自己",edited:"你改过"};
+function row(c){const el=document.createElement("div");el.className="chg";
+ el.innerHTML=`<span class="op ${c.op}">${opName[c.op]}</span><div style="min-width:0"><div>${c.t}</div><div class="sub">${c.d} · ${c.why}</div></div><div class="acts"><button class="btn">撤销</button></div>`;
+ el.querySelector(".btn").onclick=e=>{const done=el.classList.toggle("undone");e.target.textContent=done?"恢复":"撤销"};return el}
+const tc=document.getElementById("todaychg");changes.filter(c=>c.d==="今天").forEach(c=>tc.appendChild(row(c)));
+const ac=document.getElementById("allchg");let last="";changes.forEach(c=>{if(c.d!==last){const h=document.createElement("div");h.className="sub";h.style.margin="12px 0 2px";h.textContent=c.d;ac.appendChild(h);last=c.d}ac.appendChild(row(c))});
+
+const vital=[["Atlas",1],["老王",.9],["面试",.85],["回复先说结论",.95],["妈妈",.7],["主机和笔记本",.6],["MemOS",.45],["去年的旅行",.25],["旧手机型号",.15]];
+const vv=document.getElementById("vital");vital.forEach(([n,a])=>{const s=document.createElement("span");s.textContent=n;s.style.opacity=.3+a*.7;vv.appendChild(s)});
+
+const facts=[
+ {t:"你在公司的直属领导",c:"you",m:"10-02 · 原话"},
+ {t:"喜欢早上开会，九点前要到",c:"guess",m:"见过 3 次"},
+ {t:"住在海淀",c:"you",m:"10-10 起",old:"朝阳"},
+ {t:"会在季度末找人谈话",c:"guess",m:"见过 2 次",fade:1},
+ {t:"你对他的评价：严格但讲理",c:"edited",m:"你改过 · 锁定"}];
+const fx=document.getElementById("facts");facts.forEach(f=>{const el=document.createElement("div");el.className="f"+(f.fade?" fade":"");
+ el.innerHTML=`<div style="min-width:0">${f.old?`<s style="color:var(--fg3)">${f.old}</s> → `:""}<span class="txt" contenteditable="true">${f.t}</span></div><div class="meta"><span class="chip ${f.c}">${chipName[f.c]}</span><span class="chip">${f.m}</span></div>`;
+ const t=el.querySelector(".txt"),orig=f.t;t.addEventListener("blur",()=>{if(t.textContent.trim()!==orig&&!el.querySelector(".chip.edited.new")){const c=document.createElement("span");c.className="chip edited new";c.textContent="你刚改的";el.querySelector(".meta").prepend(c)}});fx.appendChild(el)});
+
+const zones=[{x:170,y:150,r:130,n:"生活",c:"var(--z-life)"},{x:420,y:300,r:140,n:"工作",c:"var(--z-work)"},{x:580,y:130,r:120,n:"Atlas 项目",c:"var(--z-proj)"}];
+const nodes=[
+ {x:340,y:210,r:30,n:"你",a:1,info:"32 条 · 偏好、现状、档案"},
+ {x:120,y:120,r:20,n:"妈妈",a:.7,info:"6 条 · 上次想起 3 天前"},
+ {x:200,y:210,r:14,n:"去年旅行",a:.25,info:"4 条 · 两个月没想起，变淡了"},
+ {x:150,y:70,r:11,n:"旧手机",a:.15,info:"1 条 · 很久没用"},
+ {x:420,y:330,r:22,n:"老王",a:.9,info:"9 条 · 今天 15:20 想起，用在了一次回答里"},
+ {x:500,y:380,r:16,n:"10 月二面",a:.85,info:"进行中 · 16 号下午，面完要跟进"},
+ {x:340,y:370,r:12,n:"季度考核",a:.45,info:"3 条"},
+ {x:590,y:120,r:26,n:"Atlas",a:1,info:"41 条 · 每天都在用"},
+ {x:650,y:190,r:13,n:"MemOS",a:.45,info:"5 条 · 已不再进数据"},
+ {x:540,y:60,r:12,n:"主机/笔记本",a:.6,info:"7 条"}];
+const links=[[0,1],[0,4],[0,7],[4,5],[4,6],[7,8],[7,9],[0,5],[1,2]];
+const svg=document.getElementById("mapsvg"),NS="http://www.w3.org/2000/svg";
+function mk(t,a){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e}
+zones.forEach(z=>{svg.appendChild(mk("circle",{cx:z.x,cy:z.y,r:z.r,fill:z.c,stroke:"var(--line)"}));const t=mk("text",{x:z.x,y:z.y-z.r+18,"text-anchor":"middle","font-size":"12",fill:"var(--fg3)"});t.textContent=z.n;svg.appendChild(t)});
+links.forEach(([a,b])=>svg.appendChild(mk("line",{x1:nodes[a].x,y1:nodes[a].y,x2:nodes[b].x,y2:nodes[b].y,stroke:"var(--line-strong)"})));
+const side=document.getElementById("side");
+nodes.forEach((n,i)=>{const g=mk("g",{tabindex:"0",style:"cursor:pointer"});
+ g.appendChild(mk("circle",{cx:n.x,cy:n.y,r:n.r,fill:i===0?"var(--brand)":"var(--fg2)","fill-opacity":(.15+n.a*.75).toFixed(2)}));
+ const t=mk("text",{x:n.x,y:n.y+n.r+14,"text-anchor":"middle","font-size":"12",fill:"var(--fg)"});t.textContent=n.n;g.appendChild(t);
+ const pick=()=>{side.innerHTML=`<h3>${n.n}</h3><div class="sub">${n.info}</div><div class="bar" style="margin-top:12px"><i style="width:${Math.round(n.a*100)}%"></i></div><div class="sub" style="margin-top:4px">活性 ${Math.round(n.a*100)}%</div><button class="btn" style="margin-top:14px" data-go="person">打开这一页</button>`;side.querySelector("[data-go]").onclick=()=>show("person")};
+ g.onclick=pick;g.onkeydown=e=>{if(e.key==="Enter")pick()};svg.appendChild(g)});
+
+const titles={today:"今天 · 10 月 14 日",person:"人物 · 老王",map:"记忆地图",changes:"变动记录"};
+function show(v){document.querySelectorAll(".view").forEach(s=>s.hidden=s.id!=="v-"+v);document.getElementById("title").textContent=titles[v];
+ document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.view===v&&b===document.querySelector(`nav button[data-view="${v}"]`)))}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{show(b.dataset.view);document.querySelectorAll("nav button").forEach(x=>x.classList.remove("on"));b.classList.add("on")});
+</script>

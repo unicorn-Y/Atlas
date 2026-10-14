@@ -191,3 +191,10 @@ timezone = ""
 # 专家模式的内容目录（独立 git 仓库）。不填就是 ~/.atlas-expert；目录不存在时按 repo 克隆。
 # dir = "~/.atlas-expert"
 repo = "https://github.com/unicorn-Y/atlas-expert.git"
+
+[memory.library]
+# 透明记忆库（docs/memory/PLAN-V1.md）：data/memory 下的 Markdown + git，每轮自动读写
+enabled = true
+# root = "D:/Atlas/data/memory"
+# writer_model = ""          # 提炼记忆固定用的模型；空 = 设置里的 memory_model → compression_model → 当前模型
+# writer_timeout_seconds = 90
