@@ -217,9 +217,18 @@ class MemoryStore:
             ignore = self.root / ".gitignore"
             if not ignore.exists():
                 ignore.write_text(".index.sqlite*\n", encoding="utf-8")
-            if self._git_available() and not (self.root / ".git").exists():
+            if self._git_available() and not self._git_healthy():
+                # Missing, or left half-written by a killed process: `git init` is safe
+                # on an existing directory and keeps whatever objects survived.
                 self._git("init", "-q")
                 self.commit("记忆库建立")
+
+    def _git_healthy(self) -> bool:
+        if not (self.root / ".git" / "HEAD").exists():
+            return False
+        result = subprocess.run(["git", "rev-parse", "--git-dir"], cwd=self.root,
+                                capture_output=True, timeout=30, check=False)
+        return result.returncode == 0
 
     # ---------- pages ----------
     def read(self, rel: str) -> Page:
