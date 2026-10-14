@@ -65,6 +65,6 @@ class TurnQueue:
                        (error[:1000], row_id))
 
     def count(self) -> int:
-        with self._connect() as db:
+        with self._connection() as db:
             return int(db.execute("SELECT COUNT(*) FROM pending").fetchone()[0])
 

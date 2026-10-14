@@ -418,7 +418,11 @@ class MemoryStore:
                 if any(self.tombstoned(tombstone_hashes("", "", text))
                        for text in file.get("removed", [])):
                     raise ValueError(message)
-            self._git("revert", "--no-edit", sha)
+            try:
+                self._git("revert", "--no-edit", sha)
+            except RuntimeError:
+                self._git("revert", "--abort", check=False)
+                raise
             for rel in self.pages():
                 if any(entry.text == "（已按你的要求忘掉）" or
                        self.tombstoned(tombstone_hashes(entry.key, entry.value, entry.text))

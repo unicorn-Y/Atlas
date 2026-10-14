@@ -277,7 +277,7 @@ class MemoryLibrary:
             message = result.message() if not result.empty else "日记"
             self.store.commit(message)
             if result.forgotten_texts:
-                purge_history(self.store, result.forgotten_texts)
+                self._purge(result.forgotten_texts)
         self.index.sync()
         return result
 
@@ -330,10 +330,19 @@ class MemoryLibrary:
             self.store.write(page)
             diary_pages = self.store.redact_diary([entry.quote, entry.text, entry.value])
             self.store.commit("按你的要求忘掉了一条记忆")
-            history = purge_history(self.store, [entry.text, entry.quote, entry.value])
+            history = self._purge([entry.text, entry.quote, entry.value])
         self.index.sync()
         return {"ok": True, "pages": [page.path], "diary_pages": diary_pages, "history": history,
                 "not_covered": ["Atlas 的原始聊天记录（engine 会话库）", "你自己做的备份或同步副本"]}
+
+    def _purge(self, needles: list[str]) -> dict[str, Any]:
+        # The entry is already gone from the pages; a failed history rewrite must not
+        # undo that or hide it, so report it instead of raising.
+        try:
+            return purge_history(self.store, needles)
+        except Exception as exc:
+            log.warning("memory.library.purge_failed", error=str(exc), error_type=type(exc).__name__)
+            return {"rewritten": False, "commits": 0, "error": str(exc)}
 
     def set_aliases(self, rel: str, aliases: list[str]) -> None:
         rel = self._safe_rel(rel)
