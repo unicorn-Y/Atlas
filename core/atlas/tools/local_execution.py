@@ -106,8 +106,19 @@ LOCAL_TOOLS = [
     _tool(
         "local_shell",
         (
-            "Run a command locally. Windows defaults to Git Bash, then PowerShell. Set cwd for any accessible directory. "
-            "Nonzero exit codes are returned as results."
+            "Run a shell command on this machine and return its output.\n"
+            "- shell: on Windows prefer \"bash\" (Git Bash, POSIX syntax: forward slashes, $VAR, &&). "
+            "Use \"powershell\" only for PowerShell cmdlets, and then write PowerShell syntax only.\n"
+            "- Never pass multi-line code inline (python -c, node -e, heredocs inside quotes). Write the "
+            "script to a file with write, then run the file. Inline code with nested quotes is the most "
+            "common cause of failures here.\n"
+            "- Quote paths that contain spaces. Don't nest one shell's quoting inside another's.\n"
+            "- For a program with many or complex arguments use local_exec (argv array, no quoting).\n"
+            "- Set cwd instead of chaining cd. Use detached or local_process for servers and anything "
+            "long-running.\n"
+            "- A nonzero exit code is a result, not a crash: read the output before deciding what to do.\n"
+            "- Don't use this to read, search or edit files when a dedicated tool exists "
+            "(local_file read/list/glob/search, grep, glob, edit, write)."
         ),
         {
             "shell": {"type": "string", "enum": ["powershell", "cmd", "bash"]},
@@ -125,8 +136,11 @@ LOCAL_TOOLS = [
     _tool(
         "local_exec",
         (
-            "Run an installed local executable with argv (without shell quoting). Supports "
-            "Python, Node, npm, npx, Git, and other commands."
+            "Run an installed program directly with an argv array, without any shell. Each "
+            "argument is passed as-is, so there is no quoting or escaping to get wrong. Prefer this "
+            "over local_shell when arguments contain spaces, quotes or JSON (e.g. executable=\"python\", "
+            "args=[\"script.py\", \"--name\", \"a b\"]). Works for python, node, npm, npx, git and any "
+            "other executable on PATH. Shell features (pipes, redirects, globs, &&) are not available."
         ),
         {
             "executable": {"type": "string"},
@@ -175,8 +189,13 @@ LOCAL_TOOLS = [
     _tool(
         "local_file",
         (
-            "Read, write, append, list, search, create, copy, move, stat, glob, and delete files "
-            "or directories at arbitrary local paths."
+            "Read files and manage files or directories at any local path: read, list, glob, search, "
+            "stat, mkdir, copy, move, delete, plus write/append.\n"
+            "- To change a text file, read it here first, then use edit (targeted replacement) or "
+            "write (whole file). Use write/append here only when edit and write are not offered.\n"
+            "- read/list/glob/search/stat are read-only and run in parallel: when you need several "
+            "files, request all of them in the same response instead of one per turn.\n"
+            "- Large files: read a range with offset/limit instead of the whole file."
         ),
         {
             "action": {

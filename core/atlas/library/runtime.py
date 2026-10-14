@@ -412,6 +412,9 @@ DEFERRABLE_BUILTINS = frozenset({
     "list_available_plugins_to_install", "request_plugin_install", "wait_for_environment",
     "send_message_to_user_async", "request_user_input_async", "get_context_remaining", "new_context",
     "new_context_window", "execute_code", "subtask_status", "subtask_message",
+    # Compatibility aliases of local_shell / local_process (Codex and Claude names);
+    # offering them next to the real tools only gives the model more ways to misquote.
+    "exec_command", "powershell", "write_stdin",
 })
 
 _LOADED: OrderedDict[str, list[str]] = OrderedDict()

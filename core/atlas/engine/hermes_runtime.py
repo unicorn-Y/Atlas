@@ -216,21 +216,10 @@ def _trust_context_files() -> None:
 
 
 def _model_family_guidance(model: str) -> str:
-    name = str(model or "").lower()
-    families = (
-        (("claude", "anthropic"), "Claude", "Use exact surrounding text when editing; ask for clarification when the target is ambiguous."),
-        (("gpt", "codex", "openai"), "GPT/Codex", "Keep tool arguments valid JSON and wait for tool results before continuing."),
-        (("gemini",), "Gemini", "Keep each tool request focused and use returned file context before editing."),
-        (("deepseek",), "DeepSeek", "After a file edit, inspect the changed lines before reporting completion."),
-        (("kimi", "moonshot"), "Kimi", "Use short, focused edits and enough context to identify one target."),
-        (("glm", "zhipu", "zai/"), "GLM", "Use the registered tool names and include required arguments explicitly."),
-        (("qwen",), "Qwen", "Keep file paths and requested ranges explicit in file operations."),
-        (("minimax",), "MiniMax", "Wait for tool results before giving a final answer."),
-    )
-    for markers, family, instruction in families:
-        if any(marker in name for marker in markers):
-            return f"{family}: {instruction}"
-    return "Default: follow the tool descriptions and verify edits before finishing."
+    """Behavior notes for the model's family; profiles live in atlas.models.profiles."""
+    from atlas.models.profiles import guidance_text
+
+    return guidance_text(model)
 
 
 def system_browser_candidates() -> list[Path]:

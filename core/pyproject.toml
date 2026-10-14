@@ -12,6 +12,7 @@ dependencies = [
     "websockets>=13.0",
     "sherpa-onnx>=1.12.20",
     "litellm>=1.50.0",
+    "json-repair>=0.60.0",
     "langchain-core>=0.3.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",

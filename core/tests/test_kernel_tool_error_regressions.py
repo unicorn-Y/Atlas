@@ -123,7 +123,8 @@ async def test_writes_work_without_workspace_and_utf8_pages_never_split(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_retry_discards_incomplete_arguments_and_preserves_text(monkeypatch):
+async def test_incomplete_arguments_become_a_call_error_without_a_retry(monkeypatch):
+    """FEEL-1: a broken call is answered on its own; the response is not thrown away."""
     def chunk(text, arguments, finished=False):
         return {"choices": [{"delta": {"content": text, "tool_calls": [{
             "index": 0, "id": "call-1", "function": {"name": "local_shell", "arguments": arguments},
@@ -142,10 +143,26 @@ async def test_retry_discards_incomplete_arguments_and_preserves_text(monkeypatc
     agent = SimpleNamespace(_model_router=SimpleNamespace(resolve=AsyncMock(return_value=route)))
     text = []
     result = await complete_stream(agent, "test", [], [], max_retries=1, on_text=text.append)
-    assert result.attempts == 2
-    assert result.tool_calls == [{"id": "call-1", "name": "local_shell", "args": {"command": "taskkill /?"}}]
-    assert result.text == "Hello world"
-    assert "".join(text) == "Hello world"
+    assert result.attempts == 1
+    [call] = result.tool_calls
+    assert call["id"] == "call-1" and call["name"] == "local_shell" and call["args"] == {}
+    assert "not valid JSON" in call["arg_error"]
+    assert result.text == "Hello "
+
+
+def test_tool_call_arguments_repair_only_closed_objects():
+    from atlas.kernel.model_call import _ToolDelta, _tool_calls
+
+    calls = _tool_calls({
+        0: _ToolDelta("a", "write", '{"path": "y", "content": "ok",}'),
+        1: _ToolDelta("b", "write", '{"path": "y", "content": "half a fi'),
+    })
+    assert calls[0]["args"] == {"path": "y", "content": "ok"} and calls[0]["args_repaired"]
+    assert calls[1]["args"] == {} and "arg_error" in calls[1]
+    [cut] = _tool_calls({0: _ToolDelta("c", "write", '{"path": "y"}')}, truncated=True)
+    assert cut["args"] == {"path": "y"}  # complete JSON is kept even when the output hit the limit
+    [cut] = _tool_calls({0: _ToolDelta("c", "write", '{"path": "y", "con')}, truncated=True)
+    assert "output length limit" in cut["arg_error"]
 
 
 def test_overlap_merge_preserves_boundary_character_repetition():

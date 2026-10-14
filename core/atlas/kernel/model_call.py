@@ -432,26 +432,67 @@ def _merge_delta(previous: str, piece: str) -> str:
     return _overlap_merge(previous, piece)
 
 
-def _tool_calls(values: dict[int, _ToolDelta]) -> list[dict[str, Any]]:
+def _repair_arguments(raw: str) -> dict[str, Any] | None:
+    """Best-effort repair of a broken JSON object; None when it cannot be trusted.
+
+    Only closed objects are repaired (bad escapes, trailing commas, quote styles). An
+    object that never closes was cut off, and "repairing" it would silently run the
+    call with truncated content, e.g. write half a file.
+    """
+    if not raw.rstrip().endswith("}"):
+        return None
+    try:
+        import json_repair
+    except ImportError:
+        return None
+    try:
+        repaired = json_repair.loads(raw)
+    except Exception:
+        return None
+    return repaired if isinstance(repaired, dict) and repaired else None
+
+
+def _tool_calls(values: dict[int, _ToolDelta], *, truncated: bool = False) -> list[dict[str, Any]]:
+    """Parse streamed tool calls without discarding the whole response for one bad call.
+
+    Broken arguments are repaired when possible (``args_repaired``). A call that cannot
+    be repaired, or whose arguments were cut off by the output limit, comes back with
+    ``arg_error`` so the kernel answers it with a tool error and the model resends just
+    that call.
+    """
     result: list[dict[str, Any]] = []
-    for index in sorted(values):
+    ordered = [index for index in sorted(values) if values[index].name]
+    for position, index in enumerate(ordered):
         item = values[index]
-        if not item.name:
-            continue
+        call: dict[str, Any] = {"id": item.call_id or f"call-{uuid.uuid4().hex}",
+                                "name": item.name, "args": {}}
+        raw = item.arguments or "{}"
+        cut_off = truncated and position == len(ordered) - 1
         try:
-            arguments = json.loads(item.arguments or "{}")
+            arguments = json.loads(raw)
         except (TypeError, ValueError) as exc:
-            raise ModelCallError(
-                f"Model returned incomplete arguments for tool {item.name}",
-                category="malformed_response", retryable=True,
-            ) from exc
+            arguments = None if cut_off else _repair_arguments(raw)
+            if arguments is None:
+                call["arg_error"] = (
+                    f"The arguments for {item.name} were cut off by the output length limit "
+                    f"after {len(raw)} characters, so the call was not run. Resend it with "
+                    "smaller content: split a large file into several edits or appends."
+                    if cut_off else
+                    f"The arguments for {item.name} were not valid JSON ({exc}), so the call "
+                    "was not run. Resend this call with valid JSON arguments; if the content "
+                    "is large, split it into several smaller calls."
+                )
+                result.append(call)
+                continue
+            call["args_repaired"] = True
         if not isinstance(arguments, dict):
-            raise ModelCallError(
-                f"Model returned non-object arguments for tool {item.name}",
-                category="malformed_response", retryable=True,
+            call["arg_error"] = (
+                f"The arguments for {item.name} must be a JSON object, so the call was not run. "
+                "Resend it with an object of named arguments."
             )
-        result.append({"id": item.call_id or f"call-{uuid.uuid4().hex}",
-                       "name": item.name, "args": arguments})
+        else:
+            call["args"] = arguments
+        result.append(call)
     return result
 
 
@@ -687,8 +728,10 @@ async def complete_stream(
                 last_usage = attempt_usage or last_usage
                 duration_ms = int((time.monotonic() - overall_started) * 1000)
                 result = ModelCallResult(
-                    combined_text, _tool_calls(attempt_tools), last_usage,
-                    total_attempts, duration_ms, route.model_id or candidate, route.provider,
+                    combined_text,
+                    _tool_calls(attempt_tools, truncated=finish_reason in {"length", "max_tokens"}),
+                    last_usage, total_attempts, duration_ms, route.model_id or candidate,
+                    route.provider,
                 )
                 if usage_budget is not None:
                     usage_row = _usage_row(result, request_id, wire_model, estimated)

@@ -63,9 +63,9 @@ def _self_facts(agent: Any, model_id: str, workspace: str | None) -> tuple[str, 
     if workspace:
         lines.append(f"- Working directory: {workspace}")
     else:
-        lines.append("- No active workspace is selected. Local file mutation has no authorized "
-                     "workspace scope. Ask the user to select a workspace before writing, "
-                     "editing, moving, or deleting files; do not retry mutations or invent a root.")
+        lines.append(f"- No workspace is selected: relative paths resolve against {Path.home()}; "
+                     "use absolute paths for anything elsewhere. Reading and editing files "
+                     "anywhere on this machine is allowed.")
     shell = "PowerShell / cmd" if os.name == "nt" else os.environ.get("SHELL", "sh")
     lines.append(f"- Host: {platform.system()} {platform.release()} ({platform.version()}), "
                  f"Python {platform.python_version()}, shell {shell}")
@@ -437,15 +437,18 @@ class AtlasKernel:
                             plan_update_callback=request.plan_update_callback,
                             todo_store=getattr(runtime, "todo_store", None))
             edit_manager = None
-            if (request.workspace and not request.workspace.startswith("ssh://")
-                    and getattr(agent, "_local_execution", None) is not None):
+            remote_workspace = bool(request.workspace and request.workspace.startswith("ssh://"))
+            if not remote_workspace and getattr(agent, "_local_execution", None) is not None:
                 from atlas.kernel.edit import EditManager
 
+                # Without a workspace the kernel editor still serves the whole machine:
+                # relative paths resolve against the home directory, absolute paths are
+                # unrestricted (same scope local_file already has).
                 edit_manager = EditManager(
-                    request.workspace,
+                    request.workspace or Path.home(),
                     allowed_paths=(
                         [*getattr(runtime, "allowed_paths", []), request.workspace]
-                        if getattr(runtime, "allowed_paths", None) else None
+                        if request.workspace and getattr(runtime, "allowed_paths", None) else None
                     ),
                 )
             run_dir = log_path.parent if log_path is not None else LOG_DIR / "runs" / "active" / run_id
@@ -507,8 +510,13 @@ class AtlasKernel:
             tool_inputs: dict[str, dict[str, Any]] = {}
             pretool_blocked: set[str] = set()
             tool_hook_context: dict[str, list[str]] = {}
+            bad_tool_args: dict[str, str] = {}
 
             async def dispatch_tool(call_id: str, name: str, args: dict[str, Any]) -> Any:
+                if call_id in bad_tool_args:
+                    # Unparseable arguments: answer this call only, the rest of the batch runs.
+                    return {"content": bad_tool_args.pop(call_id), "is_error": True,
+                            "outcome": "failed"}
                 tool_args = copy.deepcopy(args)
                 if (getattr(proxy_runtime, "dynamic_plan_mode", False)
                         and name not in {
@@ -635,7 +643,11 @@ class AtlasKernel:
                         "after_tokens": result.after_tokens, "budget_tokens": result.budget_tokens}
 
             proxy_runtime.new_context_window_callback = new_context_window_callback
-            stuck = StuckDetector()
+            from atlas.models.profiles import profile_for
+
+            model_profile = profile_for(wire_model, selected_model)
+            stuck = StuckDetector(**model_profile.stuck)
+            output_token_limit = request.max_output_tokens or model_profile.max_output_tokens
             usage_budget = request.usage_budget or env_run_usage_budget()
 
             async def record_workflow_usage(row: dict[str, Any]) -> None:
@@ -1007,6 +1019,13 @@ class AtlasKernel:
                     and not (read_only and schema["function"]["name"] == "workflow")
                 )
                 if edit_manager is not None:
+                    # One way to edit text: the kernel editor (read-checked, fuzzy matching).
+                    # The exact-match local_edit tools stay registered, just not offered.
+                    available_tools = [
+                        item for item in available_tools
+                        if str((item.get("function") or item).get("name", ""))
+                        not in {"local_edit", "local_edit_batch"}
+                    ]
                     available_tools = [*available_tools, *edit_manager.get_tools_for_llm()]
                 deferred_note = None
                 schema_chars_before = len(json.dumps(available_tools, ensure_ascii=False, default=str))
@@ -1103,7 +1122,7 @@ class AtlasKernel:
                     model_task = asyncio.create_task(complete_stream(
                         agent, turn_model, messages, tools,
                         reasoning_effort=turn_effort,
-                        max_output_tokens=request.max_output_tokens,
+                        max_output_tokens=output_token_limit,
                         cancel_event=model_cancel_event,
                         max_retries=model_retries,
                         fallback_models=list(getattr(runtime, "fallback_models", []) or []),
@@ -1302,6 +1321,13 @@ class AtlasKernel:
                     break
 
                 calls = response.tool_calls
+                for call in calls:
+                    if call.get("arg_error"):
+                        bad_tool_args[str(call["id"])] = str(call["arg_error"])
+                        record("tool_args_invalid", tool_call_id=call["id"], name=call["name"],
+                               truncated="output length limit" in str(call["arg_error"]))
+                    elif call.get("args_repaired"):
+                        record("tool_args_repaired", tool_call_id=call["id"], name=call["name"])
                 state.tool_calls.extend(calls)
                 open_call_ids.update(str(call["id"]) for call in calls)
                 assistant_message = {

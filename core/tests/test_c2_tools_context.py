@@ -47,7 +47,8 @@ def test_model_family_guidance_is_short_and_specific():
         guidance = _model_family_guidance(model)
         assert guidance
         assert family == "default" or family in guidance.lower()
-        assert len(guidance) < 180
+        # Profiles (atlas.models.profiles) carry a few notes per family, still kept brief.
+        assert len(guidance) < 800
 
 
 def test_image_tool_result_keeps_thumbnail_data_and_text_summary():

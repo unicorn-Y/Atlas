@@ -38,12 +38,28 @@ def _schema(name: str, description: str, properties: dict[str, Any], required: l
 
 
 EDIT_TOOLS = [
-    _schema("apply_patch", "Apply a Codex *** Begin Patch patch with Add/Delete/Update File and optional Move to. Existing files must have been read and remain unchanged.",
+    _schema("apply_patch", (
+        "Apply a multi-file patch in Codex format: *** Begin Patch, then *** Add File / *** Delete File / "
+        "*** Update File (optional *** Move to) sections with @@ context and -/+ lines, then *** End Patch. "
+        "Use it for coordinated changes across several files; for one change in one file, edit is simpler. "
+        "Existing files must have been read and still be unchanged."),
             {"patch": {"type": "string"}}, ["patch"]),
-    _schema("edit", "Replace old_string in a file already fully read. Exact match is preferred; fallback matches must be unique. Stale files require a new read.",
+    _schema("edit", (
+        "Replace text in an existing file. This is the default way to change a file.\n"
+        "- Read the file first (local_file read); edits to unread or since-changed files are refused.\n"
+        "- old_string: copy the exact current text, including indentation, with enough surrounding "
+        "lines to be unique. Don't include line-number prefixes from the read output.\n"
+        "- Keep each edit small. For several separate changes make several edit calls (they can go in "
+        "one response) rather than one huge replacement.\n"
+        "- replace_all=true renames every occurrence."),
             {"path": {"type": "string"}, "old_string": {"type": "string"}, "new_string": {"type": "string"},
              "replace_all": {"type": "boolean", "default": False}}, ["path", "old_string", "new_string"]),
-    _schema("write", "Write full text. Existing files must first be fully read. Preserves their BOM, encoding and newline style; new files use UTF-8.",
+    _schema("write", (
+        "Create a new file or replace a whole file. Existing files must be read first. Keeps the "
+        "file's BOM, encoding and line endings; new files are UTF-8.\n"
+        "- Prefer edit for changing part of an existing file: rewriting a whole file wastes output and "
+        "risks being cut off by the output limit.\n"
+        "- For a very large new file, write a first part, then add the rest with edit or local_file append."),
             {"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]),
 ]
 EDIT_TOOL_NAMES = frozenset(item["function"]["name"] for item in EDIT_TOOLS)
