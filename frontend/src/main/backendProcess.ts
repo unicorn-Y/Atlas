@@ -491,6 +491,13 @@ async function ensureBackendRunningImpl(options?: EnsureBackendOptions): Promise
 
   try {
     loadSharedApiToken();
+    // Fast path (resident backend): a healthy Atlas that accepts our token is attached
+    // without the netstat/PowerShell process checks below, which cost seconds on Windows.
+    const live = await probeHealth();
+    if (live?.ready && isAtlasHealthPayload(live.payload) && await externalAcceptsSessionToken()) {
+      emit('ready', false, '复用已运行的 Atlas 后端');
+      return { ready: true, managed: false, pid: readBackendPid() ?? undefined };
+    }
     if (await preparePreviousBackend(onProgress)) {
       emit('ready', false, '复用已运行的 Atlas 后端');
       return { ready: true, managed: false, pid: readBackendPid() ?? undefined };

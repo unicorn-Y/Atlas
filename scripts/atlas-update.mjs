@@ -203,9 +203,10 @@ function launch() {
   log(`launched Atlas (pid ${child.pid}) debug-port=${debugPort}`);
 }
 
-// The desktop must become visible before any git, dependency, or build work starts.
-// UpdateBanner performs the background check after Electron is running.
-if (flag('--launch-only')) {
+// The desktop must become visible before any dependency or build work starts: when the
+// last build matches HEAD (the usual case) launch right away; UpdateBanner checks for
+// updates in the background. Only a stale/missing build (manual pull, merge) rebuilds first.
+if (flag('--launch-only') && readStamp() === sh('git', ['rev-parse', 'HEAD'])) {
   launch();
   process.exit(0);
 }
@@ -238,12 +239,16 @@ process.on('exit', () => {
 const waitPid = Number(option('--wait-pid'));
 try {
   if (waitPid) await waitForExit(waitPid);
-  const result = pull();
-  log(result.pulled ? `pulled ${result.before?.slice(0, 7)}..${result.after?.slice(0, 7)} (${result.changed.length} files)`
-    : (result.reason ?? 'already up to date'));
-  const steps = rebuild();
-  if (result.pulled) postMerge();
-  status({ ok: true, pulled: result.pulled, reason: result.reason, steps, head: sh('git', ['rev-parse', '--short', 'HEAD']) });
+  if (flag('--launch-only')) {
+    rebuild();
+  } else {
+    const result = pull();
+    log(result.pulled ? `pulled ${result.before?.slice(0, 7)}..${result.after?.slice(0, 7)} (${result.changed.length} files)`
+      : (result.reason ?? 'already up to date'));
+    const steps = rebuild();
+    if (result.pulled) postMerge();
+    status({ ok: true, pulled: result.pulled, reason: result.reason, steps, head: sh('git', ['rev-parse', '--short', 'HEAD']) });
+  }
 } catch (error) {
   const detail = String(error?.stderr || error?.message || error).trim().split('\n').slice(-20).join('\n');
   log(`FAILED: ${detail}`);
@@ -251,4 +256,4 @@ try {
   process.exitCode = 1;
 }
 // Relaunch even after a failed update: the previous build is still in place.
-if (flag('--relaunch')) launch();
+if (flag('--relaunch') || flag('--launch-only')) launch();
