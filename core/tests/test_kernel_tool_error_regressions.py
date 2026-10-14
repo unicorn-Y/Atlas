@@ -100,20 +100,25 @@ def test_repeated_error_halts_only_after_corrective_nudge_is_ignored():
 
 
 @pytest.mark.asyncio
-async def test_missing_workspace_returns_actionable_error_without_mutating(tmp_path):
+async def test_writes_work_without_workspace_and_utf8_pages_never_split(tmp_path):
     runtime = LocalExecutionRuntime()
-    target = tmp_path / "not-written.txt"
+    target = tmp_path / "written.txt"
     result = await runtime.call_tool("local_file", {
         "action": "write", "path": str(target), "cwd": str(tmp_path), "content": "test",
     })
-    assert result["is_error"]
-    assert "Select an active workspace" in str(result)
-    assert not target.exists()
-    result = await runtime.call_tool("local_file", {
-        "action": "write", "path": str(target), "content": "test", "_atlas_workspace": str(tmp_path),
-    })
     assert not result["is_error"]
     assert target.read_text() == "test"
+    result = await runtime.call_tool("local_file", {
+        "action": "write", "path": str(tmp_path), "content": "x", "_atlas_workspace": str(tmp_path),
+    })
+    assert result["is_error"]  # the workspace root itself stays protected
+    chinese = tmp_path / "zh.txt"
+    chinese.write_bytes("你好世界".encode("utf-8"))
+    result = await runtime.call_tool("local_file", {
+        "action": "read", "path": str(chinese), "byte_offset": 0, "byte_limit": 4,
+    })
+    assert not result["is_error"]
+    assert "你" in str(result) and "\ufffd" not in str(result)
     await runtime.shutdown()
 
 
