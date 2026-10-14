@@ -233,6 +233,16 @@
   animation: text-sweep 1.6s linear infinite;
 }
 
+/* Reasoning expand/collapse (ZCode components/ui/collapsible.tsx): height animates on the Radix content,
+   opacity on its inner layer; no CSS transitions, keyframes only, so window resizes stay composited. */
+@keyframes collapsible-down { from { height: 0; } to { height: var(--radix-collapsible-content-height); } }
+@keyframes collapsible-up { from { height: var(--radix-collapsible-content-height); } to { height: 0; } }
+.reasoning-collapsible { overflow: hidden; }
+.reasoning-collapsible[data-state='open'] { animation: collapsible-down .3s ease-in-out; }
+.reasoning-collapsible[data-state='closed'] { animation: collapsible-up .3s ease-in-out forwards; }
+.reasoning-collapsible[data-state='open'] > .reasoning-collapsible-fade { animation: fade-in .3s ease-in-out; }
+.reasoning-collapsible[data-state='closed'] > .reasoning-collapsible-fade { animation: fade-in .3s ease-in-out reverse forwards; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

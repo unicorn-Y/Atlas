@@ -45,7 +45,7 @@ export function createEventBuffer(sink: (events: AgentEvent[]) => void, options:
 
   return {
     push: (event) => {
-      if (disposed || event.type !== 'message.delta') {
+      if (disposed || !isStreamChunk(event)) {
         // 非流式事件立即透传，但先把攒着的 delta 冲出去，run.events 的顺序保持到达顺序。
         flush();
         sink([event]);
@@ -61,11 +61,29 @@ export function createEventBuffer(sink: (events: AgentEvent[]) => void, options:
 }
 
 /** 相邻的 delta 合成一条；不同类型的事件之间保持独立（正常情况下攒批里只有 delta）。 */
+/** Streamed text chunks: reply deltas and the kernel's raw thinking chunks (run.status + status=reasoning). */
+function isReasoningChunk(event: AgentEvent): boolean {
+  return event.type === 'run.status' && event.data.status === 'reasoning' && typeof event.data.text === 'string';
+}
+
+function isStreamChunk(event: AgentEvent): boolean {
+  return event.type === 'message.delta' || isReasoningChunk(event);
+}
+
 function coalesce(deltas: AgentEvent[]): AgentEvent[] {
   const merged: AgentEvent[] = [];
   for (const event of deltas) {
     const previous = merged[merged.length - 1];
-    if (previous && previous.type === 'message.delta' && event.type === 'message.delta') {
+    if (previous && isReasoningChunk(previous) && isReasoningChunk(event)) {
+      // Thinking used to bypass batching: every few tokens re-ran the whole timeline in five places.
+      merged[merged.length - 1] = {
+        ...previous,
+        sequence: event.sequence,
+        // Keep the first chunk's time: the timeline uses it as when thinking started.
+        timestamp: previous.timestamp,
+        data: { ...previous.data, text: String(previous.data.text ?? '') + String(event.data.text ?? '') },
+      };
+    } else if (previous && previous.type === 'message.delta' && event.type === 'message.delta') {
       merged[merged.length - 1] = {
         ...previous,
         sequence: event.sequence,
