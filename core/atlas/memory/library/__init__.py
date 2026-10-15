@@ -81,7 +81,9 @@ def _skip_reason(workspace: str, user_text: str, config: Any = None) -> str:
             return defaults
 
     try:
-        normalized = str(workspace or "")
+        normalized = str(workspace or "").strip()
+        if not normalized:
+            raise ValueError
         if any(re.search(p, normalized, re.I) for p in configured("skip_workspace_patterns", _DEFAULT_WORKSPACE_PATTERNS)):
             return "workspace"
         root = Path(tempfile.gettempdir()).resolve()
@@ -433,9 +435,10 @@ class MemoryLibrary:
             getattr(page, bucket).remove(entry)
             self.store.add_tombstones(tombstone_hashes(entry.key, entry.value, entry.text), "用户要求忘掉")
             self.store.write(page)
-            needles = [entry.quote, entry.text, entry.value, entry.outcome, *entry.trigger]
+            # No topic words, and no short halves ("直接回答"): they would wipe unrelated diary lines.
+            needles = [entry.quote, entry.text, entry.value, entry.outcome]
             if entry.src == SRC_EPISODE and "：" in entry.text:
-                needles.extend(entry.text.split("：", 1))
+                needles.extend(part for part in entry.text.split("：", 1) if len(part.strip()) >= 6)
             diary_pages = self.store.redact_diary(needles)
             self.store.commit("按你的要求忘掉了一条记忆")
             history = self._purge([entry.text, entry.quote, entry.value])
