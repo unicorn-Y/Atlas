@@ -6131,6 +6131,127 @@
       ]
     },
     {
+      "path": "/api/evolution/discovery",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "discovery_status_api_evolution_discovery_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Discovery Status Api Evolution Discovery Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/evolution/discovery/reports/{name}",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "discovery_report_api_evolution_discovery_reports__name__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "name",
+              "required": true,
+              "schema": {
+                "title": "Name",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Discovery Report Api Evolution Discovery Reports  Name  Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/evolution/discovery/run",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "discovery_run_api_evolution_discovery_run_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DiscoveryRunRequest"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Req"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Discovery Run Api Evolution Discovery Run Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/evolution/drafts",
       "operations": [
         {
@@ -13042,6 +13163,75 @@
       ]
     },
     {
+      "path": "/api/personal-todos",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_personal_todos_api_personal_todos_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Personal Todos Api Personal Todos Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/personal-todos",
+      "operations": [
+        {
+          "method": "PUT",
+          "operation_id": "put_personal_todos_api_personal_todos_put",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalTodosUpdate"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Put Personal Todos Api Personal Todos Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/plugin-marketplaces",
       "operations": [
         {
@@ -16305,6 +16495,369 @@
                     },
                     "title": "Response Search Messages Api Search Get",
                     "type": "array"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/sessions",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "list_sessions_api_sessions_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "parent",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Parent"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 200,
+                "maximum": 500,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response List Sessions Api Sessions Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/sessions",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "create_session_api_sessions_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Req",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "201": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Create Session Api Sessions Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/sessions/active-run",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "active_run_api_sessions_active_run_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "conversation_id",
+              "required": true,
+              "schema": {
+                "title": "Conversation Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Active Run Api Sessions Active Run Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/sessions/{session_id}/dismiss",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "dismiss_session_api_sessions__session_id__dismiss_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "session_id",
+              "required": true,
+              "schema": {
+                "title": "Session Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Req"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Dismiss Session Api Sessions  Session Id  Dismiss Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/sessions/{session_id}/message",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "message_session_api_sessions__session_id__message_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "session_id",
+              "required": true,
+              "schema": {
+                "title": "Session Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Req",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Message Session Api Sessions  Session Id  Message Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/sessions/{session_id}/start",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "start_session_api_sessions__session_id__start_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "session_id",
+              "required": true,
+              "schema": {
+                "title": "Session Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Start Session Api Sessions  Session Id  Start Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/sessions/{session_id}/stop",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "stop_session_api_sessions__session_id__stop_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "session_id",
+              "required": true,
+              "schema": {
+                "title": "Session Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Stop Session Api Sessions  Session Id  Stop Post",
+                    "type": "object"
                   }
                 }
               },
@@ -21843,6 +22396,7 @@
             "run_usage",
             "safety.reviewed",
             "session",
+            "session.event",
             "session.title",
             "status",
             "subagent_end",
@@ -23041,6 +23595,45 @@
         "title": "DevicePatch",
         "type": "object"
       },
+      "DiscoveryRunRequest": {
+        "properties": {
+          "days": {
+            "default": 7,
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Days",
+            "type": "integer"
+          },
+          "max_drafts": {
+            "default": 6,
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Max Drafts",
+            "type": "integer"
+          },
+          "only": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Only"
+          },
+          "use_model": {
+            "default": true,
+            "title": "Use Model",
+            "type": "boolean"
+          }
+        },
+        "title": "DiscoveryRunRequest",
+        "type": "object"
+      },
       "DownloadBody": {
         "properties": {
           "files": {
@@ -24120,6 +24713,65 @@
           "request_id"
         ],
         "title": "PermissionBody",
+        "type": "object"
+      },
+      "PersonalTodo": {
+        "properties": {
+          "created_at": {
+            "default": "",
+            "title": "Created At",
+            "type": "string"
+          },
+          "done": {
+            "default": false,
+            "title": "Done",
+            "type": "boolean"
+          },
+          "done_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Done At"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 500,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "PersonalTodo",
+        "type": "object"
+      },
+      "PersonalTodosUpdate": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PersonalTodo"
+            },
+            "maxItems": 500,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PersonalTodosUpdate",
         "type": "object"
       },
       "PolicySpec": {
