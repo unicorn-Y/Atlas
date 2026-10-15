@@ -110,7 +110,7 @@ describe('BackendAdapter availability and recovery', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('marks a server failure unavailable and clears it after a health check recovers', async () => {
+  it('keeps the backend live on a server failure and clears the error after a health check', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true } as Response)
       .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: 'temporarily unavailable' }) } as Response)
@@ -120,7 +120,8 @@ describe('BackendAdapter availability and recovery', () => {
     await adapter.initialize();
 
     await expect(adapter.getModels()).rejects.toThrow('temporarily unavailable');
-    expect(adapter.mode).toBe('mock');
+    // A 5xx proves the backend answered; only network failures drop to mock (BOOT-1 review).
+    expect(adapter.mode).toBe('backend');
     expect(adapter.availabilityError).toBe('temporarily unavailable');
     await expect(adapter.initialize()).resolves.toBe('backend');
     expect(adapter.availabilityError).toBeNull();
