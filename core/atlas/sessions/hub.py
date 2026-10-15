@@ -541,8 +541,8 @@ _hub: SessionHub | None = None
 def get_session_hub() -> SessionHub:
     global _hub
     if _hub is None:
-        from atlas.config import DATA_ROOT
+        from atlas.config import get_config
 
-        _hub = SessionHub(SessionStore(DATA_ROOT / "linked_sessions.db"))
+        _hub = SessionHub(SessionStore(get_config().db_path.parent / "linked_sessions.db"))
     _hub.attach()
     return _hub

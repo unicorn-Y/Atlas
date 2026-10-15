@@ -20,6 +20,32 @@ async def list_sessions(
     return {"sessions": [public(item) for item in items]}
 
 
+@router.post("/api/sessions", status_code=201)
+async def create_session(req: dict[str, Any]) -> dict[str, Any]:
+    """User-made side session (palette / composer): starts now unless ``start`` is false."""
+    parent = str(req.get("parent_conversation_id") or "").strip() or None
+    title = str(req.get("title") or "").strip()[:120]
+    prompt = str(req.get("prompt") or "").strip()
+    if not title or not prompt:
+        raise HTTPException(status_code=422, detail="title and prompt are required")
+    fields = {
+        "parent_conversation_id": parent, "title": title, "prompt": prompt,
+        "background": str(req.get("background") or ""),
+        "context": "fork" if req.get("context") == "fork" and parent else "fresh",
+        "use_worktree": bool(req.get("use_worktree")), "name": str(req.get("name") or title),
+        "notify_parent": req.get("notify") is not False and parent is not None,
+    }
+    hub = get_session_hub()
+    try:
+        if req.get("start") is False:
+            record = await hub.propose(initiation="offer", **fields)
+        else:
+            record = await hub.create_and_start(initiation="user_asked", **fields)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"session": public(record)}
+
+
 @router.get("/api/sessions/active-run")
 async def active_run(conversation_id: str) -> dict[str, Any]:
     """The live backend run of a conversation, so the desktop can attach to it.
