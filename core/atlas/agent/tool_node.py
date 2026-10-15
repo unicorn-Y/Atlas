@@ -1259,6 +1259,18 @@ async def execute_tools_node(
                           "content": [{"type": "text", "text": json.dumps(
                               data, ensure_ascii=False,
                           )}], "is_error": False}
+            elif fn_name.startswith("browser_"):
+                if getattr(ctx, "sandbox_enabled", False):
+                    raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")
+                from atlas.tools.x2.browser import call_tool as call_browser_tool
+                from atlas.tools.x2.context import reset_context, set_context
+                from atlas.tools.x2.registration import build_x2_context
+
+                x2_token = set_context(build_x2_context(ctx))
+                try:
+                    result = await call_browser_tool(fn_name, fn_args)
+                finally:
+                    reset_context(x2_token)
             elif agent._mcp:
                 if getattr(ctx, "sandbox_enabled", False):
                     raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")

@@ -1,5 +1,13 @@
 # Atlas engine core ports
 
+## BOOT-1 continuation fixes
+
+- Added the X2 browser schemas to the Atlas agent catalog and dispatch browser calls through the run-scoped X2 context. The browser runtime is now reachable from a real chat; `browser_navigate` was verified against `https://example.com`.
+- Completed source-split compatibility where delayed calls still expected monolithic Hermes helpers: real-profile consent now delegates to `browser_tool_cloud`; Bot Desktop host placement defaults to Atlas gateway execution and explicitly refuses non-host placement because Atlas does not ship Bot Desktop.
+- Kept Hermes PM optional after uninstall: browser execution uses Atlas/host environment and a detected external `agent-browser`; lazy PM installs are skipped when PM is absent. Windows Chromium discovery includes installed Edge/Chrome locations.
+- X2 config synchronization now writes compatibility YAML under the Atlas data/Hermes home (`config.yaml`), never to Atlas' TOML `config/atlas.toml`. The latter was restored in the test worktree from the source copy after this bug was found.
+- Renamed X2 bridge logging's reserved `LogRecord` field from `module` to `bridge_module` so deferred bridge imports cannot fail while reporting an error.
+
 This is the source map consumed by `atlas.upstream.watch`. The rows track Hermes source files and the commit each Atlas copy was adapted from. Files under `engine_core` are imported through the `atlas.engine_core` namespace; no import-time path injection is used.
 
 | source | destination | commit |

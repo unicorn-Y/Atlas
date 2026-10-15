@@ -58,7 +58,7 @@ def _ensure_loaded() -> None:
         try:
             importlib.import_module(mod_name)
         except Exception as exc:  # noqa: BLE001
-            log.warning("x2.bridge_load_failed", extra={"module": mod_name, "error": str(exc)})
+            log.warning("x2.bridge_load_failed", extra={"bridge_module": mod_name, "error": str(exc)})
 
 
 def get_tools_for_llm() -> list[dict[str, Any]]:
@@ -109,7 +109,7 @@ def shutdown() -> None:
                 stop()
             except Exception as exc:  # noqa: BLE001
                 log.warning("x2.bridge_shutdown_failed",
-                            extra={"module": mod_name, "error": str(exc)})
+                            extra={"bridge_module": mod_name, "error": str(exc)})
 
 
 __all__ = [

@@ -22,9 +22,7 @@ def hermes_home() -> Path:
 
 
 def config_file() -> Path:
-    from atlas.config import CONFIG_PATH
-
-    return Path(CONFIG_PATH)
+    return hermes_home() / "config.yaml"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:

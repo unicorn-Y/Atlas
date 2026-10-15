@@ -39,6 +39,9 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
         tools = [*tools, *agent._computer_use.get_tools_for_llm()]
     if agent._web is not None:
         tools = [*tools, *_WEB_TOOLS, _WEB_EXTRACT_TOOL]
+        from atlas.tools.x2.browser import get_browser_tool_schemas
+
+        tools.extend(get_browser_tool_schemas())
     tools.append({"type": "function", "function": {
         "name": "automation_manage",
         "description": (

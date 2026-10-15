@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Optional
 
 from atlas.engine_core.tools.browser_tool_origin import origin_module as _origin
+from atlas.engine_core.tools import browser_tool_cloud as _cloud
 
 _RP = "Real-profile browsing is unavailable in this Atlas runtime: "
 
@@ -36,7 +37,7 @@ def _real_profile_snapshot_error(err: str) -> str:
 def _real_profile_cdp() -> tuple[None, str | None]:
     """Never attach to user browser profiles; return a clear unsupported result."""
     bt = _origin()
-    if not bt._use_real_profile():
+    if not _cloud._use_real_profile():
         bt._real_profile_cdp_cache.pop("cdp", None)
         return None, None
     return None, _RP + "turn the real-profile toggle off or use an isolated local browser session."

@@ -67,10 +67,13 @@ def _find_agent_browser(*, validate: bool = True) -> str:
     (``validate=False``) never execute or install anything. Selection is not
     cached: a new PM fact or profile must be visible immediately.
     """
-    import pm
+    try:
+        import pm
+    except ModuleNotFoundError:
+        pm = None
 
     termux = _is_termux_environment()
-    if not termux:
+    if pm is not None and not termux:
         installed = pm.installed_package("agent-browser")
         if installed and installed.binary is not None:
             return str(installed.binary)
@@ -82,7 +85,7 @@ def _find_agent_browser(*, validate: bool = True) -> str:
         if candidate and usable(candidate):
             return candidate
     hint = f"agent-browser CLI not found. Install it with: {_browser_install_hint()}"
-    if validate and not termux:
+    if validate and not termux and pm is not None:
         try:
             pm.ensure("agent-browser")
         except (pm.InstallError, OSError) as exc:
@@ -114,6 +117,17 @@ def _chromium_executable() -> Optional[str]:
         found = shutil.which(name)
         if found:
             return found
+    if os.name == "nt":
+        for base in (os.environ.get("PROGRAMFILES(X86)"), os.environ.get("PROGRAMFILES")):
+            if not base:
+                continue
+            for relative in (
+                os.path.join("Microsoft", "Edge", "Application", "msedge.exe"),
+                os.path.join("Google", "Chrome", "Application", "chrome.exe"),
+            ):
+                candidate = os.path.join(base, relative)
+                if os.path.isfile(candidate):
+                    return candidate
     return None
 
 
@@ -128,7 +142,10 @@ def _maybe_autoinstall_chromium() -> bool:
     _bt._chromium_autoinstall_attempted = True
     if _running_in_docker() or _is_termux_environment() or os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH"):
         return False
-    from pm import InstallError, ensure, lazy_installs_allowed
+    try:
+        from pm import InstallError, ensure, lazy_installs_allowed
+    except ModuleNotFoundError:
+        return False
     if not lazy_installs_allowed():
         return False
     _bt.logger.info("browser: installing PM's pinned Chromium")

@@ -42,3 +42,50 @@
 - `desktop_entry` 到 ready 的 ≤1.5 秒目标尚未完成；应优先继续拆分启动 import 关键路径，并用同一 `desktop_entry` 冷启动测量复验。
 - 真实模型对话仍受 API 401 阻塞，需要可用于 Atlas API 的 provider 凭据后重验。
 - 原始工作树 `D:\Atlas` 未动；当前工作树有启动探测产生的未跟踪 `data/cache/`、`data/startup-*` 目录，均未加入提交。
+
+## BOOT-1 补齐复核（2026-10-15，boot-1-int）
+
+### 保护提交与补齐项
+
+- 中断后先将已有核心移植提交为 `e711aa55 fix(boot): complete Hermes runtime import ports` 并推送到 `origin/boot-1-int`，防止未提交代码丢失。
+- 本轮真实调用暴露的延迟路径已补齐：`tool_catalog` 暴露现有 X2 浏览器 schema，`tool_node` 用 run-scoped X2 context 执行浏览器调用；Bot Desktop 无法用的放置路径明确拒绝，默认 Atlas host/gateway 路径保留。
+- 修正 `browser_tool_real_profile` 对拆分后模块的错误访问；X2 兼容配置写入 `DATA_ROOT/config.yaml`，不覆盖 Atlas TOML；Hermes PM 不在验收虚拟环境时，浏览器使用宿主环境和已安装的 agent-browser，并识别 Windows 的 Edge/Chrome 路径；修复 X2 日志 `LogRecord.module` 保留字段冲突。
+- 浏览器调用曾发现并纠正 Atlas 测试副本 `config/atlas.toml` 被 YAML 覆盖的问题：从 `D:\Atlas\config\atlas.toml` 只读恢复到 `D:\atlas-boot-int\config\atlas.toml`。两份文件 SHA-256 相同；`D:\Atlas` 未写入。当前工作树中的 `engine/config.yaml` 以及 data 下探测文件仍为测试环境配置/产物，不纳入提交。
+- 既有移植模块与删除项清单见本目录 `core/atlas/engine_core/PORTED.md`（Hermes `c9e076b` 来源映射及 Atlas 不支持项）；本轮浏览器接线和延迟路径修复也已追加在该文件。
+
+### 静态导入检查
+
+执行：`python scripts/diag/import_check.py core`
+
+```text
+TOTAL 0
+```
+
+针对本轮触及的 Python 模块运行 `compileall -q`，退出码 0。
+
+### 真实对话逐项结果
+
+| 验收项 | 结果与证据 |
+|---|---|
+| 普通问答 | 通过（此前 run `ff1a6df1-c5e1-40fe-8a21-7511b8928d12`，模型回复 `56`，收到 `run.completed`）。 |
+| 终端命令 | 通过：`cmd /c echo BOOT1_TERMINAL_OK` 返回 `BOOT1_TERMINAL_OK`。 |
+| 文件读/写/编辑 | 通过：测试文件写入 `BOOT1_ALPHA`、编辑为 `BOOT1_BETA`，再读回 `BOOT1_BETA`。 |
+| MCP 工具 | 通过：真实对话调用 `filesystem__list_allowed_directories`，返回允许目录 `D:\Atlas`。MCP 文件写入因服务器边界拒绝工作树外路径；文件改写由已验收的 Atlas `local_shell` 完成。 |
+| 浏览器打开网页 | 通过：run `9865a083-8376-45e6-b868-ec1a035764ea` 调用真实 `browser_navigate`，导航到 `https://example.com/`，工具返回成功、标题 `Example Domain`，对话随后 `run.completed`。 |
+| 看图 | 通过：run `91e6d84b-9dbf-4164-8c4e-ba30bc07f254` 附加 `data/runtime/boot-repair-current.png`；模型回答了图中 Atlas 窗口的 MCP 加载提示及可见 UI 内容，随后 `run.completed`。 |
+| 触发压缩 | 通过：对旧会话调用 `POST /api/conversations/091006a8-9b94-438d-8bb8-35ad6be0cfe4/compact`，HTTP 200，返回 `compressed`、`before_tokens`、`after_tokens`、`summary` 和 `estimated_after_tokens`；摘要长度 1933 字符。 |
+| 自动生成标题 | 通过：真实消息运行收到 `session.title` 事件（旧会话与图片对话均观察到），消息正常完成。 |
+| 打开旧会话继续聊 | 通过：会话 `091006a8-9b94-438d-8bb8-35ad6be0cfe4` 的 run `802751e1-f0f9-4d9d-8bab-ff2af279c7c6` 完成，返回“旧会话继续成功”。先前限制工具的探路 run 在加载许多无关上下文后主动取消，不作为通过证据。 |
+
+### 旧 HTTP 400 根因结论
+
+- 已证实的直接故障是会话读取导入失败：旧 run `e6ee9222-b392-4d57-b2f1-89ee92edcb73` 的 `_rows_to_conversation -> index_tool_call_uids` 延迟导入缺少 `tool_call_id_variants`；`tool_result_id_variants` 同属缺失项。错误触发 `kernel.session_read_failed`，随后 loop 回退到 `request.history` 而继续发起模型调用。
+- 同一旧 run 的请求包含约 80 个工具，`provider=custom` 返回 HTTP 400 `invalid_request`，输入记录约 26,847 tokens。保留日志没有 provider 响应体或完整请求快照，因此无法证明 400 是缺失 ID helper 的直接后果，也无法确定被代理拒绝的具体字段；可能相关的回退 history/tool-call 配对和大型工具 schema 都没有证据定论。
+- 补齐后，原旧会话的短续聊成功；另一个旧会话探路 run 在被取消前连续进行 38 次 model request，没有 400，也没有 `kernel.*_failed`。因此原始 400 当前未复现；结论保持为“已确认读取根因，400 因果未能从旧代理日志还原”。
+
+### 日志、就绪与剩余边界
+
+- 测试后端 `GET /api/health` 返回 `status:"ok"`，后台 components 最终均为 `ready`。
+- 扫描 `D:\atlas-boot-int\data\logs\backend-stdio.log`：417 行；`kernel.*_failed` 命中 **0**，`ImportError` 命中 **0**。该文件最后写入时间为本轮 12:44；12:44 后成功对话的 run JSONL（含旧会话、图片、压缩前后及浏览器 run）也未记录 kernel failure 或 ImportError。`backend-stdio.stderr.log` 同样为 0/0，但其最后写入时间仍是较早的启动/关闭记录。
+- 本次浏览器访问使用测试工作树中配置的真实 `agent-browser` 与本地 Chrome；Bot Desktop terminal placement 仍明确不支持。`browser_navigate` 实际导航已通过。
+- `core/atlas/kernel/context.py` 未改；本轮新增修改只涉及 agent tool catalog/dispatch、X2 配置同步与浏览器兼容模块。原工作树 `D:\Atlas` 未被写入。

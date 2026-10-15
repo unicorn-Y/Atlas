@@ -178,11 +178,15 @@ def _agent_browser_command_env(socket_dir: str) -> dict[str, str]:
     """Credential-scrubbed env for one command: PATH fallbacks, the session socket dir, and
     daemon-side idle self-termination (agent-browser 0.24+) mirroring the Python janitor
     unless the user set ``AGENT_BROWSER_IDLE_TIMEOUT_MS`` explicitly."""
-    from pm import env_for
-
     env = _bt._build_browser_env()
     env["PATH"] = _install._merge_browser_path(env.get("PATH", ""))
-    env = env_for("agent-browser", base_env=env)
+    try:
+        from pm import env_for
+    except ModuleNotFoundError:
+        # Hermes PM overlays are absent in Atlas; keep the Atlas environment.
+        pass
+    else:
+        env = env_for("agent-browser", base_env=env)
     executable = _install._chromium_executable()
     if executable:
         env["AGENT_BROWSER_EXECUTABLE_PATH"] = executable
