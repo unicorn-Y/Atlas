@@ -265,6 +265,19 @@ const flags = (conversations: ConversationSummary[]) => ({
   archived: conversations.filter((item) => item.archived).map((item) => item.id),
 });
 
+const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 15000];
+/** 后端刚起来时接口偶发失败：按退避重试，后端掉线（mock）就不再试。 */
+async function withRetry<T>(load: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await load();
+    } catch (error) {
+      if (attempt >= RETRY_DELAYS_MS.length || backend.mode !== 'backend') throw error;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
 /** Native desktop notification, only when Atlas is not what the user is looking at. */
 function notifyDesktop(title: string, body: string, kind: NotificationKind, onClick: () => void) {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
@@ -326,25 +339,43 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         set({ conversationsLoading: false });
         return;
       }
-      try {
-        const [configuration, loaded, toolList, skills, capabilities] = await Promise.all([backend.getConfiguration(), backend.getConversations(), backend.getTools(), backend.getSkills(), backend.getAgentCapabilities()]);
-        // Older conversations carry the backend's English placeholder title.
-        const conversations = (await migrateLegacyFlags(loaded)).map((item) => item.title === 'New conversation' ? { ...item, title: '新对话' } : item);
-        const preferredModel = storageGet('atlas.preference.model');
-        const model = mode === 'backend' ? configuration.current : preferredModel || configuration.current;
-        set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, compressionModel: configuration.compression_model ?? '', subagentsEnabled: configuration.subagents_enabled ?? true, subagentDefaultModel: configuration.subagent_default_model || configuration.current, configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });
-        const first = conversations.find((item) => !item.archived);
-        if (firstLoad && first && !selectedId && !get().activeConversationId) await get().openConversation(first);
+      // 会话列表与配置/工具/技能分开加载、各自重试：后端刚重启时某个接口偶尔失败，
+      // 以前 Promise.all 整批作废，会话列表就一直空着（且已连上不会再 initialize）。
+      const extras = (async () => {
+        const [configuration, toolList, skills, capabilities] = await Promise.allSettled([
+          withRetry(() => backend.getConfiguration()), withRetry(() => backend.getTools()),
+          withRetry(() => backend.getSkills()), withRetry(() => backend.getAgentCapabilities()),
+        ]);
+        if (configuration.status === 'fulfilled') {
+          const config = configuration.value;
+          const preferredModel = storageGet('atlas.preference.model');
+          const model = mode === 'backend' ? config.current : preferredModel || config.current;
+          set({ models: config.models, model, providerBaseUrl: config.gateway_base_url, apiKeyConfigured: config.api_key_configured, compressionModel: config.compression_model ?? '', subagentsEnabled: config.subagents_enabled ?? true, subagentDefaultModel: config.subagent_default_model || config.current, configLoaded: true });
+        }
+        if (toolList.status === 'fulfilled') set({ tools: toolList.value.tools });
+        if (skills.status === 'fulfilled') set({ skills: skills.value });
+        if (capabilities.status === 'fulfilled') set({ capabilities: capabilities.value });
+        const failed = [configuration, toolList, skills, capabilities].find((result): result is PromiseRejectedResult => result.status === 'rejected');
+        if (failed) fail(failed.reason, '部分后端数据读取失败');
         // Roles and recipes are extras; the app works without them if the backend predates them.
         const [profiles, recipes] = await Promise.all([backend.getProfiles().catch(() => []), backend.getRecipes().catch(() => [])]);
         set((state) => ({ profiles, recipes, profileId: profiles.some((profile) => profile.id === state.profileId) ? state.profileId : 'default' }));
         // Per-phase thinking budget (C5); older backends answer nothing and the default (off) stands.
         const stages = await backend.getReasoningStages().catch(() => null);
         if (stages) set({ reasoningStages: stages });
+      })();
+      try {
+        const loaded = await withRetry(() => backend.getConversations());
+        // Older conversations carry the backend's English placeholder title.
+        const conversations = (await migrateLegacyFlags(loaded)).map((item) => item.title === 'New conversation' ? { ...item, title: '新对话' } : item);
+        set({ conversations, ...flags(conversations), conversationsLoading: false });
+        const first = conversations.find((item) => !item.archived);
+        if (firstLoad && first && !selectedId && !get().activeConversationId) await get().openConversation(first);
       } catch (error) {
-        fail(error, '无法读取后端数据');
+        fail(error, '无法读取会话列表');
         set({ conversationsLoading: false });
       }
+      await extras;
       })().finally(() => { initializing = null; });
       return initializing;
     },
