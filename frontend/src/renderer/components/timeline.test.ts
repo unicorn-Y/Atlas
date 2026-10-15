@@ -23,6 +23,18 @@ describe('describeTool', () => {
 });
 
 describe('buildTimeline', () => {
+  it('places a retry countdown after a partial assistant reply', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('run.started', { content: '继续回答' }, 0),
+      ev('message.delta', { content: 'partial' }, 1),
+      ev('run.retrying', { kind: 'connection', attempt: 2, max_attempts: 5, delay_s: 5, category: 'connection' }, 2),
+    ]);
+    expect(items.map((item) => item.kind)).toEqual(['user', 'reply', 'retrying']);
+    const retry = items[2];
+    expect(retry.kind === 'retrying' && retry.event.data).toMatchObject({ kind: 'connection', attempt: 2, max_attempts: 5, delay_s: 5 });
+  });
+
   it('pairs tool start and finish by tool_call_id and never shows bookkeeping events', () => {
     seq = 0;
     const items = buildTimeline([

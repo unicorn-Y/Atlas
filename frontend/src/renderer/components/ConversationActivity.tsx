@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, LoaderCircle, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
@@ -84,6 +84,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
       {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : item.tone === 'todo' ? <ListChecks size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
       <span>{item.text}</span>
     </div>;
+    case 'retrying': return <RetryNotice key={item.id} event={item.event} />;
     case 'lsp': return <LspNotice key={item.id} item={item} />;
     case 'review': return <ReviewFindingsCard key={item.id} item={item} store={store} />;
     case 'cancelled': return <div key={item.id} className="my-4 flex items-center gap-2 text-[12.5px] text-fg-3">
@@ -96,6 +97,28 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     default: return null;
   }
 });
+
+function RetryNotice({ event }: { event: AgentEvent }) {
+  const data = event.data;
+  const delay = Math.max(0, Number(data.delay_s) || 0);
+  const attempt = Math.max(1, Number(data.attempt) || 1);
+  const maxAttempts = Math.max(attempt, Number(data.max_attempts) || attempt);
+  const [remaining, setRemaining] = useState(() => Math.ceil(delay));
+  useEffect(() => {
+    const deadline = Date.parse(event.timestamp) + delay * 1000;
+    const tick = () => setRemaining(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    tick();
+    const timer = window.setInterval(tick, 250);
+    return () => window.clearInterval(timer);
+  }, [delay, event.timestamp]);
+  const text = data.kind === 'connection'
+    ? `连接中断，${remaining} 秒后第 ${attempt}/${maxAttempts} 次重试…`
+    : `请求暂时失败，${remaining} 秒后重试…`;
+  return <div className="my-3 flex items-center gap-2 text-[12.5px] text-fg-2" role="status" aria-live="polite">
+    <LoaderCircle size={13} className="shrink-0 animate-spin text-brand" />
+    <span>{text}</span>
+  </div>;
+}
 
 export default function ConversationActivity({ events, store, username, setTab, onOpenBrowser }: ConversationActivityProps) {
   const items = useMemo(() => buildTimeline(events), [events]);

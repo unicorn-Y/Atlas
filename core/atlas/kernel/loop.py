@@ -11,6 +11,7 @@ import contextlib
 import copy
 import json
 import logging
+import math
 import os
 import time
 import uuid
@@ -302,6 +303,19 @@ class AtlasKernel:
         engine_config = dict(raw_config.get("engine", {}))
         configured_retries = engine_config.get("model_retries")
         model_retries = int(configured_retries) if configured_retries is not None else None
+        def positive_engine_setting(name: str, default: float) -> float:
+            try:
+                value = float(engine_config.get(name, default))
+                return value if math.isfinite(value) and value > 0 else default
+            except (TypeError, ValueError, OverflowError):
+                return default
+
+        stream_idle_timeout_s = positive_engine_setting("model_stream_idle_timeout_s", 300.0)
+        connection_retry_max_wait_s = positive_engine_setting("model_connection_retry_max_wait_s", 300.0)
+        try:
+            stream_max_retries = max(0, int(engine_config.get("model_stream_max_retries", 5)))
+        except (TypeError, ValueError, OverflowError):
+            stream_max_retries = 5
         retry_watchdog = os.environ.get("CLAUDE_CODE_RETRY_WATCHDOG") == "1"
 
         def retry_delay_env(name: str, default: float | None) -> float | None:
@@ -722,6 +736,15 @@ class AtlasKernel:
                            retry_after_s=event.get("retry_after_s"),
                            retry_kind=event.get("retry_kind"),
                            retry_number=event.get("retry_number"))
+                    if event.get("retry"):
+                        await event_queue.put(emit("run.retrying", data={
+                            "kind": event.get("retry_kind") or "standard",
+                            "attempt": event.get("retry_number") or event.get("attempt"),
+                            "max_attempts": event.get("retry_max_attempts"),
+                            "delay_s": event.get("retry_delay_s") or 0,
+                            "category": event.get("category") or "unknown",
+                            "message": event.get("message") or "模型连接暂时中断",
+                        }))
 
             async def on_summary_attempt(event: dict[str, Any]) -> None:
                 await record_model_attempt(event, purpose="compaction")
@@ -859,6 +882,9 @@ class AtlasKernel:
                         fallback_models=list(getattr(runtime, "fallback_models", []) or []),
                         retry_watchdog=retry_watchdog,
                         retry_watchdog_max_wait_s=watchdog_max_wait,
+                        stream_idle_timeout_s=stream_idle_timeout_s,
+                        stream_max_retries=stream_max_retries,
+                        connection_retry_max_wait_s=connection_retry_max_wait_s,
                         overloaded_retry_base_delay_s=overloaded_retry_base_delay,
                         on_attempt=on_summary_attempt,
                         usage_budget=usage_budget,
@@ -1134,6 +1160,9 @@ class AtlasKernel:
                         fallback_models=list(getattr(runtime, "fallback_models", []) or []),
                         retry_watchdog=retry_watchdog,
                         retry_watchdog_max_wait_s=watchdog_max_wait,
+                        stream_idle_timeout_s=stream_idle_timeout_s,
+                        stream_max_retries=stream_max_retries,
+                        connection_retry_max_wait_s=connection_retry_max_wait_s,
                         overloaded_retry_base_delay_s=overloaded_retry_base_delay,
                         on_text=on_text, on_attempt=on_attempt, on_event=on_event,
                         usage_budget=usage_budget,

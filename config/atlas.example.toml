@@ -38,6 +38,9 @@ verify_before_stop = true
 [engine]
 kernel = "atlas" # atlas | hermes
 workflow_max_parallel = 4
+model_stream_idle_timeout_s = 300.0        # No model stream chunk for this long triggers a connection retry.
+model_stream_max_retries = 5               # Connection/timeout retries after the first attempt.
+model_connection_retry_max_wait_s = 300.0   # Maximum cumulative backoff before giving up.
 
 # 技能与工具库（省 token）：技能索引只放本轮最相关的几条，少用的工具 / MCP 工具折叠成名字清单
 [library]

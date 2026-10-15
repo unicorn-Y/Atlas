@@ -2760,7 +2760,7 @@ async def _execute_run(
                 })
 
             elif etype in {
-                "process.completed", "process.notification", "run.compaction.progress", "run.recovery.notice",
+                "process.completed", "process.notification", "run.compaction.progress", "run.recovery.notice", "run.retrying",
                 # C6 新增队列事件：wire 事件与内部 type 同名，data 原样透传。
                 "lsp.diagnostics", "review.findings", "application_receipt",
             }:

@@ -88,6 +88,7 @@ export type TimelineItem =
   | { kind: 'cancelled'; id: string; reason?: string }
   /** One-line runtime notes: the model was swapped after errors, or Atlas went back to verify its edits. */
   | { kind: 'notice'; id: string; tone: 'switch' | 'verify' | 'todo'; text: string }
+  | { kind: 'retrying'; id: string; event: AgentEvent }
   /** LSP 在编辑后报的新问题：默认收成一行，可展开看明细。 */
   | { kind: 'lsp'; id: string; path: string; count: number; diagnostics: LspDiagnosticItem[] }
   /** /review 代码审查的结构化结论，由 ReviewFindingsCard 渲染；findings 为空即「没有发现问题」。 */
@@ -392,6 +393,10 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
   for (const event of events) {
     const data = event.data;
     switch (event.type) {
+      case 'run.retrying':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'retrying', id: event.id, event });
+        break;
       case 'run.status': {
         if (data.status !== 'reasoning' || typeof data.text !== 'string' || !data.text) break;
         const previous = items[items.length - 1];

@@ -561,7 +561,10 @@ async def complete_stream(
     on_text: Callable[[str], Awaitable[None] | None] | None = None,
     on_attempt: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
     on_event: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
-    unbounded_connection_retries: bool = True,
+    unbounded_connection_retries: bool = False,
+    stream_idle_timeout_s: float = 300.0,
+    stream_max_retries: int = 5,
+    connection_retry_max_wait_s: float = 300.0,
     retry_watchdog: bool | None = None,
     retry_watchdog_max_wait_s: float | None = None,
     overloaded_retry_base_delay_s: float | None = None,
@@ -572,6 +575,9 @@ async def complete_stream(
     from atlas.models.tokens import estimate_tokens
 
     router = agent._model_router
+    stream_idle_timeout_s = max(0.01, float(stream_idle_timeout_s))
+    stream_max_retries = max(0, int(stream_max_retries))
+    connection_retry_max_wait_s = max(0.01, float(connection_retry_max_wait_s))
     candidates = [model_id, *(fallback_models or [])]
     candidates = list(dict.fromkeys(str(item) for item in candidates if item))
     max_retries, retry_watchdog, retry_watchdog_max_wait_s, overloaded_retry_base_delay_s = (
@@ -607,6 +613,7 @@ async def complete_stream(
         retry_index = 0
         connection_retry_count = 0
         connection_retry_delay = 5.0
+        connection_retry_wait_s = 0.0
         overloaded_retry_count = 0
         watchdog_capacity_wait_s = 0.0
 
@@ -648,10 +655,21 @@ async def complete_stream(
                     next_task = asyncio.create_task(_stream_next(chunks))
                     cancel_task = asyncio.create_task(cancel_event.wait()) if cancel_event is not None else None
                     try:
+                        waiters = {next_task}
                         if cancel_task is not None:
-                            done, _ = await asyncio.wait(
-                                {next_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED,
+                            waiters.add(cancel_task)
+                        done, _ = await asyncio.wait(
+                            waiters, timeout=stream_idle_timeout_s,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if not done:
+                            next_task.cancel()
+                            await asyncio.gather(next_task, return_exceptions=True)
+                            raise ModelCallError(
+                                f"Model stream produced no data for {stream_idle_timeout_s:g} seconds.",
+                                category="connection", retryable=True,
                             )
+                        if cancel_task is not None:
                             if cancel_task in done and cancel_event.is_set():
                                 raise asyncio.CancelledError
                         has_chunk, chunk = await next_task
@@ -795,17 +813,18 @@ async def complete_stream(
                     cool(route.model_id or candidate, 60.0)
                 retry_after = _retry_after(exc)
                 connection_retry = bool(
-                    error.retryable and error.category == "connection"
-                    and unbounded_connection_retries
-                    and "bedrock" not in str(route.provider).lower()
+                    error.retryable and error.category in {"connection", "timeout"}
+                    and (unbounded_connection_retries or connection_retry_count < stream_max_retries)
                 )
                 watchdog_capacity_retry = bool(
                     error.retryable and retry_watchdog and status in {429, 529}
                     and error.category in {"rate_limit", "overloaded"}
                 )
-                will_retry = connection_retry or watchdog_capacity_retry or bool(
-                    error.retryable and retry_index < max_retries
+                standard_retry = bool(
+                    error.retryable and error.category not in {"connection", "timeout"}
+                    and retry_index < max_retries
                 )
+                will_retry = connection_retry or watchdog_capacity_retry or standard_retry
                 if watchdog_capacity_retry and retry_watchdog_max_wait_s is not None:
                     remaining_wait = retry_watchdog_max_wait_s - watchdog_capacity_wait_s
                     if remaining_wait <= 0:
@@ -822,6 +841,10 @@ async def complete_stream(
                 if watchdog_capacity_retry and will_retry and retry_watchdog_max_wait_s is not None:
                     remaining_wait = max(0.0, retry_watchdog_max_wait_s - watchdog_capacity_wait_s)
                     delay = min(delay or 0.0, remaining_wait)
+                if connection_retry and will_retry:
+                    remaining_connection_wait = connection_retry_max_wait_s - connection_retry_wait_s
+                    if remaining_connection_wait <= 0 or (delay or 0.0) > remaining_connection_wait:
+                        will_retry = False
                 retry_kind = (
                     "connection" if connection_retry else
                     "watchdog_capacity" if watchdog_capacity_retry and will_retry else
@@ -842,8 +865,10 @@ async def complete_stream(
                              "retry": will_retry,
                              "retry_kind": retry_kind,
                              "retry_number": retry_number if will_retry else None,
+                             "retry_max_attempts": (stream_max_retries if connection_retry else max_retries),
                              "retry_delay_s": delay,
-                             "retry_after_s": retry_after}
+                             "retry_after_s": retry_after,
+                             "message": str(error)}
                     published = on_attempt(event)
                     if asyncio.iscoroutine(published):
                         await published
@@ -869,6 +894,7 @@ async def complete_stream(
                 else:
                     await asyncio.sleep(delay)
                 if connection_retry:
+                    connection_retry_wait_s += delay
                     connection_retry_count += 1
                     connection_retry_delay = min(60.0, connection_retry_delay * 2)
                 elif watchdog_capacity_retry:
