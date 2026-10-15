@@ -71,7 +71,8 @@ export class BackendAdapter {
       // 后端给了 detail 就直接用它（后端消息多为中文）；否则用中文兜底，原始英文留在 detail。
       const message = detail ?? `后端请求失败（HTTP ${response.status}）`;
       if (response.status >= 500) {
-        this.live = false;
+        // A 5xx proves the backend is reachable: one failing endpoint (a component still
+        // loading in the background) must not flip the whole client into mock mode.
         this.availabilityError = message;
       }
       throw new BackendError(message, detail ? undefined : `Backend request failed (${response.status})`);
@@ -531,6 +532,12 @@ export class BackendAdapter {
   }
 
   private async startRunInternal(request: RunStartRequest, onEvent: (event: RuntimeStreamEvent) => void, shouldPause: () => boolean, maxReconnectAttempts: number): Promise<void> {
+    if (!this.live) await this.initialize(3000);
+    // The desktop app must never answer with the mock runtime: a run that looks real but never
+    // reached the backend (BOOT-1 review). Mock stays available for the browser-only preview.
+    if (!this.live && typeof window !== 'undefined' && 'atlasDesktop' in window) {
+      throw new BackendError(this.availabilityError ?? '连不上 Atlas 后端，请确认它已经启动', 'Backend unavailable; mock runtime is disabled in the desktop app');
+    }
     if (!this.live) {
       this.mockCancelled.delete(request.run_id);
       try {
