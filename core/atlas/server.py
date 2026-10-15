@@ -367,19 +367,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         web_runtime = WebRuntime()
         capabilities.register(
             "web.search",
-            description="Search the public web (DuckDuckGo) and return result links.",
+            description="Search the live web through the Atlas provider chain (Bocha, Exa, Brave, free tiers, ddgs).",
             handler=lambda inputs: web_runtime.web_search(
                 str(inputs.get("query", "")), int(inputs.get("max_results", 5)),
             ),
-            source="duckduckgo/html",
+            source="atlas/websearch",
         )
         capabilities.register(
             "web.fetch",
-            description="Download a web page and return readable text.",
+            description="Read a web page and return its main text (local reader, vendor fallback).",
             handler=lambda inputs: web_runtime.web_fetch(
-                str(inputs.get("url", "")), int(inputs.get("max_chars", 8000)),
+                str(inputs.get("url", "")), int(inputs.get("max_chars", 15000)),
             ),
-            source="duckduckgo/html",
+            source="atlas/websearch",
         )
         capabilities.register(
             "notifications.send",

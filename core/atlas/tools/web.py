@@ -1,151 +1,51 @@
-"""Web access tools for the normal Agent: search + page fetch, no API key.
+"""Web access tools for the normal Agent: ``web_search`` + ``web_fetch``.
 
-``web_search`` queries DuckDuckGo's HTML endpoint and parses result links,
-titles, and snippets with the stdlib HTML parser. ``web_fetch`` downloads a
-page and returns readable text (tags stripped, scripts/styles dropped).
-Both are plain httpx calls with short timeouts; network failures return
+Both delegate to :mod:`atlas.websearch`, which walks a configured provider chain (Bocha for
+Chinese queries, Exa / Brave / Parallel / Tavily / … with keys, the anonymous free tiers, ddgs)
+and reads pages locally first, falling back to vendor renderers. Failures come back as
 structured errors instead of raising into the agent loop.
 """
 
 from __future__ import annotations
 
-import html as html_module
 import json
-import logging
 import re
-from html.parser import HTMLParser
-from typing import Any, Sequence
-from urllib.parse import quote_plus, urljoin
+from typing import Any
 
-from atlas.tools.ssrf_transport import create_ssrf_safe_async_client
-
-logger = logging.getLogger(__name__)
-
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-)
-SEARCH_URL = "https://html.duckduckgo.com/html/?q={query}"
+from atlas.websearch import WebSearchService, get_service
 
 
-class _TextExtractor(HTMLParser):
-    """Collect readable text, skipping script/style, recording links."""
-
-    SKIP = {"script", "style", "noscript", "svg", "head"}
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self._skip_depth = 0
-        self.chunks: list[str] = []
-        self.links: list[tuple[str, str]] = []  # (href, text)
-        self._href: str | None = None
-        self._link_text: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in self.SKIP:
-            self._skip_depth += 1
-            return
-        if tag == "a":
-            self._href = dict(attrs).get("href")
-            self._link_text = []
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in self.SKIP and self._skip_depth > 0:
-            self._skip_depth -= 1
-        if tag == "a" and self._href is not None:
-            text = "".join(self._link_text).strip()
-            if text:
-                self.links.append((self._href or "", text))
-            self._href = None
-            self._link_text = []
-
-    def handle_data(self, data: str) -> None:
-        if self._skip_depth:
-            return
-        stripped = data.strip()
-        if stripped:
-            self.chunks.append(stripped)
-            if self._href is not None:
-                self._link_text.append(data)
-
-
-def extract_text(html: str) -> str:
-    """HTML -> readable text, whitespace-collapsed."""
-    parser = _TextExtractor()
-    try:
-        parser.feed(html)
-    except Exception:
-        logger.debug("atlas.tools.web: ignored error", exc_info=True)
-    return re.sub(r"\s+", " ", " ".join(parser.chunks)).strip()
-
-
-def parse_ddg_results(html: str, base_url: str = "https://duckduckgo.com") -> list[dict[str, str]]:
-    """Parse DuckDuckGo HTML result links: title, url, snippet."""
-    parser = _TextExtractor()
-    try:
-        parser.feed(html)
-    except Exception:
-        logger.debug("atlas.tools.web: ignored error", exc_info=True)
-    results: list[dict[str, str]] = []
-    for href, text in parser.links:
-        if "uddg=" in href:
-            match = re.search(r"uddg=([^&]+)", href)
-            if match:
-                from urllib.parse import unquote
-
-                href = unquote(match.group(1))
-        elif href.startswith("/"):
-            href = urljoin(base_url, href)
-        if not href.startswith("http"):
-            continue
-        if re.match(r"https?://(www\.)?duckduckgo\.com/", href):
-            continue  # DDG-internal redirects (ads / tracking), not results
-        results.append({"title": html_module.unescape(text), "url": href})
-    return results
-
-
-def _host_of(url: str) -> str:
-    """Lowercased hostname of a URL, empty when unparseable."""
-    match = re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://([^/?#]+)", url)
-    authority = match.group(1) if match else ""
-    if "@" in authority:
-        authority = authority.rsplit("@", 1)[1]
-    host = authority.split(":", 1)[0].strip().casefold()
-    return host[4:] if host.startswith("www.") else host
-
-
-def _domain_matches(host: str, allowed: Sequence[str]) -> bool:
-    for entry in allowed:
-        pattern = str(entry or "").strip().casefold()
-        if pattern.startswith("*."):
-            pattern = pattern[2:]
-        if not pattern:
-            continue
-        if host == pattern or host.endswith("." + pattern):
-            return True
-    return False
+def _str_list(value: Any) -> list[str]:
+    return [str(item).strip() for item in (value or []) if isinstance(item, str) and str(item).strip()]
 
 
 class WebRuntime:
-    """Stateless web tools exposed to the Agent."""
+    """Agent-facing web tools over the shared :class:`WebSearchService`."""
+
+    def __init__(self, service: WebSearchService | None = None) -> None:
+        self._service = service
+
+    @property
+    def service(self) -> WebSearchService:
+        return self._service or get_service()
 
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         args = arguments or {}
         try:
             if name == "web_search":
                 data = await self.web_search(
-                    str(args.get("query", "")), int(args.get("max_results", 5)),
+                    str(args.get("query", "")), int(args.get("max_results", 5) or 5),
                     allowed_domains=args.get("allowed_domains"),
                     blocked_domains=args.get("blocked_domains"),
                     mode=str(args.get("mode") or "balanced"),
                 )
             elif name == "web_fetch":
                 data = await self.web_fetch(
-                    str(args.get("url", "")), int(args.get("max_chars", 8000)),
+                    str(args.get("url", "")), int(args.get("max_chars", 15000) or 15000),
                 )
             else:
                 return self._error(f"Unknown web tool: {name}")
-        except Exception as exc:
+        except (ValueError, RuntimeError, OSError, TypeError) as exc:
             return self._error(f"{name} failed: {exc}")
         return {
             "data": data,
@@ -159,56 +59,48 @@ class WebRuntime:
                          mode: str = "balanced") -> dict[str, Any]:
         if not query.strip():
             raise ValueError("query is required")
-
-        def _list(value: Any) -> list[str]:
-            return [str(item).strip() for item in (value or [])
-                    if isinstance(item, str) and str(item).strip()]
-
-        allowed = _list(allowed_domains)
-        blocked = _list(blocked_domains)
+        allowed, blocked = _str_list(allowed_domains), _str_list(blocked_domains)
         search_mode = str(mode or "balanced").strip().casefold()
         if search_mode not in {"balanced", "strict", "long"}:
             search_mode = "balanced"
-        if allowed:
-            query = f"{query} " + " ".join(f"site:{item}" for item in allowed)
-        else:
-            for item in blocked:
-                query = f"{query} -site:{item}"
-        response = await self._get(SEARCH_URL.format(query=quote_plus(query.strip())))
-        results = parse_ddg_results(response)
-        if allowed or blocked:
-            filtered: list[dict[str, str]] = []
-            for item in results:
-                host = _host_of(str(item.get("url") or ""))
-                if allowed and not _domain_matches(host, allowed):
-                    continue
-                if blocked and _domain_matches(host, blocked):
-                    continue
-                filtered.append(item)
-            results = filtered
-        return {
+        # "long" asks for a wider sweep; "strict" keeps the list short and on-target.
+        count = {"long": max(max_results, 10), "strict": min(max_results, 5)}.get(search_mode, max_results)
+        result = await self.service.search(query, count, allowed_domains=allowed, blocked_domains=blocked)
+        if not result.get("success"):
+            raise RuntimeError(str(result.get("error") or "web search failed"))
+        data = result.get("data") or {}
+        results = [
+            {k: row[k] for k in ("title", "url", "description", "published", "site") if row.get(k)}
+            for row in data.get("web") or []
+        ]
+        payload: dict[str, Any] = {
             "query": query, "mode": search_mode,
             "allowed_domains": allowed, "blocked_domains": blocked,
-            "results": results[: max(1, max_results)],
+            "provider": data.get("served_by", ""),
+            "results": results[: max(1, count)],
         }
+        if data.get("fallbacks"):
+            payload["fallbacks"] = data["fallbacks"]
+        if data.get("cached"):
+            payload["cached"] = True
+        return payload
 
-    async def web_fetch(self, url: str, max_chars: int = 8000) -> dict[str, Any]:
+    async def web_fetch(self, url: str, max_chars: int = 15000) -> dict[str, Any]:
         if not re.match(r"^https?://", url):
             raise ValueError("url must start with http:// or https://")
-        response = await self._get(url)
-        text = extract_text(response)
-        return {"url": url, "text": text[: max(200, max_chars)], "length": len(text)}
-
-    async def _get(self, url: str) -> str:
-        # Every hop, including redirects, passes the connect-time DNS guard in
-        # atlas.tools.ssrf_transport: a hostname answered with a private or
-        # loopback address is blocked before a socket opens.
-        async with create_ssrf_safe_async_client(
-            follow_redirects=True, timeout=15.0, headers={"User-Agent": USER_AGENT},
-        ) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            return response.text
+        page = (await self.service.extract([url], char_limit=max_chars))[0]
+        if page.get("error"):
+            raise RuntimeError(str(page["error"]))
+        text = str(page.get("content") or "")
+        meta = page.get("metadata") or {}
+        payload: dict[str, Any] = {
+            "url": page.get("url") or url, "title": page.get("title", ""), "text": text,
+            "length": len(text), "truncated": bool(page.get("truncated")),
+            "provider": meta.get("served_by", ""),
+        }
+        if meta.get("fallbacks"):
+            payload["fallbacks"] = meta["fallbacks"]
+        return payload
 
     @staticmethod
     def _error(message: str) -> dict[str, Any]:
@@ -224,15 +116,20 @@ WEB_TOOLS = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Search the public web (DuckDuckGo) and return result links.",
+            "description": (
+                "Search the live web and return ranked results (title, url, snippet, publish date). "
+                "Chinese queries are routed to a Chinese index automatically. Use web_fetch to read a result."
+            ),
             "parameters": {"type": "object", "properties": {
-                "query": {"type": "string"},
-                "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
+                "query": {"type": "string",
+                    "description": "Search query. Operators such as \"exact phrase\" or -term work on most backends."},
+                "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
                 "allowed_domains": {"type": "array", "items": {"type": "string"},
                     "description": "Restrict results to these hosts and their subdomains."},
                 "blocked_domains": {"type": "array", "items": {"type": "string"},
                     "description": "Drop results served by these hosts and their subdomains."},
-                "mode": {"type": "string", "enum": ["balanced", "strict", "long"]},
+                "mode": {"type": "string", "enum": ["balanced", "strict", "long"],
+                    "description": "balanced (default), strict (few on-target results) or long (wide sweep, 10+)."},
             }, "required": ["query"], "additionalProperties": False},
         },
     },
@@ -240,10 +137,13 @@ WEB_TOOLS = [
         "type": "function",
         "function": {
             "name": "web_fetch",
-            "description": "Download a web page and return its readable text.",
+            "description": (
+                "Read a web page (or PDF / video captions) and return its main text as markdown. "
+                "Long pages return head + tail with a footer naming the saved full text for read_file."
+            ),
             "parameters": {"type": "object", "properties": {
                 "url": {"type": "string"},
-                "max_chars": {"type": "integer", "minimum": 200, "maximum": 50000},
+                "max_chars": {"type": "integer", "minimum": 200, "maximum": 100000},
             }, "required": ["url"], "additionalProperties": False},
         },
     },

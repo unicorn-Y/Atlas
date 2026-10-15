@@ -88,6 +88,27 @@ toast_enabled = true
 # bot_token = "..."
 # chat_id = "..."
 
+[web]
+# web_search / web_fetch walk these providers in order and fail over to the next one.
+# Providers without a key are skipped, so the defaults work out of the box (free tiers + ddgs).
+# search_order    = ["exa", "brave", "parallel", "perplexity", "tavily", "keenable", "searxng", "keyless", "bocha", "ddgs"]
+# search_order_zh = ["bocha", "keyless", "exa", "brave", "parallel", "tavily", "searxng", "ddgs"]  # mostly-Chinese queries
+# extract_order   = ["local", "exa", "parallel", "tavily", "keenable", "keyless"]
+keyless = true              # anonymous free tiers of Exa / Parallel / Keenable / Tavily (rate-limited)
+cache_ttl_minutes = 20
+extract_char_limit = 15000  # longer pages return head + tail; the full text is saved for read_file
+parallel_mode = "fast"      # turbo | fast | basic | advanced (only with a Parallel key)
+
+[web.keys]
+# Each key may instead come from its env var (BOCHA_API_KEY, EXA_API_KEY, PARALLEL_API_KEY,
+# TAVILY_API_KEY, BRAVE_SEARCH_API_KEY, KEENABLE_API_KEY, PERPLEXITY_API_KEY, SEARXNG_URL).
+bocha = ""       # https://open.bochaai.com — Chinese index; used first for Chinese queries
+exa = ""         # https://exa.ai
+parallel = ""    # https://parallel.ai
+tavily = ""      # https://app.tavily.com
+brave = ""       # https://brave.com/search/api/
+# searxng = "http://localhost:8080"
+
 [tools]
 # Warn after this many same-file edits in one run.
 same_file_edit_reminder_threshold = 6

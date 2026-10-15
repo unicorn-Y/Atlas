@@ -46,6 +46,7 @@ dependencies = [
     "keyring>=25.0",
     "pypdf>=5.0",
     "trafilatura>=2.0",
+    "ddgs>=9.0",
     "youtube-transcript-api>=1.2",
     # Aider-style tree-sitter repository map; versions follow Aider 5dc9490bb35f.
     "grep-ast==0.9.0",

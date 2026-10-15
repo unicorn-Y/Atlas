@@ -159,3 +159,27 @@ Explicitly unsupported surfaces remain explicit: Bot Desktop operations, selecti
 | `tools/schema_sanitizer.py` | `core/atlas/engine_core/tools/schema_sanitizer.py` | `c9e076b` |
 
 `tools/tool_search_validation.py` still imported Hermes' top-level `model_tools.coerce_tool_args` inside a try/except, so deferred-tool validation silently skipped argument coercion ("5" for an integer would be rejected). `import_check.py` only covers `atlas.*` imports, which is why it reported 0.
+
+## Web search (atlas.websearch)
+
+Translated, not copied: async httpx against the vendors' REST APIs (no exa-py / parallel-web SDKs), Atlas `[web]` config in `config/atlas.toml` instead of Hermes `config.yaml` / `~/.hermes/.env`, and nothing imported from Hermes. Atlas additions with no Hermes counterpart: Bocha (Chinese index, `providers/keyed.py`), Chinese-query routing (`router.py`), a full failover chain instead of one backend + one-shot keyless rescue, Tavily in the keyless ring, and the free local page reader (`providers/local.py`). Dropped: Nous managed gateway, Firecrawl keyless (refuses proxy exit IPs), xAI and OpenAI-native search (need those vendors' model keys).
+
+| source | destination | commit |
+|---|---|---|
+| `agent/web_search_provider.py` | `core/atlas/websearch/providers/base.py` | `c9e076b` |
+| `agent/web_search_registry.py` | `core/atlas/websearch/providers/__init__.py` | `c9e076b` |
+| `plugins/web/_common.py` | `core/atlas/websearch/common.py` | `c9e076b` |
+| `plugins/web/keyless_mcp.py` | `core/atlas/websearch/keyless.py` | `c9e076b` |
+| `plugins/web/exa/provider.py` | `core/atlas/websearch/providers/keyed.py` | `c9e076b` |
+| `plugins/web/parallel/provider.py` | `core/atlas/websearch/providers/keyed.py` | `c9e076b` |
+| `plugins/web/tavily/provider.py` | `core/atlas/websearch/providers/keyed.py` | `c9e076b` |
+| `plugins/web/brave_free/provider.py` | `core/atlas/websearch/providers/keyed.py` | `c9e076b` |
+| `plugins/web/keenable/provider.py` | `core/atlas/websearch/providers/keyed.py` | `c9e076b` |
+| `plugins/web/perplexity/provider.py` | `core/atlas/websearch/providers/keyed.py` | `c9e076b` |
+| `plugins/web/searxng/provider.py` | `core/atlas/websearch/providers/keyed.py` | `c9e076b` |
+| `plugins/web/ddgs/provider.py` | `core/atlas/websearch/providers/ddgs.py` | `c9e076b` |
+| `plugins/web/ddgs/_search_worker.py` | `core/atlas/websearch/providers/_ddgs_worker.py` | `c9e076b` |
+| `tools/web_tools.py` | `core/atlas/websearch/service.py` | `c9e076b` |
+| `tools/web_tools_rescue.py` | `core/atlas/websearch/service.py` | `c9e076b` |
+| `tools/web_result_cache.py` | `core/atlas/websearch/cache.py` | `c9e076b` |
+| `tools/web_tools_truncate.py` | `core/atlas/websearch/cache.py` | `c9e076b` |
