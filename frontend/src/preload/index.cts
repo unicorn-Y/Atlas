@@ -24,6 +24,7 @@ const desktopApi: AtlasDesktopApi = {
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
   showFloatingComposer: () => ipcRenderer.invoke('floating-composer:show'),
   hideFloatingComposer: () => ipcRenderer.send('floating-composer:hide'),
+  setRunStatus: (status) => ipcRenderer.send('window:run-status', status),
   submitFloatingComposer: (text: string) => ipcRenderer.send('floating-composer:submit', text),
   onFloatingComposerSubmit: (callback: (text: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, text: string) => callback(text);

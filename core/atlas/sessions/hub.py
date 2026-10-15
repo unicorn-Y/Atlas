@@ -91,6 +91,9 @@ class SessionHub:
         if isinstance(listeners, list):
             listeners.append(self._on_run_terminal)
             self._listening = True
+            from atlas.sessions.idle_compaction import start_idle_compaction
+
+            start_idle_compaction()
 
     @staticmethod
     def _manager() -> Any:

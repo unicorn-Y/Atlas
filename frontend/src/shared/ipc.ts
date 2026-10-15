@@ -81,6 +81,8 @@ export interface AtlasDesktopApi {
   /** Open the small native floating composer. The desktop shell forwards submitted text to the main UI. */
   showFloatingComposer?(): void;
   hideFloatingComposer?(): void;
+  /** Taskbar progress/flash for agent work: running, waiting for the user, or idle. */
+  setRunStatus?(status: 'running' | 'waiting' | 'idle'): void;
   submitFloatingComposer?(text: string): void;
   onFloatingComposerSubmit?(callback: (text: string) => void): () => void;
   /** Open one existing file in a fixed allowlisted IDE CLI, after validating it stays inside the workspace. */

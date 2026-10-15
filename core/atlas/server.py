@@ -643,6 +643,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # tool capabilities are wired. Optional integrations continue in the
         # deferred task and do not gate chat readiness.
         startup.mark_core_ready(True)
+        # Linked side sessions report on run completion, and idle compaction
+        # watches finished runs; both hang off the runtime manager.
+        try:
+            from atlas.sessions import get_session_hub
+
+            get_session_hub()
+        except Exception:
+            log.exception("sessions.hub_start_failed")
 
         # S2: everything deferred starts from here — after uvicorn binds, so
         # /api/health answers while the components come up.

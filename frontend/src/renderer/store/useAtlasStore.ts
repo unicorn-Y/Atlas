@@ -1168,3 +1168,14 @@ function download(filename: string, text: string, type: string) {
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// Taskbar status (Windows progress bar / flash): any run waiting on the user wins,
+// then any run still working; otherwise clear it.
+if (typeof window !== 'undefined' && window.atlasDesktop?.setRunStatus) {
+  let lastStatus = '';
+  useAtlasStore.subscribe((state) => {
+    const live = state.runs.filter((run) => !['completed', 'failed', 'cancelled'].includes(run.status));
+    const status = live.some((run) => run.status === 'waiting') ? 'waiting' : live.length ? 'running' : 'idle';
+    if (status !== lastStatus) { lastStatus = status; window.atlasDesktop?.setRunStatus?.(status); }
+  });
+}

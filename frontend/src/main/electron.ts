@@ -687,6 +687,16 @@ ipcMain.on('window:maximize', () => {
   else windowRef.maximize();
 });
 ipcMain.on('window:close', () => windowRef?.close());
+// Desktop counterpart of Claude Code's Program Status Protocol (OSC 7501): the
+// taskbar shows whether Atlas is working, waiting on you, or done.
+ipcMain.on('window:run-status', (_event, status: unknown) => {
+  if (!windowRef || windowRef.isDestroyed()) return;
+  if (status === 'running') windowRef.setProgressBar(2, { mode: 'indeterminate' });
+  else if (status === 'waiting') {
+    windowRef.setProgressBar(1, { mode: 'paused' });
+    if (!windowRef.isFocused()) windowRef.flashFrame(true);
+  } else windowRef.setProgressBar(-1);
+});
 // Source mode (running from a git checkout without the Vite dev server): updates are
 // pulled and rebuilt by scripts/atlas-update.mjs instead of reinstalling a package.
 const updateRoot = () => (!app.isPackaged && !process.env.VITE_DEV_SERVER_URL ? sourceRoot(app.getAppPath()) : null);
