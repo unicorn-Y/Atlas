@@ -472,8 +472,9 @@ class SessionHub:
             f"你开的独立会话「{record['title']}」（句柄 {record['name']}，id {record['session_id']}）{outcome}。\n"
             f"它的回报：\n{excerpt}\n"
             f"{self._stats_line(stats)}\n"
-            "这是它自己的报告，不是证据：告诉用户已完成之前先核对结果或改动。"
-            "用户要的下一步若因此解锁就接着做；没有就一两句话汇报。不要替用户开没要求的新工作。\n"
+            "这是它自己的报告：如果它说改了代码或文件，转告用户「已完成」前用一两步看一眼改动（diff 或关键文件）；"
+            "只是答复或调研结果就直接转述，不要为核对去翻日志、数据库或别的目录。"
+            "用户要的下一步若因此解锁就接着做；没有就用一两句话向用户汇报，然后结束这一轮。不要开用户没要求的新工作。\n"
             "</side-session-event>"
         )
         parent_id = record["parent_conversation_id"]
