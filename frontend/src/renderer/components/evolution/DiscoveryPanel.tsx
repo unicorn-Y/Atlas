@@ -55,7 +55,7 @@ export default function DiscoveryPanel({ apiBaseUrl, onToast, onDraftsChanged }:
     controls={<button className="btn ghost" disabled={status?.running} onClick={() => void run()}>
       {status?.running ? <LoaderCircle size={14} className="spin" /> : <Play size={14} />}{status?.running ? '正在发现…' : '现在跑一次'}
     </button>}>
-    <div className="grid gap-2 px-3.5 pb-3 text-[12.5px]">
+    <div className="grid min-w-0 gap-2 px-3.5 pb-3 text-[12.5px] [overflow-wrap:anywhere]">
       <div className="text-fg-3">
         {status?.last_run_at ? `上次：${relativeTime(status.last_run_at)}` : '还没跑过'}
         {counts && ` · 抓到 ${counts.collected} 条，判断 ${counts.judged} 条，值得吸收 ${counts.absorb} 条，生成任务书草稿 ${counts.drafts} 份`}
@@ -64,10 +64,10 @@ export default function DiscoveryPanel({ apiBaseUrl, onToast, onDraftsChanged }:
       {status?.last_errors && Object.keys(status.last_errors).length > 0 && <div className="text-fg-3">
         这些源这次没读到：{Object.keys(status.last_errors).join('、')}
       </div>}
-      {absorb.map((row) => <div key={row.id} className="rounded-lg bg-sunken px-3 py-2">
+      {absorb.map((row) => <div key={row.id} className="min-w-0 rounded-lg bg-sunken px-3 py-2 [overflow-wrap:anywhere]">
         <div className="flex items-start gap-2">
           <span className="min-w-0 flex-1 font-medium text-fg">{row.feature || row.title}</span>
-          <a href={row.url} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 text-fg-3 hover:text-fg">{row.source}<ExternalLink size={11} /></a>
+          <a href={row.url} target="_blank" rel="noreferrer" className="inline-flex max-w-[40%] shrink-0 truncate items-center gap-1 text-fg-3 hover:text-fg">{row.source}<ExternalLink size={11} /></a>
         </div>
         {row.atlas_gap && <div className="mt-1 text-fg-2">Atlas：{row.atlas_gap}</div>}
         {row.port_from && <div className="mt-0.5 text-fg-3">移植：{row.port_from} · 工作量 {row.effort ?? 'M'} · 价值 {row.value ?? 3}/5</div>}
