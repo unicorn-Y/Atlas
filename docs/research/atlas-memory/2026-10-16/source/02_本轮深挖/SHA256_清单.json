@@ -1,0 +1,57 @@
+[
+  {
+    "name": "00_先读_结论与研究边界.md",
+    "size": 5248,
+    "sha256": "d610886ac087999411337cbe321e30c95fc2b931a825a42557ff505c565a625c"
+  },
+  {
+    "name": "01_W2现状与缺陷审计.md",
+    "size": 7262,
+    "sha256": "b9bc6cae7909a2192d0f7d4c85fdbcd5333bc5d7730a5d49c92a934b13a8cf28"
+  },
+  {
+    "name": "02_统一事件本体与未来多模态契约.md",
+    "size": 10514,
+    "sha256": "59cdca08e56dc0e47928b6d5de800ee7c9500099dc58a9d961bf876994202177"
+  },
+  {
+    "name": "03_机制级源码复用裁决.md",
+    "size": 12145,
+    "sha256": "8dab96426fcc8ac776c21565dba5ab6cfcef232be381172f5de3cef69d9bbbee"
+  },
+  {
+    "name": "04_记忆生命周期与经验技能闭环.md",
+    "size": 8050,
+    "sha256": "b6e38fc30768f9346db503945baf219ca51fa94c2443c7698cacc2e24c75e0e5"
+  },
+  {
+    "name": "05_最小验证实验与施工决策.md",
+    "size": 6303,
+    "sha256": "09adcd7cdc3ea900116bbfe13afa0aa85958446ef7b5d398b9a779e365c2b5d4"
+  },
+  {
+    "name": "06_视觉语音手机_仅规划暂不实施.md",
+    "size": 4743,
+    "sha256": "2556632e3e20eafde97e68bcd5ff9785e8462bbdf62814bb0685ffbb3314f5a6"
+  },
+  {
+    "name": "07_待用户确认事项.md",
+    "size": 2528,
+    "sha256": "f1f954936d540db4336f2e8f67f98b29a8beb7b04413d74666754a544decfefd"
+  },
+  {
+    "name": "08_源码与资料索引.csv",
+    "size": 6105,
+    "sha256": "70360ac0d2ea4ccd8d302a03c402433d8f6b1d86b0bf80438a6e5aae2afec5c0"
+  },
+  {
+    "name": "09_方法与版本说明.md",
+    "size": 1006,
+    "sha256": "2d05329ef3c41bb9525d7e194701ea53482367e46734b5202f907f76d1951b7f"
+  },
+  {
+    "name": "tests/atlas_memory_research_cases.jsonl",
+    "size": 5632,
+    "sha256": "db9395d6450d9dd96dd6597e055289fab2f62930219fc949ad5b4ac3b55d1e4e"
+  }
+]

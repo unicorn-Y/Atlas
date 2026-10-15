@@ -1,0 +1,288 @@
+{
+  "generated_on": "2026-10-16",
+  "canonical_root": "Atlas_记忆系统_统一资料库_2026-10-16",
+  "dedupe_method": "SHA-256 exact-byte equality; differing older variants retained separately",
+  "original_input_archives": 5,
+  "entries": [
+    {
+      "logical_path": "05_查漏与覆盖/00-总览与证据边界.md",
+      "source": "Atlas长期记忆研究-ABC全域二次查漏总包-2026-10-14.zip:00-总览与证据边界.md",
+      "sha256": "77f905d6bae25c256e90777f909d1567d5b70f6548f4cef2b24484f1563fe66d",
+      "size_bytes": 6102,
+      "stored": true
+    },
+    {
+      "logical_path": "02_产品与用户体验/A-产品与用户抱怨-调研报告.md",
+      "source": "Atlas长期记忆研究-ABC全域二次查漏总包-2026-10-14.zip:A-产品与用户抱怨-调研报告.md",
+      "sha256": "1ebe072ee271a288af3c091e24841170d2fb1fa2f571b1895ef5bad99020f092",
+      "size_bytes": 53137,
+      "stored": true
+    },
+    {
+      "logical_path": "03_开源项目与机制/B-开源项目机制-调研报告.md",
+      "source": "Atlas长期记忆研究-ABC全域二次查漏总包-2026-10-14.zip:B-开源项目机制-调研报告.md",
+      "sha256": "7021361cb1133826a43791fca9778c9c2f5c144c5e9867140ae02582c06ae607",
+      "size_bytes": 34287,
+      "stored": true
+    },
+    {
+      "logical_path": "04_论文与评测/C-论文与查漏补缺-调研报告.md",
+      "source": "Atlas长期记忆研究-ABC全域二次查漏总包-2026-10-14.zip:C-论文与查漏补缺-调研报告.md",
+      "sha256": "b0d6e3b870b605843ff7a18bc4ba0ef6a4ef99d49b726c1b51c977006da69328",
+      "size_bytes": 26805,
+      "stored": true
+    },
+    {
+      "logical_path": "05_查漏与覆盖/01-遗漏审计与新发现-2026-10-14.md",
+      "source": "Atlas长期记忆研究-ABC全域二次查漏总包-2026-10-14.zip:01-遗漏审计与新发现-2026-10-14.md",
+      "sha256": "f5b45735372f535caa743aec47809485666bada863362dfd1d8188943fa3b0a9",
+      "size_bytes": 11027,
+      "stored": true
+    },
+    {
+      "logical_path": "05_查漏与覆盖/02-全域二次查漏与统一总账-2026-10-14.md",
+      "source": "Atlas长期记忆研究-ABC全域二次查漏总包-2026-10-14.zip:02-全域二次查漏与统一总账-2026-10-14.md",
+      "sha256": "5a8fff6b5e98c3491ef4c9b11273f14f3d823ec1e6d7430f2bc0dcb08749dbb4",
+      "size_bytes": 28665,
+      "stored": true
+    },
+    {
+      "logical_path": "05_查漏与覆盖/03-ABC全项覆盖状态矩阵-2026-10-14.md",
+      "source": "Atlas长期记忆研究-ABC全域二次查漏总包-2026-10-14.zip:03-ABC全项覆盖状态矩阵-2026-10-14.md",
+      "sha256": "ee1c7f2c643defe51d0e3346e1c47398f8d92444f302a25bf5df3c437cbc7491",
+      "size_bytes": 22658,
+      "stored": true
+    },
+    {
+      "logical_path": "07_Opus交接与审查/00_先读_Opus省token摘要.md",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:00_先读_Opus省token摘要.md",
+      "sha256": "64d573cae6b011ce04b129bbd99384b37c525ae838e8c7c0a0eb8e796af04326",
+      "size_bytes": 5283,
+      "stored": true
+    },
+    {
+      "logical_path": "06_Atlas源码与架构/01_Atlas实际链路与缺陷证据.md",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:01_Atlas实际链路与缺陷证据.md",
+      "sha256": "794fc9de3f69e5736bf46e78244b3fad517edff6ebbb4bed1ff86b495f74368d",
+      "size_bytes": 14967,
+      "stored": true
+    },
+    {
+      "logical_path": "03_开源项目与机制/02_候选项目源码与依赖索引.md",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:02_候选项目源码与依赖索引.md",
+      "sha256": "18abb1826be05b458e3691bc84969b873c144aedb2f4eebf466032c2517ae90d",
+      "size_bytes": 16828,
+      "stored": true
+    },
+    {
+      "logical_path": "06_Atlas源码与架构/03_统一架构与分阶段任务书.md",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:03_统一架构与分阶段任务书.md",
+      "sha256": "483170edba9a3ae20beb8eae783d9a9558370d2fee1360954b361862dd3f3503",
+      "size_bytes": 16739,
+      "stored": true
+    },
+    {
+      "logical_path": "03_开源项目与机制/04_源码证据卡片_关键细节.md",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:04_源码证据卡片_关键细节.md",
+      "sha256": "d9825d55fd6f7268d9bbd503035aa226c8db0488b53b31d7beef04992bcec66d",
+      "size_bytes": 16796,
+      "stored": true
+    },
+    {
+      "logical_path": "07_Opus交接与审查/05_交给Opus5.5的审查指令.txt",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:05_交给Opus5.5的审查指令.txt",
+      "sha256": "608feb9debc931e851e137a0e175047ff669c4a0764e4839e008e1b65a9c86c5",
+      "size_bytes": 4371,
+      "stored": true
+    },
+    {
+      "logical_path": "08_机器索引与来源/06_项目机器索引.json",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:06_项目机器索引.json",
+      "sha256": "5afe9f875978b3544b0b3089b5ecb4517364f9d749871001c7715e0df7890f8e",
+      "size_bytes": 22968,
+      "stored": true
+    },
+    {
+      "logical_path": "05_查漏与覆盖/07_查漏总账与后续候选池.md",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:07_查漏总账与后续候选池.md",
+      "sha256": "616fac8fde49e8532d5844bff5aeb70a4c2206d29b0c194bb4c43ecd06cb86b8",
+      "size_bytes": 7645,
+      "stored": true
+    },
+    {
+      "logical_path": "06_Atlas源码与架构/Atlas_记忆系统_源码级筛选与施工方案_2026-10-15.md",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:90_前版源码筛选报告_备查.md",
+      "sha256": "678fe6ccac81b25e91540eb16df0b8cfcc0a09080ef742d8ffbcf05abf0466f6",
+      "size_bytes": 21535,
+      "stored": true
+    },
+    {
+      "logical_path": "07_Opus交接与审查/README_阅读顺序与边界.md",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:README_阅读顺序与边界.md",
+      "sha256": "32415b7fe2083bd13c0e1e944fd0f2dde59852a318e68b96261a090c2328d882",
+      "size_bytes": 3282,
+      "stored": true
+    },
+    {
+      "logical_path": "08_机器索引与来源/SOURCE_MANIFEST_SHA256_原Opus.txt",
+      "source": "Atlas_Memory_Opus55_交接审查包_2026-10-15.zip:SOURCE_MANIFEST_SHA256.txt",
+      "sha256": "b84e8e9dfb621148a3b9c9579ac863c8ecbb733285bdb5176e8005e2c5352d77",
+      "size_bytes": 1301,
+      "stored": true
+    },
+    {
+      "logical_path": "01_原始任务书/A-产品与用户抱怨.md",
+      "source": "A-产品与用户抱怨.md",
+      "sha256": "5b6db4c57a481dbdffd255bce36fbf8d185e25248eb284b462ebd56be34588ec",
+      "size_bytes": 6104,
+      "stored": true
+    },
+    {
+      "logical_path": "01_原始任务书/B-开源项目机制.md",
+      "source": "B-开源项目机制.md",
+      "sha256": "6d44d5903384f552c6c8ccb01cfc6852e4b83b0d33796e29178737f49c1f2cb1",
+      "size_bytes": 4981,
+      "stored": true
+    },
+    {
+      "logical_path": "01_原始任务书/C-论文与查漏补缺.md",
+      "source": "C-论文与查漏补缺.md",
+      "sha256": "9c3214881b3dd38dd4a6823896733fe09a255c47d08fa45c9e1bef8b6a6014f7",
+      "size_bytes": 4848,
+      "stored": true
+    },
+    {
+      "logical_path": "06_Atlas源码与架构/Atlas_记忆系统_源码级筛选与施工方案_2026-10-15.md",
+      "source": "Atlas_记忆系统_源码级筛选与施工方案_2026-10-15.md",
+      "sha256": "678fe6ccac81b25e91540eb16df0b8cfcc0a09080ef742d8ffbcf05abf0466f6",
+      "stored": false,
+      "stored_as": "06_Atlas源码与架构/Atlas_记忆系统_源码级筛选与施工方案_2026-10-15.md"
+    },
+    {
+      "logical_path": "07_Opus交接与审查/05_交给Opus5.5的审查指令(1).txt",
+      "source": "05_交给Opus5.5的审查指令(1).txt",
+      "sha256": "608feb9debc931e851e137a0e175047ff669c4a0764e4839e008e1b65a9c86c5",
+      "stored": false,
+      "stored_as": "07_Opus交接与审查/05_交给Opus5.5的审查指令.txt"
+    },
+    {
+      "logical_path": "09_旧版差异留档/README_阅读顺序与边界.md",
+      "source": "Atlas_记忆系统_Opus5.5全量审查交接包_2026-10-15.zip:README_阅读顺序与边界.md",
+      "sha256": "f6aef9dae03d1e434c31797ae5df6ba39549a14204868a0c5707b7a4f7eadfd6",
+      "size_bytes": 3145,
+      "stored": true
+    },
+    {
+      "logical_path": "09_旧版差异留档/00_先读_Opus省token摘要.md",
+      "source": "Atlas_记忆系统_Opus5.5全量审查交接包_2026-10-15.zip:00_先读_Opus省token摘要.md",
+      "sha256": "44e3b3f58271791212e9d2aaffcdcb5571e3543c0405764434f30c9d7c45b5b0",
+      "size_bytes": 5068,
+      "stored": true
+    },
+    {
+      "logical_path": "09_旧版差异留档/02_候选项目源码与依赖索引.md",
+      "source": "Atlas_记忆系统_Opus5.5全量审查交接包_2026-10-15.zip:02_候选项目源码与依赖索引.md",
+      "sha256": "86b6c99c833c91d55cb4b829fb0ac877de5117af3f2c217bcf55efd107fdcf4c",
+      "size_bytes": 16736,
+      "stored": true
+    },
+    {
+      "logical_path": "09_旧版差异留档/04_源码证据卡片_关键细节.md",
+      "source": "Atlas_记忆系统_Opus5.5全量审查交接包_2026-10-15.zip:04_源码证据卡片_关键细节.md",
+      "sha256": "4a3ce057e7b3c1f0bf793078a24eb1efb6ba63503b4685ef9c6809ac593af0cd",
+      "size_bytes": 13284,
+      "stored": true
+    },
+    {
+      "logical_path": "09_旧版差异留档/05_交给Opus5.5的审查指令.txt",
+      "source": "Atlas_记忆系统_Opus5.5全量审查交接包_2026-10-15.zip:05_交给Opus5.5的审查指令.txt",
+      "sha256": "5f03d0c1e4fcc1d34d0407e7a0258e405c4b1a1256f6eb76bf1a4ad5030abf82",
+      "size_bytes": 3911,
+      "stored": true
+    },
+    {
+      "logical_path": "09_旧版差异留档/06_项目机器索引.json",
+      "source": "Atlas_记忆系统_Opus5.5全量审查交接包_2026-10-15.zip:06_项目机器索引.json",
+      "sha256": "ae395a1a4db395c5154e1954bde6251b6ebd643b4c4d992a568f8d647f6273bc",
+      "size_bytes": 22941,
+      "stored": true
+    },
+    {
+      "logical_path": "00-总览与证据边界.md",
+      "source": "Atlas长期记忆调研-ABC-2026-10-14.zip:00-总览与证据边界.md",
+      "sha256": "77f905d6bae25c256e90777f909d1567d5b70f6548f4cef2b24484f1563fe66d",
+      "stored": false,
+      "stored_as": "05_查漏与覆盖/00-总览与证据边界.md"
+    },
+    {
+      "logical_path": "A-产品与用户抱怨-调研报告.md",
+      "source": "Atlas长期记忆调研-ABC-2026-10-14.zip:A-产品与用户抱怨-调研报告.md",
+      "sha256": "1ebe072ee271a288af3c091e24841170d2fb1fa2f571b1895ef5bad99020f092",
+      "stored": false,
+      "stored_as": "02_产品与用户体验/A-产品与用户抱怨-调研报告.md"
+    },
+    {
+      "logical_path": "B-开源项目机制-调研报告.md",
+      "source": "Atlas长期记忆调研-ABC-2026-10-14.zip:B-开源项目机制-调研报告.md",
+      "sha256": "7021361cb1133826a43791fca9778c9c2f5c144c5e9867140ae02582c06ae607",
+      "stored": false,
+      "stored_as": "03_开源项目与机制/B-开源项目机制-调研报告.md"
+    },
+    {
+      "logical_path": "C-论文与查漏补缺-调研报告.md",
+      "source": "Atlas长期记忆调研-ABC-2026-10-14.zip:C-论文与查漏补缺-调研报告.md",
+      "sha256": "b0d6e3b870b605843ff7a18bc4ba0ef6a4ef99d49b726c1b51c977006da69328",
+      "stored": false,
+      "stored_as": "04_论文与评测/C-论文与查漏补缺-调研报告.md"
+    },
+    {
+      "logical_path": "00-总览与证据边界.md",
+      "source": "Atlas长期记忆调研-ABC-遗漏审计增补-2026-10-14.zip:00-总览与证据边界.md",
+      "sha256": "77f905d6bae25c256e90777f909d1567d5b70f6548f4cef2b24484f1563fe66d",
+      "stored": false,
+      "stored_as": "05_查漏与覆盖/00-总览与证据边界.md"
+    },
+    {
+      "logical_path": "A-产品与用户抱怨-调研报告.md",
+      "source": "Atlas长期记忆调研-ABC-遗漏审计增补-2026-10-14.zip:A-产品与用户抱怨-调研报告.md",
+      "sha256": "1ebe072ee271a288af3c091e24841170d2fb1fa2f571b1895ef5bad99020f092",
+      "stored": false,
+      "stored_as": "02_产品与用户体验/A-产品与用户抱怨-调研报告.md"
+    },
+    {
+      "logical_path": "B-开源项目机制-调研报告.md",
+      "source": "Atlas长期记忆调研-ABC-遗漏审计增补-2026-10-14.zip:B-开源项目机制-调研报告.md",
+      "sha256": "7021361cb1133826a43791fca9778c9c2f5c144c5e9867140ae02582c06ae607",
+      "stored": false,
+      "stored_as": "03_开源项目与机制/B-开源项目机制-调研报告.md"
+    },
+    {
+      "logical_path": "C-论文与查漏补缺-调研报告.md",
+      "source": "Atlas长期记忆调研-ABC-遗漏审计增补-2026-10-14.zip:C-论文与查漏补缺-调研报告.md",
+      "sha256": "b0d6e3b870b605843ff7a18bc4ba0ef6a4ef99d49b726c1b51c977006da69328",
+      "stored": false,
+      "stored_as": "04_论文与评测/C-论文与查漏补缺-调研报告.md"
+    },
+    {
+      "logical_path": "01-遗漏审计与新发现-2026-10-14.md",
+      "source": "Atlas长期记忆调研-ABC-遗漏审计增补-2026-10-14.zip:01-遗漏审计与新发现-2026-10-14.md",
+      "sha256": "f5b45735372f535caa743aec47809485666bada863362dfd1d8188943fa3b0a9",
+      "stored": false,
+      "stored_as": "05_查漏与覆盖/01-遗漏审计与新发现-2026-10-14.md"
+    },
+    {
+      "logical_path": "00_入口/01_审查汇报_2026-10-16.md",
+      "source": "本次新增：2026-10-16 统一核查",
+      "sha256": "5c6badef9515359a3876913d0f048dd704e43df1b1331939587be2eb429648d7",
+      "size_bytes": 18531,
+      "stored": true
+    },
+    {
+      "logical_path": "00_入口/00_开始这里.md",
+      "source": "本次新增：总索引",
+      "sha256": "d97a561c6c840231c0cf657f5963305cf198341bb1602c7134bb6708b365f012",
+      "size_bytes": 3970,
+      "stored": true
+    }
+  ]
+}

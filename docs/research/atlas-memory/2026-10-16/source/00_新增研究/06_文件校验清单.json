@@ -1,0 +1,35 @@
+{
+  "created": "2026-10-16",
+  "files": [
+    {
+      "path": "00_先读_研究结论.md",
+      "bytes": 7584,
+      "sha256": "781abecf67bc1d2ba0f742436d1afb58f3ca6edf806275128ec9c1fede7c9b77"
+    },
+    {
+      "path": "01_候选项目源码复用矩阵.md",
+      "bytes": 8858,
+      "sha256": "da1c4815e44bceef1956f6f03585cd7c6d090be68314b971c7d94ca32e76301c"
+    },
+    {
+      "path": "02_Atlas原生目标架构与选型.md",
+      "bytes": 7241,
+      "sha256": "0a0f8beaf7c42fb9f5609ce8f9f2866a840d3bf8d1273affde5a693a42160f20"
+    },
+    {
+      "path": "03_实验与验收协议.md",
+      "bytes": 4176,
+      "sha256": "337ec4366529c4636bdf213d58ddd90d0d6c63ee2d2f785485c03deb55cef727"
+    },
+    {
+      "path": "04_范围缺口与问题.md",
+      "bytes": 4478,
+      "sha256": "2c384b0a4947100792ea69b8c8b156f1ee422a5d0a05b99b6cbecf84cc1eb660"
+    },
+    {
+      "path": "05_来源与版权核对.md",
+      "bytes": 4943,
+      "sha256": "2534cbd0a7df89e5af99a107489dc31d03e9270c0b2ac1997f1bc40a7ed6b41e"
+    }
+  ]
+}

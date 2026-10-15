@@ -1,0 +1,15 @@
+Atlas Memory Opus 5.5 Review Pack - snapshot manifest
+Atlas code commit: 7826e91c6c71dfc180f6fad6136b5eb53a9dab52 (memory-v1)
+Catalogued project / research entries: 40. Static GitHub source review only.
+No candidate integration, Windows E2E, or performance benchmark has been run.
+
+64d573cae6b011ce04b129bbd99384b37c525ae838e8c7c0a0eb8e796af04326  00_先读_Opus省token摘要.md
+794fc9de3f69e5736bf46e78244b3fad517edff6ebbb4bed1ff86b495f74368d  01_Atlas实际链路与缺陷证据.md
+18abb1826be05b458e3691bc84969b873c144aedb2f4eebf466032c2517ae90d  02_候选项目源码与依赖索引.md
+483170edba9a3ae20beb8eae783d9a9558370d2fee1360954b361862dd3f3503  03_统一架构与分阶段任务书.md
+d9825d55fd6f7268d9bbd503035aa226c8db0488b53b31d7beef04992bcec66d  04_源码证据卡片_关键细节.md
+608feb9debc931e851e137a0e175047ff669c4a0764e4839e008e1b65a9c86c5  05_交给Opus5.5的审查指令.txt
+5afe9f875978b3544b0b3089b5ecb4517364f9d749871001c7715e0df7890f8e  06_项目机器索引.json
+616fac8fde49e8532d5844bff5aeb70a4c2206d29b0c194bb4c43ecd06cb86b8  07_查漏总账与后续候选池.md
+678fe6ccac81b25e91540eb16df0b8cfcc0a09080ef742d8ffbcf05abf0466f6  90_前版源码筛选报告_备查.md
+32415b7fe2083bd13c0e1e944fd0f2dde59852a318e68b96261a090c2328d882  README_阅读顺序与边界.md
