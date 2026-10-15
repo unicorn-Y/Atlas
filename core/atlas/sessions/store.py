@@ -41,7 +41,8 @@ def _now() -> str:
 def slugify(text: str, fallback: str = "session") -> str:
     """CCD-style short handle: ``[a-z0-9-]``, at most 24 characters."""
     value = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:24].strip("-")
-    return value or fallback
+    # Chinese titles have no ASCII to keep: use a short random handle instead.
+    return value if len(value) >= 3 else f"{fallback[:15]}-{uuid.uuid4().hex[:4]}"
 
 
 class SessionStore:

@@ -1,3 +1,4 @@
+import SideSessionNote from './sessions/SideSessionNote';
 import { Children, createElement, isValidElement, memo, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { defaultRehypePlugins, defaultRemarkPlugins, Streamdown, type Components } from 'streamdown';
 import { cjk } from '@streamdown/cjk';
@@ -384,6 +385,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
         onClose={closeContextMenu} restoreFocus={() => contextTriggerRef.current?.focus()} />}
     </div>;
   }
+  if (role === 'user' && typeof content === 'string' && content.trimStart().startsWith('<side-session-event>')) return <SideSessionNote content={content} />;
   if (role === 'user') {
     return <div ref={messageRootRef} className="group my-5 flex flex-col items-end gap-1" data-message-role="user" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
       {note && <span className="text-[11.5px] text-fg-3">{note}</span>}
