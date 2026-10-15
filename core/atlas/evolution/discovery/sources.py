@@ -25,7 +25,7 @@ from typing import Any
 
 import httpx
 
-TIMEOUT = httpx.Timeout(15.0, connect=8.0)
+TIMEOUT = httpx.Timeout(25.0, connect=20.0)
 UA = "Atlas-Discovery/1.0 (+personal agent; contact: local)"
 
 #: 已经在跟的产品仓库：看它们的新版本说明（功能级别的变化都在这里）。
@@ -240,7 +240,9 @@ async def web_search(client: httpx.AsyncClient, since: datetime) -> list[dict[st
     service, items = get_service(), []
     for query in WEB_QUERIES:
         result = await service.search(query, 8)
-        for row in result.get("results", []) if isinstance(result, dict) else []:
+        data = result.get("data") if isinstance(result, dict) else None
+        rows = (data or {}).get("web") or (result.get("results") if isinstance(result, dict) else None) or []
+        for row in rows:
             items.append(_item("web-search", "post", row.get("title", ""), row.get("url", ""),
                                row.get("snippet") or row.get("description") or "", row.get("published_at") or "",
                                popularity=5, lang="zh" if re.search(r"[一-鿿]", query) else "en"))
@@ -272,11 +274,19 @@ async def collect(days: int = 7, only: list[str] | None = None) -> tuple[list[di
         names = [name for name in FETCHERS if not only or name in only]
 
         async def guarded(name: str) -> list[dict[str, Any]]:
-            try:
-                return await asyncio.wait_for(FETCHERS[name](client, since), timeout=180)
-            except Exception as exc:  # noqa: BLE001 - 单源失败不影响其它源
-                errors[name] = f"{type(exc).__name__}: {exc}"[:300]
-                return []
+            for attempt in (1, 2):
+                try:
+                    return await asyncio.wait_for(FETCHERS[name](client, since), timeout=180)
+                except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout,
+                        httpx.RemoteProtocolError) as exc:
+                    # 走代理时新隧道偶尔建不起来：换个连接再试一次。
+                    if attempt == 2:
+                        errors[name] = f"{type(exc).__name__}: {exc}"[:300]
+                    await asyncio.sleep(2)
+                except Exception as exc:  # noqa: BLE001 - 单源失败不影响其它源
+                    errors[name] = f"{type(exc).__name__}: {exc}"[:300]
+                    return []
+            return []
 
         batches = await asyncio.gather(*(guarded(name) for name in names))
     merged: dict[str, dict[str, Any]] = {}

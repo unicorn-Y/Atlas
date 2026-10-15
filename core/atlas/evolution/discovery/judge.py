@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import re
@@ -45,6 +46,9 @@ def rule_score(item: dict[str, Any], now: datetime | None = None) -> float:
     if relevance <= 0:
         return 0.0
     popularity = math.log10(1 + max(0.0, float(item.get("popularity") or 0)))
+    if item.get("kind") == "skill":
+        # 技能市场的安装量是历史累计，不代表「新」：只给很小的权重。
+        popularity /= 3
     freshness = 1.0
     published = item.get("published_at") or ""
     if published:
@@ -53,7 +57,7 @@ def rule_score(item: dict[str, Any], now: datetime | None = None) -> float:
             freshness = max(0.3, 1.0 - age_days / 30)
         except ValueError:
             pass
-    kind_bonus = {"release": 1.6, "page": 1.6, "mcp": 1.1, "skill": 1.1}.get(item.get("kind", ""), 1.0)
+    kind_bonus = {"release": 1.6, "page": 1.6, "mcp": 1.1, "skill": 0.6}.get(item.get("kind", ""), 1.0)
     seen_bonus = 1.0 + 0.3 * len(item.get("also_seen_in") or [])
     return round(min(relevance, 12) * (1 + popularity) * freshness * kind_bonus * seen_bonus, 2)
 
@@ -118,13 +122,16 @@ async def llm_judge(candidates: list[dict[str, Any]], *, batch_size: int = 15) -
     judged: dict[str, dict[str, Any]] = {}
     for start in range(0, len(candidates), batch_size):
         batch = candidates[start:start + batch_size]
-        try:
-            result = await manager.model_router.complete_for(
-                model, "discovery_judge", [{"role": "user", "content": _prompt(batch)}], max_tokens=3000)
-            for row in _parse(str(result.text or "")):
-                judged[str(row["id"])] = row
-        except Exception as exc:  # noqa: BLE001
-            log.warning("discovery.judge_batch_failed", error=str(exc))
+        for attempt in range(3):
+            try:
+                result = await manager.model_router.complete_for(
+                    model, "discovery_judge", [{"role": "user", "content": _prompt(batch)}], max_tokens=3000)
+                for row in _parse(str(result.text or "")):
+                    judged[str(row["id"])] = row
+                break
+            except Exception as exc:  # noqa: BLE001
+                log.warning("discovery.judge_batch_failed", error=str(exc), attempt=attempt + 1)
+                await asyncio.sleep(3 * (attempt + 1))
     out = []
     for item in candidates:
         verdict = judged.get(item["id"])
@@ -142,7 +149,10 @@ async def llm_judge(candidates: list[dict[str, Any]], *, batch_size: int = 15) -
 
 
 def _rule_only(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [{**item, "verdict": "absorb" if item.get("score", 0) >= 25 else "watch",
+    def strong(item: dict[str, Any]) -> bool:
+        return item.get("score", 0) >= 40 and item.get("kind") in {"release", "page", "repo"}
+
+    return [{**item, "verdict": "absorb" if strong(item) else "watch",
              "feature": item["title"], "atlas_gap": "待核对（规则判断，没有模型参与）",
-             "port_from": item["url"], "effort": "M", "value": 3 if item.get("score", 0) >= 25 else 2,
+             "port_from": item["url"], "effort": "M", "value": 3 if strong(item) else 2,
              "judged_by": "rules"} for item in items]

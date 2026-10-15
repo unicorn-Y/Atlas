@@ -17,6 +17,7 @@ import DraftList from '../components/evolution/DraftList';
 import BranchStatus from '../components/evolution/BranchStatus';
 import SkillCandidates from '../components/evolution/SkillCandidates';
 import UpstreamPanel from '../components/evolution/UpstreamPanel';
+import DiscoveryPanel from '../components/evolution/DiscoveryPanel';
 
 const errorText = (cause: unknown, fallback: string): string =>
   cause instanceof Error ? cause.message : fallback;
@@ -220,6 +221,7 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
 
     <div className="grid gap-3">
       <UpstreamPanel apiBaseUrl={apiBaseUrl} onToast={onToast} />
+      <DiscoveryPanel apiBaseUrl={apiBaseUrl} onToast={onToast} onDraftsChanged={() => void loadDrafts()} />
 
       <Section icon={RadioTower} title="上游来源" count={sources.length} open={open.sources}
         hint="监视哪些仓库" onToggle={() => setOpen((value) => ({ ...value, sources: !value.sources }))}
