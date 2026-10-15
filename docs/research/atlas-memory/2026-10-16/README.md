@@ -27,3 +27,9 @@
 - Dream 分组未达阈值时全局推进 checkpoint 可能跳过历史未整理经历，属于需复现的风险。
 - 源码候选：MIRIX、Graphiti、Hindsight、Mastra、ReMe、ReasoningBank、AMA-Agent、MemOS local plugin；不同仓库版本和许可证分别核对。
 - 视觉/语音暂缓施工不等于暂缓研究；事件结构、时间线、证据溯源与跨模态兼容现在就要留位。
+
+## 2026-10-16 续研增量（原 V3 总包不变）
+
+新增独立研究文件：[CONTINUATION_2026-10-16.md](CONTINUATION_2026-10-16.md)。已进一步核对 W2 队列领取/失败恢复、Dream 写入原子性、embedding 调度入口、精确证据指针、中文词法基础；新增 AMA-Agent 的轨迹证据下钻和 LongMemEval-V2 的逻辑轨迹指纹/检索策略源码研究。
+
+**阅读顺序**：先遵循上面的主权决议，再读此续研文件。原 V3 ZIP 的 55 文件及其校验值保持不变。续研文件只包含源码静态核查和设计/待验证实验，未实施或测试 Atlas 生产代码。
