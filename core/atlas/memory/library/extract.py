@@ -263,7 +263,8 @@ def apply_episode(store: MemoryStore, episode: Episode | None, steps: list[dict]
     else:
         original_title = entry.text.split("：", 1)[0]
         old_did = entry.text.split("：", 1)[1] if "：" in entry.text else ""
-        merged = (old_did + "；" + did).strip("；")
+        parts = [p for p in old_did.split("；") if p]
+        merged = "；".join(parts if did in parts else [*parts, did])
         entry.text = f"{original_title}：{merged[-max(1, 200 - len(original_title) - 1):]}"
         entry.outcome = episode.outcome
         entry.steps = (entry.steps + safe_steps)[-8:]
