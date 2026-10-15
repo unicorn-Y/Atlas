@@ -30,6 +30,7 @@ import type { CustomCommandInfo, PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
 import type { PaletteItem } from './components/Palette';
+import PersonalTodos from './components/PersonalTodos';
 import type { SpeechRecognitionLike } from './components/VoiceOverlay';
 import type { StatusBarPreferences } from './pages/SettingsPage';
 import type { RecipeLaunchRequest } from './components/settings/RecipeManagerPanel';
@@ -1498,6 +1499,7 @@ export default function App() {
     </Dialog>
     </Suspense>
 
+    <PersonalTodos apiBaseUrl={store.apiBaseUrl} connected={store.connected} />
     {paletteOpen && <Suspense fallback={null}><Palette items={paletteItems} open onClose={() => setPaletteOpen(false)} search={searchMessages} /></Suspense>}
 
     {voiceOpen && <Suspense fallback={null}><VoiceOverlay
