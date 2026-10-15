@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .store import DIARY, SRC_EDITED, SRC_SAID, SRC_SELF, MemoryStore, Page, is_expired
+from .store import DIARY, EPISODES, SRC_EDITED, SRC_EPISODE, SRC_SAID, SRC_SELF, MemoryStore, Page, is_expired
 
 _CJK = r"぀-ゟ゠-ヿ㐀-䶿一-鿿가-힯"
 _CJK_RUN = re.compile(f"[{_CJK}]+")
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS items (
   importance INTEGER NOT NULL DEFAULT 5,
   trigger TEXT,
   tokens TEXT NOT NULL,
-  origin_class TEXT NOT NULL CHECK (origin_class IN ('owner','agent','untrusted','system')),
+  origin_class TEXT NOT NULL CHECK (origin_class IN ('owner','agent','untrusted','system','episode')),
   observed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS items_path ON items(path);
@@ -60,6 +60,8 @@ def tokenize(text: str) -> set[str]:
 
 
 def origin_class(src: str) -> str:
+    if src == SRC_EPISODE:
+        return "episode"
     if src in (SRC_SAID, SRC_EDITED):
         return "owner"
     if src:
@@ -97,6 +99,23 @@ class MemoryIndex:
             db = sqlite3.connect(self.path, check_same_thread=False)
             db.row_factory = sqlite3.Row
             db.executescript(_SCHEMA)
+            schema = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='items'").fetchone()[0]
+            if "'episode'" not in schema:
+                db.executescript("""
+                    ALTER TABLE items RENAME TO items_old;
+                    CREATE TABLE items_new (
+                      rowid INTEGER PRIMARY KEY, id TEXT NOT NULL, path TEXT NOT NULL,
+                      kind TEXT NOT NULL, bucket TEXT NOT NULL, text TEXT NOT NULL,
+                      key TEXT, src TEXT, at TEXT, until TEXT, quote TEXT, mode TEXT,
+                      importance INTEGER NOT NULL DEFAULT 5, trigger TEXT, tokens TEXT NOT NULL,
+                      origin_class TEXT NOT NULL CHECK (origin_class IN ('owner','agent','untrusted','system','episode')),
+                      observed_at TEXT
+                    );
+                    INSERT INTO items_new SELECT * FROM items_old;
+                    DROP TABLE items_old;
+                    ALTER TABLE items_new RENAME TO items;
+                    CREATE INDEX IF NOT EXISTS items_path ON items(path);
+                """)
             self._db = db
         return self._db
 
@@ -141,7 +160,8 @@ class MemoryIndex:
         db.execute("DELETE FROM items WHERE path = ?", (rel,))
 
     def _insert(self, db: sqlite3.Connection, row: dict[str, Any]) -> None:
-        searchable = " ".join(filter(None, [row["text"], row.get("quote") or "", row.get("trigger") or ""]))
+        searchable = " ".join(filter(None, [row.get("search_text") or row["text"],
+                                             row.get("quote") or "", row.get("trigger") or ""]))
         row["tokens"] = " ".join(sorted(tokenize(searchable)))
         cur = db.execute(
             "INSERT INTO items(id, path, kind, bucket, text, key, src, at, until, quote, mode,"
@@ -169,6 +189,18 @@ class MemoryIndex:
                 })
             return
         page = Page.parse(rel, text)
+        if rel.startswith(EPISODES + "/"):
+            for entry in page.current:
+                self._insert(db, {
+                    "id": entry.id, "path": rel, "kind": "episode", "bucket": "current",
+                    "text": entry.text, "search_text": " ".join([entry.text, entry.outcome,
+                                                                     *entry.trigger]),
+                    "key": "", "src": entry.src, "at": entry.at, "until": "",
+                    "quote": "", "mode": entry.mode, "importance": 5,
+                    "trigger": " ".join(entry.trigger), "origin_class": origin_class(entry.src),
+                    "observed_at": entry.at,
+                })
+            return
         names = [page.title, *page.aliases] if page.kind in ("person", "thing") else []
         for bucket in ("current", "history"):
             for entry in getattr(page, bucket):
@@ -242,7 +274,7 @@ class MemoryIndex:
             q_cov, i_cov = matched / q_weight, matched / item_weight
             relevance = 2 * q_cov * i_cov / (q_cov + i_cov)
             decay = 1.0
-            if row["kind"] == "diary":
+            if row["kind"] in ("diary", "episode"):
                 try:
                     day = datetime.fromisoformat(row["observed_at"]).date()
                     decay = 0.5 ** (max(0, (now.date() - day).days) / HALF_LIFE_DAYS)

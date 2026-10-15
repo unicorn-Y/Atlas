@@ -10,6 +10,7 @@ import { ConfirmButton } from './common';
 export interface MemEntry {
   id: string; text: string; src: string; at: string; until?: string;
   quote?: string; ended?: string; why?: string; key?: string;
+  outcome?: string; steps?: string[]; verified?: boolean;
 }
 interface MemPage {
   path: string; title: string; kind: string; aliases: string[];
@@ -168,7 +169,7 @@ function ChangeCard({ change, apiBaseUrl, onChanged, onToast }: { change: Change
 }
 
 export function TodayView({ apiBaseUrl, connected, onToast }: Props) {
-  const today = useLoad(() => api<{ changes: Change[]; now: MemPage; turns: number }>(apiBaseUrl, '/api/memlib/today'), [apiBaseUrl, connected]);
+  const today = useLoad(() => api<{ changes: Change[]; now: MemPage; turns: number; episodes: MemEntry[] }>(apiBaseUrl, '/api/memlib/today'), [apiBaseUrl, connected]);
   const me = useLoad(() => api<MemPage>(apiBaseUrl, `/api/memlib/page?path=${encodeURIComponent('我.md')}`), [apiBaseUrl, connected]);
   const self = useLoad(() => api<MemPage>(apiBaseUrl, `/api/memlib/page?path=${encodeURIComponent('它自己.md')}`), [apiBaseUrl, connected]);
   const reload = () => { void today.load(); void me.load(); void self.load(); };
@@ -176,7 +177,7 @@ export function TodayView({ apiBaseUrl, connected, onToast }: Props) {
   const error = today.error || me.error || self.error;
   if (error) return <div className="error-note" role="alert"><span>读取失败：{error}</span></div>;
   if (!today.data || !me.data || !self.data) return <div className="list glass"><div className="empty"><LoaderCircle size={22} className="spin" /><b>正在读取…</b></div></div>;
-  const { changes, now, turns } = today.data;
+  const { changes, now, turns, episodes } = today.data;
   return <section aria-label="今天">
     <div className="filterbar" style={{ marginBottom: 6, gap: 8 }}>
       <small className="empty-note">今天聊了 {turns} 轮，记忆变动 {changes.length} 次。下面每一条都会自动带进对话；不对就直接改或忘掉。</small>
@@ -192,6 +193,15 @@ export function TodayView({ apiBaseUrl, connected, onToast }: Props) {
     <PageBlock page={me.data} apiBaseUrl={apiBaseUrl} onChanged={reload} onToast={onToast} emptyText="还没有记下关于你的事。聊天时说起自己的情况、偏好或计划，它会自动记住。" />
     <h3 className="cap">它自己</h3>
     <PageBlock page={self.data} apiBaseUrl={apiBaseUrl} onChanged={reload} onToast={onToast} emptyText="它对自己的记录（表过的态、犯过的错）。第一版只能由你来写。" />
+    {episodes.length > 0 && <>
+      <h3 className="cap">今天做过的事</h3>
+      <div className="list glass">{episodes.map((entry) => <div key={entry.id}>
+        <EntryRow entry={entry} apiBaseUrl={apiBaseUrl} onChanged={reload} onToast={onToast} />
+        <small style={{ display: 'block', color: 'var(--fg-3)', padding: '0 12px 8px' }}>
+          {entry.outcome}{entry.verified ? ' · 已验证' : ''}
+        </small>
+      </div>)}</div>
+    </>}
   </section>;
 }
 

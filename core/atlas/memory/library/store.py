@@ -30,11 +30,13 @@ from typing import Any
 
 ME, NOW, SELF = "我.md", "现状.md", "它自己.md"
 PEOPLE, THINGS, DIARY = "人", "事", "日记"
+EPISODES = "经历"
 RESIDENT_PAGES = (ME, NOW, SELF)
 TOMBSTONES = ".tombstones.jsonl"
 
 # Who a fact came from. Only the first two are about the user's own word.
 SRC_SAID, SRC_EDITED, SRC_GUESS, SRC_SELF = "你说的", "你改的", "推测", "它自己"
+SRC_EPISODE = "经历"
 
 _PAGE_HEADER = {
     ME: "关于你。每行一条，可以直接改；你改过的行会标成「你改的」。",
@@ -62,6 +64,9 @@ class Entry:
     why: str = ""
     importance: int = 5
     trigger: list[str] = field(default_factory=list)
+    steps: list[str] = field(default_factory=list)
+    outcome: str = ""
+    verified: bool = False
 
     def meta(self) -> dict[str, Any]:
         data = {k: v for k, v in asdict(self).items() if k != "text" and v not in ("", [], None)}
@@ -112,6 +117,8 @@ class Page:
             return "person"
         if self.path.startswith(THINGS + "/"):
             return "thing"
+        if self.path.startswith(EPISODES + "/"):
+            return "episode"
         return {ME: "me", NOW: "now", SELF: "self"}.get(self.path, "other")
 
     def render(self) -> str:
@@ -221,7 +228,7 @@ class MemoryStore:
     # ---------- setup ----------
     def ensure(self) -> None:
         with self.lock:
-            for sub in (PEOPLE, THINGS, DIARY):
+            for sub in (PEOPLE, THINGS, DIARY, EPISODES):
                 (self.root / sub).mkdir(parents=True, exist_ok=True)
             for name in RESIDENT_PAGES:
                 path = self.root / name
@@ -269,7 +276,7 @@ class MemoryStore:
 
     def pages(self) -> list[str]:
         found = [name for name in RESIDENT_PAGES if (self.root / name).exists()]
-        for sub in (PEOPLE, THINGS):
+        for sub in (PEOPLE, THINGS, EPISODES):
             folder = self.root / sub
             if folder.exists():
                 found.extend(f"{sub}/{p.name}" for p in sorted(folder.glob("*.md")))
@@ -303,7 +310,8 @@ class MemoryStore:
         needles = sorted({n.strip() for n in needles if n and len(n.strip()) >= 2},
                          key=len, reverse=True)
         changed = 0
-        for rel in self.diary_pages():
+        for rel in [*self.diary_pages(),
+                    *(f"{EPISODES}/{p.name}" for p in sorted((self.root / EPISODES).glob("*.md")))]:
             path = self.root / rel
             text = path.read_text(encoding="utf-8")
             new = text
