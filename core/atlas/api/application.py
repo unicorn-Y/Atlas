@@ -43,6 +43,7 @@ from atlas.api.linear_integration_router import router as linear_integration_rou
 from atlas.api.mcp_resources_router import router as mcp_resources_router
 from atlas.api.model_catalog_preferences_router import router as model_catalog_preferences_router
 from atlas.api.output_style_settings_router import router as output_style_settings_router
+from atlas.api.personal_todos_router import router as personal_todos_router
 from atlas.api.projects_router import router as projects_router
 from atlas.api.records_router import router as records_router
 from atlas.api.runtime import RuntimeManager
@@ -124,6 +125,7 @@ def create_app(
         mcp_resources_router,
         model_catalog_preferences_router,
         output_style_settings_router,
+        personal_todos_router,
         projects_router,
         records_router,
         skills_router,

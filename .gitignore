@@ -25,6 +25,8 @@ data/*.db-journal
 data/schedules.toml
 data/user-settings.json
 data/user-settings.json.tmp
+data/personal-todos.json
+data/personal-todos.json.tmp
 data/checkpoints/
 data/profiles/
 data/recipes/

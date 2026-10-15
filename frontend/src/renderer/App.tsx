@@ -9,6 +9,7 @@ import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/back
 import MessageThread from './components/MessageThread';
 import TodoPanel from './components/TodoPanel';
 import ProgressCapsule from './components/ProgressCapsule';
+import PersonalTodos from './components/PersonalTodos';
 import { latestTodos } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import { resolveMessageSkillReferences } from './components/skillMentions';
@@ -1442,6 +1443,7 @@ export default function App() {
       </div>
     </Dialog>
 
+    <PersonalTodos apiBaseUrl={store.apiBaseUrl} connected={store.connected} />
     <Palette items={paletteItems} open={paletteOpen} onClose={() => setPaletteOpen(false)} search={searchMessages} />
 
     {voiceOpen && <VoiceOverlay
