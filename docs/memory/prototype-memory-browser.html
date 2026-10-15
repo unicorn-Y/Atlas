@@ -1,0 +1,503 @@
+<title>Atlas 记忆浏览器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: app shell — slim left rail (sections + library stats), sticky search bar, content column, provenance drawer sliding from the right */
+:root {
+  --bg: #f5f6f4;
+  --panel: #ffffff;
+  --sunk: #eceeea;
+  --line: #dcdfd9;
+  --fg: #1d221f;
+  --fg-2: #4d5650;
+  --fg-3: #7d867f;
+  --accent: #2f6f62;        /* ledger green: the library's own ink */
+  --accent-soft: #dcebe6;
+  --said: #2f6f62;  --said-bg: #dcebe6;
+  --edited: #5b56a8; --edited-bg: #e5e4f5;
+  --guess: #9a6a12; --guess-bg: #f5ead2;
+  --episode: #2d6aa0; --episode-bg: #dde9f5;
+  --dream: #8a4b8f; --dream-bg: #f1e2f1;
+  --raw: #5e6660; --raw-bg: #e8eae6;
+  --ok: #2f7d4f; --warn: #a8641a;
+  --mark: #fff0a8;
+  --shadow: 0 10px 30px rgba(20, 30, 25, .14);
+  --f-display: "Noto Serif SC", "Songti SC", serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141816; --panel: #1b201d; --sunk: #222825; --line: #313833;
+  --fg: #e6ebe7; --fg-2: #b3bcb6; --fg-3: #85908a;
+  --accent: #7cc3b0; --accent-soft: #23362f;
+  --said: #7cc3b0; --said-bg: #23362f; --edited: #aaa6f0; --edited-bg: #2b2a45;
+  --guess: #e2b35c; --guess-bg: #3a3020; --episode: #85b6e6; --episode-bg: #1f2f40;
+  --dream: #d7a0dc; --dream-bg: #392a3a; --raw: #aab3ad; --raw-bg: #272c29;
+  --ok: #6fc993; --warn: #e3a35a; --mark: #5a4f15; --shadow: 0 10px 30px rgba(0,0,0,.45);
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #141816; --panel: #1b201d; --sunk: #222825; --line: #313833;
+  --fg: #e6ebe7; --fg-2: #b3bcb6; --fg-3: #85908a;
+  --accent: #7cc3b0; --accent-soft: #23362f;
+  --said: #7cc3b0; --said-bg: #23362f; --edited: #aaa6f0; --edited-bg: #2b2a45;
+  --guess: #e2b35c; --guess-bg: #3a3020; --episode: #85b6e6; --episode-bg: #1f2f40;
+  --dream: #d7a0dc; --dream-bg: #392a3a; --raw: #aab3ad; --raw-bg: #272c29;
+  --ok: #6fc993; --warn: #e3a35a; --mark: #5a4f15; --shadow: 0 10px 30px rgba(0,0,0,.45);
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.6; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-size: 12px; }
+
+.app { display: grid; grid-template-columns: 220px minmax(0, 1fr); height: 100%; }
+.rail { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding-block: 18px; padding-inline: 12px; gap: 18px; overflow-y: auto; }
+.brand { padding-inline: 8px; }
+.brand h1 { font-family: var(--f-display); font-size: 19px; margin: 0; letter-spacing: .02em; }
+.brand small { color: var(--fg-3); font-size: 12px; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav button { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer; color: var(--fg-2); }
+.nav button:hover { background: var(--sunk); }
+.nav button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.nav .n { font-family: var(--f-mono); font-size: 11px; color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.stats { margin-top: auto; border-top: 1px solid var(--line); padding-top: 14px; padding-inline: 8px; display: grid; gap: 6px; font-size: 12px; color: var(--fg-2); }
+.stats div { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.stats b { font-weight: 500; color: var(--fg); }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.btn.primary:hover { opacity: .9; color: var(--panel); }
+.btn.small { padding: 3px 9px; font-size: 12px; }
+.embed { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
+
+.main { display: flex; flex-direction: column; min-width: 0; height: 100%; }
+.searchbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding-block: 14px 10px; padding-inline: 24px; display: grid; gap: 10px; }
+.q { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.q:focus-within { border-color: var(--accent); }
+.q input { border: 0; outline: 0; background: none; flex: 1; min-width: 0; font: inherit; font-size: 15px; color: var(--fg); }
+.q kbd { font-family: var(--f-mono); font-size: 11px; color: var(--fg-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.filters .lbl { font-size: 12px; color: var(--fg-3); margin-right: 2px; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 2px 10px; font-size: 12px; cursor: pointer; color: var(--fg-2); }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.sep { width: 1px; height: 16px; background: var(--line); margin-inline: 4px; }
+select.chip { appearance: none; padding-right: 22px; background-image: linear-gradient(45deg, transparent 50%, var(--fg-3) 50%), linear-gradient(135deg, var(--fg-3) 50%, transparent 50%); background-position: calc(100% - 11px) 55%, calc(100% - 7px) 55%; background-size: 4px 4px; background-repeat: no-repeat; }
+
+.content { flex: 1; overflow-y: auto; padding-block: 20px 60px; padding-inline: 24px; }
+.wrap { max-width: 920px; display: grid; gap: 18px; }
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.head h2 { font-family: var(--f-display); font-size: 22px; margin: 0; text-wrap: balance; }
+.head p { margin: 0; color: var(--fg-3); font-size: 13px; }
+.note { font-size: 12px; color: var(--fg-3); }
+
+.src { display: inline-block; font-size: 11px; padding: 0 7px; border-radius: 4px; line-height: 18px; white-space: nowrap; font-weight: 500; }
+.src.said { color: var(--said); background: var(--said-bg); }
+.src.edited { color: var(--edited); background: var(--edited-bg); }
+.src.guess { color: var(--guess); background: var(--guess-bg); }
+.src.episode { color: var(--episode); background: var(--episode-bg); }
+.src.dream { color: var(--dream); background: var(--dream-bg); }
+.src.raw { color: var(--raw); background: var(--raw-bg); }
+.ref { border: 0; background: none; padding: 0; cursor: pointer; color: var(--accent); font-family: var(--f-mono); font-size: 11px; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 2px; }
+
+/* search results */
+.results { display: grid; gap: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.hit { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.hit:first-child { border-top: 0; }
+.hit .t { min-width: 0; }
+.hit .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--fg-3); grid-column: 1 / -1; }
+.hit .score { font-family: var(--f-mono); font-size: 11px; color: var(--fg-3); font-variant-numeric: tabular-nums; }
+mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
+.empty { padding: 28px; text-align: center; color: var(--fg-3); }
+
+/* timeline */
+.day { display: grid; gap: 8px; }
+.day h3 { font-size: 13px; margin: 0; color: var(--fg-2); font-weight: 500; display: flex; gap: 10px; align-items: baseline; position: sticky; top: 0; background: var(--bg); padding-block: 4px; z-index: 1; }
+.day h3 .mono { color: var(--fg-3); }
+.ep { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.ep > button { width: 100%; border: 0; background: none; text-align: left; cursor: pointer; padding: 11px 14px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.ep .time { font-family: var(--f-mono); font-size: 12px; color: var(--fg-3); padding-top: 1px; }
+.ep .title { font-weight: 500; }
+.ep .out { color: var(--fg-2); font-size: 13px; }
+.ep .tags { display: flex; gap: 6px; align-items: center; }
+.ver { font-size: 11px; color: var(--ok); border: 1px solid currentColor; border-radius: 4px; padding: 0 6px; line-height: 17px; white-space: nowrap; }
+.ver.no { color: var(--fg-3); }
+.open { font-size: 11px; color: var(--warn); white-space: nowrap; }
+.detail { border-top: 1px dashed var(--line); padding: 12px 14px 14px 70px; display: grid; gap: 10px; }
+.facet { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; }
+.facet dt { font-size: 12px; color: var(--fg-3); padding-top: 2px; }
+.facet dd { margin: 0; display: grid; gap: 3px; min-width: 0; }
+.facet code { font-family: var(--f-mono); font-size: 12px; background: var(--sunk); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; justify-self: start; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.more { text-align: center; color: var(--fg-3); font-size: 12px; padding: 10px; }
+
+/* projects */
+.proj { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 18px; align-items: start; }
+.plist { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; display: grid; }
+.plist button { border: 0; border-top: 1px solid var(--line); background: none; text-align: left; padding: 10px 14px; cursor: pointer; display: grid; gap: 2px; }
+.plist button:first-child { border-top: 0; }
+.plist button[aria-current="true"] { background: var(--accent-soft); }
+.plist .pm { font-size: 12px; color: var(--fg-3); display: flex; gap: 10px; }
+.pdoc { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 22px; display: grid; gap: 18px; min-width: 0; }
+.pdoc h3 { font-family: var(--f-display); font-size: 20px; margin: 0; }
+.sec h4 { margin: 0 0 6px; font-size: 12px; letter-spacing: .08em; color: var(--fg-3); font-weight: 500; }
+.line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding-block: 6px; border-top: 1px solid var(--sunk); }
+.line:first-of-type { border-top: 0; }
+.line .why { color: var(--fg-3); font-size: 12px; }
+.line .r { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
+
+/* people / me */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+.card h3 { margin: 0; font-size: 15px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.card h3 small { font-weight: 400; color: var(--fg-3); font-size: 12px; }
+.fact { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; font-size: 13px; }
+.list { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.list .fact { padding: 10px 16px; border-top: 1px solid var(--line); }
+.list .fact:first-child { border-top: 0; }
+.fact .ops { display: flex; gap: 6px; align-items: center; }
+.link { border: 0; background: none; color: var(--fg-3); font-size: 12px; cursor: pointer; padding: 0; }
+.link:hover { color: var(--accent); }
+
+/* changes */
+.chg { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 13px; }
+.chg:first-child { border-top: 0; }
+.chg .when { font-family: var(--f-mono); font-size: 12px; color: var(--fg-3); }
+.diff { display: grid; gap: 2px; min-width: 0; }
+.add { color: var(--ok); }
+.del { color: var(--fg-3); text-decoration: line-through; }
+
+/* drawer */
+.scrim { position: fixed; inset: 0; background: rgba(10, 14, 12, .35); z-index: 20; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow); z-index: 21; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.dhead { padding: 16px 20px; border-bottom: 1px solid var(--line); display: grid; gap: 4px; }
+.dhead .top { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.dhead h3 { margin: 0; font-size: 16px; }
+.dbody { flex: 1; overflow-y: auto; padding: 16px 20px; display: grid; gap: 12px; align-content: start; }
+.msg { display: grid; gap: 4px; }
+.msg .who { font-size: 12px; color: var(--fg-3); }
+.msg .bubble { padding: 10px 12px; border-radius: 8px; background: var(--sunk); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.user .bubble { background: var(--accent-soft); }
+.msg.focus .bubble { box-shadow: inset 3px 0 0 var(--accent); }
+details.tool { border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
+details.tool summary { cursor: pointer; padding: 6px 10px; font-family: var(--f-mono); display: flex; gap: 8px; }
+details.tool pre { margin: 0; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--sunk); font-family: var(--f-mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; }
+.okm { color: var(--ok); } .bad { color: #c0453a; }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 30; box-shadow: var(--shadow); }
+.demo { font-size: 11px; color: var(--fg-3); border: 1px dashed var(--line); border-radius: 6px; padding: 6px 8px; margin-inline: 8px; }
+
+@media (max-width: 760px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .rail { flex-direction: row; align-items: center; padding-block: 10px; padding-inline: 16px; gap: 10px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .brand small, .stats, .demo { display: none; }
+  .nav { flex-direction: row; }
+  .nav button { white-space: nowrap; }
+  .nav .n { display: none; }
+  .searchbar, .content { padding-inline: 16px; }
+  .proj { grid-template-columns: minmax(0, 1fr); }
+  .detail { padding-left: 14px; }
+  .facet { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .chg { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .ep > button { grid-template-columns: 40px minmax(0, 1fr); }
+  .ep .tags { grid-column: 2; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .drawer { animation: slide .18s ease-out; }
+  @keyframes slide { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+}
+</style>
+
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><h1>记忆库</h1><small>D:\Atlas\data\memory</small></div>
+    <nav class="nav" id="nav" aria-label="记忆分区"></nav>
+    <div class="demo">原型 · 下面都是示例数据，不是你的真实记忆</div>
+    <div class="stats" id="stats"></div>
+  </aside>
+  <main class="main">
+    <div class="searchbar">
+      <label class="q" for="q">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>
+        <input id="q" type="search" placeholder="搜你说过的、它做过的、原对话……  比如：记忆库 为什么不用向量" autocomplete="off">
+        <kbd>Ctrl K</kbd>
+      </label>
+      <div class="filters" id="filters"></div>
+    </div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+<div id="overlay" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const SRC = {
+  said:   { name: "你说的", cls: "said" },
+  edited: { name: "你改的", cls: "edited" },
+  guess:  { name: "推测",   cls: "guess" },
+  episode:{ name: "经历",   cls: "episode" },
+  dream:  { name: "整理",   cls: "dream" },
+  raw:    { name: "原对话", cls: "raw" },
+};
+const srcTag = s => `<span class="src ${SRC[s].cls}">${SRC[s].name}</span>`;
+
+// ---- example data (prototype only) ----
+const EPISODES = [
+  { id: "e1", day: "2026-10-16", time: "01:12", session: "a91c", title: "W2 记忆库方案：越记越多也找得回", out: "定下四层：原文 → 经历 → 项目 → 常驻；界面做成浏览器", ver: false, project: "Atlas 记忆库",
+    decisions: ["细节不压缩，留出处指针，需要时打开原对话", "向量用本地 bge-small-zh，不起服务"], files: ["docs/memory/TASKBOOK-W2.md"], commands: [], facts: ["主机 RTX 5070 12GB", "原对话在 data/engine/state.db"], open: ["界面原型等你看过再派给 Codex"],
+    steps: ["read_file ✓ TASKBOOK-W1.md", "ssh ✓ 查 OpenClaw memory-core", "write_file ✓ TASKBOOK-W2.md"] },
+  { id: "e2", day: "2026-10-16", time: "00:21", session: "a91c", title: "W1 上线：合并、清理、重启", out: "ui-redesign 到 0e989795；清掉 14 段测试记录；8765 健康", ver: true, project: "Atlas 记忆库",
+    decisions: ["只摘 W1 三个提交，不带搜索提交，避开 web.py 冲突"], files: ["D:\\Atlas\\data\\memory\\日记\\2026-10-15.md"], commands: ["python -m atlas.memory.library.cleanup --root D:\\Atlas\\data\\memory", "schtasks /run /tn AtlasDev"], facts: ["删除 14 段", "/api/memlib/today 带 episodes"], open: [],
+    steps: ["git ✓ cherry-pick ×3", "pytest ✓ 7 passed", "cleanup ✓ 14 段", "curl ✓ /api/health ok"] },
+  { id: "e3", day: "2026-10-15", time: "23:36", session: "77f0", title: "对比 2026 年主流搜索 API 的价格和质量", out: "分三类：Agent 检索 / 生成式问答 / SERP 代理，给了选型建议", ver: false, project: "Atlas 联网搜索",
+    decisions: [], files: [], commands: [], facts: ["Bing Search API 已于 2025-08 退役"], open: [],
+    steps: ["web_search ✓ 8 条", "web_fetch ✓ cyberax.com", "web_fetch ✗ 超时"] },
+  { id: "e4", day: "2026-10-15", time: "14:17", session: "03f9", title: "问 dots、Muse 这类 AI 产品", out: "介绍了 dots 和 Muse 的定位，没有联网核实最新版本", ver: false, project: "Atlas 竞品",
+    decisions: [], files: [], commands: [], facts: [], open: ["你想知道它们的最新功能，需要联网再查一次"],
+    steps: [] },
+  { id: "e5", day: "2026-10-14", time: "19:37", session: "259b", title: "看 DSH 那个会话是不是卡住了", out: "没卡死，主进程和 Host 节点都在响应", ver: true, project: "DeepSeek Harness",
+    decisions: [], files: ["D:\\Shots\\dsh_status_20261014_193617.png"], commands: ["Get-Process -Id 5572,35600"], facts: ["主进程 PID 5572", "Host PID 35600"], open: [],
+    steps: ["powershell ✓ 进程存活", "screenshot ✓ 已保存"] },
+];
+const PROJECTS = [
+  { title: "Atlas 记忆库", count: 23, updated: "10-16 01:12", open: 2, sections: {
+    "现在状态": [
+      { t: "透明记忆库 + W0 可靠性 + W1 经历已上线，主机跑在 ui-redesign 0e989795", s: "dream", ref: "e2" },
+      { t: "W2（混合检索、整理、记忆浏览器）方案已写好，等你看原型", s: "dream", ref: "e1" } ],
+    "定下的决定": [
+      { t: "只认你亲口说的事实；问题、假设、粘贴的内容不记", s: "said", ref: "e2", why: "10-14 你拍板" },
+      { t: "细节不压缩，每条记忆带出处，需要时打开原对话", s: "dream", ref: "e1", why: "避免摘要丢细节" },
+      { t: "不上图谱和向量数据库服务，向量存在 .index.sqlite", s: "dream", ref: "e1", why: "几万条内够快，少一个服务" } ],
+    "没做完": [
+      { t: "界面原型等你确认后派给主机 Codex（W2-A 后端、W2-B 界面并行）", s: "dream", ref: "e1" },
+      { t: "旧日记没有补生成经历", s: "dream", ref: "e2" } ],
+    "来龙去脉": [
+      { t: "10-14 旧 MemOS 换内核后断供，删掉重做透明记忆库", s: "dream", ref: "e2" },
+      { t: "10-15 W0 补可靠性；查实只记个人事实，几乎是空的", s: "dream", ref: "e2" },
+      { t: "10-16 W1 加经历、挡测试会话，并上线", s: "dream", ref: "e2" } ] } },
+  { title: "Atlas 联网搜索", count: 9, updated: "10-15 23:36", open: 1, sections: {
+    "现在状态": [{ t: "自有搜索链：Bocha → Tavily → DDG/Bing 兜底，走系统代理", s: "dream", ref: "e3" }],
+    "定下的决定": [{ t: "国内优先 Bocha", s: "dream", ref: "e3", why: "价格和中文质量" }],
+    "没做完": [{ t: "Tavily 的额度还没确认", s: "dream", ref: "e3" }],
+    "来龙去脉": [{ t: "10-15 对比了主流搜索 API 的价格和质量", s: "dream", ref: "e3" }] } },
+  { title: "Atlas 竞品", count: 4, updated: "10-15 14:19", open: 1, sections: {
+    "现在状态": [{ t: "关注 dots、Muse、Grok Bot、Spark 这类常驻型 AI", s: "dream", ref: "e4" }],
+    "定下的决定": [{ t: "主体能用后再抄它们的常驻形态", s: "said", ref: "e4", why: "你说的" }],
+    "没做完": [{ t: "联网查 dots、Muse 最新功能", s: "dream", ref: "e4" }],
+    "来龙去脉": [{ t: "10-15 问过 dots 和 Muse", s: "dream", ref: "e4" }] } },
+  { title: "DeepSeek Harness", count: 3, updated: "10-14 19:37", open: 0, sections: {
+    "现在状态": [{ t: "会话正常推进，没卡死", s: "dream", ref: "e5" }], "定下的决定": [], "没做完": [], "来龙去脉": [{ t: "10-14 查过一次是否卡住", s: "dream", ref: "e5" }] } },
+];
+const PEOPLE = [
+  { name: "Codex", alias: ["主机 Codex", "Luna"], facts: [{ t: "简单的批量活写任务书交给它做", s: "said" }, { t: "调试端口现在是 9336", s: "guess" }] },
+  { name: "GPT 网页版", alias: ["网页 GPT"], facts: [{ t: "帮忙做过三份记忆调研（产品抱怨 / 开源机制 / 论文）", s: "said" }] },
+];
+const ME = [
+  { t: "平时用中文沟通", s: "said", at: "10-15" },
+  { t: "要的是全能、自己用、每个细节都比最强那家好的 agent", s: "said", at: "10-05" },
+  { t: "不想要一堆测试，靠使用和日志排查", s: "said", at: "10-10" },
+  { t: "笔记本给 Atlas 当专属电脑常驻", s: "edited", at: "10-02" },
+];
+const CHANGES = [
+  { when: "10-16 03:30", what: "整理：Atlas 记忆库、Atlas 联网搜索", s: "dream", add: ["W2 方案已写好，等你看原型"], del: ["W1 待验收"] },
+  { when: "10-16 00:24", what: "清理自动测试记录", s: "raw", add: [], del: ["14 段审计测试日记"] },
+  { when: "10-15 00:56", what: "记下：平时用中文沟通", s: "said", add: ["平时用中文沟通"], del: [] },
+];
+const RAW = {
+  e1: [
+    { role: "user", text: "记忆那里还是太简单了，之后越记越多，你那个简单的界面，感觉不行，存不了多少东西，细节估计也会记不住" },
+    { role: "assistant", text: "存得下，但取不回来，细节也留不住。每轮只带进去 1500 字常驻 + 3 条事实 + 3 条经历……", focus: true },
+    { role: "user", text: "去吧" },
+    { tool: "ssh", ok: true, args: "find OpenClaw memory-core hybrid/embed/dream", out: "src/memory/hybrid.ts 10970\nsrc/memory/mmr.ts 3137\nsrc/memory/temporal-decay.ts 5044\nsrc/dreaming-phases.ts 49474" },
+    { tool: "write_file", ok: true, args: "docs/memory/TASKBOOK-W2.md", out: "File created" },
+  ],
+  e2: [
+    { role: "user", text: "合并：把 memory-w1 并进 memory-v1 和主机正在跑的 ui-redesign，对 D:\\Atlas\\data\\memory 真跑 cleanup，然后重启主机后端。", focus: true },
+    { tool: "git", ok: true, args: "cherry-pick 843bafbc d326915f 9ace88c5", out: "0e989795 fix(memory): W1 review …" },
+    { tool: "cleanup", ok: true, args: "--root D:\\Atlas\\data\\memory --runs D:\\Atlas\\data\\logs\\runs", out: "总数：14" },
+    { tool: "curl", ok: true, args: "http://127.0.0.1:8765/api/health", out: "{\"status\":\"ok\", …}" },
+    { role: "assistant", text: "W1 已上线：memory-v1 和 ui-redesign 都已合并推送，真实记忆库清掉了 14 段测试记录，主机 Atlas 已重启。" },
+  ],
+};
+
+// ---- state ----
+const state = { view: "timeline", q: "", src: new Set(), range: "all", project: "", proj: 0, expanded: new Set(["e1"]) };
+const VIEWS = [
+  ["search", "搜索", ""], ["timeline", "时间线", "1,284"], ["projects", "项目", "37"],
+  ["people", "人", "12"], ["me", "关于你", "41"], ["changes", "变动记录", ""],
+];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function hl(text) {
+  const t = esc(text);
+  const words = state.q.trim().split(/\s+/).filter(w => w.length > 0);
+  if (!words.length) return t;
+  return words.reduce((acc, w) => acc.replace(new RegExp(esc(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), m => `<mark>${m}</mark>`), t);
+}
+const $ = id => document.getElementById(id);
+let toastTimer;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2200); }
+
+function renderNav() {
+  $("nav").innerHTML = VIEWS.map(([k, n, c]) => `<button data-view="${k}" ${state.view === k ? 'aria-current="page"' : ""}><span>${n}</span><span class="n">${c}</span></button>`).join("");
+  $("stats").innerHTML = `
+    <div><span>全部记忆</span><b>18,906 条</b></div>
+    <div><span>今天新增</span><b>27</b></div>
+    <div><span>上次整理</span><b>今天 03:30</b></div>
+    <div><span>向量索引</span><b class="embed"><i class="dot"></i>已就绪</b></div>
+    <button class="btn small" id="dream" style="margin-top:6px">立即整理</button>`;
+}
+function renderFilters() {
+  const srcs = Object.entries(SRC).map(([k, v]) => `<button class="chip" data-src="${k}" aria-pressed="${state.src.has(k)}">${v.name}</button>`).join("");
+  const ranges = [["today", "今天"], ["7d", "7 天"], ["30d", "30 天"], ["all", "全部"]].map(([k, n]) => `<button class="chip" data-range="${k}" aria-pressed="${state.range === k}">${n}</button>`).join("");
+  const projOpts = `<option value="">全部项目</option>` + PROJECTS.map(p => `<option ${state.project === p.title ? "selected" : ""}>${esc(p.title)}</option>`).join("");
+  $("filters").innerHTML = `<span class="lbl">来源</span>${srcs}<span class="sep"></span><span class="lbl">时间</span>${ranges}<span class="sep"></span><select class="chip" id="proj" aria-label="项目">${projOpts}</select>`;
+}
+
+function allItems() {
+  const items = [];
+  EPISODES.forEach(e => items.push({ kind: "episode", s: "episode", text: `${e.title}：${e.out}`, extra: [...e.decisions, ...e.facts, ...e.files].join(" · "), at: `${e.day.slice(5)} ${e.time}`, day: e.day, where: `经历/${e.day}.md`, ref: e.id, project: e.project }));
+  PROJECTS.forEach(p => Object.entries(p.sections).forEach(([sec, lines]) => lines.forEach(l => items.push({ kind: "dream", s: l.s, text: l.t, extra: l.why || "", at: p.updated, day: "2026-10-16", where: `事/${p.title}.md · ${sec}`, ref: l.ref, project: p.title }))));
+  ME.forEach(m => items.push({ kind: "fact", s: m.s, text: m.t, extra: "", at: m.at, day: "2026-10-1", where: "我.md", ref: null, project: "" }));
+  Object.entries(RAW).forEach(([ref, msgs]) => msgs.filter(m => m.role).forEach(m => items.push({ kind: "raw", s: "raw", text: m.text, extra: "", at: EPISODES.find(e => e.id === ref).day.slice(5), day: EPISODES.find(e => e.id === ref).day, where: "原对话", ref, project: EPISODES.find(e => e.id === ref).project })));
+  return items;
+}
+function filtered(items) {
+  const words = state.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return items.filter(it => {
+    if (state.src.size && !state.src.has(it.s)) return false;
+    if (state.project && it.project !== state.project) return false;
+    if (state.range === "today" && it.day !== "2026-10-16") return false;
+    if (state.range === "7d" && it.day < "2026-10-10") return false;
+    if (!words.length) return true;
+    const hay = (it.text + " " + it.extra + " " + it.project).toLowerCase();
+    return words.some(w => hay.includes(w));
+  }).map(it => {
+    const hay = (it.text + " " + it.extra).toLowerCase();
+    const hits = words.filter(w => hay.includes(w)).length;
+    return { ...it, score: words.length ? (0.45 + 0.5 * hits / words.length - (it.kind === "raw" ? 0.08 : 0)) : 0.5 };
+  }).sort((a, b) => b.score - a.score);
+}
+
+function viewSearch() {
+  const res = filtered(allItems());
+  const q = state.q.trim();
+  return `<div class="wrap">
+    <div class="head"><h2>${q ? `“${esc(q)}”` : "搜索全部记忆"}</h2><p>找到 ${res.length} 条 · 关键词 + 向量混合排序，旧日记按 30 天半衰</p></div>
+    ${res.length ? `<div class="results">${res.slice(0, 40).map(h => `
+      <div class="hit"><div class="t">${hl(h.text)}${h.extra ? `<div class="note">${hl(h.extra)}</div>` : ""}</div>
+        <span class="score">${h.score.toFixed(2)}</span>
+        <div class="meta">${srcTag(h.s)}<span>${esc(h.where)}</span><span>${esc(h.at)}</span>${h.ref ? `<button class="ref" data-ref="${h.ref}">出处 ${h.ref}</button>` : ""}</div></div>`).join("")}</div>`
+      : `<div class="results"><div class="empty">没搜到。试试换个说法，或者在来源里勾上「原对话」，连完整对话一起搜。</div></div>`}
+  </div>`;
+}
+
+function epCard(e) {
+  const open = state.expanded.has(e.id);
+  const facet = (n, arr, code) => arr.length ? `<div class="facet"><dt>${n}</dt><dd>${arr.map(x => code ? `<code>${esc(x)}</code>` : `<span>${hl(x)}</span>`).join("")}</dd></div>` : "";
+  return `<article class="ep">
+    <button data-toggle="${e.id}" aria-expanded="${open}">
+      <span class="time">${e.time}</span>
+      <span><div class="title">${hl(e.title)}</div><div class="out">${hl(e.out)}</div></span>
+      <span class="tags">${e.open.length ? `<span class="open">${e.open.length} 件没做完</span>` : ""}<span class="ver ${e.ver ? "" : "no"}">${e.ver ? "已验证" : "未验证"}</span></span>
+    </button>
+    ${open ? `<dl class="detail">
+      ${facet("定下的", e.decisions)}${facet("关键数字", e.facts)}${facet("改过的文件", e.files, true)}${facet("跑过的命令", e.commands, true)}${facet("没做完", e.open)}${facet("步骤", e.steps, true)}
+      <div class="facet"><dt>项目</dt><dd><span>${esc(e.project)}</span></dd></div>
+      <div class="actions"><button class="btn small" data-ref="${e.id}">打开原对话</button><button class="btn small" data-act="edit">改</button><button class="btn small" data-act="forget">忘掉</button></div>
+    </dl>` : ""}
+  </article>`;
+}
+function viewTimeline() {
+  const eps = EPISODES.filter(e => (!state.project || e.project === state.project) && (state.range !== "today" || e.day === "2026-10-16"));
+  const days = [...new Set(eps.map(e => e.day))];
+  const wk = d => "日一二三四五六"[new Date(d + "T12:00:00").getDay()];
+  return `<div class="wrap">
+    <div class="head"><h2>时间线</h2><p>每个会话每天一条经历，点开看决定、文件、命令和没做完的事</p></div>
+    ${days.map(d => `<section class="day"><h3>${d.slice(5).replace("-", " 月 ")} 日 · 周${wk(d)} <span class="mono">${eps.filter(e => e.day === d).length} 条</span></h3>${eps.filter(e => e.day === d).map(epCard).join("")}</section>`).join("")}
+    <div class="more">往下滚自动加载更早的 · 已加载到 10-14（共 1,284 条）</div>
+  </div>`;
+}
+function viewProjects() {
+  const p = PROJECTS[state.proj];
+  const sec = (name) => {
+    const lines = p.sections[name] || [];
+    return `<section class="sec"><h4>${name}</h4>${lines.length ? lines.map(l => `
+      <div class="line"><div>${hl(l.t)}${l.why ? `<div class="why">${esc(l.why)}</div>` : ""}</div>
+      <div class="r">${srcTag(l.s)}<button class="ref" data-ref="${l.ref}">出处</button></div></div>`).join("") : `<div class="note">暂无</div>`}</section>`;
+  };
+  return `<div class="wrap" style="max-width:1100px">
+    <div class="head"><h2>项目</h2><p>每晚把零散经历合并成项目页；「你说的」行整理时原样保留</p></div>
+    <div class="proj">
+      <nav class="plist" aria-label="项目列表">${PROJECTS.map((x, i) => `<button data-proj="${i}" aria-current="${i === state.proj}"><b>${esc(x.title)}</b><span class="pm"><span>${x.count} 条</span><span>${x.updated}</span>${x.open ? `<span class="open">${x.open} 件没做完</span>` : ""}</span></button>`).join("")}</nav>
+      <article class="pdoc"><div class="head"><h3>${esc(p.title)}</h3><span class="note">事/${esc(p.title)}.md · 更新于 ${p.updated}</span></div>
+        ${["现在状态", "定下的决定", "没做完", "来龙去脉"].map(sec).join("")}
+      </article>
+    </div></div>`;
+}
+const factRow = f => `<div class="fact"><span>${hl(f.t)}</span><span class="ops">${srcTag(f.s)}${f.at ? `<span class="note">${f.at}</span>` : ""}<button class="link" data-act="edit">改</button><button class="link" data-act="forget">忘掉</button></span></div>`;
+function viewPeople() {
+  return `<div class="wrap"><div class="head"><h2>人</h2><p>每人一页，别名会自动认出同一个人</p></div>
+    <div class="cards">${PEOPLE.map(p => `<div class="card"><h3>${esc(p.name)} <small>也叫 ${p.alias.map(esc).join("、")}</small></h3>${p.facts.map(factRow).join("")}</div>`).join("")}</div></div>`;
+}
+function viewMe() {
+  return `<div class="wrap"><div class="head"><h2>关于你</h2><p>每轮都会带进对话。只记你亲口说的，不对就直接改</p></div>
+    <div class="list">${ME.map(factRow).join("")}</div>
+    <button class="btn" data-act="add" style="justify-self:start">加一条</button></div>`;
+}
+function viewChanges() {
+  const rows = CHANGES.filter(c => !state.src.size || state.src.has(c.s));
+  return `<div class="wrap"><div class="head"><h2>变动记录</h2><p>每次变动都是一个 git 提交，可以撤销（忘掉的内容不能撤回）</p></div>
+    <div class="list">${rows.map(c => `<div class="chg"><span class="when">${c.when}</span><div class="diff"><b>${esc(c.what)}</b>${c.add.map(a => `<span class="add">+ ${esc(a)}</span>`).join("")}${c.del.map(a => `<span class="del">${esc(a)}</span>`).join("")}</div><span>${srcTag(c.s)} <button class="link" data-act="undo">撤销</button></span></div>`).join("")}</div></div>`;
+}
+
+function render() {
+  renderNav(); renderFilters();
+  const v = { search: viewSearch, timeline: viewTimeline, projects: viewProjects, people: viewPeople, me: viewMe, changes: viewChanges }[state.view];
+  $("content").innerHTML = v();
+}
+
+function openDrawer(ref) {
+  const e = EPISODES.find(x => x.id === ref);
+  const msgs = RAW[ref] || [{ role: "user", text: e.title, focus: true }, { role: "assistant", text: e.out }];
+  $("overlay").innerHTML = `<div class="scrim" data-close></div>
+    <aside class="drawer" role="dialog" aria-label="出处">
+      <div class="dhead"><div class="top"><h3>出处 · ${esc(e.title)}</h3><button class="btn small" data-close>关闭</button></div>
+        <span class="note mono">${e.session}@2026-${e.day.slice(5)}T${e.time} · 原对话这一轮的完整内容</span>
+        <div class="actions" style="margin-top:6px"><button class="btn small primary" data-act="goto">在对话里打开</button><button class="btn small" data-act="wider">多看前后一轮</button></div></div>
+      <div class="dbody">${msgs.map(m => m.tool
+        ? `<details class="tool"><summary><span class="${m.ok ? "okm" : "bad"}">${m.ok ? "✓" : "✗"}</span>${esc(m.tool)} <span style="color:var(--fg-3)">${esc(m.args)}</span></summary><pre>${esc(m.out)}</pre></details>`
+        : `<div class="msg ${m.role} ${m.focus ? "focus" : ""}"><span class="who">${m.role === "user" ? "你" : "Atlas"}</span><div class="bubble">${esc(m.text)}</div></div>`).join("")}</div>
+    </aside>`;
+  $("overlay").hidden = false;
+  $("overlay").querySelector(".drawer button").focus();
+}
+function closeDrawer() { $("overlay").hidden = true; $("overlay").innerHTML = ""; }
+
+document.addEventListener("click", ev => {
+  const b = ev.target.closest("button, [data-close]");
+  if (!b) return;
+  if (b.dataset.view) { state.view = b.dataset.view; render(); $("content").scrollTop = 0; return; }
+  if (b.dataset.src) { state.src.has(b.dataset.src) ? state.src.delete(b.dataset.src) : state.src.add(b.dataset.src); if (state.view !== "changes") state.view = "search"; render(); return; }
+  if (b.dataset.range) { state.range = b.dataset.range; render(); return; }
+  if (b.dataset.toggle) { const id = b.dataset.toggle; state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id); render(); return; }
+  if (b.dataset.proj) { state.proj = +b.dataset.proj; render(); return; }
+  if (b.dataset.ref) { openDrawer(b.dataset.ref); return; }
+  if (b.hasAttribute("data-close")) { closeDrawer(); return; }
+  if (b.id === "dream") { b.disabled = true; b.textContent = "正在整理…"; setTimeout(() => { b.disabled = false; b.textContent = "立即整理"; toast("整理完成：更新了 2 个项目页，新增 3 行"); }, 1100); return; }
+  const act = b.dataset.act;
+  if (act === "forget") toast("已忘掉：页面、日记、历史记录都已抹掉（原型里不会真删）");
+  else if (act === "edit") toast("在这一行原地改，回车保存（原型只演示入口）");
+  else if (act === "add") toast("会在「关于你」末尾加一行，来源标成「你改的」");
+  else if (act === "undo") toast("已撤销这次变动");
+  else if (act === "goto") toast("跳到那个会话的这一轮");
+  else if (act === "wider") toast("已多带前后各一轮");
+});
+document.addEventListener("change", ev => { if (ev.target.id === "proj") { state.project = ev.target.value; render(); } });
+let deb;
+$("q").addEventListener("input", ev => { clearTimeout(deb); deb = setTimeout(() => { state.q = ev.target.value; state.view = state.q.trim() ? "search" : (state.view === "search" ? "timeline" : state.view); render(); }, 300); });
+document.addEventListener("keydown", ev => {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") { ev.preventDefault(); $("q").focus(); }
+  if (ev.key === "Escape" && !$("overlay").hidden) closeDrawer();
+});
+render();
+</script>
