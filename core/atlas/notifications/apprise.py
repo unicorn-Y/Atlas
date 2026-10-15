@@ -98,3 +98,8 @@ class NotificationBus:
             finally:
                 client.remove(url)
         return {"enabled": True, "sent": sent, "failed": failed, "error": None}
+
+
+# Historical callers use this name. Both surfaces share Atlas's configured,
+# best-effort notification behavior and return contract.
+AppriseNotifier = NotificationBus

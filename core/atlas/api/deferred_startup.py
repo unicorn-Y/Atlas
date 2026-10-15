@@ -269,7 +269,11 @@ async def _start_mcp(services: Any) -> None:
 
     import atlas.server as server_module
 
-    mcp_client = await asyncio.to_thread(_construct_mcp_client)
+    # Importing the MCP SDK from a worker thread can deadlock when its package
+    # initialization overlaps the API's lazy mcp.types router import. The
+    # constructor is lightweight; keep this deferred import serialized on the
+    # event-loop thread, after the listener is available.
+    mcp_client = _construct_mcp_client()
     server_module.mcp_client = mcp_client
     await mcp_client.start()
 

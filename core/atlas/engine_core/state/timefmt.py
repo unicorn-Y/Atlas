@@ -4,12 +4,39 @@
 from __future__ import annotations
 
 import logging
+import locale
 import math
+import re
 import time as _time
 from datetime import datetime
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+_SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
+_ESCAPED_BYTES_RE = re.compile(r"[\x00-\x7f\udc80-\udcff]*")
+
+
+def _repair_surrogates(text: str, encoding: Optional[str] = None) -> str:
+    """Make locale text JSON/UTF-8 safe; preserve valid text byte-for-byte."""
+    if text.isascii() or not _SURROGATE_RE.search(text):
+        return text
+    if _ESCAPED_BYTES_RE.fullmatch(text):
+        try:
+            return text.encode("ascii", "surrogateescape").decode(encoding or locale.getencoding())
+        except (LookupError, UnicodeError):
+            pass
+    return _SURROGATE_RE.sub("\ufffd", text)
+
+
+def safe_strftime(value: datetime, fmt: str) -> str:
+    """Format a datetime without leaking lone surrogates from locale text."""
+    try:
+        return _repair_surrogates(value.strftime(fmt))
+    except UnicodeEncodeError:
+        zone = _repair_surrogates(value.tzname() or "").replace("%", "%%")
+        return _repair_surrogates(value.strftime(
+            re.sub(r"%([%Z])", lambda m: zone if m.group(1) == "Z" else "%%", fmt)))
 
 # Epoch-seconds window a stored timestamp must fall in to be trusted: 1970 .. ~2103 (inside 32-bit
 # ``time_t`` so ``fromtimestamp`` accepts it on every platform). SQLite dynamic typing lets a TEXT

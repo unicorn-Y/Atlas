@@ -11,6 +11,62 @@ This is the source map consumed by `atlas.upstream.watch`. The rows track Hermes
 | `agent/conversation_compression_archive.py` | `core/atlas/engine_core/agent/conversation_compression_archive.py` | `c9e076b` |
 | `agent/message_content.py` | `core/atlas/engine_core/agent/message_content.py` | `c9e076b` |
 | `agent/message_metadata.py` | `core/atlas/engine_core/agent/message_metadata.py` | `c9e076b` |
+| `agent/deadline.py` | `core/atlas/engine_core/agent/deadline.py` | `c9e076b` |
+| `agent/delegation_context.py` | `core/atlas/engine_core/agent/delegation_context.py` | `c9e076b` |
+| `agent/message_sanitization.py` | `core/atlas/engine_core/agent/message_sanitization.py` | `c9e076b` |
+| `agent/secret_scope.py` | `core/atlas/engine_core/agent/secret_scope.py` | `c9e076b` |
+| `agent/proxy_sources/__init__.py` | `core/atlas/engine_core/agent/proxy_sources/__init__.py` | `c9e076b` |
+| `agent/proxy_sources/iron_proxy.py` | `core/atlas/engine_core/agent/proxy_sources/iron_proxy.py` | `c9e076b` |
+| `agent/terminal_env_registry.py` | `core/atlas/engine_core/agent/terminal_env_registry.py` | `c9e076b` |
+| `hermes_time.py` | `core/atlas/engine_core/state/timefmt.py` | `c9e076b` |
+| `tools/browser_camofox_state.py` | `core/atlas/engine_core/tools/browser_camofox_state.py` | `c9e076b` |
+| `tools/browser_lightpanda.py` | `core/atlas/engine_core/tools/browser_lightpanda.py` | `c9e076b` |
+| `tools/credential_files.py` | `core/atlas/engine_core/tools/credential_files.py` | `c9e076b` |
+| `tools/env_passthrough.py` | `core/atlas/engine_core/tools/env_passthrough.py` | `c9e076b` |
+| `tools/environments/__init__.py` | `core/atlas/engine_core/tools/environments/__init__.py` | `c9e076b` |
+| `tools/environments/base.py` | `core/atlas/engine_core/tools/environments/base.py` | `c9e076b` |
+| `tools/environments/base_output.py` | `core/atlas/engine_core/tools/environments/base_output.py` | `c9e076b` |
+| `tools/environments/base_session_env.py` | `core/atlas/engine_core/tools/environments/base_session_env.py` | `c9e076b` |
+| `tools/environments/base_wait.py` | `core/atlas/engine_core/tools/environments/base_wait.py` | `c9e076b` |
+| `tools/environments/daytona.py` | `core/atlas/engine_core/tools/environments/daytona.py` | `c9e076b` |
+| `tools/environments/docker.py` | `core/atlas/engine_core/tools/environments/docker.py` | `c9e076b` |
+| `tools/environments/docker_egress.py` | `core/atlas/engine_core/tools/environments/docker_egress.py` | `c9e076b` |
+| `tools/environments/file_sync.py` | `core/atlas/engine_core/tools/environments/file_sync.py` | `c9e076b` |
+| `tools/environments/local.py` | `core/atlas/engine_core/tools/environments/local.py` | `c9e076b` |
+| `tools/environments/local_env_policy.py` | `core/atlas/engine_core/tools/environments/local_env_policy.py` | `c9e076b` |
+| `tools/environments/local_pythonpath.py` | `core/atlas/engine_core/tools/environments/local_pythonpath.py` | `c9e076b` |
+| `tools/environments/managed_modal.py` | `core/atlas/engine_core/tools/environments/managed_modal.py` | `c9e076b` |
+| `tools/environments/modal.py` | `core/atlas/engine_core/tools/environments/modal.py` | `c9e076b` |
+| `tools/environments/path_utils.py` | `core/atlas/engine_core/tools/environments/path_utils.py` | `c9e076b` |
+| `tools/environments/remote_common.py` | `core/atlas/engine_core/tools/environments/remote_common.py` | `c9e076b` |
+| `tools/environments/singularity.py` | `core/atlas/engine_core/tools/environments/singularity.py` | `c9e076b` |
+| `tools/environments/ssh.py` | `core/atlas/engine_core/tools/environments/ssh.py` | `c9e076b` |
+| `tools/environments/streams.py` | `core/atlas/engine_core/tools/environments/streams.py` | `c9e076b` |
+| `tools/environments/vercel_sandbox.py` | `core/atlas/engine_core/tools/environments/vercel_sandbox.py` | `c9e076b` |
+| `tools/managed_tool_gateway.py` | `core/atlas/engine_core/tools/managed_tool_gateway.py` | `c9e076b` |
+| `tools/mcp_liveness.py` | `core/atlas/engine_core/tools/mcp_liveness.py` | `c9e076b` |
+| `tools/spill_safety.py` | `core/atlas/engine_core/tools/spill_safety.py` | `c9e076b` |
+| `tools/terminal_scope.py` | `core/atlas/tools/terminal_scope.py` | `c9e076b` |
+| `tools/terminal_tool_config.py` | `core/atlas/engine_core/tools/terminal_tool_config.py` | `c9e076b` |
+| `tools/terminal_tool_backends.py` | `core/atlas/engine_core/tools/terminal_tool_backends.py` | `c9e076b` |
+| `tools/terminal_tool_macos_open.py` | `core/atlas/engine_core/tools/terminal_tool_macos_open.py` | `c9e076b` |
+| `tools/terminal_tool_sudo.py` | `core/atlas/engine_core/tools/terminal_tool_sudo.py` | `c9e076b` |
+| `tools/todo_tool.py` | `core/atlas/engine_core/tools/todo_tool.py` | `c9e076b` |
+| `tools/tool_output_limits.py` | `core/atlas/engine_core/tools/tool_output_limits.py` | `c9e076b` |
+| `tools/tool_output_truncate.py` | `core/atlas/engine_core/tools/tool_output_truncate.py` | `c9e076b` |
+| `tools/tool_search.py` | `core/atlas/engine_core/tools/tool_search.py` | `c9e076b` |
+| `tools/tool_search_catalog.py` | `core/atlas/engine_core/tools/tool_search_catalog.py` | `c9e076b` |
+| `tools/tool_search_validation.py` | `core/atlas/engine_core/tools/tool_search_validation.py` | `c9e076b` |
+| `tools/url_safety.py` | `core/atlas/engine_core/tools/url_safety.py` | `c9e076b` |
+| `tools/vision_tools.py` | `core/atlas/engine_core/tools/vision_tools.py` | `c9e076b` |
+| `tools/vision_tools_history_budget.py` | `core/atlas/engine_core/tools/vision_tools_history_budget.py` | `c9e076b` |
+| `tools/website_policy.py` | `core/atlas/engine_core/tools/website_policy.py` | `c9e076b` |
+| `tools/bot_desktop/__init__.py` | `core/atlas/engine_core/tools/bot_desktop/__init__.py` | `c9e076b` |
+| `tools/bot_desktop/browser.py` | `core/atlas/engine_core/tools/bot_desktop/browser.py` | `c9e076b` |
+| `tools/bot_desktop/lease.py` | `core/atlas/engine_core/tools/bot_desktop/lease.py` | `c9e076b` |
+| `tools/bot_desktop/placement.py` | `core/atlas/engine_core/tools/bot_desktop/placement.py` | `c9e076b` |
+| `tools/bot_desktop/runtime.py` | `core/atlas/engine_core/tools/bot_desktop/runtime.py` | `c9e076b` |
+| `tools/bot_desktop/sandbox_host.py` | `core/atlas/engine_core/tools/bot_desktop/sandbox_host.py` | `c9e076b` |
 | `agent/plan_prompt.py` | `core/atlas/engine_core/agent/plan_prompt.py` | `c9e076b` |
 | `agent/provider_base.py` | `core/atlas/engine_core/agent/provider_base.py` | `c9e076b41f2163445b506b1cb79862d0dab0eecd` |
 | `agent/redact.py` | `core/atlas/engine_core/agent/redact.py` | `c9e076b41f2163445b506b1cb79862d0dab0eecd` |
@@ -80,3 +136,9 @@ This is the source map consumed by `atlas.upstream.watch`. The rows track Hermes
 `config.py`, `hermes_constants.py`, `utils.py`, `agent/model_metadata.py`, `agent/turn_usage.py`, `agent/ssl_verify.py`, `agent/async_utils.py`, `agent/session_persistence.py`, `agent/session_activity.py`, `agent/skill_commands.py`, `agent/memory_manager.py`, `agent/vault_store.py`, `state/dashboard_procs.py`, `state/session_keys.py`, `state/startup_watchdog.py`, `state/sqlite_safe_read.py`, `state/timefmt.py`, `tools/tool_backend_helpers.py`, `tools/file_tools.py`, and the browser `computer_use/_platform.py` support are Atlas-owned adapters or narrow local implementations around the listed source ports.
 
 The Hermes CUA plugin, provider plugin manager, auxiliary-client bootstrap, and unsupported cloud/extension/real-profile browser providers were not carried forward. Atlas uses its native computer runtime, ModelRouter, plugin runtime, and local browser path. The upstream watcher intentionally reports source diffs as review data; it does not merge or apply them.
+
+## BOOT-1 import-check repair
+
+The rows added above close the imports reported by `python scripts/diag/import_check.py core` against Hermes revision `c9e076b41f2163445b506b1cb79862d0dab0eecd`. In existing files, this repair also adds `tool_call_id_variants` and `tool_result_id_variants` (`agent/message_sanitization.py`), `estimate_messages_tokens_rough` (`agent/model_metadata.py`, implemented with Atlas' wire-shadow/tokenizer path), `safe_strftime` (`hermes_time.py`), `is_zeroed_sqlite_file` (`hermes_cli/sqlite_safe_read.py`), and the home, socket-temp, profile-scope, and environment helpers from `hermes_constants.py` / `agent/secret_scope.py`. `agent/vault_store.py` is ported with Atlas-owned config and atomic-write seams. The lazy `atlas.engine_core` package entry and `atlas.notifications.apprise.AppriseNotifier` compatibility name are Atlas adapters.
+
+Explicitly unsupported surfaces remain explicit: Bot Desktop operations, selecting Lightpanda, remote credential-file mounts, Nous managed/free gateway authentication, and sudo execution. Atlas keeps its local built-in Chromium and local terminal paths. Hermes' `agent/credential_pool.py` is intentionally not copied: its custom-provider OAuth/plugin persistence has no Atlas-owned authority; Atlas provider keys continue through Atlas settings and keyring. There is no empty credential-pool shim or silent success path.

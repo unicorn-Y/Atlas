@@ -257,3 +257,17 @@ def offline_file_access(path: Path | str, *, what: str = "read"):
                 "handles (stop the gateway/dashboard) and retry.")
         yield
 
+
+def is_zeroed_sqlite_file(path: Path, *, probe_bytes: int = 100, force: bool = False) -> bool:
+    """True when *path* is empty or contains only NUL bytes instead of a SQLite header."""
+    try:
+        if not path.is_file():
+            return False
+    except OSError:
+        return False
+    if not force and has_live_connection(path):
+        return False
+
+    head = read_header_bytes_preopen(path, length=max(16, probe_bytes), force=force)
+    return head is not None and not head.startswith(b"SQLite format 3") and not any(head)
+

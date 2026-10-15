@@ -13,6 +13,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 _RESIZE_TARGET_BYTES = 5 * 1024 * 1024
+_EMBED_MAX_DIMENSION = 1456
 _MIME_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
                ".gif": "image/gif", ".bmp": "image/bmp", ".webp": "image/webp"}
 
@@ -93,6 +94,40 @@ def _resize_image_for_vision(image_path: Path, mime_type: Optional[str] = None,
         scale_out.update(orig_width=original[0], orig_height=original[1],
                          new_width=image.width, new_height=image.height)
     return candidate or raw()
+
+
+def _should_use_native_vision_fast_path() -> bool:
+    """Atlas has no Hermes image-routing adapter; do not advertise this path."""
+    return False
+
+
+def _build_native_vision_tool_result(
+    image_url: str, question: str, image_data_url: str, image_size_bytes: int,
+    scale_note: Optional[str] = None,
+) -> dict:
+    """Return the Hermes multimodal result envelope consumed by model_call."""
+    text_part = "Image loaded into your context — you can see it natively now. Use your built-in vision to answer the user."
+    if isinstance(question, str) and question.strip():
+        text_part += f"\n\nQuestion: {question.strip()}"
+    if scale_note:
+        text_part += f"\n\nNote: {scale_note}"
+    return {
+        "_multimodal": True,
+        "content": [
+            {"type": "text", "text": text_part},
+            {"type": "image_url", "image_url": {"url": image_data_url}},
+        ],
+        "text_summary": (
+            f"Image attached natively for the main model ({image_size_bytes / 1024:.1f} KB). "
+            "Answer using built-in vision."
+        ),
+        "meta": {"image_url": image_url[:200], "size_bytes": image_size_bytes, "native_vision": True},
+    }
+
+
+def check_vision_requirements() -> bool:
+    """Atlas does not expose Hermes' auxiliary vision client through this tool."""
+    return False
 
 
 

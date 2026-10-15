@@ -23,6 +23,35 @@ def estimate_tokens_rough(text: str) -> int:
     return dense + (len(stripped.encode("utf-8", "replace")) + CHARS_PER_TOKEN - 1) // CHARS_PER_TOKEN
 
 
+def estimate_messages_tokens_rough(
+    messages: list[dict[str, Any]], *, charge_stale_thinking: bool = True
+) -> int:
+    """Roughly estimate the text tokens in messages, excluding image payload bytes.
+
+    Atlas' engine-core port has no provider-calibrated image pricing cache, so keep this
+    helper on the same wire-shadow and tokenizer heuristic used by
+    ``estimate_request_tokens_rough``.
+    """
+    material: list[str] = []
+    newest_assistant = next(
+        (
+            index
+            for index in range(len(messages or []) - 1, -1, -1)
+            if isinstance(messages[index], dict) and messages[index].get("role") == "assistant"
+        ),
+        -1,
+    )
+    for index, message in enumerate(messages or []):
+        if not charge_stale_thinking and index != newest_assistant and isinstance(message, dict):
+            message = {
+                key: value
+                for key, value in message.items()
+                if key not in {"reasoning", "reasoning_content"}
+            }
+        material.append(str(_wire_message_shadow(message)))
+    return estimate_tokens_rough("\n".join(material))
+
+
 def _wire_message_shadow(message: Any) -> Any:
     if not isinstance(message, dict):
         return message
