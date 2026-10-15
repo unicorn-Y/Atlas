@@ -84,16 +84,17 @@ class SessionHub:
     # -- wiring --------------------------------------------------------------
 
     def attach(self) -> None:
+        """Listen to the current runtime manager (a new app gets a new one)."""
         manager = getattr(_server(), "runtime_mgr", None)
-        if manager is None or self._listening:
-            return
         listeners = getattr(manager, "terminal_listeners", None)
-        if isinstance(listeners, list):
+        if not isinstance(listeners, list):
+            return
+        if self._on_run_terminal not in listeners:
             listeners.append(self._on_run_terminal)
-            self._listening = True
-            from atlas.sessions.idle_compaction import start_idle_compaction
+        self._listening = True
+        from atlas.sessions.idle_compaction import start_idle_compaction
 
-            start_idle_compaction()
+        start_idle_compaction()
 
     @staticmethod
     def _manager() -> Any:

@@ -669,6 +669,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         startup_aborted = True
         raise
     finally:
+        # Background loops started next to the session hub (idle compaction,
+        # web-wide discovery schedule) end with the app.
+        try:
+            from atlas.evolution.discovery.service import stop_scheduler
+            from atlas.sessions.idle_compaction import stop_idle_compaction
+
+            await stop_scheduler()
+            await stop_idle_compaction()
+        except Exception:  # noqa: BLE001 — teardown continues
+            log.exception("sessions.background_stop_failed")
         if deferred_startup is not None:
             # Let deferred startup settle before reverse teardown; a stuck step is bounded.
             try:

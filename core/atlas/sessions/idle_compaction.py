@@ -117,3 +117,11 @@ def start_idle_compaction() -> None:
             _task = asyncio.get_running_loop().create_task(_loop())
         except RuntimeError:
             _task = None
+
+
+async def stop_idle_compaction() -> None:
+    global _task
+    task, _task = _task, None
+    if task is not None and not task.done():
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

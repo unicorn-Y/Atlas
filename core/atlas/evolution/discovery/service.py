@@ -250,3 +250,13 @@ def start_scheduler() -> None:
             _scheduler = asyncio.get_running_loop().create_task(_scheduler_loop())
         except RuntimeError:
             _scheduler = None
+
+
+async def stop_scheduler() -> None:
+    """Cancel the schedule loop and any run in flight (app shutdown)."""
+    global _scheduler, _running
+    for task in (_scheduler, _running):
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+    _scheduler = None
