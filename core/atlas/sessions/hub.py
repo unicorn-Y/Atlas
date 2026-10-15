@@ -214,6 +214,10 @@ class SessionHub:
             return await self.dismiss(record["session_id"], "stopped before start")
         run = self.active_run(record.get("conversation_id") or "")
         if run is not None:
+            # A session the user (or its parent) stopped does not report back
+            # and wake anyone (CCD: stopped sessions send no note).
+            self.store.update(record["session_id"],
+                              hub_runs=[rid for rid in record["hub_runs"] if rid != run.run_id])
             await self._cancel_run(run)
         return self.store.update(record["session_id"], status="stopped") or record
 
@@ -396,7 +400,9 @@ class SessionHub:
             record["session_id"], status=status, last_status=event, last_report=report[:_REPORT_CHARS],
             stats=stats, last_run_id=run.run_id, unseen_report=True,
         ) or record
-        if not hub_started or not updated.get("notify_parent") or not updated.get("parent_conversation_id"):
+        if (event == "run.cancelled" or not hub_started or not updated.get("notify_parent")
+                or not updated.get("parent_conversation_id")):
+            # Cancelled = someone pressed stop; that is not a report to deliver.
             return
         await self._deliver_report(updated, event, report, stats)
 

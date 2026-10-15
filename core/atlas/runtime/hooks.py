@@ -400,6 +400,13 @@ async def execute_claude_hooks(
             decision = _json_decision(event, structured)
             if code not in {0, 2}:
                 decision = {"blocked": False, "reason": ""}
+                # Claude Code 2.1.295: ``onFailure: "block"`` fails closed — a hook
+                # that cannot start, times out or exits with an unexpected code
+                # blocks the action instead of letting it through.
+                if str(spec.get("onFailure") or "").lower() == "block" and event in _BLOCKING_EXIT_EVENTS:
+                    detail = (stderr.strip() or output.strip() or f"exit code {code}")[:500]
+                    decision = {"blocked": True,
+                                "reason": f"Hook 运行失败且设置了 onFailure: block，已拦截：{detail}"}
             if event == "ConfigChange" and event_payload.get("source") == "policy_settings":
                 decision.update(blocked=False, reason="")
             if event in {"Elicitation", "ElicitationResult"} and code == 2:
@@ -753,6 +760,11 @@ class HookStore:
                     await maybe_awaitable
             if event == "tool.before" and code == 2:
                 blocked.update(blocked=True, reason=stderr.strip() or output.strip() or "Blocked by hook")
+                break
+            if (event == "tool.before" and code not in {0, 2}
+                    and str(hook.get("on_failure") or hook.get("onFailure") or "").lower() == "block"):
+                blocked.update(blocked=True, reason="Hook 运行失败且设置了失败即拦截："
+                               + (stderr.strip() or output.strip() or f"exit code {code}")[:500])
                 break
 
         if blocked["blocked"]:
