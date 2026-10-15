@@ -35,3 +35,21 @@ async def test_hook_on_failure_block(tmp_path: Path) -> None:
     hooks[0]["hooks"] = [{**failing, "onFailure": "block"}]
     closed = await execute_claude_hooks(hooks, "PreToolUse", {"tool_name": "Bash", "tool_input": {}})
     assert closed["blocked"] is True and "onFailure" in closed["reason"]
+
+
+@pytest.mark.asyncio
+async def test_worktree_tools(tmp_path: Path) -> None:
+    import subprocess
+    from types import SimpleNamespace
+
+    from atlas.sessions.tools import run_session_tool
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for args in (["init", "-q"], ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i"]):
+        subprocess.run(["git", "-C", str(repo), *args], check=True)
+    runtime = SimpleNamespace(conversation_id="c", run_id="r", workspace=str(repo), read_only=False)
+    created = await run_session_tool("worktree_create", {"name": "try it"}, runtime)
+    assert not created.get("is_error") and Path(created["data"]["worktree_path"]).is_dir()
+    listed = await run_session_tool("worktree_list", {}, runtime)
+    assert any(row.get("managed") for row in listed["data"]["worktrees"])

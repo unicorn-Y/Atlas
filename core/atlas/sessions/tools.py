@@ -16,7 +16,7 @@ from typing import Any
 
 SESSION_TOOL_NAMES = frozenset({
     "session_start", "session_send", "session_list", "session_stop", "session_dismiss",
-    "send_user_file", "next_step",
+    "send_user_file", "next_step", "worktree_list", "worktree_create",
 })
 
 SESSION_TOOLS: list[dict[str, Any]] = [
@@ -130,6 +130,65 @@ async def _next_step(args: dict[str, Any], runtime: Any) -> dict[str, Any]:
     return {"text": "回顾已显示给用户。"}
 
 
+SESSION_TOOLS.extend([
+    {"type": "function", "function": {
+        "name": "worktree_list",
+        "description": "List the git worktrees of the current workspace (path, branch, whether Atlas manages it).",
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    }},
+    {"type": "function", "function": {
+        "name": "worktree_create",
+        "description": (
+            "Create a managed git worktree (new branch atlas/<id>-<name>) next to the current workspace for "
+            "isolated edits, and return its path. To hand the work to a separate session use session_start "
+            "with use_worktree instead."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string"}, "base_branch": {"type": "string"},
+        }, "required": ["name"], "additionalProperties": False},
+    }},
+])
+
+
+async def _worktree_tool(name: str, args: dict[str, Any], runtime: Any) -> dict[str, Any]:
+    """Codex 0.162 managed worktree tools over Atlas's existing WorktreeService."""
+    import asyncio as _asyncio
+    import subprocess
+    import uuid as _uuid
+    from pathlib import Path
+
+    from atlas.task_artifacts import WorktreeService
+
+    workspace = str(getattr(runtime, "workspace", "") or "")
+    if not workspace or workspace.startswith("ssh://") or not (Path(workspace) / ".git").exists():
+        return {"text": "当前工作区不是本地 git 仓库，没法管理 worktree。", "is_error": True}
+    root = Path(workspace)
+    if name == "worktree_list":
+        result = await _asyncio.to_thread(subprocess.run, ["git", "-C", str(root), "worktree", "list", "--porcelain"],
+                                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+        rows, current = [], {}
+        for line in result.stdout.splitlines() + [""]:
+            if not line:
+                if current:
+                    current["managed"] = ".atlas-worktrees" in current.get("path", "")
+                    rows.append(current)
+                current = {}
+            elif line.startswith("worktree "):
+                current["path"] = line[9:]
+            elif line.startswith("branch "):
+                current["branch"] = line[7:].removeprefix("refs/heads/")
+        return {"text": json.dumps(rows, ensure_ascii=False, indent=1), "data": {"worktrees": rows}}
+    if getattr(runtime, "read_only", False):
+        return {"text": "只读模式下不能新建 worktree。", "is_error": True}
+    try:
+        created = await _asyncio.to_thread(WorktreeService(root).create, root, _uuid.uuid4().hex,
+                                           str(args.get("base_branch") or "") or None, str(args.get("name") or ""))
+    except ValueError as exc:
+        return {"text": f"没建成：{exc}", "is_error": True}
+    return {"text": f"已建 worktree：{created['worktree_path']}（分支 {created['worktree_branch']}，基于 {created['base_branch']}）。"
+                    "在里面改文件要用这个绝对路径。", "data": created}
+
+
 async def _send_user_file(args: dict[str, Any], runtime: Any) -> dict[str, Any]:
     from pathlib import Path
 
@@ -168,6 +227,8 @@ async def run_session_tool(name: str, args: dict[str, Any], runtime: Any) -> dic
         return await _send_user_file(args, runtime)
     if name == "next_step":
         return await _next_step(args, runtime)
+    if name in {"worktree_list", "worktree_create"}:
+        return await _worktree_tool(name, args, runtime)
     hub = get_session_hub()
     conversation_id = str(getattr(runtime, "conversation_id", "") or "")
     run_id = str(getattr(runtime, "run_id", "") or "")
