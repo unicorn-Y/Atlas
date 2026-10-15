@@ -75,6 +75,7 @@ const RunLimitsPanel = lazy(() => import('./components/settings/RunLimitsPanel')
 const PlatformSettingsPanel = lazy(() => import('./components/settings/PlatformSettingsPanel'));
 const SettingsIntegrationsPanel = lazy(() => import('./components/settings/SettingsIntegrationsPanel'));
 const NetworkSettingsPanel = lazy(() => import('./components/settings/NetworkSettingsPanel'));
+const SearchSettingsPanel = lazy(() => import('./components/settings/SearchSettingsPanel'));
 const MainConfigPanel = lazy(() => import('./components/settings/MainConfigPanel'));
 const ExpertModePanel = lazy(() => import('./components/settings/ExpertModePanel'));
 const ExpertModeBadge = lazy(() => import('./components/settings/ExpertModePanel').then((module) => ({ default: module.ExpertModeBadge })));
@@ -97,13 +98,14 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'search' | 'expert' | 'mainConfig';
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
   ['mainConfig', '主体配置', FileCog, 'atlas.toml config 配置 文件 user-settings 界面设置 当前生效 备份 恢复 编辑'],
   ['expert', '专家模式', Zap, 'expert 专家 模式 切换 覆盖 overlay 额外配置 附加说明 提示词 技能 插件 工具 MCP 同步 仓库 安装 卸载'],
   ['network', '模型网络', Server, 'proxy 代理 CA certificate certificate authority 网络 HTTPS TLS'],
+  ['search', '联网搜索', Search, 'web search 搜索 联网 博查 bocha tavily duckduckgo bing API key 密钥'],
   ['security', '工作区安全', ShieldCheck, 'workspace trust 信任 sandbox 沙箱 network permission 权限 rules AGENTS CLAUDE'],
   ['channels', 'Gateway 与渠道账号', Radio, 'gateway channel 渠道 账号'],
   ['localModels', '本地模型', Cpu, 'local 本地模型'],
@@ -1469,6 +1471,7 @@ export default function App() {
         {sheet === 'mainConfig' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">主体配置</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">直接查看和修改 Atlas 主体的配置文件。</p><MainConfigPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'expert' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">专家模式</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">开着时在普通配置之上额外加载你自己仓库里装上的提示词、技能、插件、工具和 MCP。</p><ExpertModePanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'network' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">模型网络</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">为支持的模型连接配置本机代理与自定义 CA 证书。</p><NetworkSettingsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'search' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">联网搜索</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">给 web_search 配搜索 API key：博查做主力，Tavily 做备用。</p><SearchSettingsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，只在这台电脑上生效。</p><ShortcutsPanel /></section>}
         {sheet === 'hooks' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Hooks</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在任务开始、用工具前后、完成或失败时运行你自己的命令。</p><HooksPanel /></section>}
         {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><div className="grid gap-6"><AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="notifications" /><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}

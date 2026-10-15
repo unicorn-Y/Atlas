@@ -1,6 +1,8 @@
 """Web access tools for the normal Agent: search + page fetch, no API key.
 
-``web_search`` scrapes DuckDuckGo's HTML endpoint, with Bing as the fallback.
+``web_search`` asks the keyed APIs in ``atlas.tools.search_api`` first (Bocha,
+then Tavily, each only when a key is set), then scrapes DuckDuckGo's HTML
+endpoint, with Bing as the last fallback.
 Requests go through the system proxy first (env or Windows setting), then
 directly: from mainland China DuckDuckGo fails the TLS handshake or answers
 with a 202 bot wall unless proxied, and every "success" that is not a 200 is
@@ -28,6 +30,7 @@ from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
 
 import httpx
 
+from atlas.tools import search_api
 from atlas.tools.ssrf_transport import _resolved_connect_ips, create_ssrf_safe_async_client
 
 logger = logging.getLogger(__name__)
@@ -318,12 +321,16 @@ class WebRuntime:
         search_mode = str(mode or "balanced").strip().casefold()
         if search_mode not in {"balanced", "strict", "long"}:
             search_mode = "balanced"
+        api_query = query.strip()
         if allowed:
             query = f"{query} " + " ".join(f"site:{item}" for item in allowed)
         else:
             for item in blocked:
                 query = f"{query} -site:{item}"
-        results, engine = await self._search_engines(query.strip())
+        results, engine, api_errors = await self._search_engines(
+            query.strip(), api_query=api_query, count=max(1, max_results),
+            allowed=allowed, blocked=blocked,
+        )
         if allowed or blocked:
             filtered: list[dict[str, str]] = []
             for item in results:
@@ -340,38 +347,65 @@ class WebRuntime:
             "results": results[: max(1, max_results)],
         }
         if engine == "bing":
-            data["note"] = ("DuckDuckGo was unreachable; these are Bing fallback results, which "
-                            "from mainland networks are often unrelated to the query. Check "
-                            "relevance before relying on them.")
+            data["note"] = ("Keyed search APIs and DuckDuckGo did not answer; these are Bing "
+                            "fallback results, which from mainland networks are often unrelated "
+                            "to the query. Check relevance before relying on them.")
+        if api_errors:
+            data["engine_errors"] = api_errors
         return data
 
-    async def _search_engines(self, query: str) -> tuple[list[dict[str, str]], str]:
-        """DuckDuckGo, then Bing; the first engine with results wins.
+    async def _search_engines(self, query: str, *, api_query: str = "", count: int = 5,
+                              allowed: Sequence[str] = (),
+                              blocked: Sequence[str] = (),
+                              ) -> tuple[list[dict[str, str]], str, list[str]]:
+        """Bocha, Tavily (each only with a key), DuckDuckGo, then Bing.
 
-        Bing is the last resort: reachable from everywhere, but from mainland IPs
-        it is redirected to cn.bing.com, which serves scrapers unrelated results.
+        The first engine with results wins. Bing is the last resort: reachable from
+        everywhere, but from mainland IPs it is redirected to cn.bing.com, which
+        serves scrapers unrelated results.
 
-        An engine that errors or yields nothing parseable falls through. When every
-        engine *errored* the errors are raised together so the model sees why; a
-        reachable engine that found nothing returns an empty list.
+        An engine that errors or yields nothing falls through; keyed-API errors
+        (bad key, quota) are kept in ``engine_errors`` so the user can see a key
+        needs attention even when a later engine answered. When every engine
+        *errored* the errors are raised together; a reachable engine that found
+        nothing returns an empty list.
         """
-        engines = (
+        proxy = system_proxy()
+        api_query = api_query or query
+        engines: list[tuple[str, Any]] = []
+        for provider in search_api.PROVIDERS:
+            key, _source = search_api.api_key(provider)
+            if not key:
+                continue
+            if provider.id == "bocha":
+                engines.append(("bocha", lambda key=key: search_api.bocha_search(
+                    key, api_query, count, proxy=proxy)))
+            elif provider.id == "tavily":
+                engines.append(("tavily", lambda key=key: search_api.tavily_search(
+                    key, api_query, count, proxy=proxy, allowed=allowed, blocked=blocked)))
+        for engine, template, parse in (
             ("duckduckgo", SEARCH_URL, parse_ddg_results),
             ("bing", BING_URL, parse_bing_results),
-        )
+        ):
+            async def scrape(template: str = template, parse: Any = parse) -> list[dict[str, str]]:
+                return parse(await self._get(template.format(query=quote_plus(query))))
+            engines.append((engine, scrape))
+
         errors: list[str] = []
-        for engine, template, parse in engines:
+        api_errors: list[str] = []
+        for engine, run in engines:
             try:
-                page = await self._get(template.format(query=quote_plus(query)))
+                results = await run()
             except Exception as exc:  # noqa: BLE001 — any engine failure falls through to the next
                 errors.append(f"{engine}: {_describe(exc)}")
+                if engine in search_api.PROVIDERS_BY_ID:
+                    api_errors.append(errors[-1])
                 continue
-            results = parse(page)
             if results:
-                return results, engine
+                return results, engine, api_errors
         if len(errors) == len(engines):
             raise RuntimeError("all search engines failed; " + "; ".join(errors))
-        return [], ""
+        return [], "", api_errors
 
     async def web_fetch(self, url: str, max_chars: int = 8000) -> dict[str, Any]:
         if not re.match(r"^https?://", url):
@@ -436,8 +470,9 @@ WEB_TOOLS = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": ("Search the public web (DuckDuckGo, Bing fallback) and return "
-                            "result links. The `engine` field says which answered."),
+            "description": ("Search the public web (Bocha / Tavily when keyed, else DuckDuckGo, "
+                            "Bing fallback) and return result links with snippets. The "
+                            "`engine` field says which answered."),
             "parameters": {"type": "object", "properties": {
                 "query": {"type": "string"},
                 "max_results": {"type": "integer", "minimum": 1, "maximum": 10},

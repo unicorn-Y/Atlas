@@ -38,6 +38,7 @@ from atlas.api.external_history_router import router as external_history_router
 from atlas.api.workspace_trust_settings_router import router as workspace_trust_settings_router
 from atlas.api.run_limits_router import router as run_limits_router
 from atlas.api.network_settings_router import router as network_settings_router
+from atlas.api.search_settings_router import router as search_settings_router
 from atlas.api.hook_trust_router import router as hook_trust_router
 from atlas.api.linear_integration_router import router as linear_integration_router
 from atlas.api.mcp_resources_lazy_router import router as mcp_resources_router
@@ -118,6 +119,7 @@ def create_app(
         workspace_trust_settings_router,
         run_limits_router,
         network_settings_router,
+        search_settings_router,
         hook_trust_router,
         linear_integration_router,
         mcp_resources_router,

@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import pytest
+
+from atlas.tools import search_api
 from atlas.tools.web import (
     WEB_TOOLS,
     WebRuntime,
     extract_text,
     parse_ddg_results,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_search_api_keys(monkeypatch) -> None:
+    # A real Bocha/Tavily key in this machine's credential store must not turn
+    # these scraper tests into paid live calls.
+    monkeypatch.setattr(search_api, "api_key", lambda provider: (None, None))
 
 DDG_FIXTURE = """
 <html><head><style>.x{color:red}</style></head><body>

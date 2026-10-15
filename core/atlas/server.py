@@ -367,7 +367,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         web_runtime = WebRuntime()
         capabilities.register(
             "web.search",
-            description="Search the public web (DuckDuckGo) and return result links.",
+            description="Search the public web (Bocha / Tavily when keyed, else DuckDuckGo, Bing).",
             handler=lambda inputs: web_runtime.web_search(
                 str(inputs.get("query", "")), int(inputs.get("max_results", 5)),
             ),

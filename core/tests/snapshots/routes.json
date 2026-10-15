@@ -16325,6 +16325,119 @@
       ]
     },
     {
+      "path": "/api/search-settings",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_search_settings_api_search_settings_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Search Settings Api Search Settings Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/search-settings",
+      "operations": [
+        {
+          "method": "PUT",
+          "operation_id": "update_search_settings_api_search_settings_put",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchKeyUpdate"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Update Search Settings Api Search Settings Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/search-settings/test",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "test_search_settings_api_search_settings_test_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchKeyTest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Test Search Settings Api Search Settings Test Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/settings/configuration",
       "operations": [
         {
@@ -24967,6 +25080,53 @@
           }
         },
         "title": "ScheduleUpdateRequest",
+        "type": "object"
+      },
+      "SearchKeyTest": {
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "query": {
+            "default": "Atlas AI agent",
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "SearchKeyTest",
+        "type": "object"
+      },
+      "SearchKeyUpdate": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "clear": {
+            "default": false,
+            "title": "Clear",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "SearchKeyUpdate",
         "type": "object"
       },
       "ServerActionBody": {
