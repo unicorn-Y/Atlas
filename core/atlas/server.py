@@ -651,6 +651,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             get_session_hub()
         except Exception:
             log.exception("sessions.hub_start_failed")
+        try:
+            from atlas.evolution.discovery import start_scheduler
+
+            start_scheduler()
+        except Exception:
+            log.exception("discovery.scheduler_start_failed")
 
         # S2: everything deferred starts from here — after uvicorn binds, so
         # /api/health answers while the components come up.

@@ -288,3 +288,42 @@ async def maintain_candidates() -> dict[str, Any]:
     """整理员维护：去重合并、按版本出处标过期、按闲置标 stale（从不删除）。"""
     counts = _curator().maintain()
     return {"ok": True, "counts": counts}
+
+
+# ---------------------------------------------------------------------------
+# 全网发现（新 agent / 功能 / MCP / 技能 / 工具 → 报告 + 移植任务书草稿）
+# ---------------------------------------------------------------------------
+
+
+class DiscoveryRunRequest(BaseModel):
+    days: int = Field(7, ge=1, le=60)
+    only: list[str] | None = None
+    use_model: bool = True
+    max_drafts: int = Field(6, ge=0, le=30)
+
+
+@evolution_router.get("/discovery")
+async def discovery_status() -> dict[str, Any]:
+    from atlas.evolution import discovery
+
+    return discovery.status()
+
+
+@evolution_router.post("/discovery/run")
+async def discovery_run(req: DiscoveryRunRequest | None = None) -> dict[str, Any]:
+    from atlas.evolution import discovery
+
+    body = req or DiscoveryRunRequest()
+    started = discovery.start_run(days=body.days, only=body.only, use_model=body.use_model,
+                                  max_drafts=body.max_drafts)
+    return {"started": started, **discovery.status()}
+
+
+@evolution_router.get("/discovery/reports/{name}")
+async def discovery_report(name: str) -> dict[str, Any]:
+    from atlas.evolution import discovery
+
+    report = discovery.read_report(name)
+    if report is None:
+        raise HTTPException(status_code=404, detail="报告不存在")
+    return report

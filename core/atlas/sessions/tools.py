@@ -16,6 +16,7 @@ from typing import Any
 
 SESSION_TOOL_NAMES = frozenset({
     "session_start", "session_send", "session_list", "session_stop", "session_dismiss",
+    "send_user_file",
 })
 
 SESSION_TOOLS: list[dict[str, Any]] = [
@@ -77,6 +78,43 @@ SESSION_TOOLS: list[dict[str, Any]] = [
 ]
 
 
+SESSION_TOOLS.append({"type": "function", "function": {
+    "name": "send_user_file",
+    "description": (
+        "Show files to the user as cards in this conversation (a generated report, diagram, screenshot, "
+        "built artifact) instead of only mentioning their paths. Send deliverables when they are produced; "
+        "never scratch files or every incremental save. Paths are absolute or relative to the workspace."
+    ),
+    "parameters": {"type": "object", "properties": {
+        "paths": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 10},
+        "caption": {"type": "string"},
+    }, "required": ["paths"], "additionalProperties": False},
+}})
+
+
+async def _send_user_file(args: dict[str, Any], runtime: Any) -> dict[str, Any]:
+    from pathlib import Path
+
+    workspace = str(getattr(runtime, "workspace", "") or "")
+    queue = getattr(runtime, "event_queue", None)
+    sent, missing = [], []
+    for raw in list(args.get("paths") or [])[:10]:
+        path = Path(str(raw)).expanduser()
+        if not path.is_absolute() and workspace and not workspace.startswith("ssh://"):
+            path = Path(workspace) / path
+        if not path.is_file():
+            missing.append(str(raw))
+            continue
+        sent.append(str(path))
+        if queue is not None:
+            await queue.put({"type": "artifact_created", "path": str(path), "kind": "file",
+                             "bytes": path.stat().st_size})
+    caption = str(args.get("caption") or "").strip()
+    text = (f"已把 {len(sent)} 个文件发给用户。" if sent else "没有发出任何文件。") + (
+        f" 找不到：{', '.join(missing)}" if missing else "") + (f" 说明：{caption}" if caption else "")
+    return {"text": text, "data": {"sent": sent, "missing": missing}, "is_error": not sent}
+
+
 def _brief(item: dict[str, Any]) -> dict[str, Any]:
     return {key: item.get(key) for key in (
         "session_id", "name", "title", "status", "initiation", "conversation_id", "worktree_branch",
@@ -88,6 +126,8 @@ async def run_session_tool(name: str, args: dict[str, Any], runtime: Any) -> dic
     """Execute one session tool; returns ``{"text": ..., "data": ..., "is_error": bool}``."""
     from atlas.sessions.hub import get_session_hub, public
 
+    if name == "send_user_file":
+        return await _send_user_file(args, runtime)
     hub = get_session_hub()
     conversation_id = str(getattr(runtime, "conversation_id", "") or "")
     run_id = str(getattr(runtime, "run_id", "") or "")
