@@ -189,7 +189,7 @@ const MODES: Array<{ id: ThreadPresentationMode; label: string }> = [
   { id: 'messages', label: 'Messages only · 仅消息' },
   { id: 'custom', label: 'Custom · 自定义' },
 ];
-const MODE_LABELS = Object.fromEntries(MODES.map(({ id, label }) => [id, label.split(' · ')[0]])) as Record<ThreadPresentationMode, string>;
+const MODE_LABELS = Object.fromEntries(MODES.map(({ id, label }) => [id, label.split(' · ')[1]])) as Record<ThreadPresentationMode, string>;
 
 export function ThreadClassGroup({ classId, label, count, collapsed, children }: {
   classId: ThreadClassId;

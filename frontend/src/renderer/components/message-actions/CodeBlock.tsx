@@ -211,24 +211,13 @@ export default function CodeBlock({ source, language, children }: {
   return <div className="mb-4 overflow-hidden rounded-[10px] bg-[var(--code-bg)] shadow-[inset_0_0_0_1px_var(--line)]" onContextMenu={openContextMenu}>
     <div className="flex min-h-9 items-center justify-between gap-3 border-b border-line px-2.5 pl-4">
       <span className="min-w-0 truncate font-sans text-[11px] text-fg-3">{language || '代码'}</span>
-      <div className="flex shrink-0 items-center gap-1" role="group" aria-label="代码块显示选项">
-        <button type="button" onClick={() => setView('source')} aria-pressed={view === 'source'} title="显示源码"
-          className={`inline-flex h-7 items-center rounded-md px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand ${view === 'source' ? 'bg-hover text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg'}`}>源码</button>
+      <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="代码块显示选项">
+        {(markdown || svg || diff) && <button type="button" onClick={() => setView('source')} aria-pressed={view === 'source'} title="显示源码"
+          className={`inline-flex h-7 items-center rounded-md px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand ${view === 'source' ? 'bg-hover text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg'}`}>源码</button>}
         {(markdown || svg) && <button type="button" onClick={() => setView('preview')} aria-pressed={view === 'preview'} title={svg ? '渲染 SVG 预览' : '渲染 Markdown 预览'}
           className={`inline-flex h-7 items-center rounded-md px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand ${view === 'preview' ? 'bg-hover text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg'}`}>预览</button>}
         {diff && <button type="button" onClick={() => setView('diff')} aria-pressed={view === 'diff'} title="着色显示差异行"
           className={`inline-flex h-7 items-center rounded-md px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand ${view === 'diff' ? 'bg-hover text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg'}`}>Diff</button>}
-        {(view === 'source' || view === 'diff') && <button type="button" onClick={() => setWrap((current) => !current)} aria-pressed={wrap}
-          title={wrap ? '关闭自动换行' : '自动换行'}
-          className="inline-flex h-7 items-center rounded-md px-2 text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand">
-          {wrap ? '关闭换行' : '自动换行'}
-        </button>}
-        <button type="button" aria-label="缩小代码字体" title="缩小代码字体" disabled={fontScale <= 0}
-          onClick={() => setFontScale((value) => Math.max(0, value - 1))}
-          className="inline-flex h-7 items-center rounded-md px-1.5 text-[11px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand disabled:opacity-40">A−</button>
-        <button type="button" aria-label="放大代码字体" title="放大代码字体" disabled={fontScale >= 4}
-          onClick={() => setFontScale((value) => Math.min(4, value + 1))}
-          className="inline-flex h-7 items-center rounded-md px-1.5 text-[13px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand disabled:opacity-40">A+</button>
         <ClipboardAction text={source} label="复制代码" />
         {contextActions.length > 0 && <button ref={contextTriggerRef} type="button" aria-label="更多代码操作" title="更多代码操作"
           aria-haspopup="menu" aria-expanded={Boolean(contextMenu)} onClick={openContextMenuFromButton}

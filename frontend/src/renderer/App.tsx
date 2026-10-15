@@ -2,7 +2,7 @@ import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRe
 import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Settings,
-  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, VolumeX, X, Gauge, Search,
+  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, X, Gauge, Search,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
@@ -1296,14 +1296,17 @@ export default function App() {
           {/* With tabs the left group already fills the bar; its empty part still drags the window. */}
           {!showTabs && <span className="flex-1" />}
           <div className="no-drag flex items-center gap-0.5">
-            {view === 'chat' && <Tip label="朗读最近的回复"><button aria-label="朗读最近的回复" onClick={readLastReply} className="grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Volume2 size={16} /></button></Tip>}
-            <Tip label={voiceOutput ? '自动朗读已开' : '自动朗读新回复'}>
-              <button aria-label="切换自动朗读" aria-pressed={voiceOutput} onClick={toggleVoiceOutput}
-                className={cn('grid size-8 place-items-center rounded-lg hover:bg-hover', voiceOutput ? 'text-brand' : 'text-fg-3 hover:text-fg')}>
-                {voiceOutput ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              </button>
-            </Tip>
-            <Tip label="语音通话"><button aria-label="开始语音通话" onClick={startVoice} className="grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><AudioLines size={16} /></button></Tip>
+            {/* Read-aloud, auto read-aloud and voice call share one menu so the bar stays quiet. */}
+            <Menu>
+              <Tip label="语音"><MenuTrigger asChild>
+                <button aria-label="语音" className={cn('grid size-8 place-items-center rounded-lg hover:bg-hover', voiceOutput ? 'text-brand' : 'text-fg-3 hover:text-fg')}><AudioLines size={16} /></button>
+              </MenuTrigger></Tip>
+              <MenuContent align="end">
+                <MenuItem onSelect={startVoice}><AudioLines />语音通话</MenuItem>
+                {view === 'chat' && <MenuItem onSelect={readLastReply}><Volume2 />朗读最近的回复</MenuItem>}
+                <MenuItem checked={voiceOutput} onSelect={toggleVoiceOutput}>自动朗读新回复</MenuItem>
+              </MenuContent>
+            </Menu>
             {view === 'chat' && <Tip label="任务面板"><button aria-label="切换任务面板" aria-pressed={inspectorOpen} onClick={() => toggleInspector()}
               className={cn('grid size-8 place-items-center rounded-lg hover:bg-hover', inspectorOpen ? 'text-fg' : 'text-fg-3 hover:text-fg')}><PanelRight size={16} /></button></Tip>}
             {window.atlasDesktop && window.atlasDesktop.platform !== 'darwin' && <div className="ml-1.5 flex">

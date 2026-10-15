@@ -328,7 +328,8 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       }
       try {
         const [configuration, loaded, toolList, skills, capabilities] = await Promise.all([backend.getConfiguration(), backend.getConversations(), backend.getTools(), backend.getSkills(), backend.getAgentCapabilities()]);
-        const conversations = await migrateLegacyFlags(loaded);
+        // Older conversations carry the backend's English placeholder title.
+        const conversations = (await migrateLegacyFlags(loaded)).map((item) => item.title === 'New conversation' ? { ...item, title: '新对话' } : item);
         const preferredModel = storageGet('atlas.preference.model');
         const model = mode === 'backend' ? configuration.current : preferredModel || configuration.current;
         set({ models: configuration.models, model, providerBaseUrl: configuration.gateway_base_url, apiKeyConfigured: configuration.api_key_configured, compressionModel: configuration.compression_model ?? '', subagentsEnabled: configuration.subagents_enabled ?? true, subagentDefaultModel: configuration.subagent_default_model || configuration.current, configLoaded: true, conversations, ...flags(conversations), tools: toolList.tools, skills, capabilities, conversationsLoading: false });

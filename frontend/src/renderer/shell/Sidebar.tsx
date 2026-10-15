@@ -24,6 +24,7 @@ export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
   { view: 'chat', label: '聊天', icon: MessageSquare },
   { view: 'agents', label: 'Agents', icon: Bot },
   { view: 'workbench', label: '工作台', icon: Blocks },
+  { view: 'memory', label: '记忆', icon: BookOpen },
   { view: 'auto', label: '自动化', icon: Repeat },
   { view: 'skills', label: '技能与工具', icon: Library },
   { view: 'devices', label: '设备', icon: MonitorSmartphone },
@@ -36,8 +37,10 @@ export const MORE_NAV: Array<{ view: View; label: string; icon: LucideIcon }> = 
   { view: 'board', label: '看板', icon: KanbanSquare },
   { view: 'code', label: '项目', icon: Code2 },
   { view: 'create', label: '创作', icon: Wand2 },
-  { view: 'memory', label: '记忆', icon: BookOpen },
 ];
+
+/** Untitled conversations show in Chinese whatever the backend default was. */
+const displayTitle = (title?: string) => !title || title === 'New conversation' ? '新对话' : title;
 
 const LABELS = [
   { id: 'red', name: '红', color: '#e5484d' }, { id: 'orange', name: '橙', color: '#f76b15' }, { id: 'yellow', name: '黄', color: '#e2a336' },
@@ -596,7 +599,7 @@ export default function Sidebar(props: SidebarProps) {
               ? <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" />
               : labels[conversation.id] ? <i className="size-2 shrink-0 rounded-[3px]" style={{ background: LABELS.find((label) => label.id === labels[conversation.id])?.color }} aria-label={(LABELS.find((label) => label.id === labels[conversation.id])?.name || '') + '色标签'} />
                 : null}
-        <span className="truncate">{conversation.title || '未命名会话'}</span>
+        <span className="truncate">{displayTitle(conversation.title)}</span>
         {(conversation.worktree_path || conversation.worktree_branch) && <GitBranch size={12} className="shrink-0 text-fg-3" aria-label={'工作树' + (conversation.worktree_branch ? '：' + conversation.worktree_branch : '')} />}
         {unread && (waiting || running || completed || failed) && <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" />}
         {queued > 0 && <span className="shrink-0 rounded bg-brand/15 px-1 text-[10px] text-brand" title={`${queued} 条消息待发送`}>{queued}</span>}
@@ -722,7 +725,7 @@ export default function Sidebar(props: SidebarProps) {
   const visibleProjects = activeProjects.filter((project) => project.name.toLocaleLowerCase().includes(projectPickerQuery.trim().toLocaleLowerCase()));
   const selectedActivityEvents = activityEvents.filter((item) => item.conversation_id === activityConversation?.id).reverse();
   const selectedGroup = groups.find((group) => group.id === focusSectionId) ?? groups[0];
-  return <aside aria-label="侧边栏" className={cn('flex min-h-0 flex-col pt-3 pb-3 transition-[width] duration-300', mini ? 'w-[64px] items-center px-2' : 'w-[236px] px-3')}>
+  return <aside aria-label="侧边栏" className={cn('flex min-h-0 flex-col pt-3 pb-3 transition-[width] duration-300', mini ? 'w-[64px] items-center px-2' : 'w-[256px] px-3')}>
     <div className={cn('drag flex items-center gap-2.5 pb-4', mini ? 'flex-col px-0' : 'px-1.5')}>
       <Mark className="size-7" />
       {!mini && <b className="font-serif text-[17px] font-semibold tracking-[.05em] text-heading">Atlas</b>}
@@ -860,7 +863,7 @@ export default function Sidebar(props: SidebarProps) {
         {allMatched.slice(0, 30).map((conversation) => <button key={conversation.id} type="button"
           onClick={() => { setSearchDialogOpen(false); props.onOpenConversation(conversation); }}
           className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-fg-2 hover:bg-hover hover:text-fg">
-          <MessageSquare size={14} className="shrink-0 text-fg-3" /><span className="min-w-0 flex-1 truncate">{conversation.title || '未命名会话'}</span>
+          <MessageSquare size={14} className="shrink-0 text-fg-3" /><span className="min-w-0 flex-1 truncate">{displayTitle(conversation.title)}</span>
         </button>)}
         {!allMatched.length && <p className="px-2 text-[12px] text-fg-3">没有匹配的会话。</p>}
       </div>
@@ -879,7 +882,7 @@ export default function Sidebar(props: SidebarProps) {
         {selectedGroup?.items.map((conversation) => <button key={conversation.id} type="button"
           onClick={() => { setGroupNavigatorOpen(false); props.onOpenConversation(conversation); }}
           className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-fg-2 hover:bg-hover hover:text-fg">
-          <MessageSquare size={14} className="shrink-0 text-fg-3" /><span className="min-w-0 flex-1 truncate">{conversation.title || '未命名会话'}</span>
+          <MessageSquare size={14} className="shrink-0 text-fg-3" /><span className="min-w-0 flex-1 truncate">{displayTitle(conversation.title)}</span>
         </button>)}
         {!selectedGroup?.items.length && <p className="px-2 text-[12px] text-fg-3">这个组还没有会话。</p>}
       </div>

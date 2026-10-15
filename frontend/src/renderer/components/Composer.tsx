@@ -491,7 +491,7 @@ export default function Composer(props: ComposerProps) {
       <Tip label="添加图片或文件，也可以直接粘贴、拖进来">
         <Menu>
         <MenuTrigger asChild>
-        <button type="button" aria-label="添加附件或目标" title="添加附件或目标"
+        <button ref={shortcutHelpButtonRef} type="button" aria-label="添加附件或目标" title="添加附件或目标"
           className="grid size-8 shrink-0 place-items-center rounded-[9px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
           {props.attachments.length ? <ImagePlus size={18} /> : <Paperclip size={18} />}
         </button>
@@ -502,6 +502,8 @@ export default function Composer(props: ComposerProps) {
           <MenuItem onSelect={() => props.onChange(`${props.value}${props.value && !props.value.endsWith(' ') ? ' ' : ''}/goal `)}><Sparkles size={15} />目标命令</MenuItem>
           <MenuSeparator />
           <MenuItem checked={enterToSend} onSelect={() => setEnterToSend((current) => { const next = !current; try { localStorage.setItem(ENTER_TO_SEND_KEY, String(next)); } catch { /* storage unavailable */ } return next; })}>Enter 发送</MenuItem>
+          <MenuItem checked={screenReaderMode} onSelect={toggleScreenReaderMode}><Accessibility size={15} />屏幕阅读增强</MenuItem>
+          <MenuItem onSelect={() => onShortcutHelpOpenChange(true)}><Keyboard size={15} />快捷键帮助</MenuItem>
         </MenuContent>
         </Menu>
       </Tip>
@@ -528,9 +530,9 @@ export default function Composer(props: ComposerProps) {
       <ExpertModeToggle apiBaseUrl={backend.apiBaseUrl} />
       <Menu>
         <MenuTrigger asChild disabled={!props.models.length}>
-          <button type="button" aria-label={`选择模型，当前${current?.name ?? current?.id ?? '默认模型'}`} title="选择模型" className="inline-flex h-8 min-w-0 shrink items-center gap-1.5 rounded-[9px] px-2.5 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50">
+          <button type="button" aria-label={`选择模型，当前${current?.name ?? current?.id ?? '默认模型'}`} title="选择模型" className="inline-flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-[9px] px-2.5 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50">
             <span className={cn('size-1.5 shrink-0 rounded-full', current ? 'bg-ok shadow-[0_0_8px_var(--ok)]' : 'bg-fg-3')} />
-            <span className="max-w-[160px] truncate">{current?.name ?? current?.id ?? '默认模型'}</span>
+            <span className="max-w-[220px] truncate">{current?.name ?? current?.id ?? '默认模型'}</span>
             <ChevronDown size={13} />
           </button>
         </MenuTrigger>
@@ -550,23 +552,6 @@ export default function Composer(props: ComposerProps) {
           <Sparkles size={16} />
         </button>
       </Tip>}
-
-      <Tip label="查看输入区快捷键">
-        <button ref={shortcutHelpButtonRef} type="button" aria-label="打开快捷键帮助" aria-haspopup="dialog"
-          aria-expanded={shortcutHelpOpen} title="快捷键帮助" onClick={() => onShortcutHelpOpenChange(true)}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2 text-[11.5px] text-fg-2 hover:bg-hover hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
-          <Keyboard size={15} /><span>快捷键</span>
-        </button>
-      </Tip>
-
-      <Tip label={screenReaderMode ? '关闭屏幕阅读增强' : '开启屏幕阅读增强；播报运行状态和建议项，并保持建议焦点在输入框'}>
-        <button type="button" aria-label={screenReaderMode ? '关闭屏幕阅读增强' : '开启屏幕阅读增强'}
-          aria-pressed={screenReaderMode} title="屏幕阅读增强" onClick={toggleScreenReaderMode}
-          className={cn('inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2 text-[11.5px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand',
-            screenReaderMode ? 'bg-brand-soft text-brand' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
-          <Accessibility size={16} /><span>读屏</span>
-        </button>
-      </Tip>
 
       <Tip label={props.listening ? '停止语音输入' : '语音输入'}>
         <button type="button" aria-label={props.listening ? '停止语音输入' : '开始语音输入'} aria-pressed={props.listening} onClick={props.onToggleMic}
