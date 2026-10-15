@@ -319,7 +319,7 @@ LOCAL_TOOLS = [
     _tool(
         "local_git",
         (
-            "Use the installed Git CLI in any local repository. Supports status, diff, log, "
+            "Use the installed Git CLI in a local repository within the active workspace. Supports status, diff, log, "
             "branch, add, commit, pull, fetch, and push."
         ),
         {
@@ -958,6 +958,10 @@ class LocalExecutionRuntime:
         callback: OutputCallback | None,
     ) -> dict[str, Any]:
         action = args["action"]
+        supported_keys = {"action", "repo", "args", "message", "paths", "timeout", "_atlas_workspace"}
+        unsupported = set(args) - supported_keys
+        if unsupported:
+            raise ValueError(f"Unsupported local_git parameter(s): {', '.join(sorted(unsupported))}")
         base_args: dict[str, list[str]] = {
             "status": ["status", "--short", "--branch"],
             "diff": ["diff"],
@@ -971,13 +975,64 @@ class LocalExecutionRuntime:
         }
         if action not in base_args:
             raise ValueError(f"Unsupported Git action: {action}")
+        if "paths" in args and action not in {"status", "diff", "log", "add"}:
+            raise ValueError(f"paths is not supported for Git action: {action}")
+        if "message" in args and action != "commit":
+            raise ValueError(f"message is not supported for Git action: {action}")
+        if "timeout" in args and (not isinstance(args["timeout"], (int, float)) or args["timeout"] <= 0):
+            raise ValueError("timeout must be a positive number")
+        extra_args = args.get("args", [])
+        if not isinstance(extra_args, list) or any(not isinstance(item, str) for item in extra_args):
+            raise ValueError("args must be a list of strings")
+
+        requested_repo = self._path(args["repo"])
+        if not requested_repo.is_dir():
+            raise ValueError("repo must be an existing directory")
+        workspace = self._workspace_root(args)
+        if workspace is not None:
+            try:
+                requested_repo.relative_to(workspace)
+            except ValueError as exc:
+                raise PermissionError(f"Git repository path is outside the active workspace: {requested_repo}") from exc
+
+        root_process = await self._spawn(
+            ["git", "rev-parse", "--show-toplevel"], cwd=requested_repo,
+            env=None, stdin=None, detached=False, run_id=run_id, callback=callback,
+        )
+        root_result = (await self._wait_result(root_process, args.get("timeout")))["data"]
+        if root_result.get("exit_code") != 0:
+            raise ValueError(f"Git repository root could not be resolved: {root_result.get('stderr', '').strip()}")
+        repo_root = Path(str(root_result.get("stdout", "")).strip()).resolve()
+        if workspace is not None:
+            try:
+                repo_root.relative_to(workspace)
+            except ValueError as exc:
+                raise PermissionError(
+                    f"This directory is not an independent Git repository; Git found {repo_root} above the active workspace."
+                ) from exc
+
+        raw_paths = args.get("paths", ["."] if action == "add" else [])
+        if not isinstance(raw_paths, list) or any(not isinstance(item, str) or not item for item in raw_paths):
+            raise ValueError("paths must be a list of non-empty strings")
+        pathspecs: list[str] = []
+        for raw_path in raw_paths:
+            resolved_path = self._path(raw_path, str(repo_root))
+            for boundary, label in ((workspace, "active workspace"), (repo_root, "Git repository")):
+                if boundary is None:
+                    continue
+                try:
+                    resolved_path.relative_to(boundary)
+                except ValueError as exc:
+                    raise PermissionError(f"Git pathspec is outside the {label}: {raw_path}") from exc
+            pathspecs.append(resolved_path.relative_to(repo_root).as_posix() or ".")
+
         command = base_args[action]
-        if action == "add":
-            command.extend([str(item) for item in args.get("paths", ["."])])
-        command.extend([str(item) for item in args.get("args", [])])
+        command.extend(extra_args)
+        if pathspecs:
+            command.extend(["--", *pathspecs])
         process = await self._spawn(
-            ["git", *command],
-            cwd=self._path(args["repo"]),
+            ["git", "--literal-pathspecs", *command],
+            cwd=repo_root,
             env=None,
             stdin=None,
             detached=False,
@@ -987,7 +1042,7 @@ class LocalExecutionRuntime:
         waited = await self._wait_result(process, args.get("timeout"))
         result = waited["data"]
         result["action"] = action
-        result["repo"] = str(self._path(args["repo"]))
+        result["repo"] = str(repo_root)
         return result
 
     async def _start_from_shell(
