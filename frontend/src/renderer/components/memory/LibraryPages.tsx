@@ -252,7 +252,7 @@ export function PeopleView({ apiBaseUrl, connected, onToast }: Props) {
   </section>;
 }
 
-export function LibChangesView({ apiBaseUrl, connected, onToast }: Props) {
+export function LibChangesView({ apiBaseUrl, connected, onToast, sourceFilter = [] }: Props & { sourceFilter?: string[] }) {
   const [diary, setDiary] = useState(false);
   const changes = useLoad(() => api<{ changes: Change[] }>(apiBaseUrl, `/api/memlib/changes?limit=100&diary=${diary ? 1 : 0}`), [apiBaseUrl, connected, diary]);
   if (!connected) return <div className="note">等待 Atlas 后端连接后读取记忆。</div>;
@@ -264,8 +264,14 @@ export function LibChangesView({ apiBaseUrl, connected, onToast }: Props) {
     </div>
     {changes.error && <div className="error-note" role="alert"><span>读取失败：{changes.error}</span></div>}
     {!changes.data && !changes.error && <div className="list glass"><div className="empty"><LoaderCircle size={22} className="spin" /><b>正在读取…</b></div></div>}
-    {changes.data && (changes.data.changes.length
-      ? <div className="list glass">{changes.data.changes.map((c) => <ChangeCard key={c.sha} change={c} apiBaseUrl={apiBaseUrl} onChanged={() => void changes.load()} onToast={onToast} />)}</div>
-      : <div className="list glass"><div className="empty"><Undo2 size={22} /><b>还没有变动</b>聊几轮之后，这里会列出它每次记下、改掉、忘掉了什么。</div></div>)}
+    {changes.data && (() => {
+      const visible = changes.data.changes.filter((change) => !sourceFilter.length || sourceFilter.some((source) => {
+        const names: Record<string, string[]> = { '你说的': ['said', '你说的', '记下'], '你改的': ['edited', '你改的', '修改'], '推测': ['guess', '推测'], '经历': ['episode', '经历'], '整理': ['dream', '整理'], '原对话': ['raw', '原对话', '对话'] };
+        return (names[source] ?? [source]).some((name) => change.message.toLocaleLowerCase().includes(name.toLocaleLowerCase()));
+      }));
+      return visible.length
+        ? <div className="list glass">{visible.map((c) => <ChangeCard key={c.sha} change={c} apiBaseUrl={apiBaseUrl} onChanged={() => void changes.load()} onToast={onToast} />)}</div>
+        : <div className="list glass"><div className="empty"><Undo2 size={22} /><b>{sourceFilter.length ? '没有符合来源筛选的变动' : '还没有变动'}</b>聊几轮之后，这里会列出它每次记下、改掉、忘掉了什么。</div></div>;
+    })()}
   </section>;
 }
