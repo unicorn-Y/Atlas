@@ -8,6 +8,7 @@ license = { text = "UNLICENSED" }
 
 dependencies = [
     "fastapi>=0.115.0",
+    "fastembed>=0.7.0",
     "uvicorn[standard]>=0.30.0",
     "websockets>=13.0",
     "sherpa-onnx>=1.12.20",

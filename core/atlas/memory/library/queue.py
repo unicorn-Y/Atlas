@@ -20,6 +20,7 @@ class TurnQueue:
             id INTEGER PRIMARY KEY, created TEXT, session TEXT, mode TEXT,
             user_text TEXT, assistant_text TEXT,
             workspace TEXT, steps TEXT NOT NULL DEFAULT '[]', verified INTEGER NOT NULL DEFAULT 0,
+            turn_started TEXT,
             stage TEXT NOT NULL DEFAULT 'new', attempts INTEGER NOT NULL DEFAULT 0,
             last_error TEXT)""")
         columns = {row[1] for row in db.execute("PRAGMA table_info(pending)")}
@@ -29,6 +30,8 @@ class TurnQueue:
             db.execute("ALTER TABLE pending ADD COLUMN steps TEXT NOT NULL DEFAULT '[]'")
         if "verified" not in columns:
             db.execute("ALTER TABLE pending ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
+        if "turn_started" not in columns:
+            db.execute("ALTER TABLE pending ADD COLUMN turn_started TEXT")
         db.commit()
         return db
 
@@ -43,12 +46,14 @@ class TurnQueue:
 
     def insert(self, *, created: str, session: str, mode: str,
                user_text: str, assistant_text: str, workspace: str = "",
-               steps: str = "[]", verified: bool = False) -> int:
+               steps: str = "[]", verified: bool = False, turn_started: str = "") -> int:
         with self._connection() as db:
             cursor = db.execute(
-                "INSERT INTO pending(created,session,mode,user_text,assistant_text,workspace,steps,verified) "
-                "VALUES(?,?,?,?,?,?,?,?)",
-                (created, session, mode, user_text, assistant_text, workspace, steps, int(verified)),
+                "INSERT INTO pending(created,session,mode,user_text,assistant_text,workspace,steps,verified,"
+                "turn_started) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (created, session, mode, user_text, assistant_text, workspace, steps, int(verified),
+                 turn_started),
             )
             return int(cursor.lastrowid)
 

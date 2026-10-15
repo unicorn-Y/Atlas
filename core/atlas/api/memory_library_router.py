@@ -15,14 +15,20 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+import structlog
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from atlas.memory.library import MemoryLibrary, get_library
+from atlas.memory.library.store import Entry
 
 router = APIRouter(prefix="/api/memlib", tags=["memory-library"])
+log = structlog.get_logger(__name__)
+_dream_task: asyncio.Task[Any] | None = None
 
 
 def _lib() -> MemoryLibrary:
@@ -88,8 +94,259 @@ async def changes(limit: int = 60, diary: bool = False) -> dict[str, Any]:
 
 
 @router.get("/search")
-async def search(q: str, limit: int = 10, history: bool = False) -> dict[str, Any]:
-    return {"results": await _run(_lib().search, q, max(1, min(50, limit)), history)}
+async def search(
+    q: str = "",
+    src: str = "",
+    from_: str = Query("", alias="from"),
+    to: str = "",
+    project: str = "",
+    kinds: str = "memory",
+    limit: int = 30,
+    offset: int = 0,
+    history: bool = False,
+) -> dict[str, Any]:
+    requested = tuple(x.strip() for x in kinds.split(",") if x.strip())
+    normalized = ("fact", "dream", "episode", "diary") if "memory" in requested else ()
+    if "raw" in requested:
+        normalized += ("raw",)
+    rows = await _run(_lib().search, q, 1000, history, normalized)
+    _lib().index._schedule_embeddings()
+    sources = {x.strip() for x in src.split(",") if x.strip()}
+    filtered = []
+    for row in rows:
+        path, text = str(row.get("path") or ""), str(row.get("text") or "")
+        if sources and row.get("src") not in sources:
+            continue
+        if from_ and str(row.get("at") or "")[:10] < from_:
+            continue
+        if to and str(row.get("at") or "")[:10] > to:
+            continue
+        if project and project.casefold() not in (path + text).casefold():
+            continue
+        filtered.append(row)
+    items = []
+    for row in filtered[max(0, offset) : max(0, offset) + max(1, min(100, limit))]:
+        path = str(row.get("path") or "")
+        items.append(
+            {
+                "id": row.get("id"),
+                "kind": row.get("kind"),
+                "path": path,
+                "title": Path(path).stem,
+                "text": row.get("text"),
+                "snippet": row.get("text"),
+                "src": row.get("src"),
+                "at": row.get("at"),
+                "ref": row.get("ref"),
+                "score": row.get("score"),
+                "project": Path(path).stem if path.startswith("事/") else "",
+            }
+        )
+    return {"total": len(filtered), "items": items}
+
+
+@router.get("/timeline")
+async def timeline(before: str = "", limit: int = 50, src: str = "") -> dict[str, Any]:
+    library = _lib()
+    await _run(library.ready)
+    entries = []
+    for rel in library.store.pages():
+        if not rel.startswith("经历/"):
+            continue
+        for entry in library.store.read(rel).current:
+            if before and entry.at >= before:
+                continue
+            if src and entry.src != src:
+                continue
+            entries.append(entry)
+    entries.sort(key=lambda e: e.at, reverse=True)
+    size = max(1, min(100, limit))
+    page = entries[:size]
+    return {
+        "items": [
+            {
+                "id": e.id,
+                "day": e.at[:10],
+                "at": e.at,
+                "session": e.session,
+                "ref": e.ref,
+                "text": e.text,
+                "outcome": e.outcome,
+                "verified": e.verified,
+                "steps": e.steps,
+                "decisions": e.decisions,
+                "files": e.files,
+                "commands": e.commands,
+                "facts": e.facts,
+                "open_items": e.open_items,
+                "trigger": e.trigger,
+            }
+            for e in page
+        ],
+        "next": page[-1].at if len(entries) > size and page else None,
+    }
+
+
+@router.get("/projects")
+async def projects() -> dict[str, Any]:
+    library = _lib()
+    await _run(library.ready)
+    rows = []
+    for rel in library.store.pages():
+        if not rel.startswith("事/"):
+            continue
+        page = library.store.read(rel)
+        text = (library.store.root / rel).read_text(encoding="utf-8")
+        pending_section = False
+        open_items = 0
+        for line in text.splitlines():
+            if line.startswith("## "):
+                pending_section = line[3:].strip() == "没做完"
+            elif pending_section and line.strip().startswith(("-", "*")):
+                open_items += 1
+        rows.append(
+            {
+                "path": rel,
+                "title": page.title,
+                "count": len(page.current),
+                "updated": max((e.at for e in page.current), default=""),
+                "open_items": open_items,
+            }
+        )
+    rows.sort(key=lambda row: row["updated"], reverse=True)
+    return {"items": rows}
+
+
+@router.get("/project")
+async def project(path: str) -> dict[str, Any]:
+    library = _lib()
+    await _run(library.ready)
+    rel = library._safe_rel(path)
+    if not rel.startswith("事/"):
+        raise HTTPException(400, "项目路径必须位于事/目录")
+    page = library.store.read(rel)
+    section_names = ("现在状态", "定下的决定", "没做完", "来龙去脉")
+    sections: dict[str, list[dict[str, Any]]] = {key: [] for key in section_names}
+    source = library.store.root / rel
+    current = None
+    if source.exists():
+        for line in source.read_text(encoding="utf-8").splitlines():
+            if line.startswith("## "):
+                current = line[3:].strip()
+            elif current in sections:
+                entry = Entry.parse(line)
+                if entry:
+                    sections[current].append(
+                        {
+                            "id": entry.id,
+                            "text": entry.text,
+                            "src": entry.src,
+                            "at": entry.at,
+                            "ref": entry.ref,
+                        }
+                    )
+    return {
+        "path": rel,
+        "title": page.title,
+        "aliases": page.aliases,
+        "sections": sections,
+        "history": [
+            *sections["来龙去脉"],
+            *[
+                {"id": e.id, "text": e.text, "src": e.src, "at": e.at, "ref": e.ref}
+                for e in page.history
+            ],
+        ],
+    }
+
+
+@router.get("/open")
+async def open_source(ref: str, window: int = 1) -> dict[str, Any]:
+    from atlas.memory.library.sources import open_ref
+
+    return await _run(open_ref, ref, max(1, min(2, window)))
+
+
+@router.get("/stats")
+async def stats() -> dict[str, Any]:
+    library = _lib()
+    await _run(library.ready)
+    facts = episodes = projects_count = 0
+    last_dream = None
+    for rel in library.store.pages():
+        page = library.store.read(rel)
+        if rel.startswith("事/"):
+            projects_count += 1
+            facts += len(page.current)
+        elif rel.startswith("经历/"):
+            episodes += len(page.current)
+        else:
+            facts += len(page.current)
+        for entry in page.current:
+            if entry.src == "整理" and (last_dream is None or entry.at > last_dream):
+                last_dream = entry.at
+    today = datetime.now().astimezone().date().isoformat()
+    today_added = sum(
+        1
+        for rel in library.store.pages()
+        for entry in library.store.read(rel).current
+        if entry.at[:10] == today
+    )
+    return {
+        "facts": facts,
+        "episodes": episodes,
+        "projects": projects_count,
+        "diary_days": len(library.store.diary_pages()),
+        "today_added": today_added,
+        "last_dream": last_dream,
+        "pending_failed": library.queue.failed_count(),
+        "embed": library.index.embedding_state,
+    }
+
+
+@router.post("/dream")
+async def run_dream_now() -> dict[str, Any]:
+    from atlas import server
+    from atlas.memory.library.dream import run_dream
+
+    return await run_dream(_lib(), getattr(server, "model_mgr", None))
+
+
+async def _dream_scheduler() -> None:
+    while True:
+        now = datetime.now().astimezone()
+        next_run = now.replace(hour=3, minute=30, second=0, microsecond=0)
+        if next_run <= now:
+            next_run += timedelta(days=1)
+        await asyncio.sleep(max(1, (next_run - now).total_seconds()))
+        try:
+            from atlas import server
+            from atlas.memory.library.dream import run_dream
+
+            library = get_library()
+            if library:
+                await run_dream(library, getattr(server, "model_mgr", None))
+        except Exception as exc:  # noqa: BLE001 - daemon must survive a failed daily run.
+            log.warning("memory.library.dream_scheduler_failed", error=str(exc))
+
+
+@router.on_event("startup")
+async def start_dream_scheduler() -> None:
+    global _dream_task
+    if _dream_task is None or _dream_task.done():
+        _dream_task = asyncio.create_task(_dream_scheduler())
+
+
+@router.on_event("shutdown")
+async def stop_dream_scheduler() -> None:
+    global _dream_task
+    if _dream_task:
+        _dream_task.cancel()
+        try:
+            await _dream_task
+        except asyncio.CancelledError:
+            pass
+        _dream_task = None
 
 
 @router.post("/entry")

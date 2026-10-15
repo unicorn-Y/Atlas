@@ -84,13 +84,15 @@ EPISODES
 - did: what Atlas actually did, at most 60 characters, based only on TOOLS USED and its reply; use "直接回答" when no tool was used.
 - outcome: one sentence of at most 60 characters describing the result. State failure or incompletion honestly.
 - skip: true for small talk, a reply of only "ok", or a connectivity-only test.
+- decisions, files, commands, facts, open_items: each is a list of at most 5 items, each at most 80 characters. Use only this turn's user message, assistant reply and TOOLS USED; use [] when there is no evidence. Never invent.
 - Episodes are conversation history, not user facts. Never copy episode content into facts.
 """
 
 SCHEMA_HINT = (
     '{"facts":[{"op":"set|retract|forget|alias","key":"user.home_city","value":"杭州",'
     '"text":"住在杭州","quote":"我住在杭州","stance":"said","forget_after":null,"triggers":["杭州"],"importance":6}],'
-    '"episode":{"title":"…","topics":["…"],"did":"…","outcome":"…","skip":false}}'
+    '"episode":{"title":"…","topics":["…"],"did":"…","outcome":"…","skip":false,'
+    '"decisions":[],"files":[],"commands":[],"facts":[],"open_items":[]}}'
 )
 
 
@@ -114,6 +116,11 @@ class Episode:
     did: str = ""
     outcome: str = ""
     skip: bool = False
+    decisions: list[str] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
+    commands: list[str] = field(default_factory=list)
+    facts: list[str] = field(default_factory=list)
+    open_items: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -163,7 +170,7 @@ def build_messages(*, user_text: str, assistant_text: str, known: list[tuple[str
     for step in (steps or [])[:30]:
         name = str(step.get("name") or "tool")
         mark = "✓" if step.get("ok") else "✗" if step.get("ok") is False else "…"
-        note = " ".join(str(step.get("note") or "").split())[:80]
+        note = " ".join(str(step.get("note") or "").split())[:200]
         step_lines.append(f"- {name} {mark}{' ' + note if note else ''}")
     tools_block = "TOOLS USED THIS TURN (name, ok, note):\n" + ("\n".join(step_lines) or "- (none)")
     payload = "\n\n".join([
@@ -227,6 +234,10 @@ def parse_output(raw: str) -> tuple[list[Proposal], Episode | None]:
                 did=" ".join(str(raw_episode.get("did") or "").split())[:60],
                 outcome=" ".join(str(raw_episode.get("outcome") or "").split())[:60],
                 skip=bool(raw_episode.get("skip", False)),
+                **{name: [" ".join(str(item).split())[:80] for item in raw_episode.get(name, [])
+                          if str(item).strip()][:5]
+                   for name in ("decisions", "files", "commands", "facts", "open_items")
+                   if isinstance(raw_episode.get(name, []), list)},
             )
         except (TypeError, ValueError):
             episode = None
@@ -234,7 +245,7 @@ def parse_output(raw: str) -> tuple[list[Proposal], Episode | None]:
 
 
 def apply_episode(store: MemoryStore, episode: Episode | None, steps: list[dict], verified: bool,
-                  session: str, now: datetime, mode: str = "") -> bool:
+                  session: str, now: datetime, mode: str = "", ref: str = "") -> bool:
     if episode is None or episode.skip or not episode.title:
         return False
     did = episode.did or "直接回答"
@@ -252,24 +263,27 @@ def apply_episode(store: MemoryStore, episode: Episode | None, steps: list[dict]
     for step in (steps or [])[:30]:
         name = str(step.get("name") or "tool")
         mark = "✓" if step.get("ok") else "✗"
-        note = " ".join(str(step.get("note") or "").split())[:20]
+        note = " ".join(str(step.get("note") or "").split())[:200]
         safe_steps.append(f"{name} {mark}{' ' + note if note else ''}")
     if entry is None:
         entry = Entry(text=text, id=new_id(), src="经历", at=now.isoformat(timespec="seconds"),
                       session=session, mode=mode if mode == "expert" else "",
                       trigger=episode.topics[:3], steps=safe_steps[:8], outcome=episode.outcome,
-                      verified=bool(verified))
+                      verified=bool(verified), ref=ref, **_episode_lists(episode))
         page.current.append(entry)
     else:
         original_title = entry.text.split("：", 1)[0]
         old_did = entry.text.split("：", 1)[1] if "：" in entry.text else ""
         parts = [p for p in old_did.split("；") if p]
         merged = "；".join(parts if did in parts else [*parts, did])
-        entry.text = f"{original_title}：{merged[-max(1, 200 - len(original_title) - 1):]}"
+        entry.text = f"{original_title}：{merged[-max(1, 400 - len(original_title) - 1):]}"
         entry.outcome = episode.outcome
         entry.steps = (entry.steps + safe_steps)[-8:]
         entry.verified = bool(entry.verified or verified)
         entry.trigger = list(dict.fromkeys([*entry.trigger, *episode.topics]))[:3]
+        entry.ref = ref or entry.ref
+        for name, values in _episode_lists(episode).items():
+            setattr(entry, name, list(dict.fromkeys([*getattr(entry, name), *values]))[-5:])
         entry.at = now.isoformat(timespec="seconds")
         if mode == "expert":
             entry.mode = "expert"
@@ -282,6 +296,12 @@ def _quote_ok(quote: str, user_text: str) -> bool:
     return bool(quote) and squash(quote) in squash(user_text)
 
 
+def _episode_lists(episode: Episode) -> dict[str, list[str]]:
+    return {name: list(dict.fromkeys(" ".join(str(item).split())[:80]
+                                     for item in getattr(episode, name) if str(item).strip()))[-5:]
+            for name in ("decisions", "files", "commands", "facts", "open_items")}
+
+
 def _locate(store: MemoryStore, key: str) -> tuple[Page, int] | None:
     for rel in store.pages():
         page = store.read(rel)
@@ -292,7 +312,7 @@ def _locate(store: MemoryStore, key: str) -> tuple[Page, int] | None:
 
 
 def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, session: str,
-          mode: str, now: datetime) -> ApplyResult:
+          mode: str, now: datetime, ref: str = "") -> ApplyResult:
     """Apply proposals to the Markdown pages. Caller holds ``store.lock`` and commits."""
     result = ApplyResult()
     stamp = now.isoformat(timespec="seconds")
@@ -339,7 +359,7 @@ def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, sess
             continue
         entry = Entry(
             text=text, id=new_id(), key=p.key, value=p.value, src=SRC_SAID, at=stamp,
-            until=p.forget_after, quote=p.quote[:300], session=session, mode=mode,
+            until=p.forget_after, quote=p.quote[:300], session=session, mode=mode, ref=ref,
             importance=p.importance, trigger=p.triggers,
         )
         if found is not None:

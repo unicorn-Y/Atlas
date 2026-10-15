@@ -77,13 +77,16 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
         }, ["query"]),
         _function_schema("memory_search", (
             "Search Atlas' long-term memory library: facts about the user, people, projects, "
-            "and the raw log of earlier conversations. Use it when the user refers to something "
-            "from before that is not already in context. Results carry their source and date; "
-            "if nothing relevant comes back, say you do not remember instead of guessing."
+            "and optionally the raw log of earlier conversations. Search first, then use open "
+            "with a returned ref to open the original conversation for details. Use it when the "
+            "user refers to something from before that is not already in context."
         ), {
             "query": {"type": "string", "description": "Names, topics or words to look for."},
             "limit": {"type": "integer", "minimum": 1, "maximum": 20},
             "include_history": {"type": "boolean", "description": "Also return facts that are no longer true."},
+            "open": {"type": "string", "description": "A returned ref, such as session-id@ISO-time, to open the original turn."},
+            "sources": {"type": "array", "items": {"type": "string", "enum": ["memory", "raw"]},
+                        "description": "Search memory by default; include raw to search original conversations."},
         }, ["query"]),
         _function_schema("clock.curr_time", "Return the current UTC time.", {}),
         _function_schema("clock.sleep", "Wait for a bounded number of seconds before continuing.", {
