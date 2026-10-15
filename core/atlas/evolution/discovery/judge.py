@@ -116,7 +116,7 @@ async def llm_judge(candidates: list[dict[str, Any]], *, batch_size: int = 15) -
         manager = server.model_mgr
         if manager is None:
             raise RuntimeError("model manager not ready")
-        model = manager.current_model
+        model = await _working_model(manager)
     except Exception as exc:  # noqa: BLE001
         return _rule_only(candidates), f"规则判断（模型不可用：{exc}）"
     judged: dict[str, dict[str, Any]] = {}
@@ -124,8 +124,9 @@ async def llm_judge(candidates: list[dict[str, Any]], *, batch_size: int = 15) -
         batch = candidates[start:start + batch_size]
         for attempt in range(3):
             try:
-                result = await manager.model_router.complete_for(
-                    model, "discovery_judge", [{"role": "user", "content": _prompt(batch)}], max_tokens=3000)
+                route = await manager.model_router.resolve(model, "discovery_judge")
+                result = await manager.model_router.complete(
+                    route, [{"role": "user", "content": _prompt(batch)}], max_tokens=3000)
                 for row in _parse(str(result.text or "")):
                     judged[str(row["id"])] = row
                 break
@@ -146,6 +147,21 @@ async def llm_judge(candidates: list[dict[str, Any]], *, batch_size: int = 15) -
                     "value": int(verdict.get("value") or 3) if str(verdict.get("value") or "3").isdigit() else 3,
                     "judged_by": model})
     return out, f"模型判断：{model}" if judged else "规则判断（模型没有返回可解析结果）"
+
+
+async def _working_model(manager: Any) -> str:
+    """当前模型连不上时，依次试其它已配置的模型（中转站临时故障很常见）。"""
+    ids = [manager.current_model, *[str(item.get("id")) for item in manager.list_models() if item.get("id")]]
+    errors = []
+    for model in list(dict.fromkeys(ids))[:12]:
+        try:
+            route = await manager.model_router.resolve(model, "discovery_judge")
+            await asyncio.wait_for(manager.model_router.complete(
+                route, [{"role": "user", "content": "回复 ok"}], max_tokens=8, timeout=20), timeout=30)
+            return model
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{model}: {type(exc).__name__}")
+    raise RuntimeError("没有能连上的模型（" + "；".join(errors[:6]) + "）")
 
 
 def _rule_only(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
