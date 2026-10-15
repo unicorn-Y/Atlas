@@ -364,7 +364,7 @@ class ModelRouter:
     def stream(
         self, route: RouteSpec, messages: list[dict[str, Any]], **kwargs: Any,
     ) -> Any:
-        """Return a blocking iterator of OpenAI-shaped chunks for the main run loop."""
+        """Return an async iterator of OpenAI-shaped chunks for the main run loop."""
         network = ModelNetworkSettings(
             proxy_url=route.network_proxy_url, ca_bundle_path=route.network_ca_bundle_path,
         )
@@ -562,6 +562,14 @@ def _client(route: RouteSpec, network: ModelNetworkSettings, timeout: Any) -> ht
     return httpx.Client(timeout=timeout, **loopback_request_kwargs(str(route.base_url or "")))
 
 
+def _async_client(route: RouteSpec, network: ModelNetworkSettings, timeout: Any) -> httpx.AsyncClient:
+    if network.enabled:
+        return build_model_httpx_client(network, base_url=str(route.base_url or ""), async_mode=True, timeout=timeout)
+    from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
+
+    return httpx.AsyncClient(timeout=timeout, **loopback_request_kwargs(str(route.base_url or "")))
+
+
 def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings) -> dict[str, Any]:
     timeout = kwargs.get("timeout") or httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=10.0)
     url, headers, payload = _request_details(route, messages, {**kwargs, "stream": False})
@@ -649,19 +657,19 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
     return data
 
 
-def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings):
+async def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings):
     timeout = kwargs.get("timeout") or httpx.Timeout(connect=15.0, read=None, write=30.0, pool=10.0)
     url, headers, payload = _request_details(route, messages, {**kwargs, "stream": True})
     if route.api_mode == "anthropic_messages":
         payload["stream"] = True
-    with _client(route, network, timeout) as client:
-        with client.stream("POST", url, headers=headers, json=payload) as response:
+    async with _async_client(route, network, timeout) as client:
+        async with client.stream("POST", url, headers=headers, json=payload) as response:
             response.raise_for_status()
             if route.api_mode == "anthropic_messages":
                 tool_indexes: dict[int, int] = {}
                 next_tool_index = 0
                 input_tokens = 0
-                for raw in response.iter_lines():
+                async for raw in response.aiter_lines():
                     if not raw.startswith("data: "):
                         continue
                     event = raw[6:]
@@ -702,7 +710,7 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                         }
                         yield {"choices": [{"delta": {}, "finish_reason": item.get("delta", {}).get("stop_reason")}], "usage": shaped_usage}
             else:
-                for raw in response.iter_lines():
+                async for raw in response.aiter_lines():
                     if not raw.startswith("data: "):
                         continue
                     if raw[6:] == "[DONE]":

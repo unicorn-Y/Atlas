@@ -380,10 +380,10 @@ def _choice_auxiliary_delta(chunk: Any) -> tuple[str, str]:
     return reasoning, refusal if isinstance(refusal, str) else ""
 
 
-def _stream_next(stream: Any) -> tuple[bool, Any]:
+async def _stream_next(stream: Any) -> tuple[bool, Any]:
     try:
-        return True, next(stream)
-    except StopIteration:
+        return True, await anext(stream)
+    except StopAsyncIteration:
         return False, None
 
 
@@ -640,34 +640,28 @@ async def complete_stream(
                     kwargs["max_tokens"] = max_output_tokens
                 if reasoning_effort:
                     kwargs["reasoning_config"] = {"effort": reasoning_effort}
-                stream = await asyncio.to_thread(
-                    router.stream, route, _wire_messages(request_messages), **kwargs,
-                )
-                if hasattr(stream, "choices"):
-                    chunks = iter((stream,))
-                else:
-                    chunks = iter(stream)
+                stream = router.stream(route, _wire_messages(request_messages), **kwargs)
+                chunks = aiter(stream)
                 while True:
                     if cancel_event is not None and cancel_event.is_set():
                         raise asyncio.CancelledError
-                    next_task = asyncio.create_task(asyncio.to_thread(_stream_next, chunks))
-                    if cancel_event is None:
+                    next_task = asyncio.create_task(_stream_next(chunks))
+                    cancel_task = asyncio.create_task(cancel_event.wait()) if cancel_event is not None else None
+                    try:
+                        if cancel_task is not None:
+                            done, _ = await asyncio.wait(
+                                {next_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED,
+                            )
+                            if cancel_task in done and cancel_event.is_set():
+                                raise asyncio.CancelledError
                         has_chunk, chunk = await next_task
-                    else:
-                        cancel_task = asyncio.create_task(cancel_event.wait())
-                        done, _ = await asyncio.wait(
-                            {next_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED,
-                        )
-                        if cancel_task in done and cancel_event.is_set():
-                            close = getattr(stream, "close", None)
-                            if callable(close):
-                                await asyncio.to_thread(close)
-                            next_task.cancel()
-                            await asyncio.gather(next_task, return_exceptions=True)
-                            raise asyncio.CancelledError
-                        cancel_task.cancel()
-                        await asyncio.gather(cancel_task, return_exceptions=True)
-                        has_chunk, chunk = await next_task
+                    finally:
+                        # Cancel and join the reader before closing its async generator.
+                        # Cancelling an asyncio task interrupts HTTPX I/O and closes the socket.
+                        next_task.cancel()
+                        if cancel_task is not None:
+                            cancel_task.cancel()
+                        await asyncio.gather(next_task, *([cancel_task] if cancel_task else []), return_exceptions=True)
                     if not has_chunk:
                         break
                     choices = _get(chunk, "choices") or []
@@ -887,10 +881,10 @@ async def complete_stream(
                         overloaded_retry_count += 1
             finally:
                 if stream is not None:
-                    close = getattr(stream, "close", None)
+                    close = getattr(stream, "aclose", None)
                     if callable(close):
                         try:
-                            await asyncio.to_thread(close)
+                            await close()
                         except Exception:
                             pass
         if last_error and last_error.status not in {429, 529} and candidate_index + 1 >= len(candidates):
