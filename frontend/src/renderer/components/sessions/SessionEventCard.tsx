@@ -1,7 +1,7 @@
 // 独立会话在主会话时间线里的卡片：提议（开始 / 在这里做 / 忽略）、已开始、回报。
 // 交互照 Claude Desktop 的 start_session 提议卡与「New session / Do it here」二选一。
 import { useState } from 'react';
-import { ArrowUpRight, GitBranch, Play, SplitSquareHorizontal, X } from 'lucide-react';
+import { ArrowUpRight, CircleCheck, GitBranch, Play, SplitSquareHorizontal, X } from 'lucide-react';
 import type { AgentEvent } from '../../../types/runtime';
 import { useAtlasStore } from '../../store/useAtlasStore';
 import { Button } from '../../ui/Button';
@@ -13,6 +13,7 @@ export default function SessionEventCard({ event }: { event: AgentEvent }) {
   const [session, setSession] = useState<LinkedSession | undefined>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  if (kind === 'next_step') return <NextStepBox event={event} />;
   if (!session) return null;
 
   const act = async (fn: () => Promise<{ session: LinkedSession }>) => {
@@ -65,5 +66,29 @@ export default function SessionEventCard({ event }: { event: AgentEvent }) {
     <SplitSquareHorizontal size={13} className="shrink-0 text-brand" />
     <span className="truncate">{text}「{session.title}」{session.worktree_branch ? ` · ${session.worktree_branch}` : ''}{session.error && kind === 'failed' ? `：${session.error}` : ''}</span>
     {session.conversation_id && kind !== 'dismissed' && <button className="inline-flex shrink-0 items-center gap-1 text-fg-3 hover:text-fg" onClick={open}>打开<ArrowUpRight size={12} /></button>}
+  </div>;
+}
+
+/** Claude Desktop「下一步」框：回顾 + 一个问题 + 一两个按钮；按钮把话发回当前对话。 */
+function NextStepBox({ event }: { event: AgentEvent }) {
+  const recap = String(event.data.recap ?? '');
+  const ask = String(event.data.ask ?? '');
+  const actions = Array.isArray(event.data.actions) ? event.data.actions as Array<{ label: string; message?: string }> : [];
+  const [chosen, setChosen] = useState('');
+  const answered = useAtlasStore((state) => {
+    const run = state.runs.find((item) => item.id === event.runId);
+    return Boolean(run && state.runs.some((item) => item.conversationId === run.conversationId && item.startedAt > run.startedAt));
+  });
+  return <div className="my-4 rounded-xl bg-sunken px-4 py-3 shadow-[inset_0_0_0_1px_var(--line)]" aria-label="下一步">
+    <div className="flex items-start gap-2 text-[13px] text-fg-2"><CircleCheck size={14} className="mt-0.5 shrink-0 text-ok" /><span className="whitespace-pre-wrap">{recap}</span></div>
+    {ask && actions.length > 0 && <div className="mt-2.5">
+      <div className="text-[13px] font-medium text-fg">{ask}</div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {actions.map((action, index) => <Button key={action.label} size="sm" variant={index === 0 ? 'primary' : 'secondary'}
+          disabled={Boolean(chosen) || answered}
+          onClick={() => { setChosen(action.label); void useAtlasStore.getState().sendMessage(action.message || action.label); }}>
+          {action.label}</Button>)}
+      </div>
+    </div>}
   </div>;
 }

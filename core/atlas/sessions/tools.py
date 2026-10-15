@@ -16,7 +16,7 @@ from typing import Any
 
 SESSION_TOOL_NAMES = frozenset({
     "session_start", "session_send", "session_list", "session_stop", "session_dismiss",
-    "send_user_file",
+    "send_user_file", "next_step",
 })
 
 SESSION_TOOLS: list[dict[str, Any]] = [
@@ -92,6 +92,44 @@ SESSION_TOOLS.append({"type": "function", "function": {
 }})
 
 
+SESSION_TOOLS.append({"type": "function", "function": {
+    "name": "next_step",
+    "description": (
+        "Close a turn that did real work (changed files, ran commands, multi-step work) with a short box for "
+        "the user: recap = 2-3 sentences on what is now true and what is not done or not verified. Only when "
+        "the next move is the user's call (a choice, a go-ahead, an approval) add ask = ONE short question "
+        "and 1-2 actions (label of 1-4 words, message = what clicking sends back, your recommendation first). "
+        "Skip it for short answers and chat. Write no text after calling it with an ask."
+    ),
+    "parameters": {"type": "object", "properties": {
+        "recap": {"type": "string"}, "ask": {"type": "string"},
+        "actions": {"type": "array", "maxItems": 2, "items": {"type": "object", "properties": {
+            "label": {"type": "string"}, "message": {"type": "string"},
+        }, "required": ["label"], "additionalProperties": False}},
+    }, "required": ["recap"], "additionalProperties": False},
+}})
+
+
+async def _next_step(args: dict[str, Any], runtime: Any) -> dict[str, Any]:
+    """Claude Desktop ``wrap_up``: recap + optional question with answer buttons."""
+    from atlas import server
+
+    recap = str(args.get("recap") or "").strip()[:600]
+    ask = str(args.get("ask") or "").strip()[:160]
+    actions = [{"label": str(item.get("label") or "")[:24], "message": str(item.get("message") or item.get("label") or "")[:300]}
+               for item in list(args.get("actions") or [])[:2] if isinstance(item, dict) and item.get("label")]
+    if not recap:
+        return {"text": "recap 不能为空。", "is_error": True}
+    manager = getattr(server, "runtime_mgr", None)
+    run = manager.runs.get(str(getattr(runtime, "run_id", "") or "")) if manager else None
+    if run is not None:
+        payload = {"kind": "next_step", "recap": recap, "ask": ask if actions else "", "actions": actions if ask else []}
+        await manager.send_run(run, run.next_envelope("session.event", payload), "")
+    if ask and actions:
+        return {"text": "下一步框已显示给用户，等用户点按钮或回复；这一轮到此结束，不要再写正文。"}
+    return {"text": "回顾已显示给用户。"}
+
+
 async def _send_user_file(args: dict[str, Any], runtime: Any) -> dict[str, Any]:
     from pathlib import Path
 
@@ -128,6 +166,8 @@ async def run_session_tool(name: str, args: dict[str, Any], runtime: Any) -> dic
 
     if name == "send_user_file":
         return await _send_user_file(args, runtime)
+    if name == "next_step":
+        return await _next_step(args, runtime)
     hub = get_session_hub()
     conversation_id = str(getattr(runtime, "conversation_id", "") or "")
     run_id = str(getattr(runtime, "run_id", "") or "")
