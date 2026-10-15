@@ -123,12 +123,24 @@ function prepareSharedApiToken(): void {
     writeFileSync(file, `${token}\n`, { mode: 0o600 });
   }
   try { chmodSync(file, 0o600); } catch { /* Windows ACL is handled below */ }
-  if (process.platform === 'win32') {
-    const account = `${process.env.USERDOMAIN ?? ''}\\${process.env.USERNAME ?? ''}`;
-    const acl = spawnSync('icacls', [file, '/inheritance:r', '/grant:r', `${account}:(R)`], { windowsHide: true, stdio: 'ignore' });
-    if (acl.error || acl.status !== 0) throw new Error(`无法为共享 API 令牌限制读取权限：${acl.error?.message ?? `icacls exit ${acl.status}`}`);
-  }
+  if (process.platform === 'win32') restrictTokenFile(file);
   process.env.ATLAS_API_TOKEN = token;
+}
+
+/** Best effort: let only the current account read the shared token. DOMAIN\USERNAME from the
+ * environment does not always resolve (icacls exit 1332 on the 主机 stopped startup before the
+ * window existed), so grant by SID. A failure is logged, never fatal: the file already lives in
+ * the user's own data directory. */
+function restrictTokenFile(file: string): void {
+  let account = process.env.USERNAME ?? '';
+  const who = spawnSync('whoami', ['/user', '/fo', 'csv', '/nh'], { windowsHide: true, encoding: 'utf8' });
+  const sid = who.status === 0 ? /"(S-1-[0-9-]+)"/.exec(who.stdout ?? '')?.[1] : undefined;
+  if (sid) account = `*${sid}`;
+  else if (process.env.USERDOMAIN && account) account = `${process.env.USERDOMAIN}\\${account}`;
+  const acl = spawnSync('icacls', [file, '/inheritance:r', '/grant:r', `${account}:(R)`], { windowsHide: true, stdio: 'ignore' });
+  if (acl.error || acl.status !== 0) {
+    console.warn(`Atlas: could not restrict the shared API token file (icacls ${acl.error?.message ?? `exit ${acl.status}`}); continuing`);
+  }
 }
 
 function setOpenAtLogin(enabled: boolean): void {
@@ -769,6 +781,11 @@ app.whenReady().then(async () => {
   // renderer the current state once so its startup surfaces resolve immediately.
   windowRef?.webContents.send(BACKEND_STARTUP_CHANNEL, lastProgress);
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+}).catch((error: unknown) => {
+  // An exception here used to leave a windowless main process running with no backend.
+  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  dialog.showErrorBox('Atlas 启动失败', `Atlas 启动时出错，请把下面的信息发给维护者：\n\n${message}`);
+  app.exit(1);
 });
 
 let shutdownStarted = false;
