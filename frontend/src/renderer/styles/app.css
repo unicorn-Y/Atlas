@@ -4,122 +4,144 @@
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 /*
- * Atlas design tokens.
- * Dark "夜航" is the default: deep night ink, brass instruments, a floating lit sheet.
- * Light "白瓷" is its daylight twin: white porcelain sheet on a warm grey desk, near-monochrome.
- * Brass (--brand) is reserved for Atlas itself: the mark, and anything that shows Atlas is working.
+ * Atlas design tokens (2026-10 redesign).
+ * Measured from Codex desktop 26.1007 and Claude desktop 2.37337: a shell colour behind one rounded page
+ * surface, warm neutral greys, hairline borders at 9% of the foreground, two-layer soft shadows.
+ * Brass (--brand) stays reserved for Atlas itself: the mark, and anything that shows Atlas is working.
  */
 :root, [data-theme=light] {
-  --bg: #EEEDE9;
+  --bg: #F4F3F0;
+  --desk: var(--bg);
   --sheet-bg: #FFFFFF;
   --sheet-solid: #FFFFFF;
-  --shadow-sheet: 0 0 0 1px rgba(20,20,20,.06), 0 2px 4px rgba(20,20,20,.03), 0 20px 50px -24px rgba(40,35,20,.2);
-  --raised-bg: #FFFFFF;
-  --shadow-raised: 0 0 0 1px rgba(20,20,20,.08), 0 2px 6px rgba(20,20,20,.04), 0 18px 40px -18px rgba(40,35,20,.22);
-  --card-bg: #F7F6F3;
-  --card-ring: 0 0 0 1px rgba(20,20,20,.02);
-  --overlay: #FFFFFF;
-  --shadow-pop: 0 0 0 1px rgba(20,20,20,.08), 0 16px 40px -10px rgba(20,20,20,.22);
-  --sunken: #F3F2EF;
-  --hover: rgba(20,20,22,.045);
-  --selected: rgba(20,20,22,.07);
-  --line: rgba(20,20,22,.08);
-  --line-strong: rgba(20,20,22,.15);
-  --fg: #17171B;
-  --fg-2: #55565B;
-  --fg-3: #8A8A86;
-  --heading: #111114;
-  --brand: #9E6F2B;
-  --brand-soft: rgba(158,111,43,.12);
-  --primary-bg: #111114;
-  --on-primary: #FFFFFF;
-  --ok: #2E8B68;
-  --ok-soft: rgba(46,139,104,.12);
-  --danger: #B0442B;
-  --danger-soft: rgba(176,68,43,.1);
-  --code-bg: #F4F3F0;
-  --orb-opacity: .13;
-  --orb-filter: grayscale(1) contrast(1.1);
-  --desk: var(--bg);
   --sheet-blur: none;
+  --shadow-sheet: 0 0 0 .5px rgba(26,26,24,.08), 0 4px 16px rgba(0,0,0,.05);
+  --rail-bg: transparent;
+  --panel-bg: rgba(255,255,255,.55);
+  --raised-bg: #FFFFFF;
+  --shadow-raised: 0 0 0 1px rgba(26,26,24,.08), 0 1px 2px rgba(26,26,24,.05), 0 4px 14px -4px rgba(26,26,24,.08);
+  --card-bg: #FAFAF8;
+  --card-ring: 0 0 0 1px rgba(26,26,24,.07);
+  --overlay: #FFFFFF;
+  --shadow-pop: 0 0 0 1px rgba(26,26,24,.08), 0 8px 24px rgba(0,0,0,.12), 0 2px 6px rgba(0,0,0,.06);
+  --sunken: rgba(26,26,24,.045);
+  --hover: rgba(26,26,24,.05);
+  --selected: rgba(26,26,24,.075);
+  --line: rgba(26,26,24,.09);
+  --line-strong: rgba(26,26,24,.17);
+  --fg: #1A1A19;
+  --fg-2: #52514E;
+  --fg-3: #898781;
+  --heading: #111110;
+  --brand: #A8762E;
+  --brand-soft: rgba(168,118,46,.12);
+  --info: #256ABF;
+  --info-soft: rgba(37,106,191,.1);
+  --primary-bg: #1A1A19;
+  --on-primary: #FFFFFF;
+  --ok: #1F8A5E;
+  --ok-soft: rgba(31,138,94,.11);
+  --warn: #B86A0B;
+  --warn-soft: rgba(184,106,11,.11);
+  --danger: #C2432F;
+  --danger-soft: rgba(194,67,47,.1);
+  --code-bg: #F6F6F4;
+  --user-bubble: rgba(26,26,24,.055);
+  --orb-opacity: .1;
+  --orb-filter: grayscale(1) contrast(1.1);
   --mark-1: #F0D08F; --mark-2: #C8964A; --mark-3: #8A5E22; --core-1: #F6DFA8; --core-2: #9C6B27;
   --avatar-bg: linear-gradient(145deg, #E3C17F, #9E6E2A); --avatar-fg: #1A1206;
   color-scheme: light;
 }
 
-/* 晨光: pastel aurora desk, translucent porcelain sheet, periwinkle accents. */
+/* 晨光: the light theme on a soft lilac shell, translucent page, periwinkle accents. */
 [data-theme=aurora] {
-  --bg: #F3F2FA;
-  --desk: radial-gradient(55% 45% at 8% 0%, #E3DEFB 0%, transparent 70%), radial-gradient(45% 40% at 100% 6%, #FCE3D6 0%, transparent 70%), radial-gradient(60% 55% at 85% 100%, #D8E8FB 0%, transparent 72%), radial-gradient(45% 45% at 0% 100%, #F4E1F1 0%, transparent 70%), #F3F2FA;
-  --sheet-bg: rgba(255,255,255,.66);
-  --sheet-solid: #FAF9FE;
-  --sheet-blur: blur(30px) saturate(1.4);
-  --shadow-sheet: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(255,255,255,.75), 0 24px 60px -28px rgba(88,76,170,.28);
+  --bg: #F1F0F8;
+  --desk: radial-gradient(55% 45% at 8% 0%, #E6E1FB 0%, transparent 70%), radial-gradient(45% 40% at 100% 6%, #FBE6DB 0%, transparent 70%), radial-gradient(60% 55% at 85% 100%, #DCEAFB 0%, transparent 72%), #F1F0F8;
+  --sheet-bg: rgba(255,255,255,.78);
+  --sheet-solid: #FBFAFE;
+  --sheet-blur: blur(28px) saturate(1.4);
+  --shadow-sheet: 0 0 0 .5px rgba(60,56,110,.1), 0 8px 30px -10px rgba(88,76,170,.22);
+  --rail-bg: transparent;
+  --panel-bg: rgba(255,255,255,.4);
   --raised-bg: #FFFFFF;
-  --shadow-raised: 0 0 0 1px rgba(88,76,170,.08), 0 2px 6px rgba(88,76,170,.05), 0 16px 36px -16px rgba(88,76,170,.28);
-  --card-bg: rgba(255,255,255,.74);
-  --card-ring: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(88,76,170,.06), 0 8px 22px -14px rgba(88,76,170,.3);
+  --shadow-raised: 0 0 0 1px rgba(60,56,110,.09), 0 1px 2px rgba(60,56,110,.05), 0 4px 14px -4px rgba(88,76,170,.16);
+  --card-bg: rgba(255,255,255,.7);
+  --card-ring: 0 0 0 1px rgba(60,56,110,.08);
   --overlay: #FFFFFF;
-  --shadow-pop: 0 0 0 1px rgba(88,76,170,.1), 0 18px 44px -12px rgba(88,76,170,.3);
-  --sunken: rgba(255,255,255,.62);
+  --shadow-pop: 0 0 0 1px rgba(60,56,110,.1), 0 10px 28px -6px rgba(88,76,170,.26);
+  --sunken: rgba(60,56,110,.05);
   --hover: rgba(91,108,240,.07);
   --selected: rgba(91,108,240,.12);
-  --line: rgba(60,56,110,.08);
-  --line-strong: rgba(60,56,110,.15);
+  --line: rgba(60,56,110,.09);
+  --line-strong: rgba(60,56,110,.17);
   --fg: #1C1D30;
   --fg-2: #56597A;
   --fg-3: #8B8DA8;
   --heading: #15162B;
   --brand: #5B6CF0;
   --brand-soft: rgba(91,108,240,.13);
-  --primary-bg: linear-gradient(145deg, #7388FF, #5360E8);
+  --info: #4C5FE6;
+  --info-soft: rgba(76,95,230,.11);
+  --primary-bg: #1C1D30;
   --on-primary: #FFFFFF;
   --ok: #2E9B7A;
   --ok-soft: rgba(46,155,122,.12);
+  --warn: #C07214;
+  --warn-soft: rgba(192,114,20,.12);
   --danger: #D2534B;
   --danger-soft: rgba(210,83,75,.1);
   --code-bg: rgba(255,255,255,.7);
-  --orb-opacity: .4;
+  --user-bubble: rgba(91,108,240,.08);
+  --orb-opacity: .3;
   --orb-filter: none;
   --mark-1: #D9DEFF; --mark-2: #8E9BFA; --mark-3: #5A5FD6; --core-1: #F1E6FF; --core-2: #7C82F0;
   --avatar-bg: linear-gradient(145deg, #B9C3FF, #6C74E6); --avatar-fg: #FFFFFF;
   color-scheme: light;
 }
 
+/* 夜航: Claude's neutral dark ramp (#0b0b0b → #20201f) with the page surface one step above the shell. */
 [data-theme=dark] {
-  --bg: #07090D;
-  --sheet-bg: radial-gradient(120% 90% at 85% -10%, #1B2331 0%, #0F151D 55%, #0B1017 100%);
-  --sheet-solid: #0E141C;
-  --shadow-sheet: inset 0 1px 0 rgba(255,255,255,.05), 0 0 0 1px rgba(255,255,255,.05), 0 30px 80px rgba(0,0,0,.6);
-  --raised-bg: linear-gradient(180deg, rgba(27,35,47,.96), rgba(19,26,36,.96));
-  --shadow-raised: inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px rgba(255,255,255,.07), 0 24px 60px -20px rgba(0,0,0,.7);
-  --card-bg: linear-gradient(180deg, rgba(255,255,255,.042), rgba(255,255,255,.018));
-  --card-ring: inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(255,255,255,.05);
-  --overlay: #18202B;
-  --shadow-pop: inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(255,255,255,.09), 0 24px 60px -12px rgba(0,0,0,.75);
-  --sunken: rgba(255,255,255,.04);
-  --hover: rgba(255,255,255,.05);
-  --selected: rgba(214,170,100,.12);
-  --line: rgba(255,255,255,.075);
-  --line-strong: rgba(255,255,255,.14);
-  --fg: #E8EBEF;
-  --fg-2: #A5AFBB;
-  --fg-3: #77818E;
-  --heading: #F4EDE0;
+  --bg: #0D0D0C;
+  --desk: var(--bg);
+  --sheet-bg: #171716;
+  --sheet-solid: #171716;
+  --sheet-blur: none;
+  --shadow-sheet: 0 0 0 .5px rgba(255,255,255,.07), 0 6px 24px rgba(0,0,0,.45);
+  --rail-bg: transparent;
+  --panel-bg: transparent;
+  --raised-bg: #1F1F1E;
+  --shadow-raised: 0 0 0 1px rgba(255,255,255,.08), 0 2px 8px rgba(0,0,0,.35);
+  --card-bg: #1C1C1B;
+  --card-ring: 0 0 0 1px rgba(255,255,255,.065);
+  --overlay: #222221;
+  --shadow-pop: 0 0 0 1px rgba(255,255,255,.09), 0 8px 24px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
+  --sunken: rgba(255,255,255,.045);
+  --hover: rgba(255,255,255,.055);
+  --selected: rgba(255,255,255,.085);
+  --line: rgba(255,255,255,.08);
+  --line-strong: rgba(255,255,255,.15);
+  --fg: #ECECEA;
+  --fg-2: #A9A8A3;
+  --fg-3: #74736E;
+  --heading: #F6F6F4;
   --brand: #D9AF69;
-  --brand-soft: rgba(217,175,105,.13);
-  --primary-bg: linear-gradient(145deg, #EDCB87, #B7843A);
-  --on-primary: #1A1206;
-  --ok: #6FC2A8;
-  --ok-soft: rgba(111,194,168,.13);
-  --danger: #E3866E;
-  --danger-soft: rgba(227,134,110,.13);
-  --code-bg: rgba(0,0,0,.3);
-  --orb-opacity: .5;
+  --brand-soft: rgba(217,175,105,.14);
+  --info: #7FA7F0;
+  --info-soft: rgba(127,167,240,.13);
+  --primary-bg: #ECECEA;
+  --on-primary: #111110;
+  --ok: #5FC29A;
+  --ok-soft: rgba(95,194,154,.13);
+  --warn: #E1A04B;
+  --warn-soft: rgba(225,160,75,.13);
+  --danger: #E8806A;
+  --danger-soft: rgba(232,128,106,.13);
+  --code-bg: #121211;
+  --user-bubble: rgba(255,255,255,.07);
+  --orb-opacity: .35;
   --orb-filter: none;
   --avatar-bg: linear-gradient(145deg, #E3C17F, #9E6E2A); --avatar-fg: #1A1206;
-  --desk: var(--bg);
-  --sheet-blur: none;
   --mark-1: #F0D08F; --mark-2: #C8964A; --mark-3: #8A5E22; --core-1: #F6DFA8; --core-2: #9C6B27;
   color-scheme: dark;
 }
@@ -143,8 +165,18 @@
   --color-ok-soft: var(--ok-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  /* Aliases some ported components use (shadcn / ZCode naming); they map onto Atlas tokens. */
+  --color-surface: var(--overlay);
+  --color-surface-2: var(--hover);
+  --color-panel: var(--overlay);
+  --color-card: var(--card-bg);
+  --color-border: var(--line);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
   --color-code: var(--code-bg);
-  --font-sans: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", -apple-system, system-ui, sans-serif;
   --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
   --font-mono: "Cascadia Code", "Cascadia Mono", "Geist Mono Variable", Consolas, monospace;
   --shadow-pop: var(--shadow-pop);
@@ -157,7 +189,7 @@
     margin: 0;
     background: var(--desk);
     color: var(--fg);
-    font: 14px/1.6 var(--font-sans);
+    font: 14px/1.55 var(--font-sans);
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -179,24 +211,25 @@
   .drag { -webkit-app-region: drag; }
   .no-drag { -webkit-app-region: no-drag; }
 
-  /* Atlas speaks in serif; everything else is the UI face. */
-  .prose-atlas { font: 15.5px/1.9 var(--font-serif); color: var(--fg); overflow-wrap: anywhere; }
+  /* Reply text: the UI face at reading size (Codex 14/22.75, Claude 14/20). */
+  .prose-atlas { font: 14px/1.7 var(--font-sans); color: var(--fg); overflow-wrap: anywhere; }
   .prose-atlas > :first-child { margin-top: 0; }
   .prose-atlas > :last-child { margin-bottom: 0; }
-  .prose-atlas p { margin: 0 0 .8em; }
-  .prose-atlas h1, .prose-atlas h2, .prose-atlas h3, .prose-atlas h4 { font-family: var(--font-serif); color: var(--heading); font-weight: 600; line-height: 1.4; margin: 1.3em 0 .5em; }
-  .prose-atlas h1 { font-size: 1.35em; }
-  .prose-atlas h2 { font-size: 1.2em; }
-  .prose-atlas h3, .prose-atlas h4 { font-size: 1.05em; }
+  .prose-atlas p { margin: 0 0 .75em; }
+  .prose-atlas h1, .prose-atlas h2, .prose-atlas h3, .prose-atlas h4 { font-family: var(--font-sans); color: var(--heading); font-weight: 600; line-height: 1.4; margin: 1.4em 0 .45em; }
+  .prose-atlas h1 { font-size: 1.3em; }
+  .prose-atlas h2 { font-size: 1.15em; }
+  .prose-atlas h3, .prose-atlas h4 { font-size: 1em; }
   .prose-atlas ul, .prose-atlas ol { margin: 0 0 .8em; padding-left: 1.4em; }
   .prose-atlas li { margin: .2em 0; }
   .prose-atlas li::marker { color: var(--fg-3); }
-  .prose-atlas a { color: var(--brand); text-decoration: underline; text-decoration-color: var(--brand-soft); text-underline-offset: 3px; }
-  .prose-atlas strong { font-weight: 700; color: var(--heading); }
+  .prose-atlas a { color: var(--info); text-decoration: none; }
+  .prose-atlas a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .prose-atlas strong { font-weight: 600; color: var(--heading); }
   .prose-atlas blockquote { margin: 0 0 .8em; padding-left: 1em; border-left: 2px solid var(--line-strong); color: var(--fg-2); }
   .prose-atlas hr { border: 0; border-top: 1px solid var(--line); margin: 1.4em 0; }
-  .prose-atlas :not(pre) > code { font: .86em var(--font-mono); background: var(--code-bg); padding: .12em .4em; border-radius: 5px; }
-  .prose-atlas pre { font: 12.8px/1.7 var(--font-mono); background: var(--code-bg); border-radius: 10px; padding: 12px 16px; margin: 0 0 1em; overflow-x: auto; box-shadow: inset 0 0 0 1px var(--line); }
+  .prose-atlas :not(pre) > code { font: .88em var(--font-mono); background: var(--sunken); padding: .1em .38em; border-radius: 5px; box-shadow: inset 0 0 0 1px var(--line); }
+  .prose-atlas pre { font: 12.5px/1.65 var(--font-mono); background: var(--code-bg); border-radius: 10px; padding: 12px 16px; margin: 0 0 1em; overflow-x: auto; box-shadow: inset 0 0 0 1px var(--line); }
   .prose-atlas pre code { font: inherit; background: none; padding: 0; }
   .prose-atlas table { border-collapse: collapse; font: 13px/1.6 var(--font-sans); margin: 0 0 1em; display: block; overflow-x: auto; }
   .prose-atlas th, .prose-atlas td { border-bottom: 1px solid var(--line); padding: 7px 12px; text-align: left; }

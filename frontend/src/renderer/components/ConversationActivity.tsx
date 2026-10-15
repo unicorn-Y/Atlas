@@ -51,7 +51,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
       {firstInTurn && <TurnHeader working={last && busy} />}
       <StepTrack steps={item.steps} live={last && busy} runId={events[0]?.runId ?? ''} store={store} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
     </div>;
-    case 'artifact': return <div key={item.id} className="my-3 ml-10 flex items-center gap-3 rounded-xl card-surface px-3.5 py-2.5 text-[13px]">
+    case 'artifact': return <div key={item.id} className="my-3 flex items-center gap-3 rounded-xl card-surface px-3.5 py-2.5 text-[13px]">
       <FileText size={16} className="shrink-0 text-brand" />
       <div className="min-w-0 flex-1"><b className="font-medium text-fg">{item.name}</b>{item.summary && <p className="m-0 truncate text-fg-3">{item.summary}</p>}</div>
       <Button size="sm" variant="ghost" onClick={() => setTab('artifacts')}>查看</Button>
@@ -62,7 +62,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
     case 'foreground': {
       const data = item.event.data;
-      return <div key={item.id} className="my-4 ml-10">
+      return <div key={item.id} className="my-4">
         <ForegroundConfirmCard apiBaseUrl={store.apiBaseUrl} runId={item.event.runId}
           reason={typeof data.reason === 'string' && data.reason ? data.reason : 'Atlas 想在你正在使用的窗口里操作'}
           target={typeof data.target === 'string' ? data.target : undefined} />
@@ -71,7 +71,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     case 'handoff': {
       const data = item.event.data;
       const url = typeof data.url === 'string' ? data.url : undefined;
-      return <div key={item.id} className="my-4 ml-10">
+      return <div key={item.id} className="my-4">
         <BrowserHandoffCard apiBaseUrl={store.apiBaseUrl} runId={item.event.runId}
           reason={typeof data.reason === 'string' && data.reason ? data.reason : '浏览器这一步需要你搭把手'}
           url={url}
@@ -80,17 +80,17 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     }
     case 'group': return <WorkerGroup key={item.id} item={item} />;
     case 'checks': return <Checks key={item.id} item={item} />;
-    case 'notice': return <div key={item.id} className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
+    case 'notice': return <div key={item.id} className="my-3 flex items-center gap-2 text-[12.5px] text-fg-2">
       {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : item.tone === 'todo' ? <ListChecks size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
       <span>{item.text}</span>
     </div>;
     case 'lsp': return <LspNotice key={item.id} item={item} />;
     case 'review': return <ReviewFindingsCard key={item.id} item={item} store={store} />;
-    case 'cancelled': return <div key={item.id} className="my-4 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3">
+    case 'cancelled': return <div key={item.id} className="my-4 flex items-center gap-2 text-[12.5px] text-fg-3">
       <Square size={12} />{item.reason ? `会话已结束：${item.reason}` : '你停止了这次任务'}
     </div>;
     case 'done': return <DoneLine key={item.id} item={item} events={events} store={store} setTab={setTab} />;
-    case 'failed': return <div key={item.id} role="alert" className="my-4 ml-10 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
+    case 'failed': return <div key={item.id} role="alert" className="my-4 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
       没能完成：{item.detail}
     </div>;
     default: return null;
@@ -119,7 +119,7 @@ function DoneLine({ item, events, store, setTab }: { item: Extract<TimelineItem,
   const tokens = summary ? null : tokenCount(item.usage);
   const cached = summary ? null : cacheShare(item.usage);
   const changed = item.changes && item.changes.files > 0 ? item.changes : null;
-  return <div className="my-4 ml-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-3">
+  return <div className="my-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-3">
     <Check size={14} className="text-ok" />完成{item.startedAt ? `，用时 ${duration(item.startedAt, item.endedAt)}` : ''}
     {summary && <TokenUsageToggle usage={summary} open={usageOpen} onToggle={() => setUsageOpen((value) => !value)} />}
     {tokens && <span className="tabular-nums">· {tokens} tokens{cached ? `（${cached}）` : ''}</span>}
@@ -214,12 +214,11 @@ function RunTraceDetails({ events, usage }: { events: AgentEvent[]; usage: Retur
 }
 
 function TurnHeader({ working }: { working: boolean }) {
-  return <div className="mt-5 grid grid-cols-[28px_minmax(0,1fr)] items-center gap-3">
-    <Mark className="size-[26px]" working={working} />
-    <div className="flex items-baseline gap-2.5">
-      <b className="font-serif text-[14px] font-semibold tracking-[.04em] text-heading">Atlas</b>
-      {working && <span className="text-[12px] text-fg-3">正在处理</span>}
-    </div>
+  // No avatar or name column any more; only a working line while Atlas is busy.
+  if (!working) return <div className="mt-5" />;
+  return <div className="mt-5 flex items-center gap-2 text-[12px] text-fg-3">
+    <Mark className="size-4" working />
+    <span className="text-shimmer">正在处理</span>
   </div>;
 }
 
@@ -232,7 +231,7 @@ function StepTrack({ steps, live, runId, store, onCancelSubtask }: { steps: Step
   const expanded = !foldable || (open ?? running);
   const startedAt = steps[0]?.startedAt;
   const endedAt = steps.reduce<string | undefined>((latest, step) => (step.endedAt && (!latest || step.endedAt > latest) ? step.endedAt : latest), undefined);
-  return <div className="my-2 ml-10">
+  return <div className="my-2">
     {foldable && <button type="button" onClick={() => setOpen(!expanded)} aria-expanded={expanded}
       className="inline-flex max-w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[13px] text-fg-3 hover:text-fg">
       <ChevronRight size={13} className={cn('shrink-0 transition-transform', expanded && 'rotate-90')} />
@@ -349,7 +348,7 @@ function Approval({ event, store }: { event: AgentEvent; store: ReturnType<typeo
   const toolName = String(data.tool ?? data.name ?? '未知工具');
   const args = data.input ?? data.arguments;
   const { verb, target } = describeTool(toolName, args);
-  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface" onKeyDown={(keyEvent) => {
+  return <div className="my-4 overflow-hidden rounded-xl card-surface" onKeyDown={(keyEvent) => {
     if (!keyEvent.altKey || keyEvent.ctrlKey || keyEvent.metaKey || keyEvent.shiftKey || keyEvent.nativeEvent.isComposing || (keyEvent.nativeEvent as KeyboardEvent).keyCode === 229) return;
     const target = keyEvent.target;
     if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
@@ -405,7 +404,7 @@ function Question({ event, store }: { event: AgentEvent; store: Store }) {
   const run = store.getRun(event.runId);
   const open = answer === undefined && (!run || !['completed', 'failed', 'cancelled'].includes(run.status));
   const send = (value: string) => { if (value.trim()) store.answerInput(event.runId, eventId, value.trim()); };
-  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
+  return <div className="my-4 overflow-hidden rounded-xl card-surface">
     <div className="flex gap-3.5 border-l-[3px] border-brand px-4 py-3.5">
       <MessageCircleQuestion size={18} className="mt-0.5 shrink-0 text-brand" />
       <div className="min-w-0 flex-1">
@@ -444,7 +443,7 @@ function Plan({ event, store }: { event: AgentEvent; store: Store }) {
   const decided = store.answers[eventId];
   const run = store.getRun(event.runId);
   const open = decided === undefined && (!run || !['completed', 'failed', 'cancelled'].includes(run.status));
-  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
+  return <div className="my-4 overflow-hidden rounded-xl card-surface">
     <div className="border-l-[3px] border-brand px-4 py-3.5">
       <p className="m-0 flex items-center gap-2 text-[14px] font-semibold text-heading"><ListChecks size={17} className="text-brand" />计划：{plan.goal ?? '待确认'}</p>
       {steps.length > 0
@@ -489,7 +488,7 @@ function SaveRecipe({ runId, store }: { runId: string; store: Store }) {
 function WorkerGroup({ item }: { item: Extract<TimelineItem, { kind: 'group' }> }) {
   const ok = item.results.filter((result) => result.accepted === true).length;
   const unverified = item.results.filter((result) => result.accepted === undefined).length;
-  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface px-4 py-3.5 text-[13px]">
+  return <div className="my-4 overflow-hidden rounded-xl card-surface px-4 py-3.5 text-[13px]">
     <p className="m-0 flex items-center gap-2 font-semibold text-heading"><Users size={15} className="text-brand" />{item.results.length} 个 Worker 并行完成
       <span className="font-normal text-fg-3">{ok} 个验收通过{unverified ? `，${unverified} 个未验收` : ''}{item.results.length - ok - unverified ? `，${item.results.length - ok - unverified} 个未通过` : ''}</span></p>
     <ul className="m-0 mt-2 grid list-none gap-1 p-0">
@@ -519,7 +518,7 @@ function Checks({ item }: { item: Extract<TimelineItem, { kind: 'checks' }> }) {
   const { results } = item;
   const failed = results.failed > 0 || results.items.some((entry) => entry.severity === 'error');
   const shown = open ? results.items.slice(0, 50) : [];
-  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface text-[13px]">
+  return <div className="my-4 overflow-hidden rounded-xl card-surface text-[13px]">
     <button onClick={() => setOpen((value) => !value)} disabled={!results.items.length} className="flex w-full items-center gap-2 px-4 py-3 text-left">
       {failed ? <X size={15} className="shrink-0 text-danger" /> : <Check size={15} className="shrink-0 text-ok" />}
       <b className="font-semibold text-heading">{CHECK_KIND[results.kind] ?? '检查'}</b>
@@ -552,7 +551,7 @@ function LspNotice({ item }: { item: Extract<TimelineItem, { kind: 'lsp' }> }) {
   const [open, setOpen] = useState(false);
   const name = item.path.split(/[\\/]/).pop() || item.path || '文件';
   const truncated = item.count > item.diagnostics.length;
-  return <div className="my-2 ml-10 text-[12.5px] text-fg-2">
+  return <div className="my-2 text-[12.5px] text-fg-2">
     <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}
       className="-mx-2 flex items-center gap-2 rounded-lg px-2 py-0.5 text-left hover:bg-hover">
       <FileWarning size={13} className="shrink-0 text-brand" />
@@ -572,7 +571,7 @@ function Trust({ event, store }: { event: AgentEvent; store: Store }) {
   const files = Array.isArray(event.data.files) ? event.data.files as Array<{ path?: string; bytes?: number }> : [];
   const answer = store.answers[eventId];
   const open = answer === undefined && store.getRun(event.runId)?.status === 'waiting';
-  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
+  return <div className="my-4 overflow-hidden rounded-xl card-surface">
     <div className="flex gap-3.5 border-l-[3px] border-brand px-4 py-3.5">
       <FileCheck2 size={18} className="mt-0.5 shrink-0 text-brand" />
       <div className="min-w-0 flex-1">

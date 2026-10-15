@@ -60,7 +60,7 @@ export default function OnboardingDialog({ open, onClose, username, onUsername, 
       <div className="flex items-center gap-3">
         <Mark className="size-9" />
         <div className="min-w-0 flex-1">
-          <h2 className="m-0 font-serif text-[21px] font-semibold text-heading">开始使用 Atlas</h2>
+          <h2 className="m-0 text-[21px] font-semibold text-heading">开始使用 Atlas</h2>
           <p className="m-0 mt-0.5 text-[13px] text-fg-3">三分钟配好，之后都能在设置里改。</p>
         </div>
       </div>

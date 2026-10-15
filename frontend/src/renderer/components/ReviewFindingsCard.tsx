@@ -36,7 +36,7 @@ export default function ReviewFindingsCard({ item, store }: { item: Extract<Time
   const [activeFinding, setActiveFinding] = useState<number | null>(null);
   const findingRefs = useRef<Record<number, HTMLLIElement | null>>({});
   if (!item.findings.length) {
-    return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface">
+    return <div className="my-4 overflow-hidden rounded-xl card-surface">
       <div className="flex items-center gap-2.5 border-l-[3px] border-ok bg-ok-soft px-4 py-3 text-[13px] text-ok">
         <ShieldCheck size={16} className="shrink-0" />代码审查 · {item.scopeLabel}：没有发现问题
       </div>
@@ -83,7 +83,7 @@ export default function ReviewFindingsCard({ item, store }: { item: Extract<Time
       .then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 2000); })
       .catch(() => setCopied(false));
   };
-  return <div className="my-4 ml-10 overflow-hidden rounded-2xl card-surface" onKeyDown={(event) => {
+  return <div className="my-4 overflow-hidden rounded-xl card-surface" onKeyDown={(event) => {
     if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.nativeEvent.isComposing || (event.nativeEvent as KeyboardEvent).keyCode === 229) return;
     const target = event.target;
     if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;

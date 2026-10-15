@@ -169,7 +169,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
     setValues((current) => ({ ...current, [name]: { ...current[name], [key]: value } }));
 
   return <div className="grid max-w-[680px] gap-5 text-[13px] text-fg-2">
-    <section aria-label="Gateway 状态" className="rounded-[14px] bg-sunken px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+    <section aria-label="Gateway 状态" className="rounded-xl bg-sunken px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
       <header className="flex items-center gap-2.5">
         <Radio size={16} className="text-brand" />
         <b className="font-medium text-fg">渠道 Gateway</b>
@@ -198,7 +198,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       const fields = CHANNEL_FIELDS[name] ?? [];
       const status = rowFor(name);
       const policy = policyFor(name);
-      return <section key={name} aria-label={`${name} 渠道配置`} className="rounded-[14px] px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+      return <section key={name} aria-label={`${name} 渠道配置`} className="rounded-xl px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
         <header className="flex items-center gap-2.5">
           <b className="font-medium text-fg">{name}</b>
           {status && <span className={cn('rounded-full px-2 py-0.5 text-[11px]', status.running ? 'bg-ok-soft text-fg' : 'bg-sunken text-fg-3')}>{status.running ? '运行中' : '未运行'}</span>}
@@ -251,7 +251,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       </section>;
     })}
 
-    <section aria-label="测试发送" className="rounded-[14px] px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+    <section aria-label="测试发送" className="rounded-xl px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
       <b className="font-medium text-fg">测试发送</b>
       <p className="mb-2 mt-1 text-[12px] text-fg-3">走正式投递队列发一条，验证凭据和目标都对。</p>
       <div className="flex flex-wrap items-end gap-2">

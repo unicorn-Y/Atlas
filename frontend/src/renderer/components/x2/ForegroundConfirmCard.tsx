@@ -28,7 +28,7 @@ export default function ForegroundConfirmCard({ apiBaseUrl, runId, reason, targe
       .catch((exc) => setError(exc instanceof Error ? exc.message : String(exc)))
       .finally(() => setBusy(false));
   };
-  return <div className="overflow-hidden rounded-2xl card-surface">
+  return <div className="overflow-hidden rounded-xl card-surface">
     <div className="flex gap-3.5 border-l-[3px] border-danger px-4 py-3.5">
       <ShieldAlert size={18} className="mt-0.5 shrink-0 text-danger" />
       <div className="min-w-0 flex-1">

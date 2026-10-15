@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import {
   Archive, ArchiveRestore, ArrowUpDown, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GitBranch, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
-  Library, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, Sun, Trash2, Users, X, Wand2, type LucideIcon,
+  Library, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, SquarePen, Sun, Trash2, Users, X, Wand2, type LucideIcon,
 } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import { api } from '../services/api';
@@ -578,7 +578,7 @@ export default function Sidebar(props: SidebarProps) {
     }} onContextMenu={(event) => openContext(event, key)} onKeyDown={(event) => openContextFromKeyboard(event, key)}
       onPointerDown={(event) => startLongPress(event, key)} onPointerMove={moveLongPress}
       onPointerUp={clearLongPress} onPointerCancel={clearLongPress} onPointerLeave={clearLongPress}
-      className={cn('group relative flex cursor-grab items-center rounded-lg transition-colors', current ? 'bg-selected' : 'hover:bg-hover')}>
+      className={cn('group relative flex cursor-grab items-center rounded-lg transition-colors', current ? 'bg-selected' : 'hover:bg-hover')} data-current={current || undefined}>
       {selectionMode && <input type="checkbox" aria-label={'选择 ' + conversation.title} checked={selectedIds.includes(conversation.id)}
         onChange={() => toggleSelected(conversation.id)} className="ml-2 accent-[var(--brand)]" />}
       <button title={conversation.title} aria-current={current ? 'page' : undefined}
@@ -586,7 +586,7 @@ export default function Sidebar(props: SidebarProps) {
         disabled={props.loadingConversationId === conversation.id}
         onClick={(event) => { if (Date.now() < suppressTouchClickUntil.current) { event.preventDefault(); return; } selectionMode ? toggleSelected(conversation.id) : props.onOpenConversation(conversation); }}
         onDoubleClick={() => setEditing({ id: conversation.id, title: conversation.title })}
-        className={cn('flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-7 pl-2.5 text-left text-[13px] disabled:opacity-60', current ? 'text-fg' : 'text-fg-2 group-hover:text-fg')}>
+        className={cn('flex h-8 min-w-0 flex-1 items-center gap-2 pr-7 pl-2.5 text-left text-[13.5px] disabled:opacity-60', current ? 'text-fg' : 'text-fg-2 group-hover:text-fg')}>
         {waiting
           ? <i className="size-2 shrink-0 rounded-full bg-brand ring-2 ring-brand/20" aria-label="等待输入或审批" />
           : running
@@ -725,88 +725,91 @@ export default function Sidebar(props: SidebarProps) {
   const visibleProjects = activeProjects.filter((project) => project.name.toLocaleLowerCase().includes(projectPickerQuery.trim().toLocaleLowerCase()));
   const selectedActivityEvents = activityEvents.filter((item) => item.conversation_id === activityConversation?.id).reverse();
   const selectedGroup = groups.find((group) => group.id === focusSectionId) ?? groups[0];
-  return <aside aria-label="侧边栏" className={cn('flex min-h-0 flex-col pt-3 pb-3 transition-[width] duration-300', mini ? 'w-[64px] items-center px-2' : 'w-[256px] px-3')}>
-    <div className={cn('drag flex items-center gap-2.5 pb-4', mini ? 'flex-col px-0' : 'px-1.5')}>
-      <Mark className="size-7" />
-      {!mini && <b className="font-serif text-[17px] font-semibold tracking-[.05em] text-heading">Atlas</b>}
-      <Tip label={mini ? '展开侧边栏' : '收起侧边栏'} side="right">
-        <button aria-label={mini ? '展开侧边栏' : '收起侧边栏'} onClick={props.onToggleMini}
-          className={cn('no-drag grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg', !mini && 'ml-auto')}><PanelLeft size={16} /></button>
-      </Tip>
-    </div>
-    <div className={cn('mb-4 flex gap-1.5', mini && 'flex-col')}>
-      <Tip label="新任务 Ctrl N" side="right">
-        <button onClick={props.onNewTask} disabled={props.creating} aria-label="新建对话"
-          className={cn('card-surface flex h-9 items-center gap-2 rounded-[10px] text-[13.5px] font-medium text-fg hover:brightness-110 disabled:opacity-60', mini ? 'w-10 justify-center' : 'flex-1 px-3')}>
-          <Plus size={17} className="text-brand" />{!mini && <><span>新任务</span><Kbd className="ml-auto">Ctrl N</Kbd></>}
-        </button>
-      </Tip>
-      <Tip label="搜索和命令 Ctrl K" side="right">
-        <button onClick={props.onSearch} aria-label="搜索和命令" className="grid size-9 place-items-center rounded-[10px] text-fg-2 hover:bg-hover hover:text-fg"><Search size={16} /></button>
-      </Tip>
-    </div>
-    <nav aria-label="主导航" className="grid gap-0.5">
+  const railButton = (current: boolean) => cn('relative grid size-9 place-items-center rounded-[10px] transition-colors',
+    current ? 'bg-[var(--sheet-solid)] text-fg shadow-[0_0_0_.5px_var(--line-strong),0_1px_3px_rgba(0,0,0,.06)]' : 'text-fg-3 hover:bg-hover hover:text-fg');
+  return <aside aria-label="侧边栏" className="flex min-h-0 shrink-0">
+    {/* Page rail (Codex 26.1007: 52px icon column); pages leave the task list alone. */}
+    <nav aria-label="主导航" className="drag flex w-[52px] shrink-0 flex-col items-center gap-1 pt-2.5 pb-2.5">
+      <Tip label="Atlas" side="right"><span className="mb-1.5 grid size-9 place-items-center"><Mark className="size-[26px]" /></span></Tip>
       {NAV.map(({ view, label, icon: Icon }) => {
         const current = props.view === view;
         return <Tip key={view} label={label} side="right">
-          <button onClick={() => props.onGo(view)} aria-current={current ? 'page' : undefined}
-            className={cn('relative flex h-[34px] items-center gap-2.5 rounded-[9px] text-[13.5px] transition-colors', mini ? 'w-10 justify-center' : 'px-2.5', current ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
-            <Icon size={17} className={current ? 'text-brand' : undefined} />
-            {!mini && <span>{label}</span>}
+          <button onClick={() => props.onGo(view)} aria-current={current ? 'page' : undefined} aria-label={label} className={cn('no-drag', railButton(current))}>
+            <Icon size={18} strokeWidth={current ? 2 : 1.75} />
           </button>
         </Tip>;
       })}
       <Menu>
-        <MenuTrigger asChild><button aria-label="更多页面"
-          className={cn('relative flex h-[34px] items-center gap-2.5 rounded-[9px] text-[13.5px] transition-colors', mini ? 'w-10 justify-center' : 'px-2.5',
-            MORE_NAV.some(({ view }) => view !== 'home' && view === props.view) ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
-          <MoreHorizontal size={17} className={MORE_NAV.some(({ view }) => view !== 'home' && view === props.view) ? 'text-brand' : undefined} />
-          {!mini && <span>更多</span>}
-        </button></MenuTrigger>
-        <MenuContent align="start" className="min-w-[150px]">
+        <Tip label="更多页面" side="right"><MenuTrigger asChild><button aria-label="更多页面" className={cn('no-drag', railButton(MORE_NAV.some(({ view }) => view !== 'home' && view === props.view)))}>
+          <MoreHorizontal size={18} />
+        </button></MenuTrigger></Tip>
+        <MenuContent align="start" side="right" className="min-w-[150px]">
           <MenuLabel>所有页面</MenuLabel>
           {MORE_NAV.map(({ view, label, icon: Icon }) => <MenuItem key={view} checked={props.view === view} onSelect={() => props.onGo(view)}><Icon size={15} />{label}</MenuItem>)}
         </MenuContent>
       </Menu>
+      <span className="flex-1" />
+      <Tip label={'外观：' + themeInfo(props.theme).label + '，点击切换到' + themeInfo(nextTheme(props.theme)).label} side="right">
+        <button aria-label={'切换到' + themeInfo(nextTheme(props.theme)).label} onClick={props.onToggleTheme} className={cn('no-drag', railButton(false))}>
+          {props.theme === 'dark' ? <Moon size={17} /> : props.theme === 'aurora' ? <Sparkles size={17} /> : <Sun size={17} />}
+        </button>
+      </Tip>
+      <Tip label="设置 Ctrl ," side="right"><button aria-label="设置" onClick={props.onSettings} className={cn('no-drag', railButton(false))}><Settings size={17} /></button></Tip>
+      <Tip label={props.username + ' · ' + props.subtitle} side="right">
+        <span className="no-drag mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-[image:var(--avatar-bg)] text-[11.5px] font-semibold text-[var(--avatar-fg)]" aria-label={props.username + '，' + props.subtitle}>{props.username.slice(0, 1).toUpperCase()}</span>
+      </Tip>
     </nav>
 
-    {!mini && <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="历史会话">
-      <div className="mb-1 flex items-center gap-1 px-1">
+    {mini && <div className="flex flex-col items-center pt-2.5">
+      <Tip label="展开任务栏" side="right">
+        <button aria-label="展开侧边栏" onClick={props.onToggleMini} className="grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><PanelLeft size={16} /></button>
+      </Tip>
+    </div>}
+
+    {!mini && <div className="flex w-[238px] min-h-0 flex-col bg-[var(--panel-bg)] pt-2.5 pr-1.5 pb-2 pl-1">
+    <div className="drag flex h-9 items-center gap-1 pr-0.5 pl-2">
+      <b className="text-[15px] font-semibold tracking-[-.01em] text-heading">Atlas</b>
+      <span className="flex-1" />
+      <Tip label="搜索和命令 Ctrl K"><button onClick={props.onSearch} aria-label="搜索和命令" className="no-drag grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Search size={15} /></button></Tip>
+      <Tip label="收起任务栏"><button aria-label="收起侧边栏" onClick={props.onToggleMini} className="no-drag grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><PanelLeft size={15} /></button></Tip>
+    </div>
+    <button onClick={props.onNewTask} disabled={props.creating} aria-label="新建对话"
+      className="mt-1.5 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-fg hover:bg-hover disabled:opacity-60">
+      <SquarePen size={16} className="text-fg-2" /><span>新任务</span><Kbd className="ml-auto">Ctrl N</Kbd>
+    </button>
+    <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="历史会话">
+      <div className="mb-1.5 flex items-center gap-1 px-1">
         <label className="relative min-w-0 flex-1">
           <Search size={13} className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-fg-3" />
-          <input ref={searchInputRef} type="search" aria-label="搜索会话" value={filterText} onChange={(event) => setFilterText(event.target.value)} placeholder="搜索会话…"
-            className="h-7 w-full rounded-md bg-sunken py-1 pr-2 pl-7 text-[11.5px] text-fg outline-none placeholder:text-fg-3 focus:ring-1 focus:ring-brand" />
+          <input ref={searchInputRef} type="search" aria-label="搜索会话" value={filterText} onChange={(event) => setFilterText(event.target.value)} placeholder="搜索任务"
+            className="h-7 w-full rounded-md bg-transparent py-1 pr-2 pl-7 text-[12.5px] text-fg outline-none placeholder:text-fg-3 hover:bg-hover focus:bg-sunken focus:ring-1 focus:ring-line-strong" />
         </label>
+        {/* Filter, grouping, bulk select and custom groups share one menu so the list keeps its room. */}
         <Menu>
-          <MenuTrigger asChild><button aria-label={'筛选：' + STATUS_FILTERS[statusFilter]} className="grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><ArrowUpDown size={13} /></button></MenuTrigger>
-          <MenuContent align="end"><MenuLabel>筛选会话</MenuLabel>
+          <MenuTrigger asChild><button aria-label={'筛选和分组：' + STATUS_FILTERS[statusFilter] + '，' + ARRANGE[mode]}
+            className={cn('grid size-7 shrink-0 place-items-center rounded-md hover:bg-hover hover:text-fg', statusFilter !== 'all' || selectionMode ? 'text-brand' : 'text-fg-3')}><ArrowUpDown size={13} /></button></MenuTrigger>
+          <MenuContent align="end"><MenuLabel>显示</MenuLabel>
             {(Object.keys(STATUS_FILTERS) as StatusFilter[]).map((filter) => <MenuItem key={filter} checked={statusFilter === filter} onSelect={() => setStatusFilter(filter)}>{STATUS_FILTERS[filter]}</MenuItem>)}
-          </MenuContent>
-        </Menu>
-      </div>
-      <div className="mb-2 flex items-center gap-1 px-1">
-        <Menu>
-          <MenuTrigger asChild><button aria-label={'排列方式：' + ARRANGE[mode]} className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg"><ArrowUpDown size={12} /><span className="truncate">{ARRANGE[mode]}</span></button></MenuTrigger>
-          <MenuContent align="start"><MenuLabel>会话如何分组</MenuLabel>
+            <MenuSeparator /><MenuLabel>分组方式</MenuLabel>
             {(Object.keys(ARRANGE) as Arrange[]).map((key) => <MenuItem key={key} checked={mode === key} onSelect={() => {
               setMode(key);
               if (key === 'project') void api<{ projects: Project[] }>(backend.apiBaseUrl, '/api/projects?include_conversations=true')
                 .then((result) => setProjects(Array.isArray(result.projects) ? result.projects : []))
                 .catch(() => setProjects([]));
             }}>{ARRANGE[key]}</MenuItem>)}
+            <MenuSeparator />
+            <MenuItem checked={selectionMode} onSelect={() => { setSelectionMode((value) => !value); setSelectedIds([]); setConfirmBulkDelete(false); setConfirmBulkArchive(false); }}><Check />批量选择</MenuItem>
+            <MenuItem onSelect={() => setGroupEditor({ id: null, name: '' })}><Plus />新建自定义分组</MenuItem>
           </MenuContent>
         </Menu>
-        <button aria-label={selectionMode ? '退出批量选择' : '批量选择会话'} title={selectionMode ? '退出选择' : '批量选择'} onClick={() => {
-          setSelectionMode((value) => !value); setSelectedIds([]); setConfirmBulkDelete(false); setConfirmBulkArchive(false);
-        }} className={cn('grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg', selectionMode && 'bg-selected text-brand')}>
-          {selectionMode ? <X size={13} /> : <Check size={13} />}
-        </button>
-        <button aria-label="新建自定义分组" title="新建自定义分组" onClick={() => setGroupEditor({ id: null, name: '' })}
-          className="grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><Plus size={14} /></button>
       </div>
       {selectionMode && <div className="mb-2 grid gap-1 rounded-lg border border-line bg-sunken p-1.5">
         <div className="flex items-center justify-between px-1 text-[11px] text-fg-2"><span>已选 {filteredSelectedCount} 项</span>
-          <button onClick={() => setSelectedIds([...new Set(allMatched.map((item) => item.id))])} className="text-brand hover:underline">全选</button>
+          <span className="flex items-center gap-2">
+            <button onClick={() => setSelectedIds([...new Set(allMatched.map((item) => item.id))])} className="text-brand hover:underline">全选</button>
+            <button aria-label="退出批量选择" onClick={() => { setSelectionMode(false); setSelectedIds([]); setConfirmBulkDelete(false); setConfirmBulkArchive(false); }}
+              className="grid size-5 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><X size={12} /></button>
+          </span>
         </div>
         <div className="grid grid-cols-3 gap-1">
           <button onClick={() => bulk('pin')} disabled={!selectedIds.length} className="rounded-md px-1 py-1 text-[10.5px] text-fg-2 hover:bg-hover disabled:opacity-40">置顶</button>
@@ -839,18 +842,8 @@ export default function Sidebar(props: SidebarProps) {
         {!allMatched.length && <p className="px-2.5 text-[12.5px] text-fg-3">{props.conversationsLoading ? '正在加载…' : filterText || statusFilter !== 'all' ? '没有符合条件的会话。' : '还没有任务。点「新任务」开始。'}</p>}
         {feedback && <p role="status" aria-live="polite" className="px-2.5 py-1 text-[11px] text-fg-3">{feedback}</p>}
       </div>
-    </div>}
-    {mini && <div className="flex-1" />}
-    <div className={cn('flex items-center gap-2.5 pt-2.5', mini ? 'flex-col' : 'px-1.5')}>
-      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[image:var(--avatar-bg)] text-[12.5px] font-semibold text-[var(--avatar-fg)]" aria-hidden="true">{props.username.slice(0, 1).toUpperCase()}</span>
-      {!mini && <div className="min-w-0 flex-1 leading-tight"><div className="truncate text-[13px] text-fg">{props.username}</div><div className="truncate text-[11.5px] text-fg-3">{props.subtitle}</div></div>}
-      <Tip label={'外观：' + themeInfo(props.theme).label + '，点击切换到' + themeInfo(nextTheme(props.theme)).label} side="top">
-        <button aria-label={'切换到' + themeInfo(nextTheme(props.theme)).label} onClick={props.onToggleTheme} className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg">
-          {props.theme === 'dark' ? <Moon size={15} /> : props.theme === 'aurora' ? <Sparkles size={15} /> : <Sun size={15} />}
-        </button>
-      </Tip>
-      <Tip label="设置 Ctrl ," side="top"><button aria-label="设置" onClick={props.onSettings} className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Settings size={15} /></button></Tip>
     </div>
+    </div>}
 
     <SidebarConversationDetails conversation={details} open={Boolean(details)} onOpenChange={(open) => { if (!open) setDetails(null); }}
       running={details ? isRunning(details.id) : false} unread={details ? isUnread(details.id) : false} waiting={details ? isWaiting(details) : false} />

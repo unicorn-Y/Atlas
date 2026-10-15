@@ -14,7 +14,7 @@ export default function ComputerUseTrail({ events }: { events: AgentEvent[] }) {
   const steps = useMemo(() => events.filter((event) => event.type === 'computer.step'), [events]);
   const foregroundEvents = useMemo(() => events.filter((event) => event.type === 'computer.foreground_resumed' || event.type === 'computer.foreground_denied'), [events]);
   if (!steps.length && !foregroundEvents.length) return null;
-  return <section className="my-3 ml-10 rounded-xl border border-line bg-surface/50 px-3 py-2.5" aria-label="电脑操作轨迹">
+  return <section className="my-3 rounded-xl border border-line bg-surface/50 px-3 py-2.5" aria-label="电脑操作轨迹">
     <details>
       <summary className="flex cursor-pointer list-none items-center gap-2 text-[12.5px] text-fg-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
         <Monitor size={14} className="text-brand" aria-hidden="true" />电脑操作 · {steps.length} 步

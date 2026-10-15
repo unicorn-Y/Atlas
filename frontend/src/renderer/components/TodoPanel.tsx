@@ -94,7 +94,7 @@ export default function TodoPanel({ todos, revisionKey, running, onSubmit }: Tod
     if (event.key === 'Escape') { event.preventDefault(); setEditing(null); }
   };
 
-  return <section aria-label="待办清单" className="mb-2 overflow-hidden rounded-2xl card-surface shadow-[inset_0_0_0_1px_var(--line)]">
+  return <section aria-label="待办清单" className="mb-2 overflow-hidden rounded-xl card-surface shadow-[inset_0_0_0_1px_var(--line)]">
     <button type="button" onClick={toggleCollapsed} aria-expanded={!collapsed}
       className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-hover">
       <ListChecks size={15} className="shrink-0 text-brand" />

@@ -43,7 +43,7 @@ export function UsageBreakdown({ usage, title = '本次用量' }: { usage: Usage
     <div className="flex items-baseline gap-2">
       <span className="text-[12px] font-medium tracking-[.04em] text-fg-3">{title}</span>
       <span className="flex-1" />
-      <b className="font-serif text-[22px] leading-none font-semibold tabular-nums text-heading">{formatTokens(total)}</b>
+      <b className="text-[22px] leading-none font-semibold tabular-nums text-heading">{formatTokens(total)}</b>
       <span className="text-[12px] text-fg-3">tokens</span>
     </div>
 
@@ -134,7 +134,7 @@ export function TokenUsageToggle({ usage, open, onToggle }: { usage: UsageSummar
 
 /** The unfolded breakdown card, sitting under the finished-turn line. */
 export function TokenUsageCard({ usage }: { usage: UsageSummary }) {
-  return <div className="anim-pop mt-2 mb-1 basis-full rounded-2xl card-surface px-4 py-3.5 text-fg">
+  return <div className="anim-pop mt-2 mb-1 basis-full rounded-xl card-surface px-4 py-3.5 text-fg">
     <UsageBreakdown usage={usage} />
   </div>;
 }

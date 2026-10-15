@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
-import { Orb } from '../components/Mark';
 import { relativeTime } from '../services/api';
 
 export interface Suggestion { label: string; text: string; mode?: string }
@@ -26,26 +25,25 @@ export default function HomeView({ username, composer, notice, recent, onOpen, o
   onSuggest: (suggestion: Suggestion) => void;
 }) {
   return <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-    <Orb className="orb-bg pointer-events-none absolute -top-[120px] -right-[120px] size-[540px]" />
-    <div className="relative mx-auto w-[min(800px,100%)] px-6 pt-[9vh] pb-16">
-      <h1 className="m-0 font-serif text-[44px] leading-[1.15] font-semibold tracking-[.01em] text-heading [text-wrap:balance]">
+    <div className="relative mx-auto w-[min(800px,100%)] px-6 pt-[14vh] pb-16">
+      <h1 className="m-0 text-[28px] leading-[1.25] font-semibold tracking-[-.01em] text-heading [text-wrap:balance]">
         {greeting()}{username !== 'User' ? `，${username}` : ''}
       </h1>
-      <p className="mt-2.5 mb-8 text-[15px] text-fg-2">今天想让 Atlas 做点什么？</p>
+      <p className="mt-1.5 mb-7 text-[14px] text-fg-3">今天想让 Atlas 做点什么？</p>
       {composer}
       {notice}
       <div className="mt-4 flex flex-wrap gap-2">
         {SUGGESTIONS.map((suggestion) => <button key={suggestion.label} onClick={() => onSuggest(suggestion)}
-          className="h-8 rounded-full bg-sunken px-3.5 text-[13px] text-fg-2 shadow-[inset_0_0_0_1px_var(--line)] transition-colors hover:bg-hover hover:text-fg">
+          className="h-8 rounded-full px-3.5 text-[13px] text-fg-2 shadow-[inset_0_0_0_1px_var(--line-strong)] transition-colors hover:bg-hover hover:text-fg">
           {suggestion.label}
         </button>)}
       </div>
-      {recent.length > 0 && <section className="mt-12">
-        <h2 className="m-0 mb-3 text-[13px] font-semibold text-fg-2">继续</h2>
+      {recent.length > 0 && <section className="mt-14">
+        <h2 className="m-0 mb-2.5 text-[12.5px] font-medium text-fg-3">继续</h2>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
           {recent.map((conversation) => <button key={conversation.id} onClick={() => onOpen(conversation)}
-            className="card-surface flex min-h-[92px] flex-col rounded-[14px] px-4 pt-3.5 pb-3 text-left transition-[filter] hover:brightness-110 dark:hover:brightness-125">
-            <b className="line-clamp-2 text-[14px] leading-[1.45] font-medium text-fg">{conversation.title}</b>
+            className="card-surface flex min-h-[84px] flex-col rounded-[10px] px-3.5 pt-3 pb-2.5 text-left transition-colors hover:bg-hover">
+            <b className="line-clamp-2 text-[13.5px] leading-[1.45] font-medium text-fg">{conversation.title}</b>
             <span className="mt-auto pt-3 text-[12px] text-fg-3">{conversation.updated_at ? relativeTime(conversation.updated_at) : '对话'}</span>
           </button>)}
         </div>

@@ -428,8 +428,8 @@ export default function Composer(props: ComposerProps) {
     onDragOver={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(true); }}
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
     onDrop={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(false); props.onPickImages(event.dataTransfer.files); }}
-    className={cn('raised relative transition-shadow focus-within:shadow-[var(--shadow-raised),0_0_0_4px_var(--brand-soft)]',
-      hero ? 'rounded-[20px] px-5 pt-[18px] pb-3' : 'rounded-2xl px-4 pt-3 pb-2.5',
+    className={cn('raised relative rounded-[22px] transition-shadow focus-within:shadow-[0_0_0_1px_var(--line-strong),0_1px_2px_rgba(0,0,0,.04),0_6px_20px_-6px_rgba(0,0,0,.12)]',
+      hero ? 'px-4 pt-4 pb-2.5' : 'px-3.5 pt-3 pb-2',
       expert && 'shadow-[var(--shadow-raised),0_0_0_1.5px_var(--brand-soft)]',
       dragging && 'shadow-[var(--shadow-raised),0_0_0_2px_var(--brand)]')}>
     {matches.length > 0 && <div id={suggestionListId} role="listbox" aria-label={mention && !commandMatches.length ? (mention.trigger === '@' ? '引用文件' : mention.trigger === '#' ? '引用对话' : '技能文本提及') : '命令'} className="pop anim-pop absolute right-0 bottom-[calc(100%+8px)] left-0 z-30 max-h-[300px] overflow-auto rounded-xl p-1.5">
@@ -577,8 +577,8 @@ export default function Composer(props: ComposerProps) {
       </Tip>
       <button type="submit" aria-label="发送消息" disabled={!canSend}
         onMouseDown={(event) => event.preventDefault()}
-        className="primary-fill grid size-9 shrink-0 place-items-center rounded-full transition-[filter,opacity] hover:brightness-110 disabled:opacity-30">
-        <ArrowUp size={17} strokeWidth={2.2} />
+        className="primary-fill grid size-8 shrink-0 place-items-center rounded-full transition-[filter,opacity] hover:brightness-110 disabled:opacity-25">
+        <ArrowUp size={16} strokeWidth={2.3} />
       </button>
     </div>
     {previewIndex !== null && props.attachments[previewIndex] && <div role="dialog" aria-modal="true" aria-label={`图片预览 ${previewIndex + 1} / ${props.attachments.length}`}

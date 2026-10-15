@@ -133,7 +133,7 @@ export function ThreadPresentationControls({ settings, onChange }: {
   return <div className="sticky top-2 z-30 h-0 overflow-visible pointer-events-none">
     <div className="relative w-fit max-w-full pointer-events-auto">
       <button ref={triggerRef} type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="thread-presentation-panel"
-        className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px] text-fg-2 shadow hover:bg-surface-2"
+        className="flex items-center gap-1.5 rounded-lg bg-[var(--sheet-solid)]/90 px-2 py-1 text-[12px] text-fg-3 backdrop-blur hover:bg-hover hover:text-fg"
         aria-label="时间线显示设置">
         <SlidersHorizontal size={14} aria-hidden="true" />显示方式 <span className="text-fg-3">· {MODE_LABELS[settings.mode]}</span><ChevronDown size={12} aria-hidden="true" />
       </button>

@@ -69,7 +69,7 @@ export default function TakeoverSection({ selfDeviceId, agentId, onToast, compac
   const deviceName = (id: string) => devices.find((device) => device.id === id)?.display_name ?? id;
 
   return <section aria-label="电脑控制权" className="grid gap-3">
-    <div className={cn('flex flex-wrap items-center gap-3 rounded-[14px] px-4 py-3.5', meta.className)}>
+    <div className={cn('flex flex-wrap items-center gap-3 rounded-xl px-4 py-3.5', meta.className)}>
       {state === 'AGENT' ? <MonitorUp size={18} /> : state === 'HUMAN' ? <Hand size={18} /> : <ShieldAlert size={18} />}
       <div className="min-w-0">
         <b className="block text-[14px] font-semibold">{meta.label}</b>

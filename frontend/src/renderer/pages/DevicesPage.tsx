@@ -136,7 +136,7 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
         {devices.map((device) => {
           const self = device.id === selfDeviceId || device.kind === 'atlas-laptop';
           const online = Boolean(device.online);
-          return <article key={device.id} className="rounded-[14px] bg-surface p-4 shadow-[inset_0_0_0_1px_var(--line)]">
+          return <article key={device.id} className="rounded-xl bg-surface p-4 shadow-[inset_0_0_0_1px_var(--line)]">
             <header className="flex items-center gap-2.5">
               {self ? <Laptop size={17} className="shrink-0 text-brand" /> : <Smartphone size={17} className="shrink-0 text-fg-3" />}
               <b className="min-w-0 truncate text-[14px] font-medium text-fg">{device.display_name}</b>

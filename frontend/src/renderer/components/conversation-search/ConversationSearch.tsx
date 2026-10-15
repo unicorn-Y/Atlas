@@ -120,7 +120,7 @@ export function ConversationSearch({
   onClose: () => void;
 }) {
   if (!open) return <div className="sticky top-2 z-30 h-0 overflow-visible pointer-events-none">
-    <button type="button" onClick={onOpen} className="ml-auto flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px] text-fg-2 shadow pointer-events-auto hover:bg-surface-2" aria-label="在当前对话中查找">
+    <button type="button" onClick={onOpen} className="ml-auto flex items-center gap-1.5 rounded-lg bg-[var(--sheet-solid)]/90 px-2 py-1 text-[12px] text-fg-3 backdrop-blur pointer-events-auto hover:bg-hover hover:text-fg" aria-label="在当前对话中查找">
       <Search size={14} />查找
     </button>
   </div>;

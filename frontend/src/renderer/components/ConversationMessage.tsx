@@ -370,7 +370,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
     </button>}
   </>;
   if (role === 'assistant' && continued) {
-    return <div ref={messageRootRef} className="group my-3 pl-10" data-message-role="assistant" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
+    return <div ref={messageRootRef} className="group my-3" data-message-role="assistant" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
       {assistantContent}
       {selectionActionTooltip}
       {content && <div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -387,7 +387,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
   if (role === 'user') {
     return <div ref={messageRootRef} className="group my-5 flex flex-col items-end gap-1" data-message-role="user" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
       {note && <span className="text-[11.5px] text-fg-3">{note}</span>}
-      <div data-message-content className="max-w-[78%] whitespace-pre-wrap rounded-[16px] rounded-br-[5px] bg-sunken px-4 py-2.5 text-[14.5px] leading-[1.7] text-fg shadow-[inset_0_0_0_1px_var(--line)]" title={username}>{content}</div>
+      <div data-message-content className="max-w-[80%] whitespace-pre-wrap rounded-[18px] bg-[var(--user-bubble)] px-4 py-2 text-[14px] leading-[1.65] text-fg" title={username}>{content}</div>
       {selectionActionTooltip}
       {(content || actions) && <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {content && <ClipboardAction text={content} />}{actions}
@@ -400,13 +400,13 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
         onClose={closeContextMenu} restoreFocus={() => contextTriggerRef.current?.focus()} />}
     </div>;
   }
-  return <div ref={messageRootRef} className="group my-5 grid grid-cols-[28px_minmax(0,1fr)] gap-3" data-message-role="assistant" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
-    <Mark className="mt-[3px] size-[26px]" working={working} />
+  // Replies read as plain text under the user's turn (Codex 26.1007, Claude 2.37337): no avatar, no name.
+  return <div ref={messageRootRef} className="group my-5" data-message-role="assistant" aria-label="Atlas 的回复" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
     <div className="min-w-0">
-      <div className="mb-1.5 flex items-baseline gap-2.5">
-        <b className="font-serif text-[14px] font-semibold tracking-[.04em] text-heading">Atlas</b>
-        {status && <span className="text-[12px] text-fg-3">{status}</span>}
-      </div>
+      {(working || status) && <div className="mb-1.5 flex items-center gap-2 text-[12px] text-fg-3">
+        {working && <Mark className="size-4" working />}
+        {status && <span>{status}</span>}
+      </div>}
       {assistantContent}
       {selectionActionTooltip}
       {(content || actions) && <div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">

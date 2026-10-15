@@ -998,6 +998,94 @@ export default function App() {
   const worktreeRequested = Boolean(store.worktreeRequests[store.activeConversationId]);
   const profileName = store.profiles.find((profile) => profile.id === store.profileId)?.name ?? '默认';
   const composerStatus = listening ? '正在听…' : store.connected ? '' : store.backendStarting ? 'Atlas 后端启动中…' : 'Atlas 后端没有连接';
+  // Run settings sit on one line under the composer (Codex keeps environment controls outside the input box).
+  const runTools = <>
+    <Menu>
+      <Tip label={workspaceName ? `工作目录：${workspacePath}` : '选择工作目录'}><MenuTrigger asChild>
+        <button type="button" aria-label={workspaceName ? `工作目录：${workspaceName}` : '选择工作目录'} className={cn('inline-flex h-7 max-w-[170px] items-center gap-1.5 rounded-[9px] px-2 text-[12px] hover:bg-hover', workspaceName ? 'text-fg-2' : 'text-fg-3')}>
+          {remoteHost ? <Server size={15} className="shrink-0 text-brand" /> : <FolderOpen size={15} className="shrink-0" />}{workspaceName && <span className="truncate">{workspaceName}</span>}
+        </button>
+      </MenuTrigger></Tip>
+      <MenuContent side="top">
+        {workspacePath && <MenuLabel>{workspacePath}</MenuLabel>}
+        <MenuItem onSelect={() => void chooseWorkspace()}><Laptop />这台电脑上的文件夹…</MenuItem>
+        <MenuItem onSelect={() => setRemoteOpen(true)}><Server />另一台电脑上的目录（SSH）…</MenuItem>
+      </MenuContent>
+    </Menu>
+    {activeConversation && <Menu>
+      <Tip label={PERMISSION[permission].hint}><MenuTrigger asChild>
+        <button type="button" aria-label={`权限：${PERMISSION[permission].label}`} className={cn('inline-flex h-7 items-center gap-1.5 rounded-[9px] px-2 text-[12px] hover:bg-hover', permission === 'full_access' ? 'text-fg-3 hover:text-fg' : 'bg-brand-soft text-fg')}>
+          {permission === 'read_only' ? <Lock size={15} /> : permission === 'full_access' ? <ShieldCheck size={15} /> : <ShieldAsk size={15} />}{permission !== 'full_access' && PERMISSION[permission].label}
+        </button>
+      </MenuTrigger></Tip>
+      <MenuContent side="top">
+        <MenuLabel>这个对话的权限</MenuLabel>
+        {(['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access', 'read_only'] as const).map((mode) => <MenuItem key={mode} checked={permission === mode} onSelect={() => {
+          // External Agents only run with full access; a stricter mode hands the work back to Atlas.
+          const executor = activeConversation.executor && activeConversation.executor !== 'atlas' && mode !== 'full_access' ? { executor: 'atlas' } : {};
+          store.setConversationSettings(activeConversation.id, { permission_mode: mode, ...executor });
+          if ('executor' in executor) setToast('外部 Agent 只能在「完全访问」下用，已换回 Atlas');
+        }}>
+          <span className="min-w-0"><span className="block">{PERMISSION[mode].label}</span><small className="block text-[11.5px] text-fg-3">{PERMISSION[mode].hint}</small></span>
+        </MenuItem>)}
+      </MenuContent>
+    </Menu>}
+    {activeConversation && <RunSetupMenu conversation={activeConversation} workspace={workspacePath}
+      onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)}
+      onPickFolder={async () => window.atlasDesktop?.selectDirectory
+        ? window.atlasDesktop.selectDirectory(workspacePath || undefined)
+        : window.prompt('允许访问的目录（完整路径）', '')?.trim() || null} />}
+    {store.profiles.length > 0 && <Menu>
+      <Tip label={`角色：${profileName}`}><MenuTrigger asChild>
+        <button type="button" aria-label={`角色：${profileName}`} className={cn('inline-flex h-7 items-center gap-1.5 rounded-[9px] px-2 text-[12px] hover:bg-hover', store.profileId !== 'default' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+          <UserCog size={15} />{store.profileId !== 'default' && profileName}
+        </button>
+      </MenuTrigger></Tip>
+      <MenuContent side="top">
+        <MenuLabel>角色</MenuLabel>
+        {store.profiles.map((profile) => <MenuItem key={profile.id} checked={profile.id === store.profileId} hint={profile.mode === 'plan' ? '只读' : ''} onSelect={() => store.setProfile(profile.id)}>
+          <span className="min-w-0"><span className="block">{profile.name}</span>{profile.description && <small className="block truncate text-[11.5px] text-fg-3">{profile.description}</small>}</span>
+        </MenuItem>)}
+      </MenuContent>
+    </Menu>}
+    {Boolean(currentModel?.supports_reasoning_effort) && <Menu>
+      <Tip label={store.reasoningEffort ? `推理：${EFFORT_LABEL[store.reasoningEffort]}` : '推理档位：模型默认'}><MenuTrigger asChild>
+        <button type="button" aria-label="推理档位" className={cn('inline-flex h-7 items-center gap-1.5 rounded-[9px] px-2 text-[12px] hover:bg-hover', store.reasoningEffort ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+          <Brain size={15} />{store.reasoningEffort && EFFORT_LABEL[store.reasoningEffort]}
+        </button>
+      </MenuTrigger></Tip>
+      <MenuContent side="top">
+        <MenuLabel>推理档位</MenuLabel>
+        <MenuItem checked={!store.reasoningEffort} onSelect={() => store.setReasoningEffort('')}>模型默认</MenuItem>
+        {(['minimal', 'low', 'medium', 'high'] as const).map((effort) => <MenuItem key={effort} checked={store.reasoningEffort === effort} onSelect={() => store.setReasoningEffort(effort)}>{EFFORT_LABEL[effort]}</MenuItem>)}
+      </MenuContent>
+    </Menu>}
+    {workspaceName && !remoteHost && <Menu onOpenChange={(opening) => { if (opening && !worktreeActive) void backend.getBranches(String(activeConversation?.workspace)).then((result) => { setBranches(result.branches); setGitBranch(result.current); }).catch(() => { setBranches([]); setGitBranch(''); }); }}>
+      <Tip label={worktreeActive ? `在独立分支 ${activeConversation?.worktree_branch} 上工作` : worktreeRequested ? '下一条会在独立 worktree 里执行' : '隔离分支：在独立的 git worktree 里改，不动主目录'}><MenuTrigger asChild>
+        <button type="button" aria-label="隔离分支" className={cn('inline-flex h-7 max-w-[150px] items-center gap-1.5 rounded-[9px] px-2 text-[12px] hover:bg-hover', worktreeActive || worktreeRequested ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+          <GitBranch size={15} className="shrink-0" />{(worktreeActive || worktreeRequested) && <span className="truncate">{worktreeActive ? String(activeConversation?.worktree_branch ?? '') : '隔离'}</span>}
+        </button>
+      </MenuTrigger></Tip>
+      <MenuContent side="top">
+        {worktreeActive ? <>
+          <MenuLabel>{`独立分支 ${activeConversation?.worktree_branch}，基于 ${activeConversation?.base_branch}`}</MenuLabel>
+          <MenuItem onSelect={() => showInspectorTab('context')}>查看、合并或删除…</MenuItem>
+        </> : <>
+          <MenuLabel>在独立 worktree 里执行，起始分支</MenuLabel>
+          {worktreeRequested && <MenuItem onSelect={() => store.requestWorktree(store.activeConversationId, null)}>取消隔离</MenuItem>}
+          <MenuItem onSelect={() => store.requestWorktree(store.activeConversationId, '')}>当前分支</MenuItem>
+          {branches.length > 0 && <MenuSeparator />}
+          {branches.map((branch) => <MenuItem key={branch} checked={store.worktreeRequests[store.activeConversationId]?.base_branch === branch} onSelect={() => store.requestWorktree(store.activeConversationId, branch)}>{branch}</MenuItem>)}
+        </>}
+      </MenuContent>
+    </Menu>}
+    <Tip label={store.nextRunMode === 'plan' ? '下一条会先出计划，等你批准' : '先出计划：只读探索，批准后再动手'}>
+      <button type="button" aria-pressed={store.nextRunMode === 'plan'} onClick={() => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan')}
+        className={cn('inline-flex h-7 items-center gap-1.5 rounded-[9px] px-2 text-[12px]', store.nextRunMode === 'plan' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg')}>
+        <ListChecks size={15} />{store.nextRunMode === 'plan' && '先出计划'}
+      </button>
+    </Tip>
+  </>;
   const composerBase = {
     value: input, onChange: setInput, attachments, onPickImages: addFiles, listening, onToggleMic: toggleSpeechInput,
     attachmentProgress, failedAttachmentCount: failedAttachmentReads.length, onRetryFailedAttachments: retryFailedAttachments,
@@ -1007,93 +1095,6 @@ export default function App() {
     findMentions, mentions, onAddMention: (item: MentionItem) => { if (item.id) setMentions((current) => [...current, item]); },
     onRemoveMention: (item: MentionItem) => setMentions((current) => current.filter((entry) => !(entry.kind === item.kind && entry.id === item.id))),
     onLongPaste: (text: string) => { addDocuments([new File([text], `粘贴的文本-${new Date().toLocaleTimeString().replace(/:/g, '')}.txt`, { type: 'text/plain' })]); setToast(`粘贴内容有 ${text.length} 个字，已转成附件`); },
-    tools: <>
-      <Menu>
-        <Tip label={workspaceName ? `工作目录：${workspacePath}` : '选择工作目录'}><MenuTrigger asChild>
-          <button type="button" aria-label={workspaceName ? `工作目录：${workspaceName}` : '选择工作目录'} className={cn('inline-flex h-8 max-w-[170px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', workspaceName ? 'text-fg-2' : 'text-fg-3')}>
-            {remoteHost ? <Server size={15} className="shrink-0 text-brand" /> : <FolderOpen size={15} className="shrink-0" />}{workspaceName && <span className="truncate">{workspaceName}</span>}
-          </button>
-        </MenuTrigger></Tip>
-        <MenuContent side="top">
-          {workspacePath && <MenuLabel>{workspacePath}</MenuLabel>}
-          <MenuItem onSelect={() => void chooseWorkspace()}><Laptop />这台电脑上的文件夹…</MenuItem>
-          <MenuItem onSelect={() => setRemoteOpen(true)}><Server />另一台电脑上的目录（SSH）…</MenuItem>
-        </MenuContent>
-      </Menu>
-      {activeConversation && <Menu>
-        <Tip label={PERMISSION[permission].hint}><MenuTrigger asChild>
-          <button type="button" aria-label={`权限：${PERMISSION[permission].label}`} className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', permission === 'full_access' ? 'text-fg-3 hover:text-fg' : 'bg-brand-soft text-fg')}>
-            {permission === 'read_only' ? <Lock size={15} /> : permission === 'full_access' ? <ShieldCheck size={15} /> : <ShieldAsk size={15} />}{permission !== 'full_access' && PERMISSION[permission].label}
-          </button>
-        </MenuTrigger></Tip>
-        <MenuContent side="top">
-          <MenuLabel>这个对话的权限</MenuLabel>
-          {(['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access', 'read_only'] as const).map((mode) => <MenuItem key={mode} checked={permission === mode} onSelect={() => {
-            // External Agents only run with full access; a stricter mode hands the work back to Atlas.
-            const executor = activeConversation.executor && activeConversation.executor !== 'atlas' && mode !== 'full_access' ? { executor: 'atlas' } : {};
-            store.setConversationSettings(activeConversation.id, { permission_mode: mode, ...executor });
-            if ('executor' in executor) setToast('外部 Agent 只能在「完全访问」下用，已换回 Atlas');
-          }}>
-            <span className="min-w-0"><span className="block">{PERMISSION[mode].label}</span><small className="block text-[11.5px] text-fg-3">{PERMISSION[mode].hint}</small></span>
-          </MenuItem>)}
-        </MenuContent>
-      </Menu>}
-      {activeConversation && <RunSetupMenu conversation={activeConversation} workspace={workspacePath}
-        onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)}
-        onPickFolder={async () => window.atlasDesktop?.selectDirectory
-          ? window.atlasDesktop.selectDirectory(workspacePath || undefined)
-          : window.prompt('允许访问的目录（完整路径）', '')?.trim() || null} />}
-      {store.profiles.length > 0 && <Menu>
-        <Tip label={`角色：${profileName}`}><MenuTrigger asChild>
-          <button type="button" aria-label={`角色：${profileName}`} className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.profileId !== 'default' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
-            <UserCog size={15} />{store.profileId !== 'default' && profileName}
-          </button>
-        </MenuTrigger></Tip>
-        <MenuContent side="top">
-          <MenuLabel>角色</MenuLabel>
-          {store.profiles.map((profile) => <MenuItem key={profile.id} checked={profile.id === store.profileId} hint={profile.mode === 'plan' ? '只读' : ''} onSelect={() => store.setProfile(profile.id)}>
-            <span className="min-w-0"><span className="block">{profile.name}</span>{profile.description && <small className="block truncate text-[11.5px] text-fg-3">{profile.description}</small>}</span>
-          </MenuItem>)}
-        </MenuContent>
-      </Menu>}
-      {Boolean(currentModel?.supports_reasoning_effort) && <Menu>
-        <Tip label={store.reasoningEffort ? `推理：${EFFORT_LABEL[store.reasoningEffort]}` : '推理档位：模型默认'}><MenuTrigger asChild>
-          <button type="button" aria-label="推理档位" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.reasoningEffort ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
-            <Brain size={15} />{store.reasoningEffort && EFFORT_LABEL[store.reasoningEffort]}
-          </button>
-        </MenuTrigger></Tip>
-        <MenuContent side="top">
-          <MenuLabel>推理档位</MenuLabel>
-          <MenuItem checked={!store.reasoningEffort} onSelect={() => store.setReasoningEffort('')}>模型默认</MenuItem>
-          {(['minimal', 'low', 'medium', 'high'] as const).map((effort) => <MenuItem key={effort} checked={store.reasoningEffort === effort} onSelect={() => store.setReasoningEffort(effort)}>{EFFORT_LABEL[effort]}</MenuItem>)}
-        </MenuContent>
-      </Menu>}
-      {workspaceName && !remoteHost && <Menu onOpenChange={(opening) => { if (opening && !worktreeActive) void backend.getBranches(String(activeConversation?.workspace)).then((result) => { setBranches(result.branches); setGitBranch(result.current); }).catch(() => { setBranches([]); setGitBranch(''); }); }}>
-        <Tip label={worktreeActive ? `在独立分支 ${activeConversation?.worktree_branch} 上工作` : worktreeRequested ? '下一条会在独立 worktree 里执行' : '隔离分支：在独立的 git worktree 里改，不动主目录'}><MenuTrigger asChild>
-          <button type="button" aria-label="隔离分支" className={cn('inline-flex h-8 max-w-[150px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', worktreeActive || worktreeRequested ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
-            <GitBranch size={15} className="shrink-0" />{(worktreeActive || worktreeRequested) && <span className="truncate">{worktreeActive ? String(activeConversation?.worktree_branch ?? '') : '隔离'}</span>}
-          </button>
-        </MenuTrigger></Tip>
-        <MenuContent side="top">
-          {worktreeActive ? <>
-            <MenuLabel>{`独立分支 ${activeConversation?.worktree_branch}，基于 ${activeConversation?.base_branch}`}</MenuLabel>
-            <MenuItem onSelect={() => showInspectorTab('context')}>查看、合并或删除…</MenuItem>
-          </> : <>
-            <MenuLabel>在独立 worktree 里执行，起始分支</MenuLabel>
-            {worktreeRequested && <MenuItem onSelect={() => store.requestWorktree(store.activeConversationId, null)}>取消隔离</MenuItem>}
-            <MenuItem onSelect={() => store.requestWorktree(store.activeConversationId, '')}>当前分支</MenuItem>
-            {branches.length > 0 && <MenuSeparator />}
-            {branches.map((branch) => <MenuItem key={branch} checked={store.worktreeRequests[store.activeConversationId]?.base_branch === branch} onSelect={() => store.requestWorktree(store.activeConversationId, branch)}>{branch}</MenuItem>)}
-          </>}
-        </MenuContent>
-      </Menu>}
-      <Tip label={store.nextRunMode === 'plan' ? '下一条会先出计划，等你批准' : '先出计划：只读探索，批准后再动手'}>
-        <button type="button" aria-pressed={store.nextRunMode === 'plan'} onClick={() => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan')}
-          className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px]', store.nextRunMode === 'plan' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:bg-hover hover:text-fg')}>
-          <ListChecks size={15} />{store.nextRunMode === 'plan' && '先出计划'}
-        </button>
-      </Tip>
-    </>,
     models: store.models, model: store.model, onSelectModel: (id: string) => void store.selectModel(id), onManageModels: () => setSheet('models'),
     status: composerStatus, autoFocus: true, commands: slashCommands,
     onCyclePermission: activeConversation ? cyclePermission : undefined,
@@ -1284,7 +1285,7 @@ export default function App() {
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
         onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} />
 
-      <main className="sheet relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[14px]">
+      <main className="sheet relative my-1.5 mr-1.5 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px]">
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
           <div className={cn('flex min-w-0 items-center gap-3', showTabs && 'flex-1')}>
             {showTabs
@@ -1334,9 +1335,10 @@ export default function App() {
 
         <Suspense fallback={<div aria-label="正在加载页面" className="flex flex-1 flex-col gap-3 p-6" aria-busy="true"><div className="h-5 w-36 animate-pulse rounded bg-hover" /><div className="h-24 animate-pulse rounded-xl bg-sunken" /><div className="h-10 animate-pulse rounded-lg bg-sunken" /></div>}>
         {view === 'home' && <HomeView username={username} notice={errorNote} recent={store.conversations.slice(0, 3)} onOpen={openConversation} onSuggest={suggest}
-          composer={<Composer {...composerBase} variant="hero" onSubmit={() => void submit(true)}
+          composer={<><Composer {...composerBase} variant="hero" onSubmit={() => void submit(true)}
             placeholder={homeMode === 'image' ? '描述你想要的画面，Atlas 会带你去图像工作台' : '描述一件事，Atlas 会把它做完'}
-            modes={{ value: homeMode, options: HOME_MODES, onChange: (id) => { if (id === 'voice') startVoice(); else setHomeMode(id); } }} />} />}
+            modes={{ value: homeMode, options: HOME_MODES, onChange: (id) => { if (id === 'voice') startVoice(); else setHomeMode(id); } }} />
+            <div className="mt-1.5 flex min-w-0 items-center gap-0.5 overflow-x-auto px-1 text-[11.5px] text-fg-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div></>} />}
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
@@ -1353,16 +1355,19 @@ export default function App() {
               onOpenBrowser={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }}
               emptyState={!messages.length && !activeEvents.length && !loadingMessages ? <div className="pt-[16vh] text-center">
                 <Mark className="mx-auto mb-4 size-11" />
-                <h2 className="m-0 font-serif text-[24px] font-semibold text-heading">这次要做什么？</h2>
+                <h2 className="m-0 text-[24px] font-semibold text-heading">这次要做什么？</h2>
                 <p className="mt-2 text-[14px] text-fg-3">在下面说清楚目标，Atlas 会把过程和结果都放在这里。</p>
               </div> : null}
               footerNote={<>{retryNote}{errorNote}</>} />
             <div className="px-8 pb-5">
-              <div className="mx-auto w-[min(720px,100%)]">
+              <div className="mx-auto w-[min(760px,100%)]">
                 {queueStrip}
                 {todoStrip}
                 <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={<>{editBanner}{goalHeader}{runHeader}{rewindBanner}</>} />
-                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[10.5px] text-fg-3" aria-label="运行状态">
+                <div className="mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3">
+                  <div className="flex min-w-0 shrink items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div>
+                  <span className="flex-1" />
+                <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1" aria-label="运行状态">
                   {statusBar.model && <span className="max-w-36 truncate" title={modelName}>{modelName}</span>}{statusBar.reasoning && <span>推理 {store.reasoningEffort ? EFFORT_LABEL[store.reasoningEffort] : '默认'}</span>}
                   {statusBar.context && contextUse !== null && <span>上下文 {contextUse}%</span>}
                   {statusBar.tokens && typeof latestUsage?.input_tokens === 'number' && <span>用量 {Number(latestUsage.input_tokens) + Number(latestUsage.output_tokens ?? 0)} tokens</span>}
@@ -1370,6 +1375,7 @@ export default function App() {
                   {statusBar.git && (activeConversation?.worktree_branch || gitBranch) && <span className="max-w-32 truncate"><GitBranch size={10} className="mr-1 inline" />{String(activeConversation?.worktree_branch || gitBranch)}</span>}
                   {statusBar.permission && activeConversation && <span>{PERMISSION[permission].label}</span>}
                   {statusBar.processes && processCount !== null && <button onClick={() => showInspectorTab('processes')} className="hover:text-fg">后台进程 {processCount}</button>}
+                </div>
                 </div>
               </div>
             </div>
@@ -1409,7 +1415,7 @@ export default function App() {
     <Dialog open={Boolean(sheet)} onOpenChange={(open) => { if (!open) setSheet(null); }} label="设置"
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="overflow-y-auto bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
-        <h2 className="m-0 px-2.5 pb-3 font-serif text-[18px] font-semibold text-heading">设置</h2>
+        <h2 className="m-0 px-2.5 pb-3 text-[18px] font-semibold text-heading">设置</h2>
         <label className="mx-1 mb-3 flex h-9 items-center gap-2 rounded-lg bg-surface px-2.5 shadow-[inset_0_0_0_1px_var(--line)] focus-within:shadow-[inset_0_0_0_1px_var(--brand)]">
           <Search size={14} className="shrink-0 text-fg-3" />
           <input aria-label="搜索设置" value={settingsQuery} onChange={(event) => setSettingsQuery(event.target.value)} placeholder="搜索设置项…" className="min-w-0 flex-1 bg-transparent text-[12px] text-fg outline-none placeholder:text-fg-3" />

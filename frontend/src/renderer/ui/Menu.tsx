@@ -6,7 +6,7 @@ import { cn } from './cn';
 export const Menu = M.Root;
 export const MenuTrigger = M.Trigger;
 
-export function MenuContent({ children, align = 'start', side = 'bottom', className }: { children: ReactNode; align?: 'start' | 'end' | 'center'; side?: 'top' | 'bottom'; className?: string }) {
+export function MenuContent({ children, align = 'start', side = 'bottom', className }: { children: ReactNode; align?: 'start' | 'end' | 'center'; side?: 'top' | 'bottom' | 'left' | 'right'; className?: string }) {
   return <M.Portal>
     <M.Content align={align} side={side} sideOffset={6} className={cn('pop anim-pop z-[60] min-w-[220px] max-h-[360px] overflow-auto rounded-xl p-1.5', className)}>
       {children}

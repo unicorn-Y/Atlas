@@ -179,7 +179,7 @@ export default function AgentsPage({ apiBaseUrl, connected, onToast, username }:
         </section>
       </div>
 
-      {agent && !isRole ? <section className="min-w-0 rounded-[14px] glass" aria-label={`${agent.name} 详情`}>
+      {agent && !isRole ? <section className="min-w-0 rounded-xl glass" aria-label={`${agent.name} 详情`}>
         <header className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-3.5">
           <Bot size={18} className="shrink-0 text-brand" />
           <b className="text-[16px] font-semibold text-heading">{agent.name}</b>
@@ -209,8 +209,8 @@ export default function AgentsPage({ apiBaseUrl, connected, onToast, username }:
           {tab === 'activity' && <AgentActivityTab apiBaseUrl={apiBaseUrl} agent={agent} />}
         </div>
       </section>
-      : agent && isRole ? <section className="rounded-[14px] glass p-6" aria-label={`${agent.name} 角色`}>
-        <h2 className="m-0 mb-1 flex items-center gap-2 font-serif text-[19px] font-semibold text-heading"><UserCog size={18} className="text-fg-3" />{agent.name}</h2>
+      : agent && isRole ? <section className="rounded-xl glass p-6" aria-label={`${agent.name} 角色`}>
+        <h2 className="m-0 mb-1 flex items-center gap-2 text-[19px] font-semibold text-heading"><UserCog size={18} className="text-fg-3" />{agent.name}</h2>
         <p className="mt-0 mb-4 text-[13px] text-fg-3">{agent.description || '内置角色：一次性的任务模板，跑完即走，不常驻。'}</p>
         <dl className="m-0 grid gap-3 text-[13px]">
           {agent.model && <div><dt className="text-[12px] text-fg-3">模型</dt><dd className="m-0">{agent.model}</dd></div>}
@@ -221,7 +221,7 @@ export default function AgentsPage({ apiBaseUrl, connected, onToast, username }:
           角色不能升级为常驻 Agent，也不参与心跳、渠道和自动化。要改它的指令或模型，去「设置 → 角色」。
         </p>
       </section>
-      : <section className="grid place-items-center rounded-[14px] glass py-20 text-[13.5px] text-fg-3">
+      : <section className="grid place-items-center rounded-xl glass py-20 text-[13.5px] text-fg-3">
         {loading ? '正在读取 Agents…' : '选一个 Agent 看详情，或新建一个。'}
       </section>}
     </div>

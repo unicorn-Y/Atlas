@@ -31,7 +31,7 @@ export default function RecipesDialog({ open, onClose, recipes, onRun, onDelete 
 
   return <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }} label="配方" className="grid h-[min(560px,calc(100vh-48px))] w-[min(820px,calc(100vw-32px))] grid-cols-[240px_minmax(0,1fr)]">
     <nav className="overflow-auto bg-sunken p-2.5 shadow-[inset_-1px_0_0_var(--line)]" aria-label="配方列表">
-      <h2 className="m-0 px-2 pt-2 pb-3 font-serif text-[17px] font-semibold text-heading">配方</h2>
+      <h2 className="m-0 px-2 pt-2 pb-3 text-[17px] font-semibold text-heading">配方</h2>
       {recipes.map((recipe) => <button key={recipe.id} onClick={() => setSelected(recipe.id)} aria-current={current?.id === recipe.id}
         className={cn('block w-full truncate rounded-lg px-2.5 py-2 text-left text-[13px]', current?.id === recipe.id ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>{recipe.name}</button>)}
       {!recipes.length && <p className="m-0 px-2 text-[12.5px] leading-[1.6] text-fg-3">还没有配方。任务做完后点完成行上的「存为配方」，下次就能一键复跑。</p>}

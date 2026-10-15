@@ -81,7 +81,7 @@ export default function GroupsView({ onToast }: { onToast: (text: string) => voi
 
   if (groupsAvailable === false) return <div className="screen page"><div className="page-inner">
     <header className="page-head"><div><h1>群聊</h1><p>把几个 Agent 拉进同一个房间，@谁谁说话。</p></div></header>
-    <div className="empty glass rounded-[14px] py-16"><Users size={22} /><b>群聊服务未就绪</b>群聊编排服务（W8）还没有在这台后端上挂载；等它上线后这里会自动亮起来。</div>
+    <div className="empty glass rounded-xl py-16"><Users size={22} /><b>群聊服务未就绪</b>群聊编排服务（W8）还没有在这台后端上挂载；等它上线后这里会自动亮起来。</div>
   </div></div>;
 
   return <div className="flex min-h-0 flex-1">

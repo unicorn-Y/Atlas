@@ -207,7 +207,7 @@ export default function AgentChat({ api, agent, sessionId, onToast, onSessionsCh
     </div>
     {commands.length > 0 && input.startsWith('/') && <div className="mt-1.5 flex flex-wrap gap-1">{commands.filter((c) => `/${c.name}`.startsWith(input.split(' ')[0])).slice(0, 12).map((command) =>
       <button key={command.name} title={command.description} onClick={() => setInput(`/${command.name} `)} className="rounded-md bg-sunken px-1.5 py-0.5 text-[12px] text-fg-2 hover:bg-hover">/{command.name}</button>)}</div>}
-    <div className="mt-2 flex items-end gap-2 rounded-2xl card-surface p-2">
+    <div className="mt-2 flex items-end gap-2 rounded-xl card-surface p-2">
       <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={2} disabled={!live}
         onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }}
         placeholder={live ? `让 ${agent.name} 做点什么…（Enter 发送，Shift+Enter 换行）` : '会话没在运行，先点上面的「重新连上」'}

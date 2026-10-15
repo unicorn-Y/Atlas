@@ -35,7 +35,7 @@ export default function ReasoningBlock({ text, streaming, startedAt, endedAt, tr
     <ClipboardCopy size={12} aria-hidden="true" />{copied ? '已复制' : '复制思考'}
   </button>;
 
-  return <div className="my-2 ml-10 min-w-0" data-conversation-selectable="true">
+  return <div className="my-2 min-w-0" data-conversation-selectable="true">
     <Reasoning className="w-full" isStreaming={streaming} autoCollapseKey={streaming ? null : 'complete'}
       {...(duration !== undefined ? { duration } : {})}>
       <ReasoningTrigger streamingText={text} />

@@ -86,7 +86,7 @@ export default function AgentChatTab({ agent, username }: { agent: PersistentAge
       historyActions={noop}
       emptyState={<div className="pt-[12vh] text-center">
         <Mark className="mx-auto mb-4 size-11" />
-        <h2 className="m-0 font-serif text-[22px] font-semibold text-heading">和 {agent.name} 说什么？</h2>
+        <h2 className="m-0 text-[22px] font-semibold text-heading">和 {agent.name} 说什么？</h2>
         <p className="mt-2 text-[13.5px] text-fg-3">这条会话由 {agent.name} 负责：模型、技能和指令都按它的配置来。</p>
       </div>}
       footerNote={null}

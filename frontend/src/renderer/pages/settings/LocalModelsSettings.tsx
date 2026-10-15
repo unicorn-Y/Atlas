@@ -96,7 +96,7 @@ export default function LocalModelsSettings({ apiBaseUrl, onToast }: { apiBaseUr
 
     {error && <p role="alert" className="m-0 rounded-xl bg-danger-soft px-3.5 py-2.5 text-[12.5px] text-danger">{error}</p>}
 
-    <section aria-label="当前状态与服务器" className="rounded-[14px] bg-sunken px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+    <section aria-label="当前状态与服务器" className="rounded-xl bg-sunken px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
       <header className="flex flex-wrap items-center gap-2.5">
         <Cpu size={16} className="text-brand" />
         <b className="font-medium text-fg">本地推理</b>
@@ -194,7 +194,7 @@ export default function LocalModelsSettings({ apiBaseUrl, onToast }: { apiBaseUr
       <small className="px-1 text-[11.5px] text-fg-3">直接指向一个本机的 .gguf 文件，不用下载。</small>
     </section>
 
-    {activation && !activation.ok && <section aria-label="激活诊断" className="rounded-[14px] bg-danger-soft px-4 py-3.5">
+    {activation && !activation.ok && <section aria-label="激活诊断" className="rounded-xl bg-danger-soft px-4 py-3.5">
       <b className="font-medium text-danger">激活 {activation.model_id} 没有通过</b>
       <ul className="mb-0 mt-1.5 grid list-disc gap-1 pl-5 text-[12.5px] text-danger">
         {activation.diagnostics.map((line, index) => <li key={index}>{line}</li>)}

@@ -2,9 +2,9 @@
 export type Theme = 'light' | 'aurora' | 'dark';
 
 export const THEMES: Array<{ id: Theme; label: string; hint: string; swatch: string; windowColor: string }> = [
-  { id: 'light', label: '白瓷', hint: '纯白纸面，几乎只用黑白', swatch: 'linear-gradient(135deg,#FFFFFF 50%,#EEEDE9 50%)', windowColor: '#EEEDE9' },
-  { id: 'aurora', label: '晨光', hint: '柔和极光，半透明面板', swatch: 'linear-gradient(135deg,#E3DEFB,#FCE3D6 55%,#D8E8FB)', windowColor: '#F3F2FA' },
-  { id: 'dark', label: '夜航', hint: '深夜底色，黄铜细线', swatch: 'linear-gradient(135deg,#1B2331,#07090D 60%,#D9AF69)', windowColor: '#07090D' },
+  { id: 'light', label: '白瓷', hint: '白色纸面，暖灰底，几乎只用黑白', swatch: 'linear-gradient(135deg,#FFFFFF 50%,#F4F3F0 50%)', windowColor: '#F4F3F0' },
+  { id: 'aurora', label: '晨光', hint: '柔和极光，半透明面板', swatch: 'linear-gradient(135deg,#E3DEFB,#FCE3D6 55%,#D8E8FB)', windowColor: '#F1F0F8' },
+  { id: 'dark', label: '夜航', hint: '中性深灰，黄铜点缀', swatch: 'linear-gradient(135deg,#232322,#0D0D0C 60%,#D9AF69)', windowColor: '#0D0D0C' },
 ];
 
 export const isTheme = (value: unknown): value is Theme => value === 'light' || value === 'aurora' || value === 'dark';
@@ -28,9 +28,9 @@ const CUSTOM_THEME_KEY = 'atlas.preference.custom-theme';
 const APPEARANCE_KEY = 'atlas.preference.appearance';
 const COLOR_KEYS = ['background', 'foreground', 'accent', 'surface', 'codeBackground'] as const;
 const DEFAULT_COLORS: Record<Theme, CustomTheme['colors']> = {
-  light: { background: '#EEEDE9', foreground: '#17171B', accent: '#9E6F2B', surface: '#FFFFFF', codeBackground: '#F4F3F0' },
-  aurora: { background: '#F3F2FA', foreground: '#1C1D30', accent: '#5B6CF0', surface: '#FAF9FE', codeBackground: '#F1F0F8' },
-  dark: { background: '#07090D', foreground: '#E8EBEF', accent: '#D9AF69', surface: '#0E141C', codeBackground: '#111720' },
+  light: { background: '#F4F3F0', foreground: '#1A1A19', accent: '#A8762E', surface: '#FFFFFF', codeBackground: '#F6F6F4' },
+  aurora: { background: '#F1F0F8', foreground: '#1C1D30', accent: '#5B6CF0', surface: '#FBFAFE', codeBackground: '#F1F0F8' },
+  dark: { background: '#0D0D0C', foreground: '#ECECEA', accent: '#D9AF69', surface: '#171716', codeBackground: '#121211' },
 };
 
 const isSafeColor = (value: unknown): value is string => typeof value === 'string' && /^#[\da-f]{6}(?:[\da-f]{2})?$/i.test(value);

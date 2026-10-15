@@ -101,7 +101,7 @@ export default function WorkbenchPage({ apiBaseUrl, connected, onToast }: { apiB
       </div>
     </aside>
 
-    <section className="flex min-w-0 flex-1 flex-col rounded-2xl card-surface p-4">
+    <section className="flex min-w-0 flex-1 flex-col rounded-xl card-surface p-4">
       {!agent ? <div className="grid flex-1 place-items-center text-[13px] text-fg-3">选一个挂件，或者先添加一个。</div> : <>
         <header className="flex flex-wrap items-center gap-2 pb-3 shadow-[inset_0_-1px_0_var(--line)]">
           <div className="min-w-0 flex-1">

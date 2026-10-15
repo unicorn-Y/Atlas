@@ -444,11 +444,11 @@ export default function MessageThread({ history, username, historyActions, empty
             : <Button size="sm" variant="ghost" onClick={() => void loadEarlier(conversationId)}><History size={14} />载入更早的消息</Button>}
         </div>;
       case 'truncated':
-        return <div className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-3" role="note">
+        return <div className="my-3 flex items-center gap-2 text-[12.5px] text-fg-3" role="note">
           <History size={13} className="shrink-0 text-fg-3" />已折叠早期事件（{row.count} 条）
         </div>;
       case 'history':
-        if (row.message.role === 'user' && isTodoEdit(row.message.content)) return <div className="my-3 ml-10 flex items-center gap-2 text-[12.5px] text-fg-2">
+        if (row.message.role === 'user' && isTodoEdit(row.message.content)) return <div className="my-3 flex items-center gap-2 text-[12.5px] text-fg-2">
           <ListChecks size={13} className="shrink-0 text-brand" /><span>{todoEditNotice(row.message.content)}</span>
         </div>;
         return <ConversationMessage role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} />;
@@ -508,7 +508,7 @@ export default function MessageThread({ history, username, historyActions, empty
       onNext={() => moveSearch(1)}
       onClose={closeSearch}
     />
-    <div className="mx-auto w-[min(720px,100%)] pb-8">
+    <div className="mx-auto w-[min(760px,100%)] pb-8">
       {scrollParent && !loading && <Virtuoso
         key={scrollStateKey}
         ref={virtuosoRef}

@@ -110,7 +110,7 @@ export default function LibraryPage({ apiBaseUrl, connected, onToast, market }: 
       <aside className="flex w-56 shrink-0 flex-col gap-2">{tabs}
         <p className="m-0 px-1 text-[11.5px] leading-relaxed text-fg-3">从在线市场搜索和安装技能。装好的技能会出现在「技能库」里，点「一键整理」归类。</p>
       </aside>
-      <section className="min-w-0 flex-1 overflow-auto rounded-2xl card-surface p-4">{market}</section>
+      <section className="min-w-0 flex-1 overflow-auto rounded-xl card-surface p-4">{market}</section>
     </div></div>;
   }
 
@@ -129,7 +129,7 @@ export default function LibraryPage({ apiBaseUrl, connected, onToast, market }: 
       <Button size="sm" variant="ghost" onClick={() => void addCategory()} disabled={!connected}><FolderPlus />新建分类</Button>
     </aside>
 
-    <section className="flex min-w-0 flex-1 flex-col rounded-2xl card-surface p-4">
+    <section className="flex min-w-0 flex-1 flex-col rounded-xl card-surface p-4">
       <header className="flex flex-wrap items-center gap-2 pb-3 shadow-[inset_0_-1px_0_var(--line)]">
         <div className="min-w-0 flex-1">
           <h2 className="m-0 text-[15px] font-semibold text-heading">{category === ALL ? `全部${label}` : category === UNSORTED ? '未整理' : data?.categories.find((c) => c.id === category)?.name}</h2>
@@ -164,7 +164,7 @@ export default function LibraryPage({ apiBaseUrl, connected, onToast, market }: 
         </select>
       </div>
 
-      <div className="grid min-h-0 flex-1 content-start gap-1.5 overflow-auto">
+      <div className="grid min-h-0 flex-1 content-start overflow-auto">
         {loading && <p className="m-0 flex items-center gap-2 text-[12.5px] text-fg-3"><LoaderCircle size={13} className="animate-spin" />加载中…</p>}
         {!loading && !items.length && <div className="rounded-xl bg-sunken p-4 text-[12.5px] leading-relaxed text-fg-2">
           {data?.items.length ? '没有符合条件的条目。' : <>库还是空的。把网页 GPT 搜罗出的 JSONL 文件放进<br /><code className="font-mono text-[11.5px]">{data?.inbox}</code><br />再点「导入」→「从收件箱导入」，然后「一键整理」。</>}
@@ -199,7 +199,7 @@ function CategoryRow({ name, count, active, warn, isNew, title, onClick, onRenam
 function ItemRow({ item, categories, installing, onAssign, onInstall }: {
   item: LibraryItem; categories: LibrarySnapshot['categories']; installing: boolean; onAssign: (category: string) => void; onInstall: () => void;
 }) {
-  return <div className="flex items-start gap-3 rounded-xl px-3 py-2.5 shadow-[inset_0_0_0_1px_var(--line)]">
+  return <div className="flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-hover [&+&]:shadow-[inset_0_1px_0_var(--line)]">
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="font-mono text-[12.5px] font-medium text-fg">{item.name}</span>
