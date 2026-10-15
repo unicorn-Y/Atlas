@@ -27,7 +27,7 @@ export default function HomeView({ username, composer, notice, recent, onOpen, o
 }) {
   return <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
     <Orb className="orb-bg pointer-events-none absolute -top-[120px] -right-[120px] size-[540px]" />
-    <div className="relative mx-auto w-[min(720px,100%)] px-6 pt-[9vh] pb-16">
+    <div className="relative mx-auto w-[min(800px,100%)] px-6 pt-[9vh] pb-16">
       <h1 className="m-0 font-serif text-[44px] leading-[1.15] font-semibold tracking-[.01em] text-heading [text-wrap:balance]">
         {greeting()}{username !== 'User' ? `，${username}` : ''}
       </h1>

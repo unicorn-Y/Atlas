@@ -213,6 +213,25 @@ export default function Composer(props: ComposerProps) {
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [shellConfirmation, setShellConfirmation] = useState<string | null>(null);
   const shortcutHelpButtonRef = useRef<HTMLButtonElement>(null);
+  // The tool row scrolls when crowded; fade the clipped edge so hidden controls are discoverable.
+  const toolsRef = useRef<HTMLDivElement>(null);
+  const [toolsFade, setToolsFade] = useState({ left: false, right: false });
+  const measureTools = () => {
+    const row = toolsRef.current;
+    if (!row) return;
+    const left = row.scrollLeft > 1;
+    const right = row.scrollLeft + row.clientWidth < row.scrollWidth - 1;
+    setToolsFade((current) => current.left === left && current.right === right ? current : { left, right });
+  };
+  useEffect(() => {
+    const row = toolsRef.current;
+    if (!row || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measureTools);
+    observer.observe(row);
+    for (const child of Array.from(row.children)) observer.observe(child);
+    measureTools();
+    return () => observer.disconnect();
+  });
   const shortcutHelpCloseRef = useRef<HTMLButtonElement>(null);
   const previewOpen = previewIndex !== null;
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -500,6 +519,7 @@ export default function Composer(props: ComposerProps) {
           <MenuLabel>添加到消息</MenuLabel>
           <MenuItem onSelect={() => fileRef.current?.click()}><Paperclip size={15} />附件</MenuItem>
           <MenuItem onSelect={() => props.onChange(`${props.value}${props.value && !props.value.endsWith(' ') ? ' ' : ''}/goal `)}><Sparkles size={15} />目标命令</MenuItem>
+          {props.onEnhancePrompt && <MenuItem disabled={!props.value.trim() || enhancing} onSelect={() => void enhancePrompt()}><Sparkles size={15} />{enhancing ? '正在增强提示词…' : '增强提示词'}</MenuItem>}
           <MenuSeparator />
           <MenuItem checked={enterToSend} onSelect={() => setEnterToSend((current) => { const next = !current; try { localStorage.setItem(ENTER_TO_SEND_KEY, String(next)); } catch { /* storage unavailable */ } return next; })}>Enter 发送</MenuItem>
           <MenuItem checked={screenReaderMode} onSelect={toggleScreenReaderMode}><Accessibility size={15} />屏幕阅读增强</MenuItem>
@@ -508,8 +528,11 @@ export default function Composer(props: ComposerProps) {
         </Menu>
       </Tip>
       {/* Narrow composers (split view, wide task panel): the tool row scrolls rather than pushing send out of view. */}
-      {props.tools && <div onWheel={(event) => { if (!event.deltaX && event.deltaY) event.currentTarget.scrollLeft += event.deltaY; }}
-        className="flex min-w-0 shrink items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{props.tools}</div>}
+      {props.tools && <div ref={toolsRef} onScroll={measureTools} onWheel={(event) => { if (!event.deltaX && event.deltaY) event.currentTarget.scrollLeft += event.deltaY; }}
+        className={cn('flex min-w-0 shrink items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          toolsFade.left && toolsFade.right ? '[mask-image:linear-gradient(90deg,transparent,#000_20px,#000_calc(100%-20px),transparent)]'
+            : toolsFade.right ? '[mask-image:linear-gradient(90deg,#000_calc(100%-24px),transparent)]'
+            : toolsFade.left ? '[mask-image:linear-gradient(90deg,transparent,#000_24px)]' : '')}>{props.tools}</div>}
 
       {props.modes && <div role="radiogroup" aria-label="任务类型" className="flex shrink-0 gap-0.5 rounded-[10px] bg-sunken p-[3px] shadow-[inset_0_0_0_1px_var(--line)]">
         {props.modes.options.map(({ id, label, icon: Icon }) => {
@@ -518,7 +541,7 @@ export default function Composer(props: ComposerProps) {
             className={cn('inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] transition-colors',
               on ? 'raised text-fg' : 'text-fg-2 hover:text-fg')}>
             {/* Labels give way to icons when the toolbar gets crowded. */}
-            <Icon size={14} /><span className="hidden @[700px]:inline">{label}</span>
+            <Icon size={14} /><span className="hidden @[860px]:inline">{label}</span>
           </button>;
         })}
       </div>}
@@ -530,7 +553,7 @@ export default function Composer(props: ComposerProps) {
       <ExpertModeToggle apiBaseUrl={backend.apiBaseUrl} />
       <Menu>
         <MenuTrigger asChild disabled={!props.models.length}>
-          <button type="button" aria-label={`选择模型，当前${current?.name ?? current?.id ?? '默认模型'}`} title="选择模型" className="inline-flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-[9px] px-2.5 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50">
+          <button type="button" aria-label={`选择模型，当前${current?.name ?? current?.id ?? '默认模型'}`} title="选择模型" className="inline-flex h-8 min-w-[118px] shrink items-center gap-1.5 rounded-[9px] px-2.5 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50">
             <span className={cn('size-1.5 shrink-0 rounded-full', current ? 'bg-ok shadow-[0_0_8px_var(--ok)]' : 'bg-fg-3')} />
             <span className="max-w-[220px] truncate">{current?.name ?? current?.id ?? '默认模型'}</span>
             <ChevronDown size={13} />
@@ -545,14 +568,6 @@ export default function Composer(props: ComposerProps) {
       </Menu>
 
       {props.onAttachDrawing && <DrawingPad key={props.contextKey} onAttach={props.onAttachDrawing} />}
-      {props.onEnhancePrompt && <Tip label="用当前模型改写草稿，结果仍可编辑；不会自动发送">
-        <button type="button" aria-label="增强提示词" aria-busy={enhancing} disabled={!props.value.trim() || enhancing}
-          onClick={() => void enhancePrompt()}
-          className="grid size-8 shrink-0 place-items-center rounded-full text-fg-2 hover:bg-hover hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-40">
-          <Sparkles size={16} />
-        </button>
-      </Tip>}
-
       <Tip label={props.listening ? '停止语音输入' : '语音输入'}>
         <button type="button" aria-label={props.listening ? '停止语音输入' : '开始语音输入'} aria-pressed={props.listening} onClick={props.onToggleMic}
           className={cn('grid size-8 shrink-0 place-items-center rounded-full transition-colors',

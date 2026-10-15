@@ -105,7 +105,7 @@ export default function MemoryPage({
   );
 
   return (
-    <div className="page">
+    <div className="screen page"><div className="page-inner narrow">
       <header className="page-head">
         <div>
           <h1>记忆与资料</h1>
@@ -179,6 +179,6 @@ export default function MemoryPage({
         <b>{q ? '没有找到相关资料' : '资料库是空的'}</b>
         {q ? '换个说法试试，搜索会按意思匹配。' : '把常用的说明、笔记加进来，Atlas 回答时会参考它们。'}
       </div></div>)}
-    </div>
+    </div></div>
   );
 }

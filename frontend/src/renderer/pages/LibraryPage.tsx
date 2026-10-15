@@ -192,7 +192,7 @@ function CategoryRow({ name, count, active, warn, isNew, title, onClick, onRenam
     </button>
     {onRename && <button aria-label="重命名" onClick={onRename} className="hidden size-5 place-items-center rounded text-fg-3 group-hover:grid hover:text-fg"><Pencil size={11} /></button>}
     {onDelete && <button aria-label="删除分类" onClick={onDelete} className="hidden size-5 place-items-center rounded text-fg-3 group-hover:grid hover:text-danger"><Trash2 size={11} /></button>}
-    <span className={cn('shrink-0 text-[11px] tabular-nums', warn ? 'font-semibold text-danger' : 'text-fg-3')}>{count}</span>
+    <span className={cn('shrink-0 text-[11px] tabular-nums', warn ? 'font-semibold text-brand' : 'text-fg-3')}>{count}</span>
   </div>;
 }
 

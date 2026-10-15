@@ -1010,7 +1010,7 @@ export default function App() {
     tools: <>
       <Menu>
         <Tip label={workspaceName ? `工作目录：${workspacePath}` : '选择工作目录'}><MenuTrigger asChild>
-          <button type="button" className={cn('inline-flex h-8 max-w-[170px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', workspaceName ? 'text-fg-2' : 'text-fg-3')}>
+          <button type="button" aria-label={workspaceName ? `工作目录：${workspaceName}` : '选择工作目录'} className={cn('inline-flex h-8 max-w-[170px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', workspaceName ? 'text-fg-2' : 'text-fg-3')}>
             {remoteHost ? <Server size={15} className="shrink-0 text-brand" /> : <FolderOpen size={15} className="shrink-0" />}{workspaceName && <span className="truncate">{workspaceName}</span>}
           </button>
         </MenuTrigger></Tip>
@@ -1022,7 +1022,7 @@ export default function App() {
       </Menu>
       {activeConversation && <Menu>
         <Tip label={PERMISSION[permission].hint}><MenuTrigger asChild>
-          <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', permission === 'full_access' ? 'text-fg-3 hover:text-fg' : 'bg-brand-soft text-fg')}>
+          <button type="button" aria-label={`权限：${PERMISSION[permission].label}`} className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', permission === 'full_access' ? 'text-fg-3 hover:text-fg' : 'bg-brand-soft text-fg')}>
             {permission === 'read_only' ? <Lock size={15} /> : permission === 'full_access' ? <ShieldCheck size={15} /> : <ShieldAsk size={15} />}{permission !== 'full_access' && PERMISSION[permission].label}
           </button>
         </MenuTrigger></Tip>
@@ -1045,7 +1045,7 @@ export default function App() {
           : window.prompt('允许访问的目录（完整路径）', '')?.trim() || null} />}
       {store.profiles.length > 0 && <Menu>
         <Tip label={`角色：${profileName}`}><MenuTrigger asChild>
-          <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.profileId !== 'default' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+          <button type="button" aria-label={`角色：${profileName}`} className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.profileId !== 'default' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
             <UserCog size={15} />{store.profileId !== 'default' && profileName}
           </button>
         </MenuTrigger></Tip>
@@ -1058,7 +1058,7 @@ export default function App() {
       </Menu>}
       {Boolean(currentModel?.supports_reasoning_effort) && <Menu>
         <Tip label={store.reasoningEffort ? `推理：${EFFORT_LABEL[store.reasoningEffort]}` : '推理档位：模型默认'}><MenuTrigger asChild>
-          <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.reasoningEffort ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+          <button type="button" aria-label="推理档位" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', store.reasoningEffort ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
             <Brain size={15} />{store.reasoningEffort && EFFORT_LABEL[store.reasoningEffort]}
           </button>
         </MenuTrigger></Tip>
@@ -1070,7 +1070,7 @@ export default function App() {
       </Menu>}
       {workspaceName && !remoteHost && <Menu onOpenChange={(opening) => { if (opening && !worktreeActive) void backend.getBranches(String(activeConversation?.workspace)).then((result) => { setBranches(result.branches); setGitBranch(result.current); }).catch(() => { setBranches([]); setGitBranch(''); }); }}>
         <Tip label={worktreeActive ? `在独立分支 ${activeConversation?.worktree_branch} 上工作` : worktreeRequested ? '下一条会在独立 worktree 里执行' : '隔离分支：在独立的 git worktree 里改，不动主目录'}><MenuTrigger asChild>
-          <button type="button" className={cn('inline-flex h-8 max-w-[150px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', worktreeActive || worktreeRequested ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+          <button type="button" aria-label="隔离分支" className={cn('inline-flex h-8 max-w-[150px] items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', worktreeActive || worktreeRequested ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
             <GitBranch size={15} className="shrink-0" />{(worktreeActive || worktreeRequested) && <span className="truncate">{worktreeActive ? String(activeConversation?.worktree_branch ?? '') : '隔离'}</span>}
           </button>
         </MenuTrigger></Tip>

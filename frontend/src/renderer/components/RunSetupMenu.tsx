@@ -45,7 +45,7 @@ export default function RunSetupMenu({ conversation, workspace, onChange, onPick
 
   return <Menu onOpenChange={(open) => { if (open) load(); }}>
     <Tip label="运行方式：谁来做、命令在哪跑、能碰哪些目录"><MenuTrigger asChild>
-      <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', label ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+      <button type="button" aria-label="运行方式" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', label ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
         {container ? <Box size={15} /> : executor !== 'atlas' ? <Bot size={15} /> : restricted ? <FolderLock size={15} /> : <Laptop size={15} />}{label && <span className="max-w-[140px] truncate">{label}</span>}
       </button>
     </MenuTrigger></Tip>

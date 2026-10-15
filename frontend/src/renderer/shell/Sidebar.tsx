@@ -759,8 +759,8 @@ export default function Sidebar(props: SidebarProps) {
       <Menu>
         <MenuTrigger asChild><button aria-label="更多页面"
           className={cn('relative flex h-[34px] items-center gap-2.5 rounded-[9px] text-[13.5px] transition-colors', mini ? 'w-10 justify-center' : 'px-2.5',
-            MORE_NAV.some(({ view }) => view === props.view) ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
-          <MoreHorizontal size={17} className={MORE_NAV.some(({ view }) => view === props.view) ? 'text-brand' : undefined} />
+            MORE_NAV.some(({ view }) => view !== 'home' && view === props.view) ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
+          <MoreHorizontal size={17} className={MORE_NAV.some(({ view }) => view !== 'home' && view === props.view) ? 'text-brand' : undefined} />
           {!mini && <span>更多</span>}
         </button></MenuTrigger>
         <MenuContent align="start" className="min-w-[150px]">
