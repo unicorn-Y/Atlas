@@ -17,6 +17,7 @@ export default function LinkedSessions({ conversationId }: { conversationId: str
     ? state.conversations.find((item) => item.id === self.parent_conversation_id)?.title ?? '主会话' : '');
 
   useEffect(() => {
+    setChildren([]); setSelf(null);
     if (!conversationId) return undefined;
     let stale = false;
     const refresh = async () => {
