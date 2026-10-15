@@ -199,7 +199,7 @@ Translated from OpenClaw (MIT) `openclaw/openclaw@59cb44796b0f1f0daa0e37af8b1495
 
 ## Idle compaction, hook onFailure, taskbar status, send_user_file
 
-Closed-source designs (Claude Code 2.1.295 / 2.1.299 changelog, Claude `SendUserFile`), reimplemented: `core/atlas/sessions/idle_compaction.py` (configurable window and threshold instead of a fixed 54 min / 200K), `core/atlas/runtime/hooks.py` (`onFailure: "block"` for Claude-format hooks, `on_failure` for Atlas hooks), `frontend/src/main/electron.ts` (`window:run-status` = desktop form of the OSC 7501 Program Status Protocol), `core/atlas/sessions/tools.py` (`send_user_file`).
+Closed-source designs (Claude Code 2.1.295 / 2.1.299 changelog, Claude `SendUserFile`), reimplemented: `core/atlas/sessions/idle_compaction.py` (configurable window and threshold instead of a fixed 54 min / 200K), `core/atlas/runtime/hooks.py` (`onFailure: "block"` for Claude-format hooks, `on_failure` for Atlas hooks), `frontend/src/main/electron.ts` (`window:run-status` = desktop form of the OSC 7501 Program Status Protocol), `core/atlas/sessions/tools.py` (`send_user_file`, and `next_step` = Claude Desktop `wrap_up`: recap, one question, at most two answer buttons, shown only when a decision is pending).
 
 ## Web-wide discovery (atlas.evolution.discovery)
 
