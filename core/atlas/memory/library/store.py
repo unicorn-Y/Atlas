@@ -37,6 +37,7 @@ TOMBSTONES = ".tombstones.jsonl"
 # Who a fact came from. Only the first two are about the user's own word.
 SRC_SAID, SRC_EDITED, SRC_GUESS, SRC_SELF = "你说的", "你改的", "推测", "它自己"
 SRC_EPISODE = "经历"
+SRC_DREAM = "整理"
 
 _PAGE_HEADER = {
     ME: "关于你。每行一条，可以直接改；你改过的行会标成「你改的」。",
@@ -56,6 +57,7 @@ class Entry:
     value: str = ""
     src: str = SRC_SAID
     at: str = ""
+    ref: str = ""
     until: str = ""
     quote: str = ""
     session: str = ""
@@ -67,6 +69,11 @@ class Entry:
     steps: list[str] = field(default_factory=list)
     outcome: str = ""
     verified: bool = False
+    decisions: list[str] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
+    commands: list[str] = field(default_factory=list)
+    facts: list[str] = field(default_factory=list)
+    open_items: list[str] = field(default_factory=list)
 
     def meta(self) -> dict[str, Any]:
         data = {k: v for k, v in asdict(self).items() if k != "text" and v not in ("", [], None)}

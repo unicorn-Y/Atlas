@@ -12,16 +12,29 @@ Ported from OpenClaw memory-core:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import re
 import sqlite3
+import struct
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .store import DIARY, EPISODES, SRC_EDITED, SRC_EPISODE, SRC_SAID, SRC_SELF, MemoryStore, Page, is_expired
+from .store import (
+    DIARY,
+    EPISODES,
+    SRC_DREAM,
+    SRC_EDITED,
+    SRC_EPISODE,
+    SRC_SAID,
+    SRC_SELF,
+    MemoryStore,
+    Page,
+    is_expired,
+)
 
 _CJK = r"぀-ゟ゠-ヿ㐀-䶿一-鿿가-힯"
 _CJK_RUN = re.compile(f"[{_CJK}]+")
@@ -38,6 +51,7 @@ CREATE TABLE IF NOT EXISTS items (
   bucket TEXT NOT NULL,          -- current | history | diary
   text TEXT NOT NULL,
   key TEXT, src TEXT, at TEXT, until TEXT, quote TEXT, mode TEXT,
+  ref TEXT,
   importance INTEGER NOT NULL DEFAULT 5,
   trigger TEXT,
   tokens TEXT NOT NULL,
@@ -64,6 +78,8 @@ def origin_class(src: str) -> str:
         return "episode"
     if src in (SRC_SAID, SRC_EDITED):
         return "owner"
+    if src == SRC_DREAM:
+        return "system"
     if src:
         return "agent"
     return "untrusted"
@@ -92,6 +108,11 @@ class MemoryIndex:
         self._lock = threading.RLock()
         self._db: sqlite3.Connection | None = None
         self._idf_cache: tuple[int, dict[str, float]] | None = None
+        self._embedding_task: asyncio.Task[Any] | None = None
+        self._embedding_state = "building"
+        self._vector_cache: dict[str, list[dict[str, Any]]] = {}
+        self._vector_matrix_cache: dict[tuple[str, int], tuple[list[dict[str, Any]], Any, Any]] | None = None
+        self._entities_cache: list[tuple[str, list[str]]] | None = None
 
     def _conn(self) -> sqlite3.Connection:
         if self._db is None:
@@ -106,16 +127,26 @@ class MemoryIndex:
                     CREATE TABLE items_new (
                       rowid INTEGER PRIMARY KEY, id TEXT NOT NULL, path TEXT NOT NULL,
                       kind TEXT NOT NULL, bucket TEXT NOT NULL, text TEXT NOT NULL,
-                      key TEXT, src TEXT, at TEXT, until TEXT, quote TEXT, mode TEXT,
+                      key TEXT, src TEXT, at TEXT, until TEXT, quote TEXT, mode TEXT, ref TEXT,
                       importance INTEGER NOT NULL DEFAULT 5, trigger TEXT, tokens TEXT NOT NULL,
                       origin_class TEXT NOT NULL CHECK (origin_class IN ('owner','agent','untrusted','system','episode')),
                       observed_at TEXT
                     );
-                    INSERT INTO items_new SELECT * FROM items_old;
+                    INSERT INTO items_new(id,path,kind,bucket,text,key,src,at,until,quote,mode,
+                      importance,trigger,tokens,origin_class,observed_at)
+                    SELECT id,path,kind,bucket,text,key,src,at,until,quote,mode,
+                      importance,trigger,tokens,origin_class,observed_at FROM items_old;
                     DROP TABLE items_old;
                     ALTER TABLE items_new RENAME TO items;
                     CREATE INDEX IF NOT EXISTS items_path ON items(path);
                 """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(items)")}
+            if "ref" not in columns:
+                db.execute("ALTER TABLE items ADD COLUMN ref TEXT")
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS vectors("
+                "id TEXT PRIMARY KEY, dim INTEGER NOT NULL, vec BLOB NOT NULL, text_hash TEXT NOT NULL)"
+            )
             self._db = db
         return self._db
 
@@ -145,6 +176,10 @@ class MemoryIndex:
             if changed:
                 db.commit()
                 self._idf_cache = None
+                self._vector_cache.clear()
+                self._vector_matrix_cache = None
+                self._entities_cache = None
+            self._schedule_embeddings()
             return changed
 
     def rebuild(self) -> None:
@@ -156,7 +191,9 @@ class MemoryIndex:
 
     def _drop(self, db: sqlite3.Connection, rel: str) -> None:
         rows = [row["rowid"] for row in db.execute("SELECT rowid FROM items WHERE path = ?", (rel,))]
+        ids = [row["id"] for row in db.execute("SELECT id FROM items WHERE path = ?", (rel,))]
         db.executemany("DELETE FROM items_fts WHERE rowid = ?", [(r,) for r in rows])
+        db.executemany("DELETE FROM vectors WHERE id = ?", [(item_id,) for item_id in ids])
         db.execute("DELETE FROM items WHERE path = ?", (rel,))
 
     def _insert(self, db: sqlite3.Connection, row: dict[str, Any]) -> None:
@@ -164,9 +201,9 @@ class MemoryIndex:
                                              row.get("quote") or "", row.get("trigger") or ""]))
         row["tokens"] = " ".join(sorted(tokenize(searchable)))
         cur = db.execute(
-            "INSERT INTO items(id, path, kind, bucket, text, key, src, at, until, quote, mode,"
+            "INSERT INTO items(id, path, kind, bucket, text, key, src, at, until, quote, mode, ref,"
             " importance, trigger, tokens, origin_class, observed_at)"
-            " VALUES(:id, :path, :kind, :bucket, :text, :key, :src, :at, :until, :quote, :mode,"
+            " VALUES(:id, :path, :kind, :bucket, :text, :key, :src, :at, :until, :quote, :mode, :ref,"
             " :importance, :trigger, :tokens, :origin_class, :observed_at)",
             row,
         )
@@ -178,13 +215,15 @@ class MemoryIndex:
             day = Path(rel).stem
             for n, (head, body) in enumerate(_diary_blocks(text)):
                 mode = "expert" if '"mode":"expert"' in body else ""
+                ref_match = re.search(r'"ref":"([^"\\]*)"', body)
                 clean = re.sub(r"<!--.*?-->", "", body, flags=re.S).strip()
                 if not clean:
                     continue
                 self._insert(db, {
                     "id": f"d_{day}_{n}", "path": rel, "kind": "diary", "bucket": "diary",
                     "text": clean, "key": "", "src": "", "at": f"{day}T{head or '00:00'}",
-                    "until": "", "quote": "", "mode": mode, "importance": 5, "trigger": "",
+                    "until": "", "quote": "", "mode": mode,
+                    "ref": ref_match.group(1) if ref_match else "", "importance": 5, "trigger": "",
                     "origin_class": "system", "observed_at": day,
                 })
             return
@@ -196,7 +235,7 @@ class MemoryIndex:
                     "text": entry.text, "search_text": " ".join([entry.text, entry.outcome,
                                                                      *entry.trigger]),
                     "key": "", "src": entry.src, "at": entry.at, "until": "",
-                    "quote": "", "mode": entry.mode, "importance": 5,
+                    "quote": "", "mode": entry.mode, "ref": entry.ref, "importance": 5,
                     "trigger": " ".join(entry.trigger), "origin_class": origin_class(entry.src),
                     "observed_at": entry.at,
                 })
@@ -205,9 +244,10 @@ class MemoryIndex:
         for bucket in ("current", "history"):
             for entry in getattr(page, bucket):
                 self._insert(db, {
-                    "id": entry.id, "path": rel, "kind": "fact", "bucket": bucket,
+                    "id": entry.id, "path": rel,
+                    "kind": "dream" if entry.src == SRC_DREAM else "fact", "bucket": bucket,
                     "text": entry.text, "key": entry.key, "src": entry.src, "at": entry.at,
-                    "until": entry.until, "quote": entry.quote, "mode": entry.mode,
+                    "until": entry.until, "quote": entry.quote, "mode": entry.mode, "ref": entry.ref,
                     "importance": int(entry.importance or 5),
                     "trigger": " ".join([*entry.trigger, *names]),
                     "origin_class": origin_class(entry.src), "observed_at": entry.at,
@@ -226,7 +266,7 @@ class MemoryIndex:
         self._idf_cache = (total, idf)
         return idf
 
-    def search(self, query: str, *, limit: int = 8, kinds: tuple[str, ...] = ("fact", "diary"),
+    def _keyword_search(self, query: str, *, limit: int = 8, kinds: tuple[str, ...] = ("fact", "diary"),
                include_history: bool = False, now: datetime | None = None,
                exclude_paths: tuple[str, ...] = ()) -> list[dict[str, Any]]:
         q_tokens = tokenize(query)
@@ -273,15 +313,8 @@ class MemoryIndex:
             # Harmonic blend of "how much of the query" and "how much of the item" matched.
             q_cov, i_cov = matched / q_weight, matched / item_weight
             relevance = 2 * q_cov * i_cov / (q_cov + i_cov)
-            decay = 1.0
-            if row["kind"] in ("diary", "episode"):
-                try:
-                    day = datetime.fromisoformat(row["observed_at"]).date()
-                    decay = 0.5 ** (max(0, (now.date() - day).days) / HALF_LIFE_DAYS)
-                except ValueError:
-                    pass
             importance = 1.0 + (int(row["importance"] or 5) - 5) / 10.0
-            row["score"] = round(relevance * decay * importance, 4)
+            row["score"] = round(relevance * importance, 4)
             row["matched"] = sorted(hit)
             if expired:
                 row["expired"] = True
@@ -289,6 +322,134 @@ class MemoryIndex:
             results.append(row)
         results.sort(key=lambda r: r["score"], reverse=True)
         return results[:limit]
+
+    def _schedule_embeddings(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        if self._embedding_task is None or self._embedding_task.done():
+            self._embedding_state = "building"
+            self._embedding_task = loop.create_task(asyncio.to_thread(self.embed_missing))
+
+    def embed_missing(self) -> int:
+        from .embed import embed_texts
+
+        added = 0
+        try:
+            db = self._conn()
+            rows = []
+            for row in db.execute("SELECT i.id,i.text,v.text_hash FROM items i LEFT JOIN vectors v ON i.id=v.id"):
+                row = dict(row)
+                digest = hashlib.sha256(row["text"].encode("utf-8")).hexdigest()
+                if row["text_hash"] != digest:
+                    rows.append(row)
+            rows = rows[:100000]
+            for start in range(0, len(rows), 64):
+                batch = rows[start:start + 64]
+                vectors = embed_texts([row["text"] for row in batch])
+                if vectors is None:
+                    self._embedding_state = "unavailable"
+                    return added
+                with self._lock:
+                    for row, vector in zip(batch, vectors):
+                        packed = struct.pack(f"{len(vector)}f", *vector)
+                        db.execute("INSERT OR REPLACE INTO vectors(id,dim,vec,text_hash) VALUES(?,?,?,?)",
+                                   (row["id"], len(vector), packed,
+                                    hashlib.sha256(row["text"].encode("utf-8")).hexdigest()))
+                    db.commit()
+                added += len(batch)
+            if added:
+                self._vector_cache.clear()
+                self._vector_matrix_cache = None
+            self._embedding_state = "ready"
+            return added
+        except Exception:  # noqa: BLE001 - vector failures must not take down lexical search.
+            self._embedding_state = "unavailable"
+            return added
+
+    @property
+    def embedding_state(self) -> str:
+        if self._embedding_task is not None and not self._embedding_task.done():
+            return "building"
+        return self._embedding_state
+
+    def _vector_search(self, query: str, *, kinds: tuple[str, ...], include_history: bool,
+                       now: datetime, exclude_paths: tuple[str, ...]) -> list[dict[str, Any]]:
+        rows = self._vector_cache.get(query)
+        if rows is None:
+            from .embed import embed_texts
+
+            vectors = embed_texts([query])
+            if not vectors:
+                return []
+            import numpy as np
+
+            q = np.asarray(vectors[0], dtype=np.float32)
+            qnorm = float(np.linalg.norm(q))
+            if not qnorm:
+                return []
+            if self._vector_matrix_cache is None:
+                grouped: dict[tuple[str, int], list[dict[str, Any]]] = {}
+                with self._lock:
+                    for source in self._conn().execute(
+                        "SELECT i.*,v.dim,v.vec FROM items i JOIN vectors v ON i.id=v.id"
+                    ):
+                        row = dict(source)
+                        grouped.setdefault((row["kind"], int(row["dim"])), []).append(row)
+                matrices = {}
+                for key, candidates in grouped.items():
+                    matrix = np.stack([
+                        np.frombuffer(row["vec"], dtype=np.float32) for row in candidates
+                    ])
+                    matrices[key] = (candidates, matrix, np.linalg.norm(matrix, axis=1))
+                self._vector_matrix_cache = matrices
+            if not self._vector_matrix_cache:
+                return []
+            rows = []
+            for (kind, dim), (candidates, matrix, norms) in self._vector_matrix_cache.items():
+                if dim != q.size:
+                    continue
+                scores = np.divide(matrix @ q, norms * qnorm,
+                                   out=np.zeros(len(candidates), dtype=np.float32), where=norms > 0)
+                size = min(400, len(candidates))
+                top = np.argpartition(scores, -size)[-size:]
+                top = top[np.argsort(scores[top])[::-1]]
+                for index in top:
+                    row = dict(candidates[int(index)])
+                    row["vector_score"] = max(0.0, float(scores[index]))
+                    row.pop("vec", None)
+                    rows.append(row)
+            self._vector_cache[query] = rows
+            if len(self._vector_cache) > 8:
+                self._vector_cache.pop(next(iter(self._vector_cache)))
+        excluded = set(exclude_paths)
+        results = [row for row in rows if row["kind"] in kinds and row["path"] not in excluded
+                   and (include_history or (row["bucket"] != "history" and not is_expired(row["until"], now)))]
+        results.sort(key=lambda row: row["vector_score"], reverse=True)
+        return results[:400]
+
+    def search(self, query: str, *, limit: int = 8, kinds: tuple[str, ...] = ("fact", "diary"),
+               include_history: bool = False, now: datetime | None = None,
+               exclude_paths: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+        from .hybrid import merge_scores
+
+        now = now or datetime.now().astimezone()
+        requested = tuple(k for k in kinds if k != "raw")
+        keyword = self._keyword_search(query, limit=400, kinds=requested,
+                                       include_history=include_history, now=now,
+                                       exclude_paths=exclude_paths) if requested else []
+        vector = self._vector_search(query, kinds=requested, include_history=include_history,
+                                     now=now, exclude_paths=exclude_paths) if requested else []
+        include_raw = "raw" in kinds
+        results = merge_scores(keyword, vector, now=now, limit=400 if include_raw else limit)
+        if include_raw:
+            from .sources import search_raw
+
+            results.extend(search_raw(query, limit))
+            results.sort(key=lambda row: float(row.get("score", 0)), reverse=True)
+            results = results[:limit]
+        return results
 
     def facts(self, paths: list[str] | None = None) -> list[dict[str, Any]]:
         with self._lock:
@@ -303,12 +464,14 @@ class MemoryIndex:
 
     def entities(self) -> list[tuple[str, list[str]]]:
         """(page path, names) for every person / thing page, used for cue triggering."""
-        found = []
-        for rel in self.store.pages():
-            if rel.startswith(("人/", "事/")):
-                page = self.store.read(rel)
-                found.append((rel, [page.title, *page.aliases]))
-        return found
+        with self._lock:
+            if self._entities_cache is None:
+                self._entities_cache = []
+                for rel in self.store.pages():
+                    if rel.startswith(("人/", "事/")):
+                        page = self.store.read(rel)
+                        self._entities_cache.append((rel, [page.title, *page.aliases]))
+            return list(self._entities_cache)
 
 
 __all__ = ["MemoryIndex", "tokenize", "origin_class", "SRC_SELF"]

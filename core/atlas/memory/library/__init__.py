@@ -38,13 +38,14 @@ _DEFAULT_WORKSPACE_PATTERNS = [r"[\\/]\.tmp[\\/]", r"[\\/]audit[-_]", r"pytest",
 _DEFAULT_TEXT_PATTERNS = [r"ATLAS_AUDIT", r"^\s*\[[^\]]*(补测|审计|测试|audit|smoke)[^\]]*\]",
                           r"这是(隔离运行|只读权限|受控的长任务)?.{0,6}测试"]
 _RECALL_INTENT = re.compile(
-    r"上次|上回|之前|以前|还记得|记得吗|记不记得|我说过|跟你说过|那次|前几天|前阵子|那天|"
+    r"刚才|上次|上回|之前|以前|还记得|记得吗|记不记得|我说过|跟你说过|那次|前几天|前阵子|那天|"
     r"记得我|记住了什么|你知道我|聊过|做过|last time|remember",
     re.I,
 )
 INSTRUCTION = (
     "以下是 Atlas 记忆库里关于用户的记录，每条标了来源和日期。"
     "「你说的」「你改的」是用户本人确认过的；「推测」「它自己」不是用户说的。"
+    "「整理」是 Atlas 自己归纳的，以出处原文为准。"
     "用户问到记录里没有的细节时，直接说不记得或不确定，绝不编造。"
     "「经历」是 Atlas 根据对话自己整理的，说明聊过和做过什么，不是用户确认过的事实；回答「之前怎么做的」时，要分清哪些步骤真验证过。"
     "和当前问题无关时不要硬提这些记忆。"
@@ -63,6 +64,8 @@ def _now(config: Any = None) -> datetime:
 
 def _label(entry_src: str, at: str) -> str:
     day = (at or "")[:10]
+    if entry_src == "整理":
+        return f"（整理 · {day}）" if day else "（整理）"
     if entry_src == SRC_EPISODE:
         return f"（经历 · {day}）" if day else "（经历）"
     return f"（{entry_src or '来源不明'}{' · ' + day if day else ''}）"
@@ -214,29 +217,38 @@ class MemoryLibrary:
             if lines:
                 alias = f"（也叫 {'、'.join(page.aliases)}）" if page.aliases else ""
                 parts.append(f"## {page.title}{alias}\n" + "\n".join(lines))
-                refs.extend(e.id for e in current[-MAX_CUE_LINES:])
+                refs.extend(e.ref for e in current[-MAX_CUE_LINES:] if e.ref)
         skip = set(RESIDENT_PAGES) | set(cue_pages)
         hits = [h for h in self.index.search(message, limit=MAX_SEARCH_FACTS * 2,
-                                             kinds=("fact",), exclude_paths=tuple(skip), now=now)
+                                             kinds=("fact", "dream"), exclude_paths=tuple(skip), now=now)
                 if h["score"] >= SEARCH_MIN_SCORE][:MAX_SEARCH_FACTS]
         if hits:
             parts.append("## 可能相关\n" + "\n".join(
                 f"- {h['text']}{_label(h['src'], h['at'])}" for h in hits))
-            refs.extend(h["id"] for h in hits)
+            refs.extend(h.get("ref") for h in hits if h.get("ref"))
         resident_ids = {e.id for e in self._recent_episodes(now, 7, 6)}
+        detailed = bool(_RECALL_INTENT.search(message))
         episode_hits = [h for h in self.index.search(message, limit=12, kinds=("episode",), now=now)
-                        if h["score"] >= SEARCH_MIN_SCORE and h["id"] not in resident_ids][:3]
+                        if h["score"] >= SEARCH_MIN_SCORE and (detailed or h["id"] not in resident_ids)][:3]
         if episode_hits:
-            detailed = bool(_RECALL_INTENT.search(message))
             lines = []
             for hit in episode_hits:
-                entry_found = self.store.find_entry(hit["id"])
-                entry = entry_found[1] if entry_found else None
+                source_page = self.store.read(str(hit.get("path") or ""))
+                entry = next((item for item in source_page.current if item.id == hit["id"]), None)
                 line = f"- [{hit['at'][:10]}] {hit['text']} → {entry.outcome if entry else ''}"
                 if detailed and entry:
-                    line += f"；步骤：{'、'.join(entry.steps)}；{'已验证' if entry.verified else '未验证'}"
+                    details = []
+                    for label, values in (("决定", entry.decisions), ("文件", entry.files),
+                                          ("命令", entry.commands), ("关键数字", entry.facts),
+                                          ("没做完", entry.open_items), ("步骤", entry.steps)):
+                        if values:
+                            details.append(f"{label}：{'、'.join(values)}")
+                    if details:
+                        line += "；" + "；".join(details)
+                    line += f"；{'已验证' if entry.verified else '未验证'}"
                 lines.append(line)
-                refs.append(hit["id"])
+                if entry and entry.ref:
+                    refs.append(entry.ref)
             parts.append("## 以前做过的相关的事\n" + "\n".join(lines))
         if _RECALL_INTENT.search(message):
             diary = [h for h in self.index.search(message, limit=3, kinds=("diary",), now=now)
@@ -244,19 +256,25 @@ class MemoryLibrary:
             if diary:
                 parts.append("## 以前的对话记录（原文节选）\n" + "\n".join(
                     f"- [{h['at'][:16].replace('T', ' ')}] {' '.join(h['text'].split())[:240]}" for h in diary))
-                refs.extend(h["id"] for h in diary)
+                refs.extend(h.get("ref") for h in diary if h.get("ref"))
         if not parts:
             return "", []
-        return "Atlas 记忆库里和这句话有关的记录：\n\n" + "\n\n".join(parts), refs
+        detailed = bool(_RECALL_INTENT.search(message))
+        refs = list(dict.fromkeys(refs))
+        if detailed and refs:
+            parts.append('需要细节可用 memory_search(open="<ref>") 打开原对话：' + "、".join(refs[:3]))
+        block = "Atlas 记忆库里和这句话有关的记录：\n\n" + "\n\n".join(parts)
+        return block[:3000 if detailed else 1200], refs[:3] if detailed else refs
 
     # ---------- search tool ----------
-    def search(self, query: str, limit: int = 8, include_history: bool = False) -> list[dict[str, Any]]:
+    def search(self, query: str, limit: int = 8, include_history: bool = False,
+               kinds: tuple[str, ...] = ("fact", "dream", "diary")) -> list[dict[str, Any]]:
         self.ready()
         self.index.sync()
-        keep = ("id", "path", "kind", "bucket", "text", "src", "at", "until", "quote", "score", "expired")
+        keep = ("id", "path", "kind", "bucket", "text", "src", "at", "ref", "until", "quote", "score", "expired")
         return [{k: h.get(k) for k in keep}
                 for h in self.index.search(query, limit=limit, include_history=include_history,
-                                           now=_now(self.config))]
+                                           kinds=kinds, now=_now(self.config))]
 
     # ---------- write (after the reply, in the background) ----------
     def schedule_turn(self, **kwargs: Any) -> None:
@@ -274,7 +292,8 @@ class MemoryLibrary:
                           user_text=user_text, assistant_text=kwargs.get("assistant_text") or "",
                           workspace=workspace,
                           steps=json.dumps(kwargs.get("steps") or [], ensure_ascii=False),
-                          verified=bool(kwargs.get("verified", False)))
+                          verified=bool(kwargs.get("verified", False)),
+                          turn_started=str(kwargs.get("turn_started") or ""))
         task = asyncio.create_task(self._drain(kwargs.get("model_mgr")))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -285,9 +304,10 @@ class MemoryLibrary:
             for row in self.queue.pending():
                 try:
                     now = datetime.fromisoformat(row["created"])
+                    ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
                     if row["stage"] == "new":
                         await asyncio.to_thread(self._write_diary, now, row["user_text"],
-                                                row["assistant_text"], row["session"], row["mode"])
+                                                row["assistant_text"], row["session"], row["mode"], ref)
                         self.queue.stage_diary_done(row["id"])
                     result = await self.observe_turn(row, model_mgr, now)
                     self.queue.remove(row["id"])
@@ -311,16 +331,17 @@ class MemoryLibrary:
         if len(user_text) >= 2 and model_mgr is not None:
             proposals, episode = await self._extract_full(user_text, assistant_text, model_mgr, now,
                                                           steps, bool(row.get("verified", 0)))
+        ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
         return await asyncio.to_thread(self._apply, proposals, user_text,
                                        row["session"], row["mode"], now, episode=episode,
-                                       steps=steps, verified=bool(row.get("verified", 0)))
+                                       steps=steps, verified=bool(row.get("verified", 0)), ref=ref)
 
     def _write_diary(self, now: datetime, user_text: str, assistant_text: str,
-                     session: str, mode: str) -> None:
+                     session: str, mode: str, ref: str = "") -> None:
         self.ready()
-        meta = '{"session":"%s"%s}' % (re.sub(r"[^\w-]", "", session)[:64],
+        meta = '{"session":"%s","ref":"%s"%s}' % (re.sub(r"[^\w-]", "", session)[:64], ref,
                                        ',"mode":"expert"' if mode == "expert" else "")
-        reply = " ".join((assistant_text or "").split())[:300]
+        reply = " ".join((assistant_text or "").split())[:1500]
         block = (f"## {now.strftime('%H:%M')}\n<!-- {meta} -->\n"
                  f"你：{user_text[:2000]}\n\n它：{reply or '（无文字回复）'}")
         if extract.contains_secret(block):
@@ -372,13 +393,14 @@ class MemoryLibrary:
 
     def _apply(self, proposals: list[extract.Proposal], user_text: str, session: str,
                mode: str, now: datetime, *, episode: extract.Episode | None = None,
-               steps: list[dict] | None = None, verified: bool = False) -> extract.ApplyResult:
+               steps: list[dict] | None = None, verified: bool = False,
+               ref: str = "") -> extract.ApplyResult:
         with self.store.lock:
             ended = extract.expire(self.store, now)
             result = extract.apply(self.store, proposals, user_text=user_text,
-                                   session=session, mode=mode, now=now)
+                                   session=session, mode=mode, now=now, ref=ref)
             episode_changed = extract.apply_episode(self.store, episode, steps or [], verified,
-                                                    session, now, mode)
+                                                    session, now, mode, ref)
             result.ended.extend(ended)
             message = result.message() if not result.empty else (
                 f"经历：{episode.title}" if episode_changed and episode else "日记")
@@ -529,9 +551,12 @@ class MemoryLibrary:
 
 def _page_dict(page: Page) -> dict[str, Any]:
     def row(e: Entry) -> dict[str, Any]:
-        return {"id": e.id, "text": e.text, "src": e.src, "at": e.at, "until": e.until,
+        return {"id": e.id, "text": e.text, "src": e.src, "at": e.at, "ref": e.ref,
+                "until": e.until,
                 "quote": e.quote, "ended": e.ended, "why": e.why, "key": e.key,
-                "outcome": e.outcome, "steps": e.steps, "verified": e.verified}
+                "outcome": e.outcome, "steps": e.steps, "verified": e.verified,
+                "decisions": e.decisions, "files": e.files, "commands": e.commands,
+                "facts": e.facts, "open_items": e.open_items}
     return {"path": page.path, "title": page.title, "kind": page.kind, "aliases": page.aliases,
             "current": [row(e) for e in page.current], "history": [row(e) for e in page.history],
             "notes": page.notes}

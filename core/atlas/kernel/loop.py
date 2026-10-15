@@ -1987,10 +1987,22 @@ class AtlasKernel:
             library = get_library()
             if library is None:
                 return {"content": "The memory library is turned off.", "is_error": True}
+            open_value = str(arguments.get("open") or "").strip()
+            if open_value:
+                from atlas.memory.library.sources import open_ref
+
+                opened = await asyncio.to_thread(open_ref, open_value,
+                                                 max(1, min(2, int(arguments.get("window", 1) or 1))))
+                return {"content": json.dumps(opened, ensure_ascii=False), "data": opened,
+                        "outcome": "completed"}
+            sources = arguments.get("sources")
+            kinds = ("fact", "dream", "episode", "diary", "raw") if isinstance(sources, list) and "raw" in sources else (
+                "fact", "dream", "episode", "diary")
             found = await asyncio.to_thread(
                 library.search, str(arguments.get("query") or ""),
                 max(1, min(20, int(arguments.get("limit", 8) or 8))),
                 bool(arguments.get("include_history")),
+                kinds,
             )
             return {"content": json.dumps(found, ensure_ascii=False) if found else "No matching memories.",
                     "data": found, "outcome": "completed"}

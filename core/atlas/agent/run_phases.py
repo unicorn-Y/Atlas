@@ -473,15 +473,19 @@ def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) ->
         library = get_library()
         if library is None:
             return
+        assistant_text = full_response if isinstance(full_response, str) else str(full_response or "")
         library.schedule_turn(
             user_text=str(state.message or ""),
-            assistant_text=full_response if isinstance(full_response, str) else str(full_response or ""),
+            assistant_text=assistant_text,
             session=str(state.request.conversation_id or ""),
             mode="expert" if expert_mode.is_enabled() else "",
             model_mgr=getattr(agent, "_model_mgr", None),
             workspace=str(state.request.workspace or ""),
             steps=state.tool_steps,
             verified=bool(getattr(state.runtime, "verification_passed", False)),
+            turn_started=(getattr(state.runtime, "started_at", None).isoformat()
+                          if hasattr(getattr(state.runtime, "started_at", None), "isoformat")
+                          else str(getattr(state.runtime, "started_at", "") or "")),
         )
     except Exception as exc:
         log.warning("memory.library.schedule_failed", error=str(exc), error_type=type(exc).__name__)
@@ -494,7 +498,22 @@ def _note_tool_step(state: _RunState, event: dict[str, Any]) -> None:
         if event_type == "tool_call":
             if len(state.tool_steps) >= 30:
                 return
-            state.tool_steps.append({"id": event_id, "name": event.get("name"), "ok": None, "note": ""})
+            name = str(event.get("name") or "tool")
+            args = event.get("arguments")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {"command": args}
+            args = args if isinstance(args, dict) else {}
+            if name in {"write_file", "edit_file", "apply_patch", "read_file"}:
+                note = str(args.get("path") or args.get("file_path") or args.get("file") or "")
+            elif name in {"local_exec", "terminal", "run_command"}:
+                note = str(args.get("command") or args.get("cmd") or args.get("command_line") or "")
+            else:
+                note = ""
+            state.tool_steps.append({"id": event_id, "name": name, "ok": None,
+                                     "note": " ".join(note.split())[:200]})
         elif event_type == "tool_result":
             found = next((step for step in state.tool_steps if step.get("id") == event_id), None)
             if found is None:
@@ -505,9 +524,12 @@ def _note_tool_step(state: _RunState, event: dict[str, Any]) -> None:
             found["ok"] = not event.get("is_error")
             content = event.get("content")
             if isinstance(content, list):
-                content = " ".join(str(item.get("text") or item) if isinstance(item, dict) else str(item)
-                                    for item in content)
-            found["note"] = " ".join(str(content or "").split())[:80]
+                content = " ".join(
+                    str(item.get("text") or item) if isinstance(item, dict) else str(item)
+                    for item in content
+                )
+            result_note = " ".join(str(content or "").split())[:200]
+            found["note"] = " ".join(filter(None, [found.get("note", ""), result_note]))[:200]
     except Exception:
         pass
 
