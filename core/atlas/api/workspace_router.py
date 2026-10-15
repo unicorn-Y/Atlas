@@ -885,22 +885,35 @@ async def git_branches(
     if not (base / ".git").exists():
         raise HTTPException(status_code=400, detail="workspace is not a git repository")
     try:
-        current = _server()._worktrees()._git(base, "branch", "--show-current")
-        branches = _server()._worktrees()._git(base, "branch", "--list", "--format=%(refname:short)").splitlines()
+        current = await asyncio.to_thread(_server()._worktrees()._git, base, "branch", "--show-current")
+        branches = (await asyncio.to_thread(_server()._worktrees()._git, base, "branch", "--list", "--format=%(refname:short)")).splitlines()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"current": current, "branches": branches}
 
 
+def _run_workspace_process(
+    command: list[str], *, timeout: float, **kwargs: Any,
+) -> subprocess.CompletedProcess[str]:
+    # Called in a worker via to_thread. The native timeout kills and waits for
+    # the child, unlike cancelling the await on a worker thread.
+    try:
+        return subprocess.run(command, timeout=timeout, **kwargs)
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail=f"{command[0]} command timed out") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail=f"Unable to run {command[0]}: {exc}") from exc
+
+
 def _gh_json(root: Path, *args: str) -> dict[str, Any]:
     try:
-        auth = subprocess.run(["gh", "auth", "status"], cwd=root, capture_output=True,
+        auth = _run_workspace_process(["gh", "auth", "status"], cwd=root, capture_output=True,
                              text=True, encoding="utf-8", errors="replace", timeout=15)
     except (OSError, subprocess.SubprocessError) as exc:
         raise HTTPException(status_code=503, detail="GitHub CLI (gh) is unavailable") from exc
     if auth.returncode:
         raise HTTPException(status_code=503, detail="GitHub CLI is not authenticated")
-    result = subprocess.run(["gh", *args], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+    result = _run_workspace_process(["gh", *args], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     if result.returncode:
         raise HTTPException(status_code=502, detail=result.stderr.strip() or "gh command failed")
     try:
@@ -929,7 +942,7 @@ async def get_git_pr(
 ) -> dict[str, Any]:
     base, _ = _server()._workspace_path(root)
     try:
-        data = _gh_json(base, "pr", "view", "--json",
+        data = await asyncio.to_thread(_gh_json, base, "pr", "view", "--json",
                         "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup")
     except HTTPException as exc:
         if exc.status_code == 502 and "no pull requests found" in str(exc.detail).lower():
@@ -948,13 +961,13 @@ async def create_git_pr(
     if not isinstance(title, str) or not title.strip() or not isinstance(body, str):
         raise HTTPException(status_code=422, detail="title and body are required")
     try:
-        auth = subprocess.run(["gh", "auth", "status"], cwd=base, capture_output=True,
+        auth = await asyncio.to_thread(_run_workspace_process, ["gh", "auth", "status"], cwd=base, capture_output=True,
                              text=True, encoding="utf-8", errors="replace", timeout=15)
     except OSError as exc:
         raise HTTPException(status_code=503, detail="GitHub CLI (gh) is unavailable") from exc
     if auth.returncode:
         raise HTTPException(status_code=503, detail="GitHub CLI is not authenticated")
-    pushed = subprocess.run(["git", "push", "-u", "origin", "HEAD"], cwd=base,
+    pushed = await asyncio.to_thread(_run_workspace_process, ["git", "push", "-u", "origin", "HEAD"], cwd=base,
                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     if pushed.returncode:
         raise HTTPException(status_code=502, detail=pushed.stderr.strip())
@@ -963,10 +976,10 @@ async def create_git_pr(
         command.extend(["--base", str(req["base"])])
     if req.get("draft") is True:
         command.append("--draft")
-    created = subprocess.run(command, cwd=base, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    created = await asyncio.to_thread(_run_workspace_process, command, cwd=base, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     if created.returncode:
         raise HTTPException(status_code=502, detail=created.stderr.strip())
-    result = _gh_json(base, "pr", "view", "--json",
+    result = await asyncio.to_thread(_gh_json, base, "pr", "view", "--json",
                       "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup")
     return {"pr": _pr_shape(result)}
 
@@ -977,12 +990,12 @@ async def git_pr_check_log(
     check_name: str, root: str,
 ) -> dict[str, Any]:
     base, _ = _server()._workspace_path(root)
-    checks = _gh_json(base, "pr", "checks", "--json", "name,state,link")
+    checks = await asyncio.to_thread(_gh_json, base, "pr", "checks", "--json", "name,state,link")
     match = next((item for item in checks if item.get("name") == check_name), None) \
         if isinstance(checks, list) else None
     if not match or str(match.get("state", "")).upper() not in {"FAILURE", "CANCELLED", "ERROR"}:
         raise HTTPException(status_code=404, detail="failed check not found")
-    result = subprocess.run(["gh", "run", "view", str(match["link"]), "--log-failed"],
+    result = await asyncio.to_thread(_run_workspace_process, ["gh", "run", "view", str(match["link"]), "--log-failed"],
                             cwd=base, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     if result.returncode:
         raise HTTPException(status_code=502, detail=result.stderr.strip())
@@ -992,7 +1005,7 @@ async def git_pr_check_log(
 
 def _git_workspace(root: str) -> Path:
     base, _ = _server()._workspace_path(root)
-    result = subprocess.run(["git", "-C", str(base), "rev-parse", "--show-toplevel"],
+    result = _run_workspace_process(["git", "-C", str(base), "rev-parse", "--show-toplevel"],
                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
     if result.returncode:
         raise HTTPException(status_code=400, detail="workspace is not a git repository")
@@ -1001,7 +1014,7 @@ def _git_workspace(root: str) -> Path:
 
 def _git_run(base: Path, *args: str, timeout: int = 30) -> str:
     try:
-        result = subprocess.run(["git", "-C", str(base), *args], capture_output=True, text=True,
+        result = _run_workspace_process(["git", "-C", str(base), *args], capture_output=True, text=True,
                                 encoding="utf-8", errors="replace", timeout=timeout)
     except (OSError, subprocess.SubprocessError) as exc:
         raise HTTPException(status_code=503, detail=f"Unable to run git: {exc}") from exc
@@ -1025,23 +1038,23 @@ def _git_status(base: Path) -> list[dict[str, str]]:
 
 @router.get("/api/git/workspace")
 async def get_git_workspace(services: Annotated[AppServices, Depends(get_app_services)], root: str) -> dict[str, Any]:
-    base = _git_workspace(root)
-    return {"current": _git_run(base, "branch", "--show-current"),
-            "branches": _git_run(base, "branch", "--list", "--format=%(refname:short)").splitlines(),
-            "status": _git_status(base)}
+    base = await asyncio.to_thread(_git_workspace, root)
+    return {"current": await asyncio.to_thread(_git_run, base, "branch", "--show-current"),
+            "branches": (await asyncio.to_thread(_git_run, base, "branch", "--list", "--format=%(refname:short)")).splitlines(),
+            "status": await asyncio.to_thread(_git_status, base)}
 
 
 @router.post("/api/git/branch")
 async def update_git_branch(services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any]) -> dict[str, Any]:
     root = str(req.get("root", ""))
-    base = _git_workspace(root)
+    base = await asyncio.to_thread(_git_workspace, root)
     name = req.get("name")
     create = req.get("create") is True
     if not isinstance(name, str) or not name.strip():
         raise HTTPException(status_code=422, detail="branch name is required")
     name = name.strip()
-    _git_run(base, "check-ref-format", "--branch", name)
-    _git_run(base, "switch", *( ["-c", name] if create else [name] ), timeout=60)
+    await asyncio.to_thread(_git_run, base, "check-ref-format", "--branch", name)
+    await asyncio.to_thread(_git_run, base, "switch", *( ["-c", name] if create else [name] ), timeout=60)
     conversation_id = req.get("conversation_id")
     if isinstance(conversation_id, str) and conversation_id:
         memory = _service("memory", services)
@@ -1052,14 +1065,14 @@ async def update_git_branch(services: Annotated[AppServices, Depends(get_app_ser
                 conversation_root, _ = _server()._workspace_path(str(conversation["worktree_path"]))
                 if os.path.normcase(str(workspace.resolve())) == os.path.normcase(str(conversation_root.resolve())):
                     await memory.update_conversation(conversation_id, worktree_branch=name)
-    return {"current": _git_run(base, "branch", "--show-current"),
-            "branches": _git_run(base, "branch", "--list", "--format=%(refname:short)").splitlines(),
-            "status": _git_status(base)}
+    return {"current": await asyncio.to_thread(_git_run, base, "branch", "--show-current"),
+            "branches": (await asyncio.to_thread(_git_run, base, "branch", "--list", "--format=%(refname:short)")).splitlines(),
+            "status": await asyncio.to_thread(_git_status, base)}
 
 
 @router.post("/api/git/commit")
 async def commit_git_changes(services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any]) -> dict[str, Any]:
-    base = _git_workspace(str(req.get("root", "")))
+    base = await asyncio.to_thread(_git_workspace, str(req.get("root", "")))
     message = req.get("message")
     paths = req.get("paths")
     if not isinstance(message, str) or not message.strip():
@@ -1067,31 +1080,31 @@ async def commit_git_changes(services: Annotated[AppServices, Depends(get_app_se
     if not isinstance(paths, list) or not paths or any(not isinstance(path, str) for path in paths):
         raise HTTPException(status_code=422, detail="select at least one changed file")
     selected = list(dict.fromkeys(paths))
-    available = {item["path"] for item in _git_status(base)}
+    available = {item["path"] for item in await asyncio.to_thread(_git_status, base)}
     if not set(selected).issubset(available):
         raise HTTPException(status_code=409, detail="selected files changed; refresh Git status and try again")
-    _git_run(base, "add", "--", *selected, timeout=60)
-    _git_run(base, "commit", "-m", message.strip(), timeout=120)
-    return {"commit": _git_run(base, "rev-parse", "--short", "HEAD"), "status": _git_status(base)}
+    await asyncio.to_thread(_git_run, base, "add", "--", *selected, timeout=60)
+    await asyncio.to_thread(_git_run, base, "commit", "-m", message.strip(), timeout=120)
+    return {"commit": await asyncio.to_thread(_git_run, base, "rev-parse", "--short", "HEAD"), "status": await asyncio.to_thread(_git_status, base)}
 
 
 @router.post("/api/git/push")
 async def push_git_branch(services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any]) -> dict[str, Any]:
-    base = _git_workspace(str(req.get("root", "")))
-    branch = _git_run(base, "branch", "--show-current")
+    base = await asyncio.to_thread(_git_workspace, str(req.get("root", "")))
+    branch = await asyncio.to_thread(_git_run, base, "branch", "--show-current")
     if not branch:
         raise HTTPException(status_code=409, detail="cannot push a detached HEAD")
-    _git_run(base, "push", "-u", "origin", "HEAD", timeout=120)
-    return {"pushed": branch, "status": _git_status(base)}
+    await asyncio.to_thread(_git_run, base, "push", "-u", "origin", "HEAD", timeout=120)
+    return {"pushed": branch, "status": await asyncio.to_thread(_git_status, base)}
 
 
 @router.get("/api/git/history")
 async def get_git_history(
     services: Annotated[AppServices, Depends(get_app_services)], root: str, limit: int = Query(default=80, ge=1, le=200),
 ) -> dict[str, Any]:
-    base = _git_workspace(root)
-    graph = _git_run(base, "log", "--graph", "--decorate", "--all", "--date-order", "--oneline", f"-n{limit}")
-    formatted = _git_run(base, "log", "--all", "--date-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%ad", "--date=short", f"-n{limit}")
+    base = await asyncio.to_thread(_git_workspace, root)
+    graph = await asyncio.to_thread(_git_run, base, "log", "--graph", "--decorate", "--all", "--date-order", "--oneline", f"-n{limit}")
+    formatted = await asyncio.to_thread(_git_run, base, "log", "--all", "--date-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%ad", "--date=short", f"-n{limit}")
     commits = []
     for line in formatted.splitlines():
         fields = line.split("\x1f", 4)
@@ -1135,23 +1148,23 @@ def _pr_timeline(base: Path) -> list[dict[str, str]]:
 
 @router.get("/api/git/pr/timeline")
 async def get_git_pr_timeline(services: Annotated[AppServices, Depends(get_app_services)], root: str) -> dict[str, Any]:
-    return {"items": _pr_timeline(_git_workspace(root))}
+    return {"items": await asyncio.to_thread(_pr_timeline, await asyncio.to_thread(_git_workspace, root))}
 
 
 @router.post("/api/git/pr/comment")
 async def comment_git_pr(services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any]) -> dict[str, Any]:
-    base = _git_workspace(str(req.get("root", "")))
+    base = await asyncio.to_thread(_git_workspace, str(req.get("root", "")))
     body = req.get("body")
     if not isinstance(body, str) or not body.strip():
         raise HTTPException(status_code=422, detail="comment body is required")
     try:
-        result = subprocess.run(["gh", "pr", "comment", "--body", body.strip()], cwd=base,
+        result = await asyncio.to_thread(_run_workspace_process, ["gh", "pr", "comment", "--body", body.strip()], cwd=base,
                                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     except (OSError, subprocess.SubprocessError) as exc:
         raise HTTPException(status_code=503, detail=f"Unable to run gh: {exc}") from exc
     if result.returncode:
         raise HTTPException(status_code=502, detail=result.stderr.strip() or "gh pr comment failed")
-    return {"ok": True, "items": _pr_timeline(base)}
+    return {"ok": True, "items": await asyncio.to_thread(_pr_timeline, base)}
 
 
 @router.get("/api/ssh/hosts")
