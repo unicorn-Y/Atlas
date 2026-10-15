@@ -183,3 +183,24 @@ Translated, not copied: async httpx against the vendors' REST APIs (no exa-py / 
 | `tools/web_tools_rescue.py` | `core/atlas/websearch/service.py` | `c9e076b` |
 | `tools/web_result_cache.py` | `core/atlas/websearch/cache.py` | `c9e076b` |
 | `tools/web_tools_truncate.py` | `core/atlas/websearch/cache.py` | `c9e076b` |
+
+## Independent side sessions (atlas.sessions)
+
+Translated from OpenClaw (MIT) `openclaw/openclaw@59cb44796b0f1f0daa0e37af8b1495abb45d9bc1`, behaviour contract from Claude Desktop's `start_session` / `SendMessage` / `dismiss_task` (closed source, followed from its tool definitions). Nothing imported from OpenClaw. Atlas delta: a child is a normal Atlas conversation driven by the same `run.start` path as the desktop on a server-side connection, so the sidebar shows it, the desktop attaches to its live run by run id, approvals/stop work as usual; proposal cards (offer / own_initiative) the user starts; a turn started by another session or a report can only propose; stopped sessions never report; reports steered into a run that ended unread start the next turn instead of being lost.
+
+| source | destination |
+|---|---|
+| `src/agents/tools/sessions-spawn-visible.ts` | `core/atlas/sessions/hub.py` (`_launch`, worktree / inheritance) |
+| `src/agents/tools/sessions-spawn-visible.schema.ts` | `core/atlas/sessions/tools.py` (`session_start`) |
+| `src/agents/tools/sessions-send-tool.ts`, `sessions-send-tool.schema.ts` | `core/atlas/sessions/hub.py` (`send`), `tools.py` (`session_send`) |
+| `src/agents/subagents/announce/subagent-announce-active-wake.ts` | `core/atlas/sessions/hub.py` (`_deliver_report`: steer active parent, else wake) |
+| `src/agents/subagents/announce/subagent-announce-output.ts` | `core/atlas/sessions/hub.py` (`_report_text`, `_stats_line`) |
+| `src/agents/subagents/registry/subagent-registry-helpers.ts` | `core/atlas/sessions/store.py` |
+
+## Idle compaction, hook onFailure, taskbar status, send_user_file
+
+Closed-source designs (Claude Code 2.1.295 / 2.1.299 changelog, Claude `SendUserFile`), reimplemented: `core/atlas/sessions/idle_compaction.py` (configurable window and threshold instead of a fixed 54 min / 200K), `core/atlas/runtime/hooks.py` (`onFailure: "block"` for Claude-format hooks, `on_failure` for Atlas hooks), `frontend/src/main/electron.ts` (`window:run-status` = desktop form of the OSC 7501 Program Status Protocol), `core/atlas/sessions/tools.py` (`send_user_file`).
+
+## Web-wide discovery (atlas.evolution.discovery)
+
+Atlas-original (no open-source agent ships an equivalent): sources follow `docs/research/2026-09-30-landscape/10-tracking-sources.md`; drafts plug into the existing E4 index (`taskbook_draft.py`).
