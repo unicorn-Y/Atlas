@@ -75,9 +75,22 @@ OUTPUT
 - importance: 1-10, how much this matters for helping the user later (allergy, family, deadlines high; passing likes low).
 - Return {"facts": []} when the message states no fact about the user. Most messages state none; do not invent."""
 
+SYSTEM_PROMPT += """
+
+EPISODES
+- In addition to facts, return an episode object describing what happened this turn, for later questions such as what we discussed or how we did something.
+- title: what the user wanted this turn, in the user's language, at most 30 characters.
+- topics: 0-5 keywords such as product, project, person, or technology names.
+- did: what Atlas actually did, at most 60 characters, based only on TOOLS USED and its reply; use "直接回答" when no tool was used.
+- outcome: one sentence of at most 60 characters describing the result. State failure or incompletion honestly.
+- skip: true for small talk, a reply of only "ok", or a connectivity-only test.
+- Episodes are conversation history, not user facts. Never copy episode content into facts.
+"""
+
 SCHEMA_HINT = (
     '{"facts":[{"op":"set|retract|forget|alias","key":"user.home_city","value":"杭州",'
-    '"text":"住在杭州","quote":"我住在杭州","stance":"said","forget_after":null,"triggers":["杭州"],"importance":6}]}'
+    '"text":"住在杭州","quote":"我住在杭州","stance":"said","forget_after":null,"triggers":["杭州"],"importance":6}],'
+    '"episode":{"title":"…","topics":["…"],"did":"…","outcome":"…","skip":false}}'
 )
 
 
@@ -92,6 +105,15 @@ class Proposal:
     triggers: list[str] = field(default_factory=list)
     importance: int = 5
     stance: str = "said"
+
+
+@dataclass
+class Episode:
+    title: str
+    topics: list[str] = field(default_factory=list)
+    did: str = ""
+    outcome: str = ""
+    skip: bool = False
 
 
 @dataclass
@@ -134,31 +156,41 @@ def known_facts(store: MemoryStore) -> list[tuple[str, str]]:
 
 
 def build_messages(*, user_text: str, assistant_text: str, known: list[tuple[str, str]],
-                   clock: str) -> list[dict[str, str]]:
+                   clock: str, steps: list[dict] | None = None,
+                   verified: bool = False) -> list[dict[str, str]]:
     known_block = "\n".join(f"- {k} = {v}" for k, v in known) or "(none yet)"
+    step_lines = []
+    for step in (steps or [])[:30]:
+        name = str(step.get("name") or "tool")
+        mark = "✓" if step.get("ok") else "✗" if step.get("ok") is False else "…"
+        note = " ".join(str(step.get("note") or "").split())[:80]
+        step_lines.append(f"- {name} {mark}{' ' + note if note else ''}")
+    tools_block = "TOOLS USED THIS TURN (name, ok, note):\n" + ("\n".join(step_lines) or "- (none)")
     payload = "\n\n".join([
         f"USER LOCAL CLOCK: {clock}",
         f"KNOWN USER FACTS (key = current value):\n{known_block}",
         "ASSISTANT'S PREVIOUS REPLY (context only, never a source of user facts):\n"
         + ((assistant_text or "")[:1500] or "(none)"),
+        tools_block,
+        f"VERIFIED BY A REAL CHECK: {'yes' if verified else 'no'}",
         f"USER MESSAGE:\n{user_text[:MAX_USER_CHARS]}",
         f"Return JSON only, shaped like: {SCHEMA_HINT}",
     ])
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": payload}]
 
 
-def parse_output(raw: str) -> list[Proposal]:
+def parse_output(raw: str) -> tuple[list[Proposal], Episode | None]:
     text = (raw or "").strip()
     fence = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.S)
     if fence:
         text = fence.group(1)
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
-        return []
+        return [], None
     try:
         data = json.loads(text[start:end + 1])
     except ValueError:
-        return []
+        return [], None
     out: list[Proposal] = []
     for item in data.get("facts") or []:
         if not isinstance(item, dict):
@@ -183,7 +215,65 @@ def parse_output(raw: str) -> list[Proposal]:
             importance=importance,
             stance=str(item.get("stance") or "said").strip(),
         ))
-    return out
+    raw_episode = data.get("episode")
+    episode = None
+    if isinstance(raw_episode, dict):
+        try:
+            topics = raw_episode.get("topics") or []
+            episode = Episode(
+                title=" ".join(str(raw_episode.get("title") or "").split())[:30],
+                topics=[" ".join(str(t).split())[:40] for t in topics if str(t).strip()][:5]
+                if isinstance(topics, list) else [],
+                did=" ".join(str(raw_episode.get("did") or "").split())[:60],
+                outcome=" ".join(str(raw_episode.get("outcome") or "").split())[:60],
+                skip=bool(raw_episode.get("skip", False)),
+            )
+        except (TypeError, ValueError):
+            episode = None
+    return out, episode
+
+
+def apply_episode(store: MemoryStore, episode: Episode | None, steps: list[dict], verified: bool,
+                  session: str, now: datetime, mode: str = "") -> bool:
+    if episode is None or episode.skip or not episode.title:
+        return False
+    did = episode.did or "直接回答"
+    text = f"{episode.title}：{did}"[:120]
+    if contains_secret(text + episode.outcome + json.dumps(steps, ensure_ascii=False)):
+        return False
+    hashes = tombstone_hashes("", "", text)
+    if store.tombstoned(hashes):
+        return False
+    day = now.date().isoformat()
+    rel = f"经历/{day}.md"
+    page = store.read(rel)
+    entry = next((e for e in page.current if e.session == session), None)
+    safe_steps = []
+    for step in (steps or [])[:30]:
+        name = str(step.get("name") or "tool")
+        mark = "✓" if step.get("ok") else "✗"
+        note = " ".join(str(step.get("note") or "").split())[:20]
+        safe_steps.append(f"{name} {mark}{' ' + note if note else ''}")
+    if entry is None:
+        entry = Entry(text=text, id=new_id(), src="经历", at=now.isoformat(timespec="seconds"),
+                      session=session, mode=mode if mode == "expert" else "",
+                      trigger=episode.topics[:3], steps=safe_steps[:8], outcome=episode.outcome,
+                      verified=bool(verified))
+        page.current.append(entry)
+    else:
+        original_title = entry.text.split("：", 1)[0]
+        old_did = entry.text.split("：", 1)[1] if "：" in entry.text else ""
+        merged = (old_did + "；" + did).strip("；")
+        entry.text = f"{original_title}：{merged[-max(1, 200 - len(original_title) - 1):]}"
+        entry.outcome = episode.outcome
+        entry.steps = (entry.steps + safe_steps)[-8:]
+        entry.verified = bool(entry.verified or verified)
+        entry.trigger = list(dict.fromkeys([*entry.trigger, *episode.topics]))[:3]
+        entry.at = now.isoformat(timespec="seconds")
+        if mode == "expert":
+            entry.mode = "expert"
+    store.write(page)
+    return True
 
 
 def _quote_ok(quote: str, user_text: str) -> bool:

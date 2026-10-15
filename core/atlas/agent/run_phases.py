@@ -213,6 +213,7 @@ class _RunState:
     turn_error: str = ""
     abort: bool = False
     cancelled: bool = False
+    tool_steps: list[dict[str, Any]] = field(default_factory=list)
 
 
 async def execute_run(
@@ -478,9 +479,37 @@ def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) ->
             session=str(state.request.conversation_id or ""),
             mode="expert" if expert_mode.is_enabled() else "",
             model_mgr=getattr(agent, "_model_mgr", None),
+            workspace=str(state.request.workspace or ""),
+            steps=state.tool_steps,
+            verified=bool(getattr(state.runtime, "verification_passed", False)),
         )
     except Exception as exc:
         log.warning("memory.library.schedule_failed", error=str(exc), error_type=type(exc).__name__)
+
+
+def _note_tool_step(state: _RunState, event: dict[str, Any]) -> None:
+    try:
+        event_type = event.get("type")
+        event_id = event.get("id")
+        if event_type == "tool_call":
+            if len(state.tool_steps) >= 30:
+                return
+            state.tool_steps.append({"id": event_id, "name": event.get("name"), "ok": None, "note": ""})
+        elif event_type == "tool_result":
+            found = next((step for step in state.tool_steps if step.get("id") == event_id), None)
+            if found is None:
+                if len(state.tool_steps) >= 30:
+                    return
+                found = {"id": event_id, "name": event.get("name"), "ok": None, "note": ""}
+                state.tool_steps.append(found)
+            found["ok"] = not event.get("is_error")
+            content = event.get("content")
+            if isinstance(content, list):
+                content = " ".join(str(item.get("text") or item) if isinstance(item, dict) else str(item)
+                                    for item in content)
+            found["note"] = " ".join(str(content or "").split())[:80]
+    except Exception:
+        pass
 
 
 async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
@@ -845,6 +874,7 @@ async def _turn(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
     try:
         async with aclosing(_pump_events(state, hermes_task)) as pump:
             async for event in pump:
+                _note_tool_step(state, event)
                 yield event
         if state.cancelled:
             return
