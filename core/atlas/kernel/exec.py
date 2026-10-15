@@ -116,7 +116,9 @@ class ExecManager:
         )
         args["action"] = "start"
         args.setdefault("detached", True if direct_process_start else False)
-        args.setdefault("keep_stdin", True)
+        # One-shot input must reach EOF after it is written. Interactive
+        # processes opt in to retaining stdin for later write_stdin calls.
+        args.setdefault("keep_stdin", False)
         if "cmd" in args:
             args["command"] = args.pop("cmd")
         if "workdir" in args:
