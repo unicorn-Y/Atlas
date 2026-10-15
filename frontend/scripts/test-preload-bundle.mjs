@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+import { transformSync } from 'esbuild';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourcePath = path.join(root, 'src/preload/index.cts');
@@ -39,10 +39,7 @@ function execute(source, filename) {
 
 // Reproduce the old tsc-only output: it keeps a local shared-module require,
 // which the sandbox's deliberately restricted require rejects.
-const legacyOutput = ts.transpile(tsSource, {
-  target: ts.ScriptTarget.ES2022,
-  module: ts.ModuleKind.CommonJS,
-});
+const legacyOutput = transformSync(tsSource, { loader: 'ts', target: 'es2022', format: 'cjs' }).code;
 assert.throws(
   () => execute(legacyOutput, 'preload-before-bundle.cjs'),
   /sandboxed preload attempted require\(\.\.\/shared\/ipc\.js\)/,
