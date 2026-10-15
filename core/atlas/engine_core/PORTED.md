@@ -150,3 +150,12 @@ The Hermes CUA plugin, provider plugin manager, auxiliary-client bootstrap, and 
 The rows added above close the imports reported by `python scripts/diag/import_check.py core` against Hermes revision `c9e076b41f2163445b506b1cb79862d0dab0eecd`. In existing files, this repair also adds `tool_call_id_variants` and `tool_result_id_variants` (`agent/message_sanitization.py`), `estimate_messages_tokens_rough` (`agent/model_metadata.py`, implemented with Atlas' wire-shadow/tokenizer path), `safe_strftime` (`hermes_time.py`), `is_zeroed_sqlite_file` (`hermes_cli/sqlite_safe_read.py`), and the home, socket-temp, profile-scope, and environment helpers from `hermes_constants.py` / `agent/secret_scope.py`. `agent/vault_store.py` is ported with Atlas-owned config and atomic-write seams. The lazy `atlas.engine_core` package entry and `atlas.notifications.apprise.AppriseNotifier` compatibility name are Atlas adapters.
 
 Explicitly unsupported surfaces remain explicit: Bot Desktop operations, selecting Lightpanda, remote credential-file mounts, Nous managed/free gateway authentication, and sudo execution. Atlas keeps its local built-in Chromium and local terminal paths. Hermes' `agent/credential_pool.py` is intentionally not copied: its custom-provider OAuth/plugin persistence has no Atlas-owned authority; Atlas provider keys continue through Atlas settings and keyring. There is no empty credential-pool shim or silent success path.
+
+## BOOT-1 review addendum (Claude)
+
+| source | destination | commit |
+|---|---|---|
+| `tools/arg_coercion.py` | `core/atlas/engine_core/tools/arg_coercion.py` | `c9e076b` |
+| `tools/schema_sanitizer.py` | `core/atlas/engine_core/tools/schema_sanitizer.py` | `c9e076b` |
+
+`tools/tool_search_validation.py` still imported Hermes' top-level `model_tools.coerce_tool_args` inside a try/except, so deferred-tool validation silently skipped argument coercion ("5" for an integer would be rejected). `import_check.py` only covers `atlas.*` imports, which is why it reported 0.
