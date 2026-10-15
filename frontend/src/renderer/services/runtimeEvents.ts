@@ -31,6 +31,8 @@ export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEven
     'browser.handoff_required', 'browser.handoff_resolved', 'browser.panel.sync', 'browser.step', 'browser.artifact',
     'browser.vault_fill_denied']);
   known.add('process.notification');
+  // 独立会话：提议卡片、已开始、子会话回报（core/atlas/sessions）。
+  known.add('session.event');
   const base = { id: envelope.event_id, runId: envelope.run_id, sequence: envelope.sequence, timestamp: envelope.timestamp };
   // Office files and other generated documents: shown like any other artifact.
   if (envelope.event === 'artifact.created') {

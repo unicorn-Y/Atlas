@@ -137,6 +137,8 @@ interface AtlasState extends PersistentSlice {
   getRun: (runId: string) => AgentRun | undefined;
   setActiveRun: (runId: string | null) => void;
   removeRun: (runId: string) => void;
+  /** Follow a run the backend already started (side session, report wake-up, automation): replay its events, then stream live. */
+  attachRun: (conversationId: string, runId: string) => void;
   approve: (eventId: string) => void;
   reject: (eventId: string) => void;
   respondToApproval: (eventId: string, choice: 'allow_once' | 'allow_always' | 'deny', reason?: string) => void;
@@ -663,6 +665,25 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     setActiveRun: (runId) => {
       const run = get().runs.find((item) => item.id === runId);
       set({ activeRunId: runId, activeConversationId: run?.conversationId ?? get().activeConversationId, paused: run?.status === 'paused' });
+    },
+    attachRun: (conversationId, runId) => {
+      if (get().getRun(runId) || backend.mode !== 'backend') return;
+      const timestamp = new Date().toISOString();
+      const title = get().conversations.find((item) => item.id === conversationId)?.title ?? '后台运行';
+      const run: AgentRun = { id: runId, conversationId, title, status: 'running', phase: 'execution', startedAt: timestamp, updatedAt: timestamp, lastEventSequence: 0, events: [] };
+      set((state) => state.activeConversationId === conversationId
+        ? { runs: [...state.runs, run], activeRunId: run.id, busy: true }
+        : { runs: [...state.runs, run], busy: true });
+      const buffer = createEventBuffer((events) => { for (const event of events) get().appendEvent(event); });
+      try { localStorage.removeItem(`atlas.runtime.cursor.${runId}`); } catch { /* storage unavailable */ }
+      // An existing run_id makes the backend replay the run's events and keep this socket attached.
+      void backend.startRun({ type: 'run.start', run_id: runId, content: '', conversation_id: conversationId } as Parameters<typeof backend.startRun>[0], (envelope) => {
+        if (!isRuntimeEvent(envelope)) return;
+        const event = normalizeRuntimeEvent(envelope);
+        if (event) buffer.push(event);
+      }, () => get().getRun(runId)?.status === 'paused')
+        .catch(() => { const current = get().getRun(runId); if (current && !current.events.length) get().removeRun(runId); })
+        .finally(() => buffer.dispose());
     },
     removeRun: (runId) => set((state) => {
       const runs = state.runs.filter((run) => run.id !== runId);

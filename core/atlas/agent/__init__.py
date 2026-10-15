@@ -728,15 +728,69 @@ class AgentOrchestrator:
 
     def _model_facing_tools(self) -> list[dict[str, Any]]:
         """Assemble model-facing tools (body in :mod:`atlas.agent.tool_catalog`)."""
-        return model_facing_tools(self)
+        tools = model_facing_tools(self)
+        if get_config().get("sessions.enabled", True) is not False:
+            from atlas.sessions.tools import SESSION_TOOLS
+
+            known = {item["function"]["name"] for item in tools}
+            tools.extend(item for item in SESSION_TOOLS if item["function"]["name"] not in known)
+        return tools
 
     async def _execute_tools_node(self, state: ToolExecutionState) -> dict[str, Any]:
         """Execute tool calls from the last AI message (body in :mod:`atlas.agent.tool_node`).
 
         For tools in APPROVAL_REQUIRED_TOOLS, emits an approval.required
         event and waits for the approval callback before executing.
+        Independent-session tools (:mod:`atlas.sessions`) are answered here.
         """
-        return await execute_tools_node(self, state)
+        from atlas.sessions.tools import SESSION_TOOL_NAMES
+
+        last = state["messages"][-1]
+        calls = list(getattr(last, "tool_calls", None) or [])
+        session_calls = [call for call in calls if call.get("name") in SESSION_TOOL_NAMES]
+        if not session_calls:
+            return await execute_tools_node(self, state)
+        result = await self._execute_session_tools(state, session_calls)
+        rest = [call for call in calls if call.get("name") not in SESSION_TOOL_NAMES]
+        if rest:
+            inner = ToolExecutionState({**state, "messages": [
+                *state["messages"][:-1], AIMessage(content=last.content, tool_calls=rest)],
+                "pending_events": result["pending_events"]})
+            other = await execute_tools_node(self, inner)
+            result = {"messages": [*result["messages"], *other["messages"]],
+                      "pending_events": other["pending_events"]}
+        return result
+
+    async def _execute_session_tools(
+        self, state: ToolExecutionState, calls: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        from atlas.sessions.tools import run_session_tool
+
+        runtime = state["runtime"]
+        events: list[dict[str, Any]] = []
+        messages: list[Any] = []
+        allow = getattr(runtime, "tool_allow", None)
+        deny = set(getattr(runtime, "tool_deny", None) or [])
+        for call in calls:
+            name, call_id = call["name"], call["id"]
+            args = call.get("args") or {}
+            queue = getattr(runtime, "event_queue", None)
+            if name in deny or (allow is not None and name not in allow):
+                outcome = {"text": f"工具 {name} 在本次运行中不可用。", "is_error": True}
+            else:
+                try:
+                    outcome = await run_session_tool(name, args, runtime)
+                except Exception as exc:  # noqa: BLE001 - reported to the model, never raised
+                    log.exception("sessions.tool_failed", tool=name)
+                    outcome = {"text": f"{type(exc).__name__}: {exc}", "is_error": True}
+            event = {"type": "tool_result", "id": call_id, "name": name,
+                     "content": outcome["text"], "data": outcome.get("data") or {},
+                     "is_error": bool(outcome.get("is_error"))}
+            events.append(event)
+            if queue is not None:
+                await queue.put(event)
+            messages.append(ToolMessage(content=outcome["text"], tool_call_id=call_id))
+        return {"messages": messages, "pending_events": [*state.get("pending_events", []), *events]}
 
     # -- public API ----------------------------------------------------------
 

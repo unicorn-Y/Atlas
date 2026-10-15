@@ -8,6 +8,7 @@ import ToolExecutionCard, { CATEGORY, Detail } from './tool-cards/ToolExecutionC
 import ConversationMessage from './ConversationMessage';
 import ReasoningBlock from './ReasoningBlock';
 import Mark from './Mark';
+import SessionEventCard from './sessions/SessionEventCard';
 import ReviewFindingsCard from './ReviewFindingsCard';
 import ForegroundConfirmCard from './x2/ForegroundConfirmCard';
 import BrowserHandoffCard from './x2/BrowserHandoffCard';
@@ -86,6 +87,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     </div>;
     case 'lsp': return <LspNotice key={item.id} item={item} />;
     case 'review': return <ReviewFindingsCard key={item.id} item={item} store={store} />;
+    case 'session': return <SessionEventCard key={item.id} event={item.event} />;
     case 'cancelled': return <div key={item.id} className="my-4 flex items-center gap-2 text-[12.5px] text-fg-3">
       <Square size={12} />{item.reason ? `会话已结束：${item.reason}` : '你停止了这次任务'}
     </div>;

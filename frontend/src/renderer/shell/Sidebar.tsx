@@ -3,11 +3,11 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import {
   Archive, ArchiveRestore, ArrowUpDown, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GitBranch, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
-  Library, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, SquarePen, Sun, Trash2, Users, X, Wand2, type LucideIcon,
+  CornerDownRight, Library, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, SquarePen, Sun, Trash2, Users, X, Wand2, type LucideIcon,
 } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import { api } from '../services/api';
-import { backend } from '../store/useAtlasStore';
+import { backend, useAtlasStore } from '../store/useAtlasStore';
 import Mark from '../components/Mark';
 import SidebarConversationDetails from '../components/sidebar/ConversationDetails';
 import { ProjectIcon } from '../pages/ProjectIcon';
@@ -206,6 +206,28 @@ export default function Sidebar(props: SidebarProps) {
     window.addEventListener('atlas:projects-updated', refresh);
     return () => { stale = true; window.removeEventListener('atlas:projects-updated', refresh); };
   }, []);
+  // 独立会话：子会话缩进挂在开它的会话下面；后端新建的子会话出现时刷新列表。
+  const [sessionParents, setSessionParents] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let stale = false;
+    const refresh = () => {
+      void api<{ sessions: Array<{ conversation_id: string | null; parent_conversation_id: string | null; status: string }> }>(backend.apiBaseUrl, '/api/sessions')
+        .then((result) => {
+          if (stale || !Array.isArray(result.sessions)) return;
+          const links = Object.fromEntries(result.sessions.filter((item) => item.conversation_id && item.parent_conversation_id)
+            .map((item) => [item.conversation_id as string, item.parent_conversation_id as string]));
+          setSessionParents(links);
+          const known = new Set(useAtlasStore.getState().conversations.map((item) => item.id));
+          if (Object.keys(links).some((id) => !known.has(id))) void useAtlasStore.getState().refreshConversations();
+          if (result.sessions.some((item) => ['starting', 'running', 'waiting'].includes(item.status))) window.dispatchEvent(new Event('atlas:session-status-activity'));
+        })
+        .catch(() => { /* backend without linked sessions */ });
+    };
+    refresh();
+    const timer = window.setInterval(() => { if (document.visibilityState !== 'hidden') refresh(); }, 4000);
+    window.addEventListener('atlas:linked-sessions', refresh);
+    return () => { stale = true; window.clearInterval(timer); window.removeEventListener('atlas:linked-sessions', refresh); };
+  }, []);
   useEffect(() => {
     let stale = false;
     const refresh = () => {
@@ -256,11 +278,22 @@ export default function Sidebar(props: SidebarProps) {
   const sortedItems = (items: ConversationSummary[]) => {
     const rank = new Map(manualOrder.map((id, index) => [id, index]));
     const original = new Map(items.map((item, index) => [item.id, index]));
-    return [...items].sort((a, b) => {
+    const sorted = [...items].sort((a, b) => {
       const aRank = rank.get(a.id) ?? manualOrder.length + (original.get(a.id) ?? 0);
       const bRank = rank.get(b.id) ?? manualOrder.length + (original.get(b.id) ?? 0);
       return aRank - bRank;
     });
+    const present = new Set(sorted.map((item) => item.id));
+    const nested = sorted.filter((item) => sessionParents[item.id] && present.has(sessionParents[item.id]));
+    if (!nested.length) return sorted;
+    const nestedIds = new Set(nested.map((item) => item.id));
+    const result: ConversationSummary[] = [];
+    const place = (item: ConversationSummary, depth: number) => {
+      result.push(item);
+      if (depth < 4) for (const child of nested) if (sessionParents[child.id] === item.id) place(child, depth + 1);
+    };
+    for (const item of sorted) if (!nestedIds.has(item.id)) place(item, 0);
+    return result;
   };
 
   const allMatched = props.conversations.filter(matches);
@@ -586,7 +619,8 @@ export default function Sidebar(props: SidebarProps) {
         disabled={props.loadingConversationId === conversation.id}
         onClick={(event) => { if (Date.now() < suppressTouchClickUntil.current) { event.preventDefault(); return; } selectionMode ? toggleSelected(conversation.id) : props.onOpenConversation(conversation); }}
         onDoubleClick={() => setEditing({ id: conversation.id, title: conversation.title })}
-        className={cn('flex h-8 min-w-0 flex-1 items-center gap-2 pr-7 pl-2.5 text-left text-[13.5px] disabled:opacity-60', current ? 'text-fg' : 'text-fg-2 group-hover:text-fg')}>
+        className={cn('flex h-8 min-w-0 flex-1 items-center gap-2 pr-7 pl-2.5 text-left text-[13.5px] disabled:opacity-60', sessionParents[conversation.id] && 'pl-6', current ? 'text-fg' : 'text-fg-2 group-hover:text-fg')}>
+        {sessionParents[conversation.id] && <CornerDownRight size={12} className="-ml-3 shrink-0 text-fg-3" aria-label="独立会话" />}
         {waiting
           ? <i className="size-2 shrink-0 rounded-full bg-brand ring-2 ring-brand/20" aria-label="等待输入或审批" />
           : running

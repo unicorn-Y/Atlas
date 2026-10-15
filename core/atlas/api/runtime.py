@@ -14,6 +14,9 @@ from fastapi import WebSocket, WebSocketDisconnect
 from atlas.config import get_config
 
 
+_LISTENER_TASKS: set[asyncio.Task[Any]] = set()
+
+
 class RunState:
     """Tracks a single agent run's state for the runtime protocol."""
 
@@ -130,6 +133,10 @@ class RuntimeManager:
         self._db: aiosqlite.Connection | None = None
         self._persist_lock = asyncio.Lock()
         self.services: Any = None
+        # Called as ``listener(run, envelope)`` (in a background task) when a
+        # run reaches run.completed/failed/cancelled — linked sessions use it
+        # to report a finished child turn to the session that started it.
+        self.terminal_listeners: list[Any] = []
 
     async def init(self, db_path: Path | None = None) -> None:
         """Load persisted lifecycle metadata and fail runs interrupted by restart."""
@@ -346,3 +353,8 @@ class RuntimeManager:
         async with run.event_lock:
             await self.persist_run(run)
             await self.send(conn_id, data)
+        if data.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+            for listener in list(self.terminal_listeners):
+                task = asyncio.create_task(listener(run, data))
+                _LISTENER_TASKS.add(task)
+                task.add_done_callback(_LISTENER_TASKS.discard)

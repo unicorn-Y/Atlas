@@ -92,6 +92,7 @@ import { api, relativeTime } from './services/api';
 import { buildTimeline } from './components/timeline';
 const ComputerEdgeBar = lazy(() => import('./components/x2').then((module) => ({ default: module.ComputerEdgeBar })));
 import UpdateBanner from './components/UpdateBanner';
+import LinkedSessions from './components/sessions/LinkedSessions';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
@@ -1361,6 +1362,7 @@ export default function App() {
               footerNote={<>{retryNote}{errorNote}</>} />
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(760px,100%)]">
+                {store.activeConversationId && <LinkedSessions conversationId={store.activeConversationId} />}
                 {queueStrip}
                 {todoStrip}
                 <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={<>{editBanner}{goalHeader}{runHeader}{rewindBanner}</>} />

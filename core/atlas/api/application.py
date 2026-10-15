@@ -48,6 +48,7 @@ from atlas.api.records_router import router as records_router
 from atlas.api.runtime import RuntimeManager
 from atlas.api.runtime_router import router as runtime_router
 from atlas.api.runtime_ws_router import router as runtime_ws_router
+from atlas.api.sessions_router import router as sessions_router
 from atlas.api.scheduling_router import router as scheduling_router
 from atlas.api.skills_market_router import router as skills_market_router
 from atlas.api.memory_library_router import router as memory_library_router
@@ -128,6 +129,7 @@ def create_app(
         skills_router,
         runtime_router,
         runtime_ws_router,
+        sessions_router,
         scheduling_router,
         tools_router,
         usage_router,

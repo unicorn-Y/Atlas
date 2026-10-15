@@ -93,6 +93,8 @@ export type TimelineItem =
   /** /review 代码审查的结构化结论，由 ReviewFindingsCard 渲染；findings 为空即「没有发现问题」。 */
   | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; findings: ReviewFinding[] }
   | { kind: 'artifact'; id: string; name: string; summary: string }
+  /** 独立会话：提议卡片 / 已开始 / 子会话回报（session.event），由 SessionEventCard 渲染。 */
+  | { kind: 'session'; id: string; event: AgentEvent }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
   | { kind: 'failed'; id: string; detail: string };
 
@@ -636,6 +638,11 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         const count = typeof data.count === 'number' ? data.count : diagnostics.length;
         if (count <= 0 && !diagnostics.length) break;
         items.push({ kind: 'lsp', id: event.id, path: String(data.path ?? ''), count, diagnostics });
+        break;
+      }
+      case 'session.event': {
+        closeReply(); closeBlocks();
+        items.push({ kind: 'session', id: event.id, event });
         break;
       }
       case 'review.findings': {

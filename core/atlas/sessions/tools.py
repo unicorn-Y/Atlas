@@ -1,0 +1,165 @@
+# Ported from openclaw/openclaw@59cb44796b0f1f0daa0e37af8b1495abb45d9bc1: src/agents/tools/sessions-spawn-visible.schema.ts (MIT)
+# Ported from openclaw/openclaw@59cb44796b0f1f0daa0e37af8b1495abb45d9bc1: src/agents/tools/sessions-send-tool.schema.ts (MIT)
+"""Model-facing tools for independent sessions.
+
+Contract mirrors Claude Desktop's ``start_session`` / ``dismiss_task`` /
+``SendMessage`` / ``list_sessions``: ``initiation`` says whose idea it is
+(``user_asked`` starts now; ``offer`` and ``own_initiative`` show a card the
+user starts), ``context`` picks a fresh brief or a fork of this conversation,
+``use_worktree`` gives a code-writing session its own git worktree.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+SESSION_TOOL_NAMES = frozenset({
+    "session_start", "session_send", "session_list", "session_stop", "session_dismiss",
+})
+
+SESSION_TOOLS: list[dict[str, Any]] = [
+    {"type": "function", "function": {
+        "name": "session_start",
+        "description": (
+            "Start (or propose) a separate Atlas session for a self-contained piece of work while you stay "
+            "with the user. The new session is a real conversation in the sidebar the user can open, talk to "
+            "and stop; when it ends a turn its last reply is reported back to you automatically, so never wait "
+            "for it or poll. initiation: 'user_asked' only when the user explicitly asked for separate/parallel/"
+            "background work (starts now); 'offer' for a task the user named in their latest message (card asks "
+            "them: new session or do it here); 'own_initiative' for a follow-up you noticed yourself (card, nothing "
+            "runs until they click). Keep quick things (a question, one edit) in this conversation. prompt is the "
+            "full brief: task, files/area, what done looks like. context 'fresh' (default) needs a background of "
+            "at least 80 characters; 'fork' copies this conversation. use_worktree=true for code-writing work so "
+            "two sessions never edit the same checkout."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "initiation": {"type": "string", "enum": ["user_asked", "offer", "own_initiative"]},
+            "title": {"type": "string", "description": "Under 60 characters; names the task."},
+            "prompt": {"type": "string", "description": "The brief the new session starts with."},
+            "background": {"type": "string", "description": "Goal, decisions and constraints so far (fresh context)."},
+            "context": {"type": "string", "enum": ["fresh", "fork"]},
+            "use_worktree": {"type": "boolean"},
+            "name": {"type": "string", "description": "Short handle [a-z0-9-], at most 24 characters."},
+            "notify": {"type": "boolean", "description": "Report back when it ends a turn (default true)."},
+        }, "required": ["initiation", "title", "prompt"], "additionalProperties": False},
+    }},
+    {"type": "function", "function": {
+        "name": "session_send",
+        "description": (
+            "Send a message to another linked session: one you started (by session_id or name) or 'parent' "
+            "(the session that started you). A running session gets it before its next step; an idle one starts "
+            "a new turn with it. Use it for follow-ups to a session that already has the context; when blocked, "
+            "send ONE short question to 'parent' and end your turn. Never use it for progress updates."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "to": {"type": "string"}, "message": {"type": "string"},
+        }, "required": ["to", "message"], "additionalProperties": False},
+    }},
+    {"type": "function", "function": {
+        "name": "session_list",
+        "description": "List the sessions linked to this conversation (ones it started, and its parent) with status and last report.",
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    }},
+    {"type": "function", "function": {
+        "name": "session_stop",
+        "description": "Stop a running linked session you started (by session_id or name).",
+        "parameters": {"type": "object", "properties": {"to": {"type": "string"}},
+                       "required": ["to"], "additionalProperties": False},
+    }},
+    {"type": "function", "function": {
+        "name": "session_dismiss",
+        "description": "Withdraw a session proposal the user has not started (it went stale or was done here after all).",
+        "parameters": {"type": "object", "properties": {
+            "session_id": {"type": "string"}, "reason": {"type": "string"},
+        }, "required": ["session_id"], "additionalProperties": False},
+    }},
+]
+
+
+def _brief(item: dict[str, Any]) -> dict[str, Any]:
+    return {key: item.get(key) for key in (
+        "session_id", "name", "title", "status", "initiation", "conversation_id", "worktree_branch",
+        "last_status", "last_report", "waiting_for",
+    ) if item.get(key) not in (None, "")}
+
+
+async def run_session_tool(name: str, args: dict[str, Any], runtime: Any) -> dict[str, Any]:
+    """Execute one session tool; returns ``{"text": ..., "data": ..., "is_error": bool}``."""
+    from atlas.sessions.hub import get_session_hub, public
+
+    hub = get_session_hub()
+    conversation_id = str(getattr(runtime, "conversation_id", "") or "")
+    run_id = str(getattr(runtime, "run_id", "") or "")
+    if not conversation_id:
+        return {"text": "这次运行没有对话 id，开不了独立会话。", "is_error": True}
+    try:
+        if name == "session_start":
+            title = str(args.get("title") or "").strip()[:120]
+            prompt = str(args.get("prompt") or "").strip()
+            initiation = str(args.get("initiation") or "own_initiative")
+            context = str(args.get("context") or "fresh")
+            background = str(args.get("background") or "").strip()
+            if not title or not prompt:
+                return {"text": "title 和 prompt 都要填：prompt 是新会话的完整任务书。", "is_error": True}
+            if context not in {"fresh", "fork"} or initiation not in {"user_asked", "offer", "own_initiative"}:
+                return {"text": "context 只能是 fresh/fork，initiation 只能是 user_asked/offer/own_initiative。", "is_error": True}
+            if context == "fresh" and len(background) < 80:
+                return {"text": "context=fresh 时要给至少 80 字的 background：总目标、已定的决定和约束、这块怎么接回来。", "is_error": True}
+            downgraded = False
+            if initiation == "user_asked" and run_id in hub.hub_run_ids:
+                # A turn another session or a report started is not the user
+                # asking: it may only propose (CCD rule).
+                initiation, downgraded = "own_initiative", True
+            if getattr(runtime, "read_only", False) and initiation == "user_asked":
+                initiation, downgraded = "own_initiative", True
+            fields = {
+                "parent_conversation_id": conversation_id, "parent_run_id": run_id or None,
+                "title": title, "prompt": prompt, "background": background, "context": context,
+                "use_worktree": bool(args.get("use_worktree")), "name": str(args.get("name") or title),
+                "initiation": initiation, "notify_parent": args.get("notify") is not False,
+            }
+            if initiation == "user_asked":
+                record = await hub.create_and_start(**fields)
+                return {"text": (
+                    f"已开始独立会话「{record['title']}」（句柄 {record['name']}，id {record['session_id']}）。"
+                    "它停下时回报会自动送回这里；不要等待或轮询，接着回应用户，最多一句话说明怎么回报。"
+                ), "data": {"session": public(record)}}
+            fields.pop("parent_run_id")
+            record = await hub.propose(parent_run_id=run_id or None, **fields)
+            note = "（这一轮不是用户直接发起的，只能提议，不能直接开始。）" if downgraded else ""
+            return {"text": (
+                f"已提议独立会话「{record['title']}」（id {record['session_id']}），卡片已显示给用户，"
+                f"用户点「开始」才会运行；7 天不点自动失效。不要等它，继续手上的事。{note}"
+            ), "data": {"session": public(record)}}
+        if name == "session_send":
+            outcome = await hub.send(str(args.get("to") or ""), str(args.get("message") or ""),
+                                     from_conversation=conversation_id)
+            verb = "已插入它正在跑的这一轮" if outcome["status"] == "steered" else "它空闲，已用这条消息开了新的一轮"
+            return {"text": f"消息已送达（{verb}）。不要轮询，它的回复会按回报规则回来。", "data": outcome}
+        if name == "session_list":
+            mine = hub.store.by_conversation(conversation_id)
+            items = [_brief(item) for item in hub.list(conversation_id)]
+            payload = {"sessions": items}
+            if mine:
+                payload["parent_conversation_id"] = mine.get("parent_conversation_id")
+                payload["this_session"] = _brief(mine)
+            return {"text": json.dumps(payload, ensure_ascii=False, indent=1), "data": payload}
+        if name == "session_stop":
+            record = hub.resolve(str(args.get("to") or ""), caller_conversation=conversation_id)
+            if record is None or record.get("session_id") == "parent":
+                return {"text": "没找到这个会话（只能停你开的会话）。", "is_error": True}
+            record = await hub.stop(record["session_id"])
+            return {"text": f"会话「{record['title']}」已停止。", "data": {"session": public(record)}}
+        if name == "session_dismiss":
+            record = hub.store.get(str(args.get("session_id") or ""))
+            if record is None or record.get("parent_conversation_id") != conversation_id:
+                return {"text": "没找到这个提议（只能撤回本对话提的）。", "is_error": True}
+            record = await hub.dismiss(record["session_id"], str(args.get("reason") or ""))
+            state = "已撤回" if record["status"] == "dismissed" else f"没撤回：它的状态是 {record['status']}"
+            return {"text": f"提议「{record['title']}」{state}。", "data": {"session": public(record)}}
+    except KeyError as exc:
+        return {"text": f"没找到会话：{exc}", "is_error": True}
+    except (ValueError, RuntimeError) as exc:
+        return {"text": str(exc), "is_error": True}
+    return {"text": f"未知的会话工具：{name}", "is_error": True}

@@ -41,7 +41,7 @@ function timelineClass(item: TimelineItem): ThreadClassId {
     case 'user': case 'reply': return 'messages';
     case 'reasoning': return 'model';
     case 'steps': case 'group': return 'tools';
-    case 'approval': case 'question': case 'trust': case 'foreground': case 'handoff': return 'approvals';
+    case 'approval': case 'question': case 'trust': case 'foreground': case 'handoff': case 'session': return 'approvals';
     case 'plan': return 'plans';
     case 'checks': case 'review': case 'lsp': return 'checks';
     case 'artifact': case 'done': return 'files';
