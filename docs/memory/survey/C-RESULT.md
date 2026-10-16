@@ -95,7 +95,7 @@ Claude 骨架：修改后支持，不可假定子 Agent 获得主 Agent 的全�
 |---|---|---|---|---|
 | MemOS skill lifecycle | `a7367d07e55db61099f7b4e2c1108bc5831a24f3`；根 Apache-2.0 | `core/skill/eligibility.ts:evaluateEligibility:45,decide:64`; `skill.ts:runSkill:65,applySkillFeedback:285`; `verifier.ts:verifyDraft:46`; `lifecycle.ts:applyFeedback:37,applyTrial:59`; `crystallize.ts:230-304`; prompt `skill-crystallize.ts:19-78`; UI `viewer/src/views/SkillsView.tsx` | 证据足够、支持数/成功锚点/政策增益准入；3–10 traces、工具白名单、counter-example；candidate→trial→active/archive，试验、用户 thumbs、reward 反馈；结构校验失败带 correction context 重试一次，再原子 upsert。Prompt：“Don't invent guidance unsupported by the inputs.” 逻辑适合 Python 重写，插件服务与 TS UI 中等成本。 | 本地源码实读 |
 | Hermes skill evolution | `607a0b0d41e07d903c0b475dd72fb6ac2b37fecc`；MIT | `agent/background_review.py:_review_tool_whitelist:1088,_run_review_fork:1147,spawn_background_review_thread:1310`; `tools/skill_manager_tool.py:_create_skill:453,_patch_skill:508,skill_manage:768`; `agent/curator.py:apply_automatic_transitions:209`; `hermes_cli/journey.py` edit/display/delete | 后 turn review fork 可更新 skill 或 memory+skill；先补当前技能再扩 support files、拒绝每 session 新造；用户可见可编辑，写入 gated。弱在提炼质量更多依赖 LLM prompt，无 SkillOpt 同级 heldout gate。Python移植中高。 | 本地源码实读 |
-| SkillOpt-Sleep / Atlas adapter | `microsoft/SkillOpt@343db229dbd5ddaf9df6b1d5540d8bcdb2604d5c`；根 MIT，`skillopt_sleep` 无子 LICENSE | `skillopt_sleep/cycle.py:run_sleep_cycle:625,797-820,989-1039,1090-1093`; `consolidate.py` gate `135-173`; `staging.py:adopt:3028`; Atlas `core/atlas/evolution/skill_sleep.py:harvest_atlas:43,run:111-125` | harvest→mine→分 train/heldout→replay/consolidate gate→stage；默认 validation gate 拒绝未改进 proposal，candidate 先 staging，auto-adopt 是 opt-in，accepted 前不覆写 live skill；gate 可配置，不应将“必定严格提升”当无条件结论。Atlas adapter 将 `evolve_memory=False`，保留记忆与 skill 分工。Python成本低至中，实际模型/replay 成本由 backend 决定。 | 本地源码实读 |
+| SkillOpt-Sleep / Atlas adapter | `microsoft/SkillOpt@343db229dbd5ddaf9df6b1d5540d8bcdb2604d5c`；根 MIT，`skillopt_sleep` 无子 LICENSE | `skillopt_sleep/cycle.py:run_sleep_cycle:625,797-820,989-1039,1090-1093`; `cycle.py` validation/promote gate `271-286,379-434`（原 `consolidate.py:135-173` 为 task delta）; `staging.py:adopt:3028`; Atlas `core/atlas/evolution/skill_sleep.py:harvest_atlas:43,run:111-125` | harvest→mine→分 train/heldout→replay/consolidate gate→stage；默认 validation gate 拒绝未改进 proposal，candidate 先 staging，auto-adopt 是 opt-in，accepted 前不覆写 live skill；gate 可配置，不应将“必定严格提升”当无条件结论。Atlas adapter 将 `evolve_memory=False`，保留记忆与 skill 分工。Python成本低至中，实际模型/replay 成本由 backend 决定。 | 本地源码实读 |
 | Codex phase2 | `openai/codex@a45b8ccb016fb74f63a6bc29e701568e387cbe38`；根 Apache-2.0（memories子树无独立许可） | `codex-rs/memories/write/src/phase2.rs:run:49`; `templates/memories/consolidation.md:29-32,137-145,687-756,813-863` | consolidation agent 增量读现有技能/手册；重复程序且明显省时/减少错误才建 skill；`SKILL.md`+scripts/templates/examples。Prompt：“Create a skill when the procedure repeats (more than once) and clearly saves time or …”。文件可读可 git diff；没有独立 heldout 成功门。Rust高成本，只移植准入和格式约束。 | 本轮 sparse local clone |
 | ReasoningBank | `thakshak/ReasoningBank@0669c7e8697100b1779d284834f8562248db2d2a`；MIT | `reasoningbank/core/bank.py:ReasoningBank.add_experience:107,retrieve_memories:147`; `distillation/distill.py:judge_trajectory:12,distill_trajectory:41`; `memory/json.py:44,54` | 将成功/失败归纳成策略并向量 top-k；无标准可编辑技能包和完善生命周期。Python但 Chroma/LangChain 中等。 | 本地源码实读 |
 | ExpeL | `e41ec9a24823e7b560c561ab191441b56d9bcefc`；Apache-2.0 | `agent/expel.py:success_critique:152,failure_critique:173,_build_critique_prompt:202,create_rules:287,update_dynamic_prompt_components:498,parse_rules:665,is_existing_rule:689,update_rules:696` | 成败轨迹反思成 lesson/rules，add/delete/replace 并向量召回；可借成败对照，非可维护 SKILL 包。研究依赖/模型成本中高。 | 本地源码实读 |
@@ -187,3 +187,18 @@ Claude 骨架：支持透明且用户可改的文本层，但把媒体本体作�
 | 多模态 | Omni-SimpleMem、V-Mem、TaskMem、TeleMem | `multimodal memory agent video image audio memory open source 2025`; `AI agent multimodal memory episodic video images repository`; `long-term memory agent multimodal image video audio open source` |
 
 LANE C DONE
+
+## 审查意见（R，2026-10-16）
+
+抽查依据：C 线报告 pinned commits 与可用本机拆解源码。
+
+1. **MemOS lifecycle citation**：`apps/memos-local-plugin/...` 的 `sync_turn` 在 transport-close 时至多重连/重试一次；失败不抛出，bridge 不可用时跳过。C 报告引用附近的 `crystallize.ts` 属 skill correction retry，不是 turn reconnect。任务书不得依赖其作为持久化成功保证。
+2. **agent-memory 原文指针存在歧义**：`get_turn` 查询条件只有 `turn_id`，若不同 trajectory 重复 turn_id，`_read_cited_text` 取 `.fetchone()` 可能回错轨迹；HMAC 绑定内容/span signature 却未绑定 source trajectory。Atlas 引用键必须至少包含 conversation/trajectory ID + message_uid/span，签名覆盖完整身份。
+3. **open-multi-agent shared memory**：结果回写/共享结构属实，但 key 随机、默认内存态、fail-open；delegation 路径未用 CAS，也不能证明 dispatch 前会自动注入上下文。只借接口思路，Atlas broker 需显式实现授权、上下文请求和结果回收。
+4. **MemOS hasSuccessAnchor**：仅依赖 policy metadata，不重放或核验目标成功，不可作为“经验已证实”的充分条件。
+5. **crystallize 修复重试**：畸形输出 correction retry 一次属实；不能推出结果已持久化/upsert。提交水位仍由 Atlas 自己的 durable write 决定。
+6. **SkillOpt gate 范围**：正确 gate 入口为 `cycle.py` 的验证与 promote 路径（报告所引 `consolidate.py:135-173` 是任务 delta 处理）；strict gate 表示配置的 aggregate validation metric 改善，不代表每个 holdout task 都提升；`gate_mode=off` 可绕过，auto-adopt 默认关闭。总裁决把“严格高于 baseline”定义为 Atlas 的拟定验收规则，而非 SkillOpt 无条件保证。
+7. **Omni-SimpleMem lazy retrieval**：MAU/pointer 机制成立，但 lazy expansion 只证明可取回 raw content，不证明所有衍生细节均可无损回溯。屏幕/音频/视频字段仅为预留研究，不进入本轮实现。
+8. **M1/M2 覆盖**：C 对 MemOS 接法、轨迹和 lifecycle 有证据，但 Atlas 永久锚点以本地 `session_sync.py:message_uid` 为准；不能以 MemOS transport session 代替来源账本。
+
+核验数：8 组源码行为；未运行项目/测试。以上意见由 R 直接补入。

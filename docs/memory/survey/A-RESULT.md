@@ -11,7 +11,7 @@
 
 ## 总裁决
 
-1. M3：Mem0 ADD-only 单次提炼最强，Mastra Observer 第二。Mem0 在同 scope 已有记忆的基础上，只从新消息提候选、以日期解析相对时间、去重/链接，并在写入成功后推进历史；它不负责 UPDATE/DELETE 纠错。Mastra 的结构化 extractor、previous extraction、thread metadata 与 transient retry适合可控字段提取，但仍是 thread-scoped observation，不是跨会话 canonical fact ledger。Atlas 应提炼带来源等级的事实/任务经验/工具观察/推断候选，再由 Atlas 自身证据层裁定。
+1. M3：Mem0 ADD-only 单次提炼最强，Mastra Observer 第二。Mem0 在同 scope 最多检索10条已有记忆的基础上，只从新消息提候选、以日期解析相对时间、在召回结果与当前batch范围内去重/链接；成功记录进入ADD历史，但消息上下文缓存可能在失败时仍保存；它不负责 UPDATE/DELETE 纠错。Mastra 的结构化 extractor、previous extraction、thread metadata 与 transient retry适合可控字段提取，但仍是 thread-scoped observation，不是跨会话 canonical fact ledger。Atlas 应提炼带来源等级的事实/任务经验/工具观察/推断候选，再由 Atlas 自身证据层裁定。
 2. M4：Codex 的控制闭环最强（lease、增量 Git diff、retry、产物校验、水位）；OpenClaw 的宿主校验第二，尤其适合保护用户手改：模型仅给 plan，宿主按精确旧文本与来源 lineage 校验后应用。ReMe 的逐条增量合并可作语义参考；Mastra 压缩梯度和 generation guard 可补强。
 3. 透明库：选 Markdown 为唯一规范内容，SQLite/向量只作可重建投影。Basic Memory 清楚实现了文件SSOT和投影分离；Codex baseline diff 与 OpenClaw exact-match apply 更接近“用户改动不能被覆盖”。Basic 的 locked note 不保护直接改文件。Atlas 现在已有 Markdown/Git 和 SQLite索引，但无强的用户编辑协调协议。
 4. Claude 骨架保留并增强：两阶段管线、透明文件库、来源等级、页面链接保留；补入 lease/idempotency/diff/retry/validation；整合模型改提案，不直接重写；来源权重按用户已拍板的用户陈述 > 工具观察 > 模型推断，但三类都可记录并保留原始证据；Markdown是真源，索引可重建。ReMe的 mtime checkpoint 不足以替代 Atlas event ID/version 账本。
@@ -35,10 +35,10 @@
 | Hindsight（新增） | 9a499b1759084a86598eff8af30ed59f7354e76c (2026-10-15)；MIT | mcp_tools.py:retain:1008/1069,recall:1259/1363,reflect:1466/1561 | retain/recall/reflect API分层 | 只读MCP wrapper，底层retry/dedup/人工编辑/feedback未知 | 高；入口读，待追。 |
 | Mem0以外的候选范围 | OpenClaw、Letta由M4覆盖；Claude Code上列 | M4表有OpenClaw/Letta refs | 不把M4整合机制冒充M3抽取实现 | M3 production抽取细节未查的在“未查清”列明 | — |
 
-M3裁决：第一 Mem0的“同scope候选 + 新消息ADD-only + hash幂等 + 写入确认后推进”；它只能覆盖新增事实，不覆盖更新/删除。第二 Mastra的“structured extractor + previous extraction + thread状态 + transient retry”；但它是thread scoped observation，不是canonical cross-session memory。Claude-Mem的event→observation→summary→viewer路径有价值，但当前证据不如前两家完整。
+M3裁决：第一 Mem0的“同scope候选 + 新消息ADD-only + 有限召回范围内hash去重 + 写入确认后推进”；它只能覆盖新增事实，不覆盖更新/删除。第二 Mastra的“structured extractor + previous extraction + thread状态 + transient retry”；但它是thread scoped observation，不是canonical cross-session memory。Claude-Mem的event→observation→summary→viewer路径有价值，但当前证据不如前两家完整。
 
 M3移植：
-- mem0 add / ADDITIVE_EXTRACTION_PROMPT → core/atlas/memory/library/__init__.py:MemoryLibrary.observe_turn/_extract_full 和 extract.py:SYSTEM_PROMPT/build_messages/parse_output/apply。保留同scope旧候选、新内容增量、日期锚、hash幂等、写成功才推进；改造成Atlas来源等级/原文指针；不要移植vector provider或ADD-only作为全部生命周期。取代只接受said用户原句的旧规则。
+- mem0 add / ADDITIVE_EXTRACTION_PROMPT → core/atlas/memory/library/__init__.py:MemoryLibrary.observe_turn/_extract_full 和 extract.py:SYSTEM_PROMPT/build_messages/parse_output/apply。保留同scope旧候选、新内容增量、日期锚、有限召回范围内hash去重、写成功才推进；改造成Atlas来源等级/原文指针；不要移植vector provider或ADD-only作为全部生命周期。取代只接受said用户原句的旧规则。
 - Mastra extractor/sync/retry → 同一MemoryLibrary：保previous extraction/结构schema/transient retry；跨会话冲突交给Atlas来源账本；不搬TS runtime。
 - SimpleMem process_window/process_remaining → TurnQueue与MemoryLibrary._drain：借批次边界/末尾flush，不拿prompt当持久去重。
 - MemoryOS仅借热度优先级；Memobase借UPDATE/APPEND/ABORT决策类型但加并发保护；Nemori借带source的episode和retry，不搬Postgres/Qdrant。
@@ -70,7 +70,7 @@ M4裁决/移植：Codex phase2控制闭环为第一；OpenClaw host-side exact-m
 
 | 项目 | commit / 许可 | 关键源码 | 真源、重建、人工编辑、失败纠错、召回/反馈 | 成本 / 证据 |
 |---|---|---|---|---|
-| Basic Memory | a72751c5d626380dedeed30f55f7a80ba3dc710d (2026-10-15)；Apache-2.0；Pi/OpenClaw/Hermes integration另有LICENSE | note_content_writes.py:write_note:399,_accept_write:639; file_service.py:write_file:197; watch_service.py:handle_changes:301; note_content_reconciler.py:reconcile:313,apply_note_content_update_plan:202; search_service.py:reindex_all:298,search:433 | Markdown文件为SSOT，DB为实体/关系/FTS/semantic投影；watch/reconciler重读文件修复投影。locked仅限制API写入，直接编辑/删除文件不阻止或回滚。可读改；故障恢复未实测，无usage feedback | 中高，watcher/schema复杂；源码+文档。 |
+| Basic Memory | a72751c5d626380dedeed30f55f7a80ba3dc710d (2026-10-15)；AGPL-3.0-or-later（核对LICENSE与pyproject.toml）；各integration另有LICENSE | note_content_writes.py:write_note:399,_accept_write:639; file_service.py:write_file:197; watch_service.py:handle_changes:301; note_content_reconciler.py:reconcile:313,apply_note_content_update_plan:202; search_service.py:reindex_all:298,search:433 | Markdown是可编辑文件真源的设计目标；该commit accepted write先落DB、再异步物化Markdown，DB暂时可能领先文件，reconcile需保护DB-ahead状态；watch/reconciler重读文件修复投影。locked仅限制API写入，直接编辑/删除文件不阻止或回滚。可读改；故障恢复未实测，无usage feedback | 中高，watcher/schema复杂；源码+文档。 |
 | Codex official internal | rust-v0.162.1, 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d；Apache-2.0；个人级files是另一层 | state/runtime/memories.rs:MemoryStore:31,record_stage1_output_usage:58; write/storage.rs:rebuild_raw_memories_file_from_memories:13,sync_rollout_summaries_from_memories:23; workspace.rs:prepare_memory_workspace:16,memory_workspace_diff:29,reset_memory_workspace_baseline:46 | 内部SQLite存stage1/job，Markdown产物为导出/重建；不要混称为唯一真源。baseline diff能传播用户改动；任务有retry/stale claim回收。个人文件可读，内部DB不透明 | 高；Git协议可借，Rust不移；源码已读。 |
 | Claude Code files | 当前2.1.296闭源；细节来自2.1.88 sourcemap | memdir.ts:buildMemoryPrompt:272,buildMemoryLines:199-266; memoryScan.ts:scanMemoryFiles:35; findRelevantMemories.ts:39,77 | topic markdown+frontmatter，MEMORY.md索引；按任务检索。prompt管写/纠错，无事务保护；可见可改，错误恢复/feedback未证 | 行为参考成本低；闭源，版本有差。 |
 | MemPalace | 9b0cebf66d9796214fe03e3992d98e5f579f1400 (2026-10-15)；根LICENSE | convo_miner.py:scan_convos:561,_split_new_and_duplicate_conversations:866,_is_unchanged_since_last_mine:892,mine_convos:939; dedup.py:dedup_source_group:98,dedup_palace:169 | 主库SQLite/vector和原文drawer，不是Markdown；可备份导出、从agent transcript重新mine；hash/source追踪与近重dry-run；语义+关键词召回，人改与反向同步未证 | 中高；源码抽样。 |
@@ -113,3 +113,18 @@ M4裁决/移植：Codex phase2控制闭环为第一；OpenClaw host-side exact-m
 - D: 当前可用空间显示0 bytes，但本结果文件已成功写入指定工作树；提交与推送前仍需确认Git对象写入可用。
 
 LANE A DONE
+
+## 审查意见（R，2026-10-16）
+
+抽查依据：A 线报告所列 pinned commits 与官方拆解源码；以下为逐函数复核及需收窄的移植边界。
+
+1. **Basic Memory 许可证更正**：A 表将 `basic-memory@a72751c5d626380dedeed30f55f7a80ba3dc710d` 标成 Apache-2.0 不实。该提交根 `LICENSE` 与 `pyproject.toml:7` 标 AGPL-3.0-or-later；`integrations/openclaw/LICENSE` 才是 MIT，Hermes/Pi integration 仍为 AGPLv3，不能覆盖 core。不得按 Apache 代码源安排 core 复制；本裁决只将其作为行为参考，或采用另有许可的实现，许可选择留待用户确认。
+2. **Mem0 幂等范围收窄**：`mem0/memory/main.py:_add_to_vector_store` 在 921-954 用同 scope 的已有记忆构造上下文，但 928-933 只取 `top_k=10`，1008-1024 的 hash 去重只覆盖召回结果和当前 batch，并非全 scope 持久唯一性。可借 ADD-only 提炼；Atlas 若需全局幂等，须以来源事件/抽取版本唯一键实现。
+3. **Mem0 水位语义区分**：1052-1098 仅成功写入的记录进入 ADD mutation history；但 984-991 解析失败仍保存消息，1072-1076 全部向量插入失败时也先 `save_messages` 再抛错。应区分消息上下文缓存与已提交记忆水位，不能宣称所有失败都不消费来源。
+4. **Basic Memory 的 accepted write 不是纯投影协议**：`note_content_writes.py:_accept_write:679-702` 以 DB 最新接受内容为基础；`note_content_materialization.py:materialize_write_change:699-717` 显示 accepted state 可先进入 DB、Markdown 后异步物化；`note_content_reconciliation.py:plan_existing_note_content_reconciliation:231-273` 防止旧文件观察覆盖 DB ahead 版本。Markdown 单一真源是 Atlas 已定方向，但应明确这是 Atlas 的协议决定，不可称为直接复刻该提交顺序。
+5. **locked 边界补充**：API mutation runner 可拒绝 locked note，但 `docs/LOCKED_NOTES.md:24-32` 说明直接文件编辑/删除与 import 可绕开。若 Atlas 保护手改，必须在文件应用/索引重建边界做内容版本校验，不能只加 API 锁。
+6. **Codex Phase 2 水位条件补全**：`phase2.rs:run:122-151` 支持“无 diff 且产物有效”捷径；有 diff 的成功路径在 `agent::handle:406-465`，还要求 agent 完成、产物有效、持有 lease 且 baseline reset 成功。验收协议要覆盖两条路径。
+7. **OpenClaw 保护手改证据增强**：除 `applyMemoryConsolidationPlan` 精确旧行/lineage 校验外，`short-term-promotion-apply.ts:440-474` 会在模型运行后重读文件并比较 fingerprint/base hash。Atlas 任务应移植 host-side re-read + generation/hash guard；字符串 validator 单独不足以保护并发编辑。
+8. **覆盖缺口**：任务书候选要求 M3 检查 memU；A 正文没有 memU 的函数证据或明确未查清声明。Letta/OpenClaw 的相关行转入 M4 也没有完整回答 M3 提炼机制。裁决不将这些项目作为 M3 已核实胜者，后续施工须先补证据或按本任务书规定的 Atlas 输入契约实现。
+
+核验数：10 组函数行为；未运行候选项目/测试。上述意见由 R 直接补入，无需等待源对话修改。
