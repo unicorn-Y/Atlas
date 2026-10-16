@@ -49,6 +49,16 @@ _ALIAS_RE = re.compile(r"^\s*别名[:：]\s*(?P<names>.+?)\s*$")
 _BAD_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
+def _iso_value(value: Any) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        return True
+    except ValueError:
+        return False
+
+
 @dataclass
 class Entry:
     text: str
@@ -84,15 +94,16 @@ class Entry:
     extra_metadata: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
-        if self.source_level is None:
+        source_levels = {"user_assertion", "tool_observation", "model_inference", "legacy_unknown"}
+        if self.source_level not in source_levels:
             self.source_level = {
                 SRC_SAID: "user_assertion",
                 SRC_EDITED: "user_assertion",
                 SRC_GUESS: "model_inference",
             }.get(self.src, "legacy_unknown")
-        if not self.recorded_at and self.at:
+        if not self.recorded_at and _iso_value(self.at):
             self.recorded_at = self.at
-        if not self.valid_to:
+        if not self.valid_to and _iso_value(self.until):
             self.valid_to = self.until
 
     def meta(self) -> dict[str, Any]:
@@ -101,6 +112,16 @@ class Entry:
                      if k not in ("text", "extra_metadata") and v not in ("", [], None)})
         if data.get("importance") == 5:
             data.pop("importance")
+        data.update({
+            "source_level": self.source_level,
+            "valid_from": self.valid_from or None,
+            "valid_to": self.valid_to or None,
+            "supersedes": self.supersedes,
+            "retracts": self.retracts,
+            "source_ref": self.source_ref,
+        })
+        if self.recorded_at:
+            data["recorded_at"] = self.recorded_at
         return data
 
     def line(self) -> str:
@@ -132,10 +153,25 @@ class Entry:
         unknown = {k: v for k, v in meta.items()
                    if k not in cls.__dataclass_fields__ and k != "text"}
         known["extra_metadata"] = unknown
-        if "recorded_at" not in known:
-            known["recorded_at"] = str(known.get("at") or "")
-        if "valid_to" not in known:
-            known["valid_to"] = str(known.get("until") or meta.get("expires") or "")
+        # Old Atlas metadata is retained and mapped only where its meaning is
+        # supported by the existing src/at/until fields. Legacy refs stay legacy.
+        source_levels = {"user_assertion", "tool_observation", "model_inference", "legacy_unknown"}
+        if known.get("source_level") not in source_levels:
+            known["source_level"] = {
+                SRC_SAID: "user_assertion",
+                SRC_EDITED: "user_assertion",
+                SRC_GUESS: "model_inference",
+            }.get(known.get("src", ""), "legacy_unknown")
+        for field_name in ("recorded_at", "valid_from", "valid_to"):
+            if known.get(field_name) and not _iso_value(known[field_name]):
+                known[field_name] = ""
+        if "recorded_at" not in known and _iso_value(known.get("at")):
+            known["recorded_at"] = known["at"]
+        if "valid_to" not in known and _iso_value(known.get("until")):
+            known["valid_to"] = known["until"]
+        known.setdefault("source_ref", None)
+        if known["source_ref"] is None and known.get("ref"):
+            known["extra_metadata"].setdefault("source_ref_status", "legacy_unresolved")
         entry = cls(text=text, **known)
         entry.id = entry.id or stable_id(text)
         return entry
