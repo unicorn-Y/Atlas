@@ -353,14 +353,17 @@ def score_candidate(report: Any, *, gate_mode: str, safety_blockers: int | None 
         generic_blockers = [str(raw_blockers)] if raw_blockers else []
     has_generic_blockers = bool(generic_blockers)
     enabled = str(gate_mode).lower() in {"on", "true", "1", "enabled"}
+    holdout_evidence = getattr(report, "holdout_leaked", False) is False
     passed = bool(enabled and blocker_evidence and getattr(report, "accepted", False)
                   and task_count >= 2 and strict_gain and safety_blockers == 0
-                  and correctness_blockers == 0 and not has_generic_blockers)
+                  and correctness_blockers == 0 and not has_generic_blockers
+                  and holdout_evidence)
     return {"gate_mode": "on" if enabled else "off", "passed": passed,
             "baseline_score": baseline, "candidate_score": candidate,
             "task_count": task_count, "safety_blockers": safety_blockers,
             "correctness_blockers": correctness_blockers, "other_blockers": generic_blockers,
             "blocker_evidence_available": blocker_evidence,
+            "holdout_leaked": bool(getattr(report, "holdout_leaked", False)),
             "reason": "strict_aggregate_improvement" if passed else "gate_not_satisfied"}
 
 

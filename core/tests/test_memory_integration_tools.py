@@ -32,7 +32,10 @@ def test_skill_gates_fail_closed_without_heldout_or_blocker_evidence(tmp_path):
 
     path = tmp_path / "SKILL.md"
     path.write_text("---\nname: demo\ndescription: demo\nversion: 0.0.0\n---\nbody\n", encoding="utf-8")
-    assert promote_candidate(path, user_reviewed=True)["reason"] == "stored_validation_gate_not_passed"
+    assert promote_candidate(path, user_reviewed=True)["reason"] in {
+        "stored_validation_gate_not_passed",
+        "stored_promotion_evidence_incomplete_or_not_passed",
+    }
 
 
 def test_skill_gates_require_balanced_heldout_and_explicit_zero_blockers():
@@ -44,12 +47,12 @@ def test_skill_gates_require_balanced_heldout_and_explicit_zero_blockers():
     assert score_candidate(report, gate_mode="on")["passed"]
 
 
-def test_skill_promotion_requires_explicit_review(tmp_path):
+def test_skill_promotion_auto_promotes_without_manual_review(tmp_path):
     path = tmp_path / "SKILL.md"
     path.write_text("---\nname: demo\ndescription: demo\nversion: 0.0.0\n---\nbody\n", encoding="utf-8")
     result = promote_candidate(path)
     assert not result["promoted"]
-    assert result["reason"] == "explicit_user_review_required"
+    assert result["reason"] == "stored_promotion_evidence_incomplete_or_not_passed"
 
 
 def test_forget_removes_linked_candidate_and_external_learned_skill(tmp_path, monkeypatch):

@@ -93,7 +93,9 @@ def run(*, dry_run: bool = False) -> dict[str, Any]:
         build_candidate, heldout_composition, is_counterexample,
         read_experiences, score_candidate,
     )
-    from atlas.evolution.skill_staging import record_validation, stage_candidate
+    from atlas.evolution.skill_staging import (
+        promote_candidate, record_validation, stage_candidate,
+    )
     from atlas.memory.library import get_library
     from atlas.models import ModelManager
     from atlas.skills import SKILLS_DIR
@@ -151,20 +153,38 @@ def run(*, dry_run: bool = False) -> dict[str, Any]:
         lookback_hours=24 * 14, max_tasks_per_night=12,
     )
     original = cycle.harvest_for_config
+    original_mine = cycle.mine
+    mined_tasks: list[Any] = []
+
+    def mine_with_evidence(*args: Any, **kwargs: Any) -> list[Any]:
+        tasks = original_mine(*args, **kwargs)
+        mined_tasks[:] = [{"task_id": task.id, "split": task.split,
+                           "origin": task.origin,
+                           "experience_ids": list(task.source_sessions or [])}
+                          for task in tasks]
+        return tasks
+
     cycle.harvest_for_config = lambda _cfg, since_iso=None, limit=0: harvest_atlas(
         since_iso=since_iso, limit=limit,
     )
+    cycle.mine = mine_with_evidence
     try:
         outcome = cycle.run_sleep_cycle(cfg)
     finally:
         cycle.harvest_for_config = original
+        cycle.mine = original_mine
     report = outcome.report
     gate = score_candidate(report, gate_mode="on")
     success_cases = {item.experience_id for item in experiences
                      if item.verified and item.outcome.strip() and not is_counterexample(item)}
     counterexample_cases = {item.experience_id for item in experiences
                             if is_counterexample(item)}
-    heldout = heldout_composition(report, success_cases, counterexample_cases)
+    gate_heldout_ids = {experience_id for task in mined_tasks if task["split"] == "val"
+                        for experience_id in task["experience_ids"]}
+    heldout = heldout_composition(
+        type("GateEvidence", (), {"heldout_ids": sorted(gate_heldout_ids)})(),
+        success_cases, counterexample_cases,
+    )
     if not heldout["passed"]:
         gate["passed"] = False
         gate["reason"] = heldout["reason"]
@@ -173,19 +193,20 @@ def run(*, dry_run: bool = False) -> dict[str, Any]:
         "success_case_ids": sorted(success_cases),
         "counterexample_case_ids": sorted(counterexample_cases),
         "heldout": heldout,
+        "mined_tasks": mined_tasks,
         "model": model_id,
         "tools": sorted({command for item in experiences for command in item.commands}),
         "success_criteria": "heldout aggregate strictly above baseline; zero safety/correctness blockers",
         "n_sessions": report.n_sessions,
         "n_tasks": report.n_tasks,
     }, candidate=candidate)
+    promotion = promote_candidate(candidate_path, report=report, gate_mode="on")
     summary = {
         "sessions": report.n_sessions, "tasks": report.n_tasks,
-        "accepted": bool(gate["passed"]), "adopted": False,
+        "accepted": bool(gate["passed"]), "adopted": bool(promotion.get("promoted")),
         "baseline": report.baseline_score, "candidate": report.candidate_score,
         "staging": outcome.staging_dir, "candidate_path": str(candidate_path),
-        "promotion": {"promoted": False, "reason": "user_review_required",
-                      "gate_passed": bool(gate["passed"])},
+        "promotion": {**promotion, "gate_passed": bool(gate["passed"])},
     }
     log.info("skill_sleep.done", **summary)
     return summary

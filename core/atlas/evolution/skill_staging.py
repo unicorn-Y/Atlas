@@ -156,23 +156,56 @@ def _next_version(current: str | None) -> str:
     return f"{major}.{minor}.{patch + 1}"
 
 
+def _stored_gate_passed(decision: Any, heldout: Any) -> bool:
+    """Recheck every persisted promotion condition before using stored evidence."""
+    if not isinstance(decision, dict) or not isinstance(heldout, dict):
+        return False
+    heldout_ids = {str(item) for item in heldout.get("heldout_ids", [])}
+    success_ids = {str(item) for item in heldout.get("success_ids", [])}
+    counterexample_ids = {str(item) for item in heldout.get("counterexample_ids", [])}
+    try:
+        strict_gain = float(decision["candidate_score"]) > float(decision["baseline_score"])
+        enough_tasks = int(decision["task_count"]) >= 2
+        zero_blockers = (int(decision["safety_blockers"]) == 0
+                         and int(decision["correctness_blockers"]) == 0)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return bool(
+        decision.get("passed") is True
+        and decision.get("gate_mode") == "on"
+        and decision.get("blocker_evidence_available") is True
+        and decision.get("holdout_leaked") is False
+        and strict_gain and enough_tasks and zero_blockers
+        and not decision.get("other_blockers")
+        and heldout.get("passed") is True
+        and success_ids and counterexample_ids
+        and success_ids <= heldout_ids and counterexample_ids <= heldout_ids
+    )
+
+
 def promote_candidate(candidate_path: Path, *, report: Any | None = None,
-                      user_reviewed: bool = False, gate_mode: str = "on",
+                      gate_mode: str = "on",
                       safety_blockers: int | None = None, correctness_blockers: int | None = None,
-                      skill_root: Path | None = None) -> dict[str, Any]:
-    """Promote only on a strict heldout gain; retain the previous version for rollback."""
+                      skill_root: Path | None = None,
+                      user_reviewed: bool | None = None,
+                      **_kwargs: Any) -> dict[str, Any]:
+    """Automatically promote a candidate only after its strict real heldout gate passes."""
     metadata, body = _parse_skill(candidate_path)
-    if not user_reviewed:
-        return {"promoted": False, "path": str(candidate_path),
-                "reason": "explicit_user_review_required"}
     if report is None:
         decision = metadata.get("validation") or {}
-        if not isinstance(decision, dict) or decision.get("passed") is not True:
+        benchmark = metadata.get("benchmark") or {}
+        heldout = benchmark.get("heldout") if isinstance(benchmark, dict) else None
+        if not _stored_gate_passed(decision, heldout):
             return {"promoted": False, "path": str(candidate_path),
-                    "reason": "stored_validation_gate_not_passed"}
+                    "reason": "stored_promotion_evidence_incomplete_or_not_passed"}
     else:
         decision = score_candidate(report, gate_mode=gate_mode, safety_blockers=safety_blockers,
                                    correctness_blockers=correctness_blockers)
+        benchmark = metadata.get("benchmark") or {}
+        heldout = benchmark.get("heldout") if isinstance(benchmark, dict) else None
+        if not _stored_gate_passed(decision, heldout):
+            decision = {**decision, "passed": False,
+                        "reason": "promotion_evidence_incomplete_or_not_passed"}
     metadata["validation"] = {**(metadata.get("validation") or {}), **decision}
     metadata["candidate_status"] = "staging" if not decision["passed"] else "promoted"
     if not decision["passed"]:
