@@ -108,8 +108,11 @@ class MemoryIndex:
         self._lock = threading.RLock()
         self._db: sqlite3.Connection | None = None
         self._idf_cache: tuple[int, dict[str, float]] | None = None
-        self._embedding_task: asyncio.Task[Any] | None = None
+        self._embedding_task: Any = None
         self._embedding_state = "building"
+        self._event_loop: asyncio.AbstractEventLoop | None = None
+        self._embedding_lock = threading.Lock()
+        self._embedding_thread: threading.Thread | None = None
         self._vector_cache: dict[str, list[dict[str, Any]]] = {}
         self._vector_matrix_cache: dict[tuple[str, int], tuple[list[dict[str, Any]], Any, Any]] | None = None
         self._entities_cache: list[tuple[str, list[str]]] | None = None
@@ -327,10 +330,45 @@ class MemoryIndex:
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
+            loop = self._event_loop
+        if loop is not None and loop.is_running():
+            with self._embedding_lock:
+                if self._embedding_task is not None and not self._embedding_task.done():
+                    return
+                if self._embedding_thread is not None and self._embedding_thread.is_alive():
+                    return
+                self._embedding_state = "building"
+                try:
+                    current_loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    current_loop = None
+                if current_loop is loop:
+                    self._embedding_task = loop.create_task(asyncio.to_thread(self.embed_missing))
+                else:
+                    self._embedding_task = asyncio.run_coroutine_threadsafe(
+                        asyncio.to_thread(self.embed_missing), loop
+                    )
             return
-        if self._embedding_task is None or self._embedding_task.done():
+        with self._embedding_lock:
+            if self._embedding_thread is not None and self._embedding_thread.is_alive():
+                return
+            if self._embedding_task is not None and not self._embedding_task.done():
+                return
             self._embedding_state = "building"
-            self._embedding_task = loop.create_task(asyncio.to_thread(self.embed_missing))
+
+            def run() -> None:
+                try:
+                    self.embed_missing()
+                finally:
+                    self._embedding_thread = None
+
+            self._embedding_thread = threading.Thread(
+                target=run, name="memory-library-embeddings", daemon=True
+            )
+            self._embedding_thread.start()
+
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._event_loop = loop
 
     def embed_missing(self) -> int:
         from .embed import embed_texts

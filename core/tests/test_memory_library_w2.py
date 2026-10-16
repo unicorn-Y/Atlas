@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
+from types import SimpleNamespace
 from datetime import datetime, timedelta
 
 import pytest
@@ -95,6 +98,82 @@ def test_hybrid_decay_and_mmr_are_deterministic():
     assert len(merged) == 1
     assert merged[0]["vector_score"] == pytest.approx(0.9)
     assert merged[0]["text_score"] == pytest.approx(1.0)
+
+
+def test_turn_without_ready_model_keeps_diary_and_pending_queue(tmp_path, monkeypatch):
+    async def run():
+        library = MemoryLibrary(tmp_path)
+        monkeypatch.setattr(library.index, "_schedule_embeddings", lambda: None)
+        monkeypatch.setattr(library, "_write_diary", lambda *args: None)
+        library.schedule_turn(
+            user_text="记住这件事",
+            assistant_text="收到",
+            session="session-no-model",
+            model_mgr=None,
+        )
+        await asyncio.gather(*library._tasks)
+        rows = library.queue.pending()
+        assert len(rows) == 1
+        assert rows[0]["stage"] == "diary_done"
+        assert rows[0]["attempts"] == 0
+
+    asyncio.run(run())
+
+
+def test_embedding_sync_worker_uses_registered_event_loop(tmp_path, monkeypatch):
+    async def run():
+        index = MemoryLibrary(tmp_path).index
+        completed = threading.Event()
+        worker_threads: list[str] = []
+
+        def embed_missing():
+            worker_threads.append(threading.current_thread().name)
+            completed.set()
+            index._embedding_state = "ready"
+            return 0
+
+        monkeypatch.setattr(index, "embed_missing", embed_missing)
+        index.set_event_loop(asyncio.get_running_loop())
+        await asyncio.to_thread(index._schedule_embeddings)
+        await asyncio.wrap_future(index._embedding_task)
+        assert completed.is_set()
+        assert worker_threads and worker_threads[0] != threading.current_thread().name
+        assert index.embedding_state == "ready"
+
+    asyncio.run(run())
+
+
+def test_embedding_model_load_retries_after_ten_minutes(tmp_path, monkeypatch):
+    import sys
+
+    from atlas import config
+    from atlas.memory.library import embed
+
+    clock = iter([100.0, 101.0, 500.0, 801.0])
+    monkeypatch.setattr(embed.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(embed, "_model", None)
+    monkeypatch.setattr(embed, "_attempted", False)
+    monkeypatch.setattr(embed, "_last_failed_at", None)
+    monkeypatch.setattr(embed, "_warned", False)
+    attempts = 0
+    model = object()
+
+    class TextEmbedding:
+        def __init__(self, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise OSError("model files unavailable")
+            self.model = model
+
+    monkeypatch.setitem(sys.modules, "fastembed", SimpleNamespace(TextEmbedding=TextEmbedding))
+    assert embed._load_model() is None
+    assert embed._load_model() is None
+    assert attempts == 1
+    assert embed._load_model() is embed._model
+    assert embed._model is not None
+    assert attempts == 2
 
 
 def test_open_ref_returns_nearest_user_turn_with_tools_and_truncates(tmp_path, monkeypatch):

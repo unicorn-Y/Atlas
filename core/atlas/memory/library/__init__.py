@@ -290,6 +290,10 @@ class MemoryLibrary:
         if reason:
             log.info("memory.library.skipped", session=kwargs.get("session", ""), reason=reason)
             return
+        try:
+            self.index.set_event_loop(asyncio.get_running_loop())
+        except RuntimeError:
+            pass
         self.ready()
         self.queue.insert(created=_now(self.config).isoformat(timespec="seconds"),
                           session=kwargs.get("session", ""), mode=kwargs.get("mode", ""),
