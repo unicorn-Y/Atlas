@@ -36,6 +36,12 @@ def memory_open(
 
 `open_ref` 与 `memory_open` 同步、只读。新 URI 必须只读指定 conversation/message UID 及有限邻近上下文；工具消息用 `tool_call_id` 关联。若 span 无法保真定位则返回整条消息，不得捏造字符范围。旧 `conversation@ISO-time` 仅兼容打开并在返回值标为 `precision="approximate"`；不得静默升级 UID。未找到会话/消息如实报告来源不可用。现有 `memory_search(open=...)` 调用兼容入口；不增加独立来源账本。
 
+## 下游消费约定（S3）
+
+- 新建记忆条目的 `source_ref` 存 `SourceRef.to_dict()` 结果；对模型/用户暴露的 `ref` 值用 `SourceRef.to_ref()` URI。只有没有精确 UID 的历史条目才继续暴露旧 `conversation@ISO-time`。
+- 记忆页与 `/api/memlib` 条目视图需返回上述七个规范 metadata 字段（含 `source_ref`），手工编辑并重建索引后读回 Markdown 中的值；不要从 SQLite 等派生索引补写权威字段。
+- `memory_search(open=<ref>)` 保持兼容。`memory_open(ref, window=1, *, engine_root=None)` 是可直接调用的只读 Python 入口，位于 `atlas.memory.library.sources`；本次不另注册重复的模型工具。
+
 ## 初始 Python 类型
 
 `core/atlas/memory/library/source_ref.py` 已提供冻结的 `SourceRef` 值类型、字典序列化和 URI 编解码。S3 可立即依此消费。此合同先冻结；若后续确需变更，只能在文末追加「变更」并同步 S3。

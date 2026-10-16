@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from atlas.memory.library.source_ref import SourceRef
+
 
 def _text(content: Any) -> str:
     if isinstance(content, str):
@@ -23,24 +25,37 @@ def _at(message: dict[str, Any]) -> str:
 
 
 def open_ref(
-    ref: str,
+    ref: SourceRef | str,
     window: int = 1,
     *,
     engine_root: str | Path | None = None,
     root: str | Path | None = None,
 ) -> dict[str, Any]:
-    session, sep, stamp = str(ref or "").rpartition("@")
-    if not sep or not session:
+    exact: SourceRef | None = ref if isinstance(ref, SourceRef) else None
+    raw_ref = exact.to_ref() if exact is not None else str(ref or "")
+    if exact is None and raw_ref.startswith("atlas://"):
         try:
-            from atlas.memory.library import get_library
+            exact = SourceRef.from_ref(raw_ref)
+        except (TypeError, ValueError):
+            return {"ok": False, "reason": "出处格式无效", "precision": "exact"}
+    if exact is not None:
+        session, stamp = exact.conversation_id, ""
+    else:
+        session, sep, stamp = raw_ref.rpartition("@")
+        if not sep or not session:
+            try:
+                from atlas.memory.library import get_library
 
-            library = get_library()
-            found = library.store.find_entry(str(ref).split(",", 1)[0]) if library else None
-            if found and found[1].ref:
-                return open_ref(found[1].ref, window, engine_root=engine_root, root=root)
-        except (OSError, RuntimeError, ValueError):
-            pass
-        return {"ok": False, "reason": "出处格式无效"}
+                library = get_library()
+                found = library.store.find_entry(raw_ref.split(",", 1)[0]) if library else None
+                if found and found[1].source_ref:
+                    exact = SourceRef(**found[1].source_ref)
+                    return open_ref(exact, window, engine_root=engine_root, root=root)
+                if found and found[1].ref:
+                    return open_ref(found[1].ref, window, engine_root=engine_root, root=root)
+            except (OSError, RuntimeError, TypeError, ValueError):
+                pass
+            return {"ok": False, "reason": "出处格式无效"}
     if engine_root is None:
         engine_root = Path(root) if root else None
     if engine_root is None:
@@ -55,32 +70,63 @@ def open_ref(
         messages = []
     if not messages:
         return {"ok": False, "reason": "原对话已删除"}
+    if exact is not None:
+        anchor = next((i for i, message in enumerate(messages)
+                       if str(message.get("id") or "") == exact.message_uid), None)
+        if anchor is None and exact.tool_call_id:
+            def has_tool_call(message: dict[str, Any]) -> bool:
+                metadata = message.get("metadata")
+                if not isinstance(metadata, dict):
+                    return False
+                if str(metadata.get("tool_call_id") or "") == exact.tool_call_id:
+                    return True
+                calls = metadata.get("tool_calls")
+                return isinstance(calls, list) and any(
+                    isinstance(call, dict) and str(call.get("id") or "") == exact.tool_call_id
+                    for call in calls
+                )
+
+            anchor = next((i for i, message in enumerate(messages) if has_tool_call(message)), None)
+        if anchor is None:
+            return {"ok": False, "reason": "原消息已删除或不存在", "precision": "exact",
+                    "source_ref": exact.to_ref(), "conversation_id": session,
+                    "message_uid": exact.message_uid}
+        precision = "exact"
+        selected = anchor
+    else:
+        users = [i for i, message in enumerate(messages) if message.get("role") == "user"]
+        if not users:
+            return {"ok": False, "reason": "原对话已删除", "precision": "approximate"}
+        precision = "approximate"
+        try:
+            target = datetime.fromisoformat(stamp)
+            def distance(index: int) -> float:
+                message_time = _parse_at(messages[index])
+                if message_time is None:
+                    return float("inf")
+                if message_time.tzinfo is None and target.tzinfo is not None:
+                    message_time = message_time.replace(tzinfo=target.tzinfo)
+                elif target.tzinfo is None and message_time.tzinfo is not None:
+                    message_time = message_time.replace(tzinfo=None)
+                return abs((message_time - target).total_seconds())
+
+            selected = min(users, key=distance)
+        except (TypeError, ValueError):
+            selected = users[-1]
     users = [i for i, message in enumerate(messages) if message.get("role") == "user"]
     if not users:
-        return {"ok": False, "reason": "原对话已删除"}
-    try:
-        target = datetime.fromisoformat(stamp)
-        def distance(index: int) -> float:
-            message_time = _parse_at(messages[index])
-            if message_time is None:
-                return float("inf")
-            if message_time.tzinfo is None and target.tzinfo is not None:
-                message_time = message_time.replace(tzinfo=target.tzinfo)
-            elif target.tzinfo is None and message_time.tzinfo is not None:
-                message_time = message_time.replace(tzinfo=None)
-            return abs((message_time - target).total_seconds())
-
-        selected = min(users, key=distance)
-    except (TypeError, ValueError):
-        selected = users[-1]
-    user_pos = users.index(selected)
-    radius = 1 if window >= 2 else 0
-    start = users[max(0, user_pos - radius)]
-    end = (
-        users[min(len(users) - 1, user_pos + 1 + radius)]
-        if user_pos + 1 + radius < len(users)
-        else len(messages)
-    )
+        if exact is None:
+            return {"ok": False, "reason": "原对话已删除", "precision": precision}
+        start, end = selected, selected + 1
+    else:
+        user_pos = max((pos for pos, idx in enumerate(users) if idx <= selected), default=0)
+        radius = 1 if window >= 2 else 0
+        start = users[max(0, user_pos - radius)]
+        end = (
+            users[min(len(users) - 1, user_pos + 1 + radius)]
+            if user_pos + 1 + radius < len(users)
+            else len(messages)
+        )
     if end < len(messages) and messages[end].get("role") == "user":
         pass
     selected_messages = messages[start:end]
@@ -136,10 +182,25 @@ def open_ref(
     return {
         "ok": True,
         "session": session,
+        "conversation_id": session,
+        **({"message_uid": exact.message_uid, "source_ref": exact.to_ref()}
+           if exact is not None else {}),
+        "precision": precision,
+        **({"span_applied": False} if exact is not None and exact.span_start is not None else {}),
         "title": title,
         "messages": result,
         "truncated": truncated,
     }
+
+
+def memory_open(
+    ref: SourceRef | str,
+    window: int = 1,
+    *,
+    engine_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """Public read-only open API; legacy references remain visibly approximate."""
+    return open_ref(ref, window, engine_root=engine_root)
 
 
 def _parse_at(message: dict[str, Any]) -> datetime | None:
@@ -158,22 +219,28 @@ def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
         found = search_session_messages(DATA_ROOT / "engine", query, limit=max(1, min(50, limit)))
     except (OSError, RuntimeError, ValueError):
         return []
-    return [
-        {
+    results = []
+    for row in found:
+        conversation_id = str(row.get("conversation_id") or "")
+        message_uid = str(row.get("id") or "")
+        try:
+            ref = SourceRef(conversation_id, message_uid).to_ref()
+        except ValueError:
+            continue
+        results.append({
             "id": str(row.get("id") or ""),
             "kind": "raw",
             "path": "原对话",
-            "title": str(row.get("conversation_id") or ""),
+            "title": conversation_id,
             "text": str(row.get("content") or ""),
             "snippet": str(row.get("snippet") or row.get("content") or ""),
             "src": "原对话",
             "at": str(row.get("created_at") or ""),
-            "ref": f"{row.get('conversation_id', '')}@{row.get('created_at', '')}",
+            "ref": ref,
             "score": 1.0,
             "project": "",
-        }
-        for row in found
-    ]
+        })
+    return results
 
 
-__all__ = ["open_ref", "search_raw"]
+__all__ = ["memory_open", "open_ref", "search_raw"]

@@ -74,9 +74,31 @@ class Entry:
     commands: list[str] = field(default_factory=list)
     facts: list[str] = field(default_factory=list)
     open_items: list[str] = field(default_factory=list)
+    source_level: str | None = None
+    recorded_at: str = ""
+    valid_from: str = ""
+    valid_to: str = ""
+    supersedes: list[str] = field(default_factory=list)
+    retracts: list[str] = field(default_factory=list)
+    source_ref: dict[str, Any] | None = None
+    extra_metadata: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.source_level is None:
+            self.source_level = {
+                SRC_SAID: "user_assertion",
+                SRC_EDITED: "user_assertion",
+                SRC_GUESS: "model_inference",
+            }.get(self.src, "legacy_unknown")
+        if not self.recorded_at and self.at:
+            self.recorded_at = self.at
+        if not self.valid_to:
+            self.valid_to = self.until
 
     def meta(self) -> dict[str, Any]:
-        data = {k: v for k, v in asdict(self).items() if k != "text" and v not in ("", [], None)}
+        data = dict(self.extra_metadata)
+        data.update({k: v for k, v in asdict(self).items()
+                     if k not in ("text", "extra_metadata") and v not in ("", [], None)})
         if data.get("importance") == 5:
             data.pop("importance")
         return data
@@ -100,10 +122,20 @@ class Entry:
                 meta = json.loads(match.group("meta"))
             except ValueError:
                 meta = {}
+        if not isinstance(meta, dict):
+            meta = {}
         if not meta:
             # A line written by hand: the person owns it.
-            return cls(text=text, id=stable_id(text), src=SRC_EDITED)
+            return cls(text=text, id=stable_id(text), src=SRC_EDITED,
+                       source_level="user_assertion")
         known = {k: v for k, v in meta.items() if k in cls.__dataclass_fields__ and k != "text"}
+        unknown = {k: v for k, v in meta.items()
+                   if k not in cls.__dataclass_fields__ and k != "text"}
+        known["extra_metadata"] = unknown
+        if "recorded_at" not in known:
+            known["recorded_at"] = str(known.get("at") or "")
+        if "valid_to" not in known:
+            known["valid_to"] = str(known.get("until") or meta.get("expires") or "")
         entry = cls(text=text, **known)
         entry.id = entry.id or stable_id(text)
         return entry
