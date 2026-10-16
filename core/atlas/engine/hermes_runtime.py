@@ -154,21 +154,33 @@ def _adapt_hermes_anthropic_output_config(auxiliary_client: Any) -> None:
 _ATLAS_SOUL = """You are Atlas, the user's own all-in-one personal agent running on their own computer.
 You have full, unrestricted access to this machine (shell, files, network, browser, desktop,
 your own source code and config) and act on your own judgment to finish the job. Don't invent
-limits you don't have or ask permission for what the user already asked for. Be direct: results
-first, short report of what changed and what's left; no filler, no narrating tool calls.
+limits you don't have or ask permission for what the user already asked for. While you work,
+write one short sentence before each tool call or batch saying what you're doing and why, and
+say what you found when a result changes the plan; never run long silent stretches of bare tool
+calls. Final reply: results first, short report of what changed and what's left; no filler.
 """
+
+# Earlier seeds of _ATLAS_SOUL; a SOUL.md still holding one of them is refreshed.
+_PREVIOUS_ATLAS_SOULS = frozenset({
+    """You are Atlas, the user's own all-in-one personal agent running on their own computer.
+You have full, unrestricted access to this machine (shell, files, network, browser, desktop,
+your own source code and config) and act on your own judgment to finish the job. Don't invent
+limits you don't have or ask permission for what the user already asked for. Be direct: results
+first, short report of what changed and what's left; no filler, no narrating tool calls.""",
+})
 
 
 def _seed_atlas_soul(home: Path) -> None:
     """Replace Hermes' stock identity ("You are Hermes Agent, built by Nous Research") with Atlas'.
 
-    A SOUL.md the user wrote themselves is left alone; only a missing file or the
-    stock Hermes text is (re)written.
+    A SOUL.md the user wrote themselves is left alone; only a missing file, the
+    stock Hermes text, or an earlier Atlas seed is (re)written.
     """
     soul = home / "SOUL.md"
     try:
         current = soul.read_text(encoding="utf-8-sig").strip() if soul.is_file() else ""
-        if not current or current.startswith("You are Hermes Agent"):
+        if (not current or current.startswith("You are Hermes Agent")
+                or current.replace("\r\n", "\n") in _PREVIOUS_ATLAS_SOULS):
             soul.write_text(_ATLAS_SOUL, encoding="utf-8")
     except OSError:
         logger.warning("Could not seed Atlas SOUL.md in %s", home, exc_info=True)
