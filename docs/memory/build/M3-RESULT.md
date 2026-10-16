@@ -31,3 +31,5 @@ Status: implemented; awaiting merged M1 lifecycle integration and real Atlas ses
 - Agreed M1 adapter contract: `MemoryLibrary.schedule_lifecycle(event: dict[str, Any], *, model_mgr: Any = None) -> None`; required fields are `conversation_id`, ordered `message_uids`, `event_kind`, `occurred_at`, and `scope`; optional `run_id` and `tool_call_id`; transcript/body fields are rejected.
 - M1 must merge its `lifecycle.py`/queue changes before the adapter can be exercised end-to-end. Retry wake and startup recovery stay M1-owned; M3 exposes `processed_source_uids(conversation_id)`.
 - M4 should consume fact candidates from Markdown page history and use M7's agreed nine-field claim payload. M3 intentionally does not call `claim_resolution`.
+
+M3 IMPLEMENTATION READY — REAL GATE PENDING
