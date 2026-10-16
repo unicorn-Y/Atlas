@@ -15,6 +15,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable
 
@@ -291,6 +292,8 @@ class AtlasKernel:
         scheduler: ToolScheduler | None = None
         messages: list[dict[str, Any]] = []
         partial_response_text: list[str] = []
+        run_message_uids: list[str] = []
+        consecutive_tool_failures = 0
         active_call_ids: set[str] = set()
         open_call_ids: set[str] = set()
 
@@ -328,13 +331,51 @@ class AtlasKernel:
             if state.phase != phase:
                 state.transition(phase)
 
-        def persist(role: str, content: Any, metadata: dict[str, Any] | None = None) -> None:
+        def persist(role: str, content: Any, metadata: dict[str, Any] | None = None) -> str:
             from atlas.engine.session_sync import append_session_message
 
-            append_session_message(self.data_dir / "engine", session_id, role, content, metadata)
+            message_uid = append_session_message(
+                self.data_dir / "engine", session_id, role, content, metadata,
+            )
+            if message_uid and message_uid not in run_message_uids:
+                run_message_uids.append(message_uid)
+            return message_uid
 
-        async def persist_async(role: str, content: Any, metadata: dict[str, Any] | None = None) -> None:
-            await asyncio.to_thread(persist, role, content, metadata)
+        async def persist_async(role: str, content: Any,
+                                metadata: dict[str, Any] | None = None) -> str:
+            return await asyncio.to_thread(persist, role, content, metadata)
+
+        def schedule_lifecycle(event_kind: str, message_uids: list[str], *,
+                               scope: str = "messages", tool_call_id: str | None = None) -> None:
+            try:
+                from atlas.memory.library import get_library
+
+                library = get_library()
+                if library is None:
+                    return
+                occurred_at = datetime.now(UTC)
+                event = {
+                    "conversation_id": str(session_id or ""),
+                    "message_uids": message_uids,
+                    "event_kind": event_kind,
+                    "occurred_at": occurred_at.isoformat(),
+                    "scope": scope,
+                    "run_id": run_id,
+                }
+                if tool_call_id:
+                    event["tool_call_id"] = tool_call_id
+                library.schedule_lifecycle(event, model_mgr=getattr(agent, "_model_mgr", None))
+                if event_kind == "turn_end":
+                    library.schedule_lifecycle({**event, "event_kind": "session_idle",
+                                                "occurred_at": (occurred_at + timedelta(minutes=30)).isoformat()},
+                                               model_mgr=getattr(agent, "_model_mgr", None))
+                record("memory_lifecycle_enqueued", conversation_id=session_id,
+                       message_uids=message_uids, event_kind=event_kind,
+                       run_id=run_id, tool_call_id=tool_call_id)
+            except Exception as exc:
+                log.warning("memory.lifecycle.schedule_failed", extra={
+                    "run_id": run_id, "error_type": type(exc).__name__,
+                })
 
         try:
             record("run_start", model=selected_model, session_id=session_id,
@@ -366,6 +407,13 @@ class AtlasKernel:
                 history.append({"role": "user", "content": request.user_content or request.message})
             elif request.user_content is not None and history and history[-1].get("role") == "user":
                 history[-1]["content"] = request.user_content
+            current_user = next((row for row in reversed(canonical_rows[-3:])
+                                 if row.get("role") == "user"
+                                 and _message_text(row) == request.message), None)
+            if current_user:
+                user_uid = str(current_user.get("message_uid") or current_user.get("id") or "")
+                if user_uid and user_uid not in run_message_uids:
+                    run_message_uids.insert(0, user_uid)
             durable_history = copy.deepcopy(history)
 
             started = started_call_ids(canonical_rows, run_log_root)
@@ -890,6 +938,11 @@ class AtlasKernel:
                             begin_session_compaction, self.data_dir / "engine", session_id, holder,
                         )
                         compaction_lease.update({"holder": holder, "watermark": watermark})
+                        held_uids = [str(item.get("id") or item.get("message_uid") or "")
+                                     for item in held_messages]
+                        held_uids = list(dict.fromkeys(uid for uid in held_uids if uid))
+                        schedule_lifecycle("pre_compress", held_uids,
+                                           scope="messages" if held_uids else "session")
 
                 async def prepare_compaction(*, force: bool = False) -> Any:
                     nonlocal durable_history, held_messages, history, messages, prompt
@@ -1415,11 +1468,12 @@ class AtlasKernel:
                             reason = failure_hook.get("reason")
                             if isinstance(reason, str) and reason.strip():
                                 tool_hook_context.setdefault(result.call_id, []).append(reason.strip())
+                        raw_tool_content = _tool_output_text(result.output)
                         record("tool_end", tool_call_id=result.call_id, name=result.name,
                                state=receipt["state"], duration_ms=receipt["duration_ms"],
                                output_ref=receipt.get("output_ref"),
-                               output=_tool_output_text(result.output))
-                        content = _tool_output_text(result.output)
+                               output=raw_tool_content)
+                        content = raw_tool_content
                         if tool_hook_context.get(result.call_id):
                             content += "\n\n" + "\n".join(tool_hook_context.pop(result.call_id))
                         is_error = (
@@ -1430,6 +1484,38 @@ class AtlasKernel:
                             ))
                             or receipt["state"] not in {"completed", "cancelled"}
                         )
+                        if is_error:
+                            consecutive_tool_failures += 1
+                        else:
+                            consecutive_tool_failures = 0
+                        memory_context = ""
+                        if consecutive_tool_failures == 2:
+                            record("memory_recheck", event_kind="tool_failure_recheck",
+                                   trigger="two_consecutive_tool_failures",
+                                   prompt_source_role="tool",
+                                   source_tool_call_id=result.call_id,
+                                   outcome="started")
+                            try:
+                                from atlas.memory.library.recall import recheck_memory
+
+                                reread = await asyncio.to_thread(
+                                    recheck_memory, raw_tool_content, limit=3,
+                                )
+                                memory_context = str(reread.get("block") or "").strip()
+                                hits = reread.get("hits") if isinstance(reread, dict) else []
+                                hit_refs = [str(hit.get("ref")) for hit in hits
+                                            if isinstance(hit, dict) and hit.get("ref")]
+                                record("memory_recheck_result", event_kind="tool_failure_recheck",
+                                       source_tool_call_id=result.call_id,
+                                       hit_refs=hit_refs, outcome="completed")
+                            except Exception as exc:
+                                record("memory_recheck_result", event_kind="tool_failure_recheck",
+                                       source_tool_call_id=result.call_id,
+                                       outcome="unavailable",
+                                       error_type=type(exc).__name__)
+                                log.warning("memory.recheck_after_tool_failures_failed", extra={
+                                    "run_id": run_id, "error_type": type(exc).__name__,
+                                })
                         record("tool_result", tool_call_id=result.call_id, name=result.name,
                                state=receipt["state"], is_error=is_error,
                                output_ref=receipt.get("output_ref"), output=content)
@@ -1444,17 +1530,23 @@ class AtlasKernel:
                                 {"type": "text", "text": content},
                                 {"type": "image_url", "image_url": {"url": image_url}},
                             ]
-                        messages.append({"role": "tool", "tool_call_id": result.call_id,
-                                         "name": result.name, "content": tool_content})
+                        messages.extend(_tool_result_context_messages(
+                            result.call_id, result.name, tool_content, memory_context,
+                        ))
                         active_call_ids.discard(result.call_id)
                         open_call_ids.discard(result.call_id)
                         pretool_blocked.discard(result.call_id)
-                        await persist_async("tool", content, {
+                        tool_message_uid = await persist_async("tool", raw_tool_content, {
                             "tool_call_id": result.call_id, "tool_name": result.name,
                             "kernel_run_id": run_id, "output_ref": receipt.get("output_ref"),
                             "receipt_state": receipt["state"],
                             "duration_ms": receipt["duration_ms"],
                         })
+                        if (tool_message_uid and
+                                (result.name.startswith("delegate_")
+                                 or result.name.startswith("subagent_"))):
+                            schedule_lifecycle("delegation_return", [tool_message_uid],
+                                               scope="messages", tool_call_id=result.call_id)
                         stuck.observe_tool(result.name, tool_args, result.output, is_error=is_error)
                         result_events.append(emit(
                             "tool_result", id=result.call_id, name=result.name,
@@ -1556,6 +1648,8 @@ class AtlasKernel:
                 raise RuntimeError(f"Kernel reached its {max_turns}-turn limit")
 
             transition(RunPhase.DONE)
+            if run_message_uids:
+                schedule_lifecycle("turn_end", list(run_message_uids))
             elapsed = int((time.monotonic() - started_at) * 1000)
             record("run_end", status="completed",
                    duration_ms=elapsed, total_input_tokens=sum(int(row.get("input_tokens") or 0) for row in usage_rows),
@@ -2402,6 +2496,23 @@ def _tool_output_text(output: Any) -> str:
         if "data" in output:
             return json.dumps(output["data"], ensure_ascii=False, default=str)
     return str(output or "")
+
+
+def _tool_result_context_messages(tool_call_id: str, name: str, tool_content: Any,
+                                 memory_context: str = "") -> list[dict[str, Any]]:
+    """Keep canonical tool output separate from ephemeral Atlas memory context."""
+    messages = [{"role": "tool", "tool_call_id": tool_call_id,
+                 "name": name, "content": tool_content}]
+    if memory_context:
+        messages.append({
+            "role": "system",
+            "content": (
+                "[Atlas memory recheck context; source=memory_library; "
+                "trigger=two_consecutive_tool_failures; this is not tool output]\n"
+                + memory_context
+            ),
+        })
+    return messages
 
 
 def _tool_result_event_text(result: ToolExecutionResult) -> str:
