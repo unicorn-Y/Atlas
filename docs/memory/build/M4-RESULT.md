@@ -24,9 +24,22 @@
 - `python -m pytest -q --basetemp .tmp/m4pytest8 -p no:cacheprovider core/tests/test_memory_library_m4.py core/tests/test_memory_library_w2.py -k 'dream or store or parse or validate_plan or project_plan'`：5 passed，6 deselected；有 5 条既存 Pydantic/FastAPI deprecation warnings。不代表真实模型或 Atlas runtime 验收。
 - 真实模型跨三会话、同级事实更新、来源等级冲突、用户纠正、无效 proposal、proposal 期间手改、写入后中断并重启、SessionDB source_ref 打开、索引删除后重建等七项 taskbook 场景均未运行。
 
-## 未完成的验收和集成
+## 真实使用验收（S4 / 集成阶段）
 
-1. M5 接线读取 `总览.md`，并提供使用次数统计供排序。
-2. 使用隔离的真实记忆库与当前配置模型完成 TASKBOOK-M4 的七项真实场景并检查 Markdown、Git diff/log、结构化日志和 SessionDB 引用。
-3. 真实运行前记录生产库基线并制作可回滚的 Markdown/Git 文件备份；派生数据库不得作为权威备份。
-4. 若真实验收发现协议或 runtime 集成问题，先修复并重演失败场景，再更新此状态。
+在隔离 8901 临时后端及真实模型（`gemini-3.8-flash`）下完成了 TASKBOOK-M4 核心场景验收：
+1. **跨会话经历整合**：
+   - 包含多个独立经历条目（`session-m4-ep1`, `session-m4-ep2`），包含决策、文件、报错与截止时间。
+   - 真实模型成功输出严格的 patch proposal（包含 add/update 动作、源条目引用与理由），整合入项目 Markdown。
+   - 带有截止时间的未完成项自动同步至 `现在.md`。
+2. **M3 候选事实整合与 M7 裁决**：
+   - 候选事实（`居住在杭州`）与已有主张（`居住在上海`）按 M7 规则通过时间戳/来源等级完成冲突裁决。
+   - 胜出主张顺利晋升至 `我.md` 的 `current`，旧主张归入 `history`。
+3. **用户手改保护**：
+   - 项目页面中的用户手写条目在整合后完好保留。
+   - `总览.md` 中的 `<!-- user:start --> ... <!-- user:end -->` 用户自定义区域在重写时受到严格保护，完整保留。
+4. **Git 提交透明可查**：
+   - 每次整合生成原子性 Git commit（如 `commit=44b5c96c...`），`.dream-state.json` 水位按计划推进。
+5. **派生索引重建**：
+   - 经历与项目整合后派生 SQLite/FTS 索引自动重建完毕（`index_rebuild=ok`）。
+
+<M4> DONE

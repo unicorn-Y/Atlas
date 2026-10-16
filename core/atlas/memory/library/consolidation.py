@@ -17,7 +17,15 @@ def text_hash(text: str) -> str:
 
 def validate_plan(raw: str, allowed_refs: set[str]) -> list[dict[str, Any]]:
     """Parse a strict model plan and reject unknown sources or unsafe fields."""
-    value = json.loads(raw)
+    import re
+    text = (raw or "").strip()
+    fence = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.S)
+    if fence:
+        text = fence.group(1).strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start >= 0 and end > start:
+        text = text[start:end + 1]
+    value = json.loads(text)
     if not isinstance(value, dict) or set(value) != {"actions"} or not isinstance(value["actions"], list):
         raise ValueError("proposal must contain only an actions array")
     actions = []
