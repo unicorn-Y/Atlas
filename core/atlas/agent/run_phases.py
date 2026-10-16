@@ -32,6 +32,7 @@ import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -464,31 +465,83 @@ async def _merge_library_recall(context: Any, message: str) -> Any:
     return {**context, "system_prompt_prefix": block, "library_refs": recall["refs"]}
 
 
-def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) -> None:
-    """Hand the finished turn to the memory library; it writes in the background."""
+def _schedule_library_write(agent: Any, state: _RunState,
+                            message_uids: list[str]) -> None:
+    """Queue a finished-turn pointer; the transcript remains in SessionDB."""
     try:
-        from atlas import expert_mode
         from atlas.memory.library import get_library
 
         library = get_library()
         if library is None:
             return
-        assistant_text = full_response if isinstance(full_response, str) else str(full_response or "")
-        library.schedule_turn(
-            user_text=str(state.message or ""),
-            assistant_text=assistant_text,
-            session=str(state.request.conversation_id or ""),
-            mode="expert" if expert_mode.is_enabled() else "",
-            model_mgr=getattr(agent, "_model_mgr", None),
-            workspace=str(state.request.workspace or ""),
-            steps=state.tool_steps,
-            verified=bool(getattr(state.runtime, "verification_passed", False)),
-            turn_started=(getattr(state.runtime, "started_at", None).isoformat()
-                          if hasattr(getattr(state.runtime, "started_at", None), "isoformat")
-                          else str(getattr(state.runtime, "started_at", "") or "")),
-        )
+        occurred_at = datetime.now(UTC)
+        event = {
+            "conversation_id": str(state.request.conversation_id or ""),
+            "message_uids": message_uids,
+            "event_kind": "turn_end",
+            "occurred_at": occurred_at.isoformat(),
+            "scope": "turn",
+            "run_id": str(getattr(state.runtime, "run_id", "") or "") or None,
+        }
+        library.schedule_lifecycle(event, model_mgr=getattr(agent, "_model_mgr", None))
+        library.schedule_lifecycle({**event, "event_kind": "session_idle",
+                                    "occurred_at": (occurred_at + timedelta(minutes=30)).isoformat()},
+                                   model_mgr=getattr(agent, "_model_mgr", None))
+        log.info("memory.lifecycle.enqueued", conversation_id=event["conversation_id"],
+                 message_uids=message_uids, event_kind=event["event_kind"],
+                 run_id=event["run_id"])
     except Exception as exc:
-        log.warning("memory.library.schedule_failed", error=str(exc), error_type=type(exc).__name__)
+        log.warning("memory.lifecycle.schedule_failed", error_type=type(exc).__name__)
+
+
+async def _recover_library_queue(library: Any, conversation_id: str,
+                                 model_mgr: Any = None,
+                                 current_user_message: str = "") -> None:
+    """Rebuild missing work from canonical SessionDB UIDs and Markdown refs."""
+    if not conversation_id:
+        return
+    try:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import read_session_all_messages
+        from atlas.memory.library.lifecycle import rebuild_uncovered_uids
+
+        messages = await asyncio.to_thread(
+            read_session_all_messages, DATA_ROOT / "engine", conversation_id,
+        )
+        ordered_uids = [str(item.get("id") or "") for item in messages
+                        if str(item.get("id") or "")]
+        # The active prompt is already durable but its assistant/tool turn has
+        # not finished. Leave it for the normal turn_end event to avoid an
+        # extraction racing the in-flight response.
+        if (messages and messages[-1].get("role") == "user"
+                and str(messages[-1].get("content") or "") == current_user_message
+                and ordered_uids):
+            ordered_uids.pop()
+        processed_source_uids = getattr(library, "processed_source_uids", None)
+        if not ordered_uids or not callable(processed_source_uids):
+            return
+        processed = await asyncio.to_thread(processed_source_uids, conversation_id)
+        occurred_at = datetime.now(UTC).isoformat()
+        row_id = await asyncio.to_thread(
+            rebuild_uncovered_uids, library.queue, conversation_id,
+            ordered_uids, processed, occurred_at=occurred_at,
+        )
+        if row_id:
+            # Re-submit the same key through M3's public adapter to wake its
+            # drain loop; enqueue is idempotent, so this does not add a row.
+            library.schedule_lifecycle({
+                "conversation_id": conversation_id,
+                "message_uids": ordered_uids[
+                    max((i for i, uid in enumerate(ordered_uids)
+                         if uid in set(processed)), default=-1) + 1:
+                ],
+                "event_kind": "session_recovery",
+                "occurred_at": occurred_at,
+                "scope": "messages",
+            }, model_mgr=model_mgr)
+    except Exception as exc:
+        log.warning("memory.lifecycle.recovery_failed",
+                    conversation_id=conversation_id, error_type=type(exc).__name__)
 
 
 def _note_tool_step(state: _RunState, event: dict[str, Any]) -> None:
@@ -550,6 +603,19 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
                 limit=_agent.get_config().max_context_messages,
             )
             state.context = await _merge_library_recall({}, state.message)
+            try:
+                from atlas.memory.library import get_library
+
+                library = get_library()
+                if library is not None:
+                    await _recover_library_queue(
+                        library, request.conversation_id,
+                        getattr(agent, "_model_mgr", None), state.message,
+                    )
+            except Exception as exc:
+                log.warning("memory.lifecycle.recovery_failed",
+                            conversation_id=request.conversation_id,
+                            error_type=type(exc).__name__)
         runtime.maintenance_context = {
             "project_state": state.plan.to_dict() if state.plan else None,
             "unresolved_work": [
@@ -970,9 +1036,6 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
         goal=state.message, response=full_response,
     )
 
-    if not request.worker:
-        _schedule_library_write(agent, state, full_response)
-
     if request.evaluate_goal and state.plan and all(
         item.status == "completed" for item in state.plan.subtasks
     ):
@@ -1002,6 +1065,10 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
             latest_session_message_id, DATA_ROOT / "engine", request.conversation_id,
             role="assistant",
         )
+        user_msg_id = await asyncio.to_thread(
+            latest_session_message_id, DATA_ROOT / "engine", request.conversation_id,
+            role="user",
+        )
     except Exception as e:
         log.warning(
             "agent.assistant_message_save_failed", error=str(e), exc_info=True,
@@ -1012,6 +1079,9 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
             "detail": f"Unable to save assistant message: {e}",
         }
         return
+    if not request.worker and msg_id:
+        message_uids = [uid for uid in (user_msg_id, msg_id) if uid]
+        _schedule_library_write(agent, state, message_uids)
     await agent._emit_hook(
         runtime, "after_response", conversation_id=request.conversation_id,
         goal=state.message, response=full_response,
