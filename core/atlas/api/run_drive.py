@@ -2717,6 +2717,16 @@ async def _execute_run(
                 if mapped is not None:
                     await emit(*mapped)
 
+            elif etype == "tool_preparing":
+                await emit("tool.preparing", {
+                    "index": event.get("index", 0),
+                    "attempt": event.get("attempt", 1),
+                    "tool_call_id": event.get("call_id", ""),
+                    "name": event.get("name", ""),
+                    "chars": event.get("chars", 0),
+                    "preview": event.get("preview", ""),
+                })
+
             elif etype == "run_steered":
                 await emit("run.steered", {
                     "content": event.get("content", ""),

@@ -388,6 +388,19 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
     return track;
   };
   const closeBlocks = () => { track = null; };
+  // Placeholder rows shown while the model is still streaming a tool call's arguments (tool.preparing).
+  // tool.started for the same call takes the row over in place instead of adding a second one.
+  const preparing = new Map<string, { step: Step; callId: string; attempt: number; resolved: boolean }>();
+  const dropPreparing = (keep?: (entry: { attempt: number }) => boolean) => {
+    for (const [key, entry] of preparing) {
+      if (entry.resolved || keep?.(entry)) continue;
+      for (const item of items) if (item.kind === 'steps') { const at = item.steps.indexOf(entry.step); if (at >= 0) item.steps.splice(at, 1); }
+      preparing.delete(key);
+    }
+  };
+  // Once a call has started executing no more argument updates can arrive for it; the next model
+  // call reuses the same attempt/index keys.
+  const forgetResolved = () => { for (const [key, entry] of preparing) if (entry.resolved) preparing.delete(key); };
 
   for (const event of events) {
     const data = event.data;
@@ -413,6 +426,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         break;
       }
       case 'run.started':
+        dropPreparing(); forgetResolved();
         runStartedAt = event.timestamp;
         if (typeof data.content === 'string' && data.content) {
           // The trust question is asked before the run starts; once the request shows up, put it back under it.
@@ -424,19 +438,51 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         // The backend reports loaded rules just before the run starts; show them after the request.
         if (earlyRules) { stepsBlock(earlyRules.id).steps.push(earlyRules); earlyRules = null; }
         break;
+      case 'tool.preparing': {
+        const attempt = Number(data.attempt ?? 1);
+        const key = `${attempt}:${String(data.index ?? 0)}`;
+        let entry = preparing.get(key);
+        if (entry?.resolved) break;
+        // A retried model call streams its tool calls again; the earlier attempt's rows are stale.
+        dropPreparing((other) => other.attempt >= attempt);
+        const toolName = String(data.name ?? '工具');
+        const chars = Number(data.chars ?? 0);
+        if (!entry) {
+          const step: Step = { id: event.id, toolName, category: classifyTool(toolName, {}), verb: describeTool(toolName, {}).verb, state: 'running', startedAt: String(data.started_at ?? event.timestamp), output: '' };
+          entry = { step, callId: '', attempt, resolved: false };
+          preparing.set(key, entry);
+          closeReply();
+          stepsBlock(event.id).steps.push(step);
+        }
+        if (data.tool_call_id) entry.callId = String(data.tool_call_id);
+        entry.step.target = `正在生成参数 · ${chars < 1000 ? `${chars} 字` : `${(chars / 1000).toFixed(1)}K 字`}`;
+        entry.step.input = typeof data.preview === 'string' && data.preview ? `…${data.preview}` : undefined;
+        break;
+      }
       case 'tool.started': {
         const key = String(data.tool_call_id || data.call_id || event.id);
         const toolName = String(data.name ?? '工具');
         const args = data.arguments ?? data.input;
         const { verb, target } = describeTool(toolName, args);
-        const step: Step = { id: event.id, toolName, category: classifyTool(toolName, args), verb, target, state: 'running', startedAt: event.timestamp, input: cap(text(args)), output: '' };
+        const fields = { toolName, category: classifyTool(toolName, args), verb, target, state: 'running' as const, input: cap(text(args)), output: '' };
+        const pending = [...preparing.values()].filter((entry) => !entry.resolved);
+        const placeholder = pending.find((entry) => entry.callId && entry.callId === data.tool_call_id)
+          ?? pending.find((entry) => !entry.callId && entry.step.toolName === toolName);
+        let step: Step;
+        if (placeholder) {
+          placeholder.resolved = true;
+          step = Object.assign(placeholder.step, fields);
+        } else {
+          step = { id: event.id, startedAt: event.timestamp, ...fields };
+          closeReply();
+          stepsBlock(event.id).steps.push(step);
+        }
         byExecution.set(key, step);
         if (!data.tool_call_id) byExecution.set(`name:${String(data.name)}`, step);
-        closeReply();
-        stepsBlock(event.id).steps.push(step);
         break;
       }
       case 'tool.completed': {
+        forgetResolved();
         const execution = data.execution && typeof data.execution === 'object' ? data.execution as Record<string, unknown> : undefined;
         const key = String(data.tool_call_id || data.call_id || '');
         let step = (key && byExecution.get(key)) || byExecution.get(`name:${String(data.name)}`);
@@ -650,6 +696,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         break;
       }
       case 'run.completed':
+        dropPreparing();
         items.push({
           kind: 'done', id: event.id, result: text(data.result), startedAt: runStartedAt, endedAt: event.timestamp,
           usage: data.usage && typeof data.usage === 'object' ? data.usage as RunUsage : undefined,
@@ -657,10 +704,12 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         });
         break;
       case 'run.cancelled':
+        dropPreparing();
         closeReply();
         items.push({ kind: 'cancelled', id: event.id, reason: text(data.reason) || undefined });
         break;
       case 'run.failed':
+        dropPreparing();
         items.push({ kind: 'failed', id: event.id, detail: text(data.detail ?? data.code) || '未知错误' });
         break;
       default:

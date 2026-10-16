@@ -24,7 +24,7 @@ const DOCUMENT_KIND: Record<string, string> = { document: '生成了 Word 文档
 
 export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEvent | null {
   // 已知事件才会被渲染；新的 wire 事件（如 lsp.diagnostics、review.findings、X2 的 computer.* / browser.*）加入这里即可显示。
-  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'run.todos', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'lsp.diagnostics', 'review.findings', 'run.completed', 'run.failed', 'run.cancelled',
+  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.preparing', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'run.todos', 'rules.loaded', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'lsp.diagnostics', 'review.findings', 'run.completed', 'run.failed', 'run.cancelled',
     // X2 电脑操控：前台确认、恢复与每一步动作（供 ForegroundConfirmCard / ComputerEdgeBar / ComputerReplayPanel）。
     'computer.foreground_required', 'computer.foreground_resumed', 'computer.foreground_denied', 'computer.step',
     // X2 浏览器代理：交接确认与结果、面板地址同步、录制中的每一步（供 BrowserHandoffCard / BrowserRecorderPanel）。
@@ -65,7 +65,21 @@ export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {
   // 去重：sequence 单调递增是 wire 契约，新 sequence 不可能重复，免去每个事件两次 O(n) 扫描；
   // 乱序/重放（sequence <= lastEventSequence，例如断线续传）才做完整查重并按 sequence 排回原位。
   let events: AgentEvent[];
-  if (event.sequence > run.lastEventSequence) {
+  if (event.type === 'tool.preparing' && event.sequence > run.lastEventSequence) {
+    // Argument-growth updates replace the previous one for the same call, keeping when it started,
+    // so a long write_file does not push older events past MAX_RUN_EVENTS.
+    let previous: AgentEvent | undefined;
+    for (let i = run.events.length - 1; i >= 0; i -= 1) {
+      const item = run.events[i];
+      if (item.type === 'tool.started' || item.type === 'run.started') break;
+      if (item.type === 'tool.preparing' && item.data.index === data.index && item.data.attempt === data.attempt) { previous = item; break; }
+    }
+    if (previous) {
+      const kept = { ...event, data: { ...data, started_at: previous.data.started_at ?? previous.timestamp } };
+      events = run.events.filter((item) => item !== previous);
+      events.push(kept);
+    } else events = [...run.events, event];
+  } else if (event.sequence > run.lastEventSequence) {
     events = [...run.events, event];
   } else {
     if (run.events.some((item) => item.id === event.id) || run.events.some((item) => item.sequence === event.sequence)) return run;

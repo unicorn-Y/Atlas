@@ -1065,6 +1065,7 @@ class AtlasKernel:
                 yield emit("run_status", status="running", text="Calling model")
 
                 reasoning_buffer: list[str] = []
+                preparing_sent: dict[tuple[int, int], tuple[float, int]] = {}
 
                 async def flush_reasoning() -> None:
                     if reasoning_buffer:
@@ -1104,6 +1105,23 @@ class AtlasKernel:
                             fragment = event.get(key)
                             if isinstance(fragment, str):
                                 fragments[key] = fragments.get(key, "") + fragment
+                        # Show the tool row as soon as its name streams in (like OpenCode's
+                        # pending tool part), then report argument growth every 250ms / 2KB —
+                        # otherwise a long write_file body leaves the UI blank until tool_call.
+                        name = fragments.get("name", "")
+                        if name:
+                            chars = len(fragments.get("arguments", ""))
+                            sent = preparing_sent.get((attempt, index))
+                            now = time.monotonic()
+                            if sent is None or (chars > sent[1] and (
+                                    now - sent[0] >= 0.25 or chars - sent[1] >= 2048)):
+                                preparing_sent[(attempt, index)] = (now, chars)
+                                await flush_reasoning()
+                                await event_queue.put(emit(
+                                    "tool_preparing", index=index, attempt=attempt,
+                                    call_id=fragments.get("id", ""), name=name, chars=chars,
+                                    preview=fragments.get("arguments", "")[-200:],
+                                ))
 
                 async def on_attempt(event: dict[str, Any]) -> None:
                     await record_model_attempt(event, purpose="conversation")
