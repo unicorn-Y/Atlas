@@ -31,6 +31,7 @@ class _Memory:
 async def test_real_hermes_atlas_child_keeps_context_and_permissions_then_cleans_up(tmp_path, monkeypatch):
     class FixtureConfig(dict):
         db_path = tmp_path / "config.db"
+        raw = {"integrations": {}}
 
     monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
         "tools.servers": {}, "tools.auto_start": [],
@@ -54,6 +55,10 @@ async def test_real_hermes_atlas_child_keeps_context_and_permissions_then_cleans
             current_model="parent-model", current_litellm_model="openai/parent-model",
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: model_rows,
+            provider_config=lambda _provider: {"base_url": fake.base_url},
+            resolve_api_key=lambda _provider: "sk-fake-e2e",
+            credential_pool=lambda _provider: None,
+            get_api_mode_override=lambda _provider: None,
         )
         memory = MemoryStore(db_path=tmp_path / "memory.sqlite3")
         await memory.init()

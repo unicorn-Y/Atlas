@@ -91,6 +91,8 @@ class SkillCandidate:
             body.append(f"{index}. {step['instruction']}（来源经历：{refs}）")
             for command in step.get("commands", []):
                 body.append(f"   命令：`{command}`")
+            for quote in step.get("supporting_quotes", []):
+                body.append(f"   来源摘录：{quote}")
         if self.verification:
             body.extend(["", "## 验证", *[f"- {item}" for item in self.verification]])
         if self.counterexamples:
@@ -103,6 +105,10 @@ class SkillCandidate:
                         for item in self.recovery)
         return ("---\n" + yaml.safe_dump(frontmatter, allow_unicode=True, sort_keys=False).rstrip()
                 + "\n---\n\n" + "\n".join(body).rstrip() + "\n")
+
+
+def is_counterexample(item: Experience) -> bool:
+    return bool(not item.verified or item.open_items or item.errors or _FAILURE.search(item.outcome))
 
 
 def experience_from_entry(entry: Entry, metadata: dict[str, Any] | None = None) -> Experience | None:
@@ -178,6 +184,13 @@ def validate_candidate(raw: dict[str, Any], experiences: list[Experience]) -> Sk
     if not _repeated_workflow(successful):
         raise ValueError("证据经历未显示同一操作重复发生")
     ids = set(evidence_ids)
+    negative_ids = {
+        key for key in evidence_ids
+        if is_counterexample(by_id[key])
+    }
+    if any(is_counterexample(item) for item in experiences) and not negative_ids:
+        raise ValueError("候选必须把可用的失败或未完成经历作为反例证据")
+    successful_ids = ids - negative_ids
     steps = raw.get("steps")
     if not isinstance(steps, list) or not steps:
         raise ValueError("候选必须包含 steps")
@@ -185,17 +198,28 @@ def validate_candidate(raw: dict[str, Any], experiences: list[Experience]) -> Sk
     for step in steps:
         if not isinstance(step, dict) or not str(step.get("instruction") or "").strip():
             raise ValueError("步骤缺少 instruction")
-        refs = tuple(dict.fromkeys(str(v) for v in step.get("experience_ids", []) if str(v) in ids))
+        refs = tuple(dict.fromkeys(str(v) for v in step.get("experience_ids", [])
+                                   if str(v) in successful_ids))
         if not refs:
-            raise ValueError("每个步骤必须引用至少一条经历")
+            raise ValueError("每个步骤必须引用成功经历")
         commands = tuple(str(v) for v in step.get("commands", []) if str(v).strip())
         supported = {command for key in refs for command in by_id[key].commands}
         if any(command not in supported for command in commands):
             raise ValueError("步骤含来源经历未记录的命令")
+        quotes = tuple(str(v).strip() for v in step.get("supporting_quotes", [])
+                       if isinstance(v, str) and str(v).strip())
+        source_text = [text for key in refs for text in (
+            by_id[key].task, by_id[key].outcome, by_id[key].summary,
+            *by_id[key].steps, *by_id[key].files, *by_id[key].commands,
+            *by_id[key].open_items, *by_id[key].errors,
+        ) if text]
+        if not quotes or any(not any(quote in text for text in source_text) for quote in quotes):
+            raise ValueError("每一步必须包含逐字出自所引成功经历的 supporting_quotes")
         clean_steps.append({"instruction": str(step["instruction"]).strip(),
-                            "experience_ids": list(refs), "commands": list(commands)})
-    counterexamples = _validated_examples(raw.get("counterexamples", []), ids, "case")
-    recovery = _validated_examples(raw.get("recovery", []), ids, "action")
+                            "experience_ids": list(refs), "commands": list(commands),
+                            "supporting_quotes": list(quotes)})
+    counterexamples = _validated_examples(raw.get("counterexamples", []), negative_ids, "case")
+    recovery = _validated_examples(raw.get("recovery", []), negative_ids, "action")
     refs = tuple(ref for key in evidence_ids for ref in by_id[key].source_refs)
     source_refs = tuple({"conversation_id": r["conversation_id"], "message_uid": r["message_uid"],
                          **{k: v for k, v in r.items() if k not in ("conversation_id", "message_uid")}}
@@ -258,10 +282,11 @@ async def build_candidate(model_router: Any, model_id: str,
     prompt = (
         "你是 Atlas 技能提炼器。仅根据输入经历归纳一个反复出现的操作流程，返回 JSON object。"
         "字段为 name(kebab-case), description, applicability[], prerequisites[], "
-        "steps:[{instruction,experience_ids[],commands[]}], verification[], "
+        "steps:[{instruction,experience_ids[],commands[],supporting_quotes[]}], verification[], "
         "counterexamples:[{case,experience_ids[]}], recovery:[{action,experience_ids[]}], "
         "evidence_ids[]。至少引用两条不同的成功经历；错误或未完成经历只能作为反例。"
-        "每一步必须引用支持它的经历 ID。commands 只能逐字取自对应经历记录的 commands。"
+        "每一步必须引用支持它的成功经历 ID，并提供 supporting_quotes 原文短句；每条短句必须逐字来自被引经历的 task/outcome/steps/files/commands/open_items/errors/summary。"
+        "commands 只能逐字取自对应经历记录的 commands。"
         "反例/失败恢复只能引用失败或未完成经历。不得编造输入材料没有支持的操作指导、命令、工具参数或安全规则。"
         "生活偏好本身不是技能。若现有技能已覆盖相同流程，复用其 name 并给出改进后的完整版本，不能新建重复技能。\n"
         "现有技能索引：\n" + json.dumps(existing, ensure_ascii=False) + "\n"
@@ -282,6 +307,24 @@ async def build_candidate(model_router: Any, model_id: str,
     raise ValueError("候选格式/出处校验两次失败：" + last_error)
 
 
+def heldout_composition(report: Any, success_ids: set[str],
+                        counterexample_ids: set[str]) -> dict[str, Any]:
+    """Require explicit heldout membership evidence for both experience types."""
+    heldout: set[str] = set()
+    for name in ("heldout_ids", "heldout_session_ids", "validation_ids",
+                 "validation_session_ids", "test_ids", "test_session_ids"):
+        value = getattr(report, name, None)
+        if isinstance(value, (list, tuple, set)):
+            heldout = {str(item) for item in value}
+            break
+    heldout_success = sorted(heldout & success_ids)
+    heldout_counterexamples = sorted(heldout & counterexample_ids)
+    passed = bool(heldout_success and heldout_counterexamples)
+    return {"heldout_ids": sorted(heldout), "success_ids": heldout_success,
+            "counterexample_ids": heldout_counterexamples, "passed": passed,
+            "reason": "balanced_heldout" if passed else "heldout_membership_missing_or_unbalanced"}
+
+
 def score_candidate(report: Any, *, gate_mode: str, safety_blockers: int | None = None,
                     correctness_blockers: int | None = None) -> dict[str, Any]:
     """Fail closed unless the enabled heldout aggregate strictly beats baseline."""
@@ -292,10 +335,14 @@ def score_candidate(report: Any, *, gate_mode: str, safety_blockers: int | None 
         strict_gain = baseline is not None and candidate is not None and float(candidate) > float(baseline)
     except (TypeError, ValueError):
         strict_gain = False
-    report_safety = getattr(report, "safety_blockers", 0)
-    report_correctness = getattr(report, "correctness_blockers", 0)
-    safety_blockers = int(report_safety or 0) if safety_blockers is None else safety_blockers
-    correctness_blockers = (int(report_correctness or 0) if correctness_blockers is None
+    report_safety = getattr(report, "safety_blockers", None)
+    report_correctness = getattr(report, "correctness_blockers", None)
+    blocker_evidence = ((report_safety is not None or safety_blockers is not None)
+                        and (report_correctness is not None or correctness_blockers is not None))
+    safety_blockers = (int(report_safety or 0) if safety_blockers is None and report_safety is not None
+                       else safety_blockers)
+    correctness_blockers = (int(report_correctness or 0)
+                            if correctness_blockers is None and report_correctness is not None
                             else correctness_blockers)
     raw_blockers = getattr(report, "blockers", None) or getattr(report, "gate_blockers", None) or []
     if isinstance(raw_blockers, dict):
@@ -306,14 +353,17 @@ def score_candidate(report: Any, *, gate_mode: str, safety_blockers: int | None 
         generic_blockers = [str(raw_blockers)] if raw_blockers else []
     has_generic_blockers = bool(generic_blockers)
     enabled = str(gate_mode).lower() in {"on", "true", "1", "enabled"}
-    passed = bool(enabled and getattr(report, "accepted", False) and task_count >= 2 and strict_gain
-                  and safety_blockers == 0 and correctness_blockers == 0 and not has_generic_blockers)
+    passed = bool(enabled and blocker_evidence and getattr(report, "accepted", False)
+                  and task_count >= 2 and strict_gain and safety_blockers == 0
+                  and correctness_blockers == 0 and not has_generic_blockers)
     return {"gate_mode": "on" if enabled else "off", "passed": passed,
             "baseline_score": baseline, "candidate_score": candidate,
             "task_count": task_count, "safety_blockers": safety_blockers,
             "correctness_blockers": correctness_blockers, "other_blockers": generic_blockers,
+            "blocker_evidence_available": blocker_evidence,
             "reason": "strict_aggregate_improvement" if passed else "gate_not_satisfied"}
 
 
 __all__ = ["Experience", "SkillCandidate", "build_candidate", "experience_from_entry",
-           "read_experiences", "score_candidate", "validate_candidate"]
+           "heldout_composition", "is_counterexample", "read_experiences",
+           "score_candidate", "validate_candidate"]

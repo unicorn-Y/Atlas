@@ -67,12 +67,13 @@ def _rewrite_stream(data: bytes, needles: list[str]) -> tuple[bytes, int]:
     return bytes(out), changed_blocks
 
 
-def _log_has_needles(root: Path, needles: list[str]) -> bool:
-    for args in (("log", "--all", "-p"), ("log", "--all", "--format=%B")):
-        output = _git(root, *args)
-        if any(n.encode("utf-8") in output for n in needles):
-            return True
-    return False
+def _needles_in_history(root: Path, needles: list[str]) -> list[str]:
+    outputs = [
+        _git(root, *args)
+        for args in (("log", "--all", "-p"), ("log", "--all", "--format=%B"))
+    ]
+    return [needle for needle in needles
+            if any(needle.encode("utf-8") in output for output in outputs)]
 
 
 def purge_history(store: Any, needles: list[str]) -> dict[str, Any]:
@@ -81,7 +82,8 @@ def purge_history(store: Any, needles: list[str]) -> dict[str, Any]:
                    key=len, reverse=True)
     if not clean or not store._git_available() or not (root / ".git").exists():
         return {"rewritten": False, "commits": 0}
-    if not _log_has_needles(root, clean):
+    clean = _needles_in_history(root, clean)
+    if not clean:
         return {"rewritten": False, "commits": 0}
 
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
@@ -242,7 +244,7 @@ def propagate_forget(
                         try:
                             derivative_text.update(
                                 line for line in child.read_text(encoding="utf-8").splitlines()
-                                if len(line.strip()) >= 2
+                                if len(line.strip()) >= 2 and line.strip() != "---"
                             )
                         except (UnicodeDecodeError, OSError):
                             # Binary derived caches are rebuilt from Markdown and are
@@ -254,7 +256,7 @@ def propagate_forget(
                 try:
                     derivative_text.update(
                         line for line in target.read_text(encoding="utf-8").splitlines()
-                        if len(line.strip()) >= 2
+                        if len(line.strip()) >= 2 and line.strip() != "---"
                     )
                 except (UnicodeDecodeError, OSError):
                     pass

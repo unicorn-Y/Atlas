@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,10 @@ class Aliases(BaseModel):
 
 class Revert(BaseModel):
     sha: str
+
+
+class SkillRollback(BaseModel):
+    previous_version: str | None = None
 
 
 @router.get("/today")
@@ -361,7 +366,10 @@ async def add_entry(body: EntryAdd) -> dict[str, Any]:
 
 @router.post("/forget")
 async def forget(body: EntryRef) -> dict[str, Any]:
-    return await _run(_lib().forget_entry, body.id)
+    result = await _run(_lib().forget_entry, body.id)
+    if result.get("skills_removed") or result.get("skills_needing_rebuild"):
+        _refresh_skill_manager()
+    return result
 
 
 @router.post("/aliases")
@@ -372,5 +380,87 @@ async def aliases(body: Aliases) -> dict[str, Any]:
 
 @router.post("/revert")
 async def revert(body: Revert) -> dict[str, Any]:
-    await _run(_lib().revert, body.sha)
-    return {"ok": True}
+    library = _lib()
+    message = await asyncio.to_thread(
+        library.store._git, "show", "-s", "--format=%s", body.sha, check=False,
+    )
+    await _run(library.revert, body.sha)
+    match = re.fullmatch(
+        r"技能 ([a-z0-9]+(?:-[a-z0-9]+)*) 升级到 (\d+\.\d+\.\d+)；回滚版本 (无|\d+\.\d+\.\d+)",
+        message.strip(),
+    )
+    rollback = None
+    if match:
+        from atlas.evolution.skill_staging import rollback_promotion
+
+        rollback = await asyncio.to_thread(
+            rollback_promotion, match.group(1),
+            previous_version=None if match.group(3) == "无" else match.group(3),
+        )
+        _refresh_skill_manager()
+    return {"ok": True, **({"skill_rollback": rollback} if rollback else {})}
+
+
+@router.get("/skills/candidates/{name}")
+async def skill_candidate(name: str) -> dict[str, Any]:
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+        raise HTTPException(400, "技能名格式无效。")
+    library = _lib()
+    from atlas.evolution.skill_staging import candidate_root
+    from atlas.skills import SKILLS_DIR
+
+    candidate_path = candidate_root(library.store.root) / name / "SKILL.md"
+    live_path = SKILLS_DIR / "learned" / name / "SKILL.md"
+    if not candidate_path.is_file():
+        raise HTTPException(404, "找不到这个技能候选。")
+    candidate, live = await asyncio.gather(
+        asyncio.to_thread(candidate_path.read_text, encoding="utf-8"),
+        asyncio.to_thread(live_path.read_text, encoding="utf-8") if live_path.is_file()
+        else asyncio.sleep(0, result=""),
+    )
+    return {"name": name, "candidate": candidate, "live": live,
+            "review_required": True}
+
+
+@router.post("/skills/candidates/{name}/promote")
+async def promote_skill_candidate(name: str) -> dict[str, Any]:
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+        raise HTTPException(400, "技能名格式无效。")
+    library = _lib()
+    from atlas.evolution.skill_staging import candidate_root, promote_candidate
+
+    candidate_path = candidate_root(library.store.root) / name / "SKILL.md"
+    if not candidate_path.is_file():
+        raise HTTPException(404, "找不到这个技能候选。")
+    result = await asyncio.to_thread(
+        promote_candidate, candidate_path, user_reviewed=True,
+    )
+    if result.get("promoted"):
+        _refresh_skill_manager()
+    return result
+
+
+@router.post("/skills/learned/{name}/rollback")
+async def rollback_skill(name: str, body: SkillRollback) -> dict[str, Any]:
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+        raise HTTPException(400, "技能名格式无效。")
+    if body.previous_version and not re.fullmatch(r"\d+\.\d+\.\d+", body.previous_version):
+        raise HTTPException(400, "技能版本格式无效。")
+    from atlas.evolution.skill_staging import rollback_promotion
+
+    result = await asyncio.to_thread(
+        rollback_promotion, name, previous_version=body.previous_version,
+    )
+    _refresh_skill_manager()
+    return result
+
+
+def _refresh_skill_manager() -> None:
+    """Refresh the current process after a learned skill is promoted, removed, or restored."""
+    try:
+        from atlas.server import skill_mgr
+
+        if skill_mgr is not None:
+            skill_mgr.scan_skills_sync()
+    except (ImportError, RuntimeError):
+        log.warning("memory.library.skill_manager_refresh_unavailable", exc_info=True)

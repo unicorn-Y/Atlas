@@ -34,6 +34,7 @@ READ_ONLY_TOOLS = frozenset({
     "ios_list_simulators", "ios_discover_project", "ios_logs", "ios_ui_status",
     "ios_ui_describe", "TaskGet", "TaskList", "TaskOutput",
     "memory_search",
+    "memory_open",
 })
 EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write", "notebook_edit"})
 
@@ -78,7 +79,7 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
         _function_schema("memory_search", (
             "Search Atlas' long-term memory library: facts about the user, people, projects, "
             "and optionally the raw log of earlier conversations. Search first, then use open "
-            "with a returned ref to open the original conversation for details. Use it when the "
+            "with a returned ref, or call memory_open(ref), to open the source for details. Use it when the "
             "user refers to something from before that is not already in context."
         ), {
             "query": {"type": "string", "description": "Names, topics or words to look for."},
@@ -88,6 +89,13 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
             "sources": {"type": "array", "items": {"type": "string", "enum": ["memory", "raw"]},
                         "description": "Search memory by default; include raw to search original conversations."},
         }, ["query"]),
+        _function_schema("memory_open", (
+            "Open a returned Atlas memory SourceRef to read its exact source when the bounded search excerpt is insufficient."
+        ), {
+            "ref": {"type": "string", "description": "An exact ref returned by memory_search."},
+            "window": {"type": "integer", "minimum": 1, "maximum": 2,
+                       "description": "Small bounded context window around the referenced source."},
+        }, ["ref"]),
         _function_schema("clock.curr_time", "Return the current UTC time.", {}),
         _function_schema("clock.sleep", "Wait for a bounded number of seconds before continuing.", {
             "seconds": {"type": "number", "minimum": 0, "maximum": 300},

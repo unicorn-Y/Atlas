@@ -2075,13 +2075,14 @@ class AtlasKernel:
                 "is_error": bool(result.get("is_error")) if isinstance(result, dict) else False,
                 "outcome": "failed" if isinstance(result, dict) and result.get("is_error") else "completed",
             }
-        if name == "memory_search":
+        if name in {"memory_search", "memory_open"}:
             from atlas.memory.library import get_library
 
             library = get_library()
             if library is None:
                 return {"content": "The memory library is turned off.", "is_error": True}
-            open_value = str(arguments.get("open") or "").strip()
+            open_value = str((arguments.get("ref") if name == "memory_open"
+                              else arguments.get("open")) or "").strip()
             if open_value:
                 from atlas.memory.library.sources import open_ref
 
@@ -2089,6 +2090,9 @@ class AtlasKernel:
                                                  max(1, min(2, int(arguments.get("window", 1) or 1))))
                 return {"content": json.dumps(opened, ensure_ascii=False), "data": opened,
                         "outcome": "completed"}
+            if name == "memory_open":
+                return {"content": "memory_open requires a ref returned by memory_search.",
+                        "is_error": True, "outcome": "failed"}
             sources = arguments.get("sources")
             kinds = ("fact", "dream", "episode", "diary", "raw") if isinstance(sources, list) and "raw" in sources else (
                 "fact", "dream", "episode", "diary")

@@ -599,7 +599,7 @@ class DelegationService:
                         "evidence": result.get("evidence", []),
                         **{key: result[key] for key in (
                             "changed_files", "changed_files_complete", "tokens",
-                            "duration_ms", "log_path",
+                            "duration_ms", "log_path", "delegation",
                         ) if key in result},
                         **({"schema_valid": result["schema_valid"]} if schema else {}),
                         **({"schema_errors": result["schema_errors"]}

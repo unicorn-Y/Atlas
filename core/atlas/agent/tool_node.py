@@ -131,6 +131,7 @@ async def execute_tools_node(
         available_tools = [*available_tools, *ctx.kernel_edit.get_tools_for_llm()]
     atlas_options = {
         "model": getattr(ctx, "model", None) or agent._model_mgr.current_model,
+        "parent_conversation_id": getattr(ctx, "conversation_id", None),
         "permission_mode": permission_mode,
         "allowed_paths": allowed_paths,
         "tool_allow": getattr(ctx, "tool_allow", None),

@@ -89,8 +89,11 @@ def run(*, dry_run: bool = False) -> dict[str, Any]:
     """Generate from M3 Markdown, replay with SkillOpt, and promote only on a strict gain."""
     from skillopt_sleep import cycle
     from skillopt_sleep.config import load_config
-    from atlas.evolution.skill_candidate import build_candidate, read_experiences, score_candidate
-    from atlas.evolution.skill_staging import promote_candidate, record_validation, stage_candidate
+    from atlas.evolution.skill_candidate import (
+        build_candidate, heldout_composition, is_counterexample,
+        read_experiences, score_candidate,
+    )
+    from atlas.evolution.skill_staging import record_validation, stage_candidate
     from atlas.memory.library import get_library
     from atlas.models import ModelManager
     from atlas.skills import SKILLS_DIR
@@ -157,32 +160,32 @@ def run(*, dry_run: bool = False) -> dict[str, Any]:
         cycle.harvest_for_config = original
     report = outcome.report
     gate = score_candidate(report, gate_mode="on")
-    success_cases = [item.experience_id for item in experiences
-                     if item.verified and item.outcome.strip()]
-    counterexample_cases = [item.experience_id for item in experiences
-                            if not item.verified or item.open_items or item.errors]
-    if not success_cases or not counterexample_cases:
+    success_cases = {item.experience_id for item in experiences
+                     if item.verified and item.outcome.strip() and not is_counterexample(item)}
+    counterexample_cases = {item.experience_id for item in experiences
+                            if is_counterexample(item)}
+    heldout = heldout_composition(report, success_cases, counterexample_cases)
+    if not heldout["passed"]:
         gate["passed"] = False
-        gate["reason"] = "heldout_requires_success_and_failure_or_unfinished_experience"
+        gate["reason"] = heldout["reason"]
     record_validation(candidate_path, validation=gate, benchmark={
         "experience_ids": [item.experience_id for item in experiences],
-        "success_case_ids": success_cases,
-        "counterexample_case_ids": counterexample_cases,
+        "success_case_ids": sorted(success_cases),
+        "counterexample_case_ids": sorted(counterexample_cases),
+        "heldout": heldout,
         "model": model_id,
         "tools": sorted({command for item in experiences for command in item.commands}),
         "success_criteria": "heldout aggregate strictly above baseline; zero safety/correctness blockers",
         "n_sessions": report.n_sessions,
         "n_tasks": report.n_tasks,
     }, candidate=candidate)
-    promotion: dict[str, Any] = {}
-    if gate["passed"] and outcome.adopted:
-        promotion = promote_candidate(candidate_path, report=report, gate_mode="on")
     summary = {
         "sessions": report.n_sessions, "tasks": report.n_tasks,
-        "accepted": bool(gate["passed"]), "adopted": bool(promotion.get("promoted")),
+        "accepted": bool(gate["passed"]), "adopted": False,
         "baseline": report.baseline_score, "candidate": report.candidate_score,
         "staging": outcome.staging_dir, "candidate_path": str(candidate_path),
-        "promotion": promotion,
+        "promotion": {"promoted": False, "reason": "user_review_required",
+                      "gate_passed": bool(gate["passed"])},
     }
     log.info("skill_sleep.done", **summary)
     return summary

@@ -739,11 +739,57 @@ class MemoryLibrary:
 
     def forget_entry(self, entry_id: str) -> dict[str, Any]:
         self.ready()
+        skills_removed: list[str] = []
+        skills_needing_rebuild: list[str] = []
         with self.store.lock:
             found = self.store.find_entry(entry_id)
             if found is None:
                 raise KeyError(entry_id)
             page, entry, bucket = found
+            metadata = entry.meta()
+            episode_details = metadata.get("episode_details")
+            episode_details = episode_details if isinstance(episode_details, dict) else {}
+            source_refs = []
+            if isinstance(entry.source_ref, dict):
+                source_refs.append(entry.source_ref)
+            for refs in (metadata.get("source_refs"), episode_details.get("source_refs")):
+                if isinstance(refs, list):
+                    source_refs.extend(ref for ref in refs if isinstance(ref, dict))
+            source_refs = [ref for ref in source_refs
+                           if ref.get("conversation_id") and ref.get("message_uid")]
+            manifest = {"memory_paths": [], "external_live_paths": [],
+                        "external_live_needs_rebuild": []}
+            if source_refs:
+                from atlas.evolution.skill_staging import derived_manifest_for_sources
+
+                manifest = derived_manifest_for_sources(self.store.root, source_refs)
+            if manifest["external_live_paths"] or manifest["external_live_needs_rebuild"]:
+                from atlas.skills import SKILLS_DIR
+
+                learned_root = (SKILLS_DIR / "learned").resolve()
+                rebuild_set = set(manifest["external_live_needs_rebuild"])
+                for raw_path in sorted(set(manifest["external_live_paths"])
+                                       | rebuild_set):
+                    live_path = Path(raw_path)
+                    try:
+                        resolved_parent = live_path.parent.resolve()
+                        relative = resolved_parent.relative_to(learned_root)
+                    except (OSError, ValueError):
+                        continue
+                    if len(relative.parts) != 1 or live_path.name != "SKILL.md":
+                        continue
+                    if live_path.is_symlink():
+                        live_path.unlink(missing_ok=True)
+                    elif live_path.is_file():
+                        live_path.unlink()
+                    if relative.name in rebuild_set:
+                        skills_needing_rebuild.append(relative.name)
+                    else:
+                        skills_removed.append(relative.name)
+                    try:
+                        live_path.parent.rmdir()
+                    except OSError:
+                        pass
             getattr(page, bucket).remove(entry)
             self.store.add_tombstones(tombstone_hashes(entry.key, entry.value, entry.text), "用户要求忘掉")
             self.store.write(page)
@@ -752,10 +798,13 @@ class MemoryLibrary:
             if entry.src == SRC_EPISODE and "：" in entry.text:
                 needles.extend(part for part in entry.text.split("：", 1) if len(part.strip()) >= 6)
             diary_pages = self.store.redact_diary(needles)
-            self.store.commit("按你的要求忘掉了一条记忆")
-            history = self._purge([entry.text, entry.quote, entry.value])
+            from atlas.memory.library.forget import propagate_forget
+
+            history = propagate_forget(self.store, [entry], manifest["memory_paths"])
         self.index.sync()
         return {"ok": True, "pages": [page.path], "diary_pages": diary_pages, "history": history,
+                "skills_removed": sorted(set(skills_removed)),
+                "skills_needing_rebuild": sorted(set(skills_needing_rebuild)),
                 "not_covered": ["Atlas 的原始聊天记录（engine 会话库）", "你自己做的备份或同步副本"]}
 
     def _purge(self, needles: list[str]) -> dict[str, Any]:

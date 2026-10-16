@@ -156,13 +156,23 @@ def _next_version(current: str | None) -> str:
     return f"{major}.{minor}.{patch + 1}"
 
 
-def promote_candidate(candidate_path: Path, *, report: Any, gate_mode: str = "on",
+def promote_candidate(candidate_path: Path, *, report: Any | None = None,
+                      user_reviewed: bool = False, gate_mode: str = "on",
                       safety_blockers: int | None = None, correctness_blockers: int | None = None,
                       skill_root: Path | None = None) -> dict[str, Any]:
     """Promote only on a strict heldout gain; retain the previous version for rollback."""
     metadata, body = _parse_skill(candidate_path)
-    decision = score_candidate(report, gate_mode=gate_mode, safety_blockers=safety_blockers,
-                               correctness_blockers=correctness_blockers)
+    if not user_reviewed:
+        return {"promoted": False, "path": str(candidate_path),
+                "reason": "explicit_user_review_required"}
+    if report is None:
+        decision = metadata.get("validation") or {}
+        if not isinstance(decision, dict) or decision.get("passed") is not True:
+            return {"promoted": False, "path": str(candidate_path),
+                    "reason": "stored_validation_gate_not_passed"}
+    else:
+        decision = score_candidate(report, gate_mode=gate_mode, safety_blockers=safety_blockers,
+                                   correctness_blockers=correctness_blockers)
     metadata["validation"] = {**(metadata.get("validation") or {}), **decision}
     metadata["candidate_status"] = "staging" if not decision["passed"] else "promoted"
     if not decision["passed"]:
