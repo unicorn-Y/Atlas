@@ -9,6 +9,8 @@ from typing import Any, Mapping
 
 from atlas.memory.library.source_ref import SourceRef
 
+RAW_SNIPPET_MAX_CHARS = 320
+
 
 def _text(content: Any) -> str:
     if isinstance(content, str):
@@ -252,6 +254,11 @@ def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
     for row in found:
         conversation_id = str(row.get("conversation_id") or "")
         message_uid = str(row.get("id") or "")
+        # Session search returns a bounded match excerpt. Never substitute the
+        # transcript/content field here: full messages are opened only by SourceRef.
+        snippet = " ".join(str(row.get("snippet") or "").split())[:RAW_SNIPPET_MAX_CHARS]
+        if not snippet:
+            continue
         try:
             ref = SourceRef(conversation_id, message_uid).to_ref()
         except ValueError:
@@ -261,13 +268,15 @@ def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
             "kind": "raw",
             "path": "原对话",
             "title": conversation_id,
-            "text": str(row.get("content") or ""),
-            "snippet": str(row.get("snippet") or row.get("content") or ""),
+            "text": snippet,
+            "snippet": snippet,
             "src": "原对话",
             "at": str(row.get("created_at") or ""),
             "ref": ref,
+            "source_ref": SourceRef(conversation_id, message_uid).to_dict(),
             "score": 1.0,
             "project": "",
+            "summary_kind": "matched_excerpt",
         })
     return results
 

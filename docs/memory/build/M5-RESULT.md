@@ -2,6 +2,8 @@
 
 Status: **M5 IMPLEMENTATION READY — INTEGRATION AND REAL GATE PENDING**
 
+S4 follow-up: addressed the acceptance return on raw search. `search_raw` now returns only a 320-character-bounded matched excerpt and stable `SourceRef`; it omits results with no excerpt and never falls back to a message-body field. Full transcript text remains available only through `memory_open`.
+
 Branch: `mem-m5`
 Base: `origin/mem-m2` at `5ffb1a16`
 Worktree: `D:\atlas-mem-m5`
