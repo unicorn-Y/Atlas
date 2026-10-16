@@ -30,4 +30,3 @@
 1. M7 `propagate_forget()` 只接受 `library.store.root` 内路径。调用方应把 `derived_manifest_for_sources(...)["memory_paths"]` 传入其 `derived_manifest`；还需在遗忘事务中调用对应 cleanup callback 删除 `external_live_paths`，并撤下 `external_live_needs_rebuild` 后安排人工重建。当前 M7 call-site 尚未接入。
 2. 现有 `/api/memlib/revert` 只回滚记忆 Git 提交，不会自动恢复库外 learned skill。需要 API/界面接线调用 `rollback_promotion(name, previous_version=...)` 并刷新 SkillManager，才能兑现一键回滚；M8 未改 API/UI 文件。
 3. 在 SkillOpt 安装的 Atlas 环境里，以隔离真实记忆库和真实 M3 经历完成 TASKBOOK-M8 所列四组 gate：来源逐步复核与格式重试；一成功加一失败/未完成 heldout 的真实重放；严格提升时自动晋升及实际调用/回写反馈；忘记传播、历史清理与重启不复现。还须完成上一波 M4 七项真实验收后才可将 M8 标 DONE。
-
