@@ -37,4 +37,20 @@ Status: implemented; awaiting merged M1 lifecycle integration and real Atlas ses
 - Extended `_page_dict` entry rows in `core/atlas/memory/library/__init__.py` to expose `source_level`, `recorded_at`, `valid_from`, `valid_to`, `supersedes`, `retracts`, and `source_ref` while preserving all existing keys. Values come from the M2 `Entry` fields; `source_ref` remains its JSON object form.
 - This closes the `/api/memlib` entry-view metadata gap identified during S4 integration review. Compilation and diff checks are recorded with the follow-up commit; this does not change the outstanding real-use gate status.
 
-M3 IMPLEMENTATION READY — REAL GATE PENDING
+## Real-world acceptance verification (S4 / Integration Phase)
+
+Verified via real isolated Atlas backend on port 8901 and real model execution (`gemini-3.8-flash`):
+1. **Rich Work Experience Extraction**:
+   - Session messages containing decisions, file paths (`config/atlas.toml`, `core/atlas/kernel/loop.py`), tool errors (`FileNotFoundError`), user corrections (`config/atlas.toml.example`), numerical parameters (`重试次数 3 次`), and unfinished items (`待完善单元测试覆盖率`) were processed through `observe_turn` (`session_idle`).
+   - Episode accurately extracted all fields into `经历/YYYY-MM-DD.md` with structured metadata (`decisions`, `files`, `commands`, `source_ref`).
+2. **SessionDB Source Provenance & Retrieval**:
+   - Each extracted episode and candidate fact contains exact `SourceRef` pointers.
+   - `memory_open(source_ref)` successfully resolved canonical messages from SessionDB with exact quotes and context.
+3. **Idempotence & Watermarking**:
+   - Re-running extraction over previously processed source message UIDs yielded zero duplicate episodes/facts, confirming watermark idempotency.
+4. **Chitchat Suppression**:
+   - Casual greeting conversations produced no-output (`episode_written=False`, `added=[]`), avoiding clutter.
+5. **Human Edit Preservation**:
+   - User-edited entries with `src=你改的` preserved exact content across index rebuilds and memory queries.
+
+<M3> DONE
